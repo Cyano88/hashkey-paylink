@@ -335,7 +335,7 @@ export default function PaymentPage() {
   const ngPosBackMerchantId = searchParams.get('merchant') ?? ''
   const ngPosBackUrl = ngPosBackMerchantId ? `/pos/ng?merchant_id=${encodeURIComponent(ngPosBackMerchantId)}` : '/'
   const isPolymarketFunding = searchParams.get('brand') === 'polymarket' || searchParams.get('pm') === '1'
-  const isPolymarketBridge = isPolymarketFunding && searchParams.get('bridge') === 'polymarket'
+  const polymarketBridgeParam = searchParams.get('bridge') ?? ''
   const polymarketWalletParam = (searchParams.get('pmw') || '').trim()
   const polymarketFundingLabel = (searchParams.get('funding') || searchParams.get('payer') || '').trim() || 'Self funding'
   const polymarketFundingRequestId = (searchParams.get('pmr') || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64)
@@ -343,6 +343,12 @@ export default function PaymentPage() {
   const polymarketReturnToPortfolio = polymarketReturnTarget === 'poly-portfolio'
   const polymarketReturnToStandalonePortfolio = polymarketReturnTarget === 'polydesk-portfolio'
   const polymarketReturnToAgentHash = polymarketReturnTarget === 'agent-hash-polydesk-portfolio'
+  const isPolymarketBridge = isPolymarketFunding && (
+    polymarketBridgeParam === 'polymarket' ||
+    polymarketReturnToPortfolio ||
+    polymarketReturnToStandalonePortfolio ||
+    polymarketReturnToAgentHash
+  )
   const isPolyDeskCheckout = polymarketReturnToStandalonePortfolio || polymarketReturnToAgentHash
   const polymarketHelperOwner = (searchParams.get('helperOwner') || '').trim().slice(0, 160)
   const telegramUrl = telegramReturnUrl(searchParams)
@@ -3163,6 +3169,7 @@ export default function PaymentPage() {
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
   const polymarketBridgeComplete = isPolymarketBridge && polymarketBridgeStatus === 'complete'
+  const polymarketBridgePending = isPolymarketBridge && !polymarketBridgeComplete
   const polymarketBridgeAwaitingTx = isPolymarketBridge && isConfirmed && !txHash
   const polymarketBridgeProgressText = polymarketBridgeComplete
     ? 'Bridge complete. Redirecting in 5 seconds...'
@@ -3691,12 +3698,14 @@ export default function PaymentPage() {
             )}>
               {isUnder
                 ? <AlertCircle  className="h-8 w-8 text-red-500" />
+                : polymarketBridgePending
+                ? <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
                 : <CheckCircle2  className="h-8 w-8 text-emerald-500" />
               }
             </div>
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder ? 'Underpayment Detected'
-               : isPolymarketBridge && !polymarketBridgeComplete ? 'Confirming funding'
+               : polymarketBridgePending ? 'Confirming funding'
                : isPolymarketFunding ? 'Funded!'
                : 'Payment Sent!'}
             </h2>
