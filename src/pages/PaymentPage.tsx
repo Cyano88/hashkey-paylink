@@ -319,6 +319,23 @@ function telegramReturnUrl(params: URLSearchParams) {
   }
 }
 
+function trustedPolydeskOrigin(raw: string) {
+  if (!raw) return ''
+  try {
+    const url = new URL(raw)
+    const isTrustedHost =
+      url.hostname === 'polydesk-i96m.onrender.com' ||
+      url.hostname === 'localhost' ||
+      url.hostname === '127.0.0.1'
+    if ((url.protocol === 'https:' || url.hostname === 'localhost' || url.hostname === '127.0.0.1') && isTrustedHost) {
+      return url.origin
+    }
+  } catch {
+    return ''
+  }
+  return ''
+}
+
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -351,9 +368,13 @@ export default function PaymentPage() {
   )
   const isPolyDeskCheckout = polymarketReturnToStandalonePortfolio || polymarketReturnToAgentHash
   const polymarketHelperOwner = (searchParams.get('helperOwner') || '').trim().slice(0, 160)
+  const polymarketStandaloneOrigin = trustedPolydeskOrigin(searchParams.get('polyOrigin') || '')
   const telegramUrl = telegramReturnUrl(searchParams)
   const polymarketPortfolioTradingUrl = '/telegram/payment-links?section=market-tools&service=poly-portfolio&notice=polymarket-funding-complete&portfolio=trading&wallet=balance'
-  const polymarketStandalonePortfolioTradingUrl = '/polydesk?service=portfolio&notice=polymarket-funding-complete&portfolio=trading&wallet=balance'
+  const polymarketStandalonePortfolioTradingPath = '/polydesk?service=portfolio&notice=polymarket-funding-complete&portfolio=trading&wallet=balance'
+  const polymarketStandalonePortfolioTradingUrl = polymarketStandaloneOrigin
+    ? `${polymarketStandaloneOrigin}${polymarketStandalonePortfolioTradingPath}`
+    : polymarketStandalonePortfolioTradingPath
   const polymarketAgentHashUrl = (() => {
     const params = new URLSearchParams({
       section: 'market-tools',
@@ -918,12 +939,19 @@ export default function PaymentPage() {
       }
       if (!response.ok || !data.ok) throw new Error(data.error || 'Bridge status unavailable')
       const currentTransactions = Array.isArray(data.transactions)
-        ? data.transactions.filter((transaction) => {
-            const createdTimeMs = Number(transaction.createdTimeMs || 0)
-            return !bridgeWaitStartedAt || !createdTimeMs || createdTimeMs >= bridgeWaitStartedAt
-          }).sort((a, b) => Number(b.createdTimeMs || 0) - Number(a.createdTimeMs || 0))
+        ? data.transactions
+            .filter((transaction) => {
+              const createdTimeMs = Number(transaction.createdTimeMs || 0)
+              if (!createdTimeMs) return false
+              return !bridgeWaitStartedAt || createdTimeMs >= bridgeWaitStartedAt
+            })
+            .sort((a, b) => Number(b.createdTimeMs || 0) - Number(a.createdTimeMs || 0))
         : []
-      const latest = currentTransactions[0] ?? null
+      const completedTransaction = currentTransactions.find((transaction) => {
+        const status = String(transaction.status || '').toUpperCase()
+        return status === 'COMPLETED' || status === 'COMPLETE'
+      })
+      const latest = completedTransaction ?? currentTransactions[0] ?? null
       const latestStatus = String(latest?.status || '').toUpperCase()
       setPolymarketBridgeLatestTx(latest?.txHash || '')
       if (latestStatus === 'COMPLETED' || latestStatus === 'COMPLETE') {
@@ -3193,11 +3221,18 @@ export default function PaymentPage() {
   }, [isConfirmed, onPaySuccessVisibleChange])
 
   useEffect(() => {
+    if (!isPolymarketBridge || !activeRecipient) {
+      polymarketBridgeWaitStartedAtRef.current = 0
+      return
+    }
+    if (!polymarketBridgeWaitStartedAtRef.current) {
+      polymarketBridgeWaitStartedAtRef.current = Date.now()
+    }
+  }, [activeRecipient, isPolymarketBridge])
+
+  useEffect(() => {
     const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
     if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge) return
-    if (!polymarketBridgeWaitStartedAtRef.current) {
-      polymarketBridgeWaitStartedAtRef.current = Date.now() - 30_000
-    }
     void refreshPolymarketBridgeStatus()
     const timer = window.setInterval(() => void refreshPolymarketBridgeStatus(), 10_000)
     return () => window.clearInterval(timer)
