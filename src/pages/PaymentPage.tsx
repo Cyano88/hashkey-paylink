@@ -31,7 +31,7 @@ const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
 const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | undefined
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
-  RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet, ChevronDown,
+  RefreshCw, Zap, Copy, CheckCheck, Wallet, ChevronDown,
   AlertTriangle, Radio, Bot, Share2, Banknote,
 } from 'lucide-react'
 import {
@@ -867,10 +867,6 @@ export default function PaymentPage() {
   const showPrivyCircleSolanaEmailPay = usePrivyCircleSolanaCheckout && privyAuthenticated
   const showCircleEmailBridgePay = showLegacyCircleEmailPay || showPrivyCircleEmailPay
   const showCircleSolanaEmailBridgePay = (!PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay) || showPrivyCircleSolanaEmailPay
-  const showCirclePoweredAttribution =
-    payMode === 'wallet' &&
-    !manualPayDetected &&
-    (showCircleEmailBridgePay || showCircleSolanaEmailBridgePay || showCirclePaymasterButton)
 
   const refreshPolymarketBridgeStatus = useCallback(async () => {
     if (!isPolymarketBridge || !activeRecipient) return
@@ -5209,7 +5205,7 @@ export default function PaymentPage() {
                 Sign in to pay
               </PrivyConnectButton>
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !(showCircleEmailBridgePay && !manualPayDetected) && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -5225,14 +5221,14 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !(showCircleEmailBridgePay && !manualPayDetected) && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:disabled:bg-white/10 dark:disabled:text-gray-400">
               {isSwitching
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
                 : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
-          ) : payMode === 'wallet' && !isBankSendPayment && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !(showCircleEmailBridgePay && !manualPayDetected) && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
               <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
               className={cn(
@@ -5248,22 +5244,12 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay</>}
               </button>
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected && !showCircleEmailBridgePay ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !(showCircleEmailBridgePay && !manualPayDetected) && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
               Privy email is signed in, but its embedded wallet is not your Circle Smart Wallet. Add the Circle wallet app id to enable Circle Smart Wallet payments, or connect an external wallet.
             </div>
           ) : null /* direct mode — no CTA button, address panel above handles it */ }
 
-          {showCirclePoweredAttribution && (
-            <div className="flex items-center justify-center pt-1 text-[11px] font-semibold text-gray-400 dark:text-gray-500">
-              <span>Hash PayLink Payment Checkout</span>
-            </div>
-          )}
-
-          <p className="flex items-center justify-center gap-1.5 text-xs text-gray-400">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            Secure · Non-custodial · Open source
-          </p>
         </div>
       </div>
 

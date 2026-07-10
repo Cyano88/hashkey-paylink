@@ -747,9 +747,9 @@ export default function Layout() {
               </span>
             ) : (
               <img
-                src="/hash-logo.png"
+                src="/hash-logo-transparent.png"
                 alt=""
-                className="h-8 w-8 object-contain transition-transform group-hover:scale-105 dark:invert dark:mix-blend-screen"
+                className="h-8 w-8 object-contain transition-transform group-hover:scale-105 dark:invert"
               />
             )}
             <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">
