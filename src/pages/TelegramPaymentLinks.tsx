@@ -6384,10 +6384,6 @@ function polymarketPositionStatus(position: PolymarketPosition): PolymarketPosit
     const startedAt = new Date(position.startDate).getTime()
     if (Number.isFinite(startedAt) && startedAt > Date.now()) return 'not-started'
   }
-  if (position.endDate) {
-    const endedAt = new Date(position.endDate).getTime()
-    if (Number.isFinite(endedAt) && endedAt < Date.now()) return 'ended'
-  }
   return 'live'
 }
 
