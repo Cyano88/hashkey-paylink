@@ -528,12 +528,12 @@ export default function PaymentPage() {
     })
       .then((response) => response.json().then((data) => ({ response, data })))
       .then(({ response, data }) => {
-        if (!response.ok || !data.ok) throw new Error(data.error ?? 'Could not load Paycrest banks.')
+        if (!response.ok || !data.ok) throw new Error(data.error ?? 'Could not load banks.')
         setBankSendInstitutions(Array.isArray(data.institutions) ? data.institutions : [])
       })
       .catch((error) => {
         setBankSendInstitutions([])
-        setBankSendError(error instanceof Error ? error.message : 'Could not load Paycrest banks.')
+        setBankSendError(error instanceof Error ? error.message.replaceAll('Paycrest ', '') : 'Could not load banks.')
       })
       .finally(() => setBankSendBanksBusy(false))
   }, [isBankSendPayment])
@@ -1828,7 +1828,7 @@ export default function PaymentPage() {
           return
         }
         if (nextStatus === 'refunding') {
-          setPaycrestStatusText('Refund is in progress or completed. Paycrest will use the refund account you verified.')
+          setPaycrestStatusText('Refund is in progress or completed. Your verified refund account will be used where a refund is required.')
           return
         }
         const providerStatus = String(data.order.status || '').trim().toLowerCase()
@@ -1848,10 +1848,10 @@ export default function PaymentPage() {
           Math.abs(amountDelta) >= 0.01
         setPaycrestStatusText(
           hasAmountMismatch
-            ? `${amountDelta > 0 ? 'Overpayment' : 'Underpayment'} detected: Paycrest expected ${formatAmount(expectedTransfer, 2)} NGN and received ${formatAmount(amountPaid, 2)} NGN. Waiting for settlement or refund update.`
+            ? `${amountDelta > 0 ? 'Overpayment' : 'Underpayment'} detected: expected ${formatAmount(expectedTransfer, 2)} NGN and received ${formatAmount(amountPaid, 2)} NGN. Waiting for settlement or refund update.`
             : detected
-            ? 'Bank transfer detected. Paycrest is settling USDC.'
-            : 'Waiting for Paycrest to confirm the bank transfer. Keep this page open; settlement can take a few minutes after your bank sends the money.',
+            ? 'Transfer received. USDC settlement is in progress.'
+            : 'Waiting for bank transfer confirmation. Keep this page open; settlement can take a few minutes after your bank sends the money.',
         )
       } catch (error) {
         if (!cancelled) {
@@ -4111,7 +4111,7 @@ export default function PaymentPage() {
                   {bankSendQuoteBusy && !bankSendDisplayUsdc ? (
                     <>
                       <RefreshCw className="h-2.5 w-2.5 animate-spin text-gray-300" />
-                      <span className="text-[11px] text-gray-400">Fetching Paycrest USDC quote...</span>
+                      <span className="text-[11px] text-gray-400">Fetching USDC quote...</span>
                     </>
                   ) : bankSendDisplayUsdc ? (
                     <span className="text-[11px] text-gray-400">
@@ -4220,7 +4220,7 @@ export default function PaymentPage() {
             </div>
             <p className="text-[11px] text-slate-400">
               {isBankSendPayment
-                ? `Recipient receives ${bankSendDestinationLabel} USDC after Paycrest confirms the transfer.`
+                ? `Recipient receives ${bankSendDestinationLabel} USDC after your bank transfer is confirmed.`
                 : <>Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>}
             </p>
             {showArbitrumRelayCost && (
@@ -4267,7 +4267,7 @@ export default function PaymentPage() {
                 <div>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">Bank transfer funding</p>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Send Naira from your bank. Paycrest settles USDC to the recipient on {bankSendDestinationLabel}.
+                    Send Naira from your bank. The recipient receives USDC on {bankSendDestinationLabel} after confirmation.
                   </p>
                 </div>
                 <Banknote className="h-4 w-4 shrink-0 text-gray-400" />
@@ -4422,7 +4422,7 @@ export default function PaymentPage() {
                         {Number.isFinite(bankSendAmountReturned) && bankSendAmountReturned > 0 && (
                           <Row label="Returned" value={`${formatAmount(bankSendAmountReturned, 2)} NGN`} />
                         )}
-                        <Row label="Bank" value={paycrestOrder.provider_institution || 'Provider bank'} />
+                        <Row label="Bank" value={paycrestOrder.provider_institution || 'Transfer bank'} />
                         <Row label="Account" value={paycrestOrder.provider_account_identifier || ''} mono />
                         <Row label="Name" value={paycrestOrder.provider_account_name || ''} />
                         <Row label="To" value={`${bankSendDestinationLabel} USDC`} />
@@ -4439,11 +4439,11 @@ export default function PaymentPage() {
                       {bankSendStatus === 'settled'
                         ? 'The recipient USDC settlement is confirmed.'
                         : bankSendStatus === 'expired'
-                        ? 'Do not send money to this account. If you already paid before expiry, Paycrest will use your verified refund account.'
+                        ? 'Do not send money to this account. If you already paid before expiry, your verified refund account will be used where a refund is required.'
                         : bankSendHasAmountMismatch
-                        ? `${bankSendMismatchLabel} detected. Do not send another transfer to this account; wait for Paycrest to settle or refund, then contact support if this stays pending for more than 10 minutes.`
+                        ? `${bankSendMismatchLabel} detected. Do not send another transfer to this account. Wait for settlement or refund, then contact support if this stays pending for more than 10 minutes.`
                         : bankSendPaymentDetected
-                        ? 'Payment is confirmed by Paycrest. Waiting for USDC settlement.'
+                        ? 'Transfer received. USDC settlement is in progress.'
                         : `Complete before ${new Date(paycrestOrder.valid_until).toLocaleString()}.`}
                     </p>
                   )}
@@ -5312,9 +5312,9 @@ export default function PaymentPage() {
             { n: '2', title: 'Verify access', body: 'Hash PayLink confirms the payment receipt' },
             { n: '3', title: 'Open helper', body: 'Return to Telegram with access unlocked' },
           ] : isPolymarketFunding && isBankSendPayment ? [
-            { n: '1', title: 'Verify refund bank', body: 'Add the bank account Paycrest can use if a transfer is refunded' },
-            { n: '2', title: 'Send Naira', body: 'Use the generated bank transfer details before the deadline' },
-            { n: '3', title: 'Settle to PolyDesk', body: 'Paycrest sends USDC to the Polymarket funding route' },
+            { n: '1', title: 'Verify refund bank', body: 'Add the bank account used if a refund is required' },
+            { n: '2', title: 'Send Naira', body: 'Use the bank transfer details before the deadline' },
+            { n: '3', title: 'Settle to PolyDesk', body: 'USDC is routed to the Polymarket funding path' },
           ] : isPolymarketFunding ? [
             { n: '1', title: 'Review wallet', body: 'Confirm the funding wallet and amount' },
             { n: '2', title: 'Fund with USDC', body: 'Pay from your gasless wallet or another wallet' },

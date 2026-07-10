@@ -665,7 +665,7 @@ export default function Dashboard() {
     : localHistoryFilter === 'send'
       ? {
           title: 'No send-from-bank receipts yet',
-          body: 'Bank-funded USDC orders will appear here after Paycrest creates or settles them.',
+          body: 'Bank-funded USDC orders will appear here after they are created or settled.',
         }
     : localHistoryFilter === 'bills'
       ? {

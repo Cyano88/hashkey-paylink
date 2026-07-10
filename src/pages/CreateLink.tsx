@@ -2009,12 +2009,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     })
       .then((response) => response.json().then((data) => ({ response, data })))
       .then(({ response, data }) => {
-        if (!response.ok || !data.ok) throw new Error(data.error ?? 'Could not load Paycrest banks.')
+        if (!response.ok || !data.ok) throw new Error(data.error ?? 'Could not load banks.')
         setPosBankInstitutions(Array.isArray(data.institutions) ? data.institutions : [])
       })
       .catch((error) => {
         setPosBankInstitutions([])
-        setPosError(error instanceof Error ? error.message : 'Could not load Paycrest banks.')
+        setPosError(error instanceof Error ? error.message.replaceAll('Paycrest ', '') : 'Could not load banks.')
       })
       .finally(() => setPosBankInstitutionsBusy(false))
   }, [posIsPaycrestFlow, receiveMode])
@@ -3347,7 +3347,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                                 }}
                                 className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-gray-950 dark:text-white dark:focus:border-white/25"
                               >
-                                <option value="">{posBankInstitutionsBusy ? 'Loading Paycrest banks...' : 'Select bank'}</option>
+                                <option value="">{posBankInstitutionsBusy ? 'Loading banks...' : 'Select bank'}</option>
                                 {posBankInstitutions.map((institution) => (
                                   <option key={institution.code} value={institution.code}>
                                     {institution.name} ({institution.code})
@@ -3364,7 +3364,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                                   setPosBankAccountName('')
                                   setPosError('')
                                 }}
-                                placeholder={posBankInstitutionsBusy ? 'Loading Paycrest banks...' : 'Paycrest bank code'}
+                                placeholder={posBankInstitutionsBusy ? 'Loading banks...' : 'Bank code'}
                                 className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
                               />
                             )}
@@ -3608,7 +3608,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Settlement network</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Payer sends Naira by bank transfer. Paycrest settles USDC to the selected destination after confirmation.
+                  Payer sends Naira by bank transfer. The recipient receives USDC after confirmation.
                 </p>
               </div>
 
@@ -3929,7 +3929,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Payer method</p>
                   <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
-                    Checkout will show Paycrest Nigerian bank transfer instructions.
+                    Checkout will show Nigerian bank transfer instructions.
                   </p>
                 </div>
                 <button
@@ -4272,7 +4272,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           {isBankSend && vaultStep === 'idle' && (
             <div className="space-y-1 px-2 text-center text-xs leading-snug">
               <p className="text-gray-400 dark:text-gray-500">
-                Payer checkout will collect refund bank details before creating the Paycrest on-ramp order.
+                Payer checkout will collect refund bank details before creating the bank transfer order.
               </p>
             </div>
           )}
