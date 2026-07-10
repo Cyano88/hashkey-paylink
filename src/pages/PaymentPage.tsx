@@ -32,7 +32,7 @@ const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | u
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, Zap, Copy, CheckCheck, Wallet, ChevronDown,
-  AlertTriangle, Radio, Bot, Share2, Banknote,
+  AlertTriangle, Radio, Bot, Share2, Banknote, Lock,
 } from 'lucide-react'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, type ChainKey,
@@ -1003,6 +1003,36 @@ export default function PaymentPage() {
     circleSolanaBalance !== null &&
     circleRequiredUnits > 0n &&
     circleSolanaBalance < circleRequiredUnits
+  const smartFundingCheckoutCtaVisible =
+    payMode === 'wallet' &&
+    smartWalletOnlyFunding &&
+    !isBankSendPayment &&
+    !manualPayDetected &&
+    !showPolymarketFundingChoice &&
+    !((usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated) &&
+    (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount || !!circleEvmEmailSession || !!circleSolanaSession || !!circleSolanaAddress)
+  const smartFundingCheckoutPending =
+    chain === 'solana'
+      ? circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading
+      : circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing
+  const smartFundingCheckoutDisabled =
+    smartFundingCheckoutPending ||
+    (chain === 'solana' ? circleSolanaNeedsFunds : circleWalletNeedsFunds) ||
+    (requiresAttendeeName && !attendeeName.trim()) ||
+    paymentAmountBlocked
+  const smartFundingCheckoutLabel = (() => {
+    if (chain === 'solana') {
+      if (circleSolanaPending) return circleSolanaSession ? 'Payment processing' : 'Opening Smart wallet'
+      if (isSolanaConfirming) return 'Confirming payment'
+      if (privyCircleLinkLoading) return 'Checking Smart wallet'
+      return circleSolanaSession || circleSolanaAddress ? 'Pay' : 'Continue'
+    }
+    if (circleEvmPaymentProcessing || circleEvmAcceptedPending) return 'Payment processing'
+    if (paycrestPreparing) return 'Preparing payment'
+    if (circlePasskeyPending) return circleSmartAccount ? 'Confirming payment' : 'Opening Smart wallet'
+    if (privyCircleLinkLoading) return 'Checking Smart wallet'
+    return circleSmartAccount ? 'Pay' : 'Continue'
+  })()
 
   function expectedEvmRecipientUnits() {
     const totalUnits = parseUnits(payableAmt || '0', meta.decimals)
@@ -4799,7 +4829,44 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {payMode === 'wallet' && !isBankSendPayment && (showCircleEmailBridgePay || !!circleSmartAccount || !!circleEvmEmailSession) && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
+          {smartFundingCheckoutCtaVisible && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={chain === 'solana' ? handleCircleSolanaEmailPay : handleCirclePasskeyPay}
+                disabled={smartFundingCheckoutDisabled}
+                className={cn(
+                  'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-bold shadow-button transition-all active:scale-[0.98]',
+                  smartFundingCheckoutDisabled
+                    ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
+                    : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
+                )}
+              >
+                {smartFundingCheckoutPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {smartFundingCheckoutLabel}
+                  </>
+                ) : (
+                  <>
+                    <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" />
+                    {smartFundingCheckoutLabel}
+                  </>
+                )}
+              </button>
+              <div className="space-y-1 text-center">
+                <p className="text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                  Hash PayLink checkout
+                </p>
+                <p className="inline-flex items-center justify-center gap-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                  <Lock className="h-3 w-3" />
+                  Secure
+                </p>
+              </div>
+            </div>
+          )}
+
+          {payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && (showCircleEmailBridgePay || !!circleSmartAccount || !!circleEvmEmailSession) && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               {!circleSmartAccount && !showPrivyCircleEmailPay && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -4983,7 +5050,7 @@ export default function PaymentPage() {
               <AlertTriangle className="h-4 w-4" />
               No Solana Address Available
             </button>
-          ) : payMode === 'wallet' && !isBankSendPayment && chain === 'solana' && (!usePrivyCircleSolanaCheckout || privyAuthenticated) && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession || !!circleSolanaAddress) ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && chain === 'solana' && (!usePrivyCircleSolanaCheckout || privyAuthenticated) && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession || !!circleSolanaAddress) ? (
               <div className="space-y-2">
                 {(showCircleSolanaEmailBridgePay || !!circleSolanaSession || !!circleSolanaAddress) && !manualPayDetected && (
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
