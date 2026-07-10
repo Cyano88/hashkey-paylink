@@ -656,6 +656,7 @@ export default function PaymentPage() {
   const [circleEvmPaymentProcessing, setCircleEvmPaymentProcessing] = useState(false)
   const [circleWalletCopied, setCircleWalletCopied] = useState(false)
   const [circleWalletPanel, setCircleWalletPanel] = useState<'fund' | 'withdraw'>('fund')
+  const circleWalletDetailsRef = useRef<HTMLDetailsElement | null>(null)
   const [circleWithdrawAddress, setCircleWithdrawAddress] = useState('')
   const [circleWithdrawAmount, setCircleWithdrawAmount] = useState('')
   const [circleWithdrawPending, setCircleWithdrawPending] = useState(false)
@@ -818,6 +819,7 @@ export default function PaymentPage() {
   const [circleSolanaFetching, setCircleSolanaFetching] = useState(false)
   const [circleSolanaCopied,   setCircleSolanaCopied]   = useState(false)
   const [circleSolanaPanel, setCircleSolanaPanel] = useState<'fund' | 'withdraw'>('fund')
+  const circleSolanaDetailsRef = useRef<HTMLDetailsElement | null>(null)
   const [circleSolanaWithdrawAddress, setCircleSolanaWithdrawAddress] = useState('')
   const [circleSolanaWithdrawAmount, setCircleSolanaWithdrawAmount] = useState('')
   const [circleSolanaWithdrawPending, setCircleSolanaWithdrawPending] = useState(false)
@@ -1003,6 +1005,26 @@ export default function PaymentPage() {
     circleRequiredUnits > 0n &&
     circleSolanaBalance < circleRequiredUnits
   const circleSolanaWalletChecking = !!circleSolanaSession && circleRequiredUnits > 0n && circleSolanaBalance === null && !circleSolanaBalanceError
+
+  function openCircleWalletPanel(panel: 'fund' | 'withdraw') {
+    setCircleWalletPanel(panel)
+    window.requestAnimationFrame(() => {
+      const details = circleWalletDetailsRef.current
+      if (!details) return
+      details.open = true
+      details.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    })
+  }
+
+  function openCircleSolanaPanel(panel: 'fund' | 'withdraw') {
+    setCircleSolanaPanel(panel)
+    window.requestAnimationFrame(() => {
+      const details = circleSolanaDetailsRef.current
+      if (!details) return
+      details.open = true
+      details.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    })
+  }
 
   function expectedEvmRecipientUnits() {
     const totalUnits = parseUnits(payableAmt || '0', meta.decimals)
@@ -4812,7 +4834,7 @@ export default function PaymentPage() {
                     return
                   }
                   if (circleSmartAccount && circleEvmWalletUnlocked && circleWalletNeedsFunds) {
-                    setCircleWalletPanel('fund')
+                    openCircleWalletPanel('fund')
                     if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
                     return
                   }
@@ -4851,10 +4873,12 @@ export default function PaymentPage() {
                   {privyCircleLinkError}
                 </p>
               )}
-              {circleWalletHasEnough && (
-                <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+              {circleSmartAccount && circleEvmWalletUnlocked && typeof circleWalletBalance === 'bigint' && (
+                <details ref={circleWalletDetailsRef} className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 truncate">{`${meta.label} ${meta.asset} wallet ready`}</span>
+                    <span className="min-w-0 truncate">
+                      {circleWalletNeedsFunds ? `Add ${meta.asset} to ${meta.label}` : `${meta.label} ${meta.asset} wallet ready`}
+                    </span>
                     <span className="ml-auto flex shrink-0 items-center gap-2">
                       <span className="font-mono font-semibold text-gray-600 dark:text-gray-200">
                         {circleWalletBalance == null
@@ -4870,7 +4894,7 @@ export default function PaymentPage() {
                         <button
                           key={mode}
                           type="button"
-                          onClick={() => setCircleWalletPanel(mode)}
+                          onClick={() => openCircleWalletPanel(mode)}
                           className={cn(
                             'rounded px-2 py-1 capitalize transition-colors',
                             circleWalletPanel === mode
@@ -5013,7 +5037,7 @@ export default function PaymentPage() {
                           return
                         }
                         if (circleSolanaSession && circleSolanaNeedsFunds) {
-                          setCircleSolanaPanel('fund')
+                          openCircleSolanaPanel('fund')
                           if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
                           return
                         }
@@ -5039,11 +5063,11 @@ export default function PaymentPage() {
                             : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
                           : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
                     </button>
-                    {circleSolanaHasEnough && (
-                      <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                    {circleSolanaSession && circleSolanaBalance !== null && (
+                      <details ref={circleSolanaDetailsRef} className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
                           <span className="min-w-0 truncate">
-                            Circle Solana wallet
+                            {circleSolanaNeedsFunds ? 'Add USDC to Solana' : 'Circle Solana wallet'}
                           </span>
                           <span className="ml-auto flex shrink-0 items-center gap-2">
                             <span className="font-mono font-semibold text-gray-600 dark:text-gray-200">
@@ -5062,7 +5086,7 @@ export default function PaymentPage() {
                               <button
                                 key={mode}
                                 type="button"
-                                onClick={() => setCircleSolanaPanel(mode)}
+                                onClick={() => openCircleSolanaPanel(mode)}
                                 className={cn(
                                   'rounded px-2 py-1 capitalize transition-colors',
                                   circleSolanaPanel === mode
