@@ -32,7 +32,7 @@ const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | u
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, ShieldCheck, Zap, Copy, CheckCheck, Wallet, ChevronDown,
-  AlertTriangle, Radio, Mail, X, Bot, Share2, Banknote,
+  AlertTriangle, Radio, Bot, Share2, Banknote,
 } from 'lucide-react'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, type ChainKey,
@@ -4826,8 +4826,8 @@ export default function PaymentPage() {
                   : privyCircleLinkLoading
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                   : circleSmartAccount
-                    ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : `Pay ${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`}</>
-                    : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" /> Continue</>}
+                    ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : 'Pay'}</>
+                    : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
               </button>
               {!circleSmartAccount && (
                 <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -5008,8 +5008,8 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
-                          : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain" /> Continue</>}
+                          ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Pay</>
+                          : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
                     </button>
                     {!circleSolanaSession && (
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -5195,7 +5195,7 @@ export default function PaymentPage() {
               >
                 {isSolanaPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
                 : isSolanaConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, 6)} USDC on Solana</>}
+                : <><Zap className="h-4 w-4" /> Pay</>}
               </button>
                 ) : null}
               </div>
@@ -5245,7 +5245,7 @@ export default function PaymentPage() {
               : isBasePaymasterPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Requesting sponsored gas…</>
               : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> Pay {formatAmount(effectiveAmt, meta.decimals)} {meta.asset} on {meta.label}</>}
+                : <><Zap className="h-4 w-4" /> Pay</>}
               </button>
             </div>
           ) : payMode === 'wallet' && !isBankSendPayment && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected && !showCircleEmailBridgePay ? (
@@ -5339,33 +5339,7 @@ export default function PaymentPage() {
           </>
         )}
 
-        <nav className="mt-6 flex items-center justify-center gap-5 sm:gap-6" aria-label="Payment checkout support">
-          <a
-            href="mailto:support@hashpaylink.com"
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-100"
-          >
-            <Mail className="h-3.5 w-3.5" />
-            Support
-          </a>
-          <a
-            href="https://x.com/Hash_PayLink"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-100"
-          >
-            <X className="h-3.5 w-3.5" />
-            DM us
-          </a>
-          <Link
-            to="/docs"
-            className="flex items-center gap-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-100"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Docs
-          </Link>
-        </nav>
-
-        <footer className="mt-4 flex min-h-[60px] items-center justify-center border-t border-gray-100 bg-white/50 px-3 py-0 dark:border-white/10 dark:bg-[#111113]/50">
+        <footer className="mt-6 flex min-h-[60px] items-center justify-center border-t border-gray-100 bg-white/50 px-3 py-0 dark:border-white/10 dark:bg-[#111113]/50">
           <span className="polydesk-powered-footer">
             <span>Powered by</span>
             <strong>Circle</strong>
