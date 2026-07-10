@@ -4539,6 +4539,9 @@ function friendlyTradeError(err: unknown) {
   if (/\b(network|timeout|fetch|failed to fetch|503|502|504|unavailable)\b/.test(message)) {
     return 'Connection issue while sending the order. Please try again.'
   }
+  if (/\b(no orders found to match|couldn'?t be fully filled|fak order|fok order|partially filled or killed|fully filled or killed)\b/.test(message)) {
+    return 'No matching liquidity was available when the order reached Polymarket. Refresh odds and try again.'
+  }
   if (/\b(price|fillable|liquidity|minimum|min size|too small|market)\b/.test(message)) {
     return 'This market moved before the order finished. Refresh and try again.'
   }
@@ -4562,7 +4565,7 @@ function stagedTradeError(stage: string, err: unknown) {
       ? `PolyDesk trade failed at ${stage}: ${message} Upstream: ${rawMessage}`
       : `PolyDesk trade failed at ${stage}: ${message}`
   }
-  if (!stage || /^(Order approval was cancelled\.|Connection issue|This market moved)/.test(message)) {
+  if (!stage || /^(Order approval was cancelled\.|Connection issue|This market moved|No matching liquidity)/.test(message)) {
     return message
   }
   return `PolyDesk trade failed at ${stage}: ${message}`
