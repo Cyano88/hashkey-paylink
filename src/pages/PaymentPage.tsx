@@ -910,7 +910,7 @@ export default function PaymentPage() {
       if (!response.ok || !data.ok) throw new Error(data.error || 'Bridge status unavailable')
       const latestStatus = String(data.latest?.status || '').toUpperCase()
       setPolymarketBridgeLatestTx(data.latest?.txHash || '')
-      if (latestStatus === 'COMPLETED') {
+      if (latestStatus === 'COMPLETED' || latestStatus === 'COMPLETE') {
         setPolymarketBridgeStatus('complete')
         setPolymarketBridgeStatusText('Bridge complete. Portfolio will refresh when you return.')
       } else if (latestStatus) {
@@ -3172,8 +3172,8 @@ export default function PaymentPage() {
     const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
     if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge) return
     void refreshPolymarketBridgeStatus()
-    const timer = window.setTimeout(() => void refreshPolymarketBridgeStatus(), 15_000)
-    return () => window.clearTimeout(timer)
+    const timer = window.setInterval(() => void refreshPolymarketBridgeStatus(), 10_000)
+    return () => window.clearInterval(timer)
   }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, refreshPolymarketBridgeStatus])
 
   // ── Direct Send display address ───────────────────────────────────────────
@@ -3537,22 +3537,22 @@ export default function PaymentPage() {
   useEffect(() => {
     const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
     if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge || !polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
-    if (polymarketBridgeStatus === 'idle' || polymarketBridgeStatus === 'checking') return
+    if (polymarketBridgeStatus !== 'complete') return
     polymarketReturnRedirected.current = true
     const timer = window.setTimeout(() => {
       window.location.assign(polymarketAgentHashUrl)
-    }, 3800)
+    }, 5000)
     return () => window.clearTimeout(timer)
   }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketAgentHashUrl])
 
   useEffect(() => {
     const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
     if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge || polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
-    if (polymarketBridgeStatus === 'idle' || polymarketBridgeStatus === 'checking') return
+    if (polymarketBridgeStatus !== 'complete') return
     polymarketReturnRedirected.current = true
     const timer = window.setTimeout(() => {
       window.location.assign(polymarketBridgeReturnUrl)
-    }, 3800)
+    }, 5000)
     return () => window.clearTimeout(timer)
   }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketBridgeReturnUrl])
 
