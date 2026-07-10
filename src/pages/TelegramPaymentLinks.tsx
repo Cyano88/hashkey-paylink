@@ -5243,16 +5243,8 @@ export function PolyStreamPanel({
         if (!configResponse.ok || !configData.ok || !configData.relayerReady || !configData.relayerUrl) {
           throw new Error('pUSD is funded, but exchange approval is missing and the Polymarket relayer is not configured.')
         }
-        tradeStage = 'derive-deposit-wallet'
+        tradeStage = 'prepare-deposit-wallet-approval'
         const relayerClient = new RelayClient(configData.relayerUrl, 137, walletClient, polyDeskRelayerBuilderConfig(BuilderConfig), undefined, { chain: polygon })
-        const derivedWallet = await relayerClient.deriveDepositWalletAddress()
-        if (derivedWallet.toLowerCase() !== polymarketDepositWallet.toLowerCase()) {
-          throw new Error('Connected owner wallet does not control this Polymarket wallet.')
-        }
-        const deployed = await relayerClient.getDeployed(polymarketDepositWallet, 'WALLET')
-        if (!deployed) {
-          throw new Error('Polymarket wallet is not deployed yet. Activate it, wait for confirmation, then retry.')
-        }
         setTradeNotice('Confirm pUSD approval for Polymarket trading. Approval does not move funds.')
         tradeStage = 'approve-collateral'
         const approveData = encodeFunctionData({
@@ -7747,16 +7739,8 @@ export function PolyPortfolioPanel({
         if (!configResponse.ok || !configData.ok || !configData.relayerReady || !configData.relayerUrl) {
           throw new Error('Conditional-token approval is missing and the Polymarket relayer is not configured.')
         }
-        sellStage = 'derive-deposit-wallet'
+        sellStage = 'prepare-deposit-wallet-approval'
         const relayerClient = new RelayClient(configData.relayerUrl, 137, walletClient, polyDeskRelayerBuilderConfig(BuilderConfig), undefined, { chain: polygon })
-        const derivedWallet = await relayerClient.deriveDepositWalletAddress()
-        if (derivedWallet.toLowerCase() !== polymarketDepositWallet.toLowerCase()) {
-          throw new Error('Connected owner wallet does not control this Polymarket wallet.')
-        }
-        const deployed = await relayerClient.getDeployed(polymarketDepositWallet, 'WALLET')
-        if (!deployed) {
-          throw new Error('Polymarket wallet is not deployed yet. Activate it, wait for confirmation, then retry.')
-        }
         setSellNotice('Confirm position approval for Polymarket selling. Approval does not move funds.')
         sellStage = 'approve-conditional-tokens'
         const approvalData = encodeFunctionData({
