@@ -446,7 +446,6 @@ export default function PaymentPage() {
   const [isManualChecking,  setIsManualChecking]  = useState(false)
   const [txSyncTick,        setTxSyncTick]        = useState(0)
   const [circleEvmAcceptedPending, setCircleEvmAcceptedPending] = useState(false)
-  const [polymarketFundingStep, setPolymarketFundingStep] = useState<'choose' | 'fund'>('choose')
   const [polymarketBridgeStatus, setPolymarketBridgeStatus] = useState<'idle' | 'checking' | 'waiting' | 'pending' | 'complete' | 'error'>('idle')
   const [polymarketBridgeStatusText, setPolymarketBridgeStatusText] = useState('')
   const [polymarketBridgeLatestTx, setPolymarketBridgeLatestTx] = useState('')
@@ -931,22 +930,6 @@ export default function PaymentPage() {
     !showCircleEmailBridgePay &&
     !showCirclePaymasterButton
   const walletConnectBlocked = isNgPosPaycrestOfframp || (smartWalletOnlyFunding && !PRIVY_AUTH_ENABLED)
-  const canStartPolymarketCircleFunding =
-    showCircleEvmEmailPay ||
-    showCircleSolanaEmailPay ||
-    showLegacyCircleEmailPay ||
-    showCircleEmailBridgePay ||
-    showCircleSolanaEmailBridgePay
-  const showPolymarketFundingChoice =
-    isPolymarketFunding &&
-    !isBankSendPayment &&
-    payMode === 'wallet' &&
-    privyAuthenticated &&
-    canStartPolymarketCircleFunding &&
-    !manualPayDetected &&
-    !circleSmartAccount &&
-    !circleSolanaSession &&
-    polymarketFundingStep === 'choose'
   const grossUpPlatformCharges = true
   const grossUpEvmPlatformCharges = grossUpPlatformCharges && (chain === 'base' || chain === 'arc' || chain === 'arbitrum')
   const grossUpSolanaPlatformCharges = grossUpPlatformCharges && chain === 'solana'
@@ -4805,20 +4788,7 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {showPolymarketFundingChoice && (
-            <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <button
-                type="button"
-                onClick={() => setPolymarketFundingStep('fund')}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-              >
-                <img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" />
-                Continue
-              </button>
-            </div>
-          )}
-
-          {payMode === 'wallet' && !isBankSendPayment && (showCircleEmailBridgePay || !!circleSmartAccount || !!circleEvmEmailSession) && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
+          {payMode === 'wallet' && !isBankSendPayment && (showCircleEmailBridgePay || !!circleSmartAccount || !!circleEvmEmailSession) && chain !== 'solana' && !manualPayDetected && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               {!circleSmartAccount && !showPrivyCircleEmailPay && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -4861,19 +4831,19 @@ export default function PaymentPage() {
                     ? isNgPosPaycrestOfframp && !paycrestOrder
                       ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Prepare naira payout</span></>
                       : circleWalletNeedsFunds
-                      ? <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
+                      ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
                       : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
-                    : <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
+                    : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
               </button>
               {privyCircleLinkError && circleSmartAccount && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                   {privyCircleLinkError}
                 </p>
               )}
-              {circleSmartAccount && (
-                <details open={circleWalletNeedsFunds || undefined} className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+              {circleSmartAccount && !circleWalletNeedsFunds && (
+                <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 truncate">{circleWalletNeedsFunds ? `${meta.label} ${meta.asset} needed` : `${meta.label} ${meta.asset} wallet ready`}</span>
+                    <span className="min-w-0 truncate">{`${meta.label} ${meta.asset} wallet ready`}</span>
                     <span className="ml-auto flex shrink-0 items-center gap-2">
                       <span className="font-mono font-semibold text-gray-600 dark:text-gray-200">
                         {circleWalletBalance == null
@@ -4910,7 +4880,7 @@ export default function PaymentPage() {
                               Gasless wallet
                             </p>
                             <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">
-                              {circleWalletNeedsFunds ? `Fund with ${meta.label} ${meta.asset}` : `${meta.label} ${meta.asset} ready`}
+                              {`${meta.label} ${meta.asset} ready`}
                             </p>
                           </div>
                           <button
@@ -5009,7 +4979,7 @@ export default function PaymentPage() {
               <AlertTriangle className="h-4 w-4" />
               No Solana Address Available
             </button>
-          ) : payMode === 'wallet' && !isBankSendPayment && chain === 'solana' && (!usePrivyCircleSolanaCheckout || privyAuthenticated) && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession || !!circleSolanaAddress) ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && chain === 'solana' && (!usePrivyCircleSolanaCheckout || privyAuthenticated) ? (
               <div className="space-y-2">
                 {(showCircleSolanaEmailBridgePay || !!circleSolanaSession || !!circleSolanaAddress) && !manualPayDetected && (
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
@@ -5048,15 +5018,15 @@ export default function PaymentPage() {
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
                           ? circleSolanaNeedsFunds
-                            ? <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
+                            ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
                             : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
-                          : <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
+                          : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
                     </button>
-                    {(circleSolanaSession || circleSolanaAddress) && (
-                      <details open={circleSolanaNeedsFunds || undefined} className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                    {(circleSolanaSession || circleSolanaAddress) && !circleSolanaNeedsFunds && (
+                      <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
                           <span className="min-w-0 truncate">
-                            {circleSolanaNeedsFunds ? 'Solana USDC needed' : 'Circle Solana wallet'}
+                            Circle Solana wallet
                           </span>
                           <span className="ml-auto flex shrink-0 items-center gap-2">
                             <span className="font-mono font-semibold text-gray-600 dark:text-gray-200">
@@ -5096,7 +5066,7 @@ export default function PaymentPage() {
                                     Circle wallet
                                   </p>
                                   <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">
-                                    {circleSolanaNeedsFunds ? 'Fund with Solana USDC' : 'Solana USDC ready'}
+                                    Solana USDC ready
                                   </p>
                                 </div>
                                 <button
@@ -5240,7 +5210,7 @@ export default function PaymentPage() {
               </div>
                 ) : null}
               </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected && !showPolymarketFundingChoice ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
