@@ -867,6 +867,15 @@ export default function PaymentPage() {
   const showPrivyCircleSolanaEmailPay = usePrivyCircleSolanaCheckout && privyAuthenticated
   const showCircleEmailBridgePay = showLegacyCircleEmailPay || showPrivyCircleEmailPay
   const showCircleSolanaEmailBridgePay = (!PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay) || showPrivyCircleSolanaEmailPay
+  const smartCheckoutOwnsWalletCta =
+    !manualPayDetected &&
+    (showCircleEmailBridgePay ||
+      showCircleSolanaEmailBridgePay ||
+      showCirclePaymasterButton ||
+      !!circleSmartAccount ||
+      !!circleEvmEmailSession ||
+      !!circleSolanaSession ||
+      !!circleSolanaAddress)
 
   const refreshPolymarketBridgeStatus = useCallback(async () => {
     if (!isPolymarketBridge || !activeRecipient) return
@@ -3916,6 +3925,7 @@ export default function PaymentPage() {
   //  MAIN PAYMENT UI
   // ────────────────────────────────────────────────────────────────────────────
   return (
+    <>
     <div className="mx-auto max-w-md animate-slide-up">
       {isNgPosSource || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess ? (
         <button
@@ -4789,7 +4799,7 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {payMode === 'wallet' && !isBankSendPayment && showCircleEmailBridgePay && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
+          {payMode === 'wallet' && !isBankSendPayment && (showCircleEmailBridgePay || !!circleSmartAccount || !!circleEvmEmailSession) && chain !== 'solana' && !manualPayDetected && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSmartAccount) && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               {!circleSmartAccount && !showPrivyCircleEmailPay && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -4975,7 +4985,7 @@ export default function PaymentPage() {
             </button>
           ) : payMode === 'wallet' && !isBankSendPayment && chain === 'solana' && (!usePrivyCircleSolanaCheckout || privyAuthenticated) && (!isPolymarketFunding || polymarketFundingStep === 'fund' || !!circleSolanaSession || !!circleSolanaAddress) ? (
               <div className="space-y-2">
-                {showCircleSolanaEmailBridgePay && !manualPayDetected && (
+                {(showCircleSolanaEmailBridgePay || !!circleSolanaSession || !!circleSolanaAddress) && !manualPayDetected && (
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
                     {!circleSolanaSession && !showPrivyCircleSolanaEmailPay && (
                       <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -5205,7 +5215,7 @@ export default function PaymentPage() {
                 Sign in to pay
               </PrivyConnectButton>
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && !(showCircleEmailBridgePay && !manualPayDetected) && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -5221,14 +5231,14 @@ export default function PaymentPage() {
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && !(showCircleEmailBridgePay && !manualPayDetected) && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:disabled:bg-white/10 dark:disabled:text-gray-400">
               {isSwitching
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
                 : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
-          ) : payMode === 'wallet' && !isBankSendPayment && !(showCircleEmailBridgePay && !manualPayDetected) && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
               <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
               className={cn(
@@ -5244,7 +5254,7 @@ export default function PaymentPage() {
                 : <><Zap className="h-4 w-4" /> Pay</>}
               </button>
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && !(showCircleEmailBridgePay && !manualPayDetected) && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected ? (
+          ) : payMode === 'wallet' && !isBankSendPayment && !smartCheckoutOwnsWalletCta && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
               Privy email is signed in, but its embedded wallet is not your Circle Smart Wallet. Add the Circle wallet app id to enable Circle Smart Wallet payments, or connect an external wallet.
             </div>
@@ -5281,9 +5291,8 @@ export default function PaymentPage() {
         </div>
       )}
 
-      <div className="mt-10 animate-fade-in">
-        {!isNgPosPaycrestOfframp && (
-          <>
+      {!isNgPosPaycrestOfframp && (
+        <div className="mt-10 animate-fade-in">
           <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
             How it works
           </p>
@@ -5322,22 +5331,20 @@ export default function PaymentPage() {
               </div>
             ))}
           </div>
-          </>
-        )}
-
-        <footer className="mt-6 flex h-[60px] items-center border-t border-gray-100 bg-white/50 py-0 dark:border-white/5 dark:bg-[#111113]/50">
-          <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
-            <p className="text-center text-xs text-gray-400">
-              <span className="polydesk-powered-footer">
-                <span>Powered by</span>
-                <strong>Circle</strong>
-              </span>
-            </p>
-          </div>
-        </footer>
-      </div>
-
+        </div>
+      )}
     </div>
+    <footer className="mt-10 flex h-[60px] items-center border-t border-gray-100 bg-white/50 py-0 dark:border-white/5 dark:bg-[#111113]/50">
+      <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
+        <p className="text-center text-xs text-gray-400">
+          <span className="polydesk-powered-footer">
+            <span>Powered by</span>
+            <strong>Circle</strong>
+          </span>
+        </p>
+      </div>
+    </footer>
+    </>
   )
 }
 
