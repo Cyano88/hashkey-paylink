@@ -3925,10 +3925,10 @@ export default function PaymentPage() {
         <button
           type="button"
           onClick={goBackFromCheckout}
-          className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700"
+          className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back
+          {isPolymarketFunding ? 'Back to PolyDesk' : 'Back'}
         </button>
       ) : (
         <Link to="/" className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
@@ -4785,13 +4785,6 @@ export default function PaymentPage() {
                 <Wallet className="h-4 w-4" />
                 Continue
               </button>
-              <a
-                href={polymarketBridgeReturnUrl}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to PolyDesk Portfolio
-              </a>
             </div>
           )}
 
@@ -4828,8 +4821,8 @@ export default function PaymentPage() {
                   : privyCircleLinkLoading
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                   : circleSmartAccount
-                    ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 rounded-md border border-black/10 bg-white p-0.5 object-contain shadow-sm" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : `Pay ${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`}</>
-                    : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 rounded-md border border-black/10 bg-white p-0.5 object-contain shadow-sm" /> Continue</>}
+                    ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : `Pay ${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`}</>
+                    : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
               </button>
               {!circleSmartAccount && (
                 <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -5010,8 +5003,8 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 rounded-md border border-black/10 bg-white p-0.5 object-contain shadow-sm" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
-                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 rounded-md border border-black/10 bg-white p-0.5 object-contain shadow-sm" /> Continue</>}
+                          ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
+                          : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
                     </button>
                     {!circleSolanaSession && (
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
