@@ -31,8 +31,8 @@ const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
 const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | undefined
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
-  RefreshCw, Zap, Copy, CheckCheck, Wallet, ChevronDown,
-  AlertTriangle, Radio, Bot, Share2, Banknote,
+  RefreshCw, Copy, CheckCheck, Wallet, ChevronDown,
+  AlertTriangle, Radio, Bot, Share2, Banknote, Lock,
 } from 'lucide-react'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, type ChainKey,
@@ -130,6 +130,18 @@ function PolyDeskVectorIcon({ className = '' }: { className?: string }) {
         strokeLinecap="round"
       />
     </svg>
+  )
+}
+
+function CheckoutTrustLine() {
+  return (
+    <div className="mt-3 space-y-3 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+      <p>Hash PayLink checkout</p>
+      <p className="inline-flex items-center justify-center gap-1">
+        <span>secure</span>
+        <Lock className="h-[11px] w-[11px]" strokeWidth={1.8} />
+      </p>
+    </div>
   )
 }
 
@@ -834,6 +846,7 @@ export default function PaymentPage() {
   const isEvmChain    = chain !== 'solana'
   const isHskOnly     = legacyChain === 'hashkey'
   const meta          = CHAIN_META[chain]
+  const finalPayLabel = 'Pay'
   const targetChainId =
     chain === 'base'     ? CHAIN_META.base.chainId     :
     chain === 'arc'      ? CHAIN_META.arc.chainId      :
@@ -928,6 +941,7 @@ export default function PaymentPage() {
     isPolymarketFunding &&
     !isBankSendPayment &&
     payMode === 'wallet' &&
+    privyAuthenticated &&
     canStartPolymarketCircleFunding &&
     !manualPayDetected &&
     !circleSmartAccount &&
@@ -2860,7 +2874,7 @@ export default function PaymentPage() {
 
   async function handleEvmPermitPay() {
     if (isPrivyEmbeddedWalletConnected) {
-      setBasePaymasterError('This Privy email wallet is not your Circle Smart Wallet. Use Continue with Circle Smart Wallet, or connect an external wallet.')
+      setBasePaymasterError('This Privy email wallet is not your Circle Smart Wallet. Open Pocket Wallet, or connect an external wallet.')
       return
     }
     if (!address) {
@@ -3944,11 +3958,11 @@ export default function PaymentPage() {
       )}
 
       <div
-        className="overflow-hidden rounded-2xl border bg-white transition-all duration-300"
-        style={{ boxShadow: `0 4px 24px -4px rgba(0,0,0,0.08), ${meta.glowStyle}`, borderColor: meta.accentColor + '26' }}
+        className="overflow-hidden rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"
+        style={{ boxShadow: `0 18px 60px -32px rgba(15,23,42,0.42), ${meta.glowStyle}`, borderColor: meta.accentColor + '24' }}
       >
         {/* ── Chain toggle ─────────────────────────────────────────────── */}
-        {!isBankSendPayment && <div className="flex justify-center pt-5 pb-0 px-4">
+        {!isBankSendPayment && <div className="flex justify-center px-4 pb-0 pt-4">
           <div className={cn(
             'flex items-center justify-center overflow-x-auto',
             availableChains.length === 1
@@ -4017,7 +4031,7 @@ export default function PaymentPage() {
         )}
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
-        <div className={cn('border-b border-gray-100 dark:border-white/10 bg-gradient-to-br p-6 text-center mt-4', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
+        <div className={cn('mt-3 border-b border-gray-100 bg-gradient-to-br p-5 text-center dark:border-white/10', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
           {isFlex ? (
             <div className="flex flex-col items-center gap-2">
               {isAgentOrWalletFunding ? (
@@ -4113,10 +4127,19 @@ export default function PaymentPage() {
           )}
           {(!isFlex || isBankSendPayment) && (
             <>
-              <div className="flex items-baseline justify-center gap-2">
-                <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">{isBankSendPayment ? (bankSendRequestedNgnLabel || 'Enter amount') : formatAmount(payableAmt, meta.decimals)}</span>
-                <span className="text-xl font-semibold text-gray-400">{isBankSendPayment ? 'NGN' : meta.asset}</span>
-              </div>
+              {isBankSendPayment ? (
+                <div className="flex items-baseline justify-center gap-2">
+                  <span className="text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">{bankSendRequestedNgnLabel || 'Enter amount'}</span>
+                  <span className="text-xl font-semibold text-gray-400">NGN</span>
+                </div>
+              ) : (
+                <div className="flex justify-center">
+                  <span className="relative text-[2.75rem] font-bold leading-none tracking-tight text-gray-900 dark:text-white">
+                    {formatAmount(payableAmt, meta.decimals)}
+                    <span className="absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap text-xl font-semibold text-gray-400 dark:text-gray-300">{meta.asset}</span>
+                  </span>
+                </div>
+              )}
               {isBankSendPayment && (
                 <div className="mt-2 flex items-center justify-center gap-1.5">
                   {bankSendQuoteBusy && !bankSendDisplayUsdc ? (
@@ -4215,7 +4238,7 @@ export default function PaymentPage() {
 
         {/* ── Live rates banner ─────────────────────────────────────────── */}
         {fxShow && fxCurrency && (
-          <div className="px-6 pt-4">
+          <div className="px-5 pt-3">
             <p className="text-center text-[10px] text-gray-400 leading-relaxed">
               Pricing in {meta.asset} · Shown in {getFxMeta(fxCurrency)?.name ?? fxCurrency} at live market rates
               {fxStale && ' · ⚠ Rate may be outdated'}
@@ -4223,7 +4246,7 @@ export default function PaymentPage() {
           </div>
         )}
 
-        <div className="p-6 space-y-5">
+        <div className="space-y-4 p-5">
           {/* Payment details */}
           <div className="space-y-1.5 text-center">
             <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-100">
@@ -4817,7 +4840,7 @@ export default function PaymentPage() {
                 onClick={handleCirclePasskeyPay}
                 disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
+                  'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
                   circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
                     : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
@@ -4832,14 +4855,12 @@ export default function PaymentPage() {
                   : privyCircleLinkLoading
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                   : circleSmartAccount
-                    ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : 'Pay'}</>
-                    : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> Continue</>}
+                    ? isNgPosPaycrestOfframp && !paycrestOrder
+                      ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Prepare naira payout</span></>
+                      : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
+                    : <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
               </button>
-              {!circleSmartAccount && (
-                <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                  Smart wallet payment
-                </p>
-              )}
+              <CheckoutTrustLine />
               {privyCircleLinkError && circleSmartAccount && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                   {privyCircleLinkError}
@@ -5003,7 +5024,7 @@ export default function PaymentPage() {
                       onClick={handleCircleSolanaEmailPay}
                       disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                       className={cn(
-                        'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
+                        'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
                         circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaNeedsFunds
                           ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
                           : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
@@ -5014,14 +5035,10 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> Pay</>
-                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> Continue</>}
+                          ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
+                          : <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
                     </button>
-                    {!circleSolanaSession && (
-                      <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                        Smart wallet payment
-                      </p>
-                    )}
+                    <CheckoutTrustLine />
                     {(circleSolanaSession || circleSolanaAddress) && (
                       <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
@@ -5167,7 +5184,7 @@ export default function PaymentPage() {
                   </div>
                 )}
                 {!smartWalletOnlyFunding && !showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource && !solanaWalletAddr ? (
-                  <>
+                  <div className="space-y-2">
                 <button
                   onClick={() => connectSolana()}
                   disabled={isSolanaConnecting || (requiresAttendeeName && !attendeeName.trim())}
@@ -5182,27 +5199,31 @@ export default function PaymentPage() {
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Signing in...</>
                     : <><Wallet className="h-4 w-4" /> {showCircleSolanaEmailBridgePay && !manualPayDetected ? 'Pay another way' : 'Sign in with Solana'}</>}
                 </button>
+                <CheckoutTrustLine />
                 <p className="text-center text-xs text-gray-400">
                   {showCircleSolanaEmailBridgePay && !manualPayDetected
                     ? 'Use Phantom, Solflare, Backpack, or WalletConnect'
                     : 'Privy opens Phantom, Solflare, Backpack, or WalletConnect'}
                 </p>
-                  </>
+                  </div>
                 ) : !smartWalletOnlyFunding && !showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource ? (
+              <div className="space-y-2">
               <button
                 onClick={handlePay}
-                disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
-                className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
-                  isSolanaPending || isSolanaConfirming
-                    ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
+                      disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                      className={cn(
+                        'relative flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold transition-all',
+                        isSolanaPending || isSolanaConfirming
+                          ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
+                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                 )}
-              >
-                {isSolanaPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
-                : isSolanaConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> Pay</>}
-              </button>
+                    >
+                      {isSolanaPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
+                      : isSolanaConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
+                      : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>}
+                    </button>
+              <CheckoutTrustLine />
+              </div>
                 ) : null}
               </div>
           ) : payMode === 'wallet' && !isBankSendPayment && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected && !showPolymarketFundingChoice ? (
@@ -5214,6 +5235,7 @@ export default function PaymentPage() {
                 <Wallet className="h-4 w-4" />
                 Sign in to pay
               </PrivyConnectButton>
+              <CheckoutTrustLine />
             </div>
           ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
             <div className={cn(
@@ -5227,22 +5249,26 @@ export default function PaymentPage() {
                 <Wallet className="h-4 w-4" />
                 {showCircleEmailPay ? 'Connect EOA Wallet' : 'Connect Wallet to Pay'}
               </PrivyWalletConnectButton>
+              <CheckoutTrustLine />
               {showLegacyCircleEmailPay && (
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
           ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
+            <div className="space-y-2">
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:disabled:bg-white/10 dark:disabled:text-gray-400">
               {isSwitching
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Switching…</>
                 : <><RefreshCw className="h-4 w-4" /> Switch to {meta.label}</>}
             </button>
+            <CheckoutTrustLine />
+            </div>
           ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
               <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
               className={cn(
-                'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
+                'relative flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold transition-all',
                 isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
                   : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
               )}>
@@ -5251,8 +5277,9 @@ export default function PaymentPage() {
               : isBasePaymasterPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Requesting sponsored gas…</>
               : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> Pay</>}
+                : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>}
               </button>
+              <CheckoutTrustLine />
             </div>
           ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
@@ -5302,13 +5329,13 @@ export default function PaymentPage() {
             { n: '2', title: 'Verify access', body: 'Hash PayLink confirms the payment receipt' },
             { n: '3', title: 'Open helper', body: 'Return to Telegram with access unlocked' },
           ] : isPolymarketFunding && isBankSendPayment ? [
-            { n: '1', title: 'Verify refund bank', body: 'Add the bank account used if a refund is required' },
-            { n: '2', title: 'Send Naira', body: 'Use the bank transfer details before the deadline' },
-            { n: '3', title: 'Settle to PolyDesk', body: 'USDC is routed to the Polymarket funding path' },
+            { n: '1', title: 'Verify refund bank' },
+            { n: '2', title: 'Send Naira' },
+            { n: '3', title: 'Settle to PolyDesk' },
           ] : isPolymarketFunding ? [
-            { n: '1', title: 'Review wallet', body: 'Confirm the funding wallet and amount' },
-            { n: '2', title: 'Fund with USDC', body: 'Pay from your gasless wallet or another wallet' },
-            { n: '3', title: 'Return to PolyDesk', body: 'Use the success screen to continue from Portfolio' },
+            { n: '1', title: 'Review wallet' },
+            { n: '2', title: 'Fund with USDC' },
+            { n: '3', title: 'Return to PolyDesk' },
           ] : isWalletManagerFunding ? [
             { n: '1', title: 'Fund wallet', body: 'Add USDC to your Circle wallet balance' },
             { n: '2', title: 'Activate x402', body: 'Move wallet USDC into x402 service balance' },
@@ -5327,7 +5354,7 @@ export default function PaymentPage() {
                   {n}
                 </div>
                 <p className="text-xs font-semibold text-gray-800">{title}</p>
-                <p className="mt-0.5 text-xs text-gray-400 leading-relaxed">{body}</p>
+                {body && <p className="mt-0.5 text-xs text-gray-400 leading-relaxed">{body}</p>}
               </div>
             ))}
           </div>
