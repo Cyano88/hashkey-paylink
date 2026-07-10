@@ -3539,7 +3539,7 @@ export default function PaymentPage() {
     polymarketAgentNoticeStored.current = true
     const actionLinks = [
       paymentReceiptId ? { label: 'Receipt', url: `/receipt/${encodeURIComponent(paymentReceiptId)}` } : null,
-      { label: 'Polymarket', url: POLYMARKET_SIGNUP_URL },
+      { label: 'PolyDesk Portfolio', url: polymarketBridgeReturnUrl },
     ].filter(Boolean)
     void fetch('/api/helper-profile', {
       method: 'POST',
@@ -4780,19 +4780,17 @@ export default function PaymentPage() {
               <button
                 type="button"
                 onClick={() => setPolymarketFundingStep('fund')}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
               >
                 <Wallet className="h-4 w-4" />
                 Continue
               </button>
               <a
-                href={POLYMARKET_SIGNUP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={polymarketBridgeReturnUrl}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]"
               >
-                <ExternalLink className="h-4 w-4" />
-                Create Polymarket account
+                <ArrowLeft className="h-4 w-4" />
+                Back to PolyDesk Portfolio
               </a>
             </div>
           )}
@@ -4830,8 +4828,8 @@ export default function PaymentPage() {
                   : privyCircleLinkLoading
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                   : circleSmartAccount
-                    ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : `Pay ${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`}</>
-                    : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue</>}
+                    ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 rounded-md border border-black/10 bg-white p-0.5 object-contain shadow-sm" /> {isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : `Pay ${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`}</>
+                    : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 rounded-md border border-black/10 bg-white p-0.5 object-contain shadow-sm" /> Continue</>}
               </button>
               {!circleSmartAccount && (
                 <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -5012,8 +5010,8 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
-                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen" /> Continue</>}
+                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 rounded-md border border-black/10 bg-white p-0.5 object-contain shadow-sm" /> Pay {formatAmount(effectiveAmt, 6)} USDC</>
+                          : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 rounded-md border border-black/10 bg-white p-0.5 object-contain shadow-sm" /> Continue</>}
                     </button>
                     {!circleSolanaSession && (
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -5318,7 +5316,7 @@ export default function PaymentPage() {
           ] : isPolymarketFunding ? [
             { n: '1', title: 'Review wallet', body: 'Confirm the funding wallet and amount' },
             { n: '2', title: 'Fund with USDC', body: 'Pay from your gasless wallet or another wallet' },
-            { n: '3', title: 'Continue trading', body: 'Use the success screen to return to Polymarket' },
+            { n: '3', title: 'Return to PolyDesk', body: 'Use the success screen to continue from Portfolio' },
           ] : isWalletManagerFunding ? [
             { n: '1', title: 'Fund wallet', body: 'Add USDC to your Circle wallet balance' },
             { n: '2', title: 'Activate x402', body: 'Move wallet USDC into x402 service balance' },
