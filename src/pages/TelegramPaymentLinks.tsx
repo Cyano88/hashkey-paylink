@@ -5308,7 +5308,7 @@ export function PolyStreamPanel({
           amount: Number(amount),
           price: Number(option.price ? Number.parseFloat(option.price) / 100 : 1),
           side: Side.BUY,
-          orderType: OrderType.FOK,
+          orderType: OrderType.FAK,
           builderCode: data.builderCode,
         },
         { tickSize: liveTickSize, negRisk: liveNegRisk, version: 2 },
@@ -5323,7 +5323,7 @@ export function PolyStreamPanel({
       if (!polyDeskValidClobCreds(userCreds)) {
         throw new Error('Polymarket API authorization failed. Reconnect the owner wallet, then try again.')
       }
-      const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FOK, false, false)
+      const orderPayload = orderToJsonV2(signedOrder, userCreds.key, OrderType.FAK, false, false)
       tradeStage = 'builder-handoff'
       const handoffResponse = await fetch('/api/polymarket-builder-handoff', {
         method: 'POST',
@@ -5335,7 +5335,7 @@ export function PolyStreamPanel({
           outcome: option.label,
           tokenId: option.tokenId,
           signer: polymarketDepositWallet,
-          orderType: OrderType.FOK,
+          orderType: OrderType.FAK,
           order: signedOrder,
           orderPayload,
         }),
