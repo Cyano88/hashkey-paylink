@@ -3210,7 +3210,7 @@ export default function PaymentPage() {
   const polymarketBridgePending = isPolymarketBridge && !polymarketBridgeComplete
   const polymarketBridgeAwaitingTx = isPolymarketBridge && isConfirmed && !txHash
   const polymarketBridgeProgressText = polymarketBridgeComplete
-    ? 'Bridge complete. Redirecting in 5 seconds...'
+    ? 'Funded. Redirecting in 7 seconds...'
     : polymarketBridgeAwaitingTx
       ? 'Confirming payment...'
       : polymarketBridgeStatusText || 'Confirming Polymarket bridge...'
@@ -3234,7 +3234,7 @@ export default function PaymentPage() {
     const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
     if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge) return
     void refreshPolymarketBridgeStatus()
-    const timer = window.setInterval(() => void refreshPolymarketBridgeStatus(), 10_000)
+    const timer = window.setInterval(() => void refreshPolymarketBridgeStatus(), 5_000)
     return () => window.clearInterval(timer)
   }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, refreshPolymarketBridgeStatus])
 
@@ -3603,7 +3603,7 @@ export default function PaymentPage() {
     polymarketReturnRedirected.current = true
     const timer = window.setTimeout(() => {
       window.location.assign(polymarketAgentHashUrl)
-    }, 5000)
+    }, 7000)
     return () => window.clearTimeout(timer)
   }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketAgentHashUrl])
 
@@ -3614,7 +3614,7 @@ export default function PaymentPage() {
     polymarketReturnRedirected.current = true
     const timer = window.setTimeout(() => {
       window.location.assign(polymarketBridgeReturnUrl)
-    }, 5000)
+    }, 7000)
     return () => window.clearTimeout(timer)
   }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketBridgeReturnUrl])
 
@@ -3754,7 +3754,7 @@ export default function PaymentPage() {
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder ? 'Underpayment Detected'
                : polymarketBridgePending ? 'Confirming funding'
-               : isPolymarketFunding ? 'Funded!'
+               : isPolymarketFunding ? 'Funded'
                : 'Payment Sent!'}
             </h2>
             <p className="mt-1 text-sm text-gray-600">
@@ -3980,12 +3980,12 @@ export default function PaymentPage() {
               </div>
             ) : isPolymarketBridge && polymarketReturnToAgentHash ? (
               <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                {polymarketBridgeComplete ? 'Redirecting back to Agent Hash...' : polymarketBridgeProgressText}
+                {polymarketBridgeComplete ? 'Funded. Redirecting back to Agent Hash in 7 seconds...' : polymarketBridgeProgressText}
                 {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
               </p>
             ) : isPolymarketBridge ? (
               <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                {polymarketBridgeComplete ? 'Redirecting back to PolyDesk...' : polymarketBridgeProgressText}
+                {polymarketBridgeComplete ? 'Funded. Redirecting back to PolyDesk in 7 seconds...' : polymarketBridgeProgressText}
                 {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
               </p>
             ) : isPolymarketFunding ? (
