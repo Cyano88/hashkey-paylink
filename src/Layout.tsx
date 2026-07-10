@@ -850,7 +850,7 @@ export default function Layout() {
               </>
             )}
 
-            {!isDashPage && (
+            {!isPayPage && !isDashPage && (
               <button
                 type="button"
                 onClick={openPaymentHistory}

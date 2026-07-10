@@ -138,8 +138,8 @@ function CheckoutTrustLine() {
     <div className="mt-3 space-y-3 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
       <p>Hash PayLink checkout</p>
       <p className="inline-flex items-center justify-center gap-1">
-        <span>secure</span>
-        <Lock className="h-[11px] w-[11px]" strokeWidth={1.8} />
+        <span>Secure</span>
+        <Lock className="h-2.5 w-2.5" strokeWidth={1.8} />
       </p>
     </div>
   )
@@ -1149,9 +1149,7 @@ export default function PaymentPage() {
       return
     }
     if (circleWalletNeedsFunds) {
-      if (!circlePasskeyPending && !circleEvmPaymentProcessing && circlePasskeyError !== SMART_WALLET_FUNDING_ERROR) {
-        setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
-      }
+      if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
       return
     }
     if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
@@ -1246,9 +1244,7 @@ export default function PaymentPage() {
       return
     }
     if (circleSolanaNeedsFunds) {
-      if (!circleSolanaPending && !isSolanaConfirming && circleSolanaError !== SMART_WALLET_FUNDING_ERROR) {
-        setCircleSolanaError(SMART_WALLET_FUNDING_ERROR)
-      }
+      if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
       return
     }
     if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
@@ -4837,11 +4833,18 @@ export default function PaymentPage() {
                 </div>
               )}
               <button
-                onClick={handleCirclePasskeyPay}
-                disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                onClick={() => {
+                  if (circleSmartAccount && circleWalletNeedsFunds) {
+                    setCircleWalletPanel('fund')
+                    if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
+                    return
+                  }
+                  handleCirclePasskeyPay()
+                }}
+                disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
                   'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
-                  circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
+                  circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
                     : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                 )}
@@ -4857,19 +4860,20 @@ export default function PaymentPage() {
                   : circleSmartAccount
                     ? isNgPosPaycrestOfframp && !paycrestOrder
                       ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Prepare naira payout</span></>
+                      : circleWalletNeedsFunds
+                      ? <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
                       : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
                     : <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
               </button>
-              <CheckoutTrustLine />
               {privyCircleLinkError && circleSmartAccount && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                   {privyCircleLinkError}
                 </p>
               )}
               {circleSmartAccount && (
-                <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                <details open={circleWalletNeedsFunds || undefined} className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 truncate">{circleWalletNeedsFunds ? `Add ${meta.label} ${meta.asset} to continue` : `${meta.label} ${meta.asset} wallet ready`}</span>
+                    <span className="min-w-0 truncate">{circleWalletNeedsFunds ? `${meta.label} ${meta.asset} needed` : `${meta.label} ${meta.asset} wallet ready`}</span>
                     <span className="ml-auto flex shrink-0 items-center gap-2">
                       <span className="font-mono font-semibold text-gray-600 dark:text-gray-200">
                         {circleWalletBalance == null
@@ -4995,6 +4999,7 @@ export default function PaymentPage() {
               {circlePasskeyError && circleWalletPanel !== 'withdraw' && (
                 <p className="text-center text-[11px] font-medium text-red-600 dark:text-red-300">{circlePasskeyError}</p>
               )}
+              <CheckoutTrustLine />
             </div>
           )}
 
@@ -5021,11 +5026,18 @@ export default function PaymentPage() {
                       </div>
                     )}
                     <button
-                      onClick={handleCircleSolanaEmailPay}
-                      disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                      onClick={() => {
+                        if ((circleSolanaSession || circleSolanaAddress) && circleSolanaNeedsFunds) {
+                          setCircleSolanaPanel('fund')
+                          if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
+                          return
+                        }
+                        handleCircleSolanaEmailPay()
+                      }}
+                      disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                       className={cn(
                         'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
-                        circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaNeedsFunds
+                        circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
                           ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
                           : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                       )}
@@ -5035,15 +5047,16 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
+                          ? circleSolanaNeedsFunds
+                            ? <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
+                            : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
                           : <><img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
                     </button>
-                    <CheckoutTrustLine />
                     {(circleSolanaSession || circleSolanaAddress) && (
-                      <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                      <details open={circleSolanaNeedsFunds || undefined} className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
                           <span className="min-w-0 truncate">
-                            {circleSolanaNeedsFunds ? 'Add Solana USDC to continue' : 'Circle Solana wallet'}
+                            {circleSolanaNeedsFunds ? 'Solana USDC needed' : 'Circle Solana wallet'}
                           </span>
                           <span className="ml-auto flex shrink-0 items-center gap-2">
                             <span className="font-mono font-semibold text-gray-600 dark:text-gray-200">
@@ -5181,6 +5194,7 @@ export default function PaymentPage() {
                         {privyCircleLinkError}
                       </p>
                     )}
+                    <CheckoutTrustLine />
                   </div>
                 )}
                 {!smartWalletOnlyFunding && !showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource && !solanaWalletAddr ? (
