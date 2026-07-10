@@ -6352,10 +6352,6 @@ function isActiveOpenPosition(position: PolymarketPosition) {
   const value = numberOrNull(position.currentValue)
   const size = numberOrNull(position.size)
   if ((value ?? 0) > 0 || (size ?? 0) > 0) return true
-  if (position.endDate) {
-    const endedAt = new Date(position.endDate).getTime()
-    if (Number.isFinite(endedAt) && endedAt < Date.now()) return false
-  }
   if (value !== null || size !== null) return (value ?? 0) > 0 || (size ?? 0) > 0
   return true
 }
