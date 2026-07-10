@@ -985,6 +985,7 @@ export default function PaymentPage() {
     typeof circleWalletBalance === 'bigint' &&
     circleRequiredUnits > 0n &&
     circleWalletBalance < circleRequiredUnits
+  const circleEvmWalletUnlocked = !!circleEvmEmailSession && circleEvmEmailSession.chain === chain
   const circleEvmEmailMerchantUnits = (() => {
     if (!showCircleEvmEmailPay || circleRequiredUnits <= 0n || (chain !== 'base' && chain !== 'arbitrum')) return null
     const totalUnits = parseUnits(payableAmt || '0', meta.decimals)
@@ -2701,7 +2702,7 @@ export default function PaymentPage() {
       setCirclePasskeyError(blockedAmountError())
       return
     }
-    if (!paycrestNeedsPreparation && (circleWalletNeedsFunds || (circleSmartAccount && typeof circleWalletBalance === 'bigint' && !circleWalletHasEnough))) {
+    if (!paycrestNeedsPreparation && circleEvmWalletUnlocked && (circleWalletNeedsFunds || (circleSmartAccount && typeof circleWalletBalance === 'bigint' && !circleWalletHasEnough))) {
       resetCircleSmartWalletPending()
       setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
       return
@@ -4804,7 +4805,7 @@ export default function PaymentPage() {
               )}
               <button
                 onClick={() => {
-                  if (circleSmartAccount && !circleWalletHasEnough) {
+                  if (circleSmartAccount && circleEvmWalletUnlocked && !circleWalletHasEnough) {
                     setCircleWalletPanel('fund')
                     if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
                     return
@@ -4824,7 +4825,7 @@ export default function PaymentPage() {
                   : paycrestPreparing
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Preparing payout</>
                   : circlePasskeyPending
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSmartAccount ? 'Confirming payment' : 'Opening Smart wallet'}</>
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleEvmWalletUnlocked ? 'Confirming payment' : 'Opening Smart wallet'}</>
                   : privyCircleLinkLoading
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                   : circleSmartAccount
@@ -4997,7 +4998,7 @@ export default function PaymentPage() {
                     )}
                     <button
                       onClick={() => {
-                        if ((circleSolanaSession || circleSolanaAddress) && !circleSolanaHasEnough) {
+                        if (circleSolanaSession && !circleSolanaHasEnough) {
                           setCircleSolanaPanel('fund')
                           if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
                           return
