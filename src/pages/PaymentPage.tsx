@@ -3162,6 +3162,13 @@ export default function PaymentPage() {
                         : isEvmReverted
                           ? 'Transaction reverted. The permit may have expired or your USDC balance was insufficient.'
                           : (evmSendError?.message ?? 'An unknown error occurred').slice(0, 140)
+  const polymarketBridgeComplete = isPolymarketBridge && polymarketBridgeStatus === 'complete'
+  const polymarketBridgeAwaitingTx = isPolymarketBridge && isConfirmed && !txHash
+  const polymarketBridgeProgressText = polymarketBridgeComplete
+    ? 'Bridge complete. Redirecting in 5 seconds...'
+    : polymarketBridgeAwaitingTx
+      ? 'Confirming payment...'
+      : polymarketBridgeStatusText || 'Confirming Polymarket bridge...'
 
   useEffect(() => {
     onPaySuccessVisibleChange(isConfirmed)
@@ -3689,6 +3696,7 @@ export default function PaymentPage() {
             </div>
             <h2 className="text-xl font-bold text-gray-900">
               {isUnder ? 'Underpayment Detected'
+               : isPolymarketBridge && !polymarketBridgeComplete ? 'Confirming funding'
                : isPolymarketFunding ? 'Funded!'
                : 'Payment Sent!'}
             </h2>
@@ -3915,13 +3923,13 @@ export default function PaymentPage() {
               </div>
             ) : isPolymarketBridge && polymarketReturnToAgentHash ? (
               <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                {ogProofValue ? 'Redirecting back to Agent Hash...' : 'Confirming your payment...'}
-                {!ogProofValue && <Loader2 className="h-3 w-3 animate-spin" />}
+                {polymarketBridgeComplete ? 'Redirecting back to Agent Hash...' : polymarketBridgeProgressText}
+                {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
               </p>
             ) : isPolymarketBridge ? (
               <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                {isConfirmed ? 'Redirecting back to PolyDesk...' : 'Confirming your payment...'}
-                {!ogProofValue && <Loader2 className="h-3 w-3 animate-spin" />}
+                {polymarketBridgeComplete ? 'Redirecting back to PolyDesk...' : polymarketBridgeProgressText}
+                {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
               </p>
             ) : isPolymarketFunding ? (
               <p className="text-center text-[11px] font-medium text-gray-400">Funding complete.</p>
