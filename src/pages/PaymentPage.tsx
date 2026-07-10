@@ -4805,7 +4805,7 @@ export default function PaymentPage() {
               )}
               <button
                 onClick={() => {
-                  if (circleSmartAccount && circleEvmWalletUnlocked && !circleWalletHasEnough) {
+                  if (circleSmartAccount && circleEvmWalletUnlocked && circleWalletNeedsFunds) {
                     setCircleWalletPanel('fund')
                     if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
                     return
@@ -4831,7 +4831,7 @@ export default function PaymentPage() {
                   : circleSmartAccount
                     ? isNgPosPaycrestOfframp && !paycrestOrder
                       ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Prepare naira payout</span></>
-                      : circleWalletHasEnough
+                      : circleEvmWalletUnlocked && !circleWalletNeedsFunds
                       ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
                       : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
                     : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
@@ -4998,7 +4998,7 @@ export default function PaymentPage() {
                     )}
                     <button
                       onClick={() => {
-                        if (circleSolanaSession && !circleSolanaHasEnough) {
+                        if (circleSolanaSession && circleSolanaNeedsFunds) {
                           setCircleSolanaPanel('fund')
                           if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
                           return
@@ -5018,7 +5018,7 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? circleSolanaHasEnough
+                          ? !circleSolanaNeedsFunds
                             ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
                             : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
                           : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
