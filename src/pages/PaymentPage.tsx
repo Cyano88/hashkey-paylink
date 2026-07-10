@@ -508,6 +508,7 @@ export default function PaymentPage() {
   const ordinaryReceiptRegistered = useRef(false)
   const accessRedirected = useRef(false)
   const polymarketReturnRedirected = useRef(false)
+  const polymarketBridgeWaitStartedAtRef = useRef(0)
   const polymarketAgentNoticeStored = useRef(false)
   const polymarketFundingMarkRef = useRef('')
   const polymarketFundingMarkInFlightRef = useRef('')
@@ -900,6 +901,7 @@ export default function PaymentPage() {
 
   const refreshPolymarketBridgeStatus = useCallback(async () => {
     if (!isPolymarketBridge || !activeRecipient) return
+    const bridgeWaitStartedAt = polymarketBridgeWaitStartedAtRef.current
     setPolymarketBridgeStatus('checking')
     setPolymarketBridgeStatusText('Checking Polymarket Bridge...')
     try {
@@ -910,12 +912,20 @@ export default function PaymentPage() {
       })
       const data = await response.json().catch(() => ({})) as {
         ok?: boolean
+        transactions?: Array<{ status?: string; txHash?: string; createdTimeMs?: number }>
         latest?: { status?: string; txHash?: string } | null
         error?: string
       }
       if (!response.ok || !data.ok) throw new Error(data.error || 'Bridge status unavailable')
-      const latestStatus = String(data.latest?.status || '').toUpperCase()
-      setPolymarketBridgeLatestTx(data.latest?.txHash || '')
+      const currentTransactions = Array.isArray(data.transactions)
+        ? data.transactions.filter((transaction) => {
+            const createdTimeMs = Number(transaction.createdTimeMs || 0)
+            return !bridgeWaitStartedAt || !createdTimeMs || createdTimeMs >= bridgeWaitStartedAt
+          }).sort((a, b) => Number(b.createdTimeMs || 0) - Number(a.createdTimeMs || 0))
+        : []
+      const latest = currentTransactions[0] ?? null
+      const latestStatus = String(latest?.status || '').toUpperCase()
+      setPolymarketBridgeLatestTx(latest?.txHash || '')
       if (latestStatus === 'COMPLETED' || latestStatus === 'COMPLETE') {
         setPolymarketBridgeStatus('complete')
         setPolymarketBridgeStatusText('Bridge complete. Portfolio will refresh when you return.')
@@ -924,7 +934,7 @@ export default function PaymentPage() {
         setPolymarketBridgeStatusText(`Bridge ${latestStatus.toLowerCase()}. Polymarket credit can take a few minutes.`)
       } else {
         setPolymarketBridgeStatus('waiting')
-        setPolymarketBridgeStatusText('Payment confirmed. Waiting for Bridge detection.')
+        setPolymarketBridgeStatusText('Payment confirmed. Waiting for the current bridge settlement.')
       }
     } catch (err) {
       setPolymarketBridgeStatus('error')
@@ -3185,6 +3195,9 @@ export default function PaymentPage() {
   useEffect(() => {
     const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
     if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge) return
+    if (!polymarketBridgeWaitStartedAtRef.current) {
+      polymarketBridgeWaitStartedAtRef.current = Date.now() - 30_000
+    }
     void refreshPolymarketBridgeStatus()
     const timer = window.setInterval(() => void refreshPolymarketBridgeStatus(), 10_000)
     return () => window.clearInterval(timer)
