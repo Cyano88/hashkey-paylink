@@ -986,6 +986,7 @@ export default function PaymentPage() {
     circleRequiredUnits > 0n &&
     circleWalletBalance < circleRequiredUnits
   const circleEvmWalletUnlocked = !!circleEvmEmailSession && circleEvmEmailSession.chain === chain
+  const circleEvmWalletChecking = circleEvmWalletUnlocked && circleRequiredUnits > 0n && typeof circleWalletBalance !== 'bigint'
   const circleEvmEmailMerchantUnits = (() => {
     if (!showCircleEvmEmailPay || circleRequiredUnits <= 0n || (chain !== 'base' && chain !== 'arbitrum')) return null
     const totalUnits = parseUnits(payableAmt || '0', meta.decimals)
@@ -1001,6 +1002,7 @@ export default function PaymentPage() {
     circleSolanaBalance !== null &&
     circleRequiredUnits > 0n &&
     circleSolanaBalance < circleRequiredUnits
+  const circleSolanaWalletChecking = !!circleSolanaSession && circleRequiredUnits > 0n && circleSolanaBalance === null && !circleSolanaBalanceError
 
   function expectedEvmRecipientUnits() {
     const totalUnits = parseUnits(payableAmt || '0', meta.decimals)
@@ -4805,6 +4807,10 @@ export default function PaymentPage() {
               )}
               <button
                 onClick={() => {
+                  if (circleSmartAccount && circleEvmWalletChecking) {
+                    void refetchCircleWalletBalance()
+                    return
+                  }
                   if (circleSmartAccount && circleEvmWalletUnlocked && circleWalletNeedsFunds) {
                     setCircleWalletPanel('fund')
                     if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
@@ -4812,10 +4818,10 @@ export default function PaymentPage() {
                   }
                   handleCirclePasskeyPay()
                 }}
-                disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
                   'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
-                  circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
+                  circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
                     : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                 )}
@@ -4831,7 +4837,11 @@ export default function PaymentPage() {
                   : circleSmartAccount
                     ? isNgPosPaycrestOfframp && !paycrestOrder
                       ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Prepare naira payout</span></>
-                      : circleEvmWalletUnlocked && !circleWalletNeedsFunds
+                      : circleEvmWalletChecking
+                      ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
+                      : circleEvmWalletUnlocked && circleWalletNeedsFunds
+                      ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
+                      : circleEvmWalletUnlocked
                       ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
                       : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
                     : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
@@ -4998,6 +5008,10 @@ export default function PaymentPage() {
                     )}
                     <button
                       onClick={() => {
+                        if (circleSolanaWalletChecking) {
+                          void refreshCircleSolanaBalance()
+                          return
+                        }
                         if (circleSolanaSession && circleSolanaNeedsFunds) {
                           setCircleSolanaPanel('fund')
                           if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
@@ -5005,10 +5019,10 @@ export default function PaymentPage() {
                         }
                         handleCircleSolanaEmailPay()
                       }}
-                      disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                      disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                       className={cn(
                         'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
-                        circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
+                        circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
                           ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
                           : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                       )}
@@ -5018,9 +5032,11 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? !circleSolanaNeedsFunds
-                            ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
-                            : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
+                          ? circleSolanaWalletChecking
+                            ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
+                            : circleSolanaNeedsFunds
+                            ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
+                            : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
                           : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
                     </button>
                     {circleSolanaHasEnough && (
