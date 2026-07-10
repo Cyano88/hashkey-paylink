@@ -4939,7 +4939,7 @@ function HashLiveScoreWidget({
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-[10px] font-black text-emerald-50">
-                        Buy {selectedTradeOption.label}{selectedTradeOption.price ? ` near ${selectedTradeOption.price}` : ''}
+                        Buy {selectedTradeOption.label} at market
                       </p>
                       <p className="mt-0.5 text-[9px] font-semibold text-emerald-100/65">
                         Confirm in your wallet. Signing is free and does not move funds by itself.
@@ -5306,7 +5306,6 @@ export function PolyStreamPanel({
         {
           tokenID: option.tokenId,
           amount: Number(amount),
-          price: Number(option.price ? Number.parseFloat(option.price) / 100 : 1),
           side: Side.BUY,
           orderType: OrderType.FAK,
           builderCode: data.builderCode,
