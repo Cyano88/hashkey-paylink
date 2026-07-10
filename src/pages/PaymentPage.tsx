@@ -4811,10 +4811,10 @@ export default function PaymentPage() {
                 onClick={handleCirclePasskeyPay}
                 disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
+                  'flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                   circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleWalletNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-[#050506] dark:text-white dark:ring-1 dark:ring-white/15 dark:hover:bg-[#111113]',
+                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                 )}
               >
                 {circleEvmPaymentProcessing || circleEvmAcceptedPending
@@ -4826,8 +4826,8 @@ export default function PaymentPage() {
                   : privyCircleLinkLoading
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                   : circleSmartAccount
-                    ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> <span className="text-sm font-bold text-white">{isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : 'Pay'}</span></>
-                    : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
+                    ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span className="text-sm font-bold">{isNgPosPaycrestOfframp && !paycrestOrder ? 'Prepare naira payout' : 'Pay'}</span></>
+                    : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> Continue</>}
               </button>
               {!circleSmartAccount && (
                 <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -4997,10 +4997,10 @@ export default function PaymentPage() {
                       onClick={handleCircleSolanaEmailPay}
                       disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaNeedsFunds || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                       className={cn(
-                        'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
+                        'flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-semibold transition-all',
                         circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaNeedsFunds
                           ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-[#050506] dark:text-white dark:ring-1 dark:ring-white/15 dark:hover:bg-[#111113]',
+                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                       )}
                     >
                       {circleSolanaPending
@@ -5008,8 +5008,8 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> <span className="text-sm font-bold text-white">Pay</span></>
-                          : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain dark:invert dark:mix-blend-screen" /> Continue</>}
+                          ? <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span className="text-sm font-bold">Pay</span></>
+                          : <><img src="/hash-logo.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> Continue</>}
                     </button>
                     {!circleSolanaSession && (
                       <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -5187,15 +5187,15 @@ export default function PaymentPage() {
                 onClick={handlePay}
                 disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                 className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
+                  'flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                   isSolanaPending || isSolanaConfirming
                     ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-[#050506] dark:text-white dark:ring-1 dark:ring-white/15 dark:hover:bg-[#111113]',
+                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
                 )}
               >
                 {isSolanaPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
                 : isSolanaConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> <span className="text-sm font-bold text-white">Pay</span></>}
+                : <><Zap className="h-4 w-4" /> <span className="text-sm font-bold">Pay</span></>}
               </button>
                 ) : null}
               </div>
@@ -5236,16 +5236,16 @@ export default function PaymentPage() {
             <div className="space-y-2">
               <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
               className={cn(
-                'flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
+                'flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-4 text-sm font-semibold transition-all',
                 isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                  : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98] dark:bg-[#050506] dark:text-white dark:ring-1 dark:ring-white/15 dark:hover:bg-[#111113]',
+                  : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
               )}>
               {isSignPending        ? <><Loader2 className="h-4 w-4 animate-spin" /> Sign Permit in Wallet…</>
               : arbitrumRelayPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Relaying via HashPayLink…</>
               : isBasePaymasterPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Requesting sponsored gas…</>
               : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
               : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><Zap className="h-4 w-4" /> <span className="text-sm font-bold text-white">Pay</span></>}
+                : <><Zap className="h-4 w-4" /> <span className="text-sm font-bold">Pay</span></>}
               </button>
             </div>
           ) : payMode === 'wallet' && !isBankSendPayment && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected && !showCircleEmailBridgePay ? (
@@ -5339,7 +5339,7 @@ export default function PaymentPage() {
           </>
         )}
 
-        <footer className="mt-6 flex min-h-[60px] items-center justify-center border-t border-gray-100 bg-white/50 px-3 py-0 dark:border-white/10 dark:bg-[#111113]/50">
+        <footer className="mt-3 flex items-center justify-center border-t border-gray-100 bg-white/50 px-3 py-2 dark:border-white/10 dark:bg-[#111113]/50">
           <span className="polydesk-powered-footer">
             <span>Powered by</span>
             <strong>Circle</strong>
