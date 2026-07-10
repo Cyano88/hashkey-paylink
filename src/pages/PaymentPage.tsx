@@ -4804,7 +4804,7 @@ export default function PaymentPage() {
               )}
               <button
                 onClick={() => {
-                  if (circleSmartAccount && circleWalletNeedsFunds) {
+                  if (circleSmartAccount && !circleWalletHasEnough) {
                     setCircleWalletPanel('fund')
                     if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
                     return
@@ -4830,9 +4830,9 @@ export default function PaymentPage() {
                   : circleSmartAccount
                     ? isNgPosPaycrestOfframp && !paycrestOrder
                       ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Prepare naira payout</span></>
-                      : circleWalletNeedsFunds
-                      ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
-                      : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
+                      : circleWalletHasEnough
+                      ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
+                      : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
                     : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
               </button>
               {privyCircleLinkError && circleSmartAccount && (
@@ -4840,7 +4840,7 @@ export default function PaymentPage() {
                   {privyCircleLinkError}
                 </p>
               )}
-              {circleSmartAccount && !circleWalletNeedsFunds && (
+              {circleWalletHasEnough && (
                 <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
                     <span className="min-w-0 truncate">{`${meta.label} ${meta.asset} wallet ready`}</span>
@@ -4997,7 +4997,7 @@ export default function PaymentPage() {
                     )}
                     <button
                       onClick={() => {
-                        if ((circleSolanaSession || circleSolanaAddress) && circleSolanaNeedsFunds) {
+                        if ((circleSolanaSession || circleSolanaAddress) && !circleSolanaHasEnough) {
                           setCircleSolanaPanel('fund')
                           if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
                           return
@@ -5017,12 +5017,12 @@ export default function PaymentPage() {
                         : privyCircleLinkLoading
                           ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSolanaSession
-                          ? circleSolanaNeedsFunds
-                            ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
-                            : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
+                          ? circleSolanaHasEnough
+                            ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
+                            : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
                           : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
                     </button>
-                    {(circleSolanaSession || circleSolanaAddress) && !circleSolanaNeedsFunds && (
+                    {circleSolanaHasEnough && (
                       <details className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
                           <span className="min-w-0 truncate">
