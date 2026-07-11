@@ -400,6 +400,11 @@ export default function PaymentPage() {
   const resolvedSolana = getPaylinkParam(searchParams, 'sol', 's').trim()
   const isMultiChain   = hasPaylinkFlag(searchParams, 'multi', 'x')
   const isFlex         = hasPaylinkFlag(searchParams, 'flex', 'f')
+  const earlyAgentFundingSlug = getPaylinkParam(searchParams, 'agentSlug', 'agent')
+  const isWalletManagerFundingLink =
+    getPaylinkParam(searchParams, 'src', 'src') === 'agent' &&
+    searchParams.get('walletManager') === 'service' &&
+    !earlyAgentFundingSlug
 
   function goBackFromCheckout() {
     if (isPolymarketBridge) {
@@ -433,6 +438,7 @@ export default function PaymentPage() {
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
+    if (isWalletManagerFundingLink) return 'arc'
     if (netParam === 'base' || netParam === 'arc' || netParam === 'solana' || netParam === 'arbitrum') return netParam
     if (legacyChain === 'base' || legacyChain === 'arc' || legacyChain === 'arbitrum' || legacyChain === 'solana') return legacyChain
     if (resolvedSolana && !resolvedEvm) return 'solana'
@@ -441,8 +447,10 @@ export default function PaymentPage() {
 
   // Normal multi-chain links can switch chains; Telegram links are intentionally
   // locked to the bot-selected network so a Base request stays Base-only.
-  const netLocked = !!netParam && (!isMultiChain || isTelegramSource)
-  const availableChains = netLocked
+  const netLocked = isWalletManagerFundingLink || (!!netParam && (!isMultiChain || isTelegramSource))
+  const availableChains = isWalletManagerFundingLink
+    ? ['arc' as ChainKey]
+    : netLocked
     ? [chain]
     : CHAINS.filter(c =>
         (c === 'solana' && !!resolvedSolana) ||
@@ -812,13 +820,21 @@ export default function PaymentPage() {
     isFetching: isCircleWalletBalanceFetching,
     refetch: refetchCircleWalletBalance,
   } = useReadContract({
-    address: chain === 'arbitrum' ? CHAIN_META.arbitrum.tokenAddress : CHAIN_META.base.tokenAddress,
+    address: chain === 'arc'
+      ? CHAIN_META.arc.tokenAddress
+      : chain === 'arbitrum'
+      ? CHAIN_META.arbitrum.tokenAddress
+      : CHAIN_META.base.tokenAddress,
     abi: ERC20_BALANCE_OF_ABI,
     functionName: 'balanceOf',
     args: [circleSmartAccount ?? '0x0000000000000000000000000000000000000000'],
-    chainId: chain === 'arbitrum' ? CHAIN_META.arbitrum.chainId : CHAIN_META.base.chainId,
+    chainId: chain === 'arc'
+      ? CHAIN_META.arc.chainId
+      : chain === 'arbitrum'
+      ? CHAIN_META.arbitrum.chainId
+      : CHAIN_META.base.chainId,
     query: {
-      enabled: !!circleSmartAccount && (chain === 'base' || chain === 'arbitrum'),
+      enabled: !!circleSmartAccount && (chain === 'base' || chain === 'arc' || chain === 'arbitrum'),
       refetchInterval: 3_000,
     },
   })
@@ -4115,12 +4131,17 @@ export default function PaymentPage() {
                 <div className="flex flex-col items-center gap-1">
                   <div className="flex items-center justify-center gap-2">
                     <span
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 text-white shadow-sm"
-                      style={{
+                      className={cn(
+                        'flex items-center justify-center',
+                        isWalletManagerFunding
+                          ? 'h-5 w-5 text-gray-800 dark:text-gray-100'
+                          : 'h-7 w-7 rounded-lg border border-white/70 text-white shadow-sm',
+                      )}
+                      style={isWalletManagerFunding ? undefined : {
                         background: `linear-gradient(135deg, hsl(${agentFundingHue} 72% 42%), hsl(${(agentFundingHue + 44) % 360} 72% 34%))`,
                       }}
                     >
-                      {isWalletManagerFunding ? <Wallet className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                      {isWalletManagerFunding ? <Bot className="h-3.5 w-3.5" /> : <Bot className="h-4 w-4" />}
                     </span>
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isWalletManagerFunding ? 'Arc x402 Funding' : 'Agent Funding'}</p>
                   </div>
@@ -4195,12 +4216,17 @@ export default function PaymentPage() {
           ) : isAgentOrWalletFunding ? (
             <div className="mb-2 flex items-center justify-center gap-2">
               <span
-                className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 text-white shadow-sm"
-                style={{
+                className={cn(
+                  'flex items-center justify-center',
+                  isWalletManagerFunding
+                    ? 'h-5 w-5 text-gray-800 dark:text-gray-100'
+                    : 'h-7 w-7 rounded-lg border border-white/70 text-white shadow-sm',
+                )}
+                style={isWalletManagerFunding ? undefined : {
                   background: `linear-gradient(135deg, hsl(${agentFundingHue} 72% 42%), hsl(${(agentFundingHue + 44) % 360} 72% 34%))`,
                 }}
               >
-                {isWalletManagerFunding ? <Wallet className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                {isWalletManagerFunding ? <Bot className="h-3.5 w-3.5" /> : <Bot className="h-4 w-4" />}
               </span>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{isWalletManagerFunding ? 'Arc x402 Funding' : 'Agent Funding'}</p>
             </div>
