@@ -496,6 +496,9 @@ export default function PaymentPage() {
       try {
         const url = new URL(raw, window.location.origin)
         if (url.origin === window.location.origin) return `${url.pathname}${url.search}${url.hash}`
+        if (isWalletManagerFunding && trustedPolydeskOrigin(url.origin)) {
+          return `${url.origin}${url.pathname}${url.search}${url.hash}`
+        }
       } catch {
         if (raw.startsWith('/')) return raw
       }
@@ -503,8 +506,13 @@ export default function PaymentPage() {
     if (isWalletManagerFunding) return '/agent?profile=agent&walletManager=service'
     return `/agent?profile=agent&agent=${encodeURIComponent(agentFundingSlug || 'hashpaylink-agent')}`
   })()
-  const agentFundingName = isWalletManagerFunding ? 'x402 wallet manager' : isAgentFunding ? agentDisplayNameFromMemo(memo, agentFundingSlug) : ''
+  const agentFundingName = isWalletManagerFunding ? 'Pocket Wallet' : isAgentFunding ? agentDisplayNameFromMemo(memo, agentFundingSlug) : ''
   const agentFundingHue = agentAvatarHue(`${agentFundingSlug}:${agentFundingName}`)
+  useEffect(() => {
+    if (!isWalletManagerFunding || chain === 'arc') return
+    setChain('arc')
+    onPayChainChange('arc')
+  }, [isWalletManagerFunding, chain, onPayChainChange])
   const paySource        = getPaylinkParam(initParams, 'src', 'src')
   const isNgPosPayment   = paySource === 'ngpos' || paySource === 'bank-receive'
   const isBankReceivePayment = paySource === 'bank-receive'
@@ -4112,13 +4120,18 @@ export default function PaymentPage() {
                         background: `linear-gradient(135deg, hsl(${agentFundingHue} 72% 42%), hsl(${(agentFundingHue + 44) % 360} 72% 34%))`,
                       }}
                     >
-                      <Bot className="h-4 w-4" />
+                      {isWalletManagerFunding ? <Wallet className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                     </span>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isWalletManagerFunding ? 'x402 Wallet Funding' : 'Agent Funding'}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isWalletManagerFunding ? 'Arc x402 Funding' : 'Agent Funding'}</p>
                   </div>
                   <p className="max-w-[15rem] truncate text-sm font-semibold text-gray-800 dark:text-gray-100">
-                    {agentFundingName}
+                    {isWalletManagerFunding ? 'Pocket Wallet' : agentFundingName}
                   </p>
+                  {isWalletManagerFunding && (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                      Arc Testnet
+                    </span>
+                  )}
                 </div>
               ) : (
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">Enter Amount</p>
@@ -4187,9 +4200,9 @@ export default function PaymentPage() {
                   background: `linear-gradient(135deg, hsl(${agentFundingHue} 72% 42%), hsl(${(agentFundingHue + 44) % 360} 72% 34%))`,
                 }}
               >
-                <Bot className="h-4 w-4" />
+                {isWalletManagerFunding ? <Wallet className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
               </span>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{isWalletManagerFunding ? 'x402 Wallet Funding' : 'Agent Funding'}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{isWalletManagerFunding ? 'Arc x402 Funding' : 'Agent Funding'}</p>
             </div>
           ) : (
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Payment Request</p>
@@ -4232,6 +4245,11 @@ export default function PaymentPage() {
                   ) : (
                     <>For {memo}</>
                   )}
+                </p>
+              )}
+              {isWalletManagerFunding && (
+                <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
+                  Return to PolyDesk to activate x402 after funding.
                 </p>
               )}
             </>
@@ -4319,11 +4337,19 @@ export default function PaymentPage() {
           {/* Payment details */}
           <div className="space-y-1.5 text-center">
             <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-100">
-              <span>{isBankSendPayment ? 'Paying by NGN bank transfer' : `Paying on ${consumerNetworkName}`}</span>
+              <span>
+                {isBankSendPayment
+                  ? 'Paying by NGN bank transfer'
+                  : isWalletManagerFunding
+                  ? 'Funding Arc Testnet x402'
+                  : `Paying on ${consumerNetworkName}`}
+              </span>
             </div>
             <p className="text-[11px] text-slate-400">
               {isBankSendPayment
                 ? `Recipient receives ${bankSendDestinationLabel} USDC after your bank transfer is confirmed.`
+                : isWalletManagerFunding
+                ? <>Pocket Wallet receives Arc USDC. Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>
                 : <>Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>}
             </p>
             {showArbitrumRelayCost && (
@@ -5427,9 +5453,9 @@ export default function PaymentPage() {
             { n: '2', title: 'Fund with USDC' },
             { n: '3', title: 'Return to PolyDesk' },
           ] : isWalletManagerFunding ? [
-            { n: '1', title: 'Fund wallet', body: 'Add USDC to your Circle wallet balance' },
-            { n: '2', title: 'Activate x402', body: 'Move wallet USDC into x402 service balance' },
-            { n: '3', title: 'Return to services', body: 'Go back to the wallet manager or PolyDesk checkout' },
+            { n: '1', title: 'Fund Pocket Wallet' },
+            { n: '2', title: 'Activate x402' },
+            { n: '3', title: 'Return to PolyDesk' },
           ] : isAgentFunding ? [
             { n: '1', title: 'Fund treasury', body: 'Add USDC to this agent wallet' },
             { n: '2', title: 'Use for actions', body: 'Treasury can support services, tips, and x402 activation' },
