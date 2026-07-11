@@ -4930,8 +4930,8 @@ export default function PaymentPage() {
                       ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
                       : circleEvmWalletUnlocked
                       ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
-                      : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
-                    : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
+                      : <><ArrowRight className="h-4 w-4" /> <span>Open Pocket Wallet</span></>
+                    : <><ArrowRight className="h-4 w-4" /> <span>Open Pocket Wallet</span></>}
               </button>
               {privyCircleLinkError && circleSmartAccount && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
@@ -5126,7 +5126,7 @@ export default function PaymentPage() {
                             : circleSolanaNeedsFunds
                             ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
                             : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
-                          : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
+                          : <><ArrowRight className="h-4 w-4" /> <span>Open Pocket Wallet</span></>}
                     </button>
                     {circleSolanaSession && circleSolanaBalance !== null && (
                       <details ref={circleSolanaDetailsRef} className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
