@@ -4927,7 +4927,7 @@ export default function PaymentPage() {
                       : circleEvmWalletChecking
                       ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
                       : circleEvmWalletUnlocked && circleWalletNeedsFunds
-                      ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
+                      ? <><ArrowRight className="h-4 w-4" /> <span>Add USDC</span></>
                       : circleEvmWalletUnlocked
                       ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
                       : <><ArrowRight className="h-4 w-4" /> <span>Open Pocket Wallet</span></>
@@ -5124,7 +5124,7 @@ export default function PaymentPage() {
                           ? circleSolanaWalletChecking
                             ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
                             : circleSolanaNeedsFunds
-                            ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
+                            ? <><ArrowRight className="h-4 w-4" /> <span>Add USDC</span></>
                             : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
                           : <><ArrowRight className="h-4 w-4" /> <span>Open Pocket Wallet</span></>}
                     </button>
