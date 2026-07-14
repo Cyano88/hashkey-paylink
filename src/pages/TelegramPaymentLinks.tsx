@@ -1701,7 +1701,7 @@ export function TelegramHelperPanel({
     if (initialNotice !== 'polymarket-funding-complete') return []
     return [{
       answer: 'Polymarket funding is complete. I can track open positions, claimables, alerts, and portfolio value right now; Polymarket cash balance should still be confirmed inside Polymarket.',
-      actionLink: { label: 'Portfolio', url: '/telegram/payment-links?section=market-tools&service=poly-portfolio' },
+      actionLink: { label: 'Portfolio', url: '/polydesk?service=portfolio' },
     }]
   })
   const [helperMode, setHelperMode] = useState<HelperMode | ''>(storedHelperMode)
@@ -2529,11 +2529,18 @@ export function TelegramHelperPanel({
   }
 
   function polyDeskUrl(service: TelegramServiceId) {
+    const standaloneService = service === 'poly-portfolio'
+      ? 'portfolio'
+      : service === 'poly-stream'
+        ? 'worldcup-scores'
+        : service === 'poly-worldcup-news'
+          ? 'worldcup-news'
+          : service === 'lp-scout'
+            ? 'lp-scout'
+            : 'worldcup'
     const params = new URLSearchParams()
-    params.set('section', 'market-tools')
-    params.set('service', service)
-    params.set('open', '1')
-    return `${shareOrigin()}/telegram/payment-links?${params.toString()}`
+    params.set('service', standaloneService)
+    return `${shareOrigin()}/polydesk?${params.toString()}`
   }
 
   function buildLpScoutWalletManagerUrl(context: string) {
