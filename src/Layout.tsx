@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { ChevronDown, LogOut, X, Send, ExternalLink, Sun, Moon, History } from 'lucide-react'
+import { ChevronDown, LogOut, X, Send, ExternalLink, Sun, Moon, History, Wallet, Radio, Coins, Landmark, Store, Phone, Wifi, Tv, Lightbulb, Banknote } from 'lucide-react'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
 import { CHAIN_META } from './lib/chains'
@@ -418,6 +418,12 @@ export default function Layout() {
   const [showTelegramHomeFab, setShowTelegramHomeFab] = useState(false)
   const [showPaymentHistoryShortcut, setShowPaymentHistoryShortcut] = useState(false)
   const [agentHashComposerFocused, setAgentHashComposerFocused] = useState(false)
+  const [circlePocketSurface, setCirclePocketSurface] = useState(false)
+  const [circlePocketWalletView, setCirclePocketWalletView] = useState<'smart' | 'x402'>('smart')
+  const [circlePocketHeaderMode, setCirclePocketHeaderMode] = useState<'wallet' | 'move' | 'bills' | 'activity'>('wallet')
+  const [circlePocketMoveView, setCirclePocketMoveView] = useState<'usdc' | 'bank' | 'pos' | ''>('')
+  const [circlePocketBillView, setCirclePocketBillView] = useState<'airtime' | 'data' | 'tv' | 'electricity'>('airtime')
+  const [circlePocketActivityView, setCirclePocketActivityView] = useState<'all' | 'bank' | 'pos' | 'bills'>('all')
 
   useEffect(() => {
     const handleHomeSurfaceChange = (event: Event) => {
@@ -432,16 +438,40 @@ export default function Layout() {
       const detail = (event as CustomEvent<{ focused?: boolean }>).detail
       setAgentHashComposerFocused(Boolean(detail?.focused))
     }
+    const handleCirclePocketSurface = (event: Event) => {
+      const detail = (event as CustomEvent<{ visible?: boolean }>).detail
+      setCirclePocketSurface(Boolean(detail?.visible))
+    }
+    const handleCirclePocketWalletView = (event: Event) => {
+      const detail = (event as CustomEvent<{ view?: 'smart' | 'x402'; mode?: 'wallet' | 'move' | 'bills' | 'activity' }>).detail
+      if (detail?.mode === 'wallet' || detail?.mode === 'move' || detail?.mode === 'bills' || detail?.mode === 'activity') {
+        setCirclePocketHeaderMode(detail.mode)
+        if (detail.mode === 'move') setCirclePocketMoveView('usdc')
+        if (detail.mode === 'bills') setCirclePocketBillView('airtime')
+        if (detail.mode === 'activity') setCirclePocketActivityView('all')
+      }
+      if (detail?.view === 'smart' || detail?.view === 'x402') setCirclePocketWalletView(detail.view)
+    }
     window.addEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
     window.addEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
     window.addEventListener('hashpaylink-agent-composer-focus', handleAgentHashComposerFocus)
+    window.addEventListener('hashpaylink-circle-pocket-surface', handleCirclePocketSurface)
+    window.addEventListener('hashpaylink-circle-pocket-wallet-view', handleCirclePocketWalletView)
     return () => {
       window.removeEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
       window.removeEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
       window.removeEventListener('hashpaylink-agent-composer-focus', handleAgentHashComposerFocus)
+      window.removeEventListener('hashpaylink-circle-pocket-surface', handleCirclePocketSurface)
+      window.removeEventListener('hashpaylink-circle-pocket-wallet-view', handleCirclePocketWalletView)
       setShowTelegramHomeFab(false)
       setShowPaymentHistoryShortcut(false)
       setAgentHashComposerFocused(false)
+      setCirclePocketSurface(false)
+      setCirclePocketWalletView('smart')
+      setCirclePocketHeaderMode('wallet')
+      setCirclePocketMoveView('')
+      setCirclePocketBillView('airtime')
+      setCirclePocketActivityView('all')
     }
   }, [])
   const polyDeskService = searchParams.get('service') ?? ''
@@ -783,9 +813,87 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col">
       {/* ── Sticky frosted-glass header ─────────────────────────────────── */}
-      <header data-hashpaylink-top-nav className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
-        <div className={`mx-auto flex max-w-5xl items-center justify-between px-4 sm:px-6 ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
-          {/* Wordmark */}
+      <header
+        data-hashpaylink-top-nav
+        className={circlePocketSurface
+          ? 'pointer-events-none fixed inset-x-0 top-0 z-50 bg-transparent'
+          : 'sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl dark:border-white/5 dark:bg-[#111113]/90'}
+      >
+        <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${circlePocketSurface ? 'justify-center' : 'justify-between'} ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
+          {circlePocketSurface ? (
+            <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full border border-gray-200 bg-gray-100/95 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_12px_36px_rgba(0,0,0,0.35)] ${circlePocketHeaderMode === 'move' ? 'grid-cols-3' : circlePocketHeaderMode === 'bills' || circlePocketHeaderMode === 'activity' ? 'grid-cols-4' : 'grid-cols-2'}`}>
+              {(circlePocketHeaderMode === 'move'
+                ? [
+                    { key: 'usdc', label: 'USDC', icon: Coins },
+                    { key: 'bank', label: 'Bank', icon: Landmark },
+                    { key: 'pos', label: 'POS', icon: Store },
+                  ]
+                : circlePocketHeaderMode === 'bills'
+                  ? [
+                      { key: 'airtime', label: 'Airtime', icon: Phone },
+                      { key: 'data', label: 'Data', icon: Wifi },
+                      { key: 'tv', label: 'TV', icon: Tv },
+                      { key: 'electricity', label: 'Electricity', icon: Lightbulb },
+                    ]
+                : circlePocketHeaderMode === 'activity'
+                  ? [
+                      { key: 'all', label: 'All', icon: History },
+                      { key: 'bank', label: 'Bank receive', icon: Landmark },
+                      { key: 'pos', label: 'POS', icon: Store },
+                      { key: 'bills', label: 'Bills', icon: Banknote },
+                    ]
+                : [
+                    { key: 'smart', label: 'Smart Wallet', icon: Wallet },
+                    { key: 'x402', label: 'x402', icon: Radio },
+                  ]
+              ).map(({ key, label, icon: Icon }) => {
+                const active = circlePocketHeaderMode === 'move'
+                  ? circlePocketMoveView === key
+                  : circlePocketHeaderMode === 'bills'
+                    ? circlePocketBillView === key
+                  : circlePocketHeaderMode === 'activity'
+                    ? circlePocketActivityView === key
+                  : circlePocketWalletView === key
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => {
+                      if (circlePocketHeaderMode === 'move') {
+                        const view = key as 'usdc' | 'bank' | 'pos'
+                        setCirclePocketMoveView(view)
+                        window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-move-select', { detail: { view } }))
+                        return
+                      }
+                      if (circlePocketHeaderMode === 'bills') {
+                        const view = key as 'airtime' | 'data' | 'tv' | 'electricity'
+                        setCirclePocketBillView(view)
+                        window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-bills-select', { detail: { view } }))
+                        return
+                      }
+                      if (circlePocketHeaderMode === 'activity') {
+                        const view = key as 'all' | 'bank' | 'pos' | 'bills'
+                        setCirclePocketActivityView(view)
+                        window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-activity-select', { detail: { view } }))
+                        return
+                      }
+                      window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-wallet-select', { detail: { view: key } }))
+                    }}
+                    className={[
+                      'flex min-h-9 min-w-0 items-center justify-center rounded-full font-black transition-all',
+                      circlePocketHeaderMode === 'bills' || circlePocketHeaderMode === 'activity' ? 'gap-1 px-1 text-[9px]' : 'gap-2 px-3 text-xs',
+                      active
+                        ? 'bg-white text-gray-950 shadow-sm dark:bg-white dark:text-gray-950'
+                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white',
+                    ].join(' ')}
+                  >
+                    <Icon className={circlePocketHeaderMode === 'bills' || circlePocketHeaderMode === 'activity' ? 'h-3.5 w-3.5 shrink-0' : 'h-4 w-4'} />
+                    <span className="truncate">{label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
           <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 focus:outline-none">
             {isPolyDeskSurface ? (
               <span className="flex h-8 w-8 items-center justify-center text-gray-900 transition-transform group-hover:scale-105 dark:text-white">
@@ -808,9 +916,12 @@ export default function Layout() {
               )}
             </span>
           </Link>
+          )}
 
           {/* Right side — single horizontal baseline */}
-          <div className="flex items-center gap-x-2">
+          <div className={circlePocketSurface ? 'hidden' : 'flex items-center gap-x-2'}>
+            {!circlePocketSurface && (
+              <>
             {isPolyDeskSurface && (
               <div className="hidden sm:flex items-center rounded-full border border-gray-200 bg-gray-50/80 p-0.5 dark:border-white/10 dark:bg-[#1c1c20]">
                 {polyDeskNavItems.map(item => (
@@ -909,13 +1020,15 @@ export default function Layout() {
             )}
 
             {/* Theme toggle — always visible */}
-            <button
+              </>
+            )}
+            {!circlePocketSurface && <button
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] text-gray-500 dark:text-gray-400 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
+            </button>}
 
           </div>
         </div>
@@ -942,7 +1055,9 @@ export default function Layout() {
       </header>
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
+      <main className={circlePocketSurface
+        ? 'w-full flex-1 px-4 py-10 sm:px-6'
+        : 'mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6'}>
         <Outlet context={{
           selectedNet: selectedNet ?? 'base',
           onNetworkSelect: handleNetworkSelect,
@@ -955,7 +1070,7 @@ export default function Layout() {
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer
         data-hashpaylink-bottom-bar
-        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 dark:border-white/5 dark:bg-[#111113]/90 ${agentHashComposerFocused ? 'hidden' : 'flex'}`}
+        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 dark:border-white/5 dark:bg-[#111113]/90 ${agentHashComposerFocused || circlePocketSurface ? 'hidden' : 'flex'}`}
       >
           <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">

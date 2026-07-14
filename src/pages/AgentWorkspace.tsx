@@ -1416,8 +1416,51 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
 
       {showAgentProfile && (
         <div
-          className="relative w-full min-w-0 overflow-hidden rounded-xl border border-gray-100 bg-white p-4 shadow-card transition-all dark:border-white/10 dark:bg-[#111114]"
+          className={cn(
+            'relative w-full min-w-0 transition-all',
+            embeddedWalletManager
+              ? 'space-y-3'
+              : 'overflow-hidden rounded-xl border border-gray-100 bg-white p-4 shadow-card dark:border-white/10 dark:bg-[#111114]',
+          )}
         >
+          {embeddedWalletManager && (
+            <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-violet-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-violet-500/[0.08]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">x402 service balance</p>
+                  <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
+                    {x402Balance !== null
+                      ? Number(x402Balance).toLocaleString(undefined, { maximumFractionDigits: 6 })
+                      : '0.00'} <span className="text-sm font-bold text-gray-400">USDC</span>
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
+                    <span className="rounded-full border border-gray-200 bg-white/80 px-2 py-1 text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400">
+                      Circle Gateway
+                    </span>
+                    <span className={cn(
+                      'rounded-full border px-2 py-1',
+                      agentWalletAccessConnected
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
+                        : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400',
+                    )}>
+                      {agentWalletAccessConnected ? 'Connected' : 'Not connected'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refreshAgentBalances()}
+                  disabled={!agentWalletAccessConnected || balancesRefreshing || x402Busy}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white/80 text-gray-600 transition-all hover:bg-white disabled:opacity-40 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
+                  aria-label="Refresh x402 balance"
+                >
+                  <RefreshCw className={cn('h-4 w-4', balancesRefreshing && 'animate-spin')} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!embeddedWalletManager && (
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3 sm:gap-4">
               <div
@@ -1484,10 +1527,11 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
               </button>
             )}
           </div>
+          )}
 
           <div className={cn(
-            'mt-4',
-            !hasPendingLpScoutRequest && 'rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]',
+            embeddedWalletManager ? 'space-y-3' : 'mt-4',
+            !embeddedWalletManager && !hasPendingLpScoutRequest && 'rounded-lg border border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]',
           )}>
             {!hasPendingLpScoutRequest && savedLpScoutIntent && (
               <div className="mb-3 rounded-xl border border-emerald-100 bg-emerald-50/80 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
@@ -1566,7 +1610,10 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                   </span>
                 </div>
               ) : (
-                <div className="divide-y divide-gray-100 dark:divide-white/10">
+                <div className={cn(
+                  'divide-y divide-gray-100 dark:divide-white/10',
+                  embeddedWalletManager && 'rounded-2xl border border-gray-100 bg-white px-4 py-2 shadow-sm dark:border-white/10 dark:bg-[#111216]',
+                )}>
                   <div className="flex items-center justify-between gap-4 py-1.5 first:pt-0">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{embeddedWalletManager ? 'Circle wallet balance' : 'Wallet treasury'}</p>
                     <div className="text-right">
@@ -1925,7 +1972,12 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
           </div>
 
           {showAgentWalletAccessPanel && (
-            <div className="mt-4 w-full min-w-0 space-y-2 overflow-hidden rounded-xl border border-gray-200 bg-gray-50/70 p-3 transition-all dark:border-white/10 dark:bg-white/[0.04]">
+            <div className={cn(
+              'mt-4 w-full min-w-0 space-y-2 overflow-hidden border transition-all',
+              embeddedWalletManager
+                ? 'rounded-[26px] border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]'
+                : 'rounded-xl border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]',
+            )}>
               {!(PRIVY_AUTH_ENABLED && !currentAgentWallet && !privyAuthenticated) && (
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -1959,13 +2011,25 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                       try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, 'login') } catch {}
                     }}
                     disabled={walletBusy || !privyReady}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                    className={cn(
+                      'group flex w-full items-center text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-60',
+                      embeddedWalletManager
+                        ? 'relative min-h-14 justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center shadow-sm hover:bg-black dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]'
+                        : 'justify-center gap-2 rounded-xl bg-black px-6 py-3.5 shadow-button hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
+                    )}
                   >
-                    <Mail className="h-4 w-4" />
-                    Sign in or connect wallet
+                    {embeddedWalletManager ? <Mail className="absolute left-5 h-4 w-4" /> : <Mail className="h-4 w-4" />}
+                    <span>{embeddedWalletManager ? 'Sign in to x402' : 'Sign in or connect wallet'}</span>
+                    {embeddedWalletManager && (
+                      <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5 dark:bg-white/10">
+                        <ArrowRight className="h-4 w-4" />
+                      </span>
+                    )}
                   </PrivyConnectButton>
-                  <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    Use email or the wallet that controls this agent session.
+                  <p className="px-3 pb-1 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
+                    {embeddedWalletManager
+                      ? 'Secure access with email or the wallet controlling this session.'
+                      : 'Use email or the wallet that controls this agent session.'}
                   </p>
                 </>
               ) : walletMode === 'choose' ? (
