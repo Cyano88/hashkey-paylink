@@ -470,7 +470,6 @@ export default async function handler(req: Request, res: Response) {
       const store = await readStore()
       const merchants = Object.values(store.merchants ?? {})
         .filter(merchant => merchant.owner_id === privyUserId)
-        .filter(merchant => merchant.source === 'bank-receive' || merchant.payout_preference === 'INSTANT_FIAT')
       const bankSendLinks = Object.values(store.bank_send_links ?? {})
         .filter(link => link.owner_id === privyUserId)
       const merchantIds = merchants.map(merchant => merchant.merchant_id)

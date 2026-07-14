@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const blockedPayerNames = new Set([
   'request',
@@ -122,9 +125,7 @@ function isGroupRequestIntent(text) {
 function describeMissingDraftFields(draft, savedWallet = '') {
   return [
     draft.mode !== 'group' && !draft.target && 'payer name',
-    draft.mode !== 'group' && !draft.amount && 'amount in USDC',
     !draft.network && 'network',
-    !draft.label && 'purpose',
     !draft.wallet && !savedWallet && 'receive wallet',
   ].filter(Boolean)
 }
@@ -144,7 +145,7 @@ assert.equal(extractCollectionLabel('create a group donation for my birthday'), 
 assert.equal(extractCollectionLabel('collect 500 USDC from 10 people for class dues'), 'class dues')
 assert.deepEqual(describeMissingDraftFields({ mode: 'group', target: '', amount: '', network: 'base', label: 'class dues', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), [])
 assert.deepEqual(describeMissingDraftFields({ mode: 'person', target: 'James', amount: '1', network: '', label: 'dinner', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), ['network'])
-assert.deepEqual(describeMissingDraftFields({ mode: 'person', target: '', amount: '', network: 'base', label: 'tuition', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), ['payer name', 'amount in USDC'])
+assert.deepEqual(describeMissingDraftFields({ mode: 'person', target: '', amount: '', network: 'base', label: '', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), ['payer name'])
 
 const { __testAgentAskPaymentEnrichment } = await import('../api/agent-ask.ts')
 const enrichment = __testAgentAskPaymentEnrichment.normalizePaymentEnrichmentContext([
@@ -164,6 +165,7 @@ assert.equal(__testAgentAskPaymentEnrichment.normalizeHelperMode('circle-pocket'
 const circlePocketCases = [
   ['show my wallet balance', 'wallet-overview', '/?product=circle-pocket'],
   ['create a PayLink to receive USDC', 'receive-usdc', '/?product=payment&tab=personal'],
+  ['I want to request 5 USDC from Chioma on base network', 'receive-usdc', '/?product=payment&tab=personal'],
   ['settle this to my Naira bank account', 'bank-payout', '/?product=payment&tab=bank'],
   ['create a static merchant POS QR', 'retail-pos', '/?product=payment&tab=pos'],
   ['buy airtime and pay electricity bills', 'bills', '/?product=payment&tab=bills'],
@@ -180,5 +182,41 @@ const closest = __testAgentAskPaymentEnrichment.routeCirclePocketQuestion('write
 assert.equal(closest?.supported, false)
 assert.equal(closest?.confidence, 'fallback')
 assert.equal(closest?.action.url, '/?product=circle-pocket')
+
+const requestStoreDir = await mkdtemp(join(tmpdir(), 'hashpaylink-agent-hash-'))
+process.env.TELEGRAM_REQUEST_STORE = join(requestStoreDir, 'telegram-requests.json')
+const { default: telegramRequestHandler } = await import('../api/telegram-request.ts')
+let responseStatus = 200
+let responseBody
+await telegramRequestHandler({
+  method: 'POST',
+  body: {
+    mode: 'person',
+    network: 'base',
+    wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce',
+    evmWallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce',
+    label: 'Payment request for Chioma',
+    target: 'Chioma',
+    amount: '5',
+  },
+  headers: { host: '127.0.0.1:5176' },
+  protocol: 'http',
+}, {
+  status(code) {
+    responseStatus = code
+    return this
+  },
+  json(body) {
+    responseBody = body
+    return this
+  },
+})
+assert.equal(responseStatus, 200)
+assert.equal(responseBody?.ok, true)
+assert.equal(responseBody?.request?.target, 'Chioma')
+assert.equal(responseBody?.request?.amount, '5')
+assert.equal(responseBody?.request?.network, 'base')
+assert.match(responseBody?.request?.payUrl ?? '', /\/pay\?[^#]*a=5/)
+assert.match(responseBody?.request?.payUrl ?? '', /[?&]n=base/)
 
 console.log('agent hash payments parser smoke ok')

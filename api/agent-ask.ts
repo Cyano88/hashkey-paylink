@@ -964,7 +964,7 @@ const CIRCLE_POCKET_ROUTES: Record<CirclePocketCapability, Omit<CirclePocketRout
     action: { label: 'Open Retail POS', url: '/?product=payment&tab=pos' },
   },
   bills: {
-    answer: 'Bills lets you pay supported airtime, data, electricity, cable, and other available services from the Circle Pocket flow.',
+    answer: 'Bills is prepared for airtime, data, electricity, and TV payments. Checkout stays unavailable until the biller catalog, validation, and durable receipt flow are verified.',
     action: { label: 'Open Bills', url: '/?product=payment&tab=bills' },
   },
   'x402-wallet': {
@@ -999,7 +999,8 @@ function routeCirclePocketQuestion(question: string, helperMode: string): Circle
   if (/\b(pos|merchant|static qr|retail|checkout|terminal)\b/.test(value)) return circlePocketResult('retail-pos')
   if (/\b(bill|airtime|mobile data|electricity|cable|utility|utilities)\b/.test(value)) return circlePocketResult('bills')
   if (/\b(x402|service balance|paid service|agent wallet|api access)\b/.test(value)) return circlePocketResult('x402-wallet')
-  if (/\b(receive|paylink|payment link|invoice|request money|collect|get paid|payment request)\b/.test(value)) return circlePocketResult('receive-usdc')
+  if (/\b(receive|paylink|payment link|request money|collect|get paid|payment request)\b/.test(value)
+    || /\b(?:request|charge|invoice)\b.*\b(?:usdc|usd|money|payment|from)\b/.test(value)) return circlePocketResult('receive-usdc')
   if (/\b(profile|account|sign in|signin|verified|verification|email|support|error|stuck|failed|not working)\b/.test(value)) return circlePocketResult('profile-support', 'medium')
   if (/\b(wallet|balance|funding address|deposit|withdraw|send|transfer|network|circle pocket|circle smart)\b/.test(value)) return circlePocketResult('wallet-overview')
   if (/\b(what can you do|how can you help|capabilities|options|features)\b/.test(value)) return circlePocketResult('wallet-overview', 'medium')

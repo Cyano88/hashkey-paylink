@@ -2921,9 +2921,21 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (source === 'bank-receive' || source === 'bank_receive' || settlement === 'instant_fiat') return 'bank'
     return 'pos'
   }
+  const circlePocketSupportedHistory = circlePocketHistory.filter(row => {
+    const source = String(row.source ?? '').toLowerCase()
+    const settlement = String(row.settlementType ?? '').toLowerCase()
+    if (source === 'bank-send' || source === 'bank_send' || settlement === 'paycrest_onramp') return false
+    return source === 'ngpos'
+      || source === 'pos'
+      || source === 'bank-receive'
+      || source === 'bank_receive'
+      || source === 'bills'
+      || settlement === 'instant_fiat'
+      || settlement === 'bill_payment'
+  })
   const visibleCirclePocketHistory = circlePocketActivityView === 'all'
-    ? circlePocketHistory
-    : circlePocketHistory.filter(row => circlePocketHistoryKind(row) === circlePocketActivityView)
+    ? circlePocketSupportedHistory
+    : circlePocketSupportedHistory.filter(row => circlePocketHistoryKind(row) === circlePocketActivityView)
   const showHowItWorks = streamMode || accessMode || polymarketMode
   const paymentTabs: Array<{ key: PaymentTab; title: string; body: string; icon: typeof UserRound; badge?: string }> = [
     { key: 'usdc', title: 'Receive USDC', body: 'Anyone pays USDC. You receive USDC in your wallet.', icon: Wallet, badge: 'No account' },

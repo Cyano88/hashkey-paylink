@@ -43,6 +43,7 @@ import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import { PrivyDisconnectButton } from '../lib/PrivyDisconnectButton'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
+import { resolvePrivyCircleLink } from '../lib/privyCircleLink'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
@@ -779,12 +780,20 @@ function paylinkDraftSideQuestionFallback(draft: HelperPaylinkDraft, text: strin
 function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: string) {
   const missing = [
     draft.mode !== 'group' && !draft.target && 'payer name',
-    draft.mode !== 'group' && !draft.amount && 'amount in USDC',
     !draft.network && 'network',
-    !draft.label && 'purpose',
     !draft.wallet && !savedWallet && 'receive wallet',
   ].filter(Boolean)
   return missing as string[]
+}
+
+function defaultPaylinkLabel(draft: HelperPaylinkDraft) {
+  if (draft.label) return draft.label
+  if (draft.mode === 'group') return draft.target || 'Group collection'
+  return draft.target ? `Payment request for ${friendlyName(draft.target)}` : 'Payment request'
+}
+
+function isSignedInStatusMessage(text: string) {
+  return /\b(i am|i'm|im|already|currently)\s+(?:signed|logged)\s+in\b|\bmy account is (?:signed|logged) in\b/i.test(text)
 }
 
 function compactSavedWallet(wallet: string) {
@@ -1734,7 +1743,7 @@ export function TelegramHelperPanel({
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
   const agentRequestPayer = payer.trim() || helperName || cleanTelegramName || ownerKey || fallbackOwner || 'anonymous-helper'
   const activeHelperThreadId = `mode:${helperMode || 'general'}${helperMode === 'polydesk' && polyDeskSubMode ? `:${polyDeskSubMode}` : ''}`
-  const { authenticated: polyDeskAuthenticated, getAccessToken: getPolyDeskAccessToken } = usePrivy()
+  const { ready: helperAuthReady, authenticated: helperAuthenticated, getAccessToken: getHelperAccessToken } = usePrivy()
 
   useEffect(() => {
     if (lockedHelperMode && helperMode !== lockedHelperMode) {
@@ -2211,6 +2220,18 @@ export function TelegramHelperPanel({
     return profile.preferredPaymentEvmWallet || (profile.preferredPaymentWallet?.startsWith('0x') ? profile.preferredPaymentWallet : '')
   }
 
+  async function linkedCircleReceiveWallet(network: RequestNetwork | '') {
+    if (!helperAuthenticated || !network || network === 'all') return ''
+    try {
+      const accessToken = await getHelperAccessToken()
+      if (!accessToken) return ''
+      const linked = await resolvePrivyCircleLink({ accessToken, chain: network, purpose: 'payment' })
+      return linked.link?.circleWalletAddress?.trim() || ''
+    } catch {
+      return ''
+    }
+  }
+
   function savedWalletForOtherNetwork(network: RequestNetwork | '') {
     if (!profile || !network || network === 'all') return ''
     const evmWallet = profile.preferredPaymentEvmWallet || (profile.preferredPaymentWallet?.startsWith('0x') ? profile.preferredPaymentWallet : '')
@@ -2301,7 +2322,7 @@ export function TelegramHelperPanel({
     if (!res.ok || !data.ok || !data.request) throw new Error(data.error || 'Could not create PayLink.')
     const saved = data.request
     const savedWallet = saved.wallet || walletForNetwork
-    const memoryLine = `Preferred payment receive wallet is ${shortAddress(savedWallet)} on ${requestNetworkLabels[network]}. For future PayLink requests, ask whether to continue with this wallet or replace it.`
+    const memoryLine = `Preferred payment receive wallet is ${shortAddress(savedWallet)} on ${requestNetworkLabels[network]}. Reuse it automatically for compatible PayLink requests unless the user asks for a different wallet.`
     const nextMemory = [memoryDraft.trim() || profile?.memorySummary || '', memoryLine]
       .filter(Boolean)
       .join('\n')
@@ -2356,7 +2377,26 @@ export function TelegramHelperPanel({
       ? null
       : paylinkDraft ?? revisionBase
     let draft = buildDraftFromText(nextQuestion, activeDraft)
-    const savedWallet = preferredWalletFor(draft.network)
+    if (!draft.network && profile?.preferredPaymentNetwork) {
+      draft = { ...draft, network: profile.preferredPaymentNetwork }
+    }
+    draft = { ...draft, label: defaultPaylinkLabel(draft) }
+    const profileWallet = preferredWalletFor(draft.network)
+    const linkedWallet = !draft.wallet && !profileWallet
+      ? await linkedCircleReceiveWallet(draft.network)
+      : ''
+    const savedWallet = profileWallet || linkedWallet
+
+    if (!draft.wallet && savedWallet && !wantsNewWallet(nextQuestion) && walletMatchesNetwork(savedWallet, draft.network)) {
+      draft = {
+        ...draft,
+        wallet: savedWallet,
+        evmWallet: savedWallet.startsWith('0x') ? savedWallet : draft.evmWallet,
+        solanaWallet: savedWallet.startsWith('0x') ? draft.solanaWallet : savedWallet,
+        offeredSavedWallet: true,
+        offeredSavedWalletNetwork: draft.network,
+      }
+    }
 
     if (!draft.wallet && savedWallet && wantsSavedWallet(nextQuestion)) {
       const savedNetwork: RequestNetwork = savedWallet.startsWith('0x') ? 'base' : 'solana'
@@ -2370,6 +2410,15 @@ export function TelegramHelperPanel({
         offeredSavedWallet: true,
         offeredSavedWalletNetwork: shouldDeferEvmNetworkChoice ? '' : draft.network || savedNetwork,
       }
+    }
+
+    if (!draft.wallet && savedWallet && !draft.offeredSavedWallet && wantsNewWallet(nextQuestion)) {
+      setThinkingState('payment-wallet')
+      setPaylinkDraft({ ...draft, offeredSavedWallet: true, offeredSavedWalletNetwork: draft.network })
+      finishHelperMessage(nextQuestion, {
+        answer: 'Send the new receive wallet. I will use it for this PayLink.',
+      })
+      return true
     }
 
     if (!draft.wallet && savedWallet && !draft.offeredSavedWallet) {
@@ -2495,13 +2544,10 @@ export function TelegramHelperPanel({
       setPaylinkDraft(draft)
       const missingNetworkOnly = missing.length === 1 && missing[0] === 'network'
       const missingTarget = draft.target ? friendlyName(draft.target) : 'the payer'
-      const missingPurposeOnly = missing.length === 1 && missing[0] === 'purpose'
       const fallbackAnswer = missingNetworkOnly
         ? draft.wallet?.startsWith('0x')
           ? `Which EVM network should ${missingTarget} use: Base, Arbitrum, or Arc?`
           : `Which network should ${missingTarget} use: Base, Arc, Arbitrum, Solana, or all networks?`
-        : missingPurposeOnly
-        ? `What is this payment for?`
         : `Send ${missing.join(', ')}. One line is fine.`
       const answer = await polishLocalHelperResult(
         [
@@ -2611,13 +2657,13 @@ export function TelegramHelperPanel({
 
   async function portfolioAnswer(nextQuestion: string) {
     const portfolioUrl = polyDeskUrl('poly-portfolio')
-    if (!polyDeskAuthenticated) {
+    if (!helperAuthenticated) {
       return {
         answer: 'Open PolyDesk Portfolio and sign in to connect your Polymarket profile first.',
         actionLink: { label: 'Portfolio', url: portfolioUrl },
       }
     }
-    const token = await getPolyDeskAccessToken()
+    const token = await getHelperAccessToken()
     if (!token) {
       return {
         answer: 'Open PolyDesk Portfolio and sign in to continue.',
@@ -3150,6 +3196,15 @@ export function TelegramHelperPanel({
         finishHelperMessage(nextQuestion, {
           answer,
         })
+        return
+      }
+      if (helperMode === 'circle-pocket' && isSignedInStatusMessage(nextQuestion)) {
+        const answer = !helperAuthReady
+          ? 'I am still checking your account session. Try that request again in a moment.'
+          : helperAuthenticated
+            ? 'You are signed in. I can use your connected Circle Pocket context for wallet and PayLink actions.'
+            : 'I cannot confirm an active sign-in on this session yet. Sign in here, then I can use your connected Circle Pocket context.'
+        finishHelperMessage(nextQuestion, { answer })
         return
       }
       if (helperMode !== 'circle-pocket' && isPaymentRequestIntent(nextQuestion)) {
