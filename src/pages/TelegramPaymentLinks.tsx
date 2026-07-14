@@ -2021,10 +2021,23 @@ export function TelegramHelperPanel({
     }, 40)
   }
 
+  function resetPolyDeskLane() {
+    setPolyDeskSubMode('')
+    onPolyDeskSubModeChange?.('')
+    window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
+    setMessages([])
+    setPaylinkDraft(null)
+    setPolyPortfolioFundingDraft(null)
+    setQuestion('')
+    setAskError('')
+  }
+
   function resetHelperMode() {
+    if (helperMode === 'polydesk' && (polyDeskSubMode || lockedHelperMode === 'polydesk')) {
+      resetPolyDeskLane()
+      return
+    }
     if (lockedHelperMode) {
-      setPolyDeskSubMode('')
-      window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
       setMessages([])
       setPaylinkDraft(null)
       setPolyPortfolioFundingDraft(null)
@@ -3258,15 +3271,7 @@ export function TelegramHelperPanel({
                   <div className="flex justify-center">
                     <button
                       type="button"
-                      onClick={() => {
-                        setPolyDeskSubMode('')
-                        setPolyPortfolioFundingDraft(null)
-                        setMessages([])
-                        setQuestion('')
-                        setAskError('')
-                        window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
-                        onPolyDeskSubModeChange?.('')
-                      }}
+                      onClick={resetPolyDeskLane}
                       className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
                     >
                       Desk Agent / {polyDeskSubModes.find(mode => mode.id === polyDeskSubMode)?.label}
