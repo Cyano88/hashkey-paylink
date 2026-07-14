@@ -11,7 +11,6 @@ import {
   Copy,
   CheckCheck,
   Share2,
-  ArrowLeft,
   ArrowRight,
   ChevronDown,
   Activity,
@@ -61,6 +60,7 @@ import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { resolvePrivyCircleLink, savePrivyCircleLink, unlinkPrivyCircleLink } from '../lib/privyCircleLink'
 import { queryBalances, type UnifiedBalanceBreakdown } from '../lib/unifiedBalance'
 import AgentWorkspace from './AgentWorkspace'
+import { TelegramHelperPanel } from './TelegramPaymentLinks'
 import PayLinkShareSheet from '../components/PayLinkShareSheet'
 
 // ─── Solana address: base58, 32–44 characters ────────────────────────────────
@@ -68,6 +68,14 @@ const isValidSolanaAddr = isValidSolanaAddress
 
 const VISIBLE_CREATE_CHAINS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
 const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
+const HASHPAYSTREAM_APP_URL = import.meta.env.VITE_HASHPAYSTREAM_APP_URL || 'https://hashpaystream.app'
+const POLYDESK_APP_URL = import.meta.env.VITE_POLYDESK_APP_URL || 'https://polydesk-i96m.onrender.com'
+const AGENT_HASH_HEADER_PROMPTS = [
+  { text: 'I can help with payments and Hash PayLink services.', delayMs: 9500 },
+  { text: 'I am Agent Hash.', delayMs: 7000 },
+  { text: 'Tap to launch me.', delayMs: 3600 },
+  { text: 'What do you want to fund or request today?', delayMs: 8500 },
+] as const
 
 function PolymarketMark({ className }: { className?: string }) {
   return (
@@ -83,6 +91,24 @@ function PolymarketMark({ className }: { className?: string }) {
         fill="currentColor"
       />
     </svg>
+  )
+}
+
+function AgentHashCssIcon({ header = false, staticPose = false }: { header?: boolean; staticPose?: boolean }) {
+  return (
+    <div className={cn('ask-hash-live-agent shrink-0', staticPose && 'ask-hash-live-agent--static', header && 'ask-hash-live-agent--header')} aria-hidden="true">
+      <span className="ask-hash-live-agent__head">
+        <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--left" />
+        <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--right" />
+        <span className="ask-hash-live-agent__mouth" />
+      </span>
+      <span className="ask-hash-live-agent__antenna" />
+      <span className="ask-hash-live-agent__bubble">
+        <span />
+        <span />
+        <span />
+      </span>
+    </div>
   )
 }
 
@@ -136,6 +162,25 @@ function PaymentHubMark({ className }: { className?: string }) {
   )
 }
 
+function FlowBackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:-translate-x-0.5 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
+    >
+      <span className="back-btn text-gray-500 dark:text-gray-300" aria-hidden="true">
+        <span className="arrow-container">
+          <span className="chevron c1" />
+          <span className="chevron c2" />
+          <span className="chevron c3" />
+        </span>
+      </span>
+      Back
+    </button>
+  )
+}
+
 type VaultStep = 'idle' | 'ready'
 type ReceiveMode = 'email' | 'paste' | 'bank'
 type PaymentMode = 'personal' | 'business'
@@ -143,10 +188,11 @@ type PaymentFlow = 'usdc' | 'bank' | 'bank-send'
 type PaymentTab = PaymentMode | PaymentFlow | 'pos' | 'bills'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 type BankSendNetwork = 'polygon' | 'base'
-type CirclePocketView = 'chooser' | 'main' | 'x402'
+type CirclePocketView = 'chooser' | 'wallet-manager' | 'main' | 'x402'
 type CirclePocketTab = 'balance' | 'fund' | 'withdraw' | 'activity'
 type PosCountry = 'NG' | 'KE' | 'GH'
 type PosSettlementPath = 'PAYCREST_NAIRA'
+type PosStep = 'country' | 'setup' | 'ready'
 type CreateProduct = 'payment' | 'agent' | 'circle-pocket' | 'pos' | 'streampay' | 'polymarket'
 type AccessView = 'overview' | 'wallet'
 type LocalCurrencyProfile = {
@@ -916,10 +962,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const navigate = useNavigate()
   const productParam = searchParams.get('product')
   const paymentTabParam = searchParams.get('tab')
+  const posStepParam = searchParams.get('posStep')
   const initialProductTarget = (productParam ?? '').toLowerCase()
   const initialPaymentTab = (paymentTabParam ?? '').toLowerCase()
   const startsInBankPayment = initialProductTarget === 'payment' && initialPaymentTab === 'bank'
-  const startsInBankSendPayment = initialProductTarget === 'payment' && initialPaymentTab === 'bank-send'
+  const startsInBankSendPayment = false
   const startsInPosPayment = initialProductTarget === 'payment' && initialPaymentTab === 'pos'
   const startsInBillsPayment = initialProductTarget === 'payment' && initialPaymentTab === 'bills'
   const startsInProduct = Boolean(initialProductTarget) || initialProduct === 'polymarket' || window.location.pathname === '/polymarket'
@@ -977,6 +1024,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [polymarketSpotlightIndex, setPolymarketSpotlightIndex] = useState(0)
   const [productHubOpen, setProductHubOpen] = useState(!startsInProduct)
   const [paymentMenuOpen, setPaymentMenuOpen] = useState(startsInPaymentMenu)
+  const [serviceHubAgentPromptIndex, setServiceHubAgentPromptIndex] = useState(0)
+  const [serviceHubAgentMounted, setServiceHubAgentMounted] = useState(false)
+  const [serviceHubAgentVisible, setServiceHubAgentVisible] = useState(false)
   const [posCountry,     setPosCountry]     = useState<PosCountry | null>(startsInBankPayment ? 'NG' : null)
   const [posSettlementPath, setPosSettlementPath] = useState<PosSettlementPath | null>(null)
   const [posMerchantName, setPosMerchantName] = useState('')
@@ -1199,9 +1249,56 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (typeof window === 'undefined') return
     const url = new URL(window.location.href)
     url.searchParams.set('product', 'payment')
-    if (tab === 'personal' || tab === 'usdc') url.searchParams.delete('tab')
+    if (tab === 'personal') url.searchParams.delete('tab')
     else url.searchParams.set('tab', tab)
+    url.searchParams.delete('posStep')
     navigate(`${url.pathname}${url.search}${url.hash}`)
+  }
+
+  function pushPosStepHistory(step: PosStep) {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    url.searchParams.set('product', 'payment')
+    url.searchParams.set('tab', 'pos')
+    if (step === 'country') url.searchParams.delete('posStep')
+    else url.searchParams.set('posStep', step)
+    navigate(`${url.pathname}${url.search}${url.hash}`)
+  }
+
+  function goBackOr(fallback: () => void) {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      navigate(-1)
+      return
+    }
+    fallback()
+  }
+
+  function openServiceHubAgent() {
+    setServiceHubAgentMounted(true)
+    window.setTimeout(() => setServiceHubAgentVisible(true), 20)
+  }
+
+  function closeServiceHubAgent() {
+    setServiceHubAgentVisible(false)
+    window.setTimeout(() => setServiceHubAgentMounted(false), 260)
+  }
+
+  function applyPosStep(step: string | null) {
+    if (step === 'setup' || step === 'ready') {
+      setPosCountry('NG')
+      setPosSettlementPath('PAYCREST_NAIRA')
+      if (step === 'setup') {
+        setPosMerchant(null)
+        setPosCopied(false)
+      }
+      return
+    }
+    setPosCountry(null)
+    setPosSettlementPath(null)
+    setPosMerchant(null)
+    setPosCopied(false)
+    resetPosBankDetails()
+    setPosError('')
   }
 
   function activateBankReceive() {
@@ -1284,7 +1381,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closeAccessMode() {
-    openHubMode()
+    goBackOr(() => openHubMode(false))
   }
 
   function openCirclePocketMode(push = true, view: CirclePocketView = 'chooser') {
@@ -1313,7 +1410,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       setCirclePocketError('')
       return
     }
-    openHubMode()
+    goBackOr(() => openHubMode(false))
   }
 
   function openPaymentMenu(push = true) {
@@ -1414,6 +1511,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function openStreamMode(push = true) {
+    if (push && typeof window !== 'undefined') {
+      window.location.assign(HASHPAYSTREAM_APP_URL)
+      return
+    }
     if (push) pushProductHistory('streampay')
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
@@ -1430,11 +1531,17 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closeStreamMode() {
-    openHubMode()
-    setStreamMode(false)
+    goBackOr(() => {
+      openHubMode(false)
+      setStreamMode(false)
+    })
   }
 
   function openPolymarketMode(push = true) {
+    if (push && typeof window !== 'undefined') {
+      window.location.assign(POLYDESK_APP_URL)
+      return
+    }
     if (push) pushProductHistory('polymarket')
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
@@ -1451,7 +1558,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closePolymarketMode() {
-    openHubMode()
+    goBackOr(() => openHubMode(false))
   }
 
   useEffect(() => {
@@ -1477,6 +1584,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       setVaultStep('idle')
       if (tab === 'pos') {
         openPosMode(false, true)
+        applyPosStep(posStepParam)
         return
       }
       if (tab === 'bills') {
@@ -1486,7 +1594,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       if (tab === 'bank') {
         activateBankReceive()
       } else if (tab === 'bank-send') {
-        activateBankSend()
+        openHubMode(false)
       } else {
         setPaymentFlow('usdc')
         setReceiveMode('paste')
@@ -1518,7 +1626,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (product === 'polymarket') {
       openPolymarketMode(false)
     }
-  }, [productParam, paymentTabParam]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [productParam, paymentTabParam, posStepParam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onPopState = () => {
@@ -1530,7 +1638,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         return
       }
       if (product === 'payment') {
-        if (tab === 'pos') openPosMode(false, true)
+        if (tab === 'pos') {
+          openPosMode(false, true)
+          applyPosStep(url.searchParams.get('posStep'))
+        }
         else if (tab === 'bills') openBillsMode(false)
         else {
           if (!tab) openPaymentMenu(false)
@@ -1539,7 +1650,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             if (tab === 'bank') {
               activateBankReceive()
             } else if (tab === 'bank-send') {
-              activateBankSend()
+              openHubMode(false)
             } else {
               setPaymentFlow('usdc')
               setReceiveMode('paste')
@@ -1579,6 +1690,18 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }, 7_000)
     return () => window.clearInterval(timer)
   }, [polymarketMode])
+
+  useEffect(() => {
+    if (!productHubOpen || serviceHubAgentMounted) {
+      setServiceHubAgentPromptIndex(0)
+      return
+    }
+    const delay = AGENT_HASH_HEADER_PROMPTS[serviceHubAgentPromptIndex]?.delayMs ?? 7000
+    const timer = window.setTimeout(() => {
+      setServiceHubAgentPromptIndex(index => (index + 1) % AGENT_HASH_HEADER_PROMPTS.length)
+    }, delay)
+    return () => window.clearTimeout(timer)
+  }, [productHubOpen, serviceHubAgentPromptIndex, serviceHubAgentMounted])
 
   const circlePocketSelectedWallet = circlePocketWallets[circlePocketNetwork]
   const circlePocketSelectedBalance = circlePocketRows.find(row => row.key === circlePocketNetwork)?.balance ?? 0
@@ -1855,19 +1978,23 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function handlePosBack() {
     if (posMerchant) {
-      setPosMerchant(null)
-      setPosCopied(false)
-      setPosError('')
+      goBackOr(() => {
+        setPosMerchant(null)
+        setPosCopied(false)
+        setPosError('')
+      })
       return
     }
     if (posSettlementPath) {
-      setPosCountry(null)
-      setPosSettlementPath(null)
-      resetPosBankDetails()
-      setPosError('')
+      goBackOr(() => {
+        setPosCountry(null)
+        setPosSettlementPath(null)
+        resetPosBankDetails()
+        setPosError('')
+      })
       return
     }
-    closePosMode()
+    goBackOr(() => openCirclePocketMode(false))
   }
 
   const posCustomerUrl = posMerchant
@@ -2083,6 +2210,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       const data = await response.json()
       if (!response.ok || !data.ok) throw new Error(data.error ?? 'POS setup failed')
       setPosMerchant(data.merchant)
+      pushPosStepHistory('ready')
     } catch (error) {
       setPosError(error instanceof Error ? error.message : 'POS setup failed')
     } finally {
@@ -2410,18 +2538,17 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       ? { label: 'Open PolyDesk', url: telegramStartUrl('polymarket') }
       : { label: 'Open payments in Telegram', url: telegramStartUrl('payment_links') }
   const isPaymentView = !productHubOpen && !paymentMenuOpen && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode
-  const showHowItWorks = productHubOpen || posMode || streamMode || accessMode || polymarketMode
+  const showHowItWorks = posMode || streamMode || accessMode || polymarketMode
   const paymentTabs: Array<{ key: PaymentTab; title: string; body: string; icon: typeof UserRound; badge?: string }> = [
     { key: 'usdc', title: 'Receive USDC', body: 'Anyone pays USDC. You receive USDC in your wallet.', icon: Wallet, badge: 'No account' },
     { key: 'bank', title: 'Receive to Bank', body: 'Anyone pays Base USDC. You receive Naira in your bank account.', icon: Landmark, badge: 'Sign-in required' },
-    { key: 'bank-send', title: 'Send from Bank', body: 'Payer sends Naira from their bank. Recipient receives USDC.', icon: Banknote, badge: 'Sign-in required' },
     { key: 'pos', title: 'POS', body: 'Create a static checkout QR for in-store payments.', icon: Store, badge: 'Sign-in required' },
     { key: 'bills', title: 'Bills', body: 'Pay bills and keep receipts in local currency history.', icon: Landmark, badge: 'Sign-in required' },
   ] as const
   const howItWorksSteps = productHubOpen
     ? [
-        { n: '1', title: 'Receive payments', body: 'Personal, business, POS, and QR payment flows' },
-        { n: '2', title: 'Manage services', body: 'Circle wallet balance, x402 service balance, PolyDesk, and HashpayStream' },
+        { n: '1', title: 'Open Circle Pocket', body: 'Manage wallet, x402, receipts, and service balance' },
+        { n: '2', title: 'Launch services', body: 'PolyDesk and Hash Paystream run as standalone service apps' },
         { n: '3', title: 'Keep proof', body: 'Receipts, dashboards, and settlement records stay connected' },
       ]
     : polymarketMode
@@ -2471,8 +2598,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       return
     }
     if (tab === 'bank-send') {
-      pushPaymentTabHistory('bank-send')
-      activateBankSend()
+      openHubMode()
       return
     }
     if (tab === 'pos') {
@@ -2525,19 +2651,28 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       <div className={cn(
         'mb-6 flex flex-col',
         paymentMenuOpen ? 'items-center text-center' : 'items-start text-left',
+        serviceHubAgentMounted && 'hidden',
       )}>
-        {productHubOpen && (
+        {productHubOpen && !serviceHubAgentMounted && (
           <span className="mb-4 inline-flex items-center justify-center gap-2 text-sm font-bold leading-none text-[#0071E3] dark:text-blue-200">
             <PaymentHubMark className="h-7 w-7 shrink-0 text-gray-950 dark:text-white" />
-            Payment Hub
+            Service Hub
+          </span>
+        )}
+        {productHubOpen && serviceHubAgentMounted && (
+          <span className="mb-4 inline-flex items-center justify-center gap-2 text-sm font-bold leading-none text-[#0071E3] dark:text-blue-200">
+            <AgentHashCssIcon staticPose />
+            Agent Hash
           </span>
         )}
         <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {productHubOpen ? 'What do you want to do?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'HashpayStream' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : paymentFlow === 'bank-send' ? 'Send from Bank' : 'Receive USDC'}
+          {productHubOpen ? serviceHubAgentMounted ? 'Ask Agent Hash' : 'What do you want to do?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'Hash Paystream' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : 'Receive USDC'}
         </h1>
         <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
           {productHubOpen
-            ? 'Receive payments, manage x402, run HashpayStream, or PolyDesk.'
+            ? serviceHubAgentMounted
+              ? 'Your Hash PayLink assistant, powered by ZeroScout intelligence.'
+              : 'Circle Pocket powers every Hash PayLink service from one wallet surface.'
             : paymentMenuOpen
             ? 'Select the payment experience you want to create.'
             : circlePocketMode
@@ -2549,7 +2684,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             : billsMode
             ? 'Utility bill payment will live here when it is ready.'
             : streamMode
-              ? 'Stream USDC for payroll, agent services, and Arena games.'
+              ? 'Stream USDC for payroll, creator access, agent services, and Arena games.'
               : accessMode
                 ? accessView === 'wallet'
                   ? 'Check Circle wallet balance, activate x402 service balance, and view paid service access.'
@@ -2625,15 +2760,52 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             ? 'space-y-2'
             : 'overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]',
         )}
-        style={{ overflowX: 'hidden' }}
+        style={{
+          overflowX: 'hidden',
+          overflowY: productHubOpen && serviceHubAgentMounted ? 'clip' : 'visible',
+        }}
       >
         {productHubOpen ? (
+          serviceHubAgentMounted ? (
+            <div
+              className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card transition-all duration-200 ease-out dark:border-white/10 dark:bg-[#111114]"
+              style={{
+                opacity: serviceHubAgentVisible ? 1 : 0,
+                transform: serviceHubAgentVisible
+                  ? 'perspective(1200px) rotateX(0deg) translateY(0) scale(1)'
+                  : 'perspective(1200px) rotateX(-6deg) translateY(0) scale(0.985)',
+                transformOrigin: 'bottom center',
+              }}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-3 dark:border-white/10 sm:px-4">
+                <FlowBackButton onClick={closeServiceHubAgent} />
+                <div className="min-w-0">
+                  <div className="min-w-0 text-right">
+                    <p className="truncate text-sm font-bold text-gray-950 dark:text-white">Agent Hash</p>
+                    <p className="text-[11px] font-medium text-gray-400">ZeroScout intelligence</p>
+                  </div>
+                </div>
+              </div>
+              <TelegramHelperPanel
+                telegramName={localCurrencyProfile?.firstName || 'there'}
+                ownerKey={privyEmail || evmAddr.trim() || 'service-hub'}
+                telegramId=""
+                fallbackOwner={privyEmail || evmAddr.trim() || 'service-hub'}
+                initialEventId=""
+                initialPayer={localCurrencyProfile?.firstName || ''}
+                onRecoverTelegramName={() => undefined}
+                onBack={closeServiceHubAgent}
+                welcomeText="Welcome to Agent Hash. Ask about payments, wallets, Hash Paystream, PolyDesk, research, planning, or any Hash PayLink service."
+                inputPlaceholder="Ask Agent Hash..."
+                hideTopDivider
+              />
+            </div>
+          ) : (
           <div className="space-y-2">
             {[
-              { icon: Wallet, title: 'Circle Pocket Wallet', body: 'Fund services, pay bills, and send money from one Circle balance.', action: () => openCirclePocketMode() },
-              { icon: Coins, title: 'Payment', body: 'Create personal, business, POS, or bills flows.', action: () => openPaymentMenu() },
-              { icon: Radio, title: 'Stream', body: 'Creator, payroll, and Arena on Arc.', action: () => { window.location.href = '/stream' } },
-              { icon: PolymarketMark, title: 'Poly', body: 'Funding, positions, and LP Scout.', action: () => openPolymarketMode() },
+              { icon: Wallet, title: 'Circle Pocket Wallet', body: 'Manage wallets, x402, receiving, bank payout, POS, bills, and receipts.', action: () => openCirclePocketMode() },
+              { icon: Radio, title: 'Hash Paystream', body: 'Open the standalone Arc streaming app for payroll, creators, and Arena.', action: () => openStreamMode() },
+              { icon: PolymarketMark, title: 'PolyDesk', body: 'Open standalone Polymarket funding, portfolio, World Cup, and LP Scout.', action: () => openPolymarketMode() },
             ].map(({ icon: Icon, title, body, action }) => (
               <button
                 key={title}
@@ -2655,7 +2827,44 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 </span>
               </button>
             ))}
+            <button
+              type="button"
+              onClick={openServiceHubAgent}
+              className="group mt-4 w-full rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-card transition-all hover:border-gray-200 hover:shadow-lg active:scale-[0.995] dark:border-white/10 dark:bg-[#111114] dark:hover:bg-[#15151a]"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex shrink-0 items-start pt-0.5 text-gray-700 dark:text-gray-300">
+                  <AgentHashCssIcon header />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Agent Hash</p>
+                      <p className="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white">
+                        Hello there
+                      </p>
+                    </div>
+                    <span className="back-btn shrink-0 text-gray-400 transition-transform group-hover:translate-x-0.5 group-hover:text-gray-600" aria-hidden="true">
+                      <span className="arrow-container arrow-container--right">
+                        <span className="chevron chevron--right c1" />
+                        <span className="chevron chevron--right c2" />
+                        <span className="chevron chevron--right c3" />
+                      </span>
+                    </span>
+                  </div>
+                  <div className="mt-3 rounded-2xl rounded-tl-md bg-gray-100 px-4 py-3 dark:bg-white/[0.07]">
+                    <p
+                      key={serviceHubAgentPromptIndex}
+                      className="telegram-agent-typewriter text-sm font-semibold leading-relaxed text-gray-800 dark:text-gray-100"
+                    >
+                      {AGENT_HASH_HEADER_PROMPTS[serviceHubAgentPromptIndex]?.text}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </button>
           </div>
+          )
         ) : paymentMenuOpen ? (
           <PaymentFlowCards />
         ) : (
@@ -2664,20 +2873,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           {circlePocketMode ? (
             <div className="space-y-5 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={closeCirclePocketMode}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-                >
-                  <span className="back-btn text-gray-500 dark:text-gray-300" aria-hidden="true">
-                    <span className="arrow-container">
-                      <span className="chevron c1" />
-                      <span className="chevron c2" />
-                      <span className="chevron c3" />
-                    </span>
-                  </span>
-                  Back
-                </button>
+                <FlowBackButton onClick={closeCirclePocketMode} />
                 {privyAuthenticated && (
                   <button
                     type="button"
@@ -2716,14 +2912,69 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   {[
                     {
                       icon: Wallet,
-                      title: 'Circle smart wallets',
-                      body: 'Manage the Circle wallet address created for each network.',
+                      title: 'Manage my wallet',
+                      body: 'View Circle smart wallets, x402 balance, funding addresses, and activity.',
+                      action: () => setCirclePocketView('wallet-manager'),
+                    },
+                    {
+                      icon: Coins,
+                      title: 'Receive USDC',
+                      body: 'Create a hosted USDC PayLink from your Circle Pocket flow.',
+                      action: () => setPaymentTab('usdc'),
+                    },
+                    {
+                      icon: Landmark,
+                      title: 'Receive to bank',
+                      body: 'Accept Base USDC and settle to a verified Naira bank account.',
+                      action: () => setPaymentTab('bank'),
+                    },
+                    {
+                      icon: Store,
+                      title: 'POS',
+                      body: 'Create a static checkout QR for retail and contactless payments.',
+                      action: () => setPaymentTab('pos'),
+                    },
+                    {
+                      icon: Banknote,
+                      title: 'Bills',
+                      body: 'Pay utility bills and keep local-currency receipts connected.',
+                      action: () => setPaymentTab('bills'),
+                    },
+                  ].map(({ icon: Icon, title, body, action }) => (
+                    <button
+                      key={title}
+                      type="button"
+                      onClick={action}
+                      className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
+                    >
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                          <Icon className="h-[18px] w-[18px]" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
+                          <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
+                        </span>
+                      </span>
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
+                        <ChevronDown className="-rotate-90 h-4 w-4" />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : circlePocketView === 'wallet-manager' ? (
+                <div className="space-y-3">
+                  {[
+                    {
+                      icon: Wallet,
+                      title: 'Circle smart wallet',
+                      body: 'View balances, funding addresses, withdrawals, and wallet activity.',
                       action: () => setCirclePocketView('main'),
                     },
                     {
                       icon: Radio,
-                      title: 'x402 Wallet',
-                      body: 'Move available funds into paid service balance.',
+                      title: 'x402 wallet',
+                      body: 'Move available USDC into paid service balance.',
                       action: () => setCirclePocketView('x402'),
                     },
                   ].map(({ icon: Icon, title, body, action }) => (
@@ -2984,20 +3235,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           ) : polymarketMode ? (
             <div className="space-y-5 p-4 sm:p-5">
-              <button
-                type="button"
-                onClick={closePolymarketMode}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-              >
-                <span className="back-btn text-gray-500 dark:text-gray-300" aria-hidden="true">
-                  <span className="arrow-container">
-                    <span className="chevron c1" />
-                    <span className="chevron c2" />
-                    <span className="chevron c3" />
-                  </span>
-                </span>
-                Back
-              </button>
+                <FlowBackButton onClick={closePolymarketMode} />
 
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Polymarket tools</p>
@@ -3082,24 +3320,11 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           ) : streamMode ? (
             <div className="space-y-5 p-4 sm:p-5">
-              <button
-                type="button"
-                onClick={closeStreamMode}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-              >
-                <span className="back-btn text-gray-500 dark:text-gray-300" aria-hidden="true">
-                  <span className="arrow-container">
-                    <span className="chevron c1" />
-                    <span className="chevron c2" />
-                    <span className="chevron c3" />
-                  </span>
-                </span>
-                Back
-              </button>
+              <FlowBackButton onClick={closeStreamMode} />
 
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">USDC on Arc</p>
-                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose a HashpayStream flow</h2>
+                <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose a Hash Paystream flow</h2>
                 <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                   Creator Studio, Arena rooms, payroll, and agent streams share the same Arc USDC settlement layer.
                 </p>
@@ -3171,7 +3396,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </div>
 
               <p className="text-center text-[11px] text-gray-400">
-                Same Hash PayLink platform. HashpayStream flows settle on Arc and can attach receipts, dashboards, and 0G records.
+                Same Hash PayLink infrastructure. Hash Paystream flows settle on Arc and can attach receipts, dashboards, and 0G records.
               </p>
             </div>
           ) : posMode ? (
@@ -3200,14 +3425,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
 
               {(posCountry || posSettlementPath || posMerchant) && (
-                <button
-                  type="button"
-                  onClick={handlePosBack}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Back
-                </button>
+                <FlowBackButton onClick={handlePosBack} />
               )}
 
               {!posCountry ? (
@@ -3236,6 +3454,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                             setPosCountry(country.key)
                             setPosSettlementPath('PAYCREST_NAIRA')
                             setPosError('')
+                            pushPosStepHistory('setup')
                           }}
                           className={cn(
                             'group flex items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-all',
@@ -3476,14 +3695,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           ) : billsMode ? (
             <>
             <div className="space-y-5 p-4 sm:p-5">
-              <button
-                type="button"
-                onClick={() => openPaymentMenu()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back
-              </button>
+              <FlowBackButton onClick={() => goBackOr(() => openCirclePocketMode(false))} />
               {!privyAuthenticated && (
                 <LocalCurrencySignInGate
                   title="Sign in for bills history"
@@ -3518,34 +3730,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </>
           ) : accessMode ? (
             <div className="space-y-5 p-4 sm:p-5">
-              <button
-                type="button"
-                onClick={closeAccessMode}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-              >
-                <span className="back-btn text-gray-500 dark:text-gray-300" aria-hidden="true">
-                  <span className="arrow-container">
-                    <span className="chevron c1" />
-                    <span className="chevron c2" />
-                    <span className="chevron c3" />
-                  </span>
-                </span>
-                Back
-              </button>
+              <FlowBackButton onClick={closeAccessMode} />
               <AgentWorkspace embedded forceProfile />
             </div>
           ) : (
             <>
           <div className="overflow-hidden bg-gray-50/60 dark:bg-white/[0.035]">
             <div className="space-y-3.5 px-3.5 py-3 sm:p-4">
-              <button
-                type="button"
-                onClick={() => openPaymentMenu()}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back
-              </button>
+              <FlowBackButton onClick={() => goBackOr(() => openCirclePocketMode(false))} />
 
           {!accessMode && !multiChainMode && (
             <CircleReceiveSelector

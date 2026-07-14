@@ -38,6 +38,7 @@ import { EVM_TREASURY } from '../lib/chains'
 import AgentWorkspace from './AgentWorkspace'
 import ZeroScoutPowerBadge from '../components/ZeroScoutPowerBadge'
 import PayLinkShareSheet from '../components/PayLinkShareSheet'
+import DynamicSendButton from '../components/DynamicSendButton'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import { PrivyDisconnectButton } from '../lib/PrivyDisconnectButton'
@@ -340,6 +341,7 @@ type HelperMessage = {
   id?: string
   question?: string
   answer?: string
+  acceptedModeLabel?: string
   proof?: { ogTxHash: string; ogExplorer: string }
   zeroscoutSponsorship?: ZeroScoutSponsorship
   paylink?: SavedRequest
@@ -566,17 +568,17 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
   {
     id: 'payments',
     label: 'Payments',
-    intro: 'Payments mode is ready. I can help you request money, create a PayLink, check a receipt, or clarify wallet and network details. What do you want to do?',
+    intro: 'I can help you request money, create a PayLink, check a receipt, or clarify wallet and network details. What do you want to do?',
   },
   {
     id: 'daily',
     label: 'Daily',
-    intro: "Daily mode is ready. I can help with personal planning, normal questions, ideas, and everyday support. What's on your mind?",
+    intro: "I can help with personal planning, normal questions, ideas, and everyday support. What's on your mind?",
   },
   {
     id: 'services',
     label: 'Services',
-    intro: 'Services mode is ready. I can help with HashpayStream, Agent Wallets, x402, Circle wallet setup, PolyDesk, and Hash PayLink features. What are you trying to use?',
+    intro: 'I can help with HashpayStream, Agent Wallets, x402, Circle wallet setup, PolyDesk, and Hash PayLink features. What are you trying to use?',
   },
   {
     id: 'polydesk',
@@ -586,7 +588,7 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
   {
     id: 'support',
     label: 'Support',
-    intro: "Support mode is ready. Tell me what is stuck, confusing, or not working, and I'll help you fix it step by step.",
+    intro: "Tell me what is stuck, confusing, or not working, and I'll help you fix it step by step.",
   },
 ]
 
@@ -594,19 +596,19 @@ const polyDeskSubModes: Array<{ id: PolyDeskSubMode; label: string; intro: strin
   {
     id: 'portfolio',
     label: 'Portfolio',
-    intro: 'Portfolio mode is ready. I can check saved profile setup, portfolio value, open positions, claimables, alerts, and funding.',
+    intro: 'I can check saved profile setup, portfolio value, open positions, claimables, alerts, and funding.',
     icon: Wallet,
   },
   {
     id: 'worldcup',
     label: 'World Cup',
-    intro: 'World Cup mode is ready. I can read live score feeds, fixture context, market routes, and latest World Cup news.',
+    intro: 'I can read live score feeds, fixture context, market routes, and latest World Cup news.',
     icon: Radio,
   },
   {
     id: 'lp-scout',
     label: 'LP Scout',
-    intro: 'LP Scout mode is ready. I can help you choose paid LP Scout access through x402 or a normal USDC access payment.',
+    intro: 'I can help you choose paid LP Scout access through x402 or a normal USDC access payment.',
     icon: LineChart,
   },
 ]
@@ -2013,7 +2015,7 @@ export function TelegramHelperPanel({
     setAskError('')
     suppressThreadHydrationRef.current = true
     freshThreadIdsRef.current.add(`mode:${mode}`)
-    setMessages([{ question: selected.label, answer: selected.intro }])
+    setMessages([{ question: selected.label, answer: selected.intro, acceptedModeLabel: selected.label }])
     window.setTimeout(() => {
       document.querySelector<HTMLInputElement>('[data-agent-hash-input="true"]')?.focus()
     }, 40)
@@ -2050,7 +2052,7 @@ export function TelegramHelperPanel({
     setAskError('')
     suppressThreadHydrationRef.current = true
     freshThreadIdsRef.current.add(`mode:polydesk:${mode}`)
-    setMessages([{ question: selected.label, answer: selected.intro }])
+    setMessages([{ question: selected.label, answer: selected.intro, acceptedModeLabel: selected.label }])
     window.setTimeout(() => {
       document.querySelector<HTMLInputElement>('[data-agent-hash-input="true"]')?.focus()
     }, 40)
@@ -3183,9 +3185,13 @@ export function TelegramHelperPanel({
               <div
                 ref={helperScrollRef}
                 className={cn(
-                  'max-h-[360px] min-h-[220px] space-y-4 overflow-y-auto p-3 scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                  'space-y-4 overflow-y-auto p-3 scroll-smooth transition-[height] duration-300 ease-out [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                  helperMode
+                    ? 'min-h-[340px] sm:min-h-[380px]'
+                    : 'max-h-[360px] min-h-[220px]',
                   !hideTopDivider && 'border-t border-gray-100 dark:border-white/10',
                 )}
+                style={helperMode ? { height: 'clamp(340px, 52dvh, 500px)' } : undefined}
               >
                 <div className="max-w-[82%] break-words rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
                   <p>
@@ -3211,18 +3217,6 @@ export function TelegramHelperPanel({
                         </button>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {helperMode && !lockedHelperMode && (
-                  <div className="flex justify-center">
-                    <button
-                      type="button"
-                      onClick={resetHelperMode}
-                      className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-                    >
-                      {helperModes.find(mode => mode.id === helperMode)?.label} mode
-                    </button>
                   </div>
                 )}
 
@@ -3281,6 +3275,23 @@ export function TelegramHelperPanel({
                       <div>
                         {message.answer && (
                           <div className="max-w-[82%] break-words whitespace-pre-wrap rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+                            {message.acceptedModeLabel && (
+                              <div className="mb-2.5 flex items-center justify-between gap-3 border-b border-gray-200/70 pb-2 dark:border-white/10">
+                                <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                  <span className="truncate">{message.acceptedModeLabel} selected</span>
+                                </span>
+                                {!lockedHelperMode && (
+                                  <button
+                                    type="button"
+                                    onClick={resetHelperMode}
+                                    className="shrink-0 text-[11px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
+                                  >
+                                    Change mode
+                                  </button>
+                                )}
+                              </div>
+                            )}
                             {message.answer}
                             {helperActionLinks(message).length > 0 && (
                               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -3325,7 +3336,7 @@ export function TelegramHelperPanel({
               </div>
 
               <div className="border-t border-gray-100 p-3 dark:border-white/10">
-                <div className="flex items-center gap-2">
+                <div className="relative">
                   <input
                     data-agent-hash-input="true"
                     value={question}
@@ -3333,22 +3344,17 @@ export function TelegramHelperPanel({
                     onKeyDown={event => event.key === 'Enter' && !event.shiftKey && !asking && askHelper()}
                     placeholder={helperMode === 'polydesk' && !polyDeskSubMode ? 'Choose a Desk Agent lane' : helperMode ? inputPlaceholder ?? 'Ask Hash...' : 'Choose a mode to start'}
                     disabled={!helperMode || (helperMode === 'polydesk' && !polyDeskSubMode)}
-                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
+                    className="h-14 w-full min-w-0 rounded-[28px] border border-gray-200 bg-gray-50 py-3 pl-4 pr-[4.25rem] text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200/80 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:focus:border-white/20 dark:focus:ring-white/10"
                   />
-                  <button
-                    type="button"
-                    onClick={asking ? stopHelperResponse : askHelper}
-                    disabled={!asking && (!question.trim() || !helperMode || (helperMode === 'polydesk' && !polyDeskSubMode))}
-                    aria-label={asking ? 'Stop response' : 'Send message'}
-                    className={cn(
-                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95 disabled:opacity-40',
-                      asking
-                        ? 'border border-gray-200 bg-white text-gray-900 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.08] dark:text-white dark:hover:bg-white/[0.12]'
-                        : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950',
-                    )}
-                  >
-                    {asking ? <span className="h-3.5 w-3.5 rounded-[4px] bg-current" /> : <Send className="h-4 w-4" />}
-                  </button>
+                  <DynamicSendButton
+                    inputText={question}
+                    isLoading={asking}
+                    onSend={askHelper}
+                    onStop={stopHelperResponse}
+                    onAddAttachment={() => document.querySelector<HTMLInputElement>('[data-agent-hash-input="true"]')?.focus()}
+                    disabled={!asking && (!helperMode || (helperMode === 'polydesk' && !polyDeskSubMode))}
+                    className="absolute bottom-1 right-1"
+                  />
                 </div>
               </div>
         </div>

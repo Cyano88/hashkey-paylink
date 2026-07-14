@@ -12,6 +12,34 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    scrollbar-color: rgba(104, 104, 112, 0.34) transparent;
+    scrollbar-width: thin;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html::-webkit-scrollbar-thumb,
+  body::-webkit-scrollbar-thumb {
+    min-height: 44px;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    background: linear-gradient(180deg, rgba(128, 128, 138, 0.42), rgba(82, 82, 91, 0.3));
+    background-clip: content-box;
+  }
+
+  html::-webkit-scrollbar-thumb:hover,
+  body::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(99, 99, 108, 0.62), rgba(63, 63, 70, 0.5));
+    background-clip: content-box;
   }
 
   body {
@@ -183,6 +211,22 @@
 html.dark body {
   background-color: #121212;
   color: #eeeeee;
+}
+
+html.dark {
+  scrollbar-color: rgba(255, 255, 255, 0.26) transparent;
+}
+
+html.dark::-webkit-scrollbar-thumb,
+html.dark body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.14));
+  background-clip: content-box;
+}
+
+html.dark::-webkit-scrollbar-thumb:hover,
+html.dark body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.24));
+  background-clip: content-box;
 }
 
 /* ── Surfaces — 3-level hierarchy: page / card / input ─────────────────────── */
