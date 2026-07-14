@@ -1407,7 +1407,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openCirclePocketMode(push = true, view: CirclePocketView = 'chooser') {
     if (push) pushProductHistory('circle-pocket')
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'circle-pocket' } }))
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
     setCirclePocketMode(true)
@@ -1442,7 +1442,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openPaymentMenu(push = true) {
     if (push) pushProductHistory('payment')
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'circle-pocket' } }))
     setProductHubOpen(false)
     setPaymentMenuOpen(true)
     setAccessMode(false)
@@ -1462,7 +1462,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openPaymentMode(push = true) {
     if (push) pushPaymentTabHistory(paymentFlow)
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'circle-pocket' } }))
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
     setAccessMode(false)
@@ -1521,7 +1521,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openBillsMode(push = true) {
     if (push) pushPaymentTabHistory('bills')
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'payments' } }))
+    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'circle-pocket' } }))
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
     setBillsMode(true)

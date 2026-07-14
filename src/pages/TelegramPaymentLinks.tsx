@@ -333,7 +333,7 @@ const blockedPayerNames = new Set([
 ])
 
 type PolymarketMode = 'self' | 'friends' | ''
-type HelperMode = 'payments' | 'daily' | 'services' | 'polydesk' | 'support'
+type HelperMode = 'circle-pocket' | 'daily' | 'services' | 'polydesk' | 'support'
 type PolyDeskSubMode = 'portfolio' | 'worldcup' | 'lp-scout'
 type HelperThinkingState = 'light' | 'payment-draft' | 'payment-wallet' | 'paylink-build' | 'deep-research' | 'proof'
 
@@ -566,9 +566,9 @@ function extractTarget(text: string, mode: RequestMode) {
 
 const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
   {
-    id: 'payments',
-    label: 'Payments',
-    intro: 'I can help you request money, create a PayLink, check a receipt, or clarify wallet and network details. What do you want to do?',
+    id: 'circle-pocket',
+    label: 'Circle Pocket',
+    intro: 'I can help with smart wallets, receiving USDC, bank payout, Retail POS, bills, x402 funding, receipts, and account support. What do you want to do?',
   },
   {
     id: 'daily',
@@ -1682,7 +1682,8 @@ export function TelegramHelperPanel({
   const storedHelperMode = (() => {
     if (lockedHelperMode) return lockedHelperMode
     if (initialHelperMode) return initialHelperMode
-    const saved = window.localStorage.getItem(helperModeStorageKey)
+    const stored = window.localStorage.getItem(helperModeStorageKey)
+    const saved = stored === 'payments' ? 'circle-pocket' : stored
     return helperModes.some(mode => mode.id === saved) ? saved as HelperMode : ''
   })()
   const storedPolyDeskSubMode = (() => {
@@ -2988,7 +2989,7 @@ export function TelegramHelperPanel({
     helperAbortRef.current = abortController
     queueHelperMessage(nextQuestion)
     try {
-      const isPaylinkFlow = helperMode === 'payments' && Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
+      const isPaylinkFlow = helperMode === 'circle-pocket' && Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
       const isDeepResearch = helperMode === 'polydesk' || isDeepResearchIntent(nextQuestion)
       setThinkingState(isPaylinkFlow ? 'payment-draft' : isDeepResearch ? 'deep-research' : 'light')
       setAgentStatus(isPaylinkFlow
@@ -3106,13 +3107,13 @@ export function TelegramHelperPanel({
         })
         return
       }
-      if (helperMode !== 'payments' && isPaymentRequestIntent(nextQuestion)) {
+      if (helperMode !== 'circle-pocket' && isPaymentRequestIntent(nextQuestion)) {
         finishHelperMessage(nextQuestion, {
-          answer: 'That sounds like a payment request. Switch to Payments mode and I will prepare it cleanly.',
+          answer: 'That sounds like a Circle Pocket request. Switch to Circle Pocket and I will prepare it cleanly.',
         })
         return
       }
-      if (helperMode === 'payments' && await handlePaylinkConversation(nextQuestion)) return
+      if (helperMode === 'circle-pocket' && await handlePaylinkConversation(nextQuestion)) return
       if (helperMode === 'polydesk' && await handlePolyDeskConversation(nextQuestion)) return
       setThinkingState(isDeepResearch ? 'deep-research' : 'light')
       setAgentStatus(isDeepResearch ? 'Running deeper research... this might take a little time.' : 'Asking ZeroScout...')
@@ -3139,6 +3140,7 @@ export function TelegramHelperPanel({
         upgradeLink?: string
         upgradeAmount?: string
         upgradeCurrency?: string
+        suggestedAction?: { label: string; url: string }
       }
       try {
         data = rawHelperResponse ? JSON.parse(rawHelperResponse) : {}
@@ -3160,7 +3162,12 @@ export function TelegramHelperPanel({
       }
       setThinkingState('proof')
       setAgentStatus('Securing proof...')
-      finishHelperMessage(nextQuestion, { answer: data.answer!, proof: data.proof, zeroscoutSponsorship: data.zeroscoutSponsorship })
+      finishHelperMessage(nextQuestion, {
+        answer: data.answer!,
+        proof: data.proof,
+        zeroscoutSponsorship: data.zeroscoutSponsorship,
+        actionLink: data.suggestedAction,
+      })
       void saveProfile({ question: nextQuestion, answer: data.answer } as Partial<HelperProfile>)
       if (!memoryDraft.trim()) {
         setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, HashpayStream, agents, research, planning, and daily questions.`)

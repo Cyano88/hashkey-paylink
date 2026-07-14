@@ -33,6 +33,14 @@ type ZeroScoutHelperGuidanceInput = {
       action: string
       fields: Record<string, string>
     }
+    circlePocketContext?: {
+      source: 'hashpaylink-backend-router'
+      capability: string
+      supported: boolean
+      confidence: 'high' | 'medium' | 'fallback'
+      answer: string
+      action: { label: string; url: string }
+    }
     hashpayStreamContext?: unknown
   }
   sourceProof?: Record<string, unknown>
@@ -289,13 +297,14 @@ function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
       'For mood or personal support, respond empathetically and naturally without turning it into a product menu.',
     ]
   }
-  if (mode === 'payments') {
+  if (mode === 'circle-pocket') {
     return [
-      'Payments mode should focus on payment request creation, payment clarification, receipts, network, amount, purpose, and receive wallet.',
-      'Hash PayLink is the deterministic source of truth for parsing, validation, wallet/network compatibility, PayLink creation, receipt state, and proof checks. ZeroScout only enriches the backend-supplied context and wording.',
-      'Never call, recommend, or imply LP Scout, Polymarket, market-intelligence, trading, or liquidity endpoints from Payments mode.',
-      'If a deterministic action result or missing-field list is supplied, preserve it exactly. Do not invent fields, change amounts, change networks, or claim a link or receipt exists before backend state says it does.',
-      'Keep wording short because deterministic PayLink creation is handled by Hash PayLink.',
+      'Circle Pocket mode covers the complete wallet service: smart-wallet overview and activity, funding addresses, supported transfers and withdrawals, Receive USDC and PayLinks, bank payout, Retail POS, bills, x402 service-balance funding, receipts, and account support.',
+      'Hash PayLink backend context is the deterministic source of truth for balances, wallet addresses, networks, validation, account verification, PayLink creation, bank settlement, POS, bills, x402 activation, receipts, transaction state, and proof checks. ZeroScout only enriches the supplied request and wording.',
+      'Never call, recommend, or imply LP Scout, Polymarket, market-intelligence, trading, or liquidity endpoints from Circle Pocket mode.',
+      'Preserve every supplied deterministic result, field, supported flag, capability, and action exactly. Never invent balances, addresses, verification, providers, links, receipts, transaction state, or completed actions.',
+      'When circlePocketContext marks a request unsupported, use its closest-assistance answer and action. Do not answer the unsupported request as though Circle Pocket can perform it.',
+      'Keep the answer direct, useful, and short enough for a mobile chat card.',
     ]
   }
   if (mode === 'services') {
@@ -369,6 +378,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
     memorySummary: sanitizedMemorySummary || undefined,
     memorySummaryHash: input.request.memorySummaryHash,
     paymentContext: input.request.paymentContext,
+    circlePocketContext: input.request.circlePocketContext,
     hashpayStreamContext: input.request.hashpayStreamContext,
     mediaInspection: mediaInspectionForZeroScout,
   }
@@ -384,7 +394,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
       partner: 'Hash PayLink',
       productType: 'agentic-service',
       analysisType: 'zeroscout-helper-context-guidance',
-      objective: 'Return a concise, consumer-friendly Agent Hash chat answer. Be direct, human, and useful. Follow helperModeInstructions strictly. Answer ordinary everyday questions cleanly. For live schedules, prices, current events, restaurants, or other freshness-sensitive requests, answer only if verified data is available in the request or ZeroScout can verify it; otherwise say plainly that live verification is not available from this chat. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Payment-link requests should be practical and minimal only when the user is in Payments mode or explicitly asks for payment help. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
+      objective: 'Return a concise, consumer-friendly Agent Hash chat answer. Be direct, human, and useful. Follow helperModeInstructions strictly. Answer ordinary everyday questions cleanly. For live schedules, prices, current events, restaurants, or other freshness-sensitive requests, answer only if verified data is available in the request or ZeroScout can verify it; otherwise say plainly that live verification is not available from this chat. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Circle Pocket requests must stay within the backend-routed wallet, receiving, bank payout, POS, bills, x402, receipts, and account capabilities. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
       outputStyle: 'consumer-helper-answer-guidance',
       data: {
         proofClass: 'zeroscout_helper_context_guidance',
@@ -428,11 +438,11 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         fallbackOrder: helperFallbackOrder(refinementLane),
         modelRoutingPolicy: {
           owner: 'zeroscout',
-          task: input.request.helperMode === 'payments' ? 'payment-assistance' : input.request.helperIntent,
-          preference: input.request.helperMode === 'payments'
+          task: input.request.helperMode === 'circle-pocket' ? 'circle-pocket-assistance' : input.request.helperIntent,
+          preference: input.request.helperMode === 'circle-pocket'
             ? 'Prefer the configured high-quality 0G text model, then immediately try the next compatible model exposed by the 0G Compute Router.'
             : 'Prefer the configured 0G helper model, then try the next compatible 0G Compute Router model.',
-          lpEndpointsAllowed: input.request.helperMode === 'payments' ? false : undefined,
+          lpEndpointsAllowed: input.request.helperMode === 'circle-pocket' ? false : undefined,
         },
         modelHints: mediaInspection?.allowed && HASHWATCH_MEDIA_MODEL_HINT
           ? {

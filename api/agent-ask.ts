@@ -44,7 +44,7 @@ const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
 const MAX_MEMORY_LENGTH = 2_600
 const HELPER_FREE_ACCESS_MODE = 'helper-free'
-const HELPER_MODES = new Set(['payments', 'daily', 'services', 'polydesk', 'support', 'streampay'])
+const HELPER_MODES = new Set(['circle-pocket', 'daily', 'services', 'polydesk', 'support', 'streampay'])
 const HELPER_SIMPLE_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_SIMPLE_DAILY_PROMPT_LIMIT ?? process.env.HELPER_DAILY_PROMPT_LIMIT ?? '100', 10) || 100)
 const HELPER_DEEP_DAILY_PROMPT_LIMIT = Math.max(1, parseInt(process.env.HELPER_DEEP_DAILY_PROMPT_LIMIT ?? '2', 10) || 2)
 const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -923,7 +923,91 @@ function personalContextFallback(question: string) {
 
 function normalizeHelperMode(value: unknown) {
   const mode = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (mode === 'payments') return 'circle-pocket'
   return HELPER_MODES.has(mode) ? mode : ''
+}
+
+type CirclePocketCapability =
+  | 'wallet-overview'
+  | 'receive-usdc'
+  | 'bank-payout'
+  | 'retail-pos'
+  | 'bills'
+  | 'x402-wallet'
+  | 'receipts'
+  | 'profile-support'
+
+type CirclePocketRoute = {
+  source: 'hashpaylink-backend-router'
+  capability: CirclePocketCapability
+  supported: boolean
+  confidence: 'high' | 'medium' | 'fallback'
+  answer: string
+  action: { label: string; url: string }
+}
+
+const CIRCLE_POCKET_ROUTES: Record<CirclePocketCapability, Omit<CirclePocketRoute, 'source' | 'capability' | 'supported' | 'confidence'>> = {
+  'wallet-overview': {
+    answer: 'Circle Pocket brings your smart-wallet balance, funding addresses, wallet activity, transfers, and supported networks into one place.',
+    action: { label: 'Open Circle Pocket', url: '/?product=circle-pocket' },
+  },
+  'receive-usdc': {
+    answer: 'Use Receive USDC to collect a payment, choose a supported network, and create a shareable PayLink.',
+    action: { label: 'Receive USDC', url: '/?product=payment&tab=personal' },
+  },
+  'bank-payout': {
+    answer: 'Use Receive to Bank to create a Naira payout link. The payer pays USDC and the verified bank account receives settlement.',
+    action: { label: 'Receive to Bank', url: '/?product=payment&tab=bank' },
+  },
+  'retail-pos': {
+    answer: 'Retail POS creates a reusable merchant QR for accepting USDC and routing settlement through the selected local flow.',
+    action: { label: 'Open Retail POS', url: '/?product=payment&tab=pos' },
+  },
+  bills: {
+    answer: 'Bills lets you pay supported airtime, data, electricity, cable, and other available services from the Circle Pocket flow.',
+    action: { label: 'Open Bills', url: '/?product=payment&tab=bills' },
+  },
+  'x402-wallet': {
+    answer: 'The x402 wallet moves available USDC into a paid-service balance for supported agent and API access.',
+    action: { label: 'Open x402 Wallet', url: '/?product=agent' },
+  },
+  receipts: {
+    answer: 'Receipts and wallet activity show payment status, transaction proof, and the history available for your signed-in account.',
+    action: { label: 'View Receipts', url: '/dashboard' },
+  },
+  'profile-support': {
+    answer: 'Open Circle Pocket to sign in, review your verified account, edit available profile details, and manage wallet services.',
+    action: { label: 'Open Circle Pocket', url: '/?product=circle-pocket' },
+  },
+}
+
+function circlePocketResult(capability: CirclePocketCapability, confidence: CirclePocketRoute['confidence'] = 'high'): CirclePocketRoute {
+  return {
+    source: 'hashpaylink-backend-router',
+    capability,
+    supported: true,
+    confidence,
+    ...CIRCLE_POCKET_ROUTES[capability],
+  }
+}
+
+function routeCirclePocketQuestion(question: string, helperMode: string): CirclePocketRoute | undefined {
+  if (helperMode !== 'circle-pocket') return undefined
+  const value = cleanQuestionForFallback(question).toLowerCase()
+  if (/\b(receipt|refund|history|transaction|proof|status|tx hash|confirmation)\b/.test(value)) return circlePocketResult('receipts')
+  if (/\b(bank|naira|account number|settlement|payout|paycrest|zenith)\b/.test(value)) return circlePocketResult('bank-payout')
+  if (/\b(pos|merchant|static qr|retail|checkout|terminal)\b/.test(value)) return circlePocketResult('retail-pos')
+  if (/\b(bill|airtime|mobile data|electricity|cable|utility|utilities)\b/.test(value)) return circlePocketResult('bills')
+  if (/\b(x402|service balance|paid service|agent wallet|api access)\b/.test(value)) return circlePocketResult('x402-wallet')
+  if (/\b(receive|paylink|payment link|invoice|request money|collect|get paid|payment request)\b/.test(value)) return circlePocketResult('receive-usdc')
+  if (/\b(profile|account|sign in|signin|verified|verification|email|support|error|stuck|failed|not working)\b/.test(value)) return circlePocketResult('profile-support', 'medium')
+  if (/\b(wallet|balance|funding address|deposit|withdraw|send|transfer|network|circle pocket|circle smart)\b/.test(value)) return circlePocketResult('wallet-overview')
+  if (/\b(what can you do|how can you help|capabilities|options|features)\b/.test(value)) return circlePocketResult('wallet-overview', 'medium')
+  return {
+    ...circlePocketResult('wallet-overview', 'fallback'),
+    supported: false,
+    answer: 'Circle Pocket does not handle that request directly yet. The closest available help is wallet management, receiving USDC, bank payout, Retail POS, bills, x402 funding, or receipts. Open Circle Pocket to choose the right flow.',
+  }
 }
 
 const PAYMENT_ENRICHMENT_ACTIONS = new Set([
@@ -944,7 +1028,7 @@ const PAYMENT_ENRICHMENT_FIELDS = new Set([
 ])
 
 function normalizePaymentEnrichmentContext(question: string, helperMode: string) {
-  if (helperMode !== 'payments') return undefined
+  if (helperMode !== 'circle-pocket') return undefined
   const lines = question.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
   const actionLine = lines.find(line => line.startsWith('local_action='))
   const action = actionLine?.slice('local_action='.length).trim().toLowerCase() ?? ''
@@ -975,8 +1059,10 @@ function paymentEnrichmentPrompt(context: ReturnType<typeof normalizePaymentEnri
 }
 
 export const __testAgentAskPaymentEnrichment = {
+  normalizeHelperMode,
   normalizePaymentEnrichmentContext,
   paymentEnrichmentPrompt,
+  routeCirclePocketQuestion,
 }
 
 function classifyHelperRequest(question: string, helperMode = ''): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
@@ -988,7 +1074,7 @@ function classifyHelperRequest(question: string, helperMode = ''): { helperInten
   if (helperMode === 'daily') return { helperIntent: 'daily-assistant', qualityMode: 'fast' }
   if (helperMode === 'services') return { helperIntent: 'hashpaylink-services', qualityMode: 'standard' }
   if (helperMode === 'support') return { helperIntent: 'support', qualityMode: 'standard' }
-  if (helperMode === 'payments') return { helperIntent: 'payment-help', qualityMode: 'standard' }
+  if (helperMode === 'circle-pocket') return { helperIntent: 'circle-pocket', qualityMode: 'standard' }
   if (/^\s*(hi|hello|hey|yo|gm|good morning|good afternoon|good evening)\b/.test(value)) {
     return { helperIntent: 'greeting', qualityMode: 'fast' }
   }
@@ -1185,7 +1271,7 @@ function userFacingZeroScoutMediaFollowUp(error: unknown) {
   return 'You do not need to unlock again. Try again shortly; if this repeats, the ZeroScout media worker or API configuration needs attention on the server.'
 }
 
-function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = '', hashpayStreamContext?: unknown): string {
+function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = '', hashpayStreamContext?: unknown, circlePocketRoute?: CirclePocketRoute): string {
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
   const isHashpayStreamMediaInspection = helperMode === 'streampay'
     && (
@@ -1210,6 +1296,9 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     if (helperMode === 'streampay') {
       return `Hey${knownName ? ` ${knownName}` : ''}. I am Agent Hash for HashpayStream. I can help with creator posts, HashWatch, books, World Cup news, live scores, x402 unlocks, pay-as-you-read/watch checkpoints, receipts, earnings, and unlocked-content summaries.`
     }
+    if (helperMode === 'circle-pocket') {
+      return `Hey${knownName ? ` ${knownName}` : ''}. I can help across Circle Pocket: smart wallets, receiving USDC, bank payout, Retail POS, bills, x402 funding, and receipts.`
+    }
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
   }
 
@@ -1224,7 +1313,11 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     if (streamAnswer) return streamAnswer
   }
 
+  if (circlePocketRoute && !circlePocketRoute.supported) return circlePocketRoute.answer
+
   if (zeroScoutAnswer) return zeroScoutAnswer
+
+  if (circlePocketRoute) return circlePocketRoute.answer
 
   const fallbackAnswer = fallbackHelperAnswer(question)
   if (fallbackAnswer) return fallbackAnswer
@@ -1310,7 +1403,18 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // 2. Payment verified — get AI response
-    const helperRouting = classifyHelperRequest(question, helperMode)
+    const baseHelperRouting = classifyHelperRequest(question, helperMode)
+    const circlePocketRoute = isNameQuestion(question) || isGreetingQuestion(question)
+      ? undefined
+      : routeCirclePocketQuestion(question, helperMode)
+    const helperRouting = circlePocketRoute && !isNameQuestion(question) && !isGreetingQuestion(question)
+      ? {
+          ...baseHelperRouting,
+          helperIntent: circlePocketRoute.supported
+            ? `circle-pocket-${circlePocketRoute.capability}`
+            : 'circle-pocket-closest-assistance',
+        }
+      : baseHelperRouting
     const paymentContext = normalizePaymentEnrichmentContext(question, helperMode)
     const zeroScoutQuestion = paymentEnrichmentPrompt(paymentContext) || question
     const usageTier: HelperUsageTier = helperRouting.qualityMode === 'deep' ? 'deep' : 'simple'
@@ -1373,6 +1477,7 @@ export default async function handler(req: Request, res: Response) {
           memorySummary,
           memorySummaryHash,
           paymentContext,
+          circlePocketContext: circlePocketRoute,
           hashpayStreamContext,
         },
         sourceProof: {
@@ -1439,6 +1544,7 @@ export default async function handler(req: Request, res: Response) {
       accessMode,
       helperMode,
       hashpayStreamContext,
+      circlePocketRoute,
     )
 
     let zeroscoutSponsorship: ZeroScoutSponsoredAction | undefined
@@ -1458,6 +1564,13 @@ export default async function handler(req: Request, res: Response) {
           helperMode,
           helperIntent: helperRouting.helperIntent,
           qualityMode: helperRouting.qualityMode,
+          circlePocketRoute: circlePocketRoute
+            ? {
+                capability: circlePocketRoute.capability,
+                supported: circlePocketRoute.supported,
+                confidence: circlePocketRoute.confidence,
+              }
+            : undefined,
           memorySummaryHash,
           guidanceRequestHash: zeroScoutGuidance?.requestHash,
           hashpayStreamContextHash: hashpayStreamContext
@@ -1474,6 +1587,8 @@ export default async function handler(req: Request, res: Response) {
           helperIntent: helperRouting.helperIntent,
           qualityMode: helperRouting.qualityMode,
           usageRemaining: usagePreview.remaining,
+          circlePocketCapability: circlePocketRoute?.capability,
+          circlePocketSupported: circlePocketRoute?.supported,
         },
       })
     } catch (err) {
@@ -1526,6 +1641,14 @@ export default async function handler(req: Request, res: Response) {
       },
       helperIntent: helperRouting.helperIntent,
       qualityMode: helperRouting.qualityMode,
+      circlePocketRoute: circlePocketRoute
+        ? {
+            capability: circlePocketRoute.capability,
+            supported: circlePocketRoute.supported,
+            confidence: circlePocketRoute.confidence,
+          }
+        : undefined,
+      suggestedAction: circlePocketRoute?.action,
       payment:         access.payment,
       proof:           accessMode === HELPER_FREE_ACCESS_MODE ? undefined : result?.proof,
       zeroscoutSponsorship,

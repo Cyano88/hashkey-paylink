@@ -36,22 +36,22 @@ type ChatMsg = {
   link?: { label: string; href: string }
 }
 
-type AgentHashMode = 'support' | 'payments'
+type AgentHashMode = 'support' | 'circle-pocket'
 
 const AGENT_HASH_WELCOME: Record<AgentHashMode, ChatMsg> = {
   support: {
     from: 'bot',
     text: "Support mode is ready. Tell me what is stuck, confusing, or not working, and I'll help you fix it step by step.",
   },
-  payments: {
+  'circle-pocket': {
     from: 'bot',
-    text: 'Payments mode is ready. I can help you request money, create a PayLink, check a receipt, or clarify wallet and network details. What do you want to do?',
+    text: 'Circle Pocket is ready. I can help with smart wallets, receiving USDC, bank payout, Retail POS, bills, x402 funding, and receipts.',
   },
 }
 
 const agentHashThinkingCopy: Record<AgentHashMode, string[]> = {
   support: ['Reading this...', 'Checking context...', 'Preparing reply...', 'Putting things in order...'],
-  payments: ['Checking payment context...', 'Matching details...', 'Validating flow...', 'Preparing reply...'],
+  'circle-pocket': ['Checking Circle Pocket...', 'Matching the right flow...', 'Validating details...', 'Preparing reply...'],
 }
 
 const agentHashSlowThinkingCopy = ['Putting things in order...', 'Almost ready...', 'Please be patient...']
@@ -556,7 +556,7 @@ export default function Layout() {
   }, [navigate])
 
   const [agentHashSurfaceMode, setAgentHashSurfaceMode] = useState<AgentHashMode>('support')
-  const agentHashMode: AgentHashMode = isPayPage || (isCreatePage && searchParams.get('product') === 'payment') ? 'payments' : agentHashSurfaceMode
+  const agentHashMode: AgentHashMode = isPayPage || (isCreatePage && searchParams.get('product') === 'payment') ? 'circle-pocket' : agentHashSurfaceMode
   const showAgentHashWidget = isCreatePage || isPayPage
   const agentHashStorageKey = `agent-hash-widget:${agentHashMode}`
   const [chatOpen,     setChatOpen]     = useState(false)
@@ -589,14 +589,15 @@ export default function Layout() {
   }
 
   useEffect(() => {
-    if (isPayPage) setAgentHashSurfaceMode('payments')
+    if (isPayPage) setAgentHashSurfaceMode('circle-pocket')
     else if (!isCreatePage || searchParams.get('product') !== 'payment') setAgentHashSurfaceMode('support')
   }, [isCreatePage, isPayPage, pathname, searchParams])
 
   useEffect(() => {
     function handleModeEvent(event: Event) {
       const detail = (event as CustomEvent<{ mode?: AgentHashMode; open?: boolean }>).detail
-      const mode = detail?.mode === 'payments' ? 'payments' : 'support'
+      const rawMode = String(detail?.mode ?? '')
+      const mode: AgentHashMode = rawMode === 'circle-pocket' || rawMode === 'payments' ? 'circle-pocket' : 'support'
       setAgentHashSurfaceMode(mode)
       if (detail?.open) openAgentHashWidget(mode)
     }
@@ -975,7 +976,7 @@ export default function Layout() {
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">Agent Hash</p>
                 <p className="mt-0.5 truncate text-[11px] font-medium text-gray-400">
-                  {agentHashMode === 'payments' ? 'Payments mode' : 'Support mode'} · Powered by ZeroScout
+                  {agentHashMode === 'circle-pocket' ? 'Circle Pocket' : 'Support mode'} · Powered by ZeroScout
                 </p>
               </div>
             </div>
@@ -992,7 +993,7 @@ export default function Layout() {
           <div className="flex-1 space-y-4 overflow-y-auto bg-[#fbfbfc] px-3 py-4 scroll-smooth dark:bg-[#0f0f12]" style={{ scrollbarWidth: 'thin', scrollbarColor: '#d8d8dd transparent' }}>
             <div className="flex justify-center">
               <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
-                {agentHashMode === 'payments' ? 'Payments mode' : 'Support mode'}
+                {agentHashMode === 'circle-pocket' ? 'Circle Pocket' : 'Support mode'}
               </span>
             </div>
 
@@ -1025,7 +1026,7 @@ export default function Layout() {
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSend()}
-                placeholder={agentHashMode === 'payments' ? 'Ask about this payment...' : 'Ask Agent Hash...'}
+                placeholder={agentHashMode === 'circle-pocket' ? 'Ask about Circle Pocket...' : 'Ask Agent Hash...'}
                 className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
               />
               <button type="button" onClick={() => handleSend()} disabled={!chatInput.trim()} aria-label="Send message" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white transition-all hover:bg-gray-800 active:scale-95 disabled:opacity-40 dark:bg-white dark:text-gray-950">

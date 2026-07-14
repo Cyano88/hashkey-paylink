@@ -48,8 +48,8 @@ try {
       eventId: 'payment-lane-smoke',
       question: 'local_action=payment_request_missing_fields\npayer=Nana\nmissing_fields=network',
       accessMode: 'helper-free',
-      helperMode: 'payments',
-      helperIntent: 'payment-help',
+      helperMode: 'circle-pocket',
+      helperIntent: 'circle-pocket-receive-usdc',
       qualityMode: 'standard',
       memorySummary: 'User is known as Shy.',
       memorySummaryHash: 'hash-memory',
@@ -65,7 +65,7 @@ try {
   assert.equal(seenPayload?.data?.refinementPolicy, '0g-compute-compatible-model-fallback')
   assert.deepEqual(seenPayload?.data?.fallbackOrder, ['0g-compute'])
   assert.equal(seenPayload?.data?.modelRoutingPolicy?.owner, 'zeroscout')
-  assert.equal(seenPayload?.data?.modelRoutingPolicy?.task, 'payment-assistance')
+  assert.equal(seenPayload?.data?.modelRoutingPolicy?.task, 'circle-pocket-assistance')
   assert.equal(seenPayload?.data?.modelRoutingPolicy?.lpEndpointsAllowed, false)
   assert.ok(seenPayload?.data?.helperModeInstructions?.some(line => line.includes('Never call, recommend, or imply LP Scout')))
 
