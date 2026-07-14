@@ -1794,6 +1794,19 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   ])
 
   useEffect(() => {
+    const mobileComposerFocused = serviceHubAgentComposerActive
+      && window.matchMedia('(max-width: 767px)').matches
+    window.dispatchEvent(new CustomEvent('hashpaylink-agent-composer-focus', {
+      detail: { focused: mobileComposerFocused },
+    }))
+    return () => {
+      window.dispatchEvent(new CustomEvent('hashpaylink-agent-composer-focus', {
+        detail: { focused: false },
+      }))
+    }
+  }, [serviceHubAgentComposerActive])
+
+  useEffect(() => {
     if (!serviceHubAgentComposerActive || !window.matchMedia('(max-width: 767px)').matches) {
       setServiceHubAgentViewport(null)
       return
@@ -1802,13 +1815,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     const viewport = window.visualViewport
     const updateViewport = () => {
       const topNavHeight = document.querySelector<HTMLElement>('[data-hashpaylink-top-nav]')?.getBoundingClientRect().height ?? 0
-      const bottomBarHeight = document.querySelector<HTMLElement>('[data-hashpaylink-bottom-bar]')?.getBoundingClientRect().height ?? 0
       const viewportHeight = viewport?.height ?? window.innerHeight
       setServiceHubAgentViewport({
         top: (viewport?.offsetTop ?? 0) + topNavHeight,
         left: viewport?.offsetLeft ?? 0,
         width: viewport?.width ?? window.innerWidth,
-        height: Math.max(220, viewportHeight - topNavHeight - bottomBarHeight),
+        height: Math.max(220, viewportHeight - topNavHeight),
       })
     }
     const previousBodyOverflow = document.body.style.overflow
@@ -2769,7 +2781,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   return (
-    <div className="mx-auto w-[calc(100vw-2rem)] max-w-lg min-w-0 animate-fade-in sm:w-[32rem]">
+    <div className={cn(
+      'min-w-0 animate-fade-in',
+      circlePocketMode
+        ? '-mx-4 -my-10 w-[calc(100%+2rem)] max-w-none sm:mx-auto sm:my-0 sm:w-[32rem] sm:max-w-lg'
+        : 'mx-auto w-[calc(100vw-2rem)] max-w-lg sm:w-[32rem]',
+    )}>
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className={cn(
         'mb-6 flex flex-col',
@@ -2788,15 +2805,19 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             Agent Hash
           </span>
         )}
-        <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-[2.25rem]">
-          {productHubOpen ? serviceHubAgentMounted ? 'Ask Agent Hash' : 'What do you want to do?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'Hash Paystream' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : 'Receive USDC'}
+        <h1 className={cn(
+          'text-gray-900 dark:text-white',
+          productHubOpen && !serviceHubAgentMounted
+            ? 'text-[28px] font-black leading-[1.08] tracking-[-0.035em] sm:text-[34px]'
+            : 'text-3xl font-bold tracking-tight sm:text-[2.25rem]',
+        )}>
+          {productHubOpen ? serviceHubAgentMounted ? 'Ask Agent Hash' : 'What do you want to do today?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'Hash Paystream' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : 'Receive USDC'}
         </h1>
-        <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
-          {productHubOpen
-            ? serviceHubAgentMounted
+        {!(productHubOpen && !serviceHubAgentMounted) && (
+          <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
+            {productHubOpen
               ? 'Your Hash PayLink assistant, powered by ZeroScout intelligence.'
-              : 'Circle Pocket powers every Hash PayLink service from one wallet surface.'
-            : paymentMenuOpen
+              : paymentMenuOpen
             ? 'Select the payment experience you want to create.'
             : circlePocketMode
             ? 'Manage wallets, payments, and everyday money tools in one place.'
@@ -2817,7 +2838,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                   : paymentFlow === 'bank-send'
                     ? 'Create a bank-to-USDC funding link. Payer sends Naira, recipient receives USDC.'
                     : 'Create a secure USDC PayLink in seconds.'}
-        </p>
+          </p>
+        )}
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
         {false && !productHubOpen && !paymentMenuOpen && !isBankReceive && !multiChainMode && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode && <div className="mt-5 flex w-full flex-col items-center gap-2.5">
@@ -2881,6 +2903,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           'w-full min-w-0',
           productHubOpen || paymentMenuOpen
             ? 'space-y-2'
+            : circlePocketMode
+            ? 'min-h-[calc(100dvh-117px)] overflow-hidden bg-white dark:bg-[#111114] sm:min-h-0 sm:rounded-2xl sm:border sm:border-gray-100 sm:shadow-card sm:dark:border-white/10'
             : 'overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]',
         )}
         style={{
@@ -3008,8 +3032,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           <>
         <div className="space-y-0 p-0">
           {circlePocketMode ? (
-            <div className={cn('space-y-5 p-4 sm:p-5', circlePocketView !== 'chooser' && 'min-h-[590px] sm:min-h-[640px]')}>
-              <div className="relative flex min-h-8 items-center">
+            <div className={cn('min-h-[calc(100dvh-117px)] space-y-5 p-4 sm:min-h-0 sm:p-5', circlePocketView !== 'chooser' && 'sm:min-h-[640px]')}>
+              <div className="sticky top-[57px] z-20 -mx-4 -mt-4 flex min-h-14 items-center border-b border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-xl dark:border-white/5 dark:bg-[#111114]/95 sm:static sm:mx-0 sm:mt-0 sm:min-h-8 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:backdrop-blur-none sm:dark:bg-transparent">
                 <FlowBackButton onClick={closeCirclePocketMode} />
                 <div className="pointer-events-none absolute left-1/2 max-w-[45%] -translate-x-1/2 text-center">
                   <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">

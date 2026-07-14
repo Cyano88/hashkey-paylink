@@ -417,6 +417,7 @@ export default function Layout() {
   )
   const [showTelegramHomeFab, setShowTelegramHomeFab] = useState(false)
   const [showPaymentHistoryShortcut, setShowPaymentHistoryShortcut] = useState(false)
+  const [agentHashComposerFocused, setAgentHashComposerFocused] = useState(false)
 
   useEffect(() => {
     const handleHomeSurfaceChange = (event: Event) => {
@@ -427,13 +428,20 @@ export default function Layout() {
       const detail = (event as CustomEvent<{ visible?: boolean }>).detail
       setShowPaymentHistoryShortcut(Boolean(detail?.visible))
     }
+    const handleAgentHashComposerFocus = (event: Event) => {
+      const detail = (event as CustomEvent<{ focused?: boolean }>).detail
+      setAgentHashComposerFocused(Boolean(detail?.focused))
+    }
     window.addEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
     window.addEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
+    window.addEventListener('hashpaylink-agent-composer-focus', handleAgentHashComposerFocus)
     return () => {
       window.removeEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
       window.removeEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
+      window.removeEventListener('hashpaylink-agent-composer-focus', handleAgentHashComposerFocus)
       setShowTelegramHomeFab(false)
       setShowPaymentHistoryShortcut(false)
+      setAgentHashComposerFocused(false)
     }
   }, [])
   const polyDeskService = searchParams.get('service') ?? ''
@@ -945,7 +953,10 @@ export default function Layout() {
       </main>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
-      <footer data-hashpaylink-bottom-bar className="sticky bottom-0 z-50 flex h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 backdrop-blur-xl dark:border-white/5 dark:bg-[#111113]/90">
+      <footer
+        data-hashpaylink-bottom-bar
+        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 dark:border-white/5 dark:bg-[#111113]/90 ${agentHashComposerFocused ? 'hidden' : 'flex'}`}
+      >
           <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
               {isPayPage ? (
