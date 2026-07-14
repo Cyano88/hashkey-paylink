@@ -1655,6 +1655,8 @@ export function TelegramHelperPanel({
   polyDeskResetSignal = 0,
   helperBackSignal = 0,
   onPolyDeskSubModeChange,
+  fillAvailableHeight = false,
+  onComposerFocusChange,
 }: {
   telegramName: string
   ownerKey: string
@@ -1674,6 +1676,8 @@ export function TelegramHelperPanel({
   polyDeskResetSignal?: number
   helperBackSignal?: number
   onPolyDeskSubModeChange?: (mode: PolyDeskSubMode | '') => void
+  fillAvailableHeight?: boolean
+  onComposerFocusChange?: (focused: boolean) => void
 }) {
   const cleanTelegramName = telegramName === 'there' ? '' : telegramName
   const helperSessionKeyBase = (ownerKey || telegramId || initialPayer || cleanTelegramName || 'local-helper').trim().toLowerCase()
@@ -1766,6 +1770,27 @@ export function TelegramHelperPanel({
     })
     return () => window.cancelAnimationFrame(frame)
   }, [messages, asking, agentStatus])
+
+  useLayoutEffect(() => {
+    if (!fillAvailableHeight) return
+    const node = helperScrollRef.current
+    if (!node) return
+
+    let frame = 0
+    const anchorToLatest = () => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => {
+        node.scrollTop = node.scrollHeight
+      })
+    }
+    anchorToLatest()
+    const observer = new ResizeObserver(anchorToLatest)
+    observer.observe(node)
+    return () => {
+      observer.disconnect()
+      window.cancelAnimationFrame(frame)
+    }
+  }, [fillAvailableHeight])
 
   function helperMemoryContext() {
     const profileName = helperName || profile?.displayName || helperNameDraft || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '')
@@ -3205,18 +3230,22 @@ export function TelegramHelperPanel({
   }
 
   return (
-    <div>
-      <div className="space-y-3">
-        <div className="overflow-hidden">
+    <div className={cn(fillAvailableHeight && 'flex min-h-0 flex-1 flex-col')}>
+      <div className={cn('space-y-3', fillAvailableHeight && 'flex min-h-0 flex-1 flex-col space-y-0')}>
+        <div className={cn('overflow-hidden', fillAvailableHeight && 'flex min-h-0 flex-1 flex-col')}>
               <div
                 ref={helperScrollRef}
                 className={cn(
                   'space-y-3 overflow-y-auto p-3 scroll-smooth transition-[height] duration-300 ease-out [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-                  helperMode
+                  fillAvailableHeight
+                    ? 'min-h-0 flex-1'
+                    : helperMode
                     ? 'min-h-[340px] sm:min-h-[380px]'
                     : 'max-h-[360px] min-h-[220px]',
                 )}
-                style={helperMode ? { height: 'clamp(340px, 52dvh, 500px)' } : undefined}
+                style={helperMode && !fillAvailableHeight
+                  ? { height: 'clamp(420px, calc(100dvh - 230px), 680px)' }
+                  : undefined}
               >
                 <div className="max-w-[86%] break-words rounded-[20px] rounded-bl-[6px] bg-[#f3f3f4] px-3 py-2 text-[13px] leading-[1.45] text-gray-900 shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:bg-white/[0.075] dark:text-gray-100 dark:shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
                   <p>
@@ -3359,6 +3388,14 @@ export function TelegramHelperPanel({
                     value={question}
                     onChange={event => setQuestion(event.target.value)}
                     onKeyDown={event => event.key === 'Enter' && !event.shiftKey && !asking && askHelper()}
+                    onFocus={() => {
+                      onComposerFocusChange?.(true)
+                      window.requestAnimationFrame(() => {
+                        const node = helperScrollRef.current
+                        if (node) node.scrollTop = node.scrollHeight
+                      })
+                    }}
+                    onBlur={() => onComposerFocusChange?.(false)}
                     placeholder={helperMode === 'polydesk' && !polyDeskSubMode ? 'Choose a Desk Agent lane' : helperMode ? inputPlaceholder ?? 'Ask Hash...' : 'Choose a mode to start'}
                     disabled={!helperMode || (helperMode === 'polydesk' && !polyDeskSubMode)}
                     className="h-14 w-full min-w-0 rounded-[28px] border border-gray-200 bg-gray-50 py-3 pl-4 pr-[4.25rem] text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200/80 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:focus:border-white/20 dark:focus:ring-white/10"

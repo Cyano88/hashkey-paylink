@@ -415,6 +415,27 @@ export default function Layout() {
     !!searchParams.get('wallet') ||
     !!searchParams.get('e')
   )
+  const [showTelegramHomeFab, setShowTelegramHomeFab] = useState(false)
+  const [showPaymentHistoryShortcut, setShowPaymentHistoryShortcut] = useState(false)
+
+  useEffect(() => {
+    const handleHomeSurfaceChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ visible?: boolean }>).detail
+      setShowTelegramHomeFab(Boolean(detail?.visible))
+    }
+    const handleHistoryVisibilityChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ visible?: boolean }>).detail
+      setShowPaymentHistoryShortcut(Boolean(detail?.visible))
+    }
+    window.addEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
+    window.addEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
+    return () => {
+      window.removeEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
+      window.removeEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
+      setShowTelegramHomeFab(false)
+      setShowPaymentHistoryShortcut(false)
+    }
+  }, [])
   const polyDeskService = searchParams.get('service') ?? ''
   const polyDeskLane = searchParams.get('lane') ?? ''
   const polyDeskAgentOpen = searchParams.get('agent') === '1'
@@ -867,7 +888,7 @@ export default function Layout() {
               </>
             )}
 
-            {!isPayPage && !isDashPage && (
+            {showPaymentHistoryShortcut && !isPayPage && !isDashPage && (
               <button
                 type="button"
                 onClick={openPaymentHistory}
@@ -1038,7 +1059,7 @@ export default function Layout() {
       )}
 
       {/* Telegram FAB */}
-      {showAgentHashWidget && (
+      {showTelegramHomeFab && (
         <a
           ref={agentHashFabRef}
           href={TELEGRAM_CHAT_URL}

@@ -1048,6 +1048,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [serviceHubAgentPromptIndex, setServiceHubAgentPromptIndex] = useState(0)
   const [serviceHubAgentMounted, setServiceHubAgentMounted] = useState(false)
   const [serviceHubAgentVisible, setServiceHubAgentVisible] = useState(false)
+  const [serviceHubAgentComposerActive, setServiceHubAgentComposerActive] = useState(false)
+  const [serviceHubAgentViewport, setServiceHubAgentViewport] = useState<{
+    top: number
+    left: number
+    width: number
+    height: number
+  } | null>(null)
   const [posCountry,     setPosCountry]     = useState<PosCountry | null>(startsInBankPayment ? 'NG' : null)
   const [posSettlementPath, setPosSettlementPath] = useState<PosSettlementPath | null>(null)
   const [posMerchantName, setPosMerchantName] = useState('')
@@ -1300,6 +1307,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closeServiceHubAgent() {
+    setServiceHubAgentComposerActive(false)
     setServiceHubAgentVisible(false)
     window.setTimeout(() => setServiceHubAgentMounted(false), 260)
   }
@@ -1728,6 +1736,82 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }, delay)
     return () => window.clearTimeout(timer)
   }, [productHubOpen, serviceHubAgentPromptIndex, serviceHubAgentMounted])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('hashpaylink-home-surface', {
+        detail: { visible: productHubOpen && !serviceHubAgentMounted },
+      }))
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+      window.dispatchEvent(new CustomEvent('hashpaylink-home-surface', {
+        detail: { visible: false },
+      }))
+    }
+  }, [productHubOpen, serviceHubAgentMounted])
+
+  useEffect(() => {
+    const receiveUsdcOpen = !productHubOpen
+      && !paymentMenuOpen
+      && !accessMode
+      && !circlePocketMode
+      && !posMode
+      && !billsMode
+      && !streamMode
+      && !polymarketMode
+      && !isBankReceive
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('hashpaylink-history-visibility', {
+        detail: { visible: receiveUsdcOpen || isBankReceive || posMode || billsMode },
+      }))
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+      window.dispatchEvent(new CustomEvent('hashpaylink-history-visibility', {
+        detail: { visible: false },
+      }))
+    }
+  }, [
+    accessMode,
+    billsMode,
+    circlePocketMode,
+    isBankReceive,
+    paymentMenuOpen,
+    polymarketMode,
+    posMode,
+    productHubOpen,
+    streamMode,
+  ])
+
+  useEffect(() => {
+    if (!serviceHubAgentComposerActive || !window.matchMedia('(max-width: 767px)').matches) {
+      setServiceHubAgentViewport(null)
+      return
+    }
+
+    const viewport = window.visualViewport
+    const updateViewport = () => {
+      setServiceHubAgentViewport({
+        top: viewport?.offsetTop ?? 0,
+        left: viewport?.offsetLeft ?? 0,
+        width: viewport?.width ?? window.innerWidth,
+        height: viewport?.height ?? window.innerHeight,
+      })
+    }
+    const previousBodyOverflow = document.body.style.overflow
+    updateViewport()
+    document.body.style.overflow = 'hidden'
+    viewport?.addEventListener('resize', updateViewport)
+    viewport?.addEventListener('scroll', updateViewport)
+    window.addEventListener('resize', updateViewport)
+    return () => {
+      document.body.style.overflow = previousBodyOverflow
+      viewport?.removeEventListener('resize', updateViewport)
+      viewport?.removeEventListener('scroll', updateViewport)
+      window.removeEventListener('resize', updateViewport)
+    }
+  }, [serviceHubAgentComposerActive])
 
   const circlePocketSelectedWallet = circlePocketWallets[circlePocketNetwork]
   const circlePocketSelectedBalance = circlePocketRows.find(row => row.key === circlePocketNetwork)?.balance ?? 0
@@ -2678,7 +2762,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       <div className={cn(
         'mb-6 flex flex-col',
         paymentMenuOpen || circlePocketMode || posMode || billsMode || isPaymentView ? 'items-center text-center' : 'items-start text-left',
-        (serviceHubAgentMounted || isBankReceive || posMode) && 'hidden',
+        (serviceHubAgentMounted || circlePocketMode || isBankReceive || posMode || billsMode || isPaymentView) && 'hidden',
       )}>
         {productHubOpen && !serviceHubAgentMounted && (
           <span className="mb-4 inline-flex items-center justify-center gap-2 text-sm font-bold leading-none text-[#0071E3] dark:text-blue-200">
@@ -2795,14 +2879,26 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         {productHubOpen ? (
           serviceHubAgentMounted ? (
             <div
-              className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-card transition-all duration-200 ease-out dark:border-white/10 dark:bg-[#111114]"
-              style={{
-                opacity: serviceHubAgentVisible ? 1 : 0,
-                transform: serviceHubAgentVisible
-                  ? 'perspective(1200px) rotateX(0deg) translateY(0) scale(1)'
-                  : 'perspective(1200px) rotateX(-6deg) translateY(0) scale(0.985)',
-                transformOrigin: 'bottom center',
-              }}
+              className={cn(
+                'overflow-hidden border border-gray-200 bg-white shadow-card transition-all duration-200 ease-out dark:border-white/10 dark:bg-[#111114]',
+                serviceHubAgentViewport ? 'fixed z-[90] flex flex-col rounded-none' : 'rounded-[28px]',
+              )}
+              style={serviceHubAgentViewport
+                ? {
+                    top: serviceHubAgentViewport.top,
+                    left: serviceHubAgentViewport.left,
+                    width: serviceHubAgentViewport.width,
+                    height: serviceHubAgentViewport.height,
+                    opacity: 1,
+                    transform: 'none',
+                  }
+                : {
+                    opacity: serviceHubAgentVisible ? 1 : 0,
+                    transform: serviceHubAgentVisible
+                      ? 'perspective(1200px) rotateX(0deg) translateY(0) scale(1)'
+                      : 'perspective(1200px) rotateX(-6deg) translateY(0) scale(0.985)',
+                    transformOrigin: 'bottom center',
+                  }}
             >
               <div className="flex items-center justify-between gap-3 px-3 py-3 sm:px-4">
                 <FlowBackButton onClick={closeServiceHubAgent} />
@@ -2825,6 +2921,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 welcomeText="Welcome to Agent Hash. Ask about payments, wallets, Hash Paystream, PolyDesk, research, planning, or any Hash PayLink service."
                 inputPlaceholder="Ask Agent Hash..."
                 hideTopDivider
+                fillAvailableHeight={Boolean(serviceHubAgentViewport)}
+                onComposerFocusChange={setServiceHubAgentComposerActive}
               />
             </div>
           ) : (

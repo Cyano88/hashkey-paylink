@@ -39,6 +39,7 @@ export default function DynamicSendButton({
   return (
     <button
       type="button"
+      onPointerDown={event => event.preventDefault()}
       onClick={handleClick}
       disabled={disabled}
       aria-label={isLoading ? 'Stop response' : hasInput ? 'Send message' : 'Add attachment'}
