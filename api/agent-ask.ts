@@ -952,7 +952,7 @@ const CIRCLE_POCKET_ROUTES: Record<CirclePocketCapability, Omit<CirclePocketRout
     action: { label: 'Open Circle Pocket', url: '/?product=circle-pocket' },
   },
   'receive-usdc': {
-    answer: 'Use Receive USDC to collect a payment, choose a supported network, and create a shareable PayLink.',
+    answer: 'I can prepare that PayLink automatically with your connected receive wallet. If a required detail is missing, I will ask only for that detail.',
     action: { label: 'Receive USDC', url: '/?product=payment&tab=personal' },
   },
   'bank-payout': {
@@ -994,6 +994,12 @@ function circlePocketResult(capability: CirclePocketCapability, confidence: Circ
 function routeCirclePocketQuestion(question: string, helperMode: string): CirclePocketRoute | undefined {
   if (helperMode !== 'circle-pocket') return undefined
   const value = cleanQuestionForFallback(question).toLowerCase()
+  if (/\b(?:i am|i'm|im|already|currently)\s+(?:signed|logged)\s+in\b|\bmy account is (?:signed|logged) in\b/.test(value)) {
+    return {
+      ...circlePocketResult('profile-support'),
+      answer: 'Got it. I will use the active signed-in session for Circle Pocket context; every secure wallet or payment action still verifies that session before it runs.',
+    }
+  }
   if (/\b(receipt|refund|history|transaction|proof|status|tx hash|confirmation)\b/.test(value)) return circlePocketResult('receipts')
   if (/\b(bank|naira|account number|settlement|payout|paycrest|zenith)\b/.test(value)) return circlePocketResult('bank-payout')
   if (/\b(pos|merchant|static qr|retail|checkout|terminal)\b/.test(value)) return circlePocketResult('retail-pos')
@@ -1064,6 +1070,7 @@ export const __testAgentAskPaymentEnrichment = {
   normalizePaymentEnrichmentContext,
   paymentEnrichmentPrompt,
   routeCirclePocketQuestion,
+  getHelperResponse,
 }
 
 function classifyHelperRequest(question: string, helperMode = ''): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
@@ -1289,7 +1296,9 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
 
   const newName = introducedName(question)
   if (newName) {
-    return `Got it, ${newName}. I will use your name naturally when it helps this HashpayStream workflow.`
+    if (helperMode === 'circle-pocket') return `Got it, ${newName}. I will remember your name across this Circle Pocket chat.`
+    if (helperMode === 'streampay') return `Got it, ${newName}. I will use your name naturally when it helps this HashpayStream workflow.`
+    return `Got it, ${newName}. I will use your name naturally when it helps.`
   }
 
   if (isGreetingQuestion(question)) {

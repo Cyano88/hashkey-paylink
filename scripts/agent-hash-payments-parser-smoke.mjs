@@ -178,6 +178,21 @@ for (const [question, capability, url] of circlePocketCases) {
   assert.equal(route?.capability, capability)
   assert.equal(route?.action.url, url)
 }
+const signedInRoute = __testAgentAskPaymentEnrichment.routeCirclePocketQuestion('I already signed in', 'circle-pocket')
+assert.equal(signedInRoute?.supported, true)
+assert.equal(signedInRoute?.capability, 'profile-support')
+assert.match(signedInRoute?.answer ?? '', /active signed-in session/i)
+const nameAnswer = __testAgentAskPaymentEnrichment.getHelperResponse(
+  'Hi my name is shy',
+  'Circle Pocket user',
+  'Ask Hash',
+  '0',
+  '',
+  undefined,
+  'helper-free',
+  'circle-pocket',
+)
+assert.equal(nameAnswer, 'Got it, Shy. I will remember your name across this Circle Pocket chat.')
 const closest = __testAgentAskPaymentEnrichment.routeCirclePocketQuestion('write me a World Cup match report', 'circle-pocket')
 assert.equal(closest?.supported, false)
 assert.equal(closest?.confidence, 'fallback')
