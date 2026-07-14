@@ -1048,6 +1048,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [serviceHubAgentPromptIndex, setServiceHubAgentPromptIndex] = useState(0)
   const [serviceHubAgentMounted, setServiceHubAgentMounted] = useState(false)
   const [serviceHubAgentVisible, setServiceHubAgentVisible] = useState(false)
+  const [serviceHubAnonymousOwner] = useState(() => {
+    const storageKey = 'hashpaylink-agent-hash-session-owner'
+    const stored = window.sessionStorage.getItem(storageKey)?.trim()
+    if (stored) return stored
+    const bytes = crypto.getRandomValues(new Uint8Array(12))
+    const generated = `service-hub-${Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')}`
+    window.sessionStorage.setItem(storageKey, generated)
+    return generated
+  })
   const [serviceHubAgentComposerActive, setServiceHubAgentComposerActive] = useState(false)
   const [serviceHubAgentViewport, setServiceHubAgentViewport] = useState<{
     top: number
@@ -2911,9 +2920,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </div>
               <TelegramHelperPanel
                 telegramName={localCurrencyProfile?.firstName || 'there'}
-                ownerKey={privyEmail || evmAddr.trim() || 'service-hub'}
+                ownerKey={privyEmail || evmAddr.trim() || serviceHubAnonymousOwner}
                 telegramId=""
-                fallbackOwner={privyEmail || evmAddr.trim() || 'service-hub'}
+                fallbackOwner={privyEmail || evmAddr.trim() || serviceHubAnonymousOwner}
                 initialEventId=""
                 initialPayer={localCurrencyProfile?.firstName || ''}
                 onRecoverTelegramName={() => undefined}

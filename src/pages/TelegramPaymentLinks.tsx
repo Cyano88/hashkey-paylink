@@ -1732,6 +1732,7 @@ export function TelegramHelperPanel({
   const suppressThreadHydrationRef = useRef(false)
   const freshThreadIdsRef = useRef<Set<string>>(new Set())
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
+  const agentRequestPayer = payer.trim() || helperName || cleanTelegramName || ownerKey || fallbackOwner || 'anonymous-helper'
   const activeHelperThreadId = `mode:${helperMode || 'general'}${helperMode === 'polydesk' && polyDeskSubMode ? `:${polyDeskSubMode}` : ''}`
   const { authenticated: polyDeskAuthenticated, getAccessToken: getPolyDeskAccessToken } = usePrivy()
 
@@ -1974,7 +1975,7 @@ export function TelegramHelperPanel({
         body: JSON.stringify({
           action: 'append-thread',
           owner: ownerKey,
-          payer: payer.trim() || helperName || cleanTelegramName || ownerKey,
+          payer: agentRequestPayer,
           fallbackOwner,
           mode: helperMode || undefined,
           subMode: polyDeskSubMode || undefined,
@@ -2186,7 +2187,7 @@ export function TelegramHelperPanel({
         signal: helperAbortRef.current?.signal,
         body: JSON.stringify({
           eventId: eventId.trim(),
-          payer: payer.trim(),
+          payer: agentRequestPayer,
           question: prompt,
           accessMode: 'helper-free',
           helperMode: helperMode || undefined,
@@ -2976,7 +2977,7 @@ export function TelegramHelperPanel({
         body: JSON.stringify({
           action: 'clear-thread',
           owner: ownerKey,
-          payer: payer.trim() || helperName || cleanTelegramName || ownerKey,
+          payer: agentRequestPayer,
           fallbackOwner,
           threadId: activeHelperThreadId,
         }),
@@ -3167,7 +3168,7 @@ export function TelegramHelperPanel({
         signal: abortController.signal,
         body: JSON.stringify({
           eventId: eventId.trim(),
-          payer: payer.trim(),
+          payer: agentRequestPayer,
           question: nextQuestion,
           accessMode: 'helper-free',
           helperMode,
