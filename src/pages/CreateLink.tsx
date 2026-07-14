@@ -1801,11 +1801,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
     const viewport = window.visualViewport
     const updateViewport = () => {
+      const topNavHeight = document.querySelector<HTMLElement>('[data-hashpaylink-top-nav]')?.getBoundingClientRect().height ?? 0
+      const bottomBarHeight = document.querySelector<HTMLElement>('[data-hashpaylink-bottom-bar]')?.getBoundingClientRect().height ?? 0
+      const viewportHeight = viewport?.height ?? window.innerHeight
       setServiceHubAgentViewport({
-        top: viewport?.offsetTop ?? 0,
+        top: (viewport?.offsetTop ?? 0) + topNavHeight,
         left: viewport?.offsetLeft ?? 0,
         width: viewport?.width ?? window.innerWidth,
-        height: viewport?.height ?? window.innerHeight,
+        height: Math.max(220, viewportHeight - topNavHeight - bottomBarHeight),
       })
     }
     const previousBodyOverflow = document.body.style.overflow
@@ -2890,7 +2893,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             <div
               className={cn(
                 'overflow-hidden border border-gray-200 bg-white shadow-card transition-all duration-200 ease-out dark:border-white/10 dark:bg-[#111114]',
-                serviceHubAgentViewport ? 'fixed z-[90] flex flex-col rounded-none' : 'rounded-[28px]',
+                serviceHubAgentViewport ? 'fixed z-40 flex flex-col rounded-none' : 'rounded-[28px]',
               )}
               style={serviceHubAgentViewport
                 ? {

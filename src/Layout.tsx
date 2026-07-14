@@ -775,7 +775,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col">
       {/* ── Sticky frosted-glass header ─────────────────────────────────── */}
-      <header className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
+      <header data-hashpaylink-top-nav className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
         <div className={`mx-auto flex max-w-5xl items-center justify-between px-4 sm:px-6 ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
           {/* Wordmark */}
           <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 focus:outline-none">
@@ -945,7 +945,7 @@ export default function Layout() {
       </main>
 
       {/* ── Footer ───────────────────────────────────────────────────────── */}
-      <footer className="flex h-[60px] items-center border-t border-gray-100 bg-white/50 py-0 dark:border-white/5 dark:bg-[#111113]/50">
+      <footer data-hashpaylink-bottom-bar className="sticky bottom-0 z-50 flex h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 backdrop-blur-xl dark:border-white/5 dark:bg-[#111113]/90">
           <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
               {isPayPage ? (
