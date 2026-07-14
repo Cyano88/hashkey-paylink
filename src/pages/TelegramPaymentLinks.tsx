@@ -572,13 +572,13 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
   },
   {
     id: 'daily',
-    label: 'Daily',
-    intro: "I can help with personal planning, normal questions, ideas, and everyday support. What's on your mind?",
+    label: 'Daily Companion',
+    intro: 'Daily Companion is ready. Ask questions, explore ideas, plan your day, or talk through whatever is on your mind.',
   },
   {
     id: 'services',
-    label: 'Services',
-    intro: 'I can help with HashpayStream, Agent Wallets, x402, Circle wallet setup, PolyDesk, and Hash PayLink features. What are you trying to use?',
+    label: 'Hash Paystream',
+    intro: 'Hash Paystream is ready. Ask about streaming payments, payroll, creator earnings, reader access, unlocks, and receipts.',
   },
   {
     id: 'polydesk',
@@ -3191,32 +3191,32 @@ export function TelegramHelperPanel({
               <div
                 ref={helperScrollRef}
                 className={cn(
-                  'space-y-4 overflow-y-auto p-3 scroll-smooth transition-[height] duration-300 ease-out [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                  'space-y-3 overflow-y-auto p-3 scroll-smooth transition-[height] duration-300 ease-out [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
                   helperMode
                     ? 'min-h-[340px] sm:min-h-[380px]'
                     : 'max-h-[360px] min-h-[220px]',
                 )}
                 style={helperMode ? { height: 'clamp(340px, 52dvh, 500px)' } : undefined}
               >
-                <div className="max-w-[82%] break-words rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
+                <div className="max-w-[86%] break-words rounded-[20px] rounded-bl-[6px] bg-[#f3f3f4] px-3 py-2 text-[13px] leading-[1.45] text-gray-900 shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:bg-white/[0.075] dark:text-gray-100 dark:shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
                   <p>
                     {welcomeText ?? `Welcome back, ${helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, HashpayStream, agent setup, research, planning, or daily questions.`}
                   </p>
-                  <div className="mt-2">
+                  <div className="mt-1.5">
                     <ZeroScoutPowerBadge compact />
                   </div>
                 </div>
 
                 {!helperMode && !lockedHelperMode && (
-                  <div className="max-w-[92%] rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-3 text-sm text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
-                    <p className="mb-2 font-medium">Choose how Agent Hash should help you first.</p>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className="max-w-[94%] rounded-[20px] rounded-bl-[6px] bg-[#f3f3f4] px-3 py-2.5 text-[13px] leading-[1.4] text-gray-900 shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:bg-white/[0.075] dark:text-gray-100 dark:shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
+                    <p className="mb-2 font-semibold tracking-[-0.01em]">Choose how Agent Hash should help.</p>
+                    <div className="flex flex-wrap gap-1.5">
                       {helperModes.map(mode => (
                         <button
                           key={mode.id}
                           type="button"
                           onClick={() => chooseHelperMode(mode.id)}
-                          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-xs font-semibold text-gray-900 transition hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-white dark:hover:bg-white/[0.1]"
+                          className="rounded-full border border-gray-200/90 bg-white/90 px-3 py-1.5 text-[11px] font-semibold leading-none text-gray-800 shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition hover:border-gray-300 hover:bg-white active:scale-[0.97] dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-100 dark:shadow-none dark:hover:bg-white/[0.12]"
                         >
                           {mode.label}
                         </button>
