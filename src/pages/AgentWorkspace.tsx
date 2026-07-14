@@ -166,16 +166,6 @@ type ZeroScoutIntelligenceResult = {
   recommendedActions?: string[]
   dataGaps?: string[]
   disclaimer?: string
-  claudeReview?: {
-    provider?: string
-    intelligenceRating?: number
-    recommendation?: string
-  }
-  openAiReview?: {
-    provider?: string
-    intelligenceRating?: number
-    recommendation?: string
-  }
   proof?: {
     storageRoot?: string
     contentHash?: string
@@ -1298,8 +1288,6 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
         body: JSON.stringify({
           agentSlug: payerAgentSlug || undefined,
           activityId: latestScoutActivity.id,
-          includeClaudeReview: true,
-          includeOpenAiReview: true,
         }),
       })
       const data = await readAgentWalletJson<{ ok?: boolean; error?: string; zeroscout?: ZeroScoutIntelligenceResult }>(res)
@@ -1829,16 +1817,6 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                             >
                               tx
                             </a>
-                          )}
-                          {latestZeroScout.claudeReview?.intelligenceRating && (
-                            <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
-                              Claude {latestZeroScout.claudeReview.intelligenceRating}/10
-                            </span>
-                          )}
-                          {latestZeroScout.openAiReview?.intelligenceRating && (
-                            <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-purple-700 dark:bg-white/[0.08] dark:text-purple-100">
-                              OpenAI {latestZeroScout.openAiReview.intelligenceRating}/10
-                            </span>
                           )}
                           <details className="w-full min-w-0 pt-1">
                             <summary className="cursor-pointer text-[10px] text-purple-700/70 dark:text-purple-100/70">Details</summary>

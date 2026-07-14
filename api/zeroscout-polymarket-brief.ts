@@ -161,8 +161,6 @@ export default async function zeroScoutPolymarketBriefHandler(req: Request, res:
         x402ProofHash: paidScout.proof.proofHash,
         disclaimer: 'Educational LP research for human review only. Not financial advice and not an automated trading instruction.',
       },
-      includeClaudeReview: req.body?.includeClaudeReview !== false,
-      includeOpenAiReview: req.body?.includeOpenAiReview !== false,
     }
     const result = await callZeroScoutIntelligence(payload, { requireProof: true })
 

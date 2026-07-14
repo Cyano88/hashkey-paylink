@@ -5,8 +5,6 @@ export type ZeroScoutPayload = {
   objective: string
   outputStyle: string
   data: Record<string, unknown>
-  includeClaudeReview?: boolean
-  includeOpenAiReview?: boolean
 }
 
 export type ZeroScoutIntelligenceResult = {
@@ -27,20 +25,6 @@ export type ZeroScoutIntelligenceResult = {
   dataGaps?: string[]
   suggestedVisuals?: string[]
   disclaimer?: string
-  claudeReview?: {
-    provider?: string
-    intelligenceRating?: number
-    strengths?: string[]
-    gaps?: string[]
-    recommendation?: string
-  }
-  openAiReview?: {
-    provider?: string
-    intelligenceRating?: number
-    strengths?: string[]
-    gaps?: string[]
-    recommendation?: string
-  }
   proof?: {
     storageRoot?: string
     storageUri?: string

@@ -529,8 +529,6 @@ export async function sponsorZeroScoutAction(input: ZeroScoutSponsoredActionInpu
           'Do not infer live prices, wallet balances, or market data that were not supplied.',
         ],
       },
-      includeClaudeReview: false,
-      includeOpenAiReview: false,
     }, { requireProof: true, endpointPath: '/api/integrations/sponsorship-proof' }), timeoutMs)
 
     return {
