@@ -28,6 +28,11 @@ type ZeroScoutHelperGuidanceInput = {
     hashpayStreamVideoInspectionRequested?: boolean
     memorySummary?: string
     memorySummaryHash?: string
+    paymentContext?: {
+      source: 'hashpaylink-backend-normalized'
+      action: string
+      fields: Record<string, string>
+    }
     hashpayStreamContext?: unknown
   }
   sourceProof?: Record<string, unknown>
@@ -256,10 +261,6 @@ function hashpayStreamMediaInspectionRequest(input: ZeroScoutHelperGuidanceInput
   }
 }
 
-function shouldUseDeepHelperReview(input: ZeroScoutHelperGuidanceInput) {
-  return input.request.qualityMode === 'deep'
-}
-
 function helperGuidanceTimeoutMs(input: ZeroScoutHelperGuidanceInput, mediaInspection: ReturnType<typeof hashpayStreamMediaInspectionRequest>) {
   if (mediaInspection?.requested) return HASHWATCH_MEDIA_GUIDANCE_TIMEOUT_MS
   if (input.strictGuidance || input.request.qualityMode === 'deep') return Math.max(HELPER_GUIDANCE_TIMEOUT_MS, 20_000)
@@ -267,46 +268,15 @@ function helperGuidanceTimeoutMs(input: ZeroScoutHelperGuidanceInput, mediaInspe
   return HELPER_GUIDANCE_TIMEOUT_MS
 }
 
-type HelperRefinementLane = 'og-compute' | 'openai' | 'anthropic' | 'multi-stack'
-
-function forcedSimpleHelperLane(): HelperRefinementLane | undefined {
-  const lane = String(process.env.ZEROSCOUT_HELPER_REFINEMENT_LANE ?? '').trim().toLowerCase()
-  if (lane === 'og-compute' || lane === 'openai' || lane === 'anthropic') return lane
-  return undefined
-}
+type HelperRefinementLane = 'og-compute'
 
 function helperRefinementLane(input: ZeroScoutHelperGuidanceInput): HelperRefinementLane {
-  if (shouldUseDeepHelperReview(input)) return 'multi-stack'
-  if (input.request.qualityMode === 'fast') return 'og-compute'
-  const helperMode = String(input.request.helperMode ?? '').trim().toLowerCase()
-  if (helperMode === 'payments' || helperMode === 'daily' || helperMode === 'services' || helperMode === 'support' || helperMode === 'streampay') return 'og-compute'
-  if (helperMode === 'polydesk') return 'multi-stack'
-  const forcedLane = forcedSimpleHelperLane()
-  if (forcedLane) return forcedLane
-  const seed = requestHash({
-    eventId: input.request.eventId,
-    question: input.request.question,
-    helperIntent: input.request.helperIntent,
-    memorySummaryHash: input.request.memorySummaryHash,
-  })
-  const bucket = parseInt(seed.slice(0, 2), 16) % 3
-  if (bucket === 1) return 'openai'
-  if (bucket === 2) return 'anthropic'
+  void input
   return 'og-compute'
 }
 
-function helperFallbackOrder(lane: HelperRefinementLane) {
-  if (lane === 'multi-stack') return ['0g-compute', 'openai', 'anthropic', 'local']
-  if (lane === 'openai') return ['openai', '0g-compute', 'anthropic', 'local']
-  if (lane === 'anthropic') return ['anthropic', '0g-compute', 'openai', 'local']
-  return ['0g-compute', 'openai', 'anthropic', 'local']
-}
-
-function helperReviewFlags(lane: HelperRefinementLane) {
-  return {
-    includeClaudeReview: lane === 'multi-stack' || lane === 'anthropic',
-    includeOpenAiReview: lane === 'multi-stack' || lane === 'openai',
-  }
+function helperFallbackOrder(_lane: HelperRefinementLane) {
+  return ['0g-compute']
 }
 
 function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
@@ -322,7 +292,10 @@ function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
   if (mode === 'payments') {
     return [
       'Payments mode should focus on payment request creation, payment clarification, receipts, network, amount, purpose, and receive wallet.',
-      'Keep wording short because deterministic PayLink creation is handled by Hash PayLink locally.',
+      'Hash PayLink is the deterministic source of truth for parsing, validation, wallet/network compatibility, PayLink creation, receipt state, and proof checks. ZeroScout only enriches the backend-supplied context and wording.',
+      'Never call, recommend, or imply LP Scout, Polymarket, market-intelligence, trading, or liquidity endpoints from Payments mode.',
+      'If a deterministic action result or missing-field list is supplied, preserve it exactly. Do not invent fields, change amounts, change networks, or claim a link or receipt exists before backend state says it does.',
+      'Keep wording short because deterministic PayLink creation is handled by Hash PayLink.',
     ]
   }
   if (mode === 'services') {
@@ -381,7 +354,6 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceInput): Promise<ZeroScoutHelperGuidance | undefined> {
   const sanitizedMemorySummary = sanitizeHelperContext(input.request.memorySummary)
   const refinementLane = helperRefinementLane(input)
-  const reviewFlags = helperReviewFlags(refinementLane)
   const mediaInspection = hashpayStreamMediaInspectionRequest(input)
   const mediaInspectionForZeroScout = mediaInspection && mediaInspection.allowed === false
     ? { ...mediaInspection, requested: false }
@@ -396,6 +368,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
     hashpayStreamVideoInspectionRequested: input.request.hashpayStreamVideoInspectionRequested,
     memorySummary: sanitizedMemorySummary || undefined,
     memorySummaryHash: input.request.memorySummaryHash,
+    paymentContext: input.request.paymentContext,
     hashpayStreamContext: input.request.hashpayStreamContext,
     mediaInspection: mediaInspectionForZeroScout,
   }
@@ -450,11 +423,17 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
         helperIntent: input.request.helperIntent,
         helperMode: input.request.helperMode,
         qualityMode: input.request.qualityMode ?? 'standard',
-        refinementPolicy: refinementLane === 'multi-stack'
-          ? 'deep-multi-stack-0g-anthropic-openai'
-          : 'single-lane-short-refinement',
+        refinementPolicy: '0g-compute-compatible-model-fallback',
         requestedRefinementLane: refinementLane,
         fallbackOrder: helperFallbackOrder(refinementLane),
+        modelRoutingPolicy: {
+          owner: 'zeroscout',
+          task: input.request.helperMode === 'payments' ? 'payment-assistance' : input.request.helperIntent,
+          preference: input.request.helperMode === 'payments'
+            ? 'Prefer the configured high-quality 0G text model, then immediately try the next compatible model exposed by the 0G Compute Router.'
+            : 'Prefer the configured 0G helper model, then try the next compatible 0G Compute Router model.',
+          lpEndpointsAllowed: input.request.helperMode === 'payments' ? false : undefined,
+        },
         modelHints: mediaInspection?.allowed && HASHWATCH_MEDIA_MODEL_HINT
           ? {
               preferredModel: HASHWATCH_MEDIA_MODEL_HINT,
@@ -480,8 +459,6 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
           'Do not infer live schedules, prices, wallet balances, secrets, payment proofs, or user identity beyond supplied fields.',
         ],
       },
-      includeClaudeReview: reviewFlags.includeClaudeReview,
-      includeOpenAiReview: reviewFlags.includeOpenAiReview,
     }, {
       timeoutMs: helperGuidanceTimeoutMs(input, mediaInspection),
     })

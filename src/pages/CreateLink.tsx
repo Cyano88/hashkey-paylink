@@ -14,7 +14,6 @@ import {
   ArrowRight,
   ChevronDown,
   Activity,
-  MessageCircle,
   Tag,
   Coins,
   ExternalLink,
@@ -250,6 +249,14 @@ function readableErrorMsg(err: unknown, fallback: string) {
   return fallback
 }
 
+function readableBankPayoutError(err: unknown, fallback: string) {
+  const message = readableErrorMsg(err, fallback).replaceAll('Paycrest ', '')
+  if (/PAYCREST_API_KEY|not configured/i.test(message)) {
+    return 'Bank payouts are temporarily unavailable. Please try again later.'
+  }
+  return message
+}
+
 const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: string }> = [
   { key: 'base', label: 'Base' },
   { key: 'arbitrum', label: 'Arbitrum' },
@@ -320,6 +327,7 @@ function CircleReceiveSelector({
   selectorLabel,
   addressOptionLabel,
   addressOptionBody,
+  hideLabel = false,
 }: {
   selectedNet: ChainKey
   isEvmNet: boolean
@@ -351,6 +359,7 @@ function CircleReceiveSelector({
   selectorLabel?: string
   addressOptionLabel?: string
   addressOptionBody?: string
+  hideLabel?: boolean
 }) {
   const circleEmailReceiveIntentKey = 'hashpaylink-circle-email-receive-intent'
   const { authenticated: privyAuthenticated, user: privyUser, getAccessToken } = usePrivy()
@@ -543,9 +552,11 @@ function CircleReceiveSelector({
 
   return (
     <div className="space-y-1.5">
-      <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
-        {selectorLabel ?? (receiveMode === 'bank' ? 'Bank payout' : 'Receive to')}
-      </label>
+      {!hideLabel && (
+        <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+          {selectorLabel ?? (receiveMode === 'bank' ? 'Bank payout' : 'Receive to')}
+        </label>
+      )}
       {receiveMode === 'bank' && !privyAuthenticated && (
         <PrivyConnectButton
           debugLabel="create-receive-bank"
@@ -849,19 +860,29 @@ function LocalCurrencyProfileCard({
   const identityEmail = email || draft.email || profile?.email || ''
 
   if (complete && !editing) {
+    const savedName = `${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim()
     return (
       <button
         type="button"
         onClick={onEdit}
         aria-label={`Open ${savedFallback.toLowerCase()}`}
-        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-left shadow-sm transition-all hover:border-blue-200 hover:bg-blue-100/70 active:scale-[0.99] dark:border-blue-400/20 dark:bg-blue-400/10 dark:hover:bg-blue-400/15"
+        className="group flex w-full items-center gap-3 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-3.5 py-3 text-left shadow-sm transition-all hover:border-blue-200 hover:shadow-md active:scale-[0.99] dark:border-blue-400/20 dark:from-blue-400/10 dark:to-white/[0.035] dark:hover:border-blue-300/30"
       >
-        <span className="min-w-0">
-          <span className="block text-[10px] font-bold uppercase tracking-widest text-blue-500 dark:text-blue-300">Signed in as</span>
-          <span className="block truncate text-xs font-semibold text-blue-900 dark:text-blue-100">{profile?.email}</span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-white text-blue-600 shadow-sm dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
+          <UserRound className="h-[18px] w-[18px]" />
         </span>
-        <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
-          {savedBadgeLabel}
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="truncate text-sm font-black text-gray-950 dark:text-white">{savedName || savedFallback}</span>
+            <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-700 dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
+              {savedBadgeLabel}
+            </span>
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">{profile?.email}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold text-gray-400 transition-colors group-hover:text-gray-700 dark:group-hover:text-gray-200">
+          Edit
+          <ChevronDown className="h-3.5 w-3.5 -rotate-90 transition-transform group-hover:translate-x-0.5" />
         </span>
       </button>
     )
@@ -1404,7 +1425,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function closeCirclePocketMode() {
-    if (circlePocketView !== 'chooser') {
+    if (circlePocketView === 'main' || circlePocketView === 'x402') {
+      setCirclePocketView('wallet-manager')
+      setAccessView('overview')
+      setCirclePocketError('')
+      return
+    }
+    if (circlePocketView === 'wallet-manager') {
       setCirclePocketView('chooser')
       setAccessView('overview')
       setCirclePocketError('')
@@ -1471,7 +1498,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   function resetPosBankDetails() {
-    setPosBankProvider('paycrest')
     setPosBankName('')
     setPosBankCode('')
     setPosBankAccount('')
@@ -1707,6 +1733,20 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const circlePocketSelectedBalance = circlePocketRows.find(row => row.key === circlePocketNetwork)?.balance ?? 0
   const circlePocketNetworkLabel = circlePocketNetwork === 'solana' ? 'Solana' : CHAIN_META[circlePocketNetwork].label
   const circlePocketSelectedAddress = circlePocketSelectedWallet?.address ?? ''
+  const circlePocketOpenedWalletCount = Object.values(circlePocketWallets).filter(wallet => Boolean(wallet?.address)).length
+  const circlePocketTabMeta: Record<CirclePocketTab, { eyebrow: string; title: string; body: string }> = {
+    balance: { eyebrow: 'Wallet overview', title: 'Circle smart wallets', body: 'Your USDC balance and wallet status across every supported network.' },
+    fund: { eyebrow: 'Add USDC', title: `Fund on ${circlePocketNetworkLabel}`, body: 'Use the funding address for the selected network only.' },
+    withdraw: { eyebrow: 'Send USDC', title: `Withdraw from ${circlePocketNetworkLabel}`, body: 'Send available USDC to another wallet on the same network.' },
+    activity: { eyebrow: 'This session', title: 'Wallet activity', body: 'Recent wallet actions completed during this session.' },
+  }
+  const circlePocketCurrentTabMeta = circlePocketTabMeta[circlePocketTab]
+
+  useEffect(() => {
+    setCirclePocketError('')
+    setCirclePocketWithdrawNotice('')
+    setCirclePocketWithdrawTxHash('')
+  }, [circlePocketNetwork, circlePocketTab])
 
   async function unlockCirclePocketWallet(network = circlePocketNetwork) {
     setCirclePocketError('')
@@ -1893,7 +1933,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setCirclePocketWithdrawNotice('')
     setCirclePocketWithdrawTxHash('')
     const recipient = circlePocketWithdrawAddress.trim()
-    const decimals = circlePocketNetwork === 'solana' ? 6 : CHAIN_META[circlePocketNetwork].decimals
+    const decimals = 6
     if (circlePocketNetwork === 'solana' ? !isValidSolanaAddress(recipient) : !isAddress(recipient)) {
       setCirclePocketError('Enter a valid destination address for the selected network.')
       return
@@ -2141,7 +2181,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       })
       .catch((error) => {
         setPosBankInstitutions([])
-        setPosError(error instanceof Error ? error.message.replaceAll('Paycrest ', '') : 'Could not load banks.')
+        setPosError(readableBankPayoutError(error, 'Could not load banks.'))
       })
       .finally(() => setPosBankInstitutionsBusy(false))
   }, [posIsPaycrestFlow, receiveMode])
@@ -2168,7 +2208,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       setPosBankAccountName(String(data.account_name ?? '').trim())
       setPosBankVerified(true)
     } catch (error) {
-      setPosError(error instanceof Error ? error.message : 'Account verification failed')
+      setPosError(readableBankPayoutError(error, 'Account verification failed'))
     } finally {
       setPosBankVerifyBusy(false)
     }
@@ -2532,13 +2572,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   const linkReady = generatedLink !== ''
-  const chatCta = productHubOpen || paymentMenuOpen || posMode || billsMode || streamMode || accessMode || circlePocketMode
-    ? null
-    : polymarketMode
-      ? { label: 'Open PolyDesk', url: telegramStartUrl('polymarket') }
-      : { label: 'Open payments in Telegram', url: telegramStartUrl('payment_links') }
   const isPaymentView = !productHubOpen && !paymentMenuOpen && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode
-  const showHowItWorks = posMode || streamMode || accessMode || polymarketMode
+  const showHowItWorks = streamMode || accessMode || polymarketMode
   const paymentTabs: Array<{ key: PaymentTab; title: string; body: string; icon: typeof UserRound; badge?: string }> = [
     { key: 'usdc', title: 'Receive USDC', body: 'Anyone pays USDC. You receive USDC in your wallet.', icon: Wallet, badge: 'No account' },
     { key: 'bank', title: 'Receive to Bank', body: 'Anyone pays Base USDC. You receive Naira in your bank account.', icon: Landmark, badge: 'Sign-in required' },
@@ -2556,12 +2591,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         { n: '1', title: 'Open Telegram', body: 'Start Hash PayLink inside chat' },
         { n: '2', title: 'Save address', body: 'Link your Polymarket profile' },
         { n: '3', title: 'Fund and track', body: 'Add USDC and watch positions' },
-      ]
-    : posMode
-    ? [
-        { n: '1', title: 'Choose country', body: 'Pick the local POS flow' },
-        { n: '2', title: 'Add wallet', body: 'Select supported networks' },
-        { n: '3', title: 'Show QR', body: 'Payers scan and pay USDC' },
       ]
     : streamMode
     ? [
@@ -2591,10 +2620,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       return
     }
     if (tab === 'bank') {
-      const url = new URL(window.location.href)
-      url.searchParams.set('product', 'payment')
-      url.searchParams.set('tab', 'bank')
-      window.location.assign(`${url.pathname}${url.search}${url.hash}`)
+      pushPaymentTabHistory('bank')
+      activateBankReceive()
       return
     }
     if (tab === 'bank-send') {
@@ -2650,8 +2677,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className={cn(
         'mb-6 flex flex-col',
-        paymentMenuOpen ? 'items-center text-center' : 'items-start text-left',
-        serviceHubAgentMounted && 'hidden',
+        paymentMenuOpen || circlePocketMode || posMode || billsMode || isPaymentView ? 'items-center text-center' : 'items-start text-left',
+        (serviceHubAgentMounted || isBankReceive || posMode) && 'hidden',
       )}>
         {productHubOpen && !serviceHubAgentMounted && (
           <span className="mb-4 inline-flex items-center justify-center gap-2 text-sm font-bold leading-none text-[#0071E3] dark:text-blue-200">
@@ -2676,7 +2703,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             : paymentMenuOpen
             ? 'Select the payment experience you want to create.'
             : circlePocketMode
-            ? 'Choose the wallet area to manage.'
+            ? 'Manage wallets, payments, and everyday money tools in one place.'
             : polymarketMode
             ? 'Fund, track, and scout Polymarket from one desk.'
             : posMode
@@ -2871,17 +2898,22 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           <>
         <div className="space-y-0 p-0">
           {circlePocketMode ? (
-            <div className="space-y-5 p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-3">
+            <div className={cn('space-y-5 p-4 sm:p-5', circlePocketView !== 'chooser' && 'min-h-[590px] sm:min-h-[640px]')}>
+              <div className="relative flex min-h-8 items-center">
                 <FlowBackButton onClick={closeCirclePocketMode} />
+                <div className="pointer-events-none absolute left-1/2 max-w-[45%] -translate-x-1/2 text-center">
+                  <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">
+                    {circlePocketView === 'chooser' ? 'Circle Pocket' : circlePocketView === 'wallet-manager' ? 'My wallets' : circlePocketView === 'x402' ? 'x402 wallet' : 'Circle smart wallet'}
+                  </p>
+                </div>
                 {privyAuthenticated && (
                   <button
                     type="button"
                     onClick={() => void logoutPrivy()}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400 dark:hover:bg-white/[0.1] dark:hover:text-gray-100"
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-500 transition-all hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400 dark:hover:bg-white/[0.1] dark:hover:text-gray-100"
                   >
                     <LogOut className="h-3.5 w-3.5" />
-                    Sign out
+                    <span className="hidden sm:inline">Sign out</span>
                   </button>
                 )}
               </div>
@@ -2969,15 +3001,20 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                       icon: Wallet,
                       title: 'Circle smart wallet',
                       body: 'View balances, funding addresses, withdrawals, and wallet activity.',
-                      action: () => setCirclePocketView('main'),
+                      badge: circlePocketOpenedWalletCount ? `${circlePocketOpenedWalletCount} ready` : 'Multi-network',
+                      action: () => {
+                        setCirclePocketTab('balance')
+                        setCirclePocketView('main')
+                      },
                     },
                     {
                       icon: Radio,
                       title: 'x402 wallet',
                       body: 'Move available USDC into paid service balance.',
+                      badge: 'Service balance',
                       action: () => setCirclePocketView('x402'),
                     },
-                  ].map(({ icon: Icon, title, body, action }) => (
+                  ].map(({ icon: Icon, title, body, badge, action }) => (
                     <button
                       key={title}
                       type="button"
@@ -2989,7 +3026,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                           <Icon className="h-[18px] w-[18px]" />
                         </span>
                         <span className="min-w-0">
-                          <span className="block text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
+                            <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400">{badge}</span>
+                          </span>
                           <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
                         </span>
                       </span>
@@ -3004,10 +3044,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               ) : (
                 <>
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Balance</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Circle smart wallets</h2>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{circlePocketCurrentTabMeta.eyebrow}</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">{circlePocketCurrentTabMeta.title}</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Each network has its own Circle smart wallet address.
+                      {circlePocketCurrentTabMeta.body}
                     </p>
                   </div>
 
@@ -3035,14 +3075,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     ))}
                   </div>
 
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                     {POS_NETWORK_OPTIONS.map(network => (
                       <button
                         key={network.key}
                         type="button"
                         onClick={() => setCirclePocketNetwork(network.key)}
                         className={cn(
-                          'rounded-lg border px-2 py-2 text-[11px] font-bold transition-all',
+                          'rounded-xl border px-2 py-2.5 text-[11px] font-bold transition-all',
                           circlePocketNetwork === network.key
                             ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
                             : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
@@ -3053,14 +3093,21 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                     ))}
                   </div>
 
-                  <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                  <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-blue-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-blue-500/[0.08]">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
                         <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
                           ${formatAmount(circlePocketGlobalBalance, 6)}
                         </p>
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Across Base, Arbitrum, Arc, and Solana.</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
+                          <span className="rounded-full border border-gray-200 bg-white/80 px-2 py-1 text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400">
+                            {circlePocketOpenedWalletCount} of {POS_NETWORK_OPTIONS.length} wallets ready
+                          </span>
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
+                            USDC
+                          </span>
+                        </div>
                       </div>
                       <button
                         type="button"
@@ -3138,15 +3185,22 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
                       {circlePocketTab === 'fund' && (
                         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                          <p className="text-sm font-bold text-gray-950 dark:text-white">Fund on {circlePocketNetworkLabel}</p>
-                          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">Send USDC to this Circle smart wallet address on the selected network.</p>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300">
+                              <Download className="h-[18px] w-[18px]" />
+                            </span>
+                            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400">
+                              {circlePocketNetworkLabel} only
+                            </span>
+                          </div>
                           {circlePocketSelectedAddress ? (
                             <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                              <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-gray-400">Your funding address</p>
                               <p className="break-all text-xs font-semibold text-gray-700 dark:text-gray-200">{circlePocketSelectedAddress}</p>
                               <button
                                 type="button"
                                 onClick={handleCirclePocketCopy}
-                                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-gray-950 px-3 py-2 text-xs font-bold text-white dark:bg-white dark:text-gray-950"
+                                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-bold text-white transition-all active:scale-[0.98] dark:bg-white dark:text-gray-950"
                               >
                                 {circlePocketCopied ? <CheckCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                                 {circlePocketCopied ? 'Copied' : 'Copy address'}
@@ -3157,7 +3211,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                               type="button"
                               onClick={() => handleCirclePocketSetup()}
                               disabled={circlePocketBusy}
-                              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
                             >
                               {circlePocketBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
                               Open {circlePocketNetworkLabel} Circle wallet
@@ -3168,18 +3222,25 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
                       {circlePocketTab === 'withdraw' && (
                         <div className="space-y-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                          <div>
-                            <p className="text-sm font-bold text-gray-950 dark:text-white">Withdraw from {circlePocketNetworkLabel}</p>
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Available: ${formatAmount(circlePocketSelectedBalance, 6)} USDC</p>
+                          <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {circlePocketNetworkLabel}</span>
+                            <span className="text-sm font-black tabular-nums text-gray-950 dark:text-white">${formatAmount(circlePocketSelectedBalance, 6)} USDC</span>
                           </div>
-                          <input
-                            type="text"
-                            value={circlePocketWithdrawAddress}
-                            onChange={(event) => setCirclePocketWithdrawAddress(event.target.value.trim())}
-                            placeholder={circlePocketNetwork === 'solana' ? 'Destination Solana address' : '0x destination address'}
-                            className="w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
-                          />
-                          <div className="flex gap-2">
+                          {circlePocketSelectedAddress ? (
+                            <>
+                            <label className="block">
+                              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Destination wallet</span>
+                              <input
+                                type="text"
+                                value={circlePocketWithdrawAddress}
+                                onChange={(event) => setCirclePocketWithdrawAddress(event.target.value.trim())}
+                                placeholder={circlePocketNetwork === 'solana' ? 'Destination Solana address' : '0x destination address'}
+                                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span>
+                              <span className="mt-1 flex gap-2">
                             <input
                               type="text"
                               inputMode="decimal"
@@ -3195,16 +3256,29 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                             >
                               Max
                             </button>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleCirclePocketWithdraw}
-                            disabled={circlePocketWithdrawPending}
-                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
-                          >
-                            {circlePocketWithdrawPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                            Withdraw
-                          </button>
+                              </span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={handleCirclePocketWithdraw}
+                              disabled={circlePocketWithdrawPending}
+                              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                            >
+                              {circlePocketWithdrawPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                              {circlePocketWithdrawPending ? 'Sending…' : 'Withdraw USDC'}
+                            </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleCirclePocketSetup()}
+                              disabled={circlePocketBusy}
+                              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
+                            >
+                              {circlePocketBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                              Open {circlePocketNetworkLabel} wallet first
+                            </button>
+                          )}
                           {circlePocketWithdrawNotice && <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{circlePocketWithdrawNotice}</p>}
                           {circlePocketWithdrawTxHash && <p className="break-all text-[11px] text-gray-400">Tx: {circlePocketWithdrawTxHash}</p>}
                         </div>
@@ -3212,14 +3286,29 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
                       {circlePocketTab === 'activity' && (
                         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                          <p className="text-sm font-bold text-gray-950 dark:text-white">Recent Circle Pocket activity</p>
-                          <div className="mt-3 space-y-2">
-                            {(circlePocketActivity.length ? circlePocketActivity : ['No local wallet activity yet.']).map((item, index) => (
-                              <div key={`${item}-${index}`} className="rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-                                {item}
-                              </div>
-                            ))}
-                          </div>
+                          {circlePocketActivity.length ? (
+                            <div className="space-y-2">
+                              {circlePocketActivity.map((item, index) => (
+                                <div key={`${item}-${index}`} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm dark:bg-white/[0.07] dark:text-gray-300">
+                                    <Activity className="h-3.5 w-3.5" />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-xs font-bold text-gray-700 dark:text-gray-200">{item}</span>
+                                    <span className="mt-0.5 block text-[10px] font-medium text-gray-400">This session</span>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-4 text-center dark:border-white/10 dark:bg-white/[0.025]">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-gray-400 shadow-sm dark:bg-white/[0.07]">
+                                <Activity className="h-[18px] w-[18px]" />
+                              </span>
+                              <p className="mt-3 text-sm font-bold text-gray-700 dark:text-gray-200">No wallet activity yet</p>
+                              <p className="mt-1 text-xs leading-relaxed text-gray-400">Funding, address copies, and withdrawals from this session will appear here.</p>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -3401,7 +3490,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           ) : posMode ? (
             <>
-            <div className="space-y-5 p-4 sm:p-5">
+            <div className="min-h-[590px] space-y-5 p-4 sm:min-h-[640px] sm:p-5">
+              <div className="relative flex min-h-8 items-center">
+                <FlowBackButton onClick={handlePosBack} />
+                <div className="pointer-events-none absolute left-1/2 max-w-[48%] -translate-x-1/2 text-center">
+                  <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Retail POS</p>
+                </div>
+              </div>
               {!privyAuthenticated && (
                 <LocalCurrencySignInGate
                   title="Sign in for POS history"
@@ -3424,17 +3519,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 />
               )}
 
-              {(posCountry || posSettlementPath || posMerchant) && (
-                <FlowBackButton onClick={handlePosBack} />
-              )}
-
               {!posCountry ? (
                 <div className="space-y-4">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Retail POS</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Choose country</h2>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">In-person checkout</p>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">One QR for every sale</h2>
                     <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Start with live USDC checkout, then add local wallet partners country by country.
+                      Customers enter the amount, pay with Base USDC, and you receive Naira in your verified bank account.
                     </p>
                   </div>
 
@@ -3694,8 +3785,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </>
           ) : billsMode ? (
             <>
-            <div className="space-y-5 p-4 sm:p-5">
-              <FlowBackButton onClick={() => goBackOr(() => openCirclePocketMode(false))} />
+            <div className="min-h-[590px] space-y-5 p-4 sm:min-h-[640px] sm:p-5">
+              <div className="relative flex min-h-8 items-center">
+                <FlowBackButton onClick={() => goBackOr(() => openCirclePocketMode(false))} />
+                <div className="pointer-events-none absolute left-1/2 max-w-[48%] -translate-x-1/2 text-center">
+                  <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Bills</p>
+                </div>
+              </div>
               {!privyAuthenticated && (
                 <LocalCurrencySignInGate
                   title="Sign in for bills history"
@@ -3735,9 +3831,16 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           ) : (
             <>
-          <div className="overflow-hidden bg-gray-50/60 dark:bg-white/[0.035]">
-            <div className="space-y-3.5 px-3.5 py-3 sm:p-4">
-              <FlowBackButton onClick={() => goBackOr(() => openCirclePocketMode(false))} />
+          <div className={cn('overflow-hidden', isBankReceive ? 'bg-transparent' : 'bg-gray-50/60 dark:bg-white/[0.035]')}>
+            <div className="min-h-[590px] space-y-3.5 px-3.5 py-3 sm:min-h-[640px] sm:p-4">
+              <div className="relative flex min-h-8 items-center">
+                <FlowBackButton onClick={() => goBackOr(() => openCirclePocketMode(false))} />
+                <div className="pointer-events-none absolute left-1/2 max-w-[48%] -translate-x-1/2 text-center">
+                  <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">
+                    {isBankReceive ? 'Bank payout' : 'Receive USDC'}
+                  </p>
+                </div>
+              </div>
 
           {!accessMode && !multiChainMode && (
             <CircleReceiveSelector
@@ -3768,6 +3871,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               bankVerifyBusy={posBankVerifyBusy}
               bankError={posError}
               verifyBankAccount={verifyPosBankAccount}
+              hideLabel
               selectorLabel={isBankSend ? 'USDC destination' : undefined}
               addressOptionLabel={isBankSend ? 'Receive with address' : undefined}
               addressOptionBody={isBankSend ? 'Send USDC to any EVM wallet you control.' : undefined}
@@ -4626,26 +4730,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       </div>
 
       {/* ── Last event dashboard recovery ────────────────────────────── */}
-      {!generatedLink && chatCta && (
-        <div className="mt-4 flex flex-col items-center gap-2">
-          <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-            Or at your convenience
-          </p>
-          <a
-            href={chatCta.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex w-full max-w-[18rem] items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 sm:max-w-[20rem]"
-          >
-            <MessageCircle className="h-4 w-4" />
-            {chatCta.label}
-          </a>
-          <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-            WhatsApp support coming soon.
-          </p>
-        </div>
-      )}
-
       {!generatedLink && !productHubOpen && !posMode && !streamMode && savedEvent && (
         <div className="mt-6 animate-fade-in">
           <div className="flex items-center justify-between gap-3">
@@ -4745,6 +4829,34 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               Docs
             </Link>
           </div>
+        </div>
+      )}
+
+      {!generatedLink && productHubOpen && !serviceHubAgentMounted && (
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-gray-100 pt-5 dark:border-white/10">
+          <a
+            href="mailto:support@hashpaylink.com"
+            className="flex min-w-0 items-center gap-1.5 py-1 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
+          >
+            <Mail className="h-3.5 w-3.5 shrink-0" />
+            Support
+          </a>
+          <a
+            href="https://x.com/Hash_PayLink"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 py-1 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
+          >
+            <X className="h-3.5 w-3.5 shrink-0" />
+            DM us
+          </a>
+          <Link
+            to="/docs"
+            className="flex items-center gap-1.5 py-1 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
+          >
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            Docs
+          </Link>
         </div>
       )}
 

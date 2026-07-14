@@ -16,6 +16,10 @@ import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
 const TX_HASH_RE = /^0x[0-9a-fA-F]{1,64}$/
 const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
 const SOLANA_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+const TELEGRAM_CHAT_URL = (() => {
+  const base = String(import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot').trim().replace(/\/+$/, '')
+  return base.includes('?') ? `${base}&start=payment_links` : `${base}?start=payment_links`
+})()
 const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
 function detectInput(raw: string): 'tx_hash' | 'evm_addr' | 'unknown' {
@@ -67,6 +71,18 @@ function AgentHashCssIcon({ header = false, staticPose = false }: { header?: boo
         <span />
       </span>
     </div>
+  )
+}
+
+function TelegramMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
+      <path
+        d="M20.7 3.45 3.9 9.93c-1.15.46-1.14 1.1-.21 1.38l4.31 1.35 1.66 5.08c.2.57.1.8.7.8.46 0 .66-.21.91-.46l2.07-2.01 4.3 3.18c.79.44 1.36.21 1.56-.73l2.83-13.34c.29-1.16-.44-1.69-1.33-1.33Z"
+        fill="currentColor"
+      />
+      <path d="m9.13 12.35 8.4-5.3c.42-.26.8-.12.49.16l-6.93 6.25-.27 2.84-1.69-3.95Z" fill="white" fillOpacity=".92" />
+    </svg>
   )
 }
 
@@ -550,7 +566,7 @@ export default function Layout() {
   const [isTyping,     setIsTyping]     = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const agentHashPanelRef = useRef<HTMLDivElement>(null)
-  const agentHashFabRef = useRef<HTMLButtonElement>(null)
+  const agentHashFabRef = useRef<HTMLAnchorElement>(null)
   const agentHashCloseTimerRef = useRef<number | null>(null)
   const previousAgentHashModeRef = useRef<AgentHashMode | null>(null)
 
@@ -1020,20 +1036,19 @@ export default function Layout() {
         </div>
       )}
 
-      {/* FAB */}
+      {/* Telegram FAB */}
       {showAgentHashWidget && (
-        <button
+        <a
           ref={agentHashFabRef}
-          type="button"
-          onClick={toggleAgentHashWidget}
-          className="fixed bottom-5 right-4 z-50 flex h-14 w-14 items-center justify-center transition-all duration-200 hover:-translate-y-0.5 active:scale-95 sm:right-6"
-          title="Agent Hash"
+          href={TELEGRAM_CHAT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="fixed bottom-5 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#229ED9] text-white shadow-[0_12px_30px_rgba(34,158,217,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#178dcc] active:scale-95 sm:right-6"
+          title="Open Telegram chat"
+          aria-label="Open Hash PayLink in Telegram"
         >
-          {chatOpen
-            ? <X className="h-5 w-5 text-gray-500 dark:text-gray-300" />
-            : <AgentHashCssIcon staticPose />
-          }
-        </button>
+          <TelegramMark className="h-7 w-7" />
+        </a>
       )}
 
       <style>{`

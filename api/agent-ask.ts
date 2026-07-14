@@ -926,6 +926,59 @@ function normalizeHelperMode(value: unknown) {
   return HELPER_MODES.has(mode) ? mode : ''
 }
 
+const PAYMENT_ENRICHMENT_ACTIONS = new Set([
+  'payment_request_draft_question',
+  'payment_request_missing_fields',
+  'payment_request_new_wallet_needed',
+  'payment_request_saved_wallet_network_mismatch',
+  'payment_request_saved_wallet_unavailable',
+  'payment_request_wallet_network_mismatch',
+  'paylink_ready',
+])
+
+const PAYMENT_ENRICHMENT_FIELDS = new Set([
+  'user_question', 'mode', 'payer', 'target', 'amount', 'purpose', 'network',
+  'known_amount', 'known_purpose', 'known_network', 'has_receive_wallet',
+  'missing_fields', 'saved_wallet', 'saved_wallet_network', 'requested_network',
+  'wallet_network',
+])
+
+function normalizePaymentEnrichmentContext(question: string, helperMode: string) {
+  if (helperMode !== 'payments') return undefined
+  const lines = question.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+  const actionLine = lines.find(line => line.startsWith('local_action='))
+  const action = actionLine?.slice('local_action='.length).trim().toLowerCase() ?? ''
+  if (!PAYMENT_ENRICHMENT_ACTIONS.has(action)) return undefined
+  const fields: Record<string, string> = {}
+  for (const line of lines) {
+    const separator = line.indexOf('=')
+    if (separator <= 0) continue
+    const key = line.slice(0, separator).trim().toLowerCase()
+    if (!PAYMENT_ENRICHMENT_FIELDS.has(key)) continue
+    fields[key] = line.slice(separator + 1).trim().replace(/\s+/g, ' ').slice(0, 220)
+  }
+  return {
+    source: 'hashpaylink-backend-normalized' as const,
+    action,
+    fields,
+  }
+}
+
+function paymentEnrichmentPrompt(context: ReturnType<typeof normalizePaymentEnrichmentContext>) {
+  if (!context) return ''
+  return [
+    'Enrich this deterministic Hash PayLink payment action as one short consumer chat response.',
+    `Backend action: ${context.action}`,
+    `Verified action fields: ${JSON.stringify(context.fields)}`,
+    'Preserve the supplied fields exactly. Do not create or modify payment state.',
+  ].join('\n')
+}
+
+export const __testAgentAskPaymentEnrichment = {
+  normalizePaymentEnrichmentContext,
+  paymentEnrichmentPrompt,
+}
+
 function classifyHelperRequest(question: string, helperMode = ''): { helperIntent: string; qualityMode: 'fast' | 'standard' | 'deep' } {
   const value = question.toLowerCase()
   if (isNameQuestion(question)) return { helperIntent: 'personal-memory', qualityMode: 'fast' }
@@ -1258,6 +1311,8 @@ export default async function handler(req: Request, res: Response) {
 
     // 2. Payment verified — get AI response
     const helperRouting = classifyHelperRequest(question, helperMode)
+    const paymentContext = normalizePaymentEnrichmentContext(question, helperMode)
+    const zeroScoutQuestion = paymentEnrichmentPrompt(paymentContext) || question
     const usageTier: HelperUsageTier = helperRouting.qualityMode === 'deep' ? 'deep' : 'simple'
     const usagePreview = await getHelperPromptUsageStatus(eventId, access.payment.payer, usageTier)
     if (!usagePreview.allowed) {
@@ -1309,7 +1364,7 @@ export default async function handler(req: Request, res: Response) {
         },
         request: {
           eventId,
-          question,
+          question: zeroScoutQuestion,
           accessMode,
           helperMode,
           helperIntent: helperRouting.helperIntent,
@@ -1317,6 +1372,7 @@ export default async function handler(req: Request, res: Response) {
           hashpayStreamVideoInspectionRequested,
           memorySummary,
           memorySummaryHash,
+          paymentContext,
           hashpayStreamContext,
         },
         sourceProof: {
