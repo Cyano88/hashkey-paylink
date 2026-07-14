@@ -821,7 +821,7 @@ function fallbackHelperAnswer(question: string) {
   if (/\blocal_action=payment_request_saved_wallet_choice\b/i.test(question)) {
     const network = /network=([^\n]+)/i.exec(question)?.[1]?.trim() || 'payment'
     const wallet = /saved_wallet=([^\n]+)/i.exec(question)?.[1]?.trim() || 'saved'
-    return `I can prepare that PayLink. Continue with your saved ${network} wallet ${wallet}, or use a new receive wallet?`
+    return `Use your connected ${network} wallet ${wallet}, or use another receive wallet?`
   }
   if (/\blocal_action=payment_request_new_wallet_needed\b/i.test(question)) {
     return 'Send the new receive wallet. I will use it for this PayLink.'
@@ -864,8 +864,8 @@ function fallbackHelperAnswer(question: string) {
   if (/\b(x402|activate x402|service balance|wallet balance|circle balance)\b/i.test(question)) {
     return 'Circle wallet balance is the USDC in your wallet. x402 service balance is the amount activated for paid services. Fund the wallet first, then activate x402 before using paid services.'
   }
-  if (/\b(paylink|payment link|request|invoice|collect|charge|receive (?:a )?payment|get paid)\b/i.test(question)) {
-    return 'Tell me the payer, amount, network, purpose, and receive wallet. I can then prepare a clean PayLink for sharing.'
+  if (/\b(paylink|pay link|payment link|request link|checkout link|request|invoice|bill|collect|charge|raise|receive (?:a )?payment|get paid)\b/i.test(question)) {
+    return 'Tell me the payer, amount, purpose, and network, then choose your connected Circle Pocket wallet or another receive wallet. I can create the PayLink after you confirm those details.'
   }
   if (/\b(what can you do|help me|how can you help|what do you help with)\b/i.test(question)) {
     return 'I can help with PayLinks, payment receipts, wallet funding, x402 activation, PolyDesk, HashpayStream, setup questions, and everyday planning.'
@@ -952,15 +952,15 @@ const CIRCLE_POCKET_ROUTES: Record<CirclePocketCapability, Omit<CirclePocketRout
     action: { label: 'Open Circle Pocket', url: '/?product=circle-pocket' },
   },
   'receive-usdc': {
-    answer: 'I can prepare that PayLink automatically with your connected receive wallet. If a required detail is missing, I will ask only for that detail.',
+    answer: 'I can prepare that PayLink after you confirm the payer, amount, purpose, network, and whether to use your connected Circle Pocket wallet or another wallet.',
     action: { label: 'Receive USDC', url: '/?product=payment&tab=personal' },
   },
   'bank-payout': {
-    answer: 'Use Receive to Bank to create a Naira payout link. The payer pays USDC and the verified bank account receives settlement.',
+    answer: 'Receive to Bank creates a Naira request: confirm the payer, NGN amount, purpose, and signed-in verified payout account. The payer pays Base USDC and the bank account receives settlement.',
     action: { label: 'Receive to Bank', url: '/?product=payment&tab=bank' },
   },
   'retail-pos': {
-    answer: 'Retail POS creates a reusable merchant QR for accepting USDC and routing settlement through the selected local flow.',
+    answer: 'Retail POS creates a reusable contactless terminal QR. Confirm the merchant name, settlement choice, and receiving wallet or verified bank account before creation.',
     action: { label: 'Open Retail POS', url: '/?product=payment&tab=pos' },
   },
   bills: {
@@ -1001,12 +1001,13 @@ function routeCirclePocketQuestion(question: string, helperMode: string): Circle
     }
   }
   if (/\b(receipt|refund|history|transaction|proof|status|tx hash|confirmation)\b/.test(value)) return circlePocketResult('receipts')
-  if (/\b(bank|naira|account number|settlement|payout|paycrest|zenith)\b/.test(value)) return circlePocketResult('bank-payout')
-  if (/\b(pos|merchant|static qr|retail|checkout|terminal)\b/.test(value)) return circlePocketResult('retail-pos')
-  if (/\b(bill|airtime|mobile data|electricity|cable|utility|utilities)\b/.test(value)) return circlePocketResult('bills')
+  if (/\b(bank|naira|ngn|account number|settlement|payout|paycrest|zenith)\b/.test(value) || value.includes('₦')) return circlePocketResult('bank-payout')
+  if (/\b(pos|point of sale|contactless|merchant|static qr|retail|terminal|in[ -]?store)\b/.test(value) || /\bpos\s+checkout\b/.test(value)) return circlePocketResult('retail-pos')
+  if (/\b(bills|airtime|mobile data|electricity|cable|utility|utilities)\b/.test(value)) return circlePocketResult('bills')
   if (/\b(x402|service balance|paid service|agent wallet|api access)\b/.test(value)) return circlePocketResult('x402-wallet')
-  if (/\b(receive|paylink|payment link|request money|collect|get paid|payment request)\b/.test(value)
-    || /\b(?:request|charge|invoice)\b.*\b(?:usdc|usd|money|payment|from)\b/.test(value)) return circlePocketResult('receive-usdc')
+  if (/\b(receive|paylink|pay link|payment link|request link|checkout link|request money|collect|get paid|payment request|invoice|charge|bill|raise|split|dues|donation|fundraiser)\b/.test(value)
+    || /\b(?:request|charge|invoice|bill|collect|raise|ask)\b.*\b(?:usdc|usd|money|payment|pay|from)\b/.test(value)
+    || /\b(?:create|generate|send|share)\b.*\b(?:paylink|pay link|payment link|request link|invoice)\b/.test(value)) return circlePocketResult('receive-usdc')
   if (/\b(profile|account|sign in|signin|verified|verification|email|support|error|stuck|failed|not working)\b/.test(value)) return circlePocketResult('profile-support', 'medium')
   if (/\b(wallet|balance|funding address|deposit|withdraw|send|transfer|network|circle pocket|circle smart)\b/.test(value)) return circlePocketResult('wallet-overview')
   if (/\b(what can you do|how can you help|capabilities|options|features)\b/.test(value)) return circlePocketResult('wallet-overview', 'medium')

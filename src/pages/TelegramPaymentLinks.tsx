@@ -272,6 +272,14 @@ type HelperPaylinkDraft = {
   offeredSavedWalletNetwork?: RequestNetwork | ''
 }
 
+type PaymentCreationLane = 'usdc' | 'bank' | 'pos' | ''
+
+type BankPaylinkDraft = {
+  target: string
+  amountNgn: string
+  label: string
+}
+
 type PolyPortfolioFundingDraft = {
   amount: string
   network: RequestNetwork | ''
@@ -656,8 +664,9 @@ function extractInlinePayerName(text: string, mode: RequestMode) {
 
 function extractPurpose(text: string) {
   const clean = text.replace(/\s+/g, ' ').trim()
-  const match = clean.match(/\b(?:change|update|correct|set)?\s*(?:purpose|memo|reason)\s*(?:for\s+payment\s*)?(?:to|is|=|:)?\s*(?:for\s+)?([^?.!,;]+)/i)?.[1]?.trim()
-    ?? clean.match(/\bfor\s+([^?.!,;]+)/i)?.[1]?.trim()
+  const match = clean.match(/\b(?:change|update|correct|set)?\s*(?:purpose|memo|reason|note|description|reference)\s*(?:for\s+(?:the\s+)?(?:payment|paylink|request)\s*)?(?:to|is|=|:)?\s*(?:for\s+)?([^?.!,;]+)/i)?.[1]?.trim()
+    ?? clean.match(/\b(?:this|it|that)(?:'s|\s+is)\s+for\s+([^?.!,;]+)/i)?.[1]?.trim()
+    ?? clean.match(/\b(?:for|towards?|to\s+cover|covering)\s+([^?.!,;]+)/i)?.[1]?.trim()
     ?? ''
   if (!match) return ''
   return cleanPaymentPurpose(match)
@@ -668,7 +677,10 @@ function isExplicitDraftCorrection(text: string) {
 }
 
 function isPaymentRequestIntent(text: string) {
-  return /\b(request|collect|charge|invoice|paylink|payment link|receive (?:a )?payments?|get paid|ask .*pay|split|dues|donation|group collection|contribution|fundraiser|fundraising)\b/i.test(text)
+  if (/\b(airtime|data bundle|mobile data|electricity|cable|dstv|gotv|utility|utilities|pay (?:my|the|a) bills?)\b/i.test(text)) return false
+  return /\b(request|collect|charge|invoice|bill|raise|paylink|pay link|payment link|request link|checkout link|receive (?:a )?payments?|get paid|ask .*?(?:pay|send)|split|dues|donation|group collection|contribution|fundraiser|fundraising|create .*?(?:link|request)|generate .*?(?:link|request)|send .*?(?:paylink|payment link|request link))\b/i.test(text)
+    || /\b(?:need|want|would like)\s+(?:to\s+)?(?:receive|collect|request)\b/i.test(text)
+    || /\b(?:someone|client|customer|friend|payer|[A-Z][\p{L}\p{M}'-]{1,40})\s+(?:to\s+)?pay\s+(?:me\s+)?\d/i.test(text)
 }
 
 function isDeepResearchIntent(text: string) {
@@ -728,14 +740,56 @@ function shouldStartFreshDraftRequest(text: string, existing?: HelperPaylinkDraf
 
 function wantsSavedWallet(text: string) {
   const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, '')
-  if (/^(yes\s+)?(use|use it|use this|use this one|use that|continue|same|yes|yep|yeah|sure|ok|okay|saved|saved wallet|my saved wallet|use saved|use my saved wallet|use the one saved|continue with my saved wallet)$/.test(normalized)) {
+  if (/^(yes\s+)?(use|use it|use this|use this one|use that|continue|same|yes|yep|yeah|sure|ok|okay|saved|saved wallet|connected|connected wallet|connected account|my connected wallet|my connected account|circle wallet|circle pocket wallet|my circle wallet|use saved|use connected|use my saved wallet|use my connected wallet|use my connected account|use my circle wallet|use the one saved|continue with my saved wallet|continue with my connected wallet)$/.test(normalized)) {
     return true
   }
-  return /\b(use|continue)\s+(the\s+)?(saved|same|one saved|my saved)\b/i.test(text)
+  return /\b(use|continue(?:\s+with)?)\s+(?:the\s+)?(?:saved|same|one saved|my saved|connected|my connected|circle(?: pocket)?)(?:\s+(?:wallet|account))?\b/i.test(text)
 }
 
 function wantsNewWallet(text: string) {
-  return /\b(new|replace|change|different|another)\b/i.test(text)
+  const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, '')
+  if (/^(use\s+)?(?:a\s+)?(?:new|another|different)(?:\s+(?:wallet|account|address|one))?$/.test(normalized)) return true
+  return /\b(?:use|add|send|provide|choose|switch\s+to|continue\s+with)\s+(?:a\s+)?(?:new|another|different)\s+(?:receive\s+)?(?:wallet|account|address)\b/i.test(text)
+    || /\b(?:new|another|different)\s+(?:receive\s+)?(?:wallet|account|address)\b/i.test(text)
+}
+
+function inferPaymentCreationLane(text: string): PaymentCreationLane {
+  const value = text.trim().toLowerCase()
+  if (/\b(pos|point of sale|contactless|terminal|merchant qr|static qr|in[ -]?store)\b/.test(value)) return 'pos'
+  if (/\b(naira|ngn|₦|receive to bank|bank receive|bank payout|settle(?:ment)? to (?:my |a |the )?bank|payout account|account number)\b/.test(value)) return 'bank'
+  if (/\b(direct usdc|usdc paylink|usdc payment link|crypto paylink|receive usdc|pay (?:me )?in usdc|base usdc|solana usdc)\b/.test(value)) return 'usdc'
+  if (/^(?:direct|direct paylink|direct payment link)[.!?]*$/.test(value)) return 'usdc'
+  if (/^(?:use |create |make |choose |the )?(?:direct )?(?:usdc|wallet)(?: paylink| payment link| link)?[.!?]*$/.test(value)) return 'usdc'
+  if (/^(?:use |create |make |choose |the )?(?:receive to bank|bank|naira)(?: paylink| payment link| link)?[.!?]*$/.test(value)) return 'bank'
+  if (/^(?:use |create |make |choose |the )?(?:pos|contactless|terminal)(?: qr| terminal| link)?[.!?]*$/.test(value)) return 'pos'
+  return ''
+}
+
+function extractNairaAmount(text: string) {
+  const prefix = text.match(/(?:₦|ngn\s*)\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1]
+  const suffix = text.match(/\b([\d,]+(?:\.\d{1,2})?)\s*(?:naira|ngn)\b/i)?.[1]
+  const raw = (prefix || suffix || '').replace(/,/g, '')
+  const amount = Number(raw)
+  return Number.isFinite(amount) && amount > 0 ? String(amount) : ''
+}
+
+function bankPaylinkMissingFields(draft: BankPaylinkDraft) {
+  return [
+    !draft.target && 'payer name',
+    !draft.amountNgn && 'amount in Naira',
+    !draft.label && 'purpose',
+  ].filter(Boolean) as string[]
+}
+
+function buildBankPaylinkDraft(text: string, existing?: BankPaylinkDraft | null): BankPaylinkDraft {
+  const targetFromText = extractTarget(text, 'person') || (!existing?.target ? extractInlinePayerName(text, 'person') : '')
+  const target = targetFromText || existing?.target || ''
+  const amountNgn = extractNairaAmount(text) || existing?.amountNgn || ''
+  let label = extractPurpose(text) || existing?.label || ''
+  if (existing && !existing.label && !extractNairaAmount(text) && !targetFromText && !inferPaymentCreationLane(text)) {
+    label = cleanPaymentPurpose(text)
+  }
+  return { target, amountNgn, label }
 }
 
 function isPaylinkDraftSideQuestion(text: string) {
@@ -780,16 +834,12 @@ function paylinkDraftSideQuestionFallback(draft: HelperPaylinkDraft, text: strin
 function describeMissingDraftFields(draft: HelperPaylinkDraft, savedWallet?: string) {
   const missing = [
     draft.mode !== 'group' && !draft.target && 'payer name',
+    !draft.amount && 'amount in USDC',
+    !draft.label && 'purpose',
     !draft.network && 'network',
     !draft.wallet && !savedWallet && 'receive wallet',
   ].filter(Boolean)
   return missing as string[]
-}
-
-function defaultPaylinkLabel(draft: HelperPaylinkDraft) {
-  if (draft.label) return draft.label
-  if (draft.mode === 'group') return draft.target || 'Group collection'
-  return draft.target ? `Payment request for ${friendlyName(draft.target)}` : 'Payment request'
 }
 
 function isSignedInStatusMessage(text: string) {
@@ -1732,6 +1782,9 @@ export function TelegramHelperPanel({
   const [memoryDraft, setMemoryDraft] = useState('')
   const [paylinkDraft, setPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
   const [lastPaylinkDraft, setLastPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
+  const [paymentLanePromptPending, setPaymentLanePromptPending] = useState(false)
+  const [pendingPaymentRequestText, setPendingPaymentRequestText] = useState('')
+  const [bankPaylinkDraft, setBankPaylinkDraft] = useState<BankPaylinkDraft | null>(null)
   const [polyPortfolioFundingDraft, setPolyPortfolioFundingDraft] = useState<PolyPortfolioFundingDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
   const helperScrollRef = useRef<HTMLDivElement | null>(null)
@@ -1861,6 +1914,9 @@ export function TelegramHelperPanel({
     }
     setMessages([])
     setPaylinkDraft(null)
+    setBankPaylinkDraft(null)
+    setPaymentLanePromptPending(false)
+    setPendingPaymentRequestText('')
     setPolyPortfolioFundingDraft(null)
     setHelperMode('')
     setPolyDeskSubMode('')
@@ -2045,6 +2101,9 @@ export function TelegramHelperPanel({
     setHelperMode(mode)
     setPolyDeskSubMode('')
     setPaylinkDraft(null)
+    setBankPaylinkDraft(null)
+    setPaymentLanePromptPending(false)
+    setPendingPaymentRequestText('')
     setPolyPortfolioFundingDraft(null)
     setQuestion('')
     setAskError('')
@@ -2062,6 +2121,9 @@ export function TelegramHelperPanel({
     window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
     setMessages([])
     setPaylinkDraft(null)
+    setBankPaylinkDraft(null)
+    setPaymentLanePromptPending(false)
+    setPendingPaymentRequestText('')
     setPolyPortfolioFundingDraft(null)
     setQuestion('')
     setAskError('')
@@ -2075,6 +2137,9 @@ export function TelegramHelperPanel({
     if (lockedHelperMode) {
       setMessages([])
       setPaylinkDraft(null)
+      setBankPaylinkDraft(null)
+      setPaymentLanePromptPending(false)
+      setPendingPaymentRequestText('')
       setPolyPortfolioFundingDraft(null)
       setQuestion('')
       setAskError('')
@@ -2086,6 +2151,9 @@ export function TelegramHelperPanel({
     window.localStorage.removeItem(`${helperModeStorageKey}:polydesk`)
     setMessages([])
     setPaylinkDraft(null)
+    setBankPaylinkDraft(null)
+    setPaymentLanePromptPending(false)
+    setPendingPaymentRequestText('')
     setPolyPortfolioFundingDraft(null)
     setQuestion('')
     setAskError('')
@@ -2322,7 +2390,7 @@ export function TelegramHelperPanel({
     if (!res.ok || !data.ok || !data.request) throw new Error(data.error || 'Could not create PayLink.')
     const saved = data.request
     const savedWallet = saved.wallet || walletForNetwork
-    const memoryLine = `Preferred payment receive wallet is ${shortAddress(savedWallet)} on ${requestNetworkLabels[network]}. Reuse it automatically for compatible PayLink requests unless the user asks for a different wallet.`
+    const memoryLine = `Connected payment receive wallet is ${shortAddress(savedWallet)} on ${requestNetworkLabels[network]}. Offer it for compatible PayLink requests, but confirm the user's wallet choice before creating a link.`
     const nextMemory = [memoryDraft.trim() || profile?.memorySummary || '', memoryLine]
       .filter(Boolean)
       .join('\n')
@@ -2339,8 +2407,56 @@ export function TelegramHelperPanel({
   }
 
   async function handlePaylinkConversation(nextQuestion: string) {
+    const requestedLane = inferPaymentCreationLane(nextQuestion)
+    const paymentContextText = paymentLanePromptPending && pendingPaymentRequestText
+      ? `${pendingPaymentRequestText} ${nextQuestion}`
+      : nextQuestion
+    if (bankPaylinkDraft || requestedLane === 'bank') {
+      const draft = buildBankPaylinkDraft(paymentContextText, bankPaylinkDraft)
+      const missing = bankPaylinkMissingFields(draft)
+      setPaymentLanePromptPending(false)
+      setPendingPaymentRequestText('')
+      if (missing.length) {
+        setThinkingState('payment-draft')
+        setBankPaylinkDraft(draft)
+        finishHelperMessage(nextQuestion, {
+          answer: `Receive to Bank selected. Send ${missing.join(', ')}. One line is fine.`,
+        })
+        return true
+      }
+      const params = new URLSearchParams({ product: 'payment', tab: 'bank', amount: draft.amountNgn, memo: draft.label })
+      setBankPaylinkDraft(null)
+      finishHelperMessage(nextQuestion, {
+        answer: `Receive to Bank is ready for ${friendlyName(draft.target)}: NGN ${Number(draft.amountNgn).toLocaleString('en-NG')} for ${draft.label}. Continue to confirm your signed-in payout account and create the PayLink.`,
+        actionLink: { label: 'Continue Receive to Bank', url: `/?${params.toString()}` },
+      })
+      return true
+    }
+
+    if (requestedLane === 'pos') {
+      setPaymentLanePromptPending(false)
+      setPendingPaymentRequestText('')
+      setBankPaylinkDraft(null)
+      finishHelperMessage(nextQuestion, {
+        answer: 'POS contactless terminal selected. Continue to name the terminal, choose USDC or bank settlement, and confirm the receiving account.',
+        actionLink: { label: 'Create POS Terminal', url: '/?product=payment&tab=pos' },
+      })
+      return true
+    }
+
+    if (!paylinkDraft && requestedLane !== 'usdc') {
+      setPaymentLanePromptPending(true)
+      if (!paymentLanePromptPending) setPendingPaymentRequestText(nextQuestion)
+      finishHelperMessage(nextQuestion, {
+        answer: 'Which payment flow should I create: a direct USDC PayLink, a Receive to Bank PayLink in Naira, or a POS contactless terminal?',
+      })
+      return true
+    }
+
+    setPaymentLanePromptPending(false)
+    setPendingPaymentRequestText('')
     const revisionBase = !paylinkDraft && lastPaylinkDraft && isPaylinkRevisionIntent(nextQuestion) ? lastPaylinkDraft : null
-    if (!paylinkDraft && !revisionBase && !isPaymentRequestIntent(nextQuestion)) return false
+    if (!paylinkDraft && !revisionBase && requestedLane !== 'usdc' && !isPaymentRequestIntent(paymentContextText)) return false
     if (!paylinkDraft && !paymentQuotaStatus().allowed) {
       finishHelperMessage(nextQuestion, {
         answer: 'You have used today\'s 20 AI-assisted PayLink requests. The normal Payment Links tab is still available for manual requests.',
@@ -2376,27 +2492,12 @@ export function TelegramHelperPanel({
     const activeDraft = shouldStartFreshDraftRequest(nextQuestion, paylinkDraft) || shouldStartFreshPersonDraft(nextQuestion, paylinkDraft) || shouldStartFreshGroupDraft(nextQuestion, paylinkDraft)
       ? null
       : paylinkDraft ?? revisionBase
-    let draft = buildDraftFromText(nextQuestion, activeDraft)
-    if (!draft.network && profile?.preferredPaymentNetwork) {
-      draft = { ...draft, network: profile.preferredPaymentNetwork }
-    }
-    draft = { ...draft, label: defaultPaylinkLabel(draft) }
+    let draft = buildDraftFromText(paymentContextText, activeDraft)
     const profileWallet = preferredWalletFor(draft.network)
     const linkedWallet = !draft.wallet && !profileWallet
       ? await linkedCircleReceiveWallet(draft.network)
       : ''
     const savedWallet = profileWallet || linkedWallet
-
-    if (!draft.wallet && savedWallet && !wantsNewWallet(nextQuestion) && walletMatchesNetwork(savedWallet, draft.network)) {
-      draft = {
-        ...draft,
-        wallet: savedWallet,
-        evmWallet: savedWallet.startsWith('0x') ? savedWallet : draft.evmWallet,
-        solanaWallet: savedWallet.startsWith('0x') ? draft.solanaWallet : savedWallet,
-        offeredSavedWallet: true,
-        offeredSavedWalletNetwork: draft.network,
-      }
-    }
 
     if (!draft.wallet && savedWallet && wantsSavedWallet(nextQuestion)) {
       const savedNetwork: RequestNetwork = savedWallet.startsWith('0x') ? 'base' : 'solana'
@@ -2421,12 +2522,14 @@ export function TelegramHelperPanel({
       return true
     }
 
-    if (!draft.wallet && savedWallet && !draft.offeredSavedWallet) {
+    if (!draft.wallet && savedWallet && !wantsSavedWallet(nextQuestion) && !wantsNewWallet(nextQuestion)) {
       setThinkingState('payment-wallet')
       draft = { ...draft, offeredSavedWallet: true, offeredSavedWalletNetwork: draft.network }
       setPaylinkDraft(draft)
       const savedWalletNetwork = draft.network ? requestNetworkLabels[draft.network] : walletNetworkLabel(savedWallet)
-      const fallbackAnswer = `Use your saved ${savedWalletNetwork} receive wallet ${compactSavedWallet(savedWallet)}, or add a new receive wallet?`
+      const missingDetails = describeMissingDraftFields(draft, savedWallet)
+      const detailsPrompt = missingDetails.length ? ` Also send ${missingDetails.join(', ')}.` : ''
+      const fallbackAnswer = `Use your connected ${savedWalletNetwork} wallet ${compactSavedWallet(savedWallet)}, or use another wallet?${detailsPrompt}`
       finishHelperMessage(nextQuestion, {
         answer: fallbackAnswer,
       })
@@ -3080,7 +3183,7 @@ export function TelegramHelperPanel({
     helperAbortRef.current = abortController
     queueHelperMessage(nextQuestion)
     try {
-      const isPaylinkFlow = helperMode === 'circle-pocket' && Boolean(paylinkDraft || isPaymentRequestIntent(nextQuestion))
+      const isPaylinkFlow = helperMode === 'circle-pocket' && Boolean(paylinkDraft || bankPaylinkDraft || paymentLanePromptPending || isPaymentRequestIntent(nextQuestion) || inferPaymentCreationLane(nextQuestion))
       const isDeepResearch = helperMode === 'polydesk' || isDeepResearchIntent(nextQuestion)
       setThinkingState(isPaylinkFlow ? 'payment-draft' : isDeepResearch ? 'deep-research' : 'light')
       setAgentStatus(isPaylinkFlow

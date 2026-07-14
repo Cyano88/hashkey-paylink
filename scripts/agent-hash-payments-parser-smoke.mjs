@@ -125,6 +125,8 @@ function isGroupRequestIntent(text) {
 function describeMissingDraftFields(draft, savedWallet = '') {
   return [
     draft.mode !== 'group' && !draft.target && 'payer name',
+    !draft.amount && 'amount in USDC',
+    !draft.label && 'purpose',
     !draft.network && 'network',
     !draft.wallet && !savedWallet && 'receive wallet',
   ].filter(Boolean)
@@ -143,9 +145,10 @@ assert.equal(isGroupRequestIntent('create a group donation for my birthday'), tr
 assert.equal(isGroupRequestIntent('collect from 10 people for class dues'), true)
 assert.equal(extractCollectionLabel('create a group donation for my birthday'), 'my birthday')
 assert.equal(extractCollectionLabel('collect 500 USDC from 10 people for class dues'), 'class dues')
-assert.deepEqual(describeMissingDraftFields({ mode: 'group', target: '', amount: '', network: 'base', label: 'class dues', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), [])
+assert.deepEqual(describeMissingDraftFields({ mode: 'group', target: '', amount: '', network: 'base', label: 'class dues', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), ['amount in USDC'])
 assert.deepEqual(describeMissingDraftFields({ mode: 'person', target: 'James', amount: '1', network: '', label: 'dinner', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), ['network'])
-assert.deepEqual(describeMissingDraftFields({ mode: 'person', target: '', amount: '', network: 'base', label: '', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), ['payer name'])
+assert.deepEqual(describeMissingDraftFields({ mode: 'person', target: '', amount: '', network: 'base', label: '', wallet: '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce' }), ['payer name', 'amount in USDC', 'purpose'])
+assert.deepEqual(describeMissingDraftFields({ mode: 'person', target: 'Chioma', amount: '', network: 'base', label: 'lunch', wallet: '' }, '0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce'), ['amount in USDC'])
 
 const { __testAgentAskPaymentEnrichment } = await import('../api/agent-ask.ts')
 const enrichment = __testAgentAskPaymentEnrichment.normalizePaymentEnrichmentContext([
@@ -166,8 +169,14 @@ const circlePocketCases = [
   ['show my wallet balance', 'wallet-overview', '/?product=circle-pocket'],
   ['create a PayLink to receive USDC', 'receive-usdc', '/?product=payment&tab=personal'],
   ['I want to request 5 USDC from Chioma on base network', 'receive-usdc', '/?product=payment&tab=personal'],
+  ['bill Chioma 12 USDC for design work', 'receive-usdc', '/?product=payment&tab=personal'],
+  ['generate a checkout link so Ada can pay me', 'receive-usdc', '/?product=payment&tab=personal'],
+  ['raise 20 USDC from Tobi towards class dues', 'receive-usdc', '/?product=payment&tab=personal'],
   ['settle this to my Naira bank account', 'bank-payout', '/?product=payment&tab=bank'],
+  ['I want to request 5000 Naira from Jay', 'bank-payout', '/?product=payment&tab=bank'],
+  ['collect NGN 25,000 from Ada for catering', 'bank-payout', '/?product=payment&tab=bank'],
   ['create a static merchant POS QR', 'retail-pos', '/?product=payment&tab=pos'],
+  ['set up a contactless terminal for my shop', 'retail-pos', '/?product=payment&tab=pos'],
   ['buy airtime and pay electricity bills', 'bills', '/?product=payment&tab=bills'],
   ['fund my x402 service balance', 'x402-wallet', '/?product=agent'],
   ['check my transaction receipt', 'receipts', '/dashboard'],
