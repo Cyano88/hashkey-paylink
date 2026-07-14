@@ -2795,7 +2795,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         {productHubOpen ? (
           serviceHubAgentMounted ? (
             <div
-              className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card transition-all duration-200 ease-out dark:border-white/10 dark:bg-[#111114]"
+              className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-card transition-all duration-200 ease-out dark:border-white/10 dark:bg-[#111114]"
               style={{
                 opacity: serviceHubAgentVisible ? 1 : 0,
                 transform: serviceHubAgentVisible
@@ -2804,7 +2804,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
                 transformOrigin: 'bottom center',
               }}
             >
-              <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-3 dark:border-white/10 sm:px-4">
+              <div className="flex items-center justify-between gap-3 px-3 py-3 sm:px-4">
                 <FlowBackButton onClick={closeServiceHubAgent} />
                 <div className="min-w-0">
                   <div className="min-w-0 text-right">

@@ -1652,7 +1652,6 @@ export function TelegramHelperPanel({
   lockedHelperMode = '',
   welcomeText,
   inputPlaceholder,
-  hideTopDivider = false,
   polyDeskResetSignal = 0,
   helperBackSignal = 0,
   onPolyDeskSubModeChange,
@@ -3196,7 +3195,6 @@ export function TelegramHelperPanel({
                   helperMode
                     ? 'min-h-[340px] sm:min-h-[380px]'
                     : 'max-h-[360px] min-h-[220px]',
-                  !hideTopDivider && 'border-t border-gray-100 dark:border-white/10',
                 )}
                 style={helperMode ? { height: 'clamp(340px, 52dvh, 500px)' } : undefined}
               >
@@ -3342,7 +3340,7 @@ export function TelegramHelperPanel({
                 )}
               </div>
 
-              <div className="border-t border-gray-100 p-3 dark:border-white/10">
+              <div className="bg-white p-3 dark:bg-[#111114]">
                 <div className="relative">
                   <input
                     data-agent-hash-input="true"
