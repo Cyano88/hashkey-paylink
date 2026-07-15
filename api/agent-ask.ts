@@ -761,6 +761,8 @@ function isLikelyIdentifier(value: string) {
     || value.includes('@')
     || /^0x[a-fA-F0-9]{40}$/.test(value)
     || /^helper-free-/i.test(value)
+    || /^circle-pocket-/i.test(value)
+    || /^anonymous-helper$/i.test(value)
 }
 
 function titleName(value: string) {

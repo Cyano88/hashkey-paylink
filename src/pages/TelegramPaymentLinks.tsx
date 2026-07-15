@@ -2342,6 +2342,63 @@ export function TelegramHelperPanel({
     }
   }
 
+  async function handleCirclePocketBalanceQuestion(text: string) {
+    if (!/\b(?:current\s+)?(?:circle\s+)?smart[ -]?wallet balance\b|\b(?:current\s+)?circle wallet balance\b|\b(?:check|show|what(?:'s| is))\s+my\s+(?:current\s+)?wallet balance\b/i.test(text)) return false
+    if (/\b(?:x402|service balance|paid service)\b/i.test(text)) return false
+    if (!helperAuthReady) {
+      finishHelperMessage(text, { answer: 'I am still checking your Circle Pocket session. Ask for the balance again in a moment.' })
+      return true
+    }
+    if (!helperAuthenticated) {
+      finishHelperMessage(text, { answer: 'Sign in to Circle Pocket so I can verify and read your live smart-wallet balance.' })
+      return true
+    }
+
+    const requestedNetwork = extractNetwork(text)
+    const preferredNetwork = profile?.preferredPaymentNetwork
+    const network: Exclude<RequestNetwork, 'all'> = requestedNetwork && requestedNetwork !== 'all'
+      ? requestedNetwork
+      : preferredNetwork === 'arc' || preferredNetwork === 'solana' || preferredNetwork === 'arbitrum' || preferredNetwork === 'base'
+        ? preferredNetwork
+        : 'base'
+    const wallet = preferredWalletFor(network) || await linkedCircleReceiveWallet(network)
+    if (!wallet) {
+      finishHelperMessage(text, {
+        answer: `No ${requestNetworkLabels[network]} Circle smart wallet is connected to this signed-in account yet. Open Circle Pocket to create or connect it.`,
+        actionLink: { label: 'Open Circle Pocket', url: '/?product=circle-pocket' },
+      })
+      return true
+    }
+
+    setThinkingState('payment-draft')
+    setAgentStatus('Reading live wallet balance...')
+    try {
+      const res = await fetch(network === 'solana' ? '/api/solana-balance' : '/api/evm-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(network === 'solana'
+          ? { accountAddress: wallet }
+          : { chain: network, address: wallet }),
+      })
+      const data = await res.json() as { ok?: boolean; balance?: string; error?: string }
+      if (!res.ok || !data.ok || data.balance === undefined) throw new Error(data.error || 'Balance unavailable.')
+      const amount = network === 'solana'
+        ? Number(BigInt(data.balance || '0')) / 1_000_000
+        : Number(data.balance)
+      const formatted = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 6 }).format(amount)
+      finishHelperMessage(text, {
+        answer: `Your ${requestNetworkLabels[network]} Circle smart-wallet balance is ${formatted} USDC.`,
+      })
+    } catch (error) {
+      finishHelperMessage(text, {
+        answer: error instanceof Error && error.message
+          ? error.message
+          : 'I could not read the live smart-wallet balance right now. Try again shortly.',
+      })
+    }
+    return true
+  }
+
   function savedWalletForOtherNetwork(network: RequestNetwork | '') {
     if (!profile || !network || network === 'all') return ''
     const evmWallet = profile.preferredPaymentEvmWallet || (profile.preferredPaymentWallet?.startsWith('0x') ? profile.preferredPaymentWallet : '')
@@ -3569,19 +3626,9 @@ export function TelegramHelperPanel({
         onRecoverTelegramName(cleanName)
         setPayer(current => current || cleanName)
         setMemoryDraft(nextMemory)
-        const fallbackAnswer = `Got it. I'll call you ${cleanName}.`
-        const answer = await polishLocalHelperResult(
-          [
-            'local_action=remember_name',
-            `preferred_name=${cleanName}`,
-            'Return one warm, short confirmation sentence only.',
-          ].join('\n'),
-          fallbackAnswer,
-          nextMemory,
-        )
         await saveProfile({ displayName: cleanName, memorySummary: nextMemory })
         finishHelperMessage(nextQuestion, {
-          answer,
+          answer: `Got it. I'll call you ${cleanName}.`,
         })
         return
       }
@@ -3621,18 +3668,9 @@ export function TelegramHelperPanel({
       }
       if (isAskingUserName(nextQuestion)) {
         const knownName = normalizeHelperName(helperName || profile?.displayName || helperNameDraft || nameFromMemorySummary(memoryDraft || profile?.memorySummary || '') || '')
-        const fallbackAnswer = knownName && knownName !== 'there'
+        const answer = knownName && knownName !== 'there'
           ? `You're ${friendlyName(knownName)}.`
           : "I don't know your preferred name yet. Tell me what to call you and I'll remember it."
-        const answer = await polishLocalHelperResult(
-          [
-            'local_action=personal_memory_answer',
-            `question=${nextQuestion}`,
-            `known_name=${knownName && knownName !== 'there' ? friendlyName(knownName) : ''}`,
-            'Answer only the user name question. If the name is unknown, say that naturally.',
-          ].join('\n'),
-          fallbackAnswer,
-        )
         finishHelperMessage(nextQuestion, {
           answer,
         })
@@ -3647,6 +3685,7 @@ export function TelegramHelperPanel({
         finishHelperMessage(nextQuestion, { answer })
         return
       }
+      if (helperMode === 'circle-pocket' && await handleCirclePocketBalanceQuestion(nextQuestion)) return
       if (helperMode !== 'circle-pocket' && isPaymentRequestIntent(nextQuestion)) {
         finishHelperMessage(nextQuestion, {
           answer: 'That sounds like a Circle Pocket request. Switch to Circle Pocket and I will prepare it cleanly.',
