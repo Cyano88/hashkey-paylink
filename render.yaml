@@ -6,7 +6,7 @@ services:
     name: hashkey-paylink
     runtime: node
     plan: starter
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm ci --include=dev && npm run build:source
     startCommand: npm run start
     healthCheckPath: /api/health
     envVars:
