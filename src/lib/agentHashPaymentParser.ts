@@ -1,6 +1,15 @@
 export type PaymentCreationLane = 'usdc' | 'bank' | 'pos' | ''
 export type PosSettlementChoice = 'KEEP_CRYPTO' | 'INSTANT_FIAT' | ''
 
+export function extractAgentHashRememberedName(text: string) {
+  const match = text.match(/\b(?:remember\s+)?(?:my name is|my name['’]s|call me)\s+(@?[\p{L}\p{M}][\p{L}\p{M}\w .'-]{0,40}?)(?=\s+(?:and|but|i\s+(?:want|need|would|am)|please|can\s+you)\b|[.!?,;:]|$)/iu)?.[1] ?? ''
+  return match
+    .trim()
+    .replace(/^@+/, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 48)
+}
+
 export function extractPosSettlementChoice(text: string): PosSettlementChoice {
   const value = text.trim().toLowerCase()
   if (/\b(bank|naira|ngn|fiat|settle(?:ment)? to bank|bank settlement)\b/.test(value)) return 'INSTANT_FIAT'
@@ -75,7 +84,36 @@ export function isNewPaymentFlowIntent(text: string) {
 }
 
 export function isPaymentCreationConfirmIntent(text: string) {
-  return /^(?:yes|yep|yeah|confirm|confirmed|create it|make it|generate it|send it|go ahead|looks good|proceed|continue)[.!?]*$/i.test(text.trim())
+  return /^(?:yes|yep|yeah|confirm(?:ed| it)?|comfirm|confrim|confim|create it|make it|generate it|send it|go ahead|looks good|proceed|continue)[.!?]*$/i.test(text.trim())
+}
+
+export function isSavedWalletChoiceIntent(text: string) {
+  const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, '')
+  if (/^(yes\s+)?(?:use|use it|use this|use this one|use that|use that wallet|use this wallet|continue|same|yes|yep|yeah|sure|ok|okay|saved|saved wallet|connected|connected wallet|connected account|my connected wallet|my connected account|circle wallet|circle pocket wallet|my circle wallet|use saved|use connected|use my saved wallet|use my connected wallet|use my connected account|use my circle wallet|use the one saved|continue with my saved wallet|continue with my connected wallet)$/.test(normalized)) {
+    return true
+  }
+  return /\byes\s+use(?:\s+it)?(?=\s*[,;]|\s+and\b|$)/i.test(text)
+    || /\b(?:yes\s+)?use\s+(?:that|this|the|my|saved|connected|same)(?:\s+(?:receive\s+)?(?:wallet|account|one))\b/i.test(text)
+    || /\b(?:use|continue(?:\s+with)?)\s+(?:the\s+)?(?:saved|same|one saved|my saved|connected|my connected|circle(?: pocket)?)(?:\s+(?:wallet|account))?\b/i.test(text)
+}
+
+export function cleanAgentHashPaymentPurpose(value: string) {
+  return value
+    .replace(/0x[a-fA-F0-9]{40}/g, '')
+    .replace(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g, '')
+    .replace(/\s+\b(?:on|via|using)\s+(?:the\s+)?(?:base|arc|solana|arbitrum)(?:\s+network)?\b.*$/i, '')
+    .replace(/\s+\b(?:and\s+)?(?:yes|yep|yeah|sure|okay|ok)?\s*(?:please\s+)?use\s+(?:that|this|the|my|saved|connected|same)(?:\s+(?:receive\s+)?(?:wallet|account|one))\b.*$/i, '')
+    .replace(/\b\d+(?:\.\d{1,6})?\s*(?:usdc|usd)\b/gi, '')
+    .replace(/\b(?:base|arc|solana|arbitrum|all networks?|any network|evm|usdc)\b/gi, '')
+    .replace(/\b(?:to|from)\s+@?[a-zA-Z][\w.-]{1,40}\b/gi, '')
+    .replace(/\b(?:payment|paylink|request)\s+(?:is\s+)?(?:for\s+)?/gi, '')
+    .replace(/\b(?:the\s+)?only details?.*$/i, '')
+    .replace(/\b(?:then\s+)?give me .*$/i, '')
+    .replace(/^(?:for|purpose|memo|reason)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[,.;:\s-]+|[,.;:\s-]+$/g, '')
+    .trim()
+    .slice(0, 80)
 }
 
 export function isStandalonePaymentPurposeReply(text: string) {

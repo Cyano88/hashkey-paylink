@@ -3,6 +3,8 @@ import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  cleanAgentHashPaymentPurpose,
+  extractAgentHashRememberedName,
   extractNairaPaymentAmount,
   extractPaymentAmount,
   extractPosSettlementChoice,
@@ -13,6 +15,7 @@ import {
   isPaymentCreationConfirmIntent,
   isPaymentFlowCancelIntent,
   isPaymentRequestIntent,
+  isSavedWalletChoiceIntent,
   isStandalonePaymentPurposeReply,
 } from '../src/lib/agentHashPaymentParser.ts'
 import { isClearAgentHashChatCommand } from '../src/lib/agentHashChat.ts'
@@ -187,6 +190,14 @@ assert.equal(isPaymentFlowCancelIntent('cancel this draft'), true)
 assert.equal(isPaymentFlowCancelIntent('start over'), true)
 assert.equal(isNewPaymentFlowIntent('new PayLink'), true)
 assert.equal(isPaymentCreationConfirmIntent('create it'), true)
+assert.equal(isPaymentCreationConfirmIntent('Comfirm'), true)
+assert.equal(isPaymentCreationConfirmIntent('confrim'), true)
+assert.equal(isSavedWalletChoiceIntent('5 USDC for dinner on base network and yes use that wallet'), true)
+assert.equal(isSavedWalletChoiceIntent('Yes use, payer name is Onoja'), true)
+assert.equal(cleanAgentHashPaymentPurpose('dinner on base network and yes use that wallet'), 'dinner')
+assert.equal(extractAgentHashRememberedName("My name's Shy"), 'Shy')
+assert.equal(extractAgentHashRememberedName('My name’s Shy'), 'Shy')
+assert.equal(extractAgentHashRememberedName("My name's Shy and I want to request 5 USDC"), 'Shy')
 assert.equal(isStandalonePaymentPurposeReply('Lunch'), true)
 assert.equal(isStandalonePaymentPurposeReply('Base'), false)
 assert.equal(isStandalonePaymentPurposeReply('confirm'), false)

@@ -47,6 +47,8 @@ import { resolvePrivyCircleLink } from '../lib/privyCircleLink'
 import { isClearAgentHashChatCommand } from '../lib/agentHashChat'
 import { circlePocketAgentHeaders, getCirclePocketBrowserSession } from '../lib/circlePocketAgentIdentity'
 import {
+  cleanAgentHashPaymentPurpose,
+  extractAgentHashRememberedName,
   extractNairaPaymentAmount,
   extractPaymentAmount,
   extractPosSettlementChoice,
@@ -57,6 +59,7 @@ import {
   isPaymentCreationConfirmIntent,
   isPaymentFlowCancelIntent,
   isPaymentRequestIntent,
+  isSavedWalletChoiceIntent,
   isStandalonePaymentPurposeReply,
   type PaymentCreationLane,
 } from '../lib/agentHashPaymentParser'
@@ -564,18 +567,7 @@ function stripWallets(text: string) {
 }
 
 function cleanPaymentPurpose(value: string) {
-  return stripWallets(value)
-    .replace(/\b\d+(?:\.\d{1,6})?\s*(?:usdc|usd)\b/gi, '')
-    .replace(/\b(?:base|arc|solana|arbitrum|all networks?|any network|evm|usdc)\b/gi, '')
-    .replace(/\b(?:to|from)\s+@?[a-zA-Z][\w.-]{1,40}\b/gi, '')
-    .replace(/\b(?:payment|paylink|request)\s+(?:is\s+)?(?:for\s+)?/gi, '')
-    .replace(/\b(?:the\s+)?only details?.*$/i, '')
-    .replace(/\b(?:then\s+)?give me .*$/i, '')
-    .replace(/^(?:for|purpose|memo|reason)\s+/i, '')
-    .replace(/\s+/g, ' ')
-    .replace(/^[,.;:\s-]+|[,.;:\s-]+$/g, '')
-    .trim()
-    .slice(0, 80)
+  return cleanAgentHashPaymentPurpose(value)
 }
 
 function cleanCollectionLabel(value: string) {
@@ -772,11 +764,7 @@ function shouldStartFreshDraftRequest(text: string, existing?: HelperPaylinkDraf
 }
 
 function wantsSavedWallet(text: string) {
-  const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, '')
-  if (/^(yes\s+)?(use|use it|use this|use this one|use that|continue|same|yes|yep|yeah|sure|ok|okay|saved|saved wallet|connected|connected wallet|connected account|my connected wallet|my connected account|circle wallet|circle pocket wallet|my circle wallet|use saved|use connected|use my saved wallet|use my connected wallet|use my connected account|use my circle wallet|use the one saved|continue with my saved wallet|continue with my connected wallet)$/.test(normalized)) {
-    return true
-  }
-  return /\b(use|continue(?:\s+with)?)\s+(?:the\s+)?(?:saved|same|one saved|my saved|connected|my connected|circle(?: pocket)?)(?:\s+(?:wallet|account))?\b/i.test(text)
+  return isSavedWalletChoiceIntent(text)
 }
 
 function wantsNewWallet(text: string) {
@@ -942,8 +930,7 @@ function isAskingUserName(text: string) {
 }
 
 function extractRememberedName(text: string) {
-  const match = text.match(/\b(?:remember\s+)?(?:my name is|my name['’]s|call me)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
-  return usableHelperName(match)
+  return usableHelperName(extractAgentHashRememberedName(text))
 }
 
 function cleanRelationshipName(value: string) {
@@ -2246,8 +2233,7 @@ export function TelegramHelperPanel({
   }
 
   async function saveProfile(extra: Partial<HelperProfile> = {}) {
-    const cleanPayer = (payer || helperName || helperNameDraft || cleanTelegramName).trim()
-    if (!cleanPayer) return
+    const cleanPayer = (payer || helperName || helperNameDraft || cleanTelegramName || extra.displayName || 'anonymous-helper').trim()
     setProfileBusy(true)
     setProfileError('')
     try {
@@ -3593,10 +3579,10 @@ export function TelegramHelperPanel({
           fallbackAnswer,
           nextMemory,
         )
+        await saveProfile({ displayName: cleanName, memorySummary: nextMemory })
         finishHelperMessage(nextQuestion, {
           answer,
         })
-        void saveProfile({ displayName: cleanName, memorySummary: nextMemory })
         return
       }
       const relationshipMemory = extractRelationshipMemory(nextQuestion)
