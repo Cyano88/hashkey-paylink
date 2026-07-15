@@ -1047,6 +1047,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const startsInPaymentMenu = initialProductTarget === 'payment' && !paymentTabParam
   const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
+  const posCreationIdempotencyRef = useRef('')
+  const bankReceiveIdempotencyRef = useRef('')
+  const bankSendIdempotencyRef = useRef('')
   const [localCurrencyProfile, setLocalCurrencyProfile] = useState<LocalCurrencyProfile | null>(null)
   const [localCurrencyProfileDraft, setLocalCurrencyProfileDraft] = useState<LocalCurrencyProfile>({ firstName: '', lastName: '', email: '' })
   const [localCurrencyProfileEditing, setLocalCurrencyProfileEditing] = useState(false)
@@ -2549,11 +2552,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to create POS.')
+      const idempotencyKey = posCreationIdempotencyRef.current || window.crypto.randomUUID()
+      posCreationIdempotencyRef.current = idempotencyKey
       const response = await fetch('/api/ng-pos', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${token}`,
+          'idempotency-key': idempotencyKey,
         },
         body: JSON.stringify({
           action: 'createMerchant',
@@ -2575,6 +2581,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       const data = await response.json()
       if (!response.ok || !data.ok) throw new Error(data.error ?? 'POS setup failed')
       setPosMerchant(data.merchant)
+      posCreationIdempotencyRef.current = ''
       pushPosStepHistory('ready')
     } catch (error) {
       setPosError(error instanceof Error ? error.message : 'POS setup failed')
@@ -2725,11 +2732,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to create bank receive links.')
+      const idempotencyKey = bankReceiveIdempotencyRef.current || window.crypto.randomUUID()
+      bankReceiveIdempotencyRef.current = idempotencyKey
       const response = await fetch('/api/ng-pos', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${token}`,
+          'idempotency-key': idempotencyKey,
         },
         body: JSON.stringify({
           action: 'createBankReceive',
@@ -2757,6 +2767,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       } | undefined
       if (!response.ok || !data?.ok || !data.link?.payment_url) throw new Error(data?.error || 'Could not create bank receive link.')
       const link = data.link.payment_url
+      bankReceiveIdempotencyRef.current = ''
       setGeneratedLink(link)
       setVaultStep('ready')
       const entry: SavedEvent = {
@@ -2781,11 +2792,14 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to create bank-to-USDC links.')
+      const idempotencyKey = bankSendIdempotencyRef.current || window.crypto.randomUUID()
+      bankSendIdempotencyRef.current = idempotencyKey
       const response = await fetch('/api/ng-pos', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${token}`,
+          'idempotency-key': idempotencyKey,
         },
         body: JSON.stringify({
           action: 'createBankSend',
@@ -2811,6 +2825,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       } | undefined
       if (!response.ok || !data?.ok || !data.link?.payment_url) throw new Error(data?.error || 'Could not create bank-to-USDC link.')
       const link = data.link.payment_url
+      bankSendIdempotencyRef.current = ''
       setGeneratedLink(link)
       setVaultStep('ready')
       const entry: SavedEvent = {
@@ -2921,7 +2936,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     const source = String(row.source ?? '').toLowerCase()
     const settlement = String(row.settlementType ?? '').toLowerCase()
     if (source === 'bills' || settlement === 'bill_payment') return 'bills'
-    if (source === 'bank-receive' || source === 'bank_receive' || settlement === 'instant_fiat') return 'bank'
+    if (source === 'bank-receive' || source === 'bank_receive') return 'bank'
+    if (source === 'ngpos' || source === 'pos') return 'pos'
+    if (settlement === 'instant_fiat') return 'bank'
     return 'pos'
   }
   const circlePocketSupportedHistory = circlePocketHistory.filter(row => {

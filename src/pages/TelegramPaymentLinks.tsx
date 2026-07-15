@@ -44,6 +44,22 @@ import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import { PrivyDisconnectButton } from '../lib/PrivyDisconnectButton'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { resolvePrivyCircleLink } from '../lib/privyCircleLink'
+import { isClearAgentHashChatCommand } from '../lib/agentHashChat'
+import { circlePocketAgentHeaders, getCirclePocketBrowserSession } from '../lib/circlePocketAgentIdentity'
+import {
+  extractNairaPaymentAmount,
+  extractPaymentAmount,
+  extractPosSettlementChoice,
+  extractPosTerminalName,
+  inferPaymentCreationLane,
+  isNewPaymentFlowIntent,
+  isOutboundTransferIntent,
+  isPaymentCreationConfirmIntent,
+  isPaymentFlowCancelIntent,
+  isPaymentRequestIntent,
+  isStandalonePaymentPurposeReply,
+  type PaymentCreationLane,
+} from '../lib/agentHashPaymentParser'
 
 const TELEGRAM_BOT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const PUBLIC_PAYLINK_ORIGIN = (import.meta.env.VITE_PUBLIC_PAYLINK_ORIGIN || 'https://hashpaylink.com').replace(/\/+$/, '')
@@ -270,14 +286,41 @@ type HelperPaylinkDraft = {
   solanaWallet: string
   offeredSavedWallet?: boolean
   offeredSavedWalletNetwork?: RequestNetwork | ''
+  awaitingConfirmation?: boolean
+  idempotencyKey?: string
 }
 
-type PaymentCreationLane = 'usdc' | 'bank' | 'pos' | ''
+function sameOriginHelperPath(value: string) {
+  if (typeof window === 'undefined') return ''
+  try {
+    const url = new URL(value, window.location.origin)
+    return url.origin === window.location.origin ? `${url.pathname}${url.search}${url.hash}` : ''
+  } catch {
+    return ''
+  }
+}
 
 type BankPaylinkDraft = {
   target: string
   amountNgn: string
   label: string
+  awaitingConfirmation?: boolean
+  idempotencyKey?: string
+  savedBankLabel?: string
+}
+
+type PosSettlement = 'KEEP_CRYPTO' | 'INSTANT_FIAT' | ''
+type PosNetwork = Exclude<RequestNetwork, 'all'>
+
+type PosTerminalDraft = {
+  displayName: string
+  settlement: PosSettlement
+  network: PosNetwork | ''
+  wallet: string
+  offeredSavedWallet?: boolean
+  awaitingConfirmation?: boolean
+  idempotencyKey?: string
+  destinationLabel?: string
 }
 
 type PolyPortfolioFundingDraft = {
@@ -470,10 +513,7 @@ function telegramOwnerFromContext(searchParams: URLSearchParams, displayName: st
 }
 
 function extractAmount(text: string) {
-  const explicit = text.match(/(?:\$|usdc\s+)(\d+(?:\.\d{1,6})?)|(\d+(?:\.\d{1,6})?)\s*(?:usdc|usd)\b/i)
-  if (explicit) return explicit[1] || explicit[2] || ''
-  const loose = Array.from(text.matchAll(/(^|[^\w.])(\d+(?:\.\d{1,6})?)(?!x|\w)/gi))
-  return loose.find(match => Number(match[2]) > 0)?.[2] ?? ''
+  return extractPaymentAmount(text)
 }
 
 function extractGroupContributionAmount(text: string) {
@@ -676,13 +716,6 @@ function isExplicitDraftCorrection(text: string) {
   return /\b(change|update|edit|correct|set|replace|switch)\s+(?:the\s+)?(?:payer|payer name|purpose|memo|reason|amount|network|chain|wallet|address|receive wallet|receive address)\b|\b(?:payer|purpose|memo|reason|amount|network|chain|wallet|address|receive wallet|receive address)\s*(?:to|is|=|:)\b/i.test(text)
 }
 
-function isPaymentRequestIntent(text: string) {
-  if (/\b(airtime|data bundle|mobile data|electricity|cable|dstv|gotv|utility|utilities|pay (?:my|the|a) bills?)\b/i.test(text)) return false
-  return /\b(request|collect|charge|invoice|bill|raise|paylink|pay link|payment link|request link|checkout link|receive (?:a )?payments?|get paid|ask .*?(?:pay|send)|split|dues|donation|group collection|contribution|fundraiser|fundraising|create .*?(?:link|request)|generate .*?(?:link|request)|send .*?(?:paylink|payment link|request link))\b/i.test(text)
-    || /\b(?:need|want|would like)\s+(?:to\s+)?(?:receive|collect|request)\b/i.test(text)
-    || /\b(?:someone|client|customer|friend|payer|[A-Z][\p{L}\p{M}'-]{1,40})\s+(?:to\s+)?pay\s+(?:me\s+)?\d/i.test(text)
-}
-
 function isDeepResearchIntent(text: string) {
   return /\b(research|analyze|analysis|strategy|investor|pitch|grant|roadmap|architecture|design|compare|plan|proposal|polymarket|lp scout|liquidity|market|x402 architecture|product strategy|look up|find|near me|nearby|restaurant|wuse|abuja)\b/i.test(text)
     || text.trim().length > 220
@@ -753,24 +786,8 @@ function wantsNewWallet(text: string) {
     || /\b(?:new|another|different)\s+(?:receive\s+)?(?:wallet|account|address)\b/i.test(text)
 }
 
-function inferPaymentCreationLane(text: string): PaymentCreationLane {
-  const value = text.trim().toLowerCase()
-  if (/\b(pos|point of sale|contactless|terminal|merchant qr|static qr|in[ -]?store)\b/.test(value)) return 'pos'
-  if (/\b(naira|ngn|₦|receive to bank|bank receive|bank payout|settle(?:ment)? to (?:my |a |the )?bank|payout account|account number)\b/.test(value)) return 'bank'
-  if (/\b(direct usdc|usdc paylink|usdc payment link|crypto paylink|receive usdc|pay (?:me )?in usdc|base usdc|solana usdc)\b/.test(value)) return 'usdc'
-  if (/^(?:direct|direct paylink|direct payment link)[.!?]*$/.test(value)) return 'usdc'
-  if (/^(?:use |create |make |choose |the )?(?:direct )?(?:usdc|wallet)(?: paylink| payment link| link)?[.!?]*$/.test(value)) return 'usdc'
-  if (/^(?:use |create |make |choose |the )?(?:receive to bank|bank|naira)(?: paylink| payment link| link)?[.!?]*$/.test(value)) return 'bank'
-  if (/^(?:use |create |make |choose |the )?(?:pos|contactless|terminal)(?: qr| terminal| link)?[.!?]*$/.test(value)) return 'pos'
-  return ''
-}
-
 function extractNairaAmount(text: string) {
-  const prefix = text.match(/(?:₦|ngn\s*)\s*([\d,]+(?:\.\d{1,2})?)/i)?.[1]
-  const suffix = text.match(/\b([\d,]+(?:\.\d{1,2})?)\s*(?:naira|ngn)\b/i)?.[1]
-  const raw = (prefix || suffix || '').replace(/,/g, '')
-  const amount = Number(raw)
-  return Number.isFinite(amount) && amount > 0 ? String(amount) : ''
+  return extractNairaPaymentAmount(text)
 }
 
 function bankPaylinkMissingFields(draft: BankPaylinkDraft) {
@@ -789,7 +806,7 @@ function buildBankPaylinkDraft(text: string, existing?: BankPaylinkDraft | null)
   if (existing && !existing.label && !extractNairaAmount(text) && !targetFromText && !inferPaymentCreationLane(text)) {
     label = cleanPaymentPurpose(text)
   }
-  return { target, amountNgn, label }
+  return { ...existing, target, amountNgn, label }
 }
 
 function isPaylinkDraftSideQuestion(text: string) {
@@ -925,7 +942,7 @@ function isAskingUserName(text: string) {
 }
 
 function extractRememberedName(text: string) {
-  const match = text.match(/\b(?:remember\s+)?(?:my name is|call me)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
+  const match = text.match(/\b(?:remember\s+)?(?:my name is|my name['’]s|call me)\s+(@?[a-zA-Z][\w .-]{1,40})/i)?.[1] ?? ''
   return usableHelperName(match)
 }
 
@@ -1738,9 +1755,12 @@ export function TelegramHelperPanel({
   fillAvailableHeight?: boolean
   onComposerFocusChange?: (focused: boolean) => void
 }) {
+  const navigate = useNavigate()
+  const browserProfileSession = useMemo(() => getCirclePocketBrowserSession(), [])
   const cleanTelegramName = telegramName === 'there' ? '' : telegramName
   const helperSessionKeyBase = (ownerKey || telegramId || initialPayer || cleanTelegramName || 'local-helper').trim().toLowerCase()
   const helperModeStorageKey = `hashpaylink-helper-active-mode:${helperSessionKeyBase}`
+  const paymentDraftStorageKey = `${helperModeStorageKey}:circle-pocket-payment-draft`
   const storedHelperMode = (() => {
     if (lockedHelperMode) return lockedHelperMode
     if (initialHelperMode) return initialHelperMode
@@ -1754,6 +1774,21 @@ export function TelegramHelperPanel({
     if (storedHelperMode !== 'polydesk') return ''
     const saved = window.localStorage.getItem(`${helperModeStorageKey}:polydesk`)
     return polyDeskSubModes.some(mode => mode.id === saved) ? saved as PolyDeskSubMode : ''
+  })()
+  const storedPaymentConversation = (() => {
+    try {
+      const parsed = JSON.parse(window.sessionStorage.getItem(paymentDraftStorageKey) || 'null') as {
+        paylinkDraft?: HelperPaylinkDraft | null
+        bankPaylinkDraft?: BankPaylinkDraft | null
+        posTerminalDraft?: PosTerminalDraft | null
+        paymentLanePromptPending?: boolean
+        pendingPaymentRequestText?: string
+      } | null
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      window.sessionStorage.removeItem(paymentDraftStorageKey)
+      return null
+    }
   })()
   const [started, setStarted] = useState(true)
   const [helperName, setHelperName] = useState(() => usableHelperName(window.localStorage.getItem('hashpaylink-helper-name') ?? (initialPayer || cleanTelegramName)))
@@ -1775,22 +1810,23 @@ export function TelegramHelperPanel({
   const [thinkingState, setThinkingState] = useState<HelperThinkingState>('light')
   const [askError, setAskError] = useState('')
   const [helperToast, setHelperToast] = useState('')
-  const [clearHistoryPending, setClearHistoryPending] = useState(false)
   const [profile, setProfile] = useState<HelperProfile | null>(null)
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileError, setProfileError] = useState('')
   const [memoryDraft, setMemoryDraft] = useState('')
-  const [paylinkDraft, setPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
+  const [paylinkDraft, setPaylinkDraft] = useState<HelperPaylinkDraft | null>(() => storedPaymentConversation?.paylinkDraft ?? null)
   const [lastPaylinkDraft, setLastPaylinkDraft] = useState<HelperPaylinkDraft | null>(null)
-  const [paymentLanePromptPending, setPaymentLanePromptPending] = useState(false)
-  const [pendingPaymentRequestText, setPendingPaymentRequestText] = useState('')
-  const [bankPaylinkDraft, setBankPaylinkDraft] = useState<BankPaylinkDraft | null>(null)
+  const [paymentLanePromptPending, setPaymentLanePromptPending] = useState(() => Boolean(storedPaymentConversation?.paymentLanePromptPending))
+  const [pendingPaymentRequestText, setPendingPaymentRequestText] = useState(() => String(storedPaymentConversation?.pendingPaymentRequestText ?? '').slice(0, 500))
+  const [bankPaylinkDraft, setBankPaylinkDraft] = useState<BankPaylinkDraft | null>(() => storedPaymentConversation?.bankPaylinkDraft ?? null)
+  const [posTerminalDraft, setPosTerminalDraft] = useState<PosTerminalDraft | null>(() => storedPaymentConversation?.posTerminalDraft ?? null)
   const [polyPortfolioFundingDraft, setPolyPortfolioFundingDraft] = useState<PolyPortfolioFundingDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
   const helperScrollRef = useRef<HTMLDivElement | null>(null)
   const helperAbortRef = useRef<AbortController | null>(null)
   const initialRouteAppliedRef = useRef(Boolean(initialNotice || initialHelperMode || initialPolyDeskSubMode))
   const helperFirstScrollRef = useRef(true)
+  const helperIdentityResetMountedRef = useRef(false)
   const suppressThreadHydrationRef = useRef(false)
   const freshThreadIdsRef = useRef<Set<string>>(new Set())
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
@@ -1798,11 +1834,33 @@ export function TelegramHelperPanel({
   const activeHelperThreadId = `mode:${helperMode || 'general'}${helperMode === 'polydesk' && polyDeskSubMode ? `:${polyDeskSubMode}` : ''}`
   const { ready: helperAuthReady, authenticated: helperAuthenticated, getAccessToken: getHelperAccessToken } = usePrivy()
 
+  async function helperProfileHeaders(includeJson = false) {
+    return circlePocketAgentHeaders({
+      authenticated: helperAuthenticated,
+      getAccessToken: getHelperAccessToken,
+      json: includeJson,
+    })
+  }
+
   useEffect(() => {
     if (lockedHelperMode && helperMode !== lockedHelperMode) {
       setHelperMode(lockedHelperMode)
     }
   }, [helperMode, lockedHelperMode])
+
+  useEffect(() => {
+    if (!paylinkDraft && !bankPaylinkDraft && !posTerminalDraft && !paymentLanePromptPending) {
+      window.sessionStorage.removeItem(paymentDraftStorageKey)
+      return
+    }
+    window.sessionStorage.setItem(paymentDraftStorageKey, JSON.stringify({
+      paylinkDraft,
+      bankPaylinkDraft,
+      posTerminalDraft,
+      paymentLanePromptPending,
+      pendingPaymentRequestText,
+    }))
+  }, [bankPaylinkDraft, paylinkDraft, paymentDraftStorageKey, paymentLanePromptPending, pendingPaymentRequestText, posTerminalDraft])
 
   useEffect(() => {
     if (!polyDeskResetSignal) return
@@ -1908,6 +1966,10 @@ export function TelegramHelperPanel({
   }, [helperMode, polyDeskSubMode, helperModeStorageKey])
 
   useEffect(() => {
+    if (!helperIdentityResetMountedRef.current) {
+      helperIdentityResetMountedRef.current = true
+      return
+    }
     if (initialRouteAppliedRef.current) {
       initialRouteAppliedRef.current = false
       return
@@ -1915,6 +1977,7 @@ export function TelegramHelperPanel({
     setMessages([])
     setPaylinkDraft(null)
     setBankPaylinkDraft(null)
+    setPosTerminalDraft(null)
     setPaymentLanePromptPending(false)
     setPendingPaymentRequestText('')
     setPolyPortfolioFundingDraft(null)
@@ -1924,17 +1987,14 @@ export function TelegramHelperPanel({
   }, [eventId, payer])
 
   useEffect(() => {
-    const lookupPayer = payer.trim()
-    if (!lookupPayer && !ownerKey) return
+    if (!helperAuthReady) return
     let cancelled = false
     setProfileBusy(true)
     setProfileError('')
     const profileParams = new URLSearchParams()
-    if (ownerKey) profileParams.set('owner', ownerKey)
-    if (lookupPayer) profileParams.set('payer', lookupPayer)
-    if (fallbackOwner) profileParams.set('fallbackOwner', fallbackOwner)
     if (helperMode) profileParams.set('threadId', activeHelperThreadId)
-    fetch(`/api/helper-profile?${profileParams.toString()}`)
+    helperProfileHeaders()
+      .then(headers => fetch(`/api/helper-profile?${profileParams.toString()}`, { headers }))
       .then(res => res.json() as Promise<{ ok?: boolean; profile?: HelperProfile | null; error?: string }>)
       .then(data => {
         if (cancelled) return
@@ -1986,7 +2046,7 @@ export function TelegramHelperPanel({
         if (!cancelled) setProfileBusy(false)
       })
     return () => { cancelled = true }
-  }, [payer, ownerKey, fallbackOwner, activeHelperThreadId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeHelperThreadId, helperAuthReady, helperAuthenticated]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function startHelper() {
     setStarted(true)
@@ -2036,12 +2096,10 @@ export function TelegramHelperPanel({
     try {
       await fetch('/api/helper-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await helperProfileHeaders(true),
         body: JSON.stringify({
           action: 'append-thread',
-          owner: ownerKey,
           payer: agentRequestPayer,
-          fallbackOwner,
           mode: helperMode || undefined,
           subMode: polyDeskSubMode || undefined,
           threadId: activeHelperThreadId,
@@ -2102,6 +2160,7 @@ export function TelegramHelperPanel({
     setPolyDeskSubMode('')
     setPaylinkDraft(null)
     setBankPaylinkDraft(null)
+    setPosTerminalDraft(null)
     setPaymentLanePromptPending(false)
     setPendingPaymentRequestText('')
     setPolyPortfolioFundingDraft(null)
@@ -2122,6 +2181,7 @@ export function TelegramHelperPanel({
     setMessages([])
     setPaylinkDraft(null)
     setBankPaylinkDraft(null)
+    setPosTerminalDraft(null)
     setPaymentLanePromptPending(false)
     setPendingPaymentRequestText('')
     setPolyPortfolioFundingDraft(null)
@@ -2138,6 +2198,7 @@ export function TelegramHelperPanel({
       setMessages([])
       setPaylinkDraft(null)
       setBankPaylinkDraft(null)
+      setPosTerminalDraft(null)
       setPaymentLanePromptPending(false)
       setPendingPaymentRequestText('')
       setPolyPortfolioFundingDraft(null)
@@ -2152,6 +2213,7 @@ export function TelegramHelperPanel({
     setMessages([])
     setPaylinkDraft(null)
     setBankPaylinkDraft(null)
+    setPosTerminalDraft(null)
     setPaymentLanePromptPending(false)
     setPendingPaymentRequestText('')
     setPolyPortfolioFundingDraft(null)
@@ -2191,15 +2253,12 @@ export function TelegramHelperPanel({
     try {
       const res = await fetch('/api/helper-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await helperProfileHeaders(true),
         body: JSON.stringify({
           action: 'save',
           payer: cleanPayer,
-          owner: ownerKey || undefined,
-          fallbackOwner: fallbackOwner || undefined,
           displayName: extra.displayName ?? (helperName || helperNameDraft || cleanPayer),
           accessPayer: extra.accessPayer,
-          telegramHandle: cleanTelegramName,
           accessEventId: extra.accessEventId,
           memorySummary: extra.memorySummary ?? memoryDraft,
           question: (extra as { question?: string }).question,
@@ -2231,15 +2290,12 @@ export function TelegramHelperPanel({
     try {
       const res = await fetch('/api/helper-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await helperProfileHeaders(true),
         body: JSON.stringify({
           action: 'checkpoint',
           payer: cleanPayer,
-          owner: ownerKey || undefined,
-          fallbackOwner: fallbackOwner || undefined,
           displayName: helperName || helperNameDraft || cleanPayer,
           accessPayer: profile?.accessPayer,
-          telegramHandle: cleanTelegramName,
           accessEventId: profile?.accessEventId,
           memorySummary: summary,
           preferences: profile?.preferences ?? [],
@@ -2260,7 +2316,7 @@ export function TelegramHelperPanel({
     try {
       const res = await fetch('/api/agent-ask', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await helperProfileHeaders(true),
         signal: helperAbortRef.current?.signal,
         body: JSON.stringify({
           eventId: eventId.trim(),
@@ -2319,9 +2375,18 @@ export function TelegramHelperPanel({
     const extractedTarget = extractTarget(text, mode)
     const targetFromText = payerCorrection || (!existing?.target ? extractedTarget : '')
     const inlineTarget = !targetFromText && existing && !existing.target ? extractInlinePayerName(text, mode) : ''
-    const purposeFromText = mode === 'group'
+    const explicitPurpose = mode === 'group'
       ? extractCollectionLabel(text) || extractPurpose(text)
       : extractPurpose(text)
+    const standalonePurpose = existing && !existing.label && !explicitPurpose
+      && isStandalonePaymentPurposeReply(text)
+      && !extractAmount(text) && !extractNetwork(text) && !extractWallet(text)
+      && !extractPayerCorrection(text) && !isPaymentRequestIntent(text)
+      && !inferPaymentCreationLane(text) && !wantsSavedWallet(text) && !wantsNewWallet(text)
+      && !isPaylinkDraftSideQuestion(text) && !isPaymentCreationConfirmIntent(text)
+      ? cleanPaymentPurpose(text)
+      : ''
+    const purposeFromText = explicitPurpose || standalonePurpose
     const amountFromText = extractAmountCorrection(text) || (mode === 'group' ? extractGroupContributionAmount(text) : '') || extractAmount(text)
     const existingWallet = existing?.wallet || ''
     const keepExistingWallet = Boolean(existingWallet && !walletFromText && (!networkCorrection || walletMatchesNetwork(existingWallet, nextNetwork)))
@@ -2344,6 +2409,7 @@ export function TelegramHelperPanel({
       solanaWallet: nextWallet && !nextWallet.startsWith('0x') ? nextWallet : keepExistingWallet ? existing?.solanaWallet || '' : '',
       offeredSavedWallet: networkCorrection && !keepExistingWallet ? false : savedWalletOfferStillApplies,
       offeredSavedWalletNetwork: savedWalletOfferStillApplies ? existing?.offeredSavedWalletNetwork : '',
+      awaitingConfirmation: false,
     }
   }
 
@@ -2378,8 +2444,11 @@ export function TelegramHelperPanel({
     }
     const res = await fetch('/api/telegram-request', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      headers: {
+        ...await helperProfileHeaders(true),
+        'Idempotency-Key': draft.idempotencyKey || window.crypto.randomUUID(),
+      },
+      body: JSON.stringify({ ...request, idempotencyKey: draft.idempotencyKey }),
     })
     let data: { ok?: boolean; request?: SavedRequest; error?: string }
     try {
@@ -2406,12 +2475,262 @@ export function TelegramHelperPanel({
     return saved
   }
 
+  async function savedBankReceiveProfile() {
+    if (!helperAuthenticated) return null
+    const res = await fetch('/api/ng-pos', {
+      method: 'POST',
+      headers: await helperProfileHeaders(true),
+      body: JSON.stringify({ action: 'savedBankReceiveProfile' }),
+    })
+    const data = await res.json().catch(() => undefined) as {
+      ok?: boolean
+      error?: string
+      profile?: { bank_name?: string; bank_last4?: string; bank_account_name?: string }
+    } | undefined
+    if (res.status === 404) return null
+    if (!res.ok || !data?.ok || !data.profile) throw new Error(data?.error || 'Could not check your saved bank account.')
+    return data.profile
+  }
+
+  async function createBankReceiveFromDraft(draft: BankPaylinkDraft) {
+    const idempotencyKey = draft.idempotencyKey || window.crypto.randomUUID()
+    const res = await fetch('/api/ng-pos', {
+      method: 'POST',
+      headers: {
+        ...await helperProfileHeaders(true),
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        action: 'createBankReceive',
+        display_name: draft.label,
+        amount: draft.amountNgn,
+        flexible_amount: false,
+        use_saved_bank: true,
+        client_origin: window.location.origin,
+      }),
+    })
+    const data = await res.json().catch(() => undefined) as {
+      ok?: boolean
+      error?: string
+      link?: { payment_url?: string; dashboard_url?: string }
+    } | undefined
+    if (!res.ok || !data?.ok || !data.link?.payment_url) {
+      throw new Error(data?.error || 'Could not create the Receive to Bank PayLink.')
+    }
+    return data.link
+  }
+
+  function posTerminalNameFromText(text: string, existing?: PosTerminalDraft | null) {
+    return extractPosTerminalName(text, existing?.displayName || '')
+  }
+
+  function buildPosTerminalDraft(text: string, existing?: PosTerminalDraft | null): PosTerminalDraft {
+    const settlement = extractPosSettlementChoice(text) || existing?.settlement || ''
+    const extractedNetwork = extractNetwork(text)
+    const network = settlement === 'INSTANT_FIAT'
+      ? 'base'
+      : extractedNetwork && extractedNetwork !== 'all'
+        ? extractedNetwork
+        : existing?.network || ''
+    const pastedWallet = extractWallet(text)
+    const keepWallet = Boolean(existing?.wallet && (!network || walletMatchesNetwork(existing.wallet, network)))
+    return {
+      displayName: posTerminalNameFromText(text, existing),
+      settlement,
+      network,
+      wallet: pastedWallet || (keepWallet ? existing?.wallet || '' : ''),
+      offeredSavedWallet: existing?.offeredSavedWallet,
+      awaitingConfirmation: false,
+      idempotencyKey: existing?.idempotencyKey,
+      destinationLabel: existing?.destinationLabel,
+    }
+  }
+
+  async function createPosTerminalFromDraft(draft: PosTerminalDraft) {
+    const idempotencyKey = draft.idempotencyKey || window.crypto.randomUUID()
+    const res = await fetch('/api/ng-pos', {
+      method: 'POST',
+      headers: {
+        ...await helperProfileHeaders(true),
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        action: 'createMerchant',
+        display_name: draft.displayName,
+        payout_preference: draft.settlement,
+        supported_networks: [draft.network || 'base'],
+        circle_smart_wallet_address: draft.network === 'solana' ? '' : draft.wallet,
+        solana_wallet_address: draft.network === 'solana' ? draft.wallet : '',
+        use_saved_bank: draft.settlement === 'INSTANT_FIAT',
+      }),
+    })
+    const data = await res.json().catch(() => undefined) as {
+      ok?: boolean
+      error?: string
+      merchant?: { merchant_id?: string }
+    } | undefined
+    if (!res.ok || !data?.ok || !data.merchant?.merchant_id) {
+      throw new Error(data?.error || 'Could not create the POS terminal.')
+    }
+    return {
+      merchantId: data.merchant.merchant_id,
+      terminalUrl: `/pos/ng?merchant_id=${encodeURIComponent(data.merchant.merchant_id)}&manage=1`,
+    }
+  }
+
   async function handlePaylinkConversation(nextQuestion: string) {
-    const requestedLane = inferPaymentCreationLane(nextQuestion)
+    const posSettlementReply = posTerminalDraft ? extractPosSettlementChoice(nextQuestion) : ''
+    const requestedLane = posTerminalDraft && posSettlementReply && !/\bpaylink|payment link|receive to bank\b/i.test(nextQuestion)
+      ? 'pos'
+      : inferPaymentCreationLane(nextQuestion)
+    const hasOpenPaymentFlow = Boolean(paylinkDraft || bankPaylinkDraft || posTerminalDraft || paymentLanePromptPending)
+    if (hasOpenPaymentFlow && (isPaymentFlowCancelIntent(nextQuestion) || isNewPaymentFlowIntent(nextQuestion))) {
+      setPaylinkDraft(null)
+      setBankPaylinkDraft(null)
+      setPosTerminalDraft(null)
+      setPaymentLanePromptPending(false)
+      setPendingPaymentRequestText('')
+      finishHelperMessage(nextQuestion, {
+        answer: isNewPaymentFlowIntent(nextQuestion) || /start over|restart|reset/i.test(nextQuestion)
+          ? 'Draft cleared. Which should I create next: a direct USDC PayLink, a Receive to Bank PayLink, or a POS contactless terminal?'
+          : 'Payment draft cancelled.',
+      })
+      return true
+    }
+    if (!hasOpenPaymentFlow && isOutboundTransferIntent(nextQuestion)) {
+      finishHelperMessage(nextQuestion, {
+        answer: 'Are you trying to send money from your wallet, or request that person to pay you? I will not create a receive PayLink until you confirm.',
+        actionLink: { label: 'Open Circle Pocket', url: '/?product=circle-pocket' },
+      })
+      return true
+    }
+    if (!hasOpenPaymentFlow && !requestedLane && !isPaymentRequestIntent(nextQuestion)) return false
     const paymentContextText = paymentLanePromptPending && pendingPaymentRequestText
       ? `${pendingPaymentRequestText} ${nextQuestion}`
       : nextQuestion
-    if (bankPaylinkDraft || requestedLane === 'bank') {
+
+    if ((posTerminalDraft && requestedLane !== 'usdc' && requestedLane !== 'bank') || requestedLane === 'pos') {
+      setPaymentLanePromptPending(false)
+      setPendingPaymentRequestText('')
+      setPaylinkDraft(null)
+      setBankPaylinkDraft(null)
+      const confirmingDraft = Boolean(posTerminalDraft?.awaitingConfirmation && isPaymentCreationConfirmIntent(nextQuestion))
+      let draft = buildPosTerminalDraft(paymentContextText, posTerminalDraft)
+      if (!draft.displayName) {
+        setPosTerminalDraft(draft)
+        finishHelperMessage(nextQuestion, { answer: 'POS selected. What should this terminal or store be called?' })
+        return true
+      }
+      if (!draft.settlement) {
+        setPosTerminalDraft(draft)
+        finishHelperMessage(nextQuestion, { answer: `How should ${draft.displayName} settle: keep USDC in a wallet, or receive Naira in your verified bank account?` })
+        return true
+      }
+      if (!helperAuthenticated) {
+        setPosTerminalDraft(draft)
+        finishHelperMessage(nextQuestion, {
+          answer: 'Sign in first so I can securely use your connected wallet or verified bank details.',
+          actionLink: { label: 'Open POS', url: '/?product=payment&tab=pos' },
+        })
+        return true
+      }
+      if (draft.settlement === 'INSTANT_FIAT') {
+        let savedBank
+        try {
+          savedBank = await savedBankReceiveProfile()
+        } catch (error) {
+          setPosTerminalDraft(draft)
+          finishHelperMessage(nextQuestion, { answer: error instanceof Error ? error.message : 'Could not check your saved bank account.' })
+          return true
+        }
+        if (!savedBank) {
+          setPosTerminalDraft(draft)
+          finishHelperMessage(nextQuestion, {
+            answer: 'No verified bank account is saved yet. Verify one first, then return to finish this terminal.',
+            actionLink: { label: 'Verify bank account', url: '/?product=payment&tab=bank' },
+          })
+          return true
+        }
+        draft = {
+          ...draft,
+          network: 'base',
+          wallet: '',
+          destinationLabel: `${savedBank.bank_name || 'Verified bank'}${savedBank.bank_last4 ? ` ending ${savedBank.bank_last4}` : ''}`,
+        }
+      } else {
+        if (!draft.network) {
+          setPosTerminalDraft(draft)
+          finishHelperMessage(nextQuestion, { answer: 'Which USDC network should this terminal accept: Base, Arbitrum, Arc, or Solana?' })
+          return true
+        }
+        const posNetwork = draft.network
+        if (!draft.wallet) {
+          const savedWallet = preferredWalletFor(posNetwork) || await linkedCircleReceiveWallet(posNetwork)
+          if (savedWallet && wantsSavedWallet(nextQuestion)) {
+            draft = { ...draft, wallet: savedWallet, offeredSavedWallet: true, destinationLabel: shortAddress(savedWallet) }
+          } else if (savedWallet && !draft.offeredSavedWallet && !wantsNewWallet(nextQuestion)) {
+            setPosTerminalDraft({ ...draft, offeredSavedWallet: true, destinationLabel: shortAddress(savedWallet) })
+            finishHelperMessage(nextQuestion, {
+              answer: `Use your connected ${requestNetworkLabels[posNetwork]} wallet ${shortAddress(savedWallet)}, or use another wallet?`,
+            })
+            return true
+          } else {
+            setPosTerminalDraft({ ...draft, offeredSavedWallet: true })
+            finishHelperMessage(nextQuestion, { answer: `Paste the ${requestNetworkLabels[posNetwork]} wallet that should receive this terminal's USDC.` })
+            return true
+          }
+        }
+        if (!walletMatchesNetwork(draft.wallet, posNetwork)) {
+          setPosTerminalDraft({ ...draft, wallet: '' })
+          finishHelperMessage(nextQuestion, { answer: `That wallet does not match ${requestNetworkLabels[posNetwork]}. Paste a compatible address or choose another network.` })
+          return true
+        }
+        draft = { ...draft, destinationLabel: shortAddress(draft.wallet) }
+      }
+
+      if (confirmingDraft) {
+        setThinkingState('paylink-build')
+        setAgentStatus('Creating POS terminal...')
+        try {
+          const terminal = await createPosTerminalFromDraft(draft)
+          setPosTerminalDraft(null)
+          finishHelperMessage(nextQuestion, {
+            answer: `${draft.displayName} is ready. It accepts ${requestNetworkLabels[draft.network || 'base']} USDC and settles to ${draft.destinationLabel}.`,
+            actionLink: { label: 'Open POS Terminal', url: terminal.terminalUrl },
+          })
+        } catch (error) {
+          setPosTerminalDraft(draft)
+          finishHelperMessage(nextQuestion, {
+            answer: error instanceof Error ? error.message : 'Could not create the POS terminal.',
+            actionLink: { label: 'Review POS setup', url: '/?product=payment&tab=pos' },
+          })
+        }
+        return true
+      }
+
+      const reviewDraft: PosTerminalDraft = {
+        ...draft,
+        awaitingConfirmation: true,
+        idempotencyKey: window.crypto.randomUUID(),
+      }
+      setPosTerminalDraft(reviewDraft)
+      finishHelperMessage(nextQuestion, {
+        answer: `Ready to create ${draft.displayName}: ${draft.settlement === 'INSTANT_FIAT' ? 'Naira bank settlement' : 'USDC wallet settlement'} on ${requestNetworkLabels[draft.network || 'base']}, to ${draft.destinationLabel}. This is a reusable contactless terminal; the amount is entered at checkout. Reply “confirm” to create it, or tell me what to change.`,
+      })
+      return true
+    }
+
+    if (requestedLane === 'usdc') {
+      if (bankPaylinkDraft) setBankPaylinkDraft(null)
+      if (posTerminalDraft) setPosTerminalDraft(null)
+    }
+
+    if ((bankPaylinkDraft && requestedLane !== 'usdc') || requestedLane === 'bank') {
+      if (requestedLane === 'bank') {
+        setPaylinkDraft(null)
+        setPosTerminalDraft(null)
+      }
+      const confirmingDraft = Boolean(bankPaylinkDraft?.awaitingConfirmation && isPaymentCreationConfirmIntent(nextQuestion))
       const draft = buildBankPaylinkDraft(paymentContextText, bankPaylinkDraft)
       const missing = bankPaylinkMissingFields(draft)
       setPaymentLanePromptPending(false)
@@ -2424,22 +2743,64 @@ export function TelegramHelperPanel({
         })
         return true
       }
-      const params = new URLSearchParams({ product: 'payment', tab: 'bank', amount: draft.amountNgn, memo: draft.label })
-      setBankPaylinkDraft(null)
-      finishHelperMessage(nextQuestion, {
-        answer: `Receive to Bank is ready for ${friendlyName(draft.target)}: NGN ${Number(draft.amountNgn).toLocaleString('en-NG')} for ${draft.label}. Continue to confirm your signed-in payout account and create the PayLink.`,
-        actionLink: { label: 'Continue Receive to Bank', url: `/?${params.toString()}` },
-      })
-      return true
-    }
 
-    if (requestedLane === 'pos') {
-      setPaymentLanePromptPending(false)
-      setPendingPaymentRequestText('')
-      setBankPaylinkDraft(null)
+      if (!helperAuthenticated) {
+        setBankPaylinkDraft({ ...draft, awaitingConfirmation: false })
+        finishHelperMessage(nextQuestion, {
+          answer: 'Sign in first so I can use your verified bank account without asking you to share bank details in chat.',
+          actionLink: { label: 'Open Receive to Bank', url: '/?product=payment&tab=bank' },
+        })
+        return true
+      }
+
+      if (confirmingDraft) {
+        setThinkingState('paylink-build')
+        setAgentStatus('Creating Receive to Bank PayLink...')
+        try {
+          const link = await createBankReceiveFromDraft(draft)
+          setBankPaylinkDraft(null)
+          finishHelperMessage(nextQuestion, {
+            answer: `Receive to Bank PayLink created for ${friendlyName(draft.target)}: NGN ${Number(draft.amountNgn).toLocaleString('en-NG')} for ${draft.label}.`,
+            actionLink: { label: 'Open PayLink', url: link.payment_url! },
+          })
+        } catch (error) {
+          setBankPaylinkDraft(draft)
+          finishHelperMessage(nextQuestion, {
+            answer: error instanceof Error ? error.message : 'Could not create the Receive to Bank PayLink.',
+            actionLink: { label: 'Review bank setup', url: '/?product=payment&tab=bank' },
+          })
+        }
+        return true
+      }
+
+      let savedBank
+      try {
+        savedBank = await savedBankReceiveProfile()
+      } catch (error) {
+        setBankPaylinkDraft({ ...draft, awaitingConfirmation: false })
+        finishHelperMessage(nextQuestion, {
+          answer: error instanceof Error ? error.message : 'Could not check your saved bank account.',
+        })
+        return true
+      }
+      if (!savedBank) {
+        setBankPaylinkDraft({ ...draft, awaitingConfirmation: false })
+        finishHelperMessage(nextQuestion, {
+          answer: 'No verified bank account is saved yet. Verify one in Receive to Bank, then return and confirm this request.',
+          actionLink: { label: 'Verify bank account', url: '/?product=payment&tab=bank' },
+        })
+        return true
+      }
+      const bankLabel = `${savedBank.bank_name || 'Verified bank'}${savedBank.bank_last4 ? ` ending ${savedBank.bank_last4}` : ''}`
+      const reviewDraft: BankPaylinkDraft = {
+        ...draft,
+        awaitingConfirmation: true,
+        idempotencyKey: window.crypto.randomUUID(),
+        savedBankLabel: bankLabel,
+      }
+      setBankPaylinkDraft(reviewDraft)
       finishHelperMessage(nextQuestion, {
-        answer: 'POS contactless terminal selected. Continue to name the terminal, choose USDC or bank settlement, and confirm the receiving account.',
-        actionLink: { label: 'Create POS Terminal', url: '/?product=payment&tab=pos' },
+        answer: `Ready to create a Receive to Bank PayLink for ${friendlyName(draft.target)}: NGN ${Number(draft.amountNgn).toLocaleString('en-NG')} for ${draft.label}, settling to ${bankLabel}. Reply “confirm” to create it, or tell me what to change.`,
       })
       return true
     }
@@ -2492,7 +2853,10 @@ export function TelegramHelperPanel({
     const activeDraft = shouldStartFreshDraftRequest(nextQuestion, paylinkDraft) || shouldStartFreshPersonDraft(nextQuestion, paylinkDraft) || shouldStartFreshGroupDraft(nextQuestion, paylinkDraft)
       ? null
       : paylinkDraft ?? revisionBase
-    let draft = buildDraftFromText(paymentContextText, activeDraft)
+    const confirmingDraft = Boolean(activeDraft?.awaitingConfirmation && isPaymentCreationConfirmIntent(nextQuestion))
+    let draft = confirmingDraft && activeDraft
+      ? { ...activeDraft, awaitingConfirmation: false }
+      : buildDraftFromText(paymentContextText, activeDraft)
     const profileWallet = preferredWalletFor(draft.network)
     const linkedWallet = !draft.wallet && !profileWallet
       ? await linkedCircleReceiveWallet(draft.network)
@@ -2671,6 +3035,17 @@ export function TelegramHelperPanel({
       )
       finishHelperMessage(nextQuestion, {
         answer,
+      })
+      return true
+    }
+
+    if (!confirmingDraft) {
+      const reviewDraft = { ...draft, awaitingConfirmation: true, idempotencyKey: draft.idempotencyKey || window.crypto.randomUUID() }
+      setThinkingState('payment-draft')
+      setPaylinkDraft(reviewDraft)
+      const target = draft.mode === 'group' ? draft.target || 'Group collection' : friendlyName(draft.target)
+      finishHelperMessage(nextQuestion, {
+        answer: `Ready to create: ${draft.amount} USDC from ${target} on ${requestNetworkLabels[draft.network || 'base']} for ${draft.label}. Reply “confirm” to create it, or tell me what to change.`,
       })
       return true
     }
@@ -3106,33 +3481,20 @@ export function TelegramHelperPanel({
     return true
   }
 
-  function isClearHistoryRequest(value: string) {
-    return /^(clear|clean|delete|wipe|reset)\s+(this\s+)?(chat|conversation|history|chat history)\b/i.test(value.trim())
-  }
-
-  function isClearHistoryConfirm(value: string) {
-    return /^(clear|yes|confirm|do it|delete)$/i.test(value.trim())
-  }
-
-  function isClearHistoryCancel(value: string) {
-    return /^(cancel|no|stop|never mind|nevermind)$/i.test(value.trim())
-  }
-
   async function clearCurrentHelperThread() {
     try {
-      await fetch('/api/helper-profile', {
+      const response = await fetch('/api/helper-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await helperProfileHeaders(true),
         body: JSON.stringify({
           action: 'clear-thread',
-          owner: ownerKey,
           payer: agentRequestPayer,
-          fallbackOwner,
           threadId: activeHelperThreadId,
         }),
       })
+      return response.ok
     } catch {
-      // Local clear should still work if persistence is temporarily unavailable.
+      return false
     }
   }
 
@@ -3150,29 +3512,18 @@ export function TelegramHelperPanel({
     setQuestion('')
     setAskError('')
 
-    if (clearHistoryPending) {
-      setClearHistoryPending(false)
-      if (isClearHistoryCancel(nextQuestion)) {
-        setMessages(prev => [...prev, { question: nextQuestion, answer: 'No problem. I kept this chat history.' }])
-        return
-      }
-      if (isClearHistoryConfirm(nextQuestion)) {
-        await clearCurrentHelperThread()
-        setMessages([{ answer: 'Chat history cleared. I kept your saved profile, wallet preferences, and memory.' }])
-        return
-      }
-      setMessages(prev => [...prev, {
-        question: nextQuestion,
-        answer: 'I kept this chat history. Type "clear history" again if you want to clear the visible chat.',
-      }])
-      return
-    }
-
-    if (isClearHistoryRequest(nextQuestion)) {
-      setClearHistoryPending(true)
-      setMessages(prev => [...prev, {
-        question: nextQuestion,
-        answer: 'Clear this chat history? Type "clear" to confirm or "cancel" to keep it. I will keep your saved profile, wallet preferences, and memory.',
+    if (isClearAgentHashChatCommand(nextQuestion)) {
+      const clearedRemotely = await clearCurrentHelperThread()
+      setPaylinkDraft(null)
+      setLastPaylinkDraft(null)
+      setBankPaylinkDraft(null)
+      setPosTerminalDraft(null)
+      setPaymentLanePromptPending(false)
+      setPendingPaymentRequestText('')
+      setMessages([{
+        answer: clearedRemotely
+          ? 'Chat cleared. Your saved profile, wallet preferences, and memory are still here.'
+          : 'Chat cleared on this device, but I could not sync the deletion. Try “clear chat” again when you are online.',
       }])
       return
     }
@@ -3183,7 +3534,7 @@ export function TelegramHelperPanel({
     helperAbortRef.current = abortController
     queueHelperMessage(nextQuestion)
     try {
-      const isPaylinkFlow = helperMode === 'circle-pocket' && Boolean(paylinkDraft || bankPaylinkDraft || paymentLanePromptPending || isPaymentRequestIntent(nextQuestion) || inferPaymentCreationLane(nextQuestion))
+      const isPaylinkFlow = helperMode === 'circle-pocket' && Boolean(paylinkDraft || bankPaylinkDraft || posTerminalDraft || paymentLanePromptPending || isPaymentRequestIntent(nextQuestion) || inferPaymentCreationLane(nextQuestion))
       const isDeepResearch = helperMode === 'polydesk' || isDeepResearchIntent(nextQuestion)
       setThinkingState(isPaylinkFlow ? 'payment-draft' : isDeepResearch ? 'deep-research' : 'light')
       setAgentStatus(isPaylinkFlow
@@ -3322,7 +3673,7 @@ export function TelegramHelperPanel({
       setAgentStatus(isDeepResearch ? 'Running deeper research... this might take a little time.' : 'Asking ZeroScout...')
       const res = await fetch('/api/agent-ask', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await helperProfileHeaders(true),
         signal: abortController.signal,
         body: JSON.stringify({
           eventId: eventId.trim(),
@@ -3504,11 +3855,18 @@ export function TelegramHelperPanel({
                                   <span key={`${link.label}-${link.url}`} className="inline-flex items-center gap-1.5">
                                     <a
                                       href={link.url}
-                                      target="_blank"
-                                      rel="noreferrer"
+                                      target={!sameOriginHelperPath(link.url) && /^https?:\/\//i.test(link.url) ? '_blank' : undefined}
+                                      rel={!sameOriginHelperPath(link.url) && /^https?:\/\//i.test(link.url) ? 'noreferrer' : undefined}
+                                      onClick={event => {
+                                        const internalPath = sameOriginHelperPath(link.url)
+                                        if (internalPath) {
+                                          event.preventDefault()
+                                          navigate(internalPath)
+                                        }
+                                      }}
                                       className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-800 transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-100 dark:hover:bg-white/[0.12]"
                                     >
-                                      <ExternalLink className="h-3 w-3" />
+                                      {sameOriginHelperPath(link.url) ? <ArrowRight className="h-3 w-3" /> : <ExternalLink className="h-3 w-3" />}
                                       {link.label}
                                     </a>
                                     <button
@@ -6189,7 +6547,10 @@ function SavedRequestCard({
 
       const res = await fetch('/api/telegram-request', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          ...await circlePocketAgentHeaders({ json: true }),
+          'Idempotency-Key': window.crypto.randomUUID(),
+        },
         body: JSON.stringify(request),
       })
       const data = await res.json() as { ok?: boolean; botPayload?: string; error?: string }
@@ -7553,6 +7914,7 @@ export function PolyPortfolioPanel({
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${token}`,
+          'idempotency-key': `polydesk-bank-send-${requestId}`,
         },
         body: JSON.stringify({
           action: 'createBankSend',

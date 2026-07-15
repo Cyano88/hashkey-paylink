@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { ChevronDown, LogOut, X, Send, ExternalLink, Sun, Moon, History, Wallet, Radio, Coins, Landmark, Store, Phone, Wifi, Tv, Lightbulb, Banknote } from 'lucide-react'
+import { ChevronDown, LogOut, X, Sun, Moon, History, Wallet, Radio, Coins, Landmark, Store, Phone, Wifi, Tv, Lightbulb, Banknote } from 'lucide-react'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
 import { CHAIN_META } from './lib/chains'
@@ -11,9 +11,9 @@ import { getPaylinkParam, hasPaylinkFlag } from './lib/paylinkParams'
 import { PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyConnectButton } from './lib/PrivyConnectButton'
 import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
+import { TelegramHelperPanel } from './pages/TelegramPaymentLinks'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
-const TX_HASH_RE = /^0x[0-9a-fA-F]{1,64}$/
 const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
 const SOLANA_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 const TELEGRAM_CHAT_URL = (() => {
@@ -22,39 +22,7 @@ const TELEGRAM_CHAT_URL = (() => {
 })()
 const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
 
-function detectInput(raw: string): 'tx_hash' | 'evm_addr' | 'unknown' {
-  const v = raw.trim()
-  if (EVM_ADDR_RE.test(v)) return 'evm_addr'
-  if (TX_HASH_RE.test(v))  return 'tx_hash'
-  return 'unknown'
-}
-
-// ─── Chat types ───────────────────────────────────────────────────────────────
-type ChatMsg = {
-  from: 'bot' | 'user'
-  text: string
-  link?: { label: string; href: string }
-}
-
 type AgentHashMode = 'support' | 'circle-pocket'
-
-const AGENT_HASH_WELCOME: Record<AgentHashMode, ChatMsg> = {
-  support: {
-    from: 'bot',
-    text: "Support mode is ready. Tell me what is stuck, confusing, or not working, and I'll help you fix it step by step.",
-  },
-  'circle-pocket': {
-    from: 'bot',
-    text: 'Circle Pocket is ready. I can help with smart wallets, receiving USDC, bank payout, Retail POS, bills, x402 funding, and receipts.',
-  },
-}
-
-const agentHashThinkingCopy: Record<AgentHashMode, string[]> = {
-  support: ['Reading this...', 'Checking context...', 'Preparing reply...', 'Putting things in order...'],
-  'circle-pocket': ['Checking Circle Pocket...', 'Matching the right flow...', 'Validating details...', 'Preparing reply...'],
-}
-
-const agentHashSlowThinkingCopy = ['Putting things in order...', 'Almost ready...', 'Please be patient...']
 
 function AgentHashCssIcon({ header = false, staticPose = false }: { header?: boolean; staticPose?: boolean }) {
   return (
@@ -101,167 +69,6 @@ function PolymarketMark({ className }: { className?: string }) {
       />
     </svg>
   )
-}
-
-function AgentHashThinkingIndicator({ mode }: { mode: AgentHashMode }) {
-  const [stepIndex, setStepIndex] = useState(0)
-  const [slowPhase, setSlowPhase] = useState(-1)
-  const steps = agentHashThinkingCopy[mode]
-
-  useEffect(() => {
-    setSlowPhase(-1)
-    setStepIndex(Math.floor(Math.random() * steps.length))
-    const slowTimers = [6500, 10500, 15000].map((delay, index) => (
-      window.setTimeout(() => setSlowPhase(index), delay)
-    ))
-    const timer = window.setInterval(() => {
-      setStepIndex(index => (index + 1) % steps.length)
-    }, 900)
-    return () => {
-      slowTimers.forEach(window.clearTimeout)
-      window.clearInterval(timer)
-    }
-  }, [mode, steps.length])
-
-  return (
-    <div className="max-w-[82%]">
-      <div className="inline-flex items-center rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm shadow-sm dark:bg-white/[0.08]">
-        <span className="inline-flex h-4 items-center gap-1">
-          {[0, 1, 2].map(index => (
-            <span
-              key={index}
-              className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 dark:bg-gray-500"
-              style={{ animationDelay: `${index * 120}ms` }}
-            />
-          ))}
-        </span>
-      </div>
-      <p className="ml-3 mt-1 text-[11px] italic text-gray-400">
-        {slowPhase >= 0 ? agentHashSlowThinkingCopy[slowPhase] : steps[stepIndex]}
-      </p>
-    </div>
-  )
-}
-
-const WELCOME: ChatMsg = {
-  from: 'bot',
-  text: 'Hello! I am the Hash PayLink support assistant.\n\nI can help you create payment links, understand how to pay, track transactions, explain fees, and answer questions about Base, Arc, Arbitrum, and Solana.\n\nPaste a transaction hash to track it instantly, or describe what you need help with.',
-}
-
-const CONTACT_MSG: ChatMsg = {
-  from: 'bot',
-  text: 'For issues beyond my scope, the Hash PayLink team is available via:\n\n• Email: support@hashpaylink.com\n• X (Twitter): @Hash_PayLink\n\nPlease note — only reach out through those official channels. Hash PayLink will never DM you first or ask for your private key or seed phrase. Any unsolicited message offering help or asking for wallet access is a phishing attempt.',
-}
-
-function keywordReply(input: string): ChatMsg | null {
-  const low = input.toLowerCase()
-  const has = (...words: string[]) => words.some(w => low.includes(w))
-
-  // ── Phishing / scam (safety — always first) ──────────────────────────────────
-  if (has('phish', 'scam', 'fake', 'suspicious', 'seed phrase', 'private key', 'mnemonic', 'fraud', 'hack', 'stolen', 'impostor'))
-    return { from: 'bot', text: 'Warning: Hash PayLink will NEVER ask for your private key, seed phrase, or wallet password. We will never DM you first on any platform. Only interact with links from hashpaylink.com. If you receive a suspicious message claiming to be from Hash PayLink, ignore it and report it to support@hashpaylink.com. Stay safe.' }
-
-  // ── Multi-payer / event / collection / dashboard ─────────────────────────────
-  if (has('multi', 'multi-payer', 'collection', 'collect', 'event', 'group payment', 'organis', 'organiz', 'dashboard', 'attendee', 'fundrais', 'contributor', 'many payers', 'multiple payers', 'multiple people', 'many people', 'group order', 'split'))
-    return { from: 'bot', text: 'Multi-Payer Collection mode lets you collect payments from many people with a single link — ideal for events, group orders, or fundraises.\n\nHow it works:\n1. Enable "Multi-Payer Collection" when creating your link.\n2. Share the link or QR code with participants.\n3. Each payer enters their name or handle before paying — this is logged automatically.\n4. The organizer dashboard shows every payment in real time: name, amount, chain, and timestamp.\n5. Export the full payment list as CSV anytime.\n\nThe dashboard auto-refreshes every 5 seconds. Payments across Base, Arc, Arbitrum, and Solana all appear in one unified view.' }
-
-  // ── Flexible amount ──────────────────────────────────────────────────────────
-  if (has('flex', 'flexible', 'any amount', 'payer choose', 'custom amount', 'tip', 'tips', 'pay what', 'open amount', 'variable'))
-    return { from: 'bot', text: 'Flexible Amount lets the payer enter any amount they choose rather than a fixed figure. On the payment page they type in the amount before paying. Useful for tips, donations, or pay-what-you-want scenarios. Enable it during link creation by toggling "Flexible Amount".' }
-
-  // ── Send via Address / Direct Send ──────────────────────────────────────────
-  if (has('send via', 'send via address', 'direct send', 'no wallet', 'without wallet', 'without connecting', 'cex', 'cold wallet', 'vault address', 'copy address', 'binance', 'coinbase send', 'bybit', 'kraken', 'from exchange', 'from cex'))
-    return { from: 'bot', text: '"Send via Address" lets you pay from anywhere — Binance, Coinbase, a hardware wallet, or any other source — without connecting a browser extension. You simply copy the unique vault address shown on the payment page and send the exact amount to it. The payment is detected on-chain automatically and settled within seconds. No wallet connection, no approvals needed.' }
-
-  // ── How to pay ───────────────────────────────────────────────────────────────
-  if (has('how to pay', 'paying', 'make a payment', 'i want to pay', 'send payment', 'as a payer', 'payer', 'buyer') || (has('how') && has('pay')))
-    return { from: 'bot', text: 'To pay via a Hash PayLink:\n1. Open the payment link shared with you.\n2. Choose "Send via Address" (recommended — works from any exchange or cold wallet without connecting anything), or "Connect Wallet" for browser wallet signing.\n3. Send via Address: copy the vault address shown and send the exact amount. Detected automatically within seconds.\n4. Connect Wallet: approve the transaction in your wallet. Gas is sponsored on Base and Arc.\n\nA success screen with your transaction hash confirms delivery.' }
-
-  // ── Creating a link ──────────────────────────────────────────────────────────
-  if (has('create', 'generate', 'make', 'build', 'new link', 'payment link', 'share link', 'set up', 'setup', 'get started', 'merchant', 'seller', 'receive payment', 'start accepting'))
-    return { from: 'bot', text: 'To create a payment link:\n1. Go to the home page and connect your wallet.\n2. Enter the amount (or enable Flexible Amount so the payer chooses).\n3. Select your network — Base, Arc, Arbitrum, or Solana.\n4. Optionally enable Multi-Payer Collection or add a memo.\n5. Click Generate Link — share the URL or QR code.\n\nYour wallet address is embedded in the link. No account or KYC required.' }
-
-  // ── FX / local currency ──────────────────────────────────────────────────────
-  if (has('naira', 'ngn', 'ghana', 'ghs', 'kenya', 'kes', 'singapore', 'sgd', 'fx', 'local currency', 'exchange rate', 'fixer', 'black market rate', 'street rate', 'local price', 'currency display', 'local equivalent'))
-    return { from: 'bot', text: 'Hash PayLink supports local currency display for Multi-Payer Collection links. Organisers can enable FX display for NGN (Nigerian Naira), GHS (Ghanaian Cedi), KES (Kenyan Shilling), or SGD (Singapore Dollar). Payers see the equivalent in their local currency and can type in either local currency or USDC — the platform always settles in USDC. Rates are live from Fixer.io or a custom/street rate set by the organiser.' }
-
-  // ── QR code ──────────────────────────────────────────────────────────────────
-  if (has('qr', 'qr code', 'barcode', 'print', 'download qr', 'scan qr'))
-    return { from: 'bot', text: 'Every payment link includes a downloadable QR code on the link generation screen. Payers scan it with any camera app to open the payment page directly. High-resolution QR codes are available for print materials. The QR code encodes the full payment link including amount, recipient, and chain.' }
-
-  // ── SDK / integration ────────────────────────────────────────────────────────
-  if (has('sdk', 'api', 'integrate', 'integration', 'developer', 'embed', 'widget', 'button', 'checkout', 'react', 'javascript', 'npm', 'package', 'build on'))
-    return { from: 'bot', text: 'Hash PayLink offers an SDK for developers. You can embed a payment button, use a hosted checkout, or integrate via URL parameters. The SDK supports React and vanilla JS. Contact support@hashpaylink.com for integration support.' }
-
-  // ── Fees ─────────────────────────────────────────────────────────────────────
-  if (has('fee', 'fees', 'cost', 'charge', '0.2', 'platform fee', 'how much', 'percentage', 'deduction', 'cut', 'commission', 'pricing', 'free'))
-    return { from: 'bot', text: 'Hash PayLink charges a flat 0.2% platform fee, deducted automatically at settlement. Sponsored EVM payments can include a small configured gas recovery amount in the same treasury transfer. No subscription fees.' }
-
-  // ── Gas / gasless ────────────────────────────────────────────────────────────
-  if (has('gas', 'gasless', 'free gas', 'sponsored', 'network fee', 'transaction fee', 'avnu', 'paymaster'))
-    return { from: 'bot', text: 'Gas is sponsored on Base and Arbitrum smart-wallet/paymaster flows, Arc, and Solana wallet-connect payments. Sponsored EVM payments can include a configured USDC recovery amount routed to treasury as part of settlement.' }
-
-  // ── Confirmation time ────────────────────────────────────────────────────────
-  if (has('how long', 'how fast', 'speed', 'instant', 'confirmation time', 'finality', 'settlement time', 'how quick'))
-    return { from: 'bot', text: 'Confirmation times:\n• Base: 2–5 seconds\n• Arc: 2–5 seconds\n• Arbitrum: a few seconds once sequenced\n• Solana: under 1 second\n\nAll supported networks provide near-instant finality for practical payment UX.' }
-
-  // ── Wrong chain / network ────────────────────────────────────────────────────
-  if (has('wrong chain', 'wrong network', 'different chain', 'incorrect chain', 'sent to wrong', 'sent on wrong', 'recover funds', 'recovery'))
-    return { from: 'bot', text: 'If funds were sent on the wrong chain, contact the team immediately via support@hashpaylink.com with your transaction hash. Hash PayLink uses a universal deterministic vault system — in most cases funds can be recovered by deploying the vault on the receiving chain.' }
-
-  // ── Pending / stuck ──────────────────────────────────────────────────────────
-  if (has('pending', 'stuck', 'not arrived', 'not received', 'not confirmed', 'delayed', 'taking long', 'waiting', 'not showing', 'missing payment', 'where is my'))
-    return { from: 'bot', text: 'If a payment is pending:\n• Base, Arc, or Arbitrum: paste the tx hash here for a live status check.\n• Solana: under 1 second — if stuck 30+ seconds, the tx may have dropped, retry.\n\nPaste your transaction hash and I will check it now.' }
-
-  // ── Refund / cancel ──────────────────────────────────────────────────────────
-  if (has('refund', 'cancel', 'reverse', 'undo', 'wrong amount', 'sent wrong', 'mistake', 'accidentally', 'chargeback'))
-    return { from: 'bot', text: 'Blockchain transactions are irreversible once confirmed. Hash PayLink is fully non-custodial and cannot initiate reversals. Coordinate refunds directly with the recipient. For technical errors, contact support@hashpaylink.com with your transaction hash.' }
-
-  // ── Track / status ───────────────────────────────────────────────────────────
-  if (has('track', 'status', 'check', 'verify', 'look up', 'tx hash', 'txhash', 'transaction hash', 'confirmed'))
-    return { from: 'bot', text: 'Paste your transaction hash directly into this chat and I will query it live across Base, Arc, and Arbitrum. An EVM transaction hash starts with 0x and is 66 characters long.' }
-
-  // ── Chains — Base ────────────────────────────────────────────────────────────
-  if ((has('base') && !has('database')) || has('basescan', 'metamask', 'layer 2', 'ethereum l2'))
-    return { from: 'bot', text: 'Base is an Ethereum L2 by Coinbase. Hash PayLink supports USDC payments on Base Mainnet. Gas is sponsored — zero extra cost to payers. Wallets: MetaMask, Coinbase Smart Wallet, and other Privy-supported EVM wallets. Explorer: basescan.org' }
-
-  // ── Chains — HashKey ─────────────────────────────────────────────────────────
-  if (has('hashkey', 'hsk', 'hash key', 'hashkey chain'))
-    return { from: 'bot', text: 'HashKey payments are no longer part of the active Hash PayLink checkout surface. Use Base, Arc, Arbitrum, or Solana for Circle-focused USDC payments.' }
-
-  // ── Chains — Arc ─────────────────────────────────────────────────────────────
-  if (has('arc', 'arcscan', 'arc testnet', 'arc chain', 'testnet'))
-    return { from: 'bot', text: 'Arc is an EVM chain using USDC as its native gas token. Hash PayLink is live on Arc Testnet (Chain ID 5042002) — great for testing without real funds. Explorer: testnet.arcscan.app' }
-
-  // ── Chains — Solana ──────────────────────────────────────────────────────────
-  if (has('solana', 'phantom', 'solflare', 'solscan'))
-    return { from: 'bot', text: 'Solana payments use native USDC. Wallets: Phantom and Solflare. Gas is relayer-sponsored — payers only sign the USDC transfer. "Send via Address" also works on Solana. Confirms in under 1 second. Explorer: solscan.io' }
-
-  // ── Wallet setup / connect ───────────────────────────────────────────────────
-  if (has('wallet', 'connect wallet', 'which wallet', 'walletconnect', 'install wallet', 'coinbase wallet'))
-    return { from: 'bot', text: 'Supported wallets:\n• Base / Arc / Arbitrum: Privy-supported EVM wallets, including MetaMask and Coinbase Smart Wallet.\n• Solana: Phantom or Solflare.\n\nOr skip wallets entirely — use "Send via Address" to pay from any exchange or cold wallet.' }
-
-  // ── Security / non-custodial ─────────────────────────────────────────────────
-  if (has('safe', 'secure', 'trust', 'custody', 'custodial', 'non-custodial', 'open source', 'trustless', 'audit', 'smart contract'))
-    return { from: 'bot', text: 'Hash PayLink is fully non-custodial. Funds flow directly from payer to recipient via on-chain smart contracts — the platform never holds funds. Links are stateless, parameters encoded in the URL. Smart contracts are open source and verifiable on-chain. The platform deducts a 0.2% fee at settlement.' }
-
-  // ── USDC ─────────────────────────────────────────────────────────────────────
-  if (has('usdc', 'usd coin', 'stablecoin', 'stable coin'))
-    return { from: 'bot', text: 'Hash PayLink settles in Circle USDC on Base, Arc, Arbitrum, and Solana. The contract-backed flow deducts the platform fee at settlement.' }
-
-  // ── Memo / label / tag ───────────────────────────────────────────────────────
-  if (has('memo', 'label', 'tag', 'note', 'reference', 'description'))
-    return { from: 'bot', text: 'You can add a memo or label when creating a link (e.g. "Invoice #42"). In Multi-Payer Collection mode, each payer enters their own name or handle — logged on the organizer dashboard with their payment details.' }
-
-  // ── Contact / escalate ───────────────────────────────────────────────────────
-  if (has('contact', 'support', 'help', 'human', 'agent', 'email', 'team', 'speak to', 'talk to', 'reach out', 'report', 'issue', 'problem', 'complaint', 'inquiry', 'twitter', 'x.com', '@hash'))
-    return CONTACT_MSG
-
-  // ── Platform overview — true catch-all for generic questions ─────────────────
-  if (has('what is', 'overview', 'hash paylink', 'introduction', 'intro', 'about') || (has('how') && has('work')) || (has('tell') && has('me')) || (has('explain') && !has('multi', 'flex', 'fee', 'gas', 'chain', 'wallet', 'pay', 'send', 'qr', 'sdk')))
-    return { from: 'bot', text: 'Hash PayLink is a non-custodial, Circle-focused payment platform. Merchants create a shareable payment link in seconds — no account or KYC required. Payers pay by connecting a wallet OR sending directly from any exchange or CEX using "Send via Address". Supported networks: Base, Arc, Arbitrum, and Solana. A platform fee is deducted at settlement.' }
-
-  return null
 }
 
 // ─── Shared outlet context (Layout → child pages) ────────────────────────────
@@ -418,6 +225,7 @@ export default function Layout() {
   const [showTelegramHomeFab, setShowTelegramHomeFab] = useState(false)
   const [showPaymentHistoryShortcut, setShowPaymentHistoryShortcut] = useState(false)
   const [agentHashComposerFocused, setAgentHashComposerFocused] = useState(false)
+  const [agentHashViewportTop, setAgentHashViewportTop] = useState(0)
   const [circlePocketSurface, setCirclePocketSurface] = useState(false)
   const [circlePocketWalletView, setCirclePocketWalletView] = useState<'smart' | 'x402'>('smart')
   const [circlePocketHeaderMode, setCirclePocketHeaderMode] = useState<'wallet' | 'move' | 'bills' | 'activity'>('wallet')
@@ -474,6 +282,24 @@ export default function Layout() {
       setCirclePocketActivityView('all')
     }
   }, [])
+
+  useEffect(() => {
+    if (!agentHashComposerFocused || !window.matchMedia('(max-width: 767px)').matches) {
+      setAgentHashViewportTop(0)
+      return
+    }
+    const viewport = window.visualViewport
+    const updateViewportTop = () => setAgentHashViewportTop(Math.max(0, viewport?.offsetTop ?? 0))
+    updateViewportTop()
+    viewport?.addEventListener('resize', updateViewportTop)
+    viewport?.addEventListener('scroll', updateViewportTop)
+    window.addEventListener('resize', updateViewportTop)
+    return () => {
+      viewport?.removeEventListener('resize', updateViewportTop)
+      viewport?.removeEventListener('scroll', updateViewportTop)
+      window.removeEventListener('resize', updateViewportTop)
+    }
+  }, [agentHashComposerFocused])
   const polyDeskService = searchParams.get('service') ?? ''
   const polyDeskLane = searchParams.get('lane') ?? ''
   const polyDeskAgentOpen = searchParams.get('agent') === '1'
@@ -617,17 +443,11 @@ export default function Layout() {
   const [agentHashSurfaceMode, setAgentHashSurfaceMode] = useState<AgentHashMode>('support')
   const agentHashMode: AgentHashMode = isPayPage || (isCreatePage && searchParams.get('product') === 'payment') ? 'circle-pocket' : agentHashSurfaceMode
   const showAgentHashWidget = isCreatePage || isPayPage
-  const agentHashStorageKey = `agent-hash-widget:${agentHashMode}`
   const [chatOpen,     setChatOpen]     = useState(false)
   const [chatMounted,  setChatMounted]  = useState(false)
-  const [chatInput,    setChatInput]    = useState('')
-  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([AGENT_HASH_WELCOME[agentHashMode]])
-  const [isTyping,     setIsTyping]     = useState(false)
-  const chatEndRef = useRef<HTMLDivElement>(null)
   const agentHashPanelRef = useRef<HTMLDivElement>(null)
   const agentHashFabRef = useRef<HTMLAnchorElement>(null)
   const agentHashCloseTimerRef = useRef<number | null>(null)
-  const previousAgentHashModeRef = useRef<AgentHashMode | null>(null)
 
   function openAgentHashWidget(mode?: AgentHashMode) {
     if (mode) setAgentHashSurfaceMode(mode)
@@ -665,33 +485,6 @@ export default function Layout() {
   }, [])
 
   useEffect(() => {
-    setIsTyping(false)
-    setChatInput('')
-    if (previousAgentHashModeRef.current && previousAgentHashModeRef.current !== agentHashMode) {
-      previousAgentHashModeRef.current = agentHashMode
-      window.localStorage.removeItem(agentHashStorageKey)
-      setChatMessages([AGENT_HASH_WELCOME[agentHashMode]])
-      return
-    }
-    previousAgentHashModeRef.current = agentHashMode
-    try {
-      const saved = window.localStorage.getItem(agentHashStorageKey)
-      const parsed = saved ? JSON.parse(saved) as ChatMsg[] : null
-      setChatMessages(Array.isArray(parsed) && parsed.length ? parsed.slice(-30) : [AGENT_HASH_WELCOME[agentHashMode]])
-    } catch {
-      setChatMessages([AGENT_HASH_WELCOME[agentHashMode]])
-    }
-  }, [agentHashMode, agentHashStorageKey])
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(agentHashStorageKey, JSON.stringify(chatMessages.slice(-30)))
-    } catch {
-      // Local session persistence is best-effort.
-    }
-  }, [agentHashStorageKey, chatMessages])
-
-  useEffect(() => {
     if (!chatOpen) return
     function handleOutsideClick(event: MouseEvent) {
       const target = event.target as Node | null
@@ -703,121 +496,17 @@ export default function Layout() {
     return () => window.removeEventListener('mousedown', handleOutsideClick)
   }, [chatOpen])
 
-  function scrollToBottom() {
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
-  }
-
-  function pushBot(msgs: ChatMsg[]) {
-    setChatMessages(m => [...m, ...msgs])
-    setIsTyping(false)
-    scrollToBottom()
-  }
-
-  function agentHashMemorySummary(nextQuestion: string) {
-    const recent = chatMessages
-      .slice(-8)
-      .map(msg => `${msg.from === 'user' ? 'User' : 'Agent Hash'}: ${msg.text.replace(/\s+/g, ' ').slice(0, 180)}`)
-      .join(' | ')
-    const pageContext = isPayPage ? 'Current page context: payer payment page.' : 'Current page context: Hash PayLink main app support.'
-    return `${pageContext} Agent Hash mode: ${agentHashMode}. Recent local widget context: ${recent || 'new session'}. Current message: ${nextQuestion}`.slice(0, 1600)
-  }
-
-  async function handleSend(text = chatInput) {
-    const trimmed = text.trim()
-    if (!trimmed) return
-    setChatMessages(m => [...m, { from: 'user', text: trimmed }])
-    setChatInput('')
-    scrollToBottom()
-
-    const type = detectInput(trimmed)
-
-    if (type === 'tx_hash') {
-      // Show investigating state immediately, then probe live
-      setIsTyping(true)
-      setChatMessages(m => [...m, {
-        from: 'bot',
-        text: 'Investigating transaction across Base, Arc, and Arbitrum. Please wait...',
-      }])
-      scrollToBottom()
-
-      try {
-        const res  = await fetch('/api/tx-status', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ hash: trimmed }),
-        })
-        const data = await res.json() as {
-          found: boolean
-          network?: string
-          status?: 'confirmed' | 'pending'
-          explorerName?: string
-          explorerUrl?: string
-          estimatedSeconds?: number
-        }
-
-        if (data.found && data.network && data.status) {
-          const body = data.status === 'confirmed'
-            ? `Transaction identified on ${data.network}. Current status: Confirmed.\n\nThis transaction has been successfully finalized on-chain.`
-            : `Transaction identified on ${data.network}. Current status: Pending.\n\nThis transaction is currently in the mempool. It is expected to settle in approximately ${data.estimatedSeconds ?? '—'} seconds.`
-          pushBot([{ from: 'bot', text: body, link: { label: `View on ${data.explorerName}`, href: data.explorerUrl! } }])
-        } else {
-          pushBot([{ from: 'bot', text: 'This transaction hash could not be located on our supported networks. Please verify the hash and confirm the originating network.' }])
-        }
-      } catch {
-        pushBot([{ from: 'bot', text: 'Unable to reach network nodes at this time. Please try again shortly, or verify the transaction directly on the relevant block explorer.' }])
-      }
-      return
-    }
-
-    if (type === 'evm_addr') {
-      pushBot([
-        {
-          from: 'bot',
-          text: 'Wallet address received. To verify a specific payment, share the transaction hash from your wallet history. It begins with 0x and is 66 characters long on EVM networks.',
-          link: { label: 'View address on Basescan', href: `https://basescan.org/address/${trimmed}` },
-        },
-      ])
-      return
-    }
-
-    setIsTyping(true)
-    try {
-      const res = await fetch('/api/agent-ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventId: 'agent-hash-widget',
-          payer: 'Hash PayLink user',
-          question: trimmed,
-          accessMode: 'helper-free',
-          helperMode: agentHashMode,
-          memorySummary: agentHashMemorySummary(trimmed),
-        }),
-      })
-      const contentType = res.headers.get('content-type') || ''
-      const data = contentType.includes('application/json')
-        ? await res.json() as { answer?: string; error?: string }
-        : { error: 'Agent Hash is temporarily receiving a service page instead of an API response. Please try again shortly.' }
-      if (!res.ok || !data.answer) throw new Error(data.error || 'Agent Hash could not answer just now.')
-      pushBot([{ from: 'bot', text: data.answer }])
-    } catch (err) {
-      pushBot([{
-        from: 'bot',
-        text: err instanceof Error && err.message
-          ? err.message
-          : 'Agent Hash could not reach its intelligence layer just now. Please try again shortly.',
-      }])
-    }
-  }
-
   return (
     <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col">
       {/* ── Sticky frosted-glass header ─────────────────────────────────── */}
       <header
         data-hashpaylink-top-nav
+        style={agentHashComposerFocused && agentHashViewportTop > 0
+          ? { transform: `translate3d(0, ${agentHashViewportTop}px, 0)` }
+          : undefined}
         className={circlePocketSurface
           ? 'pointer-events-none fixed inset-x-0 top-0 z-50 bg-transparent'
-          : 'sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl dark:border-white/5 dark:bg-[#111113]/90'}
+          : 'sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl transition-transform duration-100 dark:border-white/5 dark:bg-[#111113]/90'}
       >
         <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${circlePocketSurface ? 'justify-center' : 'justify-between'} ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
           {circlePocketSurface ? (
@@ -1137,50 +826,24 @@ export default function Layout() {
             </button>
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto bg-[#fbfbfc] px-3 py-4 scroll-smooth dark:bg-[#0f0f12]" style={{ scrollbarWidth: 'thin', scrollbarColor: '#d8d8dd transparent' }}>
-            <div className="flex justify-center">
-              <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-[11px] font-semibold text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
-                {agentHashMode === 'circle-pocket' ? 'Circle Pocket' : 'Support mode'}
-              </span>
-            </div>
-
-            {chatMessages.map((msg, i) => (
-              <div key={i} className={`space-y-1.5 ${msg.from === 'user' ? 'flex justify-end' : ''}`}>
-                <div className={`max-w-[82%] break-words whitespace-pre-line rounded-[18px] px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${msg.from === 'user' ? 'rounded-br-md bg-black text-white dark:bg-white dark:text-gray-950' : 'rounded-bl-md bg-[#f0f0f0] text-gray-900 dark:bg-white/[0.08] dark:text-gray-100'}`}>
-                  {msg.text}
-                </div>
-                {msg.link && (
-                  <a href={msg.link.href} target="_blank" rel="noopener noreferrer" className="ml-1 inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                    {msg.link.label}
-                  </a>
-                )}
-              </div>
-            ))}
-
-            {isTyping && (
-              <div className="flex justify-start">
-                <AgentHashThinkingIndicator mode={agentHashMode} />
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          <div className="border-t border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-[#111114]">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
-                placeholder={agentHashMode === 'circle-pocket' ? 'Ask about Circle Pocket...' : 'Ask Agent Hash...'}
-                className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-gray-200 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-              />
-              <button type="button" onClick={() => handleSend()} disabled={!chatInput.trim()} aria-label="Send message" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-white transition-all hover:bg-gray-800 active:scale-95 disabled:opacity-40 dark:bg-white dark:text-gray-950">
-                <Send className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+          <TelegramHelperPanel
+            telegramName="there"
+            ownerKey=""
+            telegramId=""
+            fallbackOwner=""
+            initialEventId=""
+            initialPayer=""
+            initialHelperMode={agentHashMode}
+            lockedHelperMode={agentHashMode}
+            onRecoverTelegramName={() => undefined}
+            onBack={closeAgentHashWidget}
+            welcomeText={agentHashMode === 'circle-pocket'
+              ? 'Circle Pocket is ready. Ask me to receive USDC, settle to bank, create a POS terminal, manage wallets, fund x402, pay bills, or find a receipt.'
+              : 'Support mode is ready. Tell me what is stuck, confusing, or not working.'}
+            inputPlaceholder={agentHashMode === 'circle-pocket' ? 'Ask about Circle Pocket...' : 'Ask Agent Hash...'}
+            fillAvailableHeight
+            onComposerFocusChange={setAgentHashComposerFocused}
+          />
         </div>
       )}
 

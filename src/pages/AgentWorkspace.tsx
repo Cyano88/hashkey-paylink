@@ -19,6 +19,7 @@ import { queryBalances }                from '../lib/unifiedBalance'
 import { PRIVY_AUTH_ENABLED }           from '../lib/authMode'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
 import { PrivyConnectButton }           from '../lib/PrivyConnectButton'
+import { circlePocketAgentHeaders }     from '../lib/circlePocketAgentIdentity'
 import ZeroScoutPowerBadge              from '../components/ZeroScoutPowerBadge'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
@@ -576,7 +577,9 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
     if (cleanOwner) query.set('owner', cleanOwner)
     if (cleanOwner) query.set('payer', cleanOwner)
     if (fallback) query.set('fallbackOwner', fallback)
-    const res = await fetch(`/api/helper-profile?${query.toString()}`)
+    const res = await fetch(`/api/helper-profile?${query.toString()}`, {
+      headers: await circlePocketAgentHeaders({ authenticated: privyAuthenticated, getAccessToken }),
+    })
     const data = await res.json() as { ok?: boolean; profile?: HelperProfile | null }
     if (res.ok && data.ok) setHelperProfile(data.profile ?? null)
   }
@@ -591,7 +594,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
         || `Prefers to be called ${displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, HashpayStream, planning, and agent setup.`
       const res = await fetch('/api/helper-profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await circlePocketAgentHeaders({ authenticated: privyAuthenticated, getAccessToken, json: true }),
         body: JSON.stringify({
           action,
           owner: displayName,
@@ -847,7 +850,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
     try {
       const res  = await fetch('/api/agent-ask', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await circlePocketAgentHeaders({ authenticated: privyAuthenticated, getAccessToken, json: true }),
         body:    JSON.stringify({
           eventId: eventId.trim(),
           payer: payer.trim(),

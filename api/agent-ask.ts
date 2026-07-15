@@ -29,6 +29,11 @@ import {
 } from './zeroscout-sponsored-action.js'
 import { readDurableJson, writeDurableJson } from './render-durable-store.js'
 import { buildHashpayStreamAgentContext } from '../modules/streampay/api/content.js'
+import {
+  circlePocketIdentityErrorStatus,
+  resolveCirclePocketIdentity,
+} from './circle-pocket-identity.js'
+import { readHelperProfileMemory } from './helper-profile.js'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
 const OG_RPC       = (process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? 'https://evmrpc.0g.ai').trim()
@@ -1035,6 +1040,25 @@ const PAYMENT_ENRICHMENT_FIELDS = new Set([
   'wallet_network',
 ])
 
+const PAYMENT_ENRICHMENT_CONTROL_PATTERN = /\b(?:ignore|override|disregard|forget)\b|\b(?:system|assistant|developer)\s*:|https?:\/\/|www\.|<\/?[a-z][^>]*>/i
+
+function cleanPaymentEnrichmentField(key: string, value: string) {
+  const clean = value.trim().replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').slice(0, 220)
+  if (!clean || PAYMENT_ENRICHMENT_CONTROL_PATTERN.test(clean)) return ''
+  if (key === 'network' || key.endsWith('_network')) {
+    return /^(base|arc|arbitrum|solana|all)$/i.test(clean) ? clean.toLowerCase() : ''
+  }
+  if (key === 'mode') return /^(person|group)$/i.test(clean) ? clean.toLowerCase() : ''
+  if (key === 'has_receive_wallet') return /^(true|false|yes|no)$/i.test(clean) ? clean.toLowerCase() : ''
+  if (key === 'missing_fields') {
+    const fields = clean.split(/[,|]/).map(field => field.trim().toLowerCase()).filter(field => (
+      ['payer', 'target', 'amount', 'purpose', 'network', 'wallet', 'receive wallet'].includes(field)
+    ))
+    return fields.join(', ')
+  }
+  return clean.replace(/[{}[\]`]/g, '')
+}
+
 function normalizePaymentEnrichmentContext(question: string, helperMode: string) {
   if (helperMode !== 'circle-pocket') return undefined
   const lines = question.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
@@ -1047,7 +1071,8 @@ function normalizePaymentEnrichmentContext(question: string, helperMode: string)
     if (separator <= 0) continue
     const key = line.slice(0, separator).trim().toLowerCase()
     if (!PAYMENT_ENRICHMENT_FIELDS.has(key)) continue
-    fields[key] = line.slice(separator + 1).trim().replace(/\s+/g, ' ').slice(0, 220)
+    const value = cleanPaymentEnrichmentField(key, line.slice(separator + 1))
+    if (value) fields[key] = value
   }
   return {
     source: 'hashpaylink-backend-normalized' as const,
@@ -1372,14 +1397,30 @@ export default async function handler(req: Request, res: Response) {
   let memorySummary = ''
   const accessMode = rawAccessMode === HELPER_FREE_ACCESS_MODE ? HELPER_FREE_ACCESS_MODE : 'paid'
   const helperMode = normalizeHelperMode(rawHelperMode)
+  let freeIdentity: Awaited<ReturnType<typeof resolveCirclePocketIdentity>> | null = null
+
+  if (accessMode === HELPER_FREE_ACCESS_MODE) {
+    try {
+      freeIdentity = await resolveCirclePocketIdentity(req)
+    } catch (error) {
+      return res.status(circlePocketIdentityErrorStatus(error)).json({
+        error: error instanceof Error ? error.message : 'Unauthorized Circle Pocket session.',
+      })
+    }
+  }
 
   try {
-    payer = normalizeBoundedString(rawPayer, 'payer', MAX_PAYER_LENGTH)
     question = normalizeBoundedString(rawQuestion, 'question', MAX_QUESTION_LENGTH)
-    eventId = accessMode === HELPER_FREE_ACCESS_MODE
-      ? String(rawEventId || `helper-free-${crypto.createHash('sha256').update(payer.toLowerCase()).digest('hex').slice(0, 18)}`).slice(0, MAX_EVENT_ID_LENGTH)
-      : normalizeBoundedString(rawEventId, 'eventId', MAX_EVENT_ID_LENGTH)
-    if (typeof rawMemorySummary === 'string') memorySummary = rawMemorySummary.trim().slice(0, MAX_MEMORY_LENGTH)
+    if (freeIdentity) {
+      const identityHash = crypto.createHash('sha256').update(freeIdentity.storageKey).digest('hex')
+      payer = `circle-pocket-${identityHash.slice(0, 24)}`
+      eventId = `helper-free-${identityHash.slice(0, 24)}`
+      memorySummary = await readHelperProfileMemory(freeIdentity)
+    } else {
+      payer = normalizeBoundedString(rawPayer, 'payer', MAX_PAYER_LENGTH)
+      eventId = normalizeBoundedString(rawEventId, 'eventId', MAX_EVENT_ID_LENGTH)
+      if (typeof rawMemorySummary === 'string') memorySummary = rawMemorySummary.trim().slice(0, MAX_MEMORY_LENGTH)
+    }
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid request' })
   }

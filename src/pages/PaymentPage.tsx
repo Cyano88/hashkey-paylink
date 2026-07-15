@@ -546,7 +546,6 @@ export default function PaymentPage() {
   const accessRedirected = useRef(false)
   const polymarketReturnRedirected = useRef(false)
   const polymarketBridgeWaitStartedAtRef = useRef(0)
-  const polymarketAgentNoticeStored = useRef(false)
   const polymarketFundingMarkRef = useRef('')
   const polymarketFundingMarkInFlightRef = useRef('')
   const ngPosRegistered  = useRef(false)
@@ -3641,36 +3640,6 @@ export default function PaymentPage() {
     }, 7000)
     return () => window.clearTimeout(timer)
   }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketBridgeReturnUrl])
-
-  useEffect(() => {
-    if (!isConfirmed || !isPolymarketBridge || !polymarketReturnToAgentHash || !polymarketHelperOwner || polymarketAgentNoticeStored.current) return
-    const proofReady = Boolean(paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash)
-    if (!proofReady) return
-    polymarketAgentNoticeStored.current = true
-    const actionLinks = [
-      paymentReceiptId ? { label: 'Receipt', url: `/receipt/${encodeURIComponent(paymentReceiptId)}` } : null,
-      { label: 'PolyDesk Portfolio', url: polymarketBridgeReturnUrl },
-    ].filter(Boolean)
-    void fetch('/api/helper-profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'append-thread',
-        owner: polymarketHelperOwner,
-        payer: polymarketHelperOwner,
-        mode: 'polydesk',
-        subMode: 'portfolio',
-        threadId: 'mode:polydesk:portfolio',
-        id: `polymarket-funding-${chain}-${txHash || paymentReceiptId || Date.now().toString(36)}`,
-        answer: 'Funding complete. I can track open positions, claimables, alerts, and portfolio value right now. Idle Polymarket cash balance still needs to be confirmed inside Polymarket.',
-        actionLinks,
-        receiptId: paymentReceiptId,
-        txHash,
-      }),
-    }).catch(() => {
-      polymarketAgentNoticeStored.current = false
-    })
-  }, [isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketHelperOwner, paymentReceipt?.proof?.ogTxHash, paymentReceipt?.proof?.ogRootHash, paymentReceiptId, chain, txHash])
 
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS

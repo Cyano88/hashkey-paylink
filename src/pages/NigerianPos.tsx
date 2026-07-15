@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
 import { QRCodeSVG } from 'qrcode.react'
 import { ArrowLeft, ArrowRight, Banknote, CheckCircle2, Copy, LayoutDashboard, Loader2, QrCode } from 'lucide-react'
 import { cn } from '../lib/utils'
@@ -78,6 +79,8 @@ const emptySetup = {
 }
 
 export default function NigerianPos() {
+  const { authenticated, getAccessToken } = usePrivy()
+  const createMerchantIdempotencyRef = useRef('')
   const params = new URLSearchParams(window.location.search)
   const initialMerchantId = params.get('merchant_id') ?? ''
   const initialManageMode = params.get('manage') === '1'
@@ -160,12 +163,24 @@ export default function NigerianPos() {
   }, [merchantId])
 
   async function createMerchant() {
+    if (!authenticated) {
+      setSetupError('Sign in to create and manage a POS terminal.')
+      return
+    }
     setSetupBusy(true)
     setSetupError('')
     try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to create POS.')
+      const idempotencyKey = createMerchantIdempotencyRef.current || window.crypto.randomUUID()
+      createMerchantIdempotencyRef.current = idempotencyKey
       const res = await fetch('/api/ng-pos', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`,
+          'idempotency-key': idempotencyKey,
+        },
         body: JSON.stringify({
           action: 'createMerchant',
           payout_preference: bankVerified ? 'INSTANT_FIAT' : 'KEEP_CRYPTO',
@@ -175,6 +190,7 @@ export default function NigerianPos() {
       const data = await res.json()
       if (!res.ok || !data.ok) throw new Error(data.error ?? 'POS setup failed')
       setMerchant(data.merchant)
+      createMerchantIdempotencyRef.current = ''
       setMerchantId(data.merchant.merchant_id)
       setShowMerchantQr(true)
       window.history.replaceState(null, '', `/pos/ng?merchant_id=${encodeURIComponent(data.merchant.merchant_id)}&manage=1`)
@@ -366,7 +382,7 @@ export default function NigerianPos() {
     )
   }
 
-  if (!merchant.bank_configured) {
+  if (merchant.payout_preference === 'INSTANT_FIAT' && !merchant.bank_configured) {
     return (
       <PosShell
         eyebrow="Nigerian Retail Mode"

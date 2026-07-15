@@ -22,6 +22,7 @@ import {
 } from './paycrest-pos.js'
 import { reconcilePaycrestOrderPayment, registerPaycrestBankSendReceipt, schedulePaycrestOrderReconciliation } from './paycrest-reconcile.js'
 import { verifyEvmUsdcTransfer } from './usdc-transfer-verify.js'
+import { recordCirclePocketAction } from './circle-pocket-action-journal.js'
 
 const STORE_PATH = process.env.NG_POS_STORE ?? './data/ng-pos-merchants.json'
 const NG_POS_STORE_KEY = (process.env.NG_POS_STORE_KEY ?? 'hashpaylink:ng-pos-merchants').trim()
@@ -68,6 +69,8 @@ type MerchantProfile = {
   source?: 'pos' | 'bank-receive'
   created_at: string
   updated_at: string
+  idempotency_key?: string
+  creation_response?: Record<string, unknown>
 }
 
 type Store = {
@@ -102,10 +105,22 @@ type BankSendLink = {
   source: 'bank-send'
   created_at: string
   updated_at: string
+  idempotency_key?: string
+  creation_response?: Record<string, unknown>
 }
 
 function cleanText(value: unknown, fallback = '') {
   return String(value ?? fallback).replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT)
+}
+
+function creationIdempotencyKey(req: Request, body: Record<string, unknown>) {
+  const value = String(req.headers['idempotency-key'] ?? body.idempotency_key ?? '').trim()
+  return /^[a-zA-Z0-9:_-]{16,128}$/.test(value) ? value : ''
+}
+
+function idempotentResourceId(prefix: string, ownerId: string, idempotencyKey: string, length = 16) {
+  const digest = createHash('sha256').update(`${prefix}:${ownerId}:${idempotencyKey}`).digest('base64url')
+  return `${prefix}_${digest.slice(0, length)}`
 }
 
 function shortAddress(value: string) {
@@ -272,9 +287,6 @@ async function publicMerchant(merchant: MerchantProfile) {
     solana_wallet_address: merchant.solana_wallet_address,
     supported_networks: merchantNetworks(merchant),
     bank_configured: Boolean(merchant.encrypted_bank_details),
-    bank_name: merchant.bank_name,
-    bank_last4: merchant.bank_last4,
-    bank_account_name: merchant.bank_account_name,
     fx_rate_ngn_per_usdc: rate.toFixed(2),
     fx_source: source,
   }
@@ -430,6 +442,11 @@ function parseSettlementType(value: unknown): SettlementType {
 
 function isVisiblePaycrestHistoryStatus(status: string) {
   const normalized = status.trim().toLowerCase()
+  return ['deposited', 'validated', 'settling', 'settled', 'refunding', 'refunded'].includes(normalized)
+}
+
+function isReconcileablePaycrestStatus(status: string) {
+  const normalized = status.trim().toLowerCase()
   return ['deposited', 'pending', 'validated', 'settling', 'settled', 'refunding', 'refunded'].includes(normalized)
 }
 
@@ -465,6 +482,24 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, institutions })
     }
 
+    if (action === 'savedBankReceiveProfile') {
+      const ownerId = await verifiedPrivyUserId(req)
+      const store = await readStore()
+      const merchant = Object.values(store.merchants ?? {})
+        .filter(item => item.owner_id === ownerId && Boolean(item.encrypted_bank_details))
+        .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]
+      if (!merchant) return res.status(404).json({ ok: false, error: 'No verified bank account is saved yet.' })
+      return res.json({
+        ok: true,
+        profile: {
+          merchant_id: merchant.merchant_id,
+          bank_name: merchant.bank_name || 'Verified bank',
+          bank_last4: merchant.bank_last4 || '',
+          bank_account_name: merchant.bank_account_name || '',
+        },
+      })
+    }
+
     if (action === 'listHistory') {
       const privyUserId = await verifiedPrivyUserId(req)
       const store = await readStore()
@@ -480,20 +515,23 @@ export default async function handler(req: Request, res: Response) {
       ])
       const existingTxHashes = new Set(payments.map(payment => payment.txHash.toLowerCase()).filter(Boolean))
       const bankSendById = new Map(bankSendLinks.map(link => [link.link_id, link]))
+      const merchantById = new Map(merchants.map(merchant => [merchant.merchant_id, merchant]))
       const paycrestOrders = await listPaycrestPosOrdersForMerchants([...merchantIds, ...bankSendLinkIds])
       for (const order of paycrestOrders) {
-        if (order.source !== 'bank-send' && !order.tx_hash && isVisiblePaycrestHistoryStatus(order.status)) {
+        if (order.source !== 'bank-send' && !order.tx_hash && isReconcileablePaycrestStatus(order.status)) {
           schedulePaycrestOrderReconciliation(order.intent_id)
         } else if (order.source === 'bank-send' && isSettledPaycrestStatus(order.status)) {
           await registerPaycrestBankSendReceipt(order).catch(() => null)
         }
       }
       const paycrestRows = paycrestOrders
-        .filter(order => order.tx_hash || isVisiblePaycrestHistoryStatus(order.status))
+        .filter(order => isVisiblePaycrestHistoryStatus(order.status))
         .filter(order => !order.tx_hash || !existingTxHashes.has(order.tx_hash.toLowerCase()))
         .map(order => {
           const isBankSendOrder = order.source === 'bank-send'
           const link = isBankSendOrder ? bankSendById.get(order.merchant_id) : undefined
+          const merchant = merchantById.get(order.merchant_id)
+          const isBankReceiveOrder = !isBankSendOrder && (order.source === 'bank-receive' || merchant?.source === 'bank-receive')
           return {
             eventId: isBankSendOrder ? `bank-send-${order.merchant_id}` : `ngpos-${order.merchant_id}`,
             txHash: order.tx_hash || `paycrest_${order.intent_id}`,
@@ -501,14 +539,20 @@ export default async function handler(req: Request, res: Response) {
             payer: isBankSendOrder
               ? (order.payer_name || order.payer_email || 'Bank transfer payer')
               : (order.payer_wallet || order.payer_email || 'Circle wallet payer'),
-            memo: isBankSendOrder ? (link?.display_name || 'Bank send funding') : 'Bank payout',
+            memo: isBankSendOrder
+              ? (link?.display_name || 'Bank send funding')
+              : isBankReceiveOrder
+                ? 'Bank receive payment'
+                : 'Retail POS payment',
             amount: order.amount_usdc,
             ts: new Date(order.updated_at || order.created_at).getTime(),
-            source: isBankSendOrder ? 'bank-send' : 'bank-receive',
+            source: isBankSendOrder ? 'bank-send' : isBankReceiveOrder ? 'bank-receive' : 'ngpos',
             merchantId: order.merchant_id,
             contextLabel: isBankSendOrder
               ? `${order.destination_network || link?.destination_network || 'base'} USDC ${shortAddress(order.destination_address || link?.destination_address || '')}`.trim()
-              : order.bank_name ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim() : 'Bank receive',
+              : order.bank_name
+                ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim()
+                : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
             settlementType: isBankSendOrder ? 'PAYCREST_ONRAMP' : 'INSTANT_FIAT',
             amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
             paycrestStatus: order.status,
@@ -558,6 +602,16 @@ export default async function handler(req: Request, res: Response) {
       const preference = body.payout_preference === 'INSTANT_FIAT' ? 'INSTANT_FIAT' : 'KEEP_CRYPTO'
       const session = await verifiedPrivyUser(req)
       const ownerId = session.userId
+      const idempotencyKey = creationIdempotencyKey(req, body)
+      if (!idempotencyKey) return res.status(400).json({ ok: false, error: 'Missing or invalid idempotency key.' })
+      const store = await readStore()
+      const existingMerchant = Object.values(store.merchants).find(merchant => (
+        merchant.owner_id === ownerId && merchant.idempotency_key === idempotencyKey
+      ))
+      if (existingMerchant) {
+        const replay = existingMerchant.creation_response ?? { ok: true, merchant: await publicMerchant(existingMerchant) }
+        return res.json({ ...replay, replayed: true })
+      }
       let ownerEmail = cleanText(body.owner_email, '').toLowerCase()
       if (session.email && ownerEmail && session.email !== ownerEmail) {
         return res.status(403).json({ ok: false, error: 'Signed-in email does not match this payout profile.' })
@@ -576,15 +630,31 @@ export default async function handler(req: Request, res: Response) {
       if (needsEvmWallet && !isAddress(wallet)) return res.status(400).json({ ok: false, error: 'Enter a valid Circle EVM wallet address.' })
       if (needsSolanaWallet && !isSolanaAddress(solanaWallet)) return res.status(400).json({ ok: false, error: 'Enter a valid Circle Solana wallet address.' })
 
-      const bankName = cleanText(body.bank_name, 'Nigerian bank')
-      const rawBankCode = cleanText(body.bank_code, '')
+      let bankName = cleanText(body.bank_name, 'Nigerian bank')
+      let rawBankCode = cleanText(body.bank_code, '')
+      let accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
+      let accountName = cleanText(body.account_name, '')
+      if (preference === 'INSTANT_FIAT' && body.use_saved_bank === true) {
+        const savedBankMerchant = Object.values(store.merchants)
+          .filter(item => item.owner_id === ownerId && Boolean(item.encrypted_bank_details))
+          .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]
+        if (!savedBankMerchant?.encrypted_bank_details) {
+          return res.status(400).json({ ok: false, error: 'No verified bank account is saved yet.' })
+        }
+        const savedBank = decryptBankDetails(savedBankMerchant.encrypted_bank_details)
+        bankName = savedBankMerchant.bank_name || bankName
+        rawBankCode = savedBank.bank_code
+        accountNumber = savedBank.account_number
+        accountName = savedBank.account_name
+      }
       const bankCode = rawBankCode ? await resolvePaycrestInstitutionCode({ bankCode: rawBankCode, bankName }) : ''
-      const accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
-      const accountName = cleanText(body.account_name, '')
-      const hasBank = bankCode && accountNumber.length === 10 && accountName
+      const hasBank = Boolean(bankCode && accountNumber.length === 10 && accountName)
+      if (preference === 'INSTANT_FIAT' && !hasBank) {
+        return res.status(400).json({ ok: false, error: 'Verify a bank account before creating a bank-settled POS terminal.' })
+      }
       const now = new Date().toISOString()
       const merchant: MerchantProfile = {
-        merchant_id: randomBytes(12).toString('base64url'),
+        merchant_id: idempotentResourceId('pos', ownerId, idempotencyKey),
         owner_id: ownerId || undefined,
         owner_email: ownerEmail || undefined,
         owner_first_name: ownerFirstName || undefined,
@@ -600,6 +670,7 @@ export default async function handler(req: Request, res: Response) {
         source: 'pos',
         created_at: now,
         updated_at: now,
+        idempotency_key: idempotencyKey,
       }
 
       if (hasBank) {
@@ -614,15 +685,31 @@ export default async function handler(req: Request, res: Response) {
         merchant.bank_account_name = accountName
       }
 
-      const store = await readStore()
+      const response = { ok: true, merchant: await publicMerchant(merchant) }
+      merchant.creation_response = response
       store.merchants[merchant.merchant_id] = merchant
       await writeStore(store)
-      return res.json({ ok: true, merchant: await publicMerchant(merchant) })
+      await recordCirclePocketAction({
+        ownerId: createHash('sha256').update(`privy:${ownerId}`.toLowerCase()).digest('hex').slice(0, 32),
+        idempotencyKey,
+        action: 'create-pos-terminal',
+        status: 'completed',
+        resourceId: merchant.merchant_id,
+        metadata: { payoutPreference: preference, networks: supportedNetworks.join(',') },
+      })
+      return res.json(response)
     }
 
     if (action === 'createBankReceive') {
       const session = await verifiedPrivyUser(req)
       const ownerId = session.userId
+      const idempotencyKey = creationIdempotencyKey(req, body)
+      if (!idempotencyKey) return res.status(400).json({ ok: false, error: 'Missing or invalid idempotency key.' })
+      const store = await readStore()
+      const existingMerchant = Object.values(store.merchants).find(merchant => (
+        merchant.owner_id === ownerId && merchant.source === 'bank-receive' && merchant.idempotency_key === idempotencyKey
+      ))
+      if (existingMerchant?.creation_response) return res.json({ ...existingMerchant.creation_response, replayed: true })
       const suppliedOwnerEmail = cleanText(body.owner_email, '').toLowerCase()
       if (session.email && suppliedOwnerEmail && session.email !== suppliedOwnerEmail) {
         return res.status(403).json({ ok: false, error: 'Signed-in email does not match this payout profile.' })
@@ -633,10 +720,24 @@ export default async function handler(req: Request, res: Response) {
       const displayName = cleanText(body.display_name || body.memo, 'Bank receive')
       const flexibleAmount = body.flexible_amount === true || body.flexible_amount === 'true'
       const amount = cleanAmount(body.amount)
-      const bankName = cleanText(body.bank_name, 'Nigerian bank')
-      const bankCode = await resolvePaycrestInstitutionCode({ bankCode: cleanText(body.bank_code, ''), bankName })
-      const accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
-      const accountName = cleanText(body.account_name, '')
+      const useSavedBank = body.use_saved_bank === true || body.use_saved_bank === 'true'
+      const savedBankMerchant = useSavedBank
+        ? Object.values(store.merchants ?? {})
+            .filter(item => item.owner_id === ownerId && Boolean(item.encrypted_bank_details))
+            .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]
+        : undefined
+      if (useSavedBank && !savedBankMerchant?.encrypted_bank_details) {
+        return res.status(404).json({ ok: false, error: 'No verified bank account is saved yet. Open Receive to Bank and verify one first.' })
+      }
+      const savedBank = savedBankMerchant?.encrypted_bank_details
+        ? decryptBankDetails(savedBankMerchant.encrypted_bank_details)
+        : undefined
+      const bankName = savedBankMerchant?.bank_name || cleanText(body.bank_name, 'Nigerian bank')
+      const bankCode = savedBank?.bank_code
+        || await resolvePaycrestInstitutionCode({ bankCode: cleanText(body.bank_code, ''), bankName })
+      const accountNumber = savedBank?.account_number
+        || cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
+      const accountName = savedBank?.account_name || cleanText(body.account_name, '')
       if (!ownerEmail) return res.status(401).json({ ok: false, error: 'Sign in to create bank receive links.' })
       if (!flexibleAmount && !amount) return res.status(400).json({ ok: false, error: 'Enter a valid Naira amount.' })
       if (!bankCode || accountNumber.length !== 10 || !accountName) {
@@ -646,7 +747,7 @@ export default async function handler(req: Request, res: Response) {
 
       const now = new Date().toISOString()
       const merchant: MerchantProfile = {
-        merchant_id: randomBytes(12).toString('base64url'),
+        merchant_id: idempotentResourceId('bank', ownerId, idempotencyKey),
         owner_id: ownerId,
         owner_email: ownerEmail,
         owner_first_name: ownerFirstName || undefined,
@@ -666,8 +767,8 @@ export default async function handler(req: Request, res: Response) {
         source: 'bank-receive',
         created_at: now,
         updated_at: now,
+        idempotency_key: idempotencyKey,
       }
-      const store = await readStore()
       store.merchants[merchant.merchant_id] = merchant
       let intentId = ''
       let amountNgnText = ''
@@ -695,7 +796,7 @@ export default async function handler(req: Request, res: Response) {
         amountNgnText = amountNgn.toFixed(2)
         amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
         rateText = rate.toFixed(2)
-        intentId = randomBytes(12).toString('base64url')
+        intentId = idempotentResourceId('intent', ownerId, idempotencyKey)
         store.intents ??= {}
         store.intents[intentId] = {
           intent_id: intentId,
@@ -708,9 +809,8 @@ export default async function handler(req: Request, res: Response) {
           expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
         }
       }
-      await writeStore(store)
       const pay_url = buildPayUrl(req, merchant, 'base', amountUsdcText, amountNgnText, 'INSTANT_FIAT', body.client_origin, intentId || undefined, 'bank-receive')
-      return res.json({
+      const response = {
         ok: true,
         link: {
           payment_url: pay_url,
@@ -725,13 +825,32 @@ export default async function handler(req: Request, res: Response) {
           bank_last4: merchant.bank_last4,
           bank_account_name: merchant.bank_account_name,
         },
+      }
+      merchant.creation_response = response
+      await writeStore(store)
+      await recordCirclePocketAction({
+        ownerId: createHash('sha256').update(`privy:${ownerId}`.toLowerCase()).digest('hex').slice(0, 32),
+        idempotencyKey,
+        action: 'create-bank-receive-paylink',
+        status: 'completed',
+        resourceId: merchant.merchant_id,
+        metadata: { amount: amountNgnText || 'payer-selected', network: 'base' },
       })
+      return res.json(response)
     }
 
     if (action === 'createBankSend') {
       const serviceRequest = isPolydeskServiceRequest(req)
       const session = serviceRequest ? null : await verifiedPrivyUser(req)
-      const ownerId = session?.userId || cleanText(body.owner_id, 'polydesk-service')
+      // Service-token calls live in a dedicated namespace and can never claim a Privy owner.
+      const ownerId = session?.userId || 'polydesk-service'
+      const idempotencyKey = creationIdempotencyKey(req, body)
+      if (!idempotencyKey) return res.status(400).json({ ok: false, error: 'Missing or invalid idempotency key.' })
+      const store = await readStore()
+      const existingLink = Object.values(store.bank_send_links ?? {}).find(link => (
+        link.owner_id === ownerId && link.idempotency_key === idempotencyKey
+      ))
+      if (existingLink?.creation_response) return res.json({ ...existingLink.creation_response, replayed: true })
       const suppliedOwnerEmail = cleanText(body.owner_email, '').toLowerCase()
       if (session?.email && suppliedOwnerEmail && session.email !== suppliedOwnerEmail) {
         return res.status(403).json({ ok: false, error: 'Signed-in email does not match this funding profile.' })
@@ -751,7 +870,7 @@ export default async function handler(req: Request, res: Response) {
 
       const now = new Date().toISOString()
       const link: BankSendLink = {
-        link_id: randomBytes(12).toString('base64url'),
+        link_id: idempotentResourceId('send', ownerId, idempotencyKey),
         owner_id: ownerId,
         owner_email: ownerEmail,
         owner_first_name: ownerFirstName || undefined,
@@ -765,13 +884,12 @@ export default async function handler(req: Request, res: Response) {
         source: 'bank-send',
         created_at: now,
         updated_at: now,
+        idempotency_key: idempotencyKey,
       }
-      const store = await readStore()
       store.bank_send_links ??= {}
       store.bank_send_links[link.link_id] = link
-      await writeStore(store)
       const payUrl = buildBankSendPayUrl(req, link, body.client_origin)
-      return res.json({
+      const response = {
         ok: true,
         link: {
           payment_url: payUrl,
@@ -782,12 +900,25 @@ export default async function handler(req: Request, res: Response) {
           destination_network: link.destination_network,
           destination_address: link.destination_address,
         },
-      })
+      }
+      link.creation_response = response
+      await writeStore(store)
+      if (session) {
+        await recordCirclePocketAction({
+          ownerId: createHash('sha256').update(`privy:${ownerId}`.toLowerCase()).digest('hex').slice(0, 32),
+          idempotencyKey,
+          action: 'create-bank-send-paylink',
+          status: 'completed',
+          resourceId: link.link_id,
+          metadata: { amount: link.amount_ngn || 'payer-selected', network: link.destination_network },
+        })
+      }
+      return res.json(response)
     }
 
     if (action === 'quote') {
       const merchantId = cleanText(body.merchant_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
-      const settlementType = parseSettlementType(body.settlement_type)
+      const requestedSettlementType = parseSettlementType(body.settlement_type)
       const amountCurrency = body.amount_currency === 'USDC' ? 'USDC' : 'NGN'
       const amount = cleanAmount(body.amount)
       if (!merchantId || !amount) return res.status(400).json({ ok: false, error: 'Missing merchant or amount.' })
@@ -795,6 +926,10 @@ export default async function handler(req: Request, res: Response) {
       const store = await readStore()
       const merchant = store.merchants[merchantId]
       if (!merchant || !merchant.settlement_enabled) return res.status(404).json({ ok: false, error: 'Merchant is not available.' })
+      if (requestedSettlementType !== merchant.payout_preference) {
+        return res.status(400).json({ ok: false, error: 'Settlement selection does not match this terminal configuration.' })
+      }
+      const settlementType = merchant.payout_preference
       if (settlementType === 'INSTANT_FIAT' && !merchant.encrypted_bank_details) {
         return res.status(400).json({ ok: false, error: 'Bank settlement is not configured for this merchant.' })
       }

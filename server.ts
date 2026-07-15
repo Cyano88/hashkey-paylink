@@ -75,6 +75,7 @@ import agentVerifyHandler   from './api/agent-verify.js'
 import agentAskHandler     from './api/agent-ask.js'
 import agentWalletHandler  from './api/agent-wallet.js'
 import helperProfileHandler from './api/helper-profile.js'
+import circlePocketActionsHandler from './api/circle-pocket-actions.js'
 import agentProfileHandler from './api/agent-profile.js'
 import agentGovernanceHandler from './api/agent-governance.js'
 import agentLegalProfileHandler from './api/agent-legal-profile.js'
@@ -227,6 +228,7 @@ app.all('/api/agent-verify',           strictLimiter, agentVerifyHandler)
 app.post('/api/agent-ask',             strictLimiter, agentAskHandler)
 app.all('/api/agent-wallet',           strictLimiter, agentWalletHandler)
 app.all('/api/helper-profile',         strictLimiter, helperProfileHandler)
+app.get('/api/circle-pocket-actions',  strictLimiter, circlePocketActionsHandler)
 app.all('/api/agent-profile',          strictLimiter, agentProfileHandler)
 app.post('/api/agent-governance',      strictLimiter, agentGovernanceHandler)
 app.get('/api/agent-legal-profile',    readLimiter, agentLegalProfileHandler)

@@ -5,6 +5,12 @@ import crypto from 'node:crypto'
 import pg from 'pg'
 import { archivePayment, type ArchiveResult } from './og-storage.js'
 import { readDurableJson, writeDurableJson } from './render-durable-store.js'
+import {
+  circlePocketIdentityErrorStatus,
+  circlePocketIdentityId,
+  resolveCirclePocketIdentity,
+  type CirclePocketIdentity,
+} from './circle-pocket-identity.js'
 
 const { Pool } = pg
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
@@ -88,10 +94,6 @@ function cleanString(value: unknown, max = 256) {
 
 function normalizePayer(value: unknown) {
   return cleanString(value, 128)
-}
-
-function profileId(payer: string) {
-  return crypto.createHash('sha256').update(payer.toLowerCase()).digest('hex').slice(0, 32)
 }
 
 function cleanList(value: unknown) {
@@ -358,6 +360,12 @@ function publicProfile(profile: HelperProfile | undefined) {
   return profile ?? null
 }
 
+export async function readHelperProfileMemory(identity: CirclePocketIdentity) {
+  const id = circlePocketIdentityId(identity)
+  const profile = pool ? await readPgProfile(id) : (await readStore()).profiles[id]
+  return cleanString(profile?.memorySummary, 2600)
+}
+
 async function checkpointMemory(profile: HelperProfile) {
   const ts = Date.now()
   const memoryHash = crypto.createHash('sha256').update(JSON.stringify({
@@ -396,76 +404,44 @@ async function checkpointMemory(profile: HelperProfile) {
 }
 
 export default async function handler(req: Request, res: Response) {
-  if (req.method === 'GET') {
-    const payer = normalizePayer(req.query.payer)
-    const ownerKey = normalizePayer(req.query.owner ?? req.query.ownerKey)
-    const fallbackOwner = normalizePayer(req.query.fallbackOwner)
-    const threadId = cleanString(req.query.threadId, 80) || undefined
-    if (!payer && !ownerKey) return res.status(400).json({ ok: false, error: 'Missing payer.' })
-    const ownerProfile = ownerKey
-      ? pool ? await readPgProfile(profileId(ownerKey), threadId) : undefined
-      : undefined
-    const payerProfile = payer
-      ? pool ? await readPgProfile(profileId(payer), threadId) : undefined
-      : undefined
-    const fallbackProfile = fallbackOwner
-      ? pool ? await readPgProfile(profileId(fallbackOwner), threadId) : undefined
-      : undefined
-    if (pool) {
-      const pgProfile = ownerProfile ?? payerProfile ?? fallbackProfile
-      if (pgProfile) return res.json({ ok: true, profile: publicProfile(pgProfile) })
-      const legacyStore = await readStore()
-      const legacyProfile =
-        (ownerKey ? legacyStore.profiles[profileId(ownerKey)] : undefined)
-        ?? (payer ? legacyStore.profiles[profileId(payer)] : undefined)
-        ?? (fallbackOwner ? legacyStore.profiles[profileId(fallbackOwner)] : undefined)
-      if (legacyProfile) {
-        await writePgProfile(legacyProfile)
-        for (const message of legacyProfile.helperThread ?? []) {
-          await appendPgThreadMessage(legacyProfile.id, cleanThreadId(threadId, `mode:${message.mode || 'general'}`), message)
-        }
-      }
-      return res.json({ ok: true, profile: publicProfile(legacyProfile ?? null) })
-    }
-    const store = await readStore()
-    const fileOwnerProfile = ownerKey ? store.profiles[profileId(ownerKey)] : undefined
-    const filePayerProfile = payer ? store.profiles[profileId(payer)] : undefined
-    const fileFallbackProfile = fallbackOwner ? store.profiles[profileId(fallbackOwner)] : undefined
-    return res.json({ ok: true, profile: publicProfile(fileOwnerProfile ?? filePayerProfile ?? fileFallbackProfile) })
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
 
-  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  let identity: CirclePocketIdentity
+  try {
+    identity = await resolveCirclePocketIdentity(req)
+  } catch (error) {
+    const status = circlePocketIdentityErrorStatus(error)
+    return res.status(status).json({ ok: false, error: error instanceof Error ? error.message : 'Unauthorized.' })
+  }
+
+  const id = circlePocketIdentityId(identity)
+
+  if (req.method === 'GET') {
+    const threadId = cleanString(req.query.threadId, 80) || undefined
+    if (pool) {
+      const pgProfile = await readPgProfile(id, threadId)
+      return res.json({ ok: true, profile: publicProfile(pgProfile) })
+    }
+    const store = await readStore()
+    return res.json({ ok: true, profile: publicProfile(store.profiles[id]) })
+  }
 
   const action = cleanString(req.body?.action, 32) || 'save'
   const payer = normalizePayer(req.body?.payer)
-  const ownerKey = normalizePayer(req.body?.owner ?? req.body?.ownerKey)
-  const fallbackOwner = normalizePayer(req.body?.fallbackOwner)
-  if (!payer && !ownerKey) return res.status(400).json({ ok: false, error: 'Missing payer.' })
-
-  const storageKey = ownerKey || payer
-  const id = profileId(storageKey)
+  const storageKey = identity.storageKey
   const requestThreadId = cleanThreadId(req.body?.threadId, `mode:${cleanString(req.body?.mode, 40) || 'general'}`)
   let store: Store | null = null
   let existing: HelperProfile | undefined
   if (pool) {
     existing = await readPgProfile(id, requestThreadId)
-      ?? (fallbackOwner ? await readPgProfile(profileId(fallbackOwner), requestThreadId) : undefined)
-    if (!existing) {
-      const legacyStore = await readStore()
-      existing = legacyStore.profiles[id] ?? (fallbackOwner ? legacyStore.profiles[profileId(fallbackOwner)] : undefined)
-      if (existing) {
-        await writePgProfile(existing)
-        for (const message of existing.helperThread ?? []) {
-          await appendPgThreadMessage(existing.id, cleanThreadId(requestThreadId, `mode:${message.mode || 'general'}`), message)
-        }
-      }
-    }
   } else {
     store = await readStore()
-    existing = store.profiles[id] ?? (fallbackOwner ? store.profiles[profileId(fallbackOwner)] : undefined)
+    existing = store.profiles[id]
   }
   const now = Date.now()
-  const displayName = cleanString(req.body?.displayName, 80) || existing?.displayName || payer || storageKey
+  const displayName = cleanString(req.body?.displayName, 80) || existing?.displayName || payer || 'Circle Pocket user'
   const requestedMemory = cleanString(req.body?.memorySummary, 1600)
   const question = cleanString(req.body?.question, 1000)
   const answer = cleanString(req.body?.answer, 2000)
@@ -480,11 +456,11 @@ export default async function handler(req: Request, res: Response) {
 
   const next: HelperProfile = {
     id,
-    payer: payer || existing?.payer || storageKey,
+    payer: payer || existing?.payer || displayName,
     displayName,
-    ownerKey: ownerKey || existing?.ownerKey,
+    ownerKey: existing?.ownerKey,
     accessPayer: cleanString(req.body?.accessPayer, 128) || existing?.accessPayer || payer,
-    telegramHandle: cleanString(req.body?.telegramHandle, 80) || existing?.telegramHandle,
+    telegramHandle: existing?.telegramHandle,
     accessEventId: cleanString(req.body?.accessEventId, 128) || existing?.accessEventId,
     preferredPaymentWallet: cleanString(req.body?.preferredPaymentWallet, 120) || existing?.preferredPaymentWallet,
     preferredPaymentNetwork: cleanString(req.body?.preferredPaymentNetwork, 24) || existing?.preferredPaymentNetwork,
@@ -552,6 +528,11 @@ export default async function handler(req: Request, res: Response) {
   store.profiles[id] = next
   await writeStore(store)
   return res.json({ ok: true, profile: publicProfile(next), checkpointed: action === 'checkpoint' && !!next.memoryProof, cleared: clearedThread })
+}
+
+export const __testHelperProfileIdentity = {
+  profileId: (storageKey: string) => circlePocketIdentityId({ kind: storageKey.startsWith('privy:') ? 'privy' : 'browser', storageKey, subject: storageKey }),
+  resolveProfileIdentity: resolveCirclePocketIdentity,
 }
 
 

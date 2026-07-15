@@ -4,6 +4,12 @@ import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { isAddress } from 'viem'
 import { PublicKey } from '@solana/web3.js'
+import {
+  circlePocketIdentityErrorStatus,
+  circlePocketIdentityId,
+  resolveCirclePocketIdentity,
+} from './circle-pocket-identity.js'
+import { recordCirclePocketAction } from './circle-pocket-action-journal.js'
 
 const STORE_PATH = process.env.TELEGRAM_REQUEST_STORE ?? './data/telegram-requests.json'
 const MAX_TEXT = 80
@@ -28,10 +34,30 @@ type TelegramRequestRecord = {
   payUrl: string
   dashboardUrl?: string
   createdAt: number
+  ownerId?: string
+  idempotencyKey?: string
 }
 
 type Store = {
   requests: Record<string, TelegramRequestRecord>
+}
+type TelegramRequestDraft = Omit<TelegramRequestRecord, 'id' | 'payUrl' | 'createdAt' | 'ownerId' | 'idempotencyKey'>
+
+let storeMutationQueue: Promise<void> = Promise.resolve()
+
+async function mutateStore<T>(mutation: (store: Store) => Promise<T> | T) {
+  let release!: () => void
+  const previous = storeMutationQueue
+  storeMutationQueue = new Promise<void>(resolveQueue => { release = resolveQueue })
+  await previous
+  try {
+    const store = await readStore()
+    const result = await mutation(store)
+    await writeStore(store)
+    return result
+  } finally {
+    release()
+  }
 }
 
 function cleanText(value: unknown, fallback = '') {
@@ -88,7 +114,7 @@ async function writeStore(store: Store) {
   await writeFile(path, `${JSON.stringify(store, null, 2)}\n`, 'utf8')
 }
 
-function buildPayUrl(req: Request, record: Omit<TelegramRequestRecord, 'id' | 'payUrl' | 'createdAt'>) {
+function buildPayUrl(req: Request, record: TelegramRequestDraft) {
   const params = new URLSearchParams()
   if (record.amount) params.set('a', record.amount)
   else params.set('f', '1')
@@ -115,7 +141,7 @@ function buildPayUrl(req: Request, record: Omit<TelegramRequestRecord, 'id' | 'p
   return `${originFromRequest(req)}/pay?${params.toString()}`
 }
 
-function buildDashboardUrl(req: Request, record: Omit<TelegramRequestRecord, 'id' | 'payUrl' | 'createdAt'>) {
+function buildDashboardUrl(req: Request, record: TelegramRequestDraft) {
   if (record.mode !== 'group') return ''
   const params = new URLSearchParams()
   params.set('id', record.eventId || collectionEventId(record.label, 'telegram-request'))
@@ -139,6 +165,11 @@ function collectionEventId(label: string, fallback: string, suffix = '') {
   return suffix ? `${slug}-${suffix}` : slug
 }
 
+function publicRequest(record: TelegramRequestRecord) {
+  const { ownerId: _ownerId, idempotencyKey: _idempotencyKey, ...safe } = record
+  return safe
+}
+
 export default async function handler(req: Request, res: Response) {
   try {
     if (req.method === 'GET') {
@@ -147,18 +178,33 @@ export default async function handler(req: Request, res: Response) {
       const store = await readStore()
       const request = store.requests[id]
       if (!request) return res.status(404).json({ ok: false, error: 'Telegram request not found' })
-      return res.json({ ok: true, request })
+      return res.json({ ok: true, request: publicRequest(request) })
     }
 
     if (req.method !== 'POST') {
       return res.status(405).json({ ok: false, error: 'Method not allowed' })
     }
 
+    let identity
+    try {
+      identity = await resolveCirclePocketIdentity(req)
+    } catch (error) {
+      return res.status(circlePocketIdentityErrorStatus(error)).json({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Unauthorized Circle Pocket session.',
+      })
+    }
+    const ownerId = circlePocketIdentityId(identity)
+    const idempotencyKey = cleanText(req.headers['idempotency-key'] ?? req.body?.idempotencyKey, '').slice(0, 128)
+    if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(idempotencyKey)) {
+      return res.status(400).json({ ok: false, error: 'Missing or invalid idempotency key.' })
+    }
+
     const body = req.body ?? {}
     const wallet = cleanText(body.wallet, '').slice(0, 96)
     const evmWallet = cleanText(body.evmWallet, '').slice(0, 96)
     const solanaWallet = cleanText(body.solanaWallet, '').slice(0, 96)
-    const mode = body.mode === 'group' ? 'group' : 'person'
+    const mode: TelegramRequestMode = body.mode === 'group' ? 'group' : 'person'
     const amount = cleanAmount(body.amount)
     const kind: TelegramRequestKind = body.kind === 'polymarket-funding' ? 'polymarket-funding' : 'payment-request'
     const label = cleanText(body.label, mode === 'group' ? 'Telegram collection' : 'Payment request')
@@ -188,7 +234,7 @@ export default async function handler(req: Request, res: Response) {
 
     const id = randomBytes(9).toString('base64url')
     const eventId = mode === 'group' ? collectionEventId(label, 'telegram-request', id.slice(0, 6).toLowerCase()) : undefined
-    const draft = {
+    const draft: TelegramRequestDraft = {
       eventId,
       mode,
       kind,
@@ -207,12 +253,30 @@ export default async function handler(req: Request, res: Response) {
       payUrl: buildPayUrl(req, draft),
       dashboardUrl: buildDashboardUrl(req, draft),
       createdAt: Date.now(),
+      ownerId,
+      idempotencyKey,
     }
-
-    const store = await readStore()
-    store.requests[id] = record
-    await writeStore(store)
-    return res.json({ ok: true, request: record, botPayload: `share_${id}` })
+    const saved = await mutateStore(store => {
+      const existing = Object.values(store.requests).find(item => (
+        item.ownerId === ownerId && item.idempotencyKey === idempotencyKey
+      ))
+      if (existing) return { record: existing, replayed: true }
+      store.requests[id] = record
+      return { record, replayed: false }
+    })
+    await recordCirclePocketAction({
+      ownerId,
+      idempotencyKey,
+      action: 'create-usdc-paylink',
+      status: 'completed',
+      resourceId: saved.record.id,
+      metadata: {
+        amount: saved.record.amount || 'payer-selected',
+        network: saved.record.network,
+        mode: saved.record.mode,
+      },
+    })
+    return res.json({ ok: true, request: publicRequest(saved.record), botPayload: `share_${saved.record.id}`, replayed: saved.replayed })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Telegram request failed'
     return res.status(500).json({ ok: false, error: message })
