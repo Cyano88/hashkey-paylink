@@ -75,12 +75,41 @@ const saved = await call({
 assert.equal(saved.statusCode, 200)
 assert.equal(saved.payload?.profile?.displayName, 'Shy')
 
+const bankPaylinkThread = await call({
+  method: 'POST',
+  headers: { 'x-helper-session': guestA },
+  body: {
+    action: 'append-thread',
+    threadId: 'mode:circle-pocket',
+    payer: 'Shy',
+    mode: 'circle-pocket',
+    question: 'Confirm',
+    answer: 'Receive to Bank PayLink created.',
+    paylink: {
+      kind: 'bank-receive',
+      mode: 'person',
+      wallet: 'OPay ending 9696',
+      network: 'base',
+      label: 'Breakfast',
+      target: 'James',
+      amount: '5000',
+      payUrl: '/pay/bank-test',
+      currency: 'NGN',
+      recipientLabel: 'OPay ending 9696',
+    },
+  },
+})
+assert.equal(bankPaylinkThread.statusCode, 200)
+assert.equal(bankPaylinkThread.payload?.profile?.helperThread?.at(-1)?.paylink?.kind, 'bank-receive')
+assert.equal(bankPaylinkThread.payload?.profile?.helperThread?.at(-1)?.paylink?.currency, 'NGN')
+assert.equal(bankPaylinkThread.payload?.profile?.helperThread?.at(-1)?.paylink?.recipientLabel, 'OPay ending 9696')
+
 const sameSession = await call({
   method: 'GET',
   headers: { 'x-helper-session': guestA },
   query: { payer: 'completely-different-name', owner: 'spoofed-owner' },
 })
-assert.equal(sameSession.payload?.profile?.memorySummary, 'Private Circle Pocket memory.')
+assert.match(sameSession.payload?.profile?.memorySummary ?? '', /^Private Circle Pocket memory\./)
 
 const foreignSession = await call({
   method: 'GET',

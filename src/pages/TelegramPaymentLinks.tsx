@@ -264,7 +264,7 @@ function polymarketBridgeNetworkPrompt(amount: string) {
 type SavedRequest = {
   id?: string
   eventId?: string
-  kind?: 'payment-request' | 'polymarket-funding'
+  kind?: 'payment-request' | 'polymarket-funding' | 'bank-receive'
   mode: RequestMode
   wallet: string
   network?: RequestNetwork
@@ -276,6 +276,8 @@ type SavedRequest = {
   amount: string
   payUrl?: string
   dashboardUrl?: string
+  currency?: 'USDC' | 'NGN'
+  recipientLabel?: string
 }
 
 type HelperPaylinkDraft = {
@@ -2802,9 +2804,22 @@ export function TelegramHelperPanel({
         try {
           const link = await createBankReceiveFromDraft(draft)
           setBankPaylinkDraft(null)
+          const bankPaylink: SavedRequest = {
+            kind: 'bank-receive',
+            mode: 'person',
+            wallet: draft.savedBankLabel || 'Verified bank account',
+            network: 'base',
+            label: draft.label,
+            target: draft.target,
+            amount: draft.amountNgn,
+            payUrl: link.payment_url,
+            dashboardUrl: link.dashboard_url,
+            currency: 'NGN',
+            recipientLabel: draft.savedBankLabel || 'Verified bank account',
+          }
           finishHelperMessage(nextQuestion, {
             answer: `Receive to Bank PayLink created for ${friendlyName(draft.target)}: NGN ${Number(draft.amountNgn).toLocaleString('en-NG')} for ${draft.label}.`,
-            actionLink: { label: 'Open PayLink', url: link.payment_url! },
+            paylink: bankPaylink,
           })
         } catch (error) {
           setBankPaylinkDraft(draft)
@@ -4021,25 +4036,32 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
   const [copied, setCopied] = useState(false)
   const network = request.network ?? inferRequestNetwork(request)
   const isPolymarketFunding = request.kind === 'polymarket-funding'
+  const isBankReceive = request.kind === 'bank-receive'
   const url = request.payUrl || buildRequestPayLink(request)
   const shareUrl = url.startsWith('http') ? url : `${PUBLIC_PAYLINK_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`
   const dashboardUrl = request.mode === 'group' ? request.dashboardUrl || buildRequestDashboardLink(request) : ''
-  const amountLine = request.amount ? `${request.amount} USDC` : 'Flexible amount'
+  const amountLine = request.amount
+    ? isBankReceive
+      ? `NGN ${Number(request.amount).toLocaleString('en-NG')}`
+      : `${request.amount} USDC`
+    : 'Flexible amount'
   const target = friendlyName(request.target)
-  const recipient = request.wallet || request.evmWallet || request.solanaWallet
+  const recipient = request.recipientLabel || request.wallet || request.evmWallet || request.solanaWallet
   const shareText = [
-    isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
+    isPolymarketFunding ? 'Polymarket funding checkout' : isBankReceive ? 'Receive to Bank PayLink' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request',
     `${request.label} - ${amountLine}`,
     isPolymarketFunding ? `Profile: ${request.polymarketWallet ? shortAddress(request.polymarketWallet) : target}` : request.mode === 'group' ? `Collection: ${target}` : `Payer: ${target}`,
     isPolymarketFunding
       ? 'Open the checkout to fund the saved Polymarket profile through the bridge.'
+      : isBankReceive
+      ? 'Open the PayLink to pay Base USDC and settle the Naira amount to the verified bank account.'
       : request.mode === 'group'
       ? 'Open the link, enter your name, and contribute securely.'
       : 'Please share the receipt after payment is confirmed.',
   ].join('\n')
 
   async function shareLink() {
-    const title = isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'
+    const title = isPolymarketFunding ? 'Polymarket funding checkout' : isBankReceive ? 'Receive to Bank PayLink' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'
     const richPayload = { title, text: shareText, url: shareUrl }
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
@@ -4076,7 +4098,7 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
         <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-200" />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-100">
-            {isPolymarketFunding ? 'Polymarket funding ready' : request.mode === 'group' ? 'Collection ready' : 'Payment request ready'}
+            {isPolymarketFunding ? 'Polymarket funding ready' : isBankReceive ? 'Bank PayLink ready' : request.mode === 'group' ? 'Collection ready' : 'Payment request ready'}
           </p>
           <p className="truncate text-[11px] text-emerald-700/80 dark:text-emerald-100/75">
             {amountLine} on {requestNetworkLabels[network]}
@@ -4086,9 +4108,9 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
       <div className="mt-2 grid gap-1 rounded-xl bg-white/80 p-2 text-xs dark:bg-white/[0.06]">
         {[
           ['Amount', amountLine],
-          ['Network', requestNetworkLabels[network]],
+          [isBankReceive ? 'Payer network' : 'Network', requestNetworkLabels[network]],
           ['Purpose', request.label || 'Payment'],
-          [isPolymarketFunding ? 'Bridge' : 'Recipient', recipient ? shortAddress(recipient) : 'Not set'],
+          [isPolymarketFunding ? 'Bridge' : isBankReceive ? 'Settlement' : 'Recipient', recipient ? (isBankReceive ? recipient : shortAddress(recipient)) : 'Not set'],
           [isPolymarketFunding ? 'Profile' : request.mode === 'group' ? 'Collection' : 'Payer', isPolymarketFunding && request.polymarketWallet ? shortAddress(request.polymarketWallet) : target || 'Not set'],
         ].map(([label, value]) => (
           <div key={label} className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-2">
@@ -4137,9 +4159,9 @@ function HelperPaylinkCard({ request }: { request: SavedRequest }) {
         url={shareUrl}
         copied={copied}
         shareText={shareText}
-        title={isPolymarketFunding ? 'Share funding link' : request.mode === 'group' ? 'Share collection link' : 'Share payment link'}
+        title={isPolymarketFunding ? 'Share funding link' : isBankReceive ? 'Share bank PayLink' : request.mode === 'group' ? 'Share collection link' : 'Share payment link'}
         subtitle="Send it through your preferred app."
-        emailSubject={isPolymarketFunding ? 'Polymarket funding checkout' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'}
+        emailSubject={isPolymarketFunding ? 'Polymarket funding checkout' : isBankReceive ? 'Receive to Bank PayLink' : request.mode === 'group' ? 'Hash PayLink collection' : 'Hash PayLink payment request'}
         onCopy={copyShareLink}
         onClose={() => setShareOpen(false)}
       />

@@ -72,7 +72,7 @@ type HelperThreadMessage = {
 type StoredPaylink = {
   id?: string
   eventId?: string
-  kind?: 'payment-request' | 'polymarket-funding'
+  kind?: 'payment-request' | 'polymarket-funding' | 'bank-receive'
   mode: string
   wallet: string
   network?: string
@@ -84,6 +84,8 @@ type StoredPaylink = {
   amount: string
   payUrl?: string
   dashboardUrl?: string
+  currency?: 'USDC' | 'NGN'
+  recipientLabel?: string
 }
 
 let pgSchemaReady: Promise<void> | null = null
@@ -127,7 +129,7 @@ function cleanPaylink(value: unknown): StoredPaylink | undefined {
   return {
     id: cleanString(record.id, 120) || undefined,
     eventId: cleanString(record.eventId, 120) || undefined,
-    kind: kind === 'polymarket-funding' ? 'polymarket-funding' : kind === 'payment-request' ? 'payment-request' : undefined,
+    kind: kind === 'polymarket-funding' ? 'polymarket-funding' : kind === 'payment-request' ? 'payment-request' : kind === 'bank-receive' ? 'bank-receive' : undefined,
     mode,
     wallet,
     network: cleanString(record.network, 24) || undefined,
@@ -139,6 +141,8 @@ function cleanPaylink(value: unknown): StoredPaylink | undefined {
     amount,
     payUrl: payUrl && /^\/|^https?:\/\//i.test(payUrl) ? payUrl : undefined,
     dashboardUrl: dashboardUrl && /^\/|^https?:\/\//i.test(dashboardUrl) ? dashboardUrl : undefined,
+    currency: record.currency === 'NGN' ? 'NGN' : record.currency === 'USDC' ? 'USDC' : undefined,
+    recipientLabel: cleanString(record.recipientLabel, 120) || undefined,
   }
 }
 
