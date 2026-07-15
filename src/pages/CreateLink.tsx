@@ -1033,6 +1033,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const navigate = useNavigate()
   const productParam = searchParams.get('product')
   const paymentTabParam = searchParams.get('tab')
+  const agentHashRouteOpen = searchParams.get('agent') === 'hash'
   const posStepParam = searchParams.get('posStep')
   const agentAmountParam = (searchParams.get('amount') ?? '').replace(/,/g, '').trim()
   const agentMemoParam = (searchParams.get('memo') ?? '').trim().slice(0, 80)
@@ -1109,8 +1110,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [productHubOpen, setProductHubOpen] = useState(!startsInProduct)
   const [paymentMenuOpen, setPaymentMenuOpen] = useState(startsInPaymentMenu)
   const [serviceHubAgentPromptIndex, setServiceHubAgentPromptIndex] = useState(0)
-  const [serviceHubAgentMounted, setServiceHubAgentMounted] = useState(false)
-  const [serviceHubAgentVisible, setServiceHubAgentVisible] = useState(false)
+  const [serviceHubAgentMounted, setServiceHubAgentMounted] = useState(agentHashRouteOpen)
+  const [serviceHubAgentVisible, setServiceHubAgentVisible] = useState(agentHashRouteOpen)
   const [serviceHubAnonymousOwner] = useState(() => {
     const storageKey = 'hashpaylink-agent-hash-session-owner'
     const stored = window.sessionStorage.getItem(storageKey)?.trim()
@@ -1376,12 +1377,18 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   function openServiceHubAgent() {
     setServiceHubAgentMounted(true)
     window.setTimeout(() => setServiceHubAgentVisible(true), 20)
+    const url = new URL(window.location.href)
+    url.searchParams.set('agent', 'hash')
+    navigate(`${url.pathname}${url.search}${url.hash}`)
   }
 
   function closeServiceHubAgent() {
     setServiceHubAgentComposerActive(false)
     setServiceHubAgentVisible(false)
     window.setTimeout(() => setServiceHubAgentMounted(false), 260)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('agent')
+    navigate(`${url.pathname}${url.search}${url.hash}`)
   }
 
   function applyPosStep(step: string | null) {
@@ -1826,6 +1833,18 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }, 7_000)
     return () => window.clearInterval(timer)
   }, [polymarketMode])
+
+  useEffect(() => {
+    if (agentHashRouteOpen) {
+      setServiceHubAgentMounted(true)
+      const timer = window.setTimeout(() => setServiceHubAgentVisible(true), 20)
+      return () => window.clearTimeout(timer)
+    }
+    setServiceHubAgentComposerActive(false)
+    setServiceHubAgentVisible(false)
+    const timer = window.setTimeout(() => setServiceHubAgentMounted(false), 260)
+    return () => window.clearTimeout(timer)
+  }, [agentHashRouteOpen])
 
   useEffect(() => {
     if (!productHubOpen || serviceHubAgentMounted) {

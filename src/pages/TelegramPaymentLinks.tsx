@@ -3783,6 +3783,25 @@ export function TelegramHelperPanel({
     <div className={cn(fillAvailableHeight && 'flex min-h-0 flex-1 flex-col')}>
       <div className={cn('space-y-3', fillAvailableHeight && 'flex min-h-0 flex-1 flex-col space-y-0')}>
         <div className={cn('overflow-hidden', fillAvailableHeight && 'flex min-h-0 flex-1 flex-col')}>
+              {helperMode && (
+                <div className="shrink-0 px-3 pb-2">
+                  <div className="flex items-center justify-between gap-3 rounded-full border border-gray-200/90 bg-gray-50/95 px-3 py-2 shadow-[0_4px_16px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-white/[0.06] dark:shadow-none">
+                    <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-gray-800 dark:text-gray-100">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                      <span className="truncate">{helperModes.find(mode => mode.id === helperMode)?.label ?? 'Agent Hash'} selected</span>
+                    </span>
+                    {!lockedHelperMode && (
+                      <button
+                        type="button"
+                        onClick={resetHelperMode}
+                        className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-500 shadow-sm transition hover:text-gray-900 dark:bg-white/[0.08] dark:text-gray-300 dark:hover:text-white"
+                      >
+                        Change mode
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
               <div
                 ref={helperScrollRef}
                 className={cn(
@@ -3871,23 +3890,6 @@ export function TelegramHelperPanel({
                       <div>
                         {message.answer && (
                           <div className="max-w-[82%] break-words whitespace-pre-wrap rounded-[18px] rounded-bl-md bg-[#f0f0f0] px-3.5 py-2.5 text-sm leading-relaxed text-gray-900 shadow-sm dark:bg-white/[0.08] dark:text-gray-100">
-                            {message.acceptedModeLabel && (
-                              <div className="mb-2.5 flex items-center justify-between gap-3 border-b border-gray-200/70 pb-2 dark:border-white/10">
-                                <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                                  <span className="truncate">{message.acceptedModeLabel} selected</span>
-                                </span>
-                                {!lockedHelperMode && (
-                                  <button
-                                    type="button"
-                                    onClick={resetHelperMode}
-                                    className="shrink-0 text-[11px] font-semibold text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200"
-                                  >
-                                    Change mode
-                                  </button>
-                                )}
-                              </div>
-                            )}
                             {message.answer}
                             {helperActionLinks(message).length > 0 && (
                               <div className="mt-2 flex flex-wrap items-center gap-2">
