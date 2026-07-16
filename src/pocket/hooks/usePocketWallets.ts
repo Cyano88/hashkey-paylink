@@ -5,6 +5,14 @@ import type { CirclePocketWallets } from '../models/pocketWallet'
 
 type PocketAccessTokenReader = () => Promise<string | null>
 
+type PocketWalletCacheEntry = {
+  wallets: CirclePocketWallets
+  rows: UnifiedBalanceBreakdown[]
+  total: number
+}
+
+const pocketWalletCache = new Map<string, PocketWalletCacheEntry>()
+
 type PocketWalletReadState = {
   wallets: CirclePocketWallets
   setWallets: Dispatch<SetStateAction<CirclePocketWallets>>
@@ -25,9 +33,10 @@ export default function usePocketWallets({
   email: string
   getAccessToken: PocketAccessTokenReader
 }): PocketWalletReadState {
-  const [wallets, setWallets] = useState<CirclePocketWallets>({})
-  const [rows, setRows] = useState<UnifiedBalanceBreakdown[]>([])
-  const [total, setTotal] = useState(0)
+  const cached = authenticated && email ? pocketWalletCache.get(email) : undefined
+  const [wallets, setWallets] = useState<CirclePocketWallets>(() => cached?.wallets ?? {})
+  const [rows, setRows] = useState<UnifiedBalanceBreakdown[]>(() => cached?.rows ?? [])
+  const [total, setTotal] = useState(() => cached?.total ?? 0)
   const [balanceBusy, setBalanceBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -40,12 +49,17 @@ export default function usePocketWallets({
       const result = await readPocketBalances({ accessToken: token })
       setRows(result.rows)
       setTotal(result.total)
+      pocketWalletCache.set(email, {
+        wallets,
+        rows: result.rows,
+        total: result.total,
+      })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Circle Pocket balance refresh failed.')
     } finally {
       setBalanceBusy(false)
     }
-  }, [getAccessToken])
+  }, [email, getAccessToken, wallets])
 
   useEffect(() => {
     if (!authenticated || !email) {
@@ -55,36 +69,60 @@ export default function usePocketWallets({
       return
     }
 
+    const immediate = pocketWalletCache.get(email)
+    if (immediate) {
+      setWallets(immediate.wallets)
+      setRows(immediate.rows)
+      setTotal(immediate.total)
+    }
+
     let cancelled = false
     async function hydrate() {
       try {
         const token = await getAccessToken()
         if (!token || cancelled) return
-        const nextWallets = await readPocketLinkedWallets({ accessToken: token })
+        const walletsRequest = readPocketLinkedWallets({ accessToken: token })
+        const balancesRequest = readPocketBalances({ accessToken: token })
+          .then(result => ({ result }))
+          .catch(reason => ({ reason }))
+        const nextWallets = await walletsRequest
         if (cancelled) return
         setWallets(nextWallets)
-        if (Object.keys(nextWallets).length) {
-          setBalanceBusy(true)
-          setError('')
-          try {
-            const result = await readPocketBalances({ accessToken: token })
-            if (cancelled) return
-            setRows(result.rows)
-            setTotal(result.total)
-          } catch (reason) {
-            if (!cancelled) setError(reason instanceof Error ? reason.message : 'Circle Pocket balance refresh failed.')
-          } finally {
-            if (!cancelled) setBalanceBusy(false)
-          }
-        } else {
+        setBalanceBusy(true)
+        setError('')
+        const balanceOutcome = await balancesRequest
+        if (cancelled) return
+        if ('result' in balanceOutcome) {
+          setRows(balanceOutcome.result.rows)
+          setTotal(balanceOutcome.result.total)
+          pocketWalletCache.set(email, {
+            wallets: nextWallets,
+            rows: balanceOutcome.result.rows,
+            total: balanceOutcome.result.total,
+          })
+        } else if (!Object.keys(nextWallets).length) {
           setRows([])
           setTotal(0)
+          pocketWalletCache.set(email, { wallets: nextWallets, rows: [], total: 0 })
+        } else {
+          setError(balanceOutcome.reason instanceof Error ? balanceOutcome.reason.message : 'Circle Pocket balance refresh failed.')
+          const previous = pocketWalletCache.get(email)
+          pocketWalletCache.set(email, {
+            wallets: nextWallets,
+            rows: previous?.rows ?? [],
+            total: previous?.total ?? 0,
+          })
         }
+        setBalanceBusy(false)
       } catch {
         if (!cancelled) {
-          setWallets({})
-          setRows([])
-          setTotal(0)
+          const previous = pocketWalletCache.get(email)
+          if (!previous) {
+            setWallets({})
+            setRows([])
+            setTotal(0)
+          }
+          setBalanceBusy(false)
         }
       }
     }

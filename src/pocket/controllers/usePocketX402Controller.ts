@@ -12,6 +12,44 @@ type PocketX402Network = 'base' | 'arc'
 type PocketX402WalletMode = 'choose' | 'create' | 'login'
 type PocketX402WalletStep = 'idle' | 'otp' | 'done'
 
+const pocketX402SnapshotCache = new Map<string, PocketX402SnapshotData>()
+const pocketX402SnapshotRequests = new Map<string, Promise<PocketX402SnapshotData>>()
+
+function x402CacheKey(email: string, network: PocketX402Network) {
+  return `${email}:${network}`
+}
+
+async function loadPocketX402Snapshot(params: {
+  email: string
+  network: PocketX402Network
+  getAccessToken: () => Promise<string | null>
+  force?: boolean
+}) {
+  const key = x402CacheKey(params.email, params.network)
+  const cached = pocketX402SnapshotCache.get(key)
+  if (cached && !params.force) return cached
+  const running = pocketX402SnapshotRequests.get(key)
+  if (running) return running
+  const request = (async () => {
+    const accessToken = await params.getAccessToken()
+    if (!accessToken) throw new Error('Sign in again to view x402 balances.')
+    const snapshot = await readPocketX402Snapshot({ accessToken, network: params.network })
+    pocketX402SnapshotCache.set(key, snapshot)
+    return snapshot
+  })().finally(() => pocketX402SnapshotRequests.delete(key))
+  pocketX402SnapshotRequests.set(key, request)
+  return request
+}
+
+export async function prefetchPocketX402Snapshot(params: {
+  authenticated: boolean
+  email: string
+  getAccessToken: () => Promise<string | null>
+}) {
+  if (!params.authenticated || !params.email) return
+  await loadPocketX402Snapshot({ email: params.email, network: 'base', getAccessToken: params.getAccessToken })
+}
+
 function readableError(reason: unknown, fallback: string) {
   return reason instanceof Error && reason.message ? reason.message : fallback
 }
@@ -26,7 +64,7 @@ export default function usePocketX402Controller({
   getAccessToken: () => Promise<string | null>
 }) {
   const [network, setNetworkState] = useState<PocketX402Network>('base')
-  const [snapshot, setSnapshot] = useState<PocketX402SnapshotData | null>(null)
+  const [snapshot, setSnapshot] = useState<PocketX402SnapshotData | null>(() => pocketX402SnapshotCache.get(x402CacheKey(email, 'base')) ?? null)
   const [refreshing, setRefreshing] = useState(false)
   const [walletMode, setWalletMode] = useState<PocketX402WalletMode>('choose')
   const [walletStep, setWalletStep] = useState<PocketX402WalletStep>('idle')
@@ -50,9 +88,7 @@ export default function usePocketX402Controller({
     setRefreshing(true)
     setError('')
     try {
-      const accessToken = await getAccessToken()
-      if (!accessToken) throw new Error('Sign in again to view x402 balances.')
-      const next = await readPocketX402Snapshot({ accessToken, network })
+      const next = await loadPocketX402Snapshot({ email, network, getAccessToken, force: true })
       if (run !== refreshRun.current) return
       setSnapshot(next)
       if (next.found && !next.connected) setWalletMode('login')
@@ -91,12 +127,12 @@ export default function usePocketX402Controller({
       return
     }
     setNetworkState(next)
-    setSnapshot(null)
+    setSnapshot(pocketX402SnapshotCache.get(x402CacheKey(email, next)) ?? null)
     setActivationOpen(false)
     setActivationSuccess('')
     setActivationPending(false)
     activationKey.current = ''
-  }, [network, walletStep])
+  }, [email, network, walletStep])
 
   const chooseMode = useCallback((mode: Exclude<PocketX402WalletMode, 'choose'>) => {
     setWalletMode(mode)

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CHAIN_META } from '../../lib/chains'
 import { copyToClipboard } from '../../lib/utils'
@@ -7,6 +7,7 @@ import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import usePocketWithdrawalController from '../controllers/usePocketWithdrawalController'
+import { prefetchPocketX402Snapshot } from '../controllers/usePocketX402Controller'
 import PocketHomeControls, { PocketHomeSignInCard, type PocketHomeTab } from '../features/home/PocketHomeControls'
 import PocketHomeOverview, { POCKET_HOME_NETWORKS, type PocketHomeNetworkKey } from '../features/home/PocketHomeOverview'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -32,6 +33,10 @@ export default function PocketHomePage() {
   const [walletBusy, setWalletBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [sessionActivity, setSessionActivity] = useState<string[]>([])
+
+  useEffect(() => {
+    void prefetchPocketX402Snapshot({ authenticated, email, getAccessToken }).catch(() => undefined)
+  }, [authenticated, email, getAccessToken])
 
   const recordActivity = useCallback((message: string) => {
     setSessionActivity(current => [message, ...current].slice(0, 5))

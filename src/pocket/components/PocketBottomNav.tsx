@@ -21,11 +21,11 @@ export default function PocketBottomNav({ active, keyboardOpen = false, onSelect
     <nav
       aria-label="Circle Pocket navigation"
       className={cn(
-        'pointer-events-none fixed inset-x-0 bottom-0 z-40 bg-transparent px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2.5 transition-transform duration-200',
+        'pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-gray-200/80 bg-white/92 px-4 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl transition-transform duration-200 dark:border-white/[0.08] dark:bg-[#111114]/92 dark:shadow-[0_-10px_30px_rgba(0,0,0,0.24)]',
         keyboardOpen && 'translate-y-full',
       )}
     >
-      <div className="pointer-events-auto mx-auto grid w-full max-w-[430px] grid-cols-4 rounded-full border border-gray-200 bg-[#F5F5F7]/95 p-1.5 shadow-[0_12px_36px_rgba(15,23,42,0.16)] backdrop-blur-2xl dark:border-white/[0.1] dark:bg-[#151518]/95 dark:shadow-[0_16px_50px_rgba(0,0,0,0.4)]">
+      <div className="pointer-events-auto mx-auto grid w-full max-w-[430px] grid-cols-4 gap-1">
         {items.map(({ key, label, icon: Icon }) => {
           const selected = active === key
           return (
@@ -35,9 +35,9 @@ export default function PocketBottomNav({ active, keyboardOpen = false, onSelect
               aria-current={selected ? 'page' : undefined}
               onClick={() => onSelect(key)}
               className={cn(
-                'flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-full px-2 text-[10px] font-bold transition-all duration-200 active:scale-95',
+                'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 active:scale-[0.97]',
                 selected
-                  ? 'bg-gray-950 text-white shadow-sm dark:bg-white/[0.12] dark:text-white dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+                  ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950'
                   : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-white/40 dark:hover:bg-white/[0.05] dark:hover:text-white/70',
               )}
             >

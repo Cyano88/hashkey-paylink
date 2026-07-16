@@ -8,6 +8,7 @@ import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 type PocketAccessTokenReader = () => Promise<string | null>
 
 const emptyProfile: LocalCurrencyProfile = { firstName: '', lastName: '', email: '' }
+const pocketProfileCache = new Map<string, LocalCurrencyProfile | null>()
 
 export default function usePocketProfile({
   authenticated,
@@ -18,9 +19,10 @@ export default function usePocketProfile({
   email: string
   getAccessToken: PocketAccessTokenReader
 }) {
-  const [profile, setProfile] = useState<LocalCurrencyProfile | null>(null)
-  const [draft, setDraft] = useState<LocalCurrencyProfile>(emptyProfile)
-  const [editing, setEditing] = useState(false)
+  const cached = authenticated && email ? pocketProfileCache.get(email) : undefined
+  const [profile, setProfile] = useState<LocalCurrencyProfile | null>(() => cached ?? null)
+  const [draft, setDraft] = useState<LocalCurrencyProfile>(() => cached ?? { ...emptyProfile, email })
+  const [editing, setEditing] = useState(() => cached === null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -33,7 +35,13 @@ export default function usePocketProfile({
       setError('')
       return
     }
-    setBusy(true)
+    const immediate = pocketProfileCache.get(email)
+    if (immediate !== undefined) {
+      setProfile(immediate)
+      setDraft(immediate ?? { ...emptyProfile, email })
+      setEditing(!immediate)
+    }
+    setBusy(immediate === undefined)
     setError('')
     try {
       const token = await getAccessToken()
@@ -41,6 +49,7 @@ export default function usePocketProfile({
       const data = await readPocketLocalCurrencyProfile({ accessToken: token })
       if (!isCurrent()) return
       const nextProfile = data.profile ?? null
+      pocketProfileCache.set(email, nextProfile)
       setProfile(nextProfile)
       setDraft({
         firstName: nextProfile?.firstName ?? '',
@@ -71,6 +80,7 @@ export default function usePocketProfile({
       })
       setProfile(data.profile)
       setDraft(data.profile)
+      pocketProfileCache.set(email, data.profile)
       setEditing(false)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save payout profile.')
