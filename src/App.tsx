@@ -28,6 +28,7 @@ import WalletsDocs      from './pages/docs/WalletsDocs'
 import EnvironmentDocs  from './pages/docs/EnvironmentDocs'
 import TermsDocs        from './pages/docs/TermsDocs'
 import PrivacyDocs      from './pages/docs/PrivacyDocs'
+import CirclePocketApp from './pocket/CirclePocketApp'
 
 // ── Hostname-based app routing ────────────────────────────────────────────────
 // The same Render service hosts both apps. The active hostname determines
@@ -61,6 +62,7 @@ export default function App() {
       {IS_APP_HOST && <Route index element={<CreateLink />} />}
       <Route path="app" element={<CreateLink />} />
       <Route path="create" element={<CreateLink />} />
+      <Route path="pocket/*" element={<CirclePocketApp />} />
       <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
       <Route path="pay" element={<PaymentPage />} />
       <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />

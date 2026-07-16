@@ -67,6 +67,25 @@ import polymarketRelayerBuilderSignerHandler from './api/polymarket-relayer-buil
 import polymarketSubmitOrderHandler from './api/polymarket-submit-order.js'
 import ngPosHandler from './api/ng-pos.js'
 import localCurrencyProfileHandler from './api/local-currency-profile.js'
+import pocketProfileHandler from './api/pocket/profile.js'
+import pocketPosHandler from './api/pocket/pos.js'
+import pocketBankReceiveHandler from './api/pocket/bank-receive.js'
+import pocketBankInstitutionsHandler from './api/pocket/bank-receive-institutions.js'
+import pocketBankVerifyHandler from './api/pocket/bank-receive-verify.js'
+import pocketBankSendHandler from './api/pocket/bank-send.js'
+import {
+  pocketSolanaTransferPrepareHandler,
+  pocketSolanaTransferSubmitHandler,
+} from './api/pocket/solana-transfers.js'
+import pocketActivityHandler from './api/pocket/activity.js'
+import pocketBalancesHandler from './api/pocket/balances.js'
+import pocketRecipientBalanceHandler from './api/pocket/recipient-balance.js'
+import pocketX402Handler from './api/pocket/x402.js'
+import pocketX402ConnectHandler from './api/pocket/x402-connect.js'
+import pocketX402ActivateHandler from './api/pocket/x402-activate.js'
+import pocketAgentAskHandler from './api/pocket/agent-ask.js'
+import pocketWalletsHandler from './api/pocket/wallets/index.js'
+import pocketWalletLinkHandler from './api/pocket/wallets/link.js'
 import { paycrestWebhookHandler } from './api/paycrest-pos.js'
 import streamRecipientInviteHandler from './api/stream-recipient-invite.js'
 import streamHistoryHandler from './api/stream-history.js'
@@ -220,6 +239,23 @@ app.post('/api/polymarket-relayer-builder-signer', strictLimiter, polymarketRela
 app.post('/api/polymarket-submit-order', strictLimiter, polymarketSubmitOrderHandler)
 app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
 app.all('/api/local-currency-profile',  strictLimiter, localCurrencyProfileHandler)
+app.all('/api/pocket/profile',           strictLimiter, pocketProfileHandler)
+app.all('/api/pocket/pos',               strictLimiter, pocketPosHandler)
+app.all('/api/pocket/bank-receive',      strictLimiter, pocketBankReceiveHandler)
+app.all('/api/pocket/bank-receive/institutions', readLimiter, pocketBankInstitutionsHandler)
+app.all('/api/pocket/bank-receive/verify', strictLimiter, pocketBankVerifyHandler)
+app.all('/api/pocket/bank-send',          strictLimiter, pocketBankSendHandler)
+app.all('/api/pocket/transfers/prepare',  strictLimiter, pocketSolanaTransferPrepareHandler)
+app.all('/api/pocket/transfers/submit',   strictLimiter, pocketSolanaTransferSubmitHandler)
+app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)
+app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
+app.all('/api/pocket/balances/recipient', readLimiter, pocketRecipientBalanceHandler)
+app.all('/api/pocket/activity',          readLimiter, pocketActivityHandler)
+app.all('/api/pocket/x402',              readLimiter, pocketX402Handler)
+app.all('/api/pocket/x402/connect',      strictLimiter, pocketX402ConnectHandler)
+app.all('/api/pocket/x402/activate',     strictLimiter, pocketX402ActivateHandler)
+app.all('/api/pocket/agent/ask',         strictLimiter, pocketAgentAskHandler)
+app.all('/api/pocket/wallets/link',      strictLimiter, pocketWalletLinkHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)
 app.all('/api/arena-room',             arenaLimiter, arenaRoomHandler)

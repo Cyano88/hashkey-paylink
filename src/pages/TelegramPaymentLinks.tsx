@@ -43,7 +43,7 @@ import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import { PrivyDisconnectButton } from '../lib/PrivyDisconnectButton'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
-import { resolvePrivyCircleLink } from '../lib/privyCircleLink'
+import { readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
 import { isClearAgentHashChatCommand } from '../lib/agentHashChat'
 import { circlePocketAgentHeaders, getCirclePocketBrowserSession } from '../lib/circlePocketAgentIdentity'
 import {
@@ -607,7 +607,7 @@ function extractTarget(text: string, mode: RequestMode) {
   return ''
 }
 
-const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
+const helperModes: Array<{ id: HelperMode; label: string; intro: string; available?: boolean }> = [
   {
     id: 'circle-pocket',
     label: 'Circle Pocket',
@@ -617,6 +617,7 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
     id: 'daily',
     label: 'Daily Companion',
     intro: 'Daily Companion is ready. Ask questions, explore ideas, plan your day, or talk through whatever is on your mind.',
+    available: false,
   },
   {
     id: 'services',
@@ -627,11 +628,13 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string }> = [
     id: 'polydesk',
     label: 'PolyDesk',
     intro: 'PolyDesk is ready. Choose Portfolio, World Cup, or LP Scout so I can use the right Polymarket flow.',
+    available: false,
   },
   {
     id: 'support',
     label: 'Support',
     intro: "Tell me what is stuck, confusing, or not working, and I'll help you fix it step by step.",
+    available: false,
   },
 ]
 
@@ -1755,7 +1758,7 @@ export function TelegramHelperPanel({
     if (initialHelperMode) return initialHelperMode
     const stored = window.localStorage.getItem(helperModeStorageKey)
     const saved = stored === 'payments' ? 'circle-pocket' : stored
-    return helperModes.some(mode => mode.id === saved) ? saved as HelperMode : ''
+    return helperModes.some(mode => mode.id === saved && mode.available !== false) ? saved as HelperMode : ''
   })()
   const storedPolyDeskSubMode = (() => {
     if (initialPolyDeskSubMode) return initialPolyDeskSubMode
@@ -2144,7 +2147,7 @@ export function TelegramHelperPanel({
 
   function chooseHelperMode(mode: HelperMode) {
     const selected = helperModes.find(item => item.id === mode)
-    if (!selected || asking) return
+    if (!selected || selected.available === false || asking) return
     setHelperMode(mode)
     setPolyDeskSubMode('')
     setPaylinkDraft(null)
@@ -2337,8 +2340,8 @@ export function TelegramHelperPanel({
     try {
       const accessToken = await getHelperAccessToken()
       if (!accessToken) return ''
-      const linked = await resolvePrivyCircleLink({ accessToken, chain: network, purpose: 'payment' })
-      return linked.link?.circleWalletAddress?.trim() || ''
+      const linked = await readPocketWallet({ accessToken, network })
+      return linked?.wallet.address.trim() || ''
     } catch {
       return ''
     }
@@ -2367,7 +2370,7 @@ export function TelegramHelperPanel({
     if (!wallet) {
       finishHelperMessage(text, {
         answer: `No ${requestNetworkLabels[network]} Circle smart wallet is connected to this signed-in account yet. Open Circle Pocket to create or connect it.`,
-        actionLink: { label: 'Open Circle Pocket', url: '/?product=circle-pocket' },
+        actionLink: { label: 'Open Circle Pocket', url: '/pocket/home/smart-wallet' },
       })
       return true
     }
@@ -2645,7 +2648,7 @@ export function TelegramHelperPanel({
     if (!hasOpenPaymentFlow && isOutboundTransferIntent(nextQuestion)) {
       finishHelperMessage(nextQuestion, {
         answer: 'Are you trying to send money from your wallet, or request that person to pay you? I will not create a receive PayLink until you confirm.',
-        actionLink: { label: 'Open Circle Pocket', url: '/?product=circle-pocket' },
+        actionLink: { label: 'Open Circle Pocket', url: '/pocket/home/smart-wallet' },
       })
       return true
     }
@@ -3829,16 +3832,27 @@ export function TelegramHelperPanel({
                   <div className="max-w-[94%] rounded-[20px] rounded-bl-[6px] bg-[#f3f3f4] px-3 py-2.5 text-[13px] leading-[1.4] text-gray-900 shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:bg-white/[0.075] dark:text-gray-100 dark:shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
                     <p className="mb-2 font-semibold tracking-[-0.01em]">Choose how Agent Hash should help.</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {helperModes.map(mode => (
+                      {helperModes.map(mode => {
+                        const unavailable = mode.available === false
+                        return (
                         <button
                           key={mode.id}
                           type="button"
                           onClick={() => chooseHelperMode(mode.id)}
-                          className="rounded-full border border-gray-200/90 bg-white/90 px-3 py-1.5 text-[11px] font-semibold leading-none text-gray-800 shadow-[0_2px_8px_rgba(15,23,42,0.04)] transition hover:border-gray-300 hover:bg-white active:scale-[0.97] dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-100 dark:shadow-none dark:hover:bg-white/[0.12]"
+                          disabled={unavailable}
+                          aria-disabled={unavailable}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold leading-none transition',
+                            unavailable
+                              ? 'cursor-not-allowed border-gray-200/70 bg-gray-100/80 text-gray-400 shadow-none dark:border-white/[0.06] dark:bg-white/[0.035] dark:text-gray-500'
+                              : 'border-gray-200/90 bg-white/90 text-gray-800 shadow-[0_2px_8px_rgba(15,23,42,0.04)] hover:border-gray-300 hover:bg-white active:scale-[0.97] dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-100 dark:shadow-none dark:hover:bg-white/[0.12]',
+                          )}
                         >
-                          {mode.label}
+                          <span>{mode.label}</span>
+                          {unavailable && <span className="text-[9px] font-bold uppercase tracking-[0.08em]">Soon</span>}
                         </button>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 )}

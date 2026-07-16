@@ -55,8 +55,16 @@ export async function mutateDurableJson<T>(key: string, mutate: (current: T | un
   const client = await requirePool().connect()
   try {
     await client.query('begin')
+    // Ensure the key exists before locking it. SELECT ... FOR UPDATE cannot lock
+    // an absent row, so concurrent first writes could otherwise overwrite one another.
+    await client.query(
+      `insert into render_durable_kv (store_key, value, updated_at)
+        values ($1, 'null'::jsonb, now())
+        on conflict (store_key) do nothing`,
+      [key],
+    )
     const result = await client.query('select value from render_durable_kv where store_key = $1 for update', [key])
-    const current = result.rows[0]?.value as T | undefined
+    const current = (result.rows[0]?.value ?? undefined) as T | undefined
     const next = await mutate(current)
     await client.query(
       `insert into render_durable_kv (store_key, value, updated_at)

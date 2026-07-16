@@ -626,6 +626,362 @@ async function runCircle(args: string[], key: string, timeoutMs = 60_000) {
   return [stdout, stderr].filter(Boolean).join('\n').trim()
 }
 
+export type AgentWalletReadSnapshot = {
+  found: boolean
+  walletAddress?: string
+  connected: boolean
+  network: 'base' | 'arc'
+  walletBalance?: string
+  walletBalanceChecked: boolean
+  walletBalanceError?: string
+  gatewayBalance?: string
+  gatewayBalanceChecked: boolean
+  gatewayBalanceError?: string
+  updatedAt?: number
+}
+
+export async function readAgentWalletSnapshot(params: {
+  agentSlug: string
+  network: 'base' | 'arc'
+}): Promise<AgentWalletReadSnapshot> {
+  const store = await readStore()
+  const record = resolveAgentRecord(store, params.agentSlug)
+  const balanceChain = params.network === 'arc' ? 'ARC-TESTNET' : 'BASE'
+  const gatewayChain = params.network === 'arc' ? 'ARC-TESTNET' : 'BASE'
+  let walletBalance: string | undefined
+  let walletBalanceError: string | undefined
+  let gatewayBalance: string | undefined
+  let gatewayBalanceError: string | undefined
+  let sessionExpired = false
+
+  if (record?.walletAddress) {
+    try {
+      walletBalance = await queryUsdcWalletBalance(record.walletAddress, balanceChain)
+      if (walletBalance === undefined) {
+        if (!record.sessionId) {
+          walletBalanceError = 'Reconnect this wallet to enable balance lookup.'
+        } else if (!CIRCLE_CLI_ENABLED) {
+          walletBalanceError = 'Wallet balance lookup is not enabled on this server.'
+        } else {
+          const key = `${params.agentSlug}_${record.sessionId}`
+          let output = ''
+          try {
+            output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', balanceChain, '--output', 'json'], key, 30_000)
+          } catch {
+            output = await runCircle(['wallet', 'balance', '--address', record.walletAddress, '--chain', balanceChain], key, 30_000)
+          }
+          walletBalance = parseBalance(output)
+          if (walletBalance === undefined) walletBalanceError = 'Wallet balance is temporarily unavailable.'
+        }
+      }
+    } catch (error) {
+      if (isCircleLoginExpired(error)) {
+        sessionExpired = true
+        walletBalanceError = 'Wallet session expired. Sign in once to continue.'
+      } else {
+        walletBalanceError = 'Wallet balance is temporarily unavailable.'
+      }
+    }
+
+    if (!record.sessionId) {
+      gatewayBalanceError = 'Reconnect this wallet to enable x402 balance lookup.'
+    } else if (!CIRCLE_CLI_ENABLED) {
+      gatewayBalanceError = 'x402 balance lookup is not enabled on this server.'
+    } else {
+      try {
+        const key = `${params.agentSlug}_${record.sessionId}`
+        let output = ''
+        try {
+          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', gatewayChain, '--output', 'json'], key, 30_000)
+        } catch {
+          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', gatewayChain], key, 30_000)
+        }
+        gatewayBalance = parseBalance(output)
+        if (gatewayBalance === undefined) gatewayBalanceError = 'x402 balance is temporarily unavailable.'
+      } catch (error) {
+        if (isCircleLoginExpired(error)) {
+          sessionExpired = true
+          gatewayBalanceError = 'Wallet session expired. Sign in once to continue.'
+        } else {
+          gatewayBalanceError = 'x402 balance is temporarily unavailable.'
+        }
+      }
+    }
+  }
+
+  return {
+    found: !!record,
+    walletAddress: record?.walletAddress,
+    connected: !!record?.sessionId && !sessionExpired,
+    network: params.network,
+    walletBalance,
+    walletBalanceChecked: !!record?.walletAddress,
+    walletBalanceError,
+    gatewayBalance,
+    gatewayBalanceChecked: !!record?.walletAddress,
+    gatewayBalanceError,
+    updatedAt: record?.updatedAt,
+  }
+}
+
+export type AgentWalletConnectionChoice = {
+  address: string
+  balance?: string
+  balanceError?: string
+}
+
+export type AgentWalletConnectionResult = {
+  status: 'otp_sent' | 'connected'
+  walletAddress?: string
+  network: 'base' | 'arc'
+  message?: string
+}
+
+export type AgentWalletConnectionFailure = Error & {
+  status?: number
+  code?: string
+  walletChoices?: AgentWalletConnectionChoice[]
+}
+
+function connectionFailure(status: number, code: string, message: string, walletChoices?: AgentWalletConnectionChoice[]) {
+  return Object.assign(new Error(message), { status, code, walletChoices }) as AgentWalletConnectionFailure
+}
+
+function safeConnectionChoices(choices: Awaited<ReturnType<typeof walletChoicesWithBalances>>): AgentWalletConnectionChoice[] {
+  return choices.map(choice => ({
+    address: choice.address,
+    ...(choice.balance !== undefined ? { balance: choice.balance } : {}),
+    ...(choice.balanceError !== undefined ? { balanceError: 'Balance unavailable' } : {}),
+  }))
+}
+
+function rethrowConnectionProviderError(error: unknown): never {
+  const detail = [
+    (error as { stdout?: string }).stdout,
+    (error as { stderr?: string }).stderr,
+    error instanceof Error ? error.message : '',
+  ].filter(Boolean).join('\n')
+  const safe = safeCircleCliError(detail)
+  if (safe.code === 'otp_mismatch' || safe.code === 'otp_expired') {
+    throw connectionFailure(safe.status, safe.code, safe.error)
+  }
+  throw connectionFailure(503, 'circle_provider_unavailable', 'Circle wallet connection is temporarily unavailable.')
+}
+
+export async function connectAgentWallet(params: {
+  action: 'init' | 'complete'
+  agentSlug: string
+  email: string
+  network: 'base' | 'arc'
+  otp?: string
+  expectedWallet?: string
+}): Promise<AgentWalletConnectionResult> {
+  if (!CIRCLE_CLI_ENABLED) {
+    throw connectionFailure(503, 'provisioning_unavailable', 'Circle wallet connection is not enabled on this server.')
+  }
+  const email = normalizeEmail(params.email)
+  const agentSlug = normalizeSlug(params.agentSlug)
+  if (!email || !agentSlug) throw connectionFailure(400, 'invalid_connection_identity', 'A verified email is required for this wallet.')
+  const expectedWallet = params.expectedWallet ? normalizeExpectedWallet(params.expectedWallet) : ''
+  if (params.expectedWallet && !expectedWallet) throw connectionFailure(400, 'invalid_expected_wallet', 'Expected wallet must be a valid EVM address.')
+  const id = sessionId(agentSlug, email)
+  const key = `${agentSlug}_${id}`
+  const testnet = params.network === 'arc'
+
+  if (params.action === 'init') {
+    let output = ''
+    try {
+      output = await runCircle(['wallet', 'login', email, '--init', ...(testnet ? ['--testnet'] : [])], key)
+    } catch (error) {
+      rethrowConnectionProviderError(error)
+    }
+    const requestId = parseRequestId(output)
+    if (!requestId) throw connectionFailure(502, 'request_id_missing', 'Circle did not return a usable wallet connection request.')
+    const store = await readStore()
+    store.pending[id] = {
+      agentSlug,
+      emailHash: emailHash(email),
+      requestId,
+      expectedWallet: expectedWallet || undefined,
+      testnet,
+      createdAt: Date.now(),
+    }
+    await writeStore(store)
+    return { status: 'otp_sent', network: params.network, message: 'OTP sent by Circle.' }
+  }
+
+  const otp = String(params.otp ?? '').trim()
+  if (!/^[a-zA-Z0-9-]{4,32}$/.test(otp)) throw connectionFailure(400, 'invalid_otp', 'Enter a valid Circle OTP.')
+  const store = await readStore()
+  const pending = store.pending[id]
+  if (!pending || pending.agentSlug !== agentSlug || pending.emailHash !== emailHash(email)) {
+    throw connectionFailure(400, 'connection_not_started', 'Resend OTP and use the newest code.')
+  }
+  if (pending.testnet !== testnet) {
+    throw connectionFailure(400, 'connection_network_changed', 'This code was requested for another network. Resend OTP and use the newest code.')
+  }
+  if (!pending.requestId) throw connectionFailure(400, 'request_id_missing', 'Resend OTP and use the newest code.')
+
+  try {
+    await runCircle(['wallet', 'login', '--request', pending.requestId, '--otp', otp, ...(pending.testnet ? ['--testnet'] : [])], key)
+  } catch (error) {
+    rethrowConnectionProviderError(error)
+  }
+  const chain = pending.testnet ? 'ARC-TESTNET' : 'BASE'
+  let listOutput = ''
+  try {
+    try {
+      listOutput = await runCircle(['wallet', 'list', '--type', 'agent', '--chain', chain, '--output', 'json'], key)
+    } catch {
+      listOutput = await runCircle(['wallet', 'list', '--type', 'agent', '--chain', chain], key)
+    }
+  } catch (error) {
+    rethrowConnectionProviderError(error)
+  }
+  const wallets = parseWalletAddresses(listOutput)
+  const existing = resolveAgentRecord(store, agentSlug)
+  const pendingExpectedWallet = pending.expectedWallet || expectedWallet
+  const expectedMatch = pendingExpectedWallet
+    ? wallets.find(item => item.toLowerCase() === pendingExpectedWallet.toLowerCase())
+    : undefined
+  const existingMatch = existing?.walletAddress
+    ? wallets.find(item => item.toLowerCase() === existing.walletAddress.toLowerCase())
+    : undefined
+  let walletAddress = expectedMatch || existingMatch
+  if (!walletAddress && pendingExpectedWallet) {
+    const choices = safeConnectionChoices(await walletChoicesWithBalances(wallets, key, chain))
+    throw connectionFailure(409, 'expected_wallet_not_found', 'That wallet was not found for this Circle email.', choices)
+  }
+  if (!walletAddress && wallets.length === 1) walletAddress = wallets[0]
+  if (!walletAddress && wallets.length > 1) {
+    const choices = safeConnectionChoices(await walletChoicesWithBalances(wallets, key, chain))
+    throw connectionFailure(409, 'multiple_agent_wallets', 'Circle found multiple wallets. Select one, resend OTP, and verify again.', choices)
+  }
+  if (!walletAddress) throw connectionFailure(502, 'wallet_not_found', 'Circle login completed, but no wallet address was found.')
+
+  const envRecord = getEnvAgentRecord(agentSlug)
+  if (envRecord?.walletAddress && envRecord.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+    throw connectionFailure(409, 'platform_agent_locked', 'This wallet is pinned by server configuration and cannot be replaced.')
+  }
+  const explicitExpectedMatch = pendingExpectedWallet && walletAddress.toLowerCase() === pendingExpectedWallet.toLowerCase()
+  if (existing?.walletAddress && existing.walletAddress.toLowerCase() !== walletAddress.toLowerCase() && !explicitExpectedMatch) {
+    throw connectionFailure(409, 'wallet_mismatch', 'Circle returned a different wallet. The existing wallet was not replaced.')
+  }
+
+  delete store.pending[id]
+  store.agents = {
+    ...(store.agents ?? {}),
+    [agentSlug]: { walletAddress, chain, emailHash: pending.emailHash, sessionId: id, updatedAt: Date.now(), source: 'store' },
+  }
+  await writeStore(store)
+  await setAgentProfileWallet(agentSlug, walletAddress)
+  await appendAgentActivity({
+    agentSlug,
+    type: 'wallet_connected',
+    title: 'Circle Agent Wallet connected',
+    direction: 'system',
+    network: chain,
+    wallet: walletAddress,
+    detail: pending.testnet ? 'Testnet session connected' : 'Mainnet session connected',
+  })
+  return { status: 'connected', walletAddress, network: params.network }
+}
+
+export type AgentGatewayActivationResult = {
+  status: 'available' | 'pending'
+  amount: string
+  network: 'base' | 'arc'
+  walletAddress: string
+  gatewayBalance: string
+}
+
+export async function activateAgentGateway(params: {
+  agentSlug: string
+  network: 'base' | 'arc'
+  amount: string
+}): Promise<AgentGatewayActivationResult> {
+  if (!CIRCLE_CLI_ENABLED) {
+    throw connectionFailure(503, 'provisioning_unavailable', 'Circle Gateway activation is not enabled on this server.')
+  }
+  const amount = Number(params.amount)
+  const configuredMax = Number.isFinite(MAX_GATEWAY_DEPOSIT_AMOUNT) && MAX_GATEWAY_DEPOSIT_AMOUNT > 0
+    ? MAX_GATEWAY_DEPOSIT_AMOUNT
+    : 5
+  const maxAmount = Math.min(configuredMax, 5)
+  if (!Number.isFinite(amount) || amount < 0.5 || amount > maxAmount || !/^\d+(?:\.\d{1,6})?$/.test(params.amount)) {
+    throw connectionFailure(400, 'invalid_gateway_amount', `x402 activation must be between 0.5 and ${maxAmount} USDC.`)
+  }
+
+  const store = await readStore()
+  const record = resolveAgentRecord(store, params.agentSlug)
+  if (!record?.walletAddress || !record.sessionId) {
+    throw connectionFailure(404, 'wallet_session_not_found', 'Reconnect this wallet before activating x402.')
+  }
+  const depositChain = params.network === 'arc' ? ARC_TESTNET_GATEWAY_CHAIN : 'BASE'
+  const method = params.network === 'arc' ? 'direct' : 'eco'
+  const serviceKey = `${params.agentSlug}_${record.sessionId}`
+  try {
+    await runCircle([
+      'gateway',
+      'deposit',
+      '--amount',
+      params.amount,
+      '--address',
+      record.walletAddress,
+      '--chain',
+      depositChain,
+      '--method',
+      method,
+    ], serviceKey, 120_000)
+  } catch (error) {
+    if (isCircleLoginExpired(error)) {
+      throw connectionFailure(409, 'circle_session_expired', 'Wallet session expired. Reconnect the wallet, then retry x402 activation.')
+    }
+    throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway activation is temporarily unavailable.')
+  }
+
+  let gatewayBalance = '0'
+  for (let attempt = 1; attempt <= GATEWAY_DEPOSIT_VERIFY_ATTEMPTS; attempt += 1) {
+    try {
+      let balanceOutput = ''
+      try {
+        balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain, '--output', 'json'], serviceKey, 30_000)
+      } catch {
+        balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain], serviceKey, 30_000)
+      }
+      gatewayBalance = parseBalance(balanceOutput) ?? '0'
+      if (Number(gatewayBalance) >= amount) break
+    } catch {
+      // A submitted deposit remains pending when the follow-up balance read is unavailable.
+    }
+    if (attempt < GATEWAY_DEPOSIT_VERIFY_ATTEMPTS) await delay(GATEWAY_DEPOSIT_VERIFY_DELAY_MS)
+  }
+
+  const status = Number(gatewayBalance) >= amount ? 'available' : 'pending'
+  if (status === 'available') {
+    await appendAgentActivity({
+      agentSlug: params.agentSlug,
+      type: 'gateway_activated',
+      title: params.network === 'arc' ? 'Activated Arc x402 Gateway balance' : 'Activated x402 Gateway balance',
+      amount: params.amount,
+      asset: 'USDC',
+      direction: 'in',
+      network: depositChain,
+      wallet: record.walletAddress,
+      detail: params.network === 'arc'
+        ? 'Deposited from Arc Testnet via direct Gateway deposit'
+        : 'Deposited from BASE',
+    })
+  }
+  return {
+    status,
+    amount: params.amount,
+    network: params.network,
+    walletAddress: record.walletAddress,
+    gatewayBalance,
+  }
+}
+
 export default async function handler(req: Request, res: Response) {
   if (req.method === 'GET') {
     const agentSlug = normalizeSlug(req.query.agent)

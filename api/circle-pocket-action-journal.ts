@@ -1,7 +1,12 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
-import { readDurableJson, writeDurableJson } from './render-durable-store.js'
+import {
+  hasRenderDurableStore,
+  mutateDurableJson,
+  readDurableJson,
+  writeDurableJson,
+} from './render-durable-store.js'
 
 const JOURNAL_PATH = process.env.CIRCLE_POCKET_ACTION_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/circle-pocket-actions.json` : './data/circle-pocket-actions.json')
@@ -62,6 +67,48 @@ async function mutate<T>(fn: (store: ActionStore) => T | Promise<T>) {
   }
 }
 
+async function mutateActionStore<T>(fn: (store: ActionStore) => T | Promise<T>) {
+  if (hasRenderDurableStore()) {
+    let result!: T
+    await mutateDurableJson<Partial<ActionStore>>(JOURNAL_STORE_KEY, async current => {
+      const store: ActionStore = { actions: current?.actions ?? {} }
+      result = await fn(store)
+      return store
+    })
+    return result
+  }
+  return mutate(fn)
+}
+
+export async function claimCirclePocketAction(input: {
+  ownerId: string
+  idempotencyKey: string
+  action: string
+  metadata?: Record<string, string>
+}) {
+  return mutateActionStore(store => {
+    const existing = Object.values(store.actions).find(record => (
+      record.ownerId === input.ownerId
+      && record.idempotencyKey === input.idempotencyKey
+      && record.action === input.action
+    ))
+    if (existing) return { record: existing, claimed: false }
+    const now = Date.now()
+    const record: CirclePocketActionRecord = {
+      id: crypto.randomUUID(),
+      ownerId: input.ownerId,
+      idempotencyKey: input.idempotencyKey,
+      action: input.action,
+      status: 'started',
+      metadata: input.metadata,
+      createdAt: now,
+      updatedAt: now,
+    }
+    store.actions[record.id] = record
+    return { record, claimed: true }
+  })
+}
+
 export async function recordCirclePocketAction(input: {
   ownerId: string
   idempotencyKey: string
@@ -70,7 +117,7 @@ export async function recordCirclePocketAction(input: {
   resourceId?: string
   metadata?: Record<string, string>
 }) {
-  return mutate(store => {
+  return mutateActionStore(store => {
     const existing = Object.values(store.actions).find(record => (
       record.ownerId === input.ownerId
       && record.idempotencyKey === input.idempotencyKey

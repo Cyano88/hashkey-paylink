@@ -70,6 +70,19 @@ function safeBalanceError(chainLabel: string) {
   return `${chainLabel} balance is temporarily unavailable. Try again in a moment.`
 }
 
+export async function readEvmUsdcBalance(chainKey: EvmBalanceChain, address: `0x${string}`) {
+  const config = CHAIN_CONFIG[chainKey]
+  const rpcUrl = process.env[config.rpcEnv]?.trim() || config.fallbackRpc
+  const client = createPublicClient({ chain: config.chain, transport: http(rpcUrl) })
+  const raw = await client.readContract({
+    address: config.tokenAddress as `0x${string}`,
+    abi: ERC20_BALANCE_OF_ABI,
+    functionName: 'balanceOf',
+    args: [address],
+  } as never)
+  return Number(raw) / 10 ** config.decimals
+}
+
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
 
@@ -79,21 +92,14 @@ export default async function handler(req: Request, res: Response) {
   if (!isAddress(address)) return res.status(400).json({ ok: false, error: 'Invalid wallet address' })
 
   const config = CHAIN_CONFIG[chainKey]
-  const rpcUrl = process.env[config.rpcEnv]?.trim() || config.fallbackRpc
 
   try {
-    const client = createPublicClient({ chain: config.chain, transport: http(rpcUrl) })
-    const raw = await client.readContract({
-      address: config.tokenAddress as `0x${string}`,
-      abi: ERC20_BALANCE_OF_ABI,
-      functionName: 'balanceOf',
-      args: [address],
-    })
+    const balance = await readEvmUsdcBalance(chainKey, address as `0x${string}`)
     return res.json({
       ok: true,
       chain: chainKey,
       label: config.label,
-      balance: (Number(raw) / 10 ** config.decimals).toString(),
+      balance: balance.toString(),
     })
   } catch (error) {
     console.error('[evm-balance] balance lookup failed', {

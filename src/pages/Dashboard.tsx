@@ -27,6 +27,8 @@ import {
   type ReceiptLookupResponse,
 } from '../lib/paymentReceiptPdf'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
+import { readPocketLocalCurrencyProfile } from '../pocket/api/pocketReadClient'
+import type { LocalCurrencyProfile } from '../pocket/models/localCurrencyProfile'
 
 const OG_GLOBAL_ARCHIVE_URL = 'https://chainscan.0g.ai/address/0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a#events'
 
@@ -88,12 +90,6 @@ interface EventPaymentRow {
   paycrestStatus?: string
   bankName?: string
   bankLast4?: string
-}
-
-type LocalCurrencyProfile = {
-  firstName: string
-  lastName: string
-  email: string
 }
 
 function chainKey(value: string | undefined): keyof typeof CHAIN_META {
@@ -369,16 +365,8 @@ export default function Dashboard() {
       try {
         const token = await getAccessToken()
         if (!token) return
-        const response = await fetch('/api/local-currency-profile', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ action: 'get' }),
-        })
-        const data = await response.json().catch(() => undefined) as { ok?: boolean; profile?: LocalCurrencyProfile | null } | undefined
-        if (!cancelled && response.ok && data?.ok) setLocalProfile(data.profile ?? null)
+        const data = await readPocketLocalCurrencyProfile({ accessToken: token })
+        if (!cancelled) setLocalProfile(data.profile)
       } catch {
         if (!cancelled) setLocalProfile(null)
       }

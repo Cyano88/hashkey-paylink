@@ -58,7 +58,7 @@ import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import { ReceiptIcon } from '../components/ReceiptIcon'
-import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleLink'
+import { linkPocketWallet, readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
 import {
   compactReceiptAmount,
   createPaymentReceiptPdf,
@@ -1249,16 +1249,15 @@ export default function PaymentPage() {
       try {
         const token = await getAccessToken()
         if (!token) throw new Error('Privy session is not ready yet. Sign in again and retry.')
-        const data = await resolvePrivyCircleLink({
+        const linked = await readPocketWallet({
           accessToken: token,
-          chain: chain as 'base' | 'arbitrum' | 'arc',
+          network: chain as 'base' | 'arbitrum' | 'arc',
         })
         if (cancelled) return
-        if (data.email) setCircleEmail(current => current || data.email || privyEmail)
-        if (data.link?.circleWalletAddress) {
+        if (linked?.wallet.address) {
           if (isConnected) disconnectEvm()
-          if (isAddress(data.link.circleWalletAddress)) {
-            setCircleSmartAccount(data.link.circleWalletAddress)
+          if (isAddress(linked.wallet.address)) {
+            setCircleSmartAccount(linked.wallet.address)
           }
         }
       } catch (err) {
@@ -1287,15 +1286,14 @@ export default function PaymentPage() {
       try {
         const token = await getAccessToken()
         if (!token) throw new Error('Privy session is not ready yet. Sign in again and retry.')
-        const data = await resolvePrivyCircleLink({
+        const linked = await readPocketWallet({
           accessToken: token,
-          chain: 'solana',
+          network: 'solana',
         })
         if (cancelled) return
-        if (data.email) setCircleSolanaEmail(current => current || data.email || privyEmail)
-        if (data.link?.circleWalletAddress) {
+        if (linked?.wallet.address) {
           if (solanaWalletAddr) disconnectSolana()
-          setCircleSolanaAddress(data.link.circleWalletAddress)
+          setCircleSolanaAddress(linked.wallet.address)
         }
       } catch (err) {
         if (cancelled) return
@@ -2399,10 +2397,10 @@ export default function PaymentPage() {
           try {
             const token = await getAccessToken()
             if (token) {
-              await savePrivyCircleLink({
+              await linkPocketWallet({
                 accessToken: token,
-                chain: 'solana',
-                email,
+                network: 'solana',
+                circleUserToken: session.userToken,
                 wallet: {
                   id: session.wallet.id,
                   address: session.wallet.address,
@@ -2821,10 +2819,10 @@ export default function PaymentPage() {
             try {
               const token = await getAccessToken()
               if (token) {
-                await savePrivyCircleLink({
+                await linkPocketWallet({
                   accessToken: token,
-                  chain,
-                  email,
+                  network: chain,
+                  circleUserToken: session.userToken,
                   wallet: session.wallet,
                 })
                 setPrivyCircleLinkError(null)

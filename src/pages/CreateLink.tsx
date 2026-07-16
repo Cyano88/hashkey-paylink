@@ -1,73 +1,78 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { useOutletContext, Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { usePrivy } from '@privy-io/react-auth'
 import type { LayoutOutletContext } from '../Layout'
 import {
   useAccount,
   useDisconnect,
 } from 'wagmi'
 import {
-  Link2,
   Copy,
   CheckCheck,
-  Share2,
   ArrowRight,
   ChevronDown,
   Activity,
-  Tag,
-  Coins,
   ExternalLink,
   Info,
   XCircle,
-  ShieldCheck,
   Loader2,
-  Zap,
-  AlertTriangle,
   Wallet,
   Mail,
   X,
-  Download,
   ScanLine,
-  LayoutDashboard,
   Globe,
-  Sliders,
   DollarSign,
   RefreshCw,
   Bot,
   Trash2,
-  LogOut,
   Radio,
   Store,
   UserRound,
-  Briefcase,
   Landmark,
-  Banknote,
-  House,
-  ArrowUpDown,
-  TrendingUp,
-  Phone,
-  Wifi,
-  Tv,
-  Lightbulb,
 } from 'lucide-react'
-import { QRCodeCanvas } from 'qrcode.react'
 import { FX_CURRENCIES, getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
-import { isAddress, parseUnits, type Address } from 'viem'
-import { cn, truncateAddress, formatAmount, formatNgnAmount, copyToClipboard } from '../lib/utils'
+import { isAddress } from 'viem'
+import { cn, formatAmount, formatNgnAmount, copyToClipboard } from '../lib/utils'
 import { useSolana }   from '../lib/SolanaContext'
 import { CHAIN_META, type ChainKey } from '../lib/chains'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { setPaylinkParam } from '../lib/paylinkParams'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
-import { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } from '../lib/router'
-import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailWithdraw } from '../lib/circleEvmEmailWallet'
-import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
+import { canUseCircleEvmEmailWallet } from '../lib/circleEvmEmailWallet'
+import { canUseCircleSolanaEmailWallet } from '../lib/circleSolanaEmailWallet'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
-import { resolvePrivyCircleLink, savePrivyCircleLink, unlinkPrivyCircleLink } from '../lib/privyCircleLink'
-import { queryBalances, type UnifiedBalanceBreakdown } from '../lib/unifiedBalance'
+import { createPocketPos } from '../pocket/api/pocketPosClient'
+import { createPocketBankReceive } from '../pocket/api/pocketBankReceiveClient'
+import { readPocketBankInstitutions, verifyPocketBankAccount } from '../pocket/api/pocketBankClient'
+import { createPocketBankSend } from '../pocket/api/pocketBankSendClient'
 import AgentWorkspace from './AgentWorkspace'
 import { TelegramHelperPanel } from './TelegramPaymentLinks'
 import PayLinkShareSheet from '../components/PayLinkShareSheet'
+import {
+  LocalCurrencyProfileCard,
+  LocalCurrencySignInGate,
+} from '../pocket/components/LocalCurrencyProfileCard'
+import usePocketIdentity from '../pocket/hooks/usePocketIdentity'
+import usePocketProfile from '../pocket/hooks/usePocketProfile'
+import usePocketRecipient from '../pocket/hooks/usePocketRecipient'
+import { PocketPayerNetworkPanel } from '../pocket/features/move/PocketPayerNetworkPanel'
+import { PocketReceiveMethodPanel } from '../pocket/features/move/PocketReceiveMethodPanel'
+import { PocketRecipientAddressFields } from '../pocket/features/move/PocketRecipientAddressFields'
+import { PocketVerifiedBankFields } from '../pocket/features/move/PocketVerifiedBankFields'
+import { PocketPosCountryPanel, PocketPosReadyPanel, PocketPosSetupPanel, PocketPosShell, PocketPosSignInCard } from '../pocket/features/move/PocketPosPanels'
+import { PocketPayLinkReadyPanel } from '../pocket/features/move/PocketPayLinkReadyPanel'
+import {
+  PocketFlexibleAmountToggle,
+  PocketPayLinkSubmitPanel,
+  PocketPaymentAmountField,
+  PocketPaymentNoteField,
+  type PocketPayLinkLane,
+} from '../pocket/features/move/PocketPayLinkFields'
+import {
+  usePocketBankReceiveController,
+  usePocketPosController,
+  usePocketUsdcPayLinkController,
+  type PocketBankReceiveActions,
+} from '../pocket/controllers/usePocketMoveControllers'
 
 // ─── Solana address: base58, 32–44 characters ────────────────────────────────
 const isValidSolanaAddr = isValidSolanaAddress
@@ -76,6 +81,7 @@ const VISIBLE_CREATE_CHAINS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
 const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const HASHPAYSTREAM_APP_URL = import.meta.env.VITE_HASHPAYSTREAM_APP_URL || 'https://hashpaystream.app'
 const POLYDESK_APP_URL = import.meta.env.VITE_POLYDESK_APP_URL || 'https://polydesk-i96m.onrender.com'
+const POCKET_SMART_WALLET_PATH = '/pocket/home/smart-wallet'
 const AGENT_HASH_HEADER_PROMPTS = [
   { text: 'I can help with payments and Hash PayLink services.', delayMs: 9500 },
   { text: 'I am Agent Hash.', delayMs: 7000 },
@@ -115,21 +121,6 @@ function AgentHashCssIcon({ header = false, staticPose = false }: { header?: boo
         <span />
       </span>
     </div>
-  )
-}
-
-function UsdcMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
-      <circle cx="12" cy="12" r="7.45" stroke="currentColor" strokeWidth="1.65" />
-      <path
-        d="M12 6.95v10.1M14.55 9.15c-.42-.7-1.18-1.08-2.3-1.08-1.3 0-2.18.58-2.18 1.55 0 2.32 4.73 1.1 4.73 3.92 0 1.1-.94 1.9-2.45 1.9-1.28 0-2.24-.43-2.88-1.25"
-        stroke="currentColor"
-        strokeWidth="1.55"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   )
 }
 
@@ -194,32 +185,16 @@ type PaymentFlow = 'usdc' | 'bank' | 'bank-send'
 type PaymentTab = PaymentMode | PaymentFlow | 'pos' | 'bills'
 type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 type BankSendNetwork = 'polygon' | 'base'
-type CirclePocketView = 'chooser' | 'wallet-manager' | 'move' | 'bills' | 'main' | 'x402'
-type CirclePocketActivityView = 'all' | 'bank' | 'pos' | 'bills'
-type CirclePocketBillView = 'airtime' | 'data' | 'tv' | 'electricity'
-type CirclePocketTab = 'balance' | 'fund' | 'withdraw' | 'activity'
-type CirclePocketNavTab = 'home' | 'move' | 'bills' | 'activity'
 type PosCountry = 'NG' | 'KE' | 'GH'
 type PosSettlementPath = 'PAYCREST_NAIRA'
 type PosStep = 'country' | 'setup' | 'ready'
 type CreateProduct = 'payment' | 'agent' | 'circle-pocket' | 'pos' | 'streampay' | 'polymarket'
 type AccessView = 'overview' | 'wallet'
-type LocalCurrencyProfile = {
-  firstName: string
-  lastName: string
-  email: string
-}
-type CirclePocketWallet = {
-  address: string
-  walletId?: string
-  blockchain?: string
-}
 type PaycrestInstitutionOption = {
   code: string
   name: string
   type?: string
 }
-type CirclePocketWallets = Partial<Record<PosNetwork, CirclePocketWallet>>
 type PosMerchant = {
   merchant_id: string
   display_name: string
@@ -234,46 +209,11 @@ function telegramStartUrl(payload: string) {
   return base.includes('?') ? `${base}&start=${encodeURIComponent(cleanPayload)}` : `${base}?start=${encodeURIComponent(cleanPayload)}`
 }
 
-async function readApiJson<T>(res: Response, label: string): Promise<T> {
-  const text = await res.text()
-  let data: unknown = {}
-  if (text) {
-    try {
-      data = JSON.parse(text)
-    } catch {
-      throw new Error(`${label} returned a non-JSON response.`)
-    }
-  }
-  if (!res.ok) {
-    const message = data && typeof data === 'object' && 'error' in data
-      ? String((data as { error?: unknown }).error)
-      : `${label} request failed.`
-    throw new Error(message)
-  }
-  return data as T
-}
-
 function readableErrorMsg(err: unknown, fallback: string) {
   if (err instanceof Error && err.message) return err.message
   if (typeof err === 'string' && err) return err
   return fallback
 }
-type CirclePocketHistoryRow = {
-  eventId: string
-  txHash: string
-  chain: string
-  payer: string
-  memo: string
-  amount: string
-  ts: number
-  source?: string
-  merchantId?: string
-  contextLabel?: string
-  settlementType?: string
-  amountNgn?: string
-  paycrestStatus?: string
-}
-
 function readableBankPayoutError(err: unknown, fallback: string) {
   const message = readableErrorMsg(err, fallback).replaceAll('Paycrest ', '')
   if (/PAYCREST_API_KEY|not configured/i.test(message)) {
@@ -301,20 +241,6 @@ const POS_COUNTRIES: Array<{ key: PosCountry; name: string; label: string; statu
   { key: 'GH', name: 'Ghana', label: 'Coming soon', status: 'soon', copy: 'Pending a verified local wallet or payout partner.' },
 ]
 
-function emailFromPrivyUser(user: unknown) {
-  const directEmail = (user as { email?: { address?: unknown } } | undefined)?.email?.address
-  if (typeof directEmail === 'string') return directEmail
-
-  const linkedAccounts = (user as { linkedAccounts?: unknown } | undefined)?.linkedAccounts
-  if (!Array.isArray(linkedAccounts)) return ''
-  for (const account of linkedAccounts) {
-    const record = account as { type?: unknown; address?: unknown; email?: unknown }
-    if (record.type === 'email' && typeof record.address === 'string') return record.address
-    if (typeof record.email === 'string') return record.email
-  }
-  return ''
-}
-
 function normalizeAmountInput(value: string) {
   const normalized = value.replace(',', '.').replace(/[^\d.]/g, '')
   const [whole, ...fraction] = normalized.split('.')
@@ -335,20 +261,16 @@ function CircleReceiveSelector({
   setSolanaAddr,
   setGeneratedLink,
   bankCountry,
-  setBankCountry,
   bankInstitutions,
   bankInstitutionsBusy,
   bankCode,
-  setBankCode,
   bankName,
-  setBankName,
   bankAccount,
-  setBankAccount,
   bankAccountName,
   bankVerified,
   bankVerifyBusy,
   bankError,
-  verifyBankAccount,
+  bankActions,
   selectorLabel,
   addressOptionLabel,
   addressOptionBody,
@@ -369,20 +291,16 @@ function CircleReceiveSelector({
   setSolanaAddr: Dispatch<SetStateAction<string>>
   setGeneratedLink: Dispatch<SetStateAction<string>>
   bankCountry: PosCountry | null
-  setBankCountry: Dispatch<SetStateAction<PosCountry | null>>
   bankInstitutions: PaycrestInstitutionOption[]
   bankInstitutionsBusy: boolean
   bankCode: string
-  setBankCode: Dispatch<SetStateAction<string>>
   bankName: string
-  setBankName: Dispatch<SetStateAction<string>>
   bankAccount: string
-  setBankAccount: Dispatch<SetStateAction<string>>
   bankAccountName: string
   bankVerified: boolean
   bankVerifyBusy: boolean
   bankError: string
-  verifyBankAccount: () => void
+  bankActions: PocketBankReceiveActions
   selectorLabel?: string
   addressOptionLabel?: string
   addressOptionBody?: string
@@ -390,645 +308,131 @@ function CircleReceiveSelector({
   hideBankSignIn?: boolean
   deferEmailSignIn?: boolean
 }) {
-  const circleEmailReceiveIntentKey = 'hashpaylink-circle-email-receive-intent'
-  const { authenticated: privyAuthenticated, user: privyUser, getAccessToken } = usePrivy()
-  const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
-  const [circleRecipientPending, setCircleRecipientPending] = useState(false)
-  const [circleRecipientError, setCircleRecipientError] = useState<string | null>(null)
-  const [circleWalletBalance, setCircleWalletBalance] = useState('Balance --')
-  const circleRecipientRunKey = useRef('')
+  const { authenticated: privyAuthenticated, email: privyEmail, getAccessToken } = usePocketIdentity()
+  const invalidateRecipientResult = useCallback(() => setGeneratedLink(''), [setGeneratedLink])
+  const recipient = usePocketRecipient({
+    authenticated: privyAuthenticated,
+    email: privyEmail,
+    getAccessToken,
+    network: selectedNet,
+    receiveMode,
+    setReceiveMode,
+    evmAddress: evmAddr,
+    solanaAddress: solanaAddr,
+    evmValid,
+    solanaValid,
+    canReceiveWithEmail,
+    setEvmAddress: setEvmAddr,
+    setSolanaAddress: setSolanaAddr,
+    invalidateResult: invalidateRecipientResult,
+  })
 
-  async function handleEmailRecipient() {
-    if (!canReceiveWithEmail) {
-      setReceiveMode('email')
-      setGeneratedLink('')
-      setCircleRecipientError('Circle Pocket receiving is not configured for this network. Paste a wallet address instead.')
-      return
-    }
+  const bankSignInControl = receiveMode === 'bank' && !privyAuthenticated && !hideBankSignIn ? (
+    <PrivyConnectButton
+      debugLabel="create-receive-bank"
+      loginOptions={{ loginMethods: ['email'] }}
+      logoutOnAuthenticated={false}
+      className="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-gray-700 transition-all hover:border-gray-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
+    >
+      <span>
+        <span className="block text-sm font-semibold">Sign in to save bank payouts</span>
+        <span className="mt-0.5 block text-[11px] text-gray-400">Required for settlement history and support.</span>
+      </span>
+      <Mail className="h-4 w-4 text-blue-500" />
+    </PrivyConnectButton>
+  ) : undefined
 
-    if (!privyAuthenticated) {
-      setCircleRecipientError('Sign in with Privy first, then continue receiving with email.')
-      return
-    }
-
-    setReceiveMode('email')
-    setGeneratedLink('')
-    setCircleRecipientError(null)
-
-    if (!privyEmail) {
-      setCircleRecipientError('Sign in with email to receive with Circle Pocket for this network.')
-      return
-    }
-
-    const runKey = `${selectedNet}:${privyEmail}`
-    circleRecipientRunKey.current = runKey
-    setCircleRecipientPending(true)
-    try {
-      if (selectedNet === 'solana') {
-        const token = await getAccessToken()
-        if (!token) throw new Error('Email session is not ready. Sign in again and retry.')
-
-        const existing = await resolvePrivyCircleLink({ accessToken: token, chain: 'solana' })
-        if (circleRecipientRunKey.current !== runKey) return
-        if (existing.link?.circleWalletAddress) {
-          setSolanaAddr(existing.link.circleWalletAddress)
-          setCircleRecipientError(null)
-          return
-        }
-
-        const session = await connectCircleSolanaEmailWallet(privyEmail)
-        if (circleRecipientRunKey.current !== runKey) return
-        setSolanaAddr(session.wallet.address)
-        await savePrivyCircleLink({
-          accessToken: token,
-          chain: 'solana',
-          email: privyEmail,
-          wallet: {
-            id: session.wallet.id,
-            address: session.wallet.address,
-            blockchain: session.wallet.blockchain,
-          },
-        })
-        setCircleRecipientError(null)
-        return
-      }
-
-      const chain = selectedNet as Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
-      const token = await getAccessToken()
-      if (!token) throw new Error('Email session is not ready. Sign in again and retry.')
-
-      const existing = await resolvePrivyCircleLink({ accessToken: token, chain })
-      if (circleRecipientRunKey.current !== runKey) return
-      if (existing.link?.circleWalletAddress) {
-        setEvmAddr(existing.link.circleWalletAddress)
-        setCircleRecipientError(null)
-        return
-      }
-
-      const session = await connectCircleEvmEmailWallet(privyEmail, chain)
-      if (circleRecipientRunKey.current !== runKey) return
-      setEvmAddr(session.wallet.address)
-      await savePrivyCircleLink({
-        accessToken: token,
-        chain,
-        email: privyEmail,
-        wallet: {
-          id: session.wallet.id,
-          address: session.wallet.address as Address,
-          blockchain: session.wallet.blockchain,
-        },
-      })
-      setCircleRecipientError(null)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Circle smart wallet setup failed.'
-      const receiveMessage = message === 'Payment cancelled.' ? 'Payment request cancelled.' : message
-      setCircleRecipientError(receiveMessage)
-    } finally {
-      if (circleRecipientRunKey.current === runKey) setCircleRecipientPending(false)
-    }
-  }
-
-  async function disconnectCircleRecipient() {
-    setCircleRecipientError(null)
-    setGeneratedLink('')
-    try {
-      const token = await getAccessToken()
-      if (token) {
-        await unlinkPrivyCircleLink({
-          accessToken: token,
-          chain: selectedNet as Extract<ChainKey, 'base' | 'arbitrum' | 'arc' | 'solana'>,
-        })
-      }
-    } catch (err) {
-      setCircleRecipientError(err instanceof Error ? err.message : 'Could not disconnect Circle wallet.')
-    } finally {
-      setReceiveMode('paste')
-      if (selectedNet === 'solana') setSolanaAddr('')
-      else setEvmAddr('')
-    }
-  }
-
-  useEffect(() => {
-    if (!privyAuthenticated || !privyEmail) return
-    let pending = ''
-    try { pending = window.sessionStorage.getItem(circleEmailReceiveIntentKey) || '' } catch {}
-    if (!pending) return
-    try { window.sessionStorage.removeItem(circleEmailReceiveIntentKey) } catch {}
-    if (!canReceiveWithEmail) return
-    setReceiveMode('email')
-    setGeneratedLink('')
-    setCircleRecipientError(null)
-  }, [privyAuthenticated, privyEmail, canReceiveWithEmail, setReceiveMode, setGeneratedLink])
-
-  useEffect(() => {
-    if (receiveMode !== 'email' || !privyAuthenticated || !privyEmail || circleRecipientPending) return
-    if (selectedNet === 'solana' ? solanaValid : evmValid) return
-    void handleEmailRecipient()
-  }, [receiveMode, privyAuthenticated, privyEmail, selectedNet]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (receiveMode === 'bank') return
-    if (canReceiveWithEmail) return
-    setReceiveMode('paste')
-    setCircleRecipientError(null)
-  }, [canReceiveWithEmail, receiveMode, setReceiveMode])
-
-  useEffect(() => {
-    const hasCircleWallet = selectedNet === 'solana' ? solanaValid : isEvmNet && evmValid
-    if (receiveMode !== 'email' || !hasCircleWallet) {
-      setCircleWalletBalance('Balance --')
-      return
-    }
-
-    let cancelled = false
-    setCircleWalletBalance('Balance ...')
-    const evmBalanceNet = selectedNet === 'base' || selectedNet === 'arc' || selectedNet === 'arbitrum'
-      ? selectedNet
-      : 'base'
-
-    const balancePromise = selectedNet === 'solana'
-      ? fetch('/api/solana-balance', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ accountAddress: solanaAddr }),
-        })
-          .then(async response => {
-            const data = await response.json() as { ok?: boolean; balance?: string }
-            if (!response.ok || !data.ok) throw new Error('Balance unavailable')
-            return Number(BigInt(data.balance ?? '0')) / 1_000_000
-          })
-      : EVM_CLIENTS[evmBalanceNet]
-          .readContract({
-            address: CHAIN_META[evmBalanceNet].tokenAddress,
-            abi: ERC20_BALANCE_OF_ABI,
-            functionName: 'balanceOf',
-            args: [evmAddr as `0x${string}`],
-          })
-          .then(raw => Number(raw) / 10 ** CHAIN_META[evmBalanceNet].decimals)
-
-    balancePromise
-      .then(balance => {
-        if (!cancelled) setCircleWalletBalance(`Balance ${formatAmount(balance.toString(), 6)} USDC`)
-      })
-      .catch(() => {
-        if (!cancelled) setCircleWalletBalance('Balance --')
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [selectedNet, isEvmNet, receiveMode, evmValid, evmAddr, solanaValid, solanaAddr])
-
-  return (
-    <div className="space-y-1.5">
-      {!hideLabel && (
-        <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
-          {selectorLabel ?? (receiveMode === 'bank' ? 'Bank payout' : 'Receive to')}
-        </label>
-      )}
-      {receiveMode === 'bank' && !privyAuthenticated && !hideBankSignIn && (
-        <PrivyConnectButton
-          debugLabel="create-receive-bank"
-          loginOptions={{ loginMethods: ['email'] }}
-          logoutOnAuthenticated={false}
-          className="flex w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-gray-700 transition-all hover:border-gray-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
-        >
-          <span>
-            <span className="block text-sm font-semibold">Sign in to save bank payouts</span>
-            <span className="mt-0.5 block text-[11px] text-gray-400">Required for settlement history and support.</span>
-          </span>
-          <Mail className="h-4 w-4 text-blue-500" />
-        </PrivyConnectButton>
-      )}
-      {receiveMode !== 'bank' && <div className="grid gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setReceiveMode('paste')
-            setCircleRecipientError(null)
-            setGeneratedLink('')
-          }}
-          className={cn(
-            'rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]',
-            receiveMode === 'paste'
-              ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
-              : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
-          )}
-        >
-          <span className="flex items-center gap-2 text-sm font-semibold">
-            <Wallet className="h-4 w-4 text-gray-500" />
-            {addressOptionLabel ?? 'Paste wallet address'}
-          </span>
-          <span className="mt-1 block text-[11px] text-gray-400">{addressOptionBody ?? 'Any wallet or exchange'}</span>
-        </button>
-        {canReceiveWithEmail && !privyAuthenticated && deferEmailSignIn ? (
-          <button
-            type="button"
-            onClick={() => {
-              setReceiveMode('email')
-              setGeneratedLink('')
-              setCircleRecipientError(null)
-            }}
-            className={cn(
-              'rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]',
-              receiveMode === 'email'
-                ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
-            )}
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              <Mail className="h-4 w-4 text-blue-500" />
-              Receive with Circle Pocket
-            </span>
-            <span className="mt-1 block text-[11px] text-gray-400">Email-backed Circle wallet</span>
-          </button>
-        ) : canReceiveWithEmail && !privyAuthenticated ? (
-          <PrivyConnectButton
-            debugLabel="create-receive-email"
-            loginOptions={{ loginMethods: ['email'] }}
-            logoutOnAuthenticated={false}
-            onBeforeLogin={() => {
-              try { window.sessionStorage.setItem(circleEmailReceiveIntentKey, selectedNet) } catch {}
-            }}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-gray-700 transition-all hover:border-gray-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              <Mail className="h-4 w-4 text-blue-500" />
-              Receive with Circle Pocket
-            </span>
-            <span className="mt-1 block text-[11px] text-gray-400">
-              Email-backed Circle wallet
-            </span>
-          </PrivyConnectButton>
-        ) : canReceiveWithEmail && (
-          <button
-            type="button"
-            onClick={handleEmailRecipient}
-            disabled={circleRecipientPending}
-            className={cn(
-              'rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]',
-              receiveMode === 'email'
-                ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
-              circleRecipientPending && 'cursor-not-allowed opacity-70',
-            )}
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold">
-              {circleRecipientPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4 text-blue-500" />}
-              Receive with Circle Pocket
-            </span>
-            <span className="mt-1 block text-[11px] text-gray-400">
-              Email-backed Circle wallet
-            </span>
-          </button>
-        )}
-      </div>}
-
-      {receiveMode === 'bank' && (
-        <div className="space-y-2.5 rounded-xl border border-gray-100 bg-gray-50/70 p-2.5 dark:border-white/10 dark:bg-white/[0.04]">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Country</p>
-            <div className="relative mt-1">
-              <select
-                value={bankCountry ?? 'NG'}
-                onChange={(event) => {
-                  setBankCountry(event.target.value as PosCountry)
-                  setGeneratedLink('')
-                }}
-                className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2 pr-9 text-sm font-semibold text-gray-950 outline-none transition-all focus:border-gray-400 dark:border-white/10 dark:bg-gray-950 dark:text-white dark:focus:border-white/25"
-              >
-                <option value="NG">Nigeria</option>
-                <option value="GH" disabled>Ghana - coming soon</option>
-                <option value="KE" disabled>Kenya - coming soon</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-            </div>
-          </div>
-
-          {bankCountry === 'NG' && (
-            <div className="space-y-2.5 border-t border-gray-100 pt-2.5 dark:border-white/10">
-              <label className="block">
-                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Bank</span>
-                {bankInstitutions.length ? (
-                  <select
-                    value={bankCode}
-                    onChange={(event) => {
-                      const selected = bankInstitutions.find((institution) => institution.code === event.target.value)
-                      setBankCode(event.target.value)
-                      setBankName(selected?.name ?? '')
-                      setBankAccount('')
-                      setGeneratedLink('')
-                    }}
-                    className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-gray-950 dark:text-white dark:focus:border-white/25"
-                  >
-                    <option value="">{bankInstitutionsBusy ? 'Loading banks...' : 'Select bank'}</option>
-                    {bankInstitutions.map((institution) => (
-                      <option key={institution.code} value={institution.code}>
-                        {institution.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    value={bankName || bankCode}
-                    onChange={(event) => {
-                      const value = event.target.value
-                      setBankName(value)
-                      setBankCode(value.trim())
-                      setGeneratedLink('')
-                    }}
-                    placeholder={bankInstitutionsBusy ? 'Loading banks...' : 'Zenith Bank'}
-                    className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600"
-                  />
-                )}
-              </label>
-              <label className="block">
-                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Account number</span>
-                <div className="mt-1 flex gap-2">
-                  <input
-                    value={bankAccount}
-                    onChange={(event) => {
-                      setBankAccount(event.target.value.replace(/\D/g, '').slice(0, 10))
-                      setGeneratedLink('')
-                    }}
-                    inputMode="numeric"
-                    placeholder="0123456789"
-                    className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600"
-                  />
-                  <button
-                    type="button"
-                    onClick={verifyBankAccount}
-                    disabled={bankVerifyBusy || !bankCode || bankAccount.length !== 10}
-                    className="inline-flex min-w-[78px] items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition-all hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
-                  >
-                    {bankVerifyBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                    Verify
-                  </button>
-                </div>
-              </label>
-              {bankVerified && bankAccountName && (
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
-                  {bankAccountName}
-                </div>
-              )}
-              {bankError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
-                  {bankError}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {canReceiveWithEmail && receiveMode === 'email' && (
-        <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">
-                {selectedNet === 'solana' ? 'Circle Solana wallet' : `${CHAIN_META[selectedNet].label} Circle wallet`}
-              </p>
-              <p className="mt-0.5 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">
-                {circleRecipientPending
-                  ? 'Preparing wallet...'
-                  : selectedNet === 'solana' && solanaValid
-                  ? truncateAddress(solanaAddr, 8)
-                  : isEvmNet && evmValid
-                  ? truncateAddress(evmAddr, 8)
-                  : privyEmail || 'Sign in to open Circle Pocket'}
-              </p>
-              {(selectedNet === 'solana' ? solanaValid : isEvmNet && evmValid) && (
-                <p className="mt-1 text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                  {circleWalletBalance}
-                </p>
-              )}
-            </div>
-            {!circleRecipientPending && (selectedNet === 'solana' ? solanaValid : evmValid) && (
-              <div className="flex shrink-0 items-center gap-1.5">
-                <CheckCheck className="h-4 w-4 text-emerald-500" />
-                <button
-                  type="button"
-                  onClick={() => void disconnectCircleRecipient()}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/80 text-gray-500 transition-colors hover:bg-white hover:text-gray-900 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
-                  aria-label="Disconnect email wallet"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-          {circleRecipientError && <p className="mt-2 text-xs text-red-500">{circleRecipientError}</p>}
-        </div>
-      )}
-      {!canReceiveWithEmail && selectedNet === 'solana' && (
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          Circle Pocket receiving for Solana is not enabled here yet.
-        </p>
-      )}
-    </div>
-  )
-}
-
-function LocalCurrencySignInGate({
-  title,
-  body,
-}: {
-  title: string
-  body: string
-}) {
-  return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
-          <Mail className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-gray-950 dark:text-white">{title}</p>
-          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{body}</p>
-        </div>
-      </div>
-      <PrivyConnectButton
-        loginOptions={{ loginMethods: ['email'] }}
-        logoutOnAuthenticated={false}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
-      >
-        <Mail className="h-4 w-4" />
-        Sign in to continue
-      </PrivyConnectButton>
-      <p className="mt-3 text-center text-[11px] font-medium leading-relaxed text-gray-400 dark:text-gray-500">
-        Sign-in saves local currency history, receipts, payout context, and support records.
-      </p>
-    </div>
-  )
-}
-
-function LocalCurrencyProfileCard({
-  profile,
-  draft,
-  email,
-  busy,
-  error,
-  editing,
-  bankAccountName,
-  title = 'Your payout profile',
-  body = 'Used for receipts, payout support, and matching bank payment records.',
-  savedFallback = 'Payout profile',
-  saveLabel = 'Save payout profile',
-  savedBadgeLabel = 'Circle Pocket',
-  identityBadgeLabel = 'Circle Pocket',
-  onDraftChange,
-  onSave,
-  onEdit,
-  onCancel,
-}: {
-  profile: LocalCurrencyProfile | null
-  draft: LocalCurrencyProfile
-  email: string
-  busy: boolean
-  error: string
-  editing: boolean
-  bankAccountName?: string
-  title?: string
-  body?: string
-  savedFallback?: string
-  saveLabel?: string
-  savedBadgeLabel?: string
-  identityBadgeLabel?: string
-  onDraftChange: (next: LocalCurrencyProfile) => void
-  onSave: () => void
-  onEdit: () => void
-  onCancel: () => void
-}) {
-  const complete = Boolean(profile?.firstName && profile?.lastName && profile?.email)
-  const dirty = Boolean(profile && (
-    profile.firstName !== draft.firstName ||
-    profile.lastName !== draft.lastName ||
-    profile.email !== (email || draft.email)
-  ))
-  const fullName = `${draft.firstName} ${draft.lastName}`.trim()
-  const bankMismatch = Boolean(bankAccountName && fullName && !bankAccountName.toLowerCase().includes(draft.lastName.trim().toLowerCase()))
-  const identityEmail = email || draft.email || profile?.email || ''
-
-  if (complete && !editing) {
-    const savedName = `${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim()
-    return (
+  const emailSignInControl = canReceiveWithEmail && !privyAuthenticated ? (
+    deferEmailSignIn ? (
       <button
         type="button"
-        onClick={onEdit}
-        aria-label={`Open ${savedFallback.toLowerCase()}`}
-        className="group flex w-full items-center gap-3 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-3.5 py-3 text-left shadow-sm transition-all hover:border-blue-200 hover:shadow-md active:scale-[0.99] dark:border-blue-400/20 dark:from-blue-400/10 dark:to-white/[0.035] dark:hover:border-blue-300/30"
+        onClick={() => {
+          recipient.deferEmailSignIn()
+        }}
+        className={cn(
+          'rounded-xl border px-3 py-2.5 text-left transition-all active:scale-[0.99]',
+          receiveMode === 'email'
+            ? 'border-gray-900 bg-gray-50 text-gray-900 dark:border-white/30 dark:bg-white/10 dark:text-gray-100'
+            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
+        )}
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-white text-blue-600 shadow-sm dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
-          <UserRound className="h-[18px] w-[18px]" />
+        <span className="flex items-center gap-2 text-sm font-semibold">
+          <Mail className="h-4 w-4 text-blue-500" />
+          Receive with Circle Pocket
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="truncate text-sm font-black text-gray-950 dark:text-white">{savedName || savedFallback}</span>
-            <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-700 dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
-              {savedBadgeLabel}
-            </span>
-          </span>
-          <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">{profile?.email}</span>
-        </span>
-        <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold text-gray-400 transition-colors group-hover:text-gray-700 dark:group-hover:text-gray-200">
-          Edit
-          <ChevronDown className="h-3.5 w-3.5 -rotate-90 transition-transform group-hover:translate-x-0.5" />
-        </span>
+        <span className="mt-1 block text-[11px] text-gray-400">Email-backed Circle wallet</span>
       </button>
+    ) : (
+      <PrivyConnectButton
+        debugLabel="create-receive-email"
+        loginOptions={{ loginMethods: ['email'] }}
+        logoutOnAuthenticated={false}
+        onBeforeLogin={() => {
+          recipient.rememberSignInIntent()
+        }}
+        className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-gray-700 transition-all hover:border-gray-300 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold">
+          <Mail className="h-4 w-4 text-blue-500" />
+          Receive with Circle Pocket
+        </span>
+        <span className="mt-1 block text-[11px] text-gray-400">
+          Email-backed Circle wallet
+        </span>
+      </PrivyConnectButton>
     )
-  }
+  ) : undefined
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-bold text-gray-950 dark:text-white">{title}</p>
-          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-            {body}
-          </p>
-        </div>
-        {complete && editing && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-600 transition-all hover:bg-gray-100 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1]"
-          >
-            Cancel
-          </button>
-        )}
-      </div>
-
-      {identityEmail && (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 dark:border-blue-400/20 dark:bg-blue-400/10">
-          <span className="min-w-0">
-            <span className="block text-[10px] font-bold uppercase tracking-widest text-blue-500 dark:text-blue-300">Signed in as</span>
-            <span className="block truncate text-xs font-semibold text-blue-900 dark:text-blue-100">{identityEmail}</span>
-          </span>
-          <span className="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
-            {identityBadgeLabel}
-          </span>
-        </div>
-      )}
-
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">First name</span>
-          <input
-            value={draft.firstName}
-            onChange={(event) => onDraftChange({ ...draft, firstName: event.target.value })}
-            placeholder="First name"
-            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
-          />
-        </label>
-        <label className="block">
-          <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Last name</span>
-          <input
-            value={draft.lastName}
-            onChange={(event) => onDraftChange({ ...draft, lastName: event.target.value })}
-            placeholder="Last name"
-            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
-          />
-        </label>
-      </div>
-
-      <label className="mt-2 block">
-        <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Email</span>
-        <input
-          value={identityEmail}
-          readOnly
-          placeholder="Signed-in email"
-          className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-500 outline-none dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400"
+    <PocketReceiveMethodPanel
+      receiveMode={receiveMode}
+      canReceiveWithEmail={canReceiveWithEmail}
+      selectedNetwork={selectedNet}
+      networkLabel={CHAIN_META[selectedNet].label}
+      recipientPending={recipient.pending}
+      recipientError={recipient.error}
+      recipientAddressLabel={recipient.recipientAddressLabel}
+      walletBalance={recipient.walletBalance}
+      walletReady={recipient.walletReady}
+      selectorLabel={selectorLabel}
+      addressOptionLabel={addressOptionLabel}
+      addressOptionBody={addressOptionBody}
+      hideLabel={hideLabel}
+      bankSignInControl={bankSignInControl}
+      emailSignInControl={emailSignInControl}
+      bankFields={receiveMode === 'bank' ? (
+        <PocketVerifiedBankFields
+          country={bankCountry ?? 'NG'}
+          institutions={bankInstitutions}
+          institutionsBusy={bankInstitutionsBusy}
+          bankCode={bankCode}
+          bankName={bankName}
+          accountNumber={bankAccount}
+          accountName={bankAccountName}
+          verified={bankVerified}
+          verifying={bankVerifyBusy}
+          error={bankError}
+          onCountryChange={bankActions.setBankCountry}
+          onInstitutionChange={bankActions.setBankInstitution}
+          onAccountChange={bankActions.setBankAccount}
+          onVerify={bankActions.verifyBankAccount}
         />
-      </label>
-
-      {bankMismatch && (
-        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-relaxed text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-          Bank account name is {bankAccountName}. Make sure this payout account belongs to you or your business.
-        </p>
-      )}
-
-      {error && (
-        <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
-          {error}
-        </p>
-      )}
-
-      {(!complete || dirty) && (
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={busy || !draft.firstName.trim() || !draft.lastName.trim() || !(email || draft.email)}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
-          {dirty ? 'Save changes' : saveLabel}
-        </button>
-      )}
-    </div>
+      ) : undefined}
+      onSelectPaste={recipient.selectPaste}
+      onSelectEmail={() => void recipient.connect()}
+      onDisconnectEmail={() => void recipient.disconnect()}
+    />
   )
 }
 
-export default function CreateLink({ initialProduct = 'payment' }: { initialProduct?: 'payment' | 'polymarket' } = {}) {
+
+type CreateLinkProps = {
+  initialProduct?: 'payment' | 'polymarket'
+}
+
+export default function CreateLink({
+  initialProduct = 'payment',
+}: CreateLinkProps = {}) {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const productParam = searchParams.get('product')
@@ -1046,16 +450,21 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const startsInBillsPayment = initialProductTarget === 'payment' && initialPaymentTab === 'bills'
   const startsInProduct = Boolean(initialProductTarget) || initialProduct === 'polymarket' || window.location.pathname === '/polymarket'
   const startsInPaymentMenu = initialProductTarget === 'payment' && !paymentTabParam
-  const { authenticated: privyAuthenticated, user: privyUser, logout: logoutPrivy, getAccessToken } = usePrivy()
-  const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
+  const { authenticated: privyAuthenticated, email: privyEmail, logout: logoutPrivy, getAccessToken } = usePocketIdentity()
   const posCreationIdempotencyRef = useRef('')
   const bankReceiveIdempotencyRef = useRef('')
   const bankSendIdempotencyRef = useRef('')
-  const [localCurrencyProfile, setLocalCurrencyProfile] = useState<LocalCurrencyProfile | null>(null)
-  const [localCurrencyProfileDraft, setLocalCurrencyProfileDraft] = useState<LocalCurrencyProfile>({ firstName: '', lastName: '', email: '' })
-  const [localCurrencyProfileEditing, setLocalCurrencyProfileEditing] = useState(false)
-  const [localCurrencyProfileBusy, setLocalCurrencyProfileBusy] = useState(false)
-  const [localCurrencyProfileError, setLocalCurrencyProfileError] = useState('')
+  const {
+    profile: localCurrencyProfile,
+    draft: localCurrencyProfileDraft,
+    setDraft: setLocalCurrencyProfileDraft,
+    editing: localCurrencyProfileEditing,
+    busy: localCurrencyProfileBusy,
+    error: localCurrencyProfileError,
+    save: saveLocalCurrencyProfile,
+    edit: editLocalCurrencyProfile,
+    cancel: cancelLocalCurrencyProfileEdit,
+  } = usePocketProfile({ authenticated: privyAuthenticated, email: privyEmail, getAccessToken })
   const [evmAddr,       setEvmAddr]       = useState('')
   const [solanaAddr,    setSolanaAddr]    = useState('')
   const [amt,           setAmt]           = useState(initialAgentAmount)
@@ -1075,32 +484,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   const [paymentFlow,    setPaymentFlow]    = useState<PaymentFlow>(startsInBankPayment ? 'bank' : startsInBankSendPayment ? 'bank-send' : 'usdc')
   const [receiveMode,    setReceiveMode]    = useState<ReceiveMode>(startsInBankPayment ? 'bank' : 'paste')
   const [bankSendNetwork, setBankSendNetwork] = useState<BankSendNetwork>('base')
-  const [circlePocketMode, setCirclePocketMode] = useState(false)
-  const [circlePocketShellActive, setCirclePocketShellActive] = useState(false)
-  const [circlePocketView, setCirclePocketView] = useState<CirclePocketView>('main')
-  const [circlePocketTab, setCirclePocketTab] = useState<CirclePocketTab>('balance')
-  const [circlePocketNetwork, setCirclePocketNetwork] = useState<PosNetwork>('base')
-  const [circlePocketWallets, setCirclePocketWallets] = useState<CirclePocketWallets>({})
-  const [circlePocketEvmSession, setCirclePocketEvmSession] = useState<Awaited<ReturnType<typeof connectCircleEvmEmailWallet>> | null>(null)
-  const [circlePocketSolanaSession, setCirclePocketSolanaSession] = useState<Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>> | null>(null)
-  const [circlePocketRows, setCirclePocketRows] = useState<UnifiedBalanceBreakdown[]>([])
-  const [circlePocketGlobalBalance, setCirclePocketGlobalBalance] = useState(0)
-  const [circlePocketBusy, setCirclePocketBusy] = useState(false)
-  const [circlePocketBalanceBusy, setCirclePocketBalanceBusy] = useState(false)
-  const [circlePocketError, setCirclePocketError] = useState('')
-  const [circlePocketCopied, setCirclePocketCopied] = useState(false)
-  const [circlePocketWithdrawAddress, setCirclePocketWithdrawAddress] = useState('')
-  const [circlePocketWithdrawAmount, setCirclePocketWithdrawAmount] = useState('')
-  const [circlePocketWithdrawPending, setCirclePocketWithdrawPending] = useState(false)
-  const [circlePocketWithdrawNotice, setCirclePocketWithdrawNotice] = useState('')
-  const [circlePocketWithdrawTxHash, setCirclePocketWithdrawTxHash] = useState('')
-  const [circlePocketActivity, setCirclePocketActivity] = useState<string[]>([])
-  const [circlePocketActivityView, setCirclePocketActivityView] = useState<CirclePocketActivityView>('all')
-  const [circlePocketBillView, setCirclePocketBillView] = useState<CirclePocketBillView>('airtime')
-  const [circlePocketHistory, setCirclePocketHistory] = useState<CirclePocketHistoryRow[]>([])
-  const [circlePocketHistoryBusy, setCirclePocketHistoryBusy] = useState(false)
-  const [circlePocketHistoryError, setCirclePocketHistoryError] = useState('')
-  const [circlePocketKeyboardOpen, setCirclePocketKeyboardOpen] = useState(false)
   const [posMode,        setPosMode]        = useState(startsInPosPayment)
   const [billsMode,      setBillsMode]      = useState(startsInBillsPayment)
   const [streamMode,     setStreamMode]     = useState(false)
@@ -1417,7 +800,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setMultiChainMode(false)
     setAccessMode(false)
     setPaymentMenuOpen(false)
-    setCirclePocketMode(false)
     setPosMode(false)
     setBillsMode(false)
     setStreamMode(false)
@@ -1439,7 +821,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setMultiChainMode(false)
     setAccessMode(false)
     setPaymentMenuOpen(false)
-    setCirclePocketMode(false)
     setPosMode(false)
     setBillsMode(false)
     setStreamMode(false)
@@ -1453,12 +834,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openHubMode(push = true) {
     if (push) pushProductHistory('hub')
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'support' } }))
     setProductHubOpen(true)
     setPaymentMenuOpen(false)
     setAccessMode(false)
-    setCirclePocketMode(false)
-    setCirclePocketShellActive(false)
     setPosMode(false)
     setBillsMode(false)
     setStreamMode(false)
@@ -1472,7 +850,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     if (on && push) pushProductHistory('agent')
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
-    setCirclePocketMode(false)
     setPosMode(false)
     setBillsMode(false)
     setStreamMode(false)
@@ -1493,77 +870,15 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     goBackOr(() => openHubMode(false))
   }
 
-  function openCirclePocketMode(push = true, view: CirclePocketView = 'main') {
-    if (push) pushProductHistory('circle-pocket')
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'circle-pocket' } }))
-    setProductHubOpen(false)
-    setPaymentMenuOpen(false)
-    setCirclePocketMode(true)
-    setCirclePocketShellActive(true)
-    setCirclePocketView(view)
-    setAccessMode(false)
-    setPosMode(false)
-    setBillsMode(false)
-    setStreamMode(false)
-    setPolymarketMode(false)
-    setAccessView('overview')
-    setGeneratedLink('')
-    setCopied(false)
-    setVaultStep('idle')
-    setCirclePocketError('')
-  }
-
-  function closeCirclePocketMode() {
-    if (circlePocketView === 'x402') {
-      setCirclePocketView('main')
-      setAccessView('overview')
-      setCirclePocketError('')
-      return
-    }
-    if (circlePocketView === 'move') {
-      setCirclePocketView('chooser')
-      return
-    }
-    if (circlePocketView === 'wallet-manager') {
-      setCirclePocketView('chooser')
-      setAccessView('overview')
-      setCirclePocketError('')
-      return
-    }
-    goBackOr(() => openHubMode(false))
-  }
-
-  function selectCirclePocketNav(tab: CirclePocketNavTab) {
-    setCirclePocketError('')
-    if (tab === 'home') {
-      setCirclePocketTab('balance')
-      openCirclePocketMode(false, 'main')
-      return
-    }
-    if (tab === 'move') {
-      setCirclePocketShellActive(true)
-      setCirclePocketView('move')
-      window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-wallet-view', {
-        detail: { mode: 'move', view: 'smart' },
-      }))
-      setPaymentTab('usdc')
-      return
-    }
-    if (tab === 'bills') {
-      openCirclePocketMode(false, 'bills')
-      return
-    }
-    setCirclePocketTab('activity')
-    openCirclePocketMode(false, 'main')
+  function openStandaloneCirclePocket(replace = false) {
+    navigate(POCKET_SMART_WALLET_PATH, { replace })
   }
 
   function openPaymentMenu(push = true) {
     if (push) pushProductHistory('payment')
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'circle-pocket' } }))
     setProductHubOpen(false)
     setPaymentMenuOpen(true)
     setAccessMode(false)
-    setCirclePocketMode(false)
     setPosMode(false)
     setBillsMode(false)
     setStreamMode(false)
@@ -1579,11 +894,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openPaymentMode(push = true) {
     if (push) pushPaymentTabHistory(paymentFlow)
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'circle-pocket' } }))
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
     setAccessMode(false)
-    setCirclePocketMode(false)
     setPosMode(false)
     setBillsMode(false)
     setStreamMode(false)
@@ -1602,7 +915,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
     setPosMode(true)
-    setCirclePocketMode(false)
     setBillsMode(false)
     setAccessMode(false)
     setStreamMode(false)
@@ -1638,11 +950,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
   function openBillsMode(push = true) {
     if (push) pushPaymentTabHistory('bills')
-    window.dispatchEvent(new CustomEvent('agent-hash-mode', { detail: { mode: 'circle-pocket' } }))
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
     setBillsMode(true)
-    setCirclePocketMode(false)
     setPosMode(false)
     setAccessMode(false)
     setStreamMode(false)
@@ -1662,7 +972,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setProductHubOpen(false)
     setPaymentMenuOpen(false)
     setStreamMode(true)
-    setCirclePocketMode(false)
     setPosMode(false)
     setBillsMode(false)
     setAccessMode(false)
@@ -1690,7 +999,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPaymentMenuOpen(false)
     setPolymarketMode(true)
     setStreamMode(false)
-    setCirclePocketMode(false)
     setPosMode(false)
     setBillsMode(false)
     setAccessMode(false)
@@ -1717,7 +1025,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       }
       setAccessMode(false)
       setPaymentMenuOpen(false)
-      setCirclePocketMode(false)
       setPosMode(false)
       setBillsMode(false)
       setStreamMode(false)
@@ -1752,7 +1059,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }
 
     if (product === 'circle-pocket') {
-      openCirclePocketMode(false)
+      openStandaloneCirclePocket(true)
       return
     }
 
@@ -1803,7 +1110,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         }
       }
       if (product === 'agent') toggleAccessMode(true, false)
-      if (product === 'circle-pocket') openCirclePocketMode(false)
+      if (product === 'circle-pocket') openStandaloneCirclePocket(true)
       if (product === 'pos') openPosMode(false)
       if (product === 'streampay') openStreamMode(false)
       if (product === 'polymarket') openPolymarketMode(false)
@@ -1876,7 +1183,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     const receiveUsdcOpen = !productHubOpen
       && !paymentMenuOpen
       && !accessMode
-      && !circlePocketMode
       && !posMode
       && !billsMode
       && !streamMode
@@ -1896,7 +1202,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }, [
     accessMode,
     billsMode,
-    circlePocketMode,
     isBankReceive,
     paymentMenuOpen,
     polymarketMode,
@@ -1917,101 +1222,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       }))
     }
   }, [serviceHubAgentComposerActive])
-
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-surface', {
-      detail: { visible: circlePocketShellActive },
-    }))
-    return () => {
-      window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-surface', {
-        detail: { visible: false },
-      }))
-    }
-  }, [circlePocketShellActive])
-
-  useEffect(() => {
-    if (!circlePocketMode) return
-    window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-wallet-view', {
-      detail: {
-        mode: circlePocketView === 'move'
-          ? 'move'
-          : circlePocketView === 'bills'
-            ? 'bills'
-            : circlePocketView === 'main' && circlePocketTab === 'activity'
-              ? 'activity'
-              : 'wallet',
-        view: circlePocketView === 'x402' ? 'x402' : 'smart',
-      },
-    }))
-  }, [circlePocketMode, circlePocketTab, circlePocketView])
-
-  useEffect(() => {
-    const handleActivitySelect = (event: Event) => {
-      const detail = (event as CustomEvent<{ view?: CirclePocketActivityView }>).detail
-      if (detail?.view === 'all' || detail?.view === 'bank' || detail?.view === 'pos' || detail?.view === 'bills') {
-        setCirclePocketActivityView(detail.view)
-      }
-    }
-    window.addEventListener('hashpaylink-circle-pocket-activity-select', handleActivitySelect)
-    return () => window.removeEventListener('hashpaylink-circle-pocket-activity-select', handleActivitySelect)
-  }, [])
-
-  useEffect(() => {
-    const handleBillsSelect = (event: Event) => {
-      const detail = (event as CustomEvent<{ view?: CirclePocketBillView }>).detail
-      if (detail?.view === 'airtime' || detail?.view === 'data' || detail?.view === 'tv' || detail?.view === 'electricity') {
-        setCirclePocketBillView(detail.view)
-      }
-    }
-    window.addEventListener('hashpaylink-circle-pocket-bills-select', handleBillsSelect)
-    return () => window.removeEventListener('hashpaylink-circle-pocket-bills-select', handleBillsSelect)
-  }, [])
-
-  useEffect(() => {
-    const handleWalletSelect = (event: Event) => {
-      const detail = (event as CustomEvent<{ view?: 'smart' | 'x402' }>).detail
-      if (detail?.view === 'x402') {
-        setCirclePocketView('x402')
-        return
-      }
-      setCirclePocketTab('balance')
-      setCirclePocketView('main')
-    }
-    window.addEventListener('hashpaylink-circle-pocket-wallet-select', handleWalletSelect)
-    return () => window.removeEventListener('hashpaylink-circle-pocket-wallet-select', handleWalletSelect)
-  }, [])
-
-  useEffect(() => {
-    const handleMoveSelect = (event: Event) => {
-      const detail = (event as CustomEvent<{ view?: 'usdc' | 'bank' | 'pos' }>).detail
-      setCirclePocketShellActive(true)
-      if (detail?.view === 'usdc') setPaymentTab('usdc')
-      if (detail?.view === 'bank') setPaymentTab('bank')
-      if (detail?.view === 'pos') setPaymentTab('pos')
-    }
-    window.addEventListener('hashpaylink-circle-pocket-move-select', handleMoveSelect)
-    return () => window.removeEventListener('hashpaylink-circle-pocket-move-select', handleMoveSelect)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!circlePocketShellActive || !window.matchMedia('(max-width: 767px)').matches) {
-      setCirclePocketKeyboardOpen(false)
-      return
-    }
-    const viewport = window.visualViewport
-    const updateKeyboardState = () => {
-      const viewportHeight = viewport?.height ?? window.innerHeight
-      setCirclePocketKeyboardOpen(window.innerHeight - viewportHeight > 140)
-    }
-    updateKeyboardState()
-    viewport?.addEventListener('resize', updateKeyboardState)
-    window.addEventListener('resize', updateKeyboardState)
-    return () => {
-      viewport?.removeEventListener('resize', updateKeyboardState)
-      window.removeEventListener('resize', updateKeyboardState)
-      setCirclePocketKeyboardOpen(false)
-    }
-  }, [circlePocketShellActive])
 
   useEffect(() => {
     if (!serviceHubAgentComposerActive || !window.matchMedia('(max-width: 767px)').matches) {
@@ -2044,286 +1254,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     }
   }, [serviceHubAgentComposerActive])
 
-  const circlePocketSelectedWallet = circlePocketWallets[circlePocketNetwork]
-  const circlePocketSelectedBalance = circlePocketRows.find(row => row.key === circlePocketNetwork)?.balance ?? 0
-  const circlePocketNetworkLabel = circlePocketNetwork === 'solana' ? 'Solana' : CHAIN_META[circlePocketNetwork].label
-  const circlePocketSelectedAddress = circlePocketSelectedWallet?.address ?? ''
-  const circlePocketOpenedWalletCount = Object.values(circlePocketWallets).filter(wallet => Boolean(wallet?.address)).length
-
-  useEffect(() => {
-    setCirclePocketError('')
-    setCirclePocketWithdrawNotice('')
-    setCirclePocketWithdrawTxHash('')
-  }, [circlePocketNetwork, circlePocketTab])
-
-  async function unlockCirclePocketWallet(network = circlePocketNetwork) {
-    setCirclePocketError('')
-    if (!PRIVY_AUTH_ENABLED) throw new Error('Circle Pocket requires Privy email sign-in.')
-    if (!privyAuthenticated) throw new Error('Sign in with email to open Circle Pocket.')
-    if (!privyEmail) throw new Error('Sign in with an email account to open Circle Pocket.')
-    if (network === 'solana' && !canUseCircleSolanaEmailWallet()) throw new Error('Circle Solana wallet is not configured.')
-    if (network !== 'solana' && !canUseCircleEvmEmailWallet(network)) throw new Error(`${CHAIN_META[network].label} Circle wallet is not configured.`)
-
-    const token = await getAccessToken()
-    if (!token) throw new Error('Email session is not ready. Sign in again and retry.')
-    const existing = await resolvePrivyCircleLink({ accessToken: token, chain: network })
-    if (existing.link?.circleWalletAddress) {
-      const wallet = {
-        address: existing.link.circleWalletAddress,
-        walletId: existing.link.circleWalletId,
-        blockchain: existing.link.circleBlockchain,
-      }
-      setCirclePocketWallets(current => ({ ...current, [network]: wallet }))
-      return wallet
-    }
-
-    if (network === 'solana') {
-      const session = await connectCircleSolanaEmailWallet(privyEmail)
-      setCirclePocketSolanaSession(session)
-      await savePrivyCircleLink({
-        accessToken: token,
-        chain: 'solana',
-        email: privyEmail,
-        wallet: {
-          id: session.wallet.id,
-          address: session.wallet.address,
-          blockchain: session.wallet.blockchain,
-        },
-      })
-      const wallet = {
-        address: session.wallet.address,
-        walletId: session.wallet.id,
-        blockchain: session.wallet.blockchain,
-      }
-      setCirclePocketWallets(current => ({ ...current, solana: wallet }))
-      return wallet
-    }
-
-    const session = await connectCircleEvmEmailWallet(privyEmail, network)
-    setCirclePocketEvmSession(session)
-    await savePrivyCircleLink({
-      accessToken: token,
-      chain: network,
-      email: privyEmail,
-      wallet: session.wallet,
-    })
-    const wallet = {
-      address: session.wallet.address,
-      walletId: session.wallet.id,
-      blockchain: session.wallet.blockchain,
-    }
-    setCirclePocketWallets(current => ({ ...current, [network]: wallet }))
-    return wallet
-  }
-
-  async function refreshCirclePocketBalances(wallets = circlePocketWallets) {
-    const networks = POS_NETWORK_OPTIONS.map(item => item.key)
-    setCirclePocketBalanceBusy(true)
-    setCirclePocketError('')
-    try {
-      const rows: UnifiedBalanceBreakdown[] = []
-      for (const network of networks) {
-        const wallet = wallets[network]
-        if (!wallet?.address) {
-          rows.push({
-            key: network,
-            label: network === 'solana' ? 'Solana' : CHAIN_META[network].label,
-            balance: 0,
-            status: 'ok',
-          })
-          continue
-        }
-        const result = await queryBalances({
-          chains: [network],
-          evmAddress: network === 'solana' ? undefined : wallet.address,
-          solanaAddress: network === 'solana' ? wallet.address : undefined,
-        })
-        rows.push(...result.rows)
-      }
-      setCirclePocketRows(rows)
-      setCirclePocketGlobalBalance(rows.reduce((sum, row) => sum + row.balance, 0))
-    } catch (err) {
-      setCirclePocketError(readableErrorMsg(err, 'Circle Pocket balance refresh failed.'))
-    } finally {
-      setCirclePocketBalanceBusy(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!privyAuthenticated || !privyEmail) {
-      setCirclePocketWallets({})
-      setCirclePocketRows([])
-      setCirclePocketGlobalBalance(0)
-      return
-    }
-
-    let cancelled = false
-    async function hydrateLinkedCirclePocketWallets() {
-      try {
-        const token = await getAccessToken()
-        if (!token || cancelled) return
-
-        const entries = await Promise.all(
-          POS_NETWORK_OPTIONS.map(async ({ key }) => {
-            try {
-              const existing = await resolvePrivyCircleLink({ accessToken: token, chain: key })
-              const link = existing.link
-              if (!link?.circleWalletAddress) return null
-              return [key, {
-                address: link.circleWalletAddress,
-                walletId: link.circleWalletId,
-                blockchain: link.circleBlockchain,
-              }] as const
-            } catch {
-              return null
-            }
-          }),
-        )
-        if (cancelled) return
-
-        const nextWallets = entries.reduce<CirclePocketWallets>((acc, entry) => {
-          if (!entry) return acc
-          acc[entry[0]] = entry[1]
-          return acc
-        }, {})
-        setCirclePocketWallets(nextWallets)
-        if (Object.keys(nextWallets).length) {
-          await refreshCirclePocketBalances(nextWallets)
-        } else {
-          setCirclePocketRows([])
-          setCirclePocketGlobalBalance(0)
-        }
-      } catch {
-        if (!cancelled) {
-          setCirclePocketWallets({})
-          setCirclePocketRows([])
-          setCirclePocketGlobalBalance(0)
-        }
-      }
-    }
-
-    void hydrateLinkedCirclePocketWallets()
-    return () => {
-      cancelled = true
-    }
-  }, [privyAuthenticated, privyEmail]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function handleCirclePocketSetup(network = circlePocketNetwork) {
-    setCirclePocketBusy(true)
-    setCirclePocketError('')
-    try {
-      const wallet = await unlockCirclePocketWallet(network)
-      const nextWallets = { ...circlePocketWallets, [network]: wallet }
-      await refreshCirclePocketBalances(nextWallets)
-      setCirclePocketActivity(current => [`${network === 'solana' ? 'Solana' : CHAIN_META[network].label} wallet ready`, ...current].slice(0, 5))
-    } catch (err) {
-      setCirclePocketError(readableErrorMsg(err, 'Circle Pocket setup failed.'))
-    } finally {
-      setCirclePocketBusy(false)
-    }
-  }
-
-  async function handleCirclePocketCopy() {
-    if (!circlePocketSelectedAddress) return
-    await copyToClipboard(circlePocketSelectedAddress)
-    setCirclePocketCopied(true)
-    setCirclePocketActivity(current => [`Copied ${circlePocketNetworkLabel} funding address`, ...current].slice(0, 5))
-    setTimeout(() => setCirclePocketCopied(false), 1800)
-  }
-
-  function handleCirclePocketWithdrawMax() {
-    if (circlePocketSelectedBalance <= 0) return
-    setCirclePocketWithdrawAmount(String(circlePocketSelectedBalance))
-  }
-
-  async function handleCirclePocketWithdraw() {
-    setCirclePocketError('')
-    setCirclePocketWithdrawNotice('')
-    setCirclePocketWithdrawTxHash('')
-    const recipient = circlePocketWithdrawAddress.trim()
-    const decimals = 6
-    if (circlePocketNetwork === 'solana' ? !isValidSolanaAddress(recipient) : !isAddress(recipient)) {
-      setCirclePocketError('Enter a valid destination address for the selected network.')
-      return
-    }
-    let amountUnits: bigint
-    try {
-      amountUnits = parseUnits(circlePocketWithdrawAmount || '0', decimals)
-    } catch {
-      setCirclePocketError('Enter a valid amount.')
-      return
-    }
-    if (amountUnits <= 0n) {
-      setCirclePocketError('Enter an amount to withdraw.')
-      return
-    }
-    if (circlePocketSelectedBalance > 0) {
-      const selectedUnits = parseUnits(String(circlePocketSelectedBalance), decimals)
-      if (amountUnits > selectedUnits) {
-        setCirclePocketError('Amount is higher than your wallet balance.')
-        return
-      }
-    }
-
-    setCirclePocketWithdrawPending(true)
-    try {
-      const wallet = circlePocketSelectedWallet ?? await unlockCirclePocketWallet(circlePocketNetwork)
-      if (circlePocketNetwork === 'solana') {
-        let session = circlePocketSolanaSession
-        if (!session || session.wallet.address !== wallet.address) {
-          session = await connectCircleSolanaEmailWallet(privyEmail)
-          setCirclePocketSolanaSession(session)
-        }
-        const buildRes = await fetch('/api/solana-build-tx', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: session.wallet.address,
-            to: recipient,
-            amount: circlePocketWithdrawAmount,
-            mode: 'withdraw',
-          }),
-        })
-        const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
-        if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build withdraw transaction')
-        const signedB64 = await signCircleSolanaTransaction({
-          session,
-          rawTransaction: buildData.tx,
-          memo: `Hash PayLink Circle Pocket withdraw ${formatAmount(circlePocketWithdrawAmount, 6)} USDC`,
-        })
-        const relayRes = await fetch('/api/solana-relay', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tx: signedB64, lastValidBlockHeight: buildData.lastValidBlockHeight }),
-        })
-        const relayData = await readApiJson<{ ok: boolean; txHash?: string; error?: string }>(relayRes, 'Solana relay')
-        if (!relayData.ok || !relayData.txHash) throw new Error(relayData.error ?? 'Relay failed')
-        setCirclePocketWithdrawTxHash(relayData.txHash)
-      } else {
-        let session = circlePocketEvmSession
-        if (!session || session.chain !== circlePocketNetwork || session.wallet.address.toLowerCase() !== wallet.address.toLowerCase()) {
-          session = await connectCircleEvmEmailWallet(privyEmail, circlePocketNetwork)
-          setCirclePocketEvmSession(session)
-        }
-        const txHash = await sendCircleEvmEmailWithdraw({
-          session,
-          recipient: recipient as Address,
-          amount: circlePocketWithdrawAmount,
-        })
-        if (txHash) setCirclePocketWithdrawTxHash(txHash)
-      }
-      setCirclePocketWithdrawNotice('Withdraw sent. Check the destination wallet in a moment.')
-      setCirclePocketActivity(current => [`Withdrew ${circlePocketWithdrawAmount} USDC on ${circlePocketNetworkLabel}`, ...current].slice(0, 5))
-      setCirclePocketWithdrawAmount('')
-      setCirclePocketWithdrawAddress('')
-      await refreshCirclePocketBalances()
-    } catch (err) {
-      setCirclePocketError(readableErrorMsg(err, 'Withdraw failed.'))
-    } finally {
-      setCirclePocketWithdrawPending(false)
-    }
-  }
-
   function handlePosBack() {
     if (posMerchant) {
       goBackOr(() => {
@@ -2342,7 +1272,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       })
       return
     }
-    goBackOr(() => openCirclePocketMode(false))
+    goBackOr(() => openPaymentMenu(false))
   }
 
   const posCustomerUrl = posMerchant
@@ -2377,134 +1307,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPosError('')
   }
 
-  async function requestLocalCurrencyProfile(action: 'get' | 'save') {
-    const token = await getAccessToken()
-    if (!token) throw new Error('Sign in again to save local currency profile.')
-    const response = await fetch('/api/local-currency-profile', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        action,
-        first_name: localCurrencyProfileDraft.firstName,
-        last_name: localCurrencyProfileDraft.lastName,
-        email: privyEmail || localCurrencyProfileDraft.email,
-      }),
-    })
-    const data = await response.json().catch(() => undefined) as {
-      ok?: boolean
-      error?: string
-      email?: string
-      profile?: LocalCurrencyProfile | null
-    } | undefined
-    if (!response.ok || !data?.ok) throw new Error(data?.error ?? 'Profile request failed.')
-    return data
-  }
-
-  async function loadLocalCurrencyProfile() {
-    if (!privyAuthenticated) {
-      setLocalCurrencyProfile(null)
-      setLocalCurrencyProfileDraft({ firstName: '', lastName: '', email: '' })
-      setLocalCurrencyProfileEditing(false)
-      setLocalCurrencyProfileError('')
-      return
-    }
-    setLocalCurrencyProfileBusy(true)
-    setLocalCurrencyProfileError('')
-    try {
-      const data = await requestLocalCurrencyProfile('get')
-      const profile = data.profile ?? null
-      setLocalCurrencyProfile(profile)
-      setLocalCurrencyProfileDraft({
-        firstName: profile?.firstName ?? '',
-        lastName: profile?.lastName ?? '',
-        email: profile?.email ?? data.email ?? privyEmail,
-      })
-      setLocalCurrencyProfileEditing(!profile)
-    } catch (error) {
-      setLocalCurrencyProfileError(error instanceof Error ? error.message : 'Could not load payout profile.')
-      setLocalCurrencyProfileDraft(current => ({ ...current, email: privyEmail || current.email }))
-      setLocalCurrencyProfileEditing(true)
-    } finally {
-      setLocalCurrencyProfileBusy(false)
-    }
-  }
-
-  async function saveLocalCurrencyProfile() {
-    setLocalCurrencyProfileBusy(true)
-    setLocalCurrencyProfileError('')
-    try {
-      const data = await requestLocalCurrencyProfile('save')
-      if (!data.profile) throw new Error('Profile was not saved.')
-      setLocalCurrencyProfile(data.profile)
-      setLocalCurrencyProfileDraft(data.profile)
-      setLocalCurrencyProfileEditing(false)
-    } catch (error) {
-      setLocalCurrencyProfileError(error instanceof Error ? error.message : 'Could not save payout profile.')
-    } finally {
-      setLocalCurrencyProfileBusy(false)
-    }
-  }
-
-  function editLocalCurrencyProfile() {
-    if (localCurrencyProfile) setLocalCurrencyProfileDraft(localCurrencyProfile)
-    else setLocalCurrencyProfileDraft(current => ({ ...current, email: privyEmail || current.email }))
-    setLocalCurrencyProfileError('')
-    setLocalCurrencyProfileEditing(true)
-  }
-
-  function cancelLocalCurrencyProfileEdit() {
-    if (!localCurrencyProfile) return
-    setLocalCurrencyProfileDraft(localCurrencyProfile)
-    setLocalCurrencyProfileError('')
-    setLocalCurrencyProfileEditing(false)
-  }
-
-  useEffect(() => {
-    void loadLocalCurrencyProfile()
-  }, [privyAuthenticated, privyEmail]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function loadCirclePocketHistory() {
-    if (!privyAuthenticated) {
-      setCirclePocketHistory([])
-      setCirclePocketHistoryError('')
-      return
-    }
-    setCirclePocketHistoryBusy(true)
-    setCirclePocketHistoryError('')
-    try {
-      const token = await getAccessToken()
-      if (!token) throw new Error('Sign in again to load Circle Pocket activity.')
-      const response = await fetch('/api/ng-pos', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ action: 'listHistory' }),
-      })
-      const data = await response.json().catch(() => undefined) as {
-        ok?: boolean
-        error?: string
-        payments?: CirclePocketHistoryRow[]
-      } | undefined
-      if (!response.ok || !data?.ok) throw new Error(data?.error ?? 'Could not load Circle Pocket activity.')
-      setCirclePocketHistory((data.payments ?? []).sort((a, b) => Number((b.ts || 0) - (a.ts || 0))))
-    } catch (error) {
-      setCirclePocketHistory([])
-      setCirclePocketHistoryError(error instanceof Error ? error.message : 'Could not load Circle Pocket activity.')
-    } finally {
-      setCirclePocketHistoryBusy(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!circlePocketMode || circlePocketView !== 'main' || circlePocketTab !== 'activity') return
-    void loadCirclePocketHistory()
-  }, [circlePocketMode, circlePocketTab, circlePocketView, privyAuthenticated, privyEmail]) // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => {
     if (!posIsPaycrestFlow && receiveMode !== 'bank') return
     setPosNetworks((current) => {
@@ -2516,15 +1318,9 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   useEffect(() => {
     if (!posIsPaycrestFlow && receiveMode !== 'bank') return
     setPosBankInstitutionsBusy(true)
-    fetch('/api/ng-pos', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'institutions', currency: 'NGN' }),
-    })
-      .then((response) => response.json().then((data) => ({ response, data })))
-      .then(({ response, data }) => {
-        if (!response.ok || !data.ok) throw new Error(data.error ?? 'Could not load banks.')
-        setPosBankInstitutions(Array.isArray(data.institutions) ? data.institutions : [])
+    readPocketBankInstitutions()
+      .then((data) => {
+        setPosBankInstitutions(data.institutions)
       })
       .catch((error) => {
         setPosBankInstitutions([])
@@ -2539,18 +1335,16 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setPosBankVerified(false)
     setPosBankAccountName('')
     try {
-      const response = await fetch('/api/ng-pos', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          action: 'verifyAccount',
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to verify this bank account.')
+      const data = await verifyPocketBankAccount({
+        accessToken: token,
+        request: {
           bank_code: posBankCode,
           bank_name: posBankName,
           account_number: posBankAccount,
-        }),
+        },
       })
-      const data = await response.json()
-      if (!response.ok || !data.ok) throw new Error(data.error ?? 'Account verification failed')
       if (data.bank_code) setPosBankCode(String(data.bank_code).trim())
       setPosBankAccountName(String(data.account_name ?? '').trim())
       setPosBankVerified(true)
@@ -2573,16 +1367,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       if (!token) throw new Error('Sign in again to create POS.')
       const idempotencyKey = posCreationIdempotencyRef.current || window.crypto.randomUUID()
       posCreationIdempotencyRef.current = idempotencyKey
-      const response = await fetch('/api/ng-pos', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${token}`,
-          'idempotency-key': idempotencyKey,
-        },
-        body: JSON.stringify({
-          action: 'createMerchant',
-          owner_id: String(privyUser?.id ?? ''),
+      const data = await createPocketPos({
+        accessToken: token,
+        idempotencyKey,
+        request: {
           owner_email: privyEmail,
           owner_first_name: localCurrencyProfile?.firstName,
           owner_last_name: localCurrencyProfile?.lastName,
@@ -2595,10 +1383,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           bank_code: posIsPaycrestFlow ? posBankCode.trim() : undefined,
           account_number: posIsPaycrestFlow ? posBankAccount.trim() : undefined,
           account_name: posIsPaycrestFlow ? posBankAccountName.trim() : undefined,
-        }),
+        },
       })
-      const data = await response.json()
-      if (!response.ok || !data.ok) throw new Error(data.error ?? 'POS setup failed')
       setPosMerchant(data.merchant)
       posCreationIdempotencyRef.current = ''
       pushPosStepHistory('ready')
@@ -2753,16 +1539,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       if (!token) throw new Error('Sign in again to create bank receive links.')
       const idempotencyKey = bankReceiveIdempotencyRef.current || window.crypto.randomUUID()
       bankReceiveIdempotencyRef.current = idempotencyKey
-      const response = await fetch('/api/ng-pos', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${token}`,
-          'idempotency-key': idempotencyKey,
-        },
-        body: JSON.stringify({
-          action: 'createBankReceive',
-          owner_id: String(privyUser?.id ?? ''),
+      const data = await createPocketBankReceive({
+        accessToken: token,
+        idempotencyKey,
+        request: {
           owner_email: privyEmail,
           owner_first_name: localCurrencyProfile?.firstName || localCurrencyProfileDraft.firstName,
           owner_last_name: localCurrencyProfile?.lastName || localCurrencyProfileDraft.lastName,
@@ -2774,17 +1554,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           account_number: posBankAccount,
           account_name: posBankAccountName,
           client_origin: window.location.origin,
-        }),
+        },
       })
-      const data = await response.json().catch(() => undefined) as {
-        ok?: boolean
-        error?: string
-        link?: {
-          payment_url?: string
-          dashboard_url?: string
-        }
-      } | undefined
-      if (!response.ok || !data?.ok || !data.link?.payment_url) throw new Error(data?.error || 'Could not create bank receive link.')
       const link = data.link.payment_url
       bankReceiveIdempotencyRef.current = ''
       setGeneratedLink(link)
@@ -2813,16 +1584,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
       if (!token) throw new Error('Sign in again to create bank-to-USDC links.')
       const idempotencyKey = bankSendIdempotencyRef.current || window.crypto.randomUUID()
       bankSendIdempotencyRef.current = idempotencyKey
-      const response = await fetch('/api/ng-pos', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${token}`,
-          'idempotency-key': idempotencyKey,
-        },
-        body: JSON.stringify({
-          action: 'createBankSend',
-          owner_id: String(privyUser?.id ?? ''),
+      const data = await createPocketBankSend({
+        accessToken: token,
+        idempotencyKey,
+        request: {
           owner_email: privyEmail,
           owner_first_name: localCurrencyProfile?.firstName || localCurrencyProfileDraft.firstName,
           owner_last_name: localCurrencyProfile?.lastName || localCurrencyProfileDraft.lastName,
@@ -2832,17 +1597,8 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           network: bankSendNetwork,
           destination_address: evmAddr.trim(),
           client_origin: window.location.origin,
-        }),
+        },
       })
-      const data = await response.json().catch(() => undefined) as {
-        ok?: boolean
-        error?: string
-        link?: {
-          payment_url?: string
-          dashboard_url?: string
-        }
-      } | undefined
-      if (!response.ok || !data?.ok || !data.link?.payment_url) throw new Error(data?.error || 'Could not create bank-to-USDC link.')
       const link = data.link.payment_url
       bankSendIdempotencyRef.current = ''
       setGeneratedLink(link)
@@ -2927,54 +1683,137 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
     setGeneratedLink(''); setCopied(false); setMultiChainMode(false); setFlexAmount(false)
     setEventMode(false)
     setVaultStep('idle')
-    setAccessMode(false); setPaymentMenuOpen(false); setCirclePocketMode(false); setPosMode(false); setBillsMode(false); setPolymarketMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
+    setAccessMode(false); setPaymentMenuOpen(false); setPosMode(false); setBillsMode(false); setPolymarketMode(false); setAgentUrl(''); setAgentUrlStatus('idle')
   }
 
   const linkReady = generatedLink !== ''
-  const isPaymentView = !productHubOpen && !paymentMenuOpen && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode
-  const activeCirclePocketNav: CirclePocketNavTab = circlePocketView === 'move'
-      ? 'move'
-      : circlePocketView === 'bills'
-        ? 'bills'
-      : circlePocketView === 'main' && circlePocketTab === 'activity'
-        ? 'activity'
-        : 'home'
-  const circlePocketBillMeta: Record<CirclePocketBillView, { title: string; body: string }> = {
-    airtime: { title: 'Airtime', body: 'Top up a Nigerian mobile number from Circle Pocket.' },
-    data: { title: 'Mobile data', body: 'Choose a network and data bundle for a Nigerian mobile number.' },
-    tv: { title: 'TV', body: 'Renew a supported decoder or smartcard subscription.' },
-    electricity: { title: 'Electricity', body: 'Validate a meter and pay a supported electricity provider.' },
-  }
-  const CirclePocketBillIcon = {
-    airtime: Phone,
-    data: Wifi,
-    tv: Tv,
-    electricity: Lightbulb,
-  }[circlePocketBillView]
-  const circlePocketHistoryKind = (row: CirclePocketHistoryRow): Exclude<CirclePocketActivityView, 'all'> => {
-    const source = String(row.source ?? '').toLowerCase()
-    const settlement = String(row.settlementType ?? '').toLowerCase()
-    if (source === 'bills' || settlement === 'bill_payment') return 'bills'
-    if (source === 'bank-receive' || source === 'bank_receive') return 'bank'
-    if (source === 'ngpos' || source === 'pos') return 'pos'
-    if (settlement === 'instant_fiat') return 'bank'
-    return 'pos'
-  }
-  const circlePocketSupportedHistory = circlePocketHistory.filter(row => {
-    const source = String(row.source ?? '').toLowerCase()
-    const settlement = String(row.settlementType ?? '').toLowerCase()
-    if (source === 'bank-send' || source === 'bank_send' || settlement === 'paycrest_onramp') return false
-    return source === 'ngpos'
-      || source === 'pos'
-      || source === 'bank-receive'
-      || source === 'bank_receive'
-      || source === 'bills'
-      || settlement === 'instant_fiat'
-      || settlement === 'bill_payment'
+  const isPaymentView = !productHubOpen && !paymentMenuOpen && !accessMode && !posMode && !billsMode && !streamMode && !polymarketMode
+  const pocketUsdcController = usePocketUsdcPayLinkController({
+    draft: {
+      amount: amt,
+      memo,
+      flexibleAmount: flexAmount,
+      network: selectedNet,
+      recipientAddress: selectedNet === 'solana' ? solanaAddr : evmAddr,
+    },
+    canSubmit: !isBankReceive && !isBankSend && canGenerate,
+    submitting: false,
+    completed: !isBankReceive && !isBankSend && vaultStep === 'ready',
+    submit: handleGenerate,
+    actions: {
+      setEvmRecipientAddress: (address) => {
+        setEvmAddr(address.trim())
+        setGeneratedLink('')
+      },
+      setSolanaRecipientAddress: (address) => {
+        setSolanaAddr(address.trim())
+        setGeneratedLink('')
+      },
+      selectNetwork: (network) => onNetworkSelect(network as ChainKey),
+      toggleMultiChain: (enabled) => toggleMultiChainMode(enabled),
+    },
   })
-  const visibleCirclePocketHistory = circlePocketActivityView === 'all'
-    ? circlePocketSupportedHistory
-    : circlePocketSupportedHistory.filter(row => circlePocketHistoryKind(row) === circlePocketActivityView)
+  const pocketBankReceiveController = usePocketBankReceiveController({
+    draft: {
+      amountNgn: amt,
+      memo,
+      flexibleAmount: flexAmount,
+      bankName: posBankName,
+      bankAccountLast4: posBankAccount.slice(-4),
+      accountVerified: posBankVerified,
+    },
+    canSubmit: canGenerateBankReceive,
+    submitting: isBankReceive && posBusy,
+    completed: isBankReceive && vaultStep === 'ready',
+    submit: handleGenerate,
+    actions: {
+      setBankCountry: (country) => {
+        setPosCountry(country as PosCountry)
+        setGeneratedLink('')
+      },
+      setBankInstitution: (code, name, resetAccount) => {
+        setPosBankCode(code)
+        setPosBankName(name)
+        if (resetAccount) setPosBankAccount('')
+        setGeneratedLink('')
+      },
+      setBankAccount: (accountNumber) => {
+        setPosBankAccount(accountNumber.replace(/\D/g, '').slice(0, 10))
+        setGeneratedLink('')
+      },
+      verifyBankAccount: verifyPosBankAccount,
+    },
+  })
+  const pocketPosController = usePocketPosController({
+    draft: {
+      merchantName: posMerchantName,
+      country: posCountry ?? '',
+      networks: posNetworks,
+      bankName: posBankName,
+      bankAccountLast4: posBankAccount.slice(-4),
+      accountVerified: posBankVerified,
+    },
+    canSubmit: Boolean(privyAuthenticated && !posBusy && posMerchantName.trim() && !(posNeedsEvmWallet && !posWallet.trim()) && !(posNeedsSolanaWallet && !posSolanaWallet.trim()) && posPaycrestReady),
+    submitting: posBusy,
+    completed: Boolean(posMerchant),
+    submit: createPosMerchant,
+    actions: {
+      selectCountry: (country) => {
+        if (!privyAuthenticated || !localCurrencyProfileReady) {
+          setPosError('Sign in and save your payout profile before creating POS.')
+          return
+        }
+        setPosCountry(country as PosCountry)
+        setPosSettlementPath('PAYCREST_NAIRA')
+        setPosError('')
+        pushPosStepHistory('setup')
+      },
+      setMerchantName: (name) => {
+        setPosMerchantName(name)
+        setPosError('')
+      },
+      toggleNetwork: (network) => togglePosNetwork(network as PosNetwork),
+      setBankInstitution: (code, name) => {
+        setPosBankCode(code)
+        setPosBankName(name)
+        setPosBankVerified(false)
+        setPosBankAccountName('')
+        setPosError('')
+      },
+      setManualBankCode: (code) => {
+        setPosBankCode(code.toUpperCase().trim())
+        setPosBankName('')
+        setPosBankVerified(false)
+        setPosBankAccountName('')
+        setPosError('')
+      },
+      setBankAccount: (accountNumber) => {
+        setPosBankAccount(accountNumber.replace(/\D/g, '').slice(0, 10))
+        setPosBankVerified(false)
+        setPosBankAccountName('')
+        setPosError('')
+      },
+      verifyBankAccount: verifyPosBankAccount,
+    },
+  })
+  const activePocketPayLinkController = isBankReceive ? pocketBankReceiveController : pocketUsdcController
+  const activePocketPayLinkLane: PocketPayLinkLane = isBankReceive ? 'bank' : isBankSend ? 'bank-send' : 'usdc'
+  const activePocketCanSubmit = isBankSend ? canGenerate : activePocketPayLinkController.canSubmit
+  const activePocketSubmitting = isBankSend ? posBusy : activePocketPayLinkController.submitting
+  const pocketAmountHelperText = isBankReceive
+    ? 'Enter the Naira amount the payer should pay.'
+    : isBankSend
+      ? 'Enter the Naira amount the payer will send from their bank.'
+      : multiChainMode
+        ? 'USDC on Base, Arc Testnet, Solana, or Arbitrum — payer chooses the chain'
+        : `USDC on ${selectedNet === 'arc' ? 'Arc Testnet' : CHAIN_META[selectedNet].label}`
+  const pocketAddressGuidance = !isBankReceive && !isBankSend && !canGenerate && (
+    multiChainMode ? !evmDirty && !solanaDirty : selectedNet === 'solana' ? !solanaDirty : !evmDirty
+  )
+    ? multiChainMode
+      ? 'Enter at least one wallet address to continue'
+      : `Enter a ${selectedNet === 'solana' ? 'Solana' : 'wallet'} address to continue`
+    : undefined
   const showHowItWorks = streamMode || accessMode || polymarketMode
   const paymentTabs: Array<{ key: PaymentTab; title: string; body: string; icon: typeof UserRound; badge?: string }> = [
     { key: 'usdc', title: 'Receive USDC', body: 'Anyone pays USDC. You receive USDC in your wallet.', icon: Wallet, badge: 'No account' },
@@ -3075,17 +1914,12 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
   }
 
   return (
-    <div className={cn(
-      'min-w-0 animate-fade-in',
-      circlePocketShellActive
-        ? '-mx-4 -my-10 w-[calc(100%+2rem)] max-w-none sm:-mx-6 sm:w-[calc(100%+3rem)]'
-        : 'mx-auto w-[calc(100vw-2rem)] max-w-lg sm:w-[32rem]',
-    )}>
+    <div className="mx-auto w-[calc(100vw-2rem)] max-w-lg min-w-0 animate-fade-in sm:w-[32rem]">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <div className={cn(
         'mb-6 flex flex-col',
-        paymentMenuOpen || circlePocketMode || posMode || billsMode || isPaymentView ? 'items-center text-center' : 'items-start text-left',
-        (serviceHubAgentMounted || circlePocketMode || isBankReceive || posMode || billsMode || isPaymentView) && 'hidden',
+        paymentMenuOpen || posMode || billsMode || isPaymentView ? 'items-center text-center' : 'items-start text-left',
+        (serviceHubAgentMounted || isBankReceive || posMode || billsMode || isPaymentView) && 'hidden',
       )}>
         {productHubOpen && !serviceHubAgentMounted && (
           <span className="mb-4 inline-flex items-center justify-center gap-2 text-sm font-bold leading-none text-[#0071E3] dark:text-blue-200">
@@ -3105,7 +1939,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             ? 'text-[28px] font-black leading-[1.08] tracking-[-0.035em] sm:text-[34px]'
             : 'text-3xl font-bold tracking-tight sm:text-[2.25rem]',
         )}>
-          {productHubOpen ? serviceHubAgentMounted ? 'Ask Agent Hash' : 'What do you want to do today?' : paymentMenuOpen ? 'Choose payment flow' : circlePocketMode ? 'Circle Pocket' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'Hash Paystream' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : 'Receive USDC'}
+          {productHubOpen ? serviceHubAgentMounted ? 'Ask Agent Hash' : 'What do you want to do today?' : paymentMenuOpen ? 'Choose payment flow' : polymarketMode ? 'PolyDesk' : posMode ? 'Retail POS' : billsMode ? 'Bills' : streamMode ? 'Hash Paystream' : accessMode ? accessView === 'wallet' ? 'x402 Wallet Manager' : 'x402 Wallet Manager' : paymentFlow === 'bank' ? 'Receive to Bank' : 'Receive USDC'}
         </h1>
         {!(productHubOpen && !serviceHubAgentMounted) && (
           <p className="mt-2 text-[15px] text-gray-500 text-balance dark:text-gray-400">
@@ -3113,8 +1947,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               ? 'Your Hash PayLink assistant, powered by ZeroScout intelligence.'
               : paymentMenuOpen
             ? 'Select the payment experience you want to create.'
-            : circlePocketMode
-            ? 'Manage wallets, payments, and everyday money tools in one place.'
             : polymarketMode
             ? 'Fund, track, and scout Polymarket from one desk.'
             : posMode
@@ -3136,7 +1968,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         )}
 
         {/* ── Chain preview toggle — hidden in multi-chain mode (all chains active) */}
-        {false && !productHubOpen && !paymentMenuOpen && !isBankReceive && !multiChainMode && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode && <div className="mt-5 flex w-full flex-col items-center gap-2.5">
+        {false && !productHubOpen && !paymentMenuOpen && !isBankReceive && !multiChainMode && !accessMode && !posMode && !billsMode && !streamMode && !polymarketMode && <div className="mt-5 flex w-full flex-col items-center gap-2.5">
           <div className="mx-auto flex w-[17.5rem] max-w-full items-center justify-start gap-0.5 overflow-x-auto rounded-xl border border-gray-200 bg-gray-100/80 p-1 [scrollbar-width:none] dark:border-white/10 dark:bg-white/[0.05] [&::-webkit-scrollbar]:hidden sm:inline-flex sm:w-auto sm:justify-center sm:gap-1">
             {VISIBLE_CREATE_CHAINS.map((c) => {
               const m = CHAIN_META[c]
@@ -3182,7 +2014,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         </div>}
 
         {/* Multi-chain mode active badge */}
-        {false && !productHubOpen && !paymentMenuOpen && !isBankReceive && multiChainMode && !accessMode && !circlePocketMode && !posMode && !billsMode && !streamMode && !polymarketMode && (
+        {false && !productHubOpen && !paymentMenuOpen && !isBankReceive && multiChainMode && !accessMode && !posMode && !billsMode && !streamMode && !polymarketMode && (
           <div className="mt-5 flex w-full justify-center">
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">
               <Globe className="h-3 w-3" />
@@ -3197,8 +2029,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           'w-full min-w-0',
           productHubOpen || paymentMenuOpen
             ? 'space-y-2'
-            : circlePocketShellActive
-            ? 'min-h-[100dvh] bg-white dark:bg-[#111114]'
             : 'overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-card dark:border-white/10 dark:bg-[#111114]',
         )}
         style={{
@@ -3258,7 +2088,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           ) : (
           <div className="space-y-2">
             {[
-              { icon: Wallet, title: 'Circle Pocket Wallet', body: 'Manage wallets, x402, receiving, bank payout, POS, bills, and receipts.', action: () => openCirclePocketMode() },
+              { icon: Wallet, title: 'Circle Pocket Wallet', body: 'Manage wallets, x402, receiving, bank payout, POS, bills, and receipts.', action: openStandaloneCirclePocket },
               { icon: Radio, title: 'Hash Paystream', body: 'Open the standalone Arc streaming app for payroll, creators, and Arena.', action: () => openStreamMode() },
               { icon: PolymarketMark, title: 'PolyDesk', body: 'Open standalone Polymarket funding, portfolio, World Cup, and LP Scout.', action: () => openPolymarketMode() },
             ].map(({ icon: Icon, title, body, action }) => (
@@ -3325,625 +2155,7 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
         ) : (
           <>
         <div className="space-y-0 p-0">
-          {circlePocketMode ? (
-            <div className="flex h-[100dvh] w-full flex-col overflow-hidden">
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.35)_transparent]">
-              <div className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-32 pt-20">
-              {circlePocketView === 'chooser' ? (
-                <div className="space-y-3">
-                  {[
-                    {
-                      icon: Wallet,
-                      title: 'Manage my wallet',
-                      body: 'View Circle smart wallets, x402 balance, funding addresses, and activity.',
-                      action: () => setCirclePocketView('wallet-manager'),
-                    },
-                    {
-                      icon: Coins,
-                      title: 'Receive USDC',
-                      body: 'Create a hosted USDC PayLink from your Circle Pocket flow.',
-                      action: () => setPaymentTab('usdc'),
-                    },
-                    {
-                      icon: Landmark,
-                      title: 'Receive to bank',
-                      body: 'Accept Base USDC and settle to a verified Naira bank account.',
-                      action: () => setPaymentTab('bank'),
-                    },
-                    {
-                      icon: Store,
-                      title: 'POS',
-                      body: 'Create a static checkout QR for retail and contactless payments.',
-                      action: () => setPaymentTab('pos'),
-                    },
-                    {
-                      icon: Banknote,
-                      title: 'Bills',
-                      body: 'Pay utility bills and keep local-currency receipts connected.',
-                      action: () => setPaymentTab('bills'),
-                    },
-                  ].map(({ icon: Icon, title, body, action }) => (
-                    <button
-                      key={title}
-                      type="button"
-                      onClick={action}
-                      className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
-                    >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                          <Icon className="h-[18px] w-[18px]" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
-                          <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
-                        </span>
-                      </span>
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
-                        <ChevronDown className="-rotate-90 h-4 w-4" />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : circlePocketView === 'move' ? (
-                <div className="flex min-h-[360px] flex-col items-center justify-center px-5 text-center">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-white text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                    <ArrowUpDown className="h-5 w-5" />
-                  </span>
-                  <h2 className="mt-4 text-lg font-black tracking-tight text-gray-950 dark:text-white">Choose how money moves</h2>
-                  <p className="mt-2 max-w-xs text-sm leading-6 text-gray-500 dark:text-gray-400">Select USDC, Bank, or POS from the pinned switch above.</p>
-                </div>
-              ) : circlePocketView === 'bills' ? (
-                <div className="space-y-5">
-                  <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-amber-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-amber-500/[0.08]">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Bills</p>
-                        <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 dark:text-white">{circlePocketBillMeta[circlePocketBillView].title}</h2>
-                        <p className="mt-1 max-w-xs text-xs leading-5 text-gray-500 dark:text-gray-400">{circlePocketBillMeta[circlePocketBillView].body}</p>
-                      </div>
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white/80 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                        <CirclePocketBillIcon className="h-[18px] w-[18px]" />
-                      </span>
-                    </div>
-                  </div>
-
-                  {privyAuthenticated && (
-                    <LocalCurrencyProfileCard
-                      profile={localCurrencyProfile}
-                      draft={localCurrencyProfileDraft}
-                      email={privyEmail}
-                      busy={localCurrencyProfileBusy}
-                      error={localCurrencyProfileError}
-                      editing={localCurrencyProfileEditing}
-                      onDraftChange={setLocalCurrencyProfileDraft}
-                      onSave={saveLocalCurrencyProfile}
-                      onEdit={editLocalCurrencyProfile}
-                      onCancel={cancelLocalCurrencyProfileEdit}
-                    />
-                  )}
-
-                  <div className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                    <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">
-                      <CirclePocketBillIcon className="h-5 w-5" />
-                    </span>
-                    <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">Provider connection pending</h3>
-                    <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
-                      {circlePocketBillMeta[circlePocketBillView].title} checkout will open here after the biller catalog, customer validation, and durable receipt flow pass verification.
-                    </p>
-                  </div>
-
-                  {!privyAuthenticated && (
-                    <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
-                      <PrivyConnectButton className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]">
-                        <Mail className="absolute left-5 h-4 w-4" />
-                        <span>Sign in to Bills</span>
-                        <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">
-                          <ArrowRight className="h-4 w-4" />
-                        </span>
-                      </PrivyConnectButton>
-                      <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">Secure access keeps bill history, receipts, reversals, and support records connected.</p>
-                    </div>
-                  )}
-                </div>
-              ) : circlePocketView === 'wallet-manager' ? (
-                <div className="space-y-3">
-                  {[
-                    {
-                      icon: Wallet,
-                      title: 'Circle smart wallet',
-                      body: 'View balances, funding addresses, withdrawals, and wallet activity.',
-                      badge: circlePocketOpenedWalletCount ? `${circlePocketOpenedWalletCount} ready` : 'Multi-network',
-                      action: () => {
-                        setCirclePocketTab('balance')
-                        setCirclePocketView('main')
-                      },
-                    },
-                    {
-                      icon: Radio,
-                      title: 'x402 wallet',
-                      body: 'Move available USDC into paid service balance.',
-                      badge: 'Service balance',
-                      action: () => setCirclePocketView('x402'),
-                    },
-                  ].map(({ icon: Icon, title, body, badge, action }) => (
-                    <button
-                      key={title}
-                      type="button"
-                      onClick={action}
-                      className="group flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-md active:scale-[0.99] dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20"
-                    >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                          <Icon className="h-[18px] w-[18px]" />
-                        </span>
-                        <span className="min-w-0">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="text-[14px] font-black text-gray-950 dark:text-white">{title}</span>
-                            <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400">{badge}</span>
-                          </span>
-                          <span className="mt-1 block text-[12px] leading-5 text-gray-500 dark:text-gray-400">{body}</span>
-                        </span>
-                      </span>
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white transition-transform group-hover:translate-x-0.5 dark:bg-white dark:text-gray-950">
-                        <ChevronDown className="-rotate-90 h-4 w-4" />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : circlePocketView === 'x402' ? (
-                <AgentWorkspace embedded forceProfile />
-              ) : circlePocketTab === 'activity' ? (
-                <div className="space-y-5">
-                  <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-slate-50 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-white/[0.04]">
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Activity</p>
-                    <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 dark:text-white">
-                      {circlePocketActivityView === 'all'
-                        ? 'All activity'
-                        : circlePocketActivityView === 'bank'
-                          ? 'Bank receive'
-                          : circlePocketActivityView === 'pos'
-                            ? 'POS activity'
-                            : 'Bills activity'}
-                    </h2>
-                    <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
-                      Receipts, payouts, reversals, and support records stay connected to your Circle Pocket account.
-                    </p>
-                  </div>
-
-                  {privyAuthenticated && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-3 px-1">
-                        <p className="text-[11px] font-bold text-gray-400">
-                          {circlePocketHistoryBusy ? 'Loading activity...' : `${visibleCirclePocketHistory.length} record${visibleCirclePocketHistory.length === 1 ? '' : 's'}`}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => void loadCirclePocketHistory()}
-                          disabled={circlePocketHistoryBusy}
-                          className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:text-white"
-                          aria-label="Refresh Circle Pocket activity"
-                        >
-                          <RefreshCw className={cn('h-3.5 w-3.5', circlePocketHistoryBusy && 'animate-spin')} />
-                        </button>
-                      </div>
-
-                      {circlePocketHistoryError ? (
-                        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
-                          {circlePocketHistoryError}
-                        </div>
-                      ) : visibleCirclePocketHistory.length ? (
-                        <div className="space-y-2">
-                          {visibleCirclePocketHistory.map((row, index) => {
-                            const kind = circlePocketHistoryKind(row)
-                            const amountNgn = formatNgnAmount(row.amountNgn ?? '')
-                            const amountUsdc = Number.parseFloat(row.amount || '')
-                            const timestamp = row.ts ? new Date(row.ts) : null
-                            return (
-                              <div key={`${row.txHash || row.eventId}-${row.ts}-${index}`} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                                <div className="flex items-start justify-between gap-3">
-                                  <span className="flex min-w-0 items-center gap-3">
-                                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
-                                      {kind === 'bank' ? <Landmark className="h-4 w-4" /> : kind === 'bills' ? <Banknote className="h-4 w-4" /> : <Store className="h-4 w-4" />}
-                                    </span>
-                                    <span className="min-w-0">
-                                      <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">
-                                        {kind === 'bank' ? 'Bank receive' : kind === 'bills' ? 'Bill payment' : 'POS payment'}
-                                      </span>
-                                      <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-400">
-                                        {row.contextLabel || row.memo || row.payer || 'Circle Pocket receipt'}
-                                      </span>
-                                    </span>
-                                  </span>
-                                  <span className="shrink-0 text-right">
-                                    <span className="block text-xs font-black text-gray-900 dark:text-gray-100">
-                                      {amountNgn ? `NGN ${amountNgn}` : Number.isFinite(amountUsdc) ? `${formatAmount(amountUsdc, 6)} USDC` : 'Receipt'}
-                                    </span>
-                                    <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{row.paycrestStatus || 'settled'}</span>
-                                  </span>
-                                </div>
-                                {timestamp && (
-                                  <p className="mt-3 border-t border-gray-100 pt-2 text-[10px] font-medium text-gray-400 dark:border-white/10">
-                                    {timestamp.toLocaleDateString()} at {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </p>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ) : !circlePocketHistoryBusy ? (
-                        <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white px-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">
-                            <Activity className="h-[18px] w-[18px]" />
-                          </span>
-                          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">No activity to show yet</h3>
-                          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
-                            {circlePocketActivityView === 'all'
-                              ? 'Bank receive, POS, and bill records will appear here.'
-                              : `Your ${circlePocketActivityView === 'bank' ? 'bank receive' : circlePocketActivityView.toUpperCase()} records will appear here.`}
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-
-                  {!privyAuthenticated && (
-                    <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
-                      <PrivyConnectButton className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]">
-                        <Mail className="absolute left-5 h-4 w-4" />
-                        <span>Sign in to Activity</span>
-                        <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">
-                          <ArrowRight className="h-4 w-4" />
-                        </span>
-                      </PrivyConnectButton>
-                      <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                        Secure access keeps activity history, receipts, reversals, and support records connected.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <>
-                  <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-blue-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-blue-500/[0.08]">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
-                        <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
-                          ${formatAmount(circlePocketGlobalBalance, 6)}
-                        </p>
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
-                          <span className="rounded-full border border-gray-200 bg-white/80 px-2 py-1 text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400">
-                            {circlePocketOpenedWalletCount} of {POS_NETWORK_OPTIONS.length} wallets ready
-                          </span>
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
-                            USDC
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => refreshCirclePocketBalances()}
-                        disabled={!privyAuthenticated || circlePocketBalanceBusy}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 transition-all hover:bg-gray-100 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
-                        aria-label="Refresh Circle Pocket balance"
-                      >
-                        <RefreshCw className={cn('h-4 w-4', circlePocketBalanceBusy && 'animate-spin')} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                    <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-white/[0.07]">
-                      <div>
-                        <p className="text-sm font-black text-gray-950 dark:text-white">Wallet networks</p>
-                        <p className="mt-0.5 text-[11px] text-gray-400">Your USDC across supported networks</p>
-                      </div>
-                      <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-black text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
-                        {circlePocketOpenedWalletCount}/{POS_NETWORK_OPTIONS.length} ready
-                      </span>
-                    </div>
-                    <div className="space-y-1 p-2">
-                      {POS_NETWORK_OPTIONS.map(network => {
-                        const row = circlePocketRows.find(item => item.key === network.key)
-                        const wallet = circlePocketWallets[network.key]
-                        const canOpenWallet = !wallet?.address && privyAuthenticated && !circlePocketBusy
-                        const statusLabel = row?.status === 'error' && wallet?.address
-                          ? 'Balance unavailable'
-                          : wallet?.address
-                            ? 'Ready'
-                            : privyAuthenticated
-                              ? 'Open wallet'
-                              : 'Sign in to open'
-                        return (
-                          <button
-                            key={network.key}
-                            type="button"
-                            onClick={() => {
-                              setCirclePocketNetwork(network.key)
-                              if (canOpenWallet) void handleCirclePocketSetup(network.key)
-                            }}
-                            disabled={!canOpenWallet && !wallet?.address}
-                            className={cn(
-                              'flex w-full items-center justify-between gap-3 rounded-xl p-3 text-left transition-all',
-                              canOpenWallet
-                                ? 'hover:bg-gray-50 active:scale-[0.99] dark:hover:bg-white/[0.04]'
-                                : 'disabled:cursor-default',
-                            )}
-                          >
-                            <div className="flex min-w-0 items-center gap-3">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">
-                                <Wallet className="h-4 w-4" />
-                              </span>
-                              <div className="min-w-0">
-                                <p className="text-sm font-bold text-gray-950 dark:text-white">{network.label}</p>
-                                <p className="mt-0.5 truncate text-[11px] text-gray-400">{wallet?.address ? truncateAddress(wallet.address) : 'Wallet not opened'}</p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-black text-gray-950 dark:text-white">${formatAmount(row?.balance ?? 0, 6)}</p>
-                              <p className={cn('mt-0.5 text-[9px] font-black uppercase tracking-wider', row?.status === 'error' && wallet?.address ? 'text-amber-500' : wallet?.address ? 'text-emerald-500' : 'text-blue-500')}>
-                                {circlePocketBusy && circlePocketNetwork === network.key ? 'Opening' : statusLabel}
-                              </p>
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  {!privyAuthenticated ? (
-                    <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
-                      <PrivyConnectButton className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]">
-                        <Mail className="absolute left-5 h-4 w-4" />
-                        <span>Sign in to Smart Wallet</span>
-                        <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">
-                          <ArrowRight className="h-4 w-4" />
-                        </span>
-                      </PrivyConnectButton>
-                      <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">Secure access with email or your connected wallet.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <LocalCurrencyProfileCard
-                        profile={localCurrencyProfile}
-                        draft={localCurrencyProfileDraft}
-                        email={privyEmail}
-                        busy={localCurrencyProfileBusy}
-                        error={localCurrencyProfileError}
-                        editing={localCurrencyProfileEditing}
-                        title="Circle Pocket profile"
-                        body="Your verified email, name, receipts, refunds, and local-currency records stay attached to one Circle Pocket identity."
-                        savedFallback="Circle Pocket profile"
-                        saveLabel="Save Circle Pocket profile"
-                        savedBadgeLabel="Verified"
-                        identityBadgeLabel="Verified"
-                        onDraftChange={setLocalCurrencyProfileDraft}
-                        onSave={saveLocalCurrencyProfile}
-                        onEdit={editLocalCurrencyProfile}
-                        onCancel={cancelLocalCurrencyProfileEdit}
-                      />
-
-                      <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
-                        {[
-                          { key: 'balance', label: 'Balance', icon: Activity },
-                          { key: 'fund', label: 'Fund', icon: Download },
-                          { key: 'withdraw', label: 'Withdraw', icon: ArrowRight },
-                          { key: 'activity', label: 'Activity', icon: LayoutDashboard },
-                        ].map(({ key, label, icon: Icon }) => (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() => setCirclePocketTab(key as CirclePocketTab)}
-                            className={cn(
-                              'flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-bold transition-all',
-                              circlePocketTab === key
-                                ? 'border-gray-300 bg-gray-100 text-gray-950 shadow-sm dark:border-white/15 dark:bg-white/[0.12] dark:text-white'
-                                : 'border-transparent bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
-                            )}
-                          >
-                            <Icon className="h-3.5 w-3.5" />
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-
-                      {(circlePocketTab === 'fund' || circlePocketTab === 'withdraw') && (
-                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                          {POS_NETWORK_OPTIONS.map(network => (
-                            <button
-                              key={network.key}
-                              type="button"
-                              onClick={() => setCirclePocketNetwork(network.key)}
-                              className={cn(
-                                'rounded-xl border px-2 py-2.5 text-[11px] font-bold transition-all',
-                                circlePocketNetwork === network.key
-                                  ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
-                                  : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
-                              )}
-                            >
-                              {network.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {circlePocketTab === 'fund' && (
-                        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300">
-                              <Download className="h-[18px] w-[18px]" />
-                            </span>
-                            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400">
-                              {circlePocketNetworkLabel} only
-                            </span>
-                          </div>
-                          {circlePocketSelectedAddress ? (
-                            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-                              <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-gray-400">Your funding address</p>
-                              <p className="break-all text-xs font-semibold text-gray-700 dark:text-gray-200">{circlePocketSelectedAddress}</p>
-                              <button
-                                type="button"
-                                onClick={handleCirclePocketCopy}
-                                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-bold text-white transition-all active:scale-[0.98] dark:bg-white dark:text-gray-950"
-                              >
-                                {circlePocketCopied ? <CheckCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                                {circlePocketCopied ? 'Copied' : 'Copy address'}
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleCirclePocketSetup()}
-                              disabled={circlePocketBusy}
-                              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
-                            >
-                              {circlePocketBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                              Open {circlePocketNetworkLabel} Circle wallet
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-                      {circlePocketTab === 'withdraw' && (
-                        <div className="space-y-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                          <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
-                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {circlePocketNetworkLabel}</span>
-                            <span className="text-sm font-black tabular-nums text-gray-950 dark:text-white">${formatAmount(circlePocketSelectedBalance, 6)} USDC</span>
-                          </div>
-                          {circlePocketSelectedAddress ? (
-                            <>
-                            <label className="block">
-                              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Destination wallet</span>
-                              <input
-                                type="text"
-                                value={circlePocketWithdrawAddress}
-                                onChange={(event) => setCirclePocketWithdrawAddress(event.target.value.trim())}
-                                placeholder={circlePocketNetwork === 'solana' ? 'Destination Solana address' : '0x destination address'}
-                                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
-                              />
-                            </label>
-                            <label className="block">
-                              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span>
-                              <span className="mt-1 flex gap-2">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={circlePocketWithdrawAmount}
-                              onChange={(event) => setCirclePocketWithdrawAmount(event.target.value)}
-                              placeholder="0.00"
-                              className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleCirclePocketWithdrawMax}
-                              className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-white/10 dark:text-gray-200"
-                            >
-                              Max
-                            </button>
-                              </span>
-                            </label>
-                            <button
-                              type="button"
-                              onClick={handleCirclePocketWithdraw}
-                              disabled={circlePocketWithdrawPending}
-                              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
-                            >
-                              {circlePocketWithdrawPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                              {circlePocketWithdrawPending ? 'Sending…' : 'Withdraw USDC'}
-                            </button>
-                            </>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleCirclePocketSetup()}
-                              disabled={circlePocketBusy}
-                              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
-                            >
-                              {circlePocketBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                              Open {circlePocketNetworkLabel} wallet first
-                            </button>
-                          )}
-                          {circlePocketWithdrawNotice && <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{circlePocketWithdrawNotice}</p>}
-                          {circlePocketWithdrawTxHash && <p className="break-all text-[11px] text-gray-400">Tx: {circlePocketWithdrawTxHash}</p>}
-                        </div>
-                      )}
-
-                      {circlePocketTab === 'activity' && (
-                        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                          {circlePocketActivity.length ? (
-                            <div className="space-y-2">
-                              {circlePocketActivity.map((item, index) => (
-                                <div key={`${item}-${index}`} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
-                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm dark:bg-white/[0.07] dark:text-gray-300">
-                                    <Activity className="h-3.5 w-3.5" />
-                                  </span>
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block text-xs font-bold text-gray-700 dark:text-gray-200">{item}</span>
-                                    <span className="mt-0.5 block text-[10px] font-medium text-gray-400">This session</span>
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-4 text-center dark:border-white/10 dark:bg-white/[0.025]">
-                              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-gray-400 shadow-sm dark:bg-white/[0.07]">
-                                <Activity className="h-[18px] w-[18px]" />
-                              </span>
-                              <p className="mt-3 text-sm font-bold text-gray-700 dark:text-gray-200">No wallet activity yet</p>
-                              <p className="mt-1 text-xs leading-relaxed text-gray-400">Funding, address copies, and withdrawals from this session will appear here.</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {circlePocketError && (
-                        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
-                          {circlePocketError}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-              </div>
-              </div>
-
-              <nav
-                aria-label="Circle Pocket navigation"
-                className={cn(
-                  'pointer-events-none fixed inset-x-0 bottom-0 z-40 bg-transparent px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2.5 transition-transform duration-200',
-                  circlePocketKeyboardOpen && 'translate-y-full',
-                )}
-              >
-                <div className="pointer-events-auto mx-auto grid w-full max-w-[430px] grid-cols-4 rounded-full border border-gray-200 bg-[#F5F5F7]/95 p-1.5 shadow-[0_12px_36px_rgba(15,23,42,0.16)] backdrop-blur-2xl dark:border-white/[0.1] dark:bg-[#151518]/95 dark:shadow-[0_16px_50px_rgba(0,0,0,0.4)]">
-                  {[
-                    { key: 'home', label: 'Home', icon: House },
-                    { key: 'move', label: 'Move', icon: ArrowUpDown },
-                    { key: 'bills', label: 'Bills', icon: Banknote },
-                    { key: 'activity', label: 'Activity', icon: TrendingUp },
-                  ].map(({ key, label, icon: Icon }) => {
-                    const active = activeCirclePocketNav === key
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        aria-current={active ? 'page' : undefined}
-                        onClick={() => selectCirclePocketNav(key as CirclePocketNavTab)}
-                        className={cn(
-                          'flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-full px-2 text-[10px] font-bold transition-all duration-200 active:scale-95',
-                          active
-                            ? 'bg-gray-950 text-white shadow-sm dark:bg-white/[0.12] dark:text-white dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
-                            : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-white/40 dark:hover:bg-white/[0.05] dark:hover:text-white/70',
-                        )}
-                      >
-                        <Icon className={cn('h-[19px] w-[19px]', active && 'stroke-[2.5]')} />
-                        <span>{label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </nav>
-            </div>
-          ) : polymarketMode ? (
+          {polymarketMode ? (
             <div className="space-y-5 p-4 sm:p-5">
                 <FlowBackButton onClick={closePolymarketMode} />
 
@@ -4110,19 +2322,10 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               </p>
             </div>
           ) : posMode ? (
-            <>
-            <div className={cn(
-              'space-y-5',
-              circlePocketShellActive
-                ? 'fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] top-[68px] mx-auto w-[calc(100%-2rem)] max-w-[430px] overflow-y-auto overscroll-contain pb-5 pt-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
-                : 'min-h-[590px] p-4 sm:min-h-[640px] sm:p-5',
-            )}>
-              {!circlePocketShellActive && <div className="relative flex min-h-8 items-center">
-                <FlowBackButton onClick={handlePosBack} />
-                <div className="pointer-events-none absolute left-1/2 max-w-[48%] -translate-x-1/2 text-center">
-                  <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Retail POS</p>
-                </div>
-              </div>}
+            <PocketPosShell
+              standalone={false}
+              backButton={<FlowBackButton onClick={handlePosBack} />}
+            >
               {privyAuthenticated && (
                 <LocalCurrencyProfileCard
                   profile={localCurrencyProfile}
@@ -4140,289 +2343,45 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               )}
 
               {!posCountry ? (
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">In-person checkout</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">One QR for every sale</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Customers enter the amount, pay with Base USDC, and you receive Naira in your verified bank account.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-2">
-                    {POS_COUNTRIES.map((country) => {
-                      const live = country.status === 'live'
-                      return (
-                        <button
-                          key={country.key}
-                          type="button"
-                          disabled={!live}
-                          onClick={() => {
-                            if (!privyAuthenticated || !localCurrencyProfileReady) {
-                              setPosError('Sign in and save your payout profile before creating POS.')
-                              return
-                            }
-                            setPosCountry(country.key)
-                            setPosSettlementPath('PAYCREST_NAIRA')
-                            setPosError('')
-                            pushPosStepHistory('setup')
-                          }}
-                          className={cn(
-                            'group flex items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-all',
-                            live && privyAuthenticated && localCurrencyProfileReady
-                              ? 'border-gray-200 bg-gray-50 hover:-translate-y-0.5 hover:border-gray-300 hover:bg-white hover:shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:hover:border-white/20 dark:hover:bg-white/[0.07]'
-                              : 'cursor-not-allowed border-dashed border-gray-200 bg-gray-50/70 opacity-70 dark:border-white/10 dark:bg-white/[0.03]',
-                          )}
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-[11px] font-black text-gray-900 shadow-sm dark:bg-white/10 dark:text-white">
-                                {country.key}
-                              </span>
-                              <div>
-                                <p className="text-sm font-black text-gray-900 dark:text-white">{country.name}</p>
-                                <p className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">{country.copy}</p>
-                              </div>
-                            </div>
-                          </div>
-                          <span className={cn(
-                            'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold',
-                            live
-                              ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-950'
-                              : 'border border-gray-200 bg-white text-gray-400 dark:border-white/10 dark:bg-white/[0.06]',
-                          )}>
-                            {country.label}
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
+                <PocketPosCountryPanel
+                  controller={pocketPosController}
+                  countries={POS_COUNTRIES}
+                  profileReady={Boolean(privyAuthenticated && localCurrencyProfileReady)}
+                />
               ) : !posMerchant ? (
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-                      Nigeria Naira POS
-                    </p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">
-                      Create Naira POS QR
-                    </h2>
-                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Payers enter Naira, pay with Base USDC, and you receive a bank payout.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-3">
-                    <label className="block">
-                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Merchant name</span>
-                      <input
-                        value={posMerchantName}
-                        onChange={(event) => {
-                          setPosMerchantName(event.target.value)
-                          setPosError('')
-                        }}
-                        placeholder="Shy Stores"
-                        className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
-                      />
-                    </label>
-                    <div>
-                      <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                        Network
-                      </span>
-                      <div className="mt-1.5 grid gap-2">
-                        {posNetworkOptions.map((network) => {
-                          const active = posNetworks.includes(network.key)
-                          return (
-                            <button
-                              key={network.key}
-                              type="button"
-                              onClick={() => togglePosNetwork(network.key)}
-                              className={cn(
-                                'flex min-h-[42px] items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-semibold transition-all',
-                                active
-                                  ? 'border-gray-900 bg-gray-900 text-white shadow-sm dark:border-white dark:bg-white dark:text-gray-950'
-                                  : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20',
-                              )}
-                            >
-                              <span>{network.label}</span>
-                              {network.badge && <span className={cn('text-[10px] font-bold uppercase tracking-wide', active ? 'text-white/70 dark:text-gray-500' : 'text-gray-400')}>{network.badge}</span>}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                    {posIsPaycrestFlow && (
-                      <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white">Nigerian bank account</p>
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              Choose the bank and verify the account name before creating the QR.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mt-3 grid gap-3">
-                          <label className="block">
-                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Bank</span>
-                            {posBankInstitutions.length ? (
-                              <select
-                                value={posBankCode}
-                                onChange={(event) => {
-                                  const selected = posBankInstitutions.find((institution) => institution.code === event.target.value)
-                                  setPosBankCode(event.target.value)
-                                  setPosBankName(selected?.name ?? '')
-                                  setPosBankVerified(false)
-                                  setPosBankAccountName('')
-                                  setPosError('')
-                                }}
-                                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-gray-950 dark:text-white dark:focus:border-white/25"
-                              >
-                                <option value="">{posBankInstitutionsBusy ? 'Loading banks...' : 'Select bank'}</option>
-                                {posBankInstitutions.map((institution) => (
-                                  <option key={institution.code} value={institution.code}>
-                                    {institution.name} ({institution.code})
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input
-                                value={posBankCode}
-                                onChange={(event) => {
-                                  setPosBankCode(event.target.value.toUpperCase().trim())
-                                  setPosBankName('')
-                                  setPosBankVerified(false)
-                                  setPosBankAccountName('')
-                                  setPosError('')
-                                }}
-                                placeholder={posBankInstitutionsBusy ? 'Loading banks...' : 'Bank code'}
-                                className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
-                              />
-                            )}
-                          </label>
-                          <label className="block">
-                            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Account number</span>
-                            <input
-                              value={posBankAccount}
-                              onChange={(event) => {
-                                setPosBankAccount(event.target.value.replace(/\D/g, '').slice(0, 10))
-                                setPosBankVerified(false)
-                                setPosBankAccountName('')
-                                setPosError('')
-                              }}
-                              inputMode="numeric"
-                              placeholder="0123456789"
-                              className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            onClick={verifyPosBankAccount}
-                            disabled={posBankVerifyBusy || !posBankCode || posBankAccount.length !== 10}
-                            className="flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:border-white/20"
-                          >
-                            {posBankVerifyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                            {posBankVerified ? 'Account verified' : 'Verify account'}
-                          </button>
-                          {posBankAccountName && (
-                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
-                              {posBankAccountName}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {posError && (
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
-                      {posError}
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={createPosMerchant}
-                    disabled={!privyAuthenticated || posBusy || !posMerchantName.trim() || (posNeedsEvmWallet && !posWallet.trim()) || (posNeedsSolanaWallet && !posSolanaWallet.trim()) || !posPaycrestReady}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                  >
-                    {posBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
-                    Generate Naira POS QR
-                  </button>
-                </div>
+                <PocketPosSetupPanel
+                  controller={pocketPosController}
+                  networkOptions={posNetworkOptions}
+                  instantBankPayout={posIsPaycrestFlow}
+                  bankInstitutions={posBankInstitutions}
+                  bankInstitutionsBusy={posBankInstitutionsBusy}
+                  bankCode={posBankCode}
+                  bankAccount={posBankAccount}
+                  bankAccountName={posBankAccountName}
+                  bankVerified={posBankVerified}
+                  bankVerifyBusy={posBankVerifyBusy}
+                  error={posError}
+                />
               ) : (
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Nigerian Retail Mode</p>
-                    <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">POS QR ready</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-                      Payers scan once and enter their amount.
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                    <div className="flex items-center gap-4">
-                      <div className="rounded-xl bg-white p-2 shadow-sm">
-                        <QRCodeCanvas value={posCustomerUrl} size={112} level="H" includeMargin />
-                      </div>
-                      <div className="min-w-0">
-                        <span className="inline-flex rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:border-white/10 dark:bg-white/[0.06]">
-                          Static POS QR
-                        </span>
-                        <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{posMerchant.display_name}</p>
-                        <p className="mt-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">
-                          {truncateAddress(posMerchant.circle_smart_wallet_address, 8)}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={copyPosCustomerLink}
-                          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                          {posCopied ? 'Copied' : 'Copy payer link'}
-                        </button>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">Payer link ready</p>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <a
-                      href={posDashboardUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                    >
-                      <LayoutDashboard className="h-4 w-4" />
-                      View payments
-                    </a>
-                    <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                      Payers open payment by scanning the QR or using the copied link.
-                    </p>
-                  </div>
-                </div>
+                <PocketPosReadyPanel
+                  customerUrl={posCustomerUrl}
+                  dashboardUrl={posDashboardUrl}
+                  displayName={posMerchant.display_name}
+                  walletAddress={posMerchant.circle_smart_wallet_address}
+                  copied={posCopied}
+                  onCopy={copyPosCustomerLink}
+                />
               )}
 
               {!privyAuthenticated && (
-                <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
-                  <PrivyConnectButton className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]">
-                    <Mail className="absolute left-5 h-4 w-4" />
-                    <span>Sign in to POS</span>
-                    <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">
-                      <ArrowRight className="h-4 w-4" />
-                    </span>
-                  </PrivyConnectButton>
-                  <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    Secure access keeps POS receipts, payouts, reversals, and support records connected.
-                  </p>
-                </div>
+                <PocketPosSignInCard />
               )}
-            </div>
-            </>
+            </PocketPosShell>
           ) : billsMode ? (
             <>
             <div className="min-h-[590px] space-y-5 p-4 sm:min-h-[640px] sm:p-5">
               <div className="relative flex min-h-8 items-center">
-                <FlowBackButton onClick={() => goBackOr(() => openCirclePocketMode(false))} />
+                <FlowBackButton onClick={() => goBackOr(() => openPaymentMenu(false))} />
                 <div className="pointer-events-none absolute left-1/2 max-w-[48%] -translate-x-1/2 text-center">
                   <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Bills</p>
                 </div>
@@ -4467,23 +2426,18 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           ) : (
             <>
           <div className={cn(
-            circlePocketShellActive ? 'overflow-visible' : 'overflow-hidden',
+            'overflow-hidden',
             isBankReceive ? 'bg-transparent' : 'bg-gray-50/60 dark:bg-white/[0.035]',
           )}>
-            <div className={cn(
-              'space-y-3.5',
-              circlePocketShellActive
-                ? 'fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] top-[68px] mx-auto w-[calc(100%-2rem)] max-w-[430px] overflow-y-auto overscroll-contain pb-5 pt-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
-                : 'min-h-[590px] px-3.5 py-3 sm:min-h-[640px] sm:p-4',
-            )}>
-              {!circlePocketShellActive && <div className="relative flex min-h-8 items-center">
-                <FlowBackButton onClick={() => goBackOr(() => openCirclePocketMode(false))} />
+            <div className="min-h-[590px] space-y-3.5 px-3.5 py-3 sm:min-h-[640px] sm:p-4">
+              <div className="relative flex min-h-8 items-center">
+                <FlowBackButton onClick={() => goBackOr(() => openPaymentMenu(false))} />
                 <div className="pointer-events-none absolute left-1/2 max-w-[48%] -translate-x-1/2 text-center">
                   <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">
                     {isBankReceive ? 'Bank payout' : 'Receive USDC'}
                   </p>
                 </div>
-              </div>}
+              </div>
 
           {!accessMode && !multiChainMode && (
             <CircleReceiveSelector
@@ -4500,26 +2454,20 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
               setSolanaAddr={setSolanaAddr}
               setGeneratedLink={setGeneratedLink}
               bankCountry={posCountry}
-              setBankCountry={setPosCountry}
               bankInstitutions={posBankInstitutions}
               bankInstitutionsBusy={posBankInstitutionsBusy}
               bankCode={posBankCode}
-              setBankCode={setPosBankCode}
               bankName={posBankName}
-              setBankName={setPosBankName}
               bankAccount={posBankAccount}
-              setBankAccount={setPosBankAccount}
               bankAccountName={posBankAccountName}
               bankVerified={posBankVerified}
               bankVerifyBusy={posBankVerifyBusy}
               bankError={posError}
-              verifyBankAccount={verifyPosBankAccount}
+              bankActions={pocketBankReceiveController.actions}
               hideLabel
               selectorLabel={isBankSend ? 'USDC destination' : undefined}
               addressOptionLabel={isBankSend ? 'Receive with address' : undefined}
               addressOptionBody={isBankSend ? 'Send USDC to any EVM wallet you control.' : undefined}
-              hideBankSignIn={circlePocketShellActive}
-              deferEmailSignIn={circlePocketShellActive}
             />
           )}
 
@@ -4588,262 +2536,61 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             />
           )}
 
-          {!accessMode && !isBankReceive && !isBankSend && (
-            <div className="space-y-2.5 rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Payer network</p>
-                  <p className="mt-0.5 text-xs font-medium text-gray-700 dark:text-gray-200">
-                    {multiChainMode ? 'Payer chooses at checkout' : CHAIN_META[selectedNet].label}
-                  </p>
-                </div>
-                <div className="relative shrink-0">
-                  <select
-                    value={multiChainMode ? 'multi' : selectedNet}
-                    disabled={multiChainMode}
-                    onChange={(event) => onNetworkSelect(event.target.value as ChainKey)}
-                    className={cn(
-                      'min-w-[128px] appearance-none rounded-lg border px-3 py-2 pr-8 text-xs font-bold outline-none transition-all',
-                      multiChainMode
-                        ? 'cursor-default border-gray-200 bg-gray-100 text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400'
-                        : 'border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950',
-                    )}
-                  >
-                    {multiChainMode ? (
-                      <option value="multi">Any supported</option>
-                    ) : (
-                      VISIBLE_CREATE_CHAINS.map((network) => (
-                        <option key={network} value={network}>
-                          {CHAIN_META[network].label}{network === 'arc' ? ' Testnet' : ''}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  {!multiChainMode && <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/70 dark:text-gray-500" />}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (receiveMode !== 'email') toggleMultiChainMode(!multiChainMode)
-                }}
-                disabled={receiveMode === 'email'}
-                className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-all hover:border-gray-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:bg-white/[0.035] dark:hover:border-white/20"
-              >
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer choose network</span>
-                  <span className="block text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                    {receiveMode === 'email'
-                      ? 'Circle Pocket uses the selected network.'
-                      : multiChainMode
-                      ? 'Add addresses per network.'
-                      : 'Use one selected network.'}
-                  </span>
-                </span>
-                <span className={cn(
-                  'relative h-6 w-10 shrink-0 rounded-full p-0.5 transition-all',
-                  multiChainMode ? 'bg-gray-950 shadow-inner dark:bg-white' : 'bg-gray-200 dark:bg-white/10',
-                )}>
-                  <span className={cn(
-                    'block h-5 w-5 rounded-full bg-white shadow-sm transition-transform dark:bg-gray-950',
-                    multiChainMode ? 'translate-x-4' : 'translate-x-0',
-                  )} />
-                </span>
-              </button>
-            </div>
+          {!accessMode && (
+            <PocketPayerNetworkPanel
+              showSelector={!isBankReceive && !isBankSend}
+              selectedNetwork={selectedNet}
+              selectedNetworkLabel={CHAIN_META[selectedNet].label}
+              options={VISIBLE_CREATE_CHAINS.map(network => ({
+                value: network,
+                label: `${CHAIN_META[network].label}${network === 'arc' ? ' Testnet' : ''}`,
+              }))}
+              multiChain={multiChainMode}
+              emailReceive={receiveMode === 'email'}
+              onNetworkSelect={pocketUsdcController.actions.selectNetwork}
+              onMultiChainToggle={() => {
+                if (receiveMode !== 'email') pocketUsdcController.actions.toggleMultiChain(!multiChainMode)
+              }}
+            />
           )}
 
-          {!accessMode && multiChainMode && (
-            <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Add receiving addresses</p>
-              <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">Enter one address for each network payers can choose.</p>
-            </div>
-          )}
+          <PocketRecipientAddressFields
+            showEvm={(isEvmNet || multiChainMode) && !isBankReceive && (multiChainMode || receiveMode === 'paste')}
+            showSolana={(selectedNet === 'solana' || multiChainMode) && !isBankReceive && !isBankSend && (multiChainMode || receiveMode === 'paste')}
+            bankSend={isBankSend}
+            multiChain={multiChainMode}
+            selectedNetwork={selectedNet}
+            receiveMode={receiveMode}
+            evm={{
+              address: evmAddr,
+              dirty: evmDirty,
+              valid: evmValid,
+              connectedAddress: connectedEvm,
+              onChange: pocketUsdcController.actions.setEvmRecipientAddress,
+              onDisconnect: disconnectConnectedEvmRecipient,
+            }}
+            solana={{
+              address: solanaAddr,
+              dirty: solanaDirty,
+              valid: solanaValid,
+              connectedAddress: connectedSolana,
+              onChange: pocketUsdcController.actions.setSolanaRecipientAddress,
+              onDisconnect: disconnectConnectedSolanaRecipient,
+            }}
+          />
 
-          {(isEvmNet || multiChainMode) && !isBankReceive && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
-            <label className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                {isBankSend ? 'Recipient wallet address' : multiChainMode ? 'EVM wallet address' : 'Wallet address'}
-              </span>
-              <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">
-                {multiChainMode ? 'Base · Arc Testnet · Arbitrum' : 'Starts with 0x'}
-              </span>
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="0x... wallet address"
-                value={evmAddr}
-                onChange={(e) => setEvmAddr(e.target.value.trim())}
-                spellCheck={false}
-                autoComplete="off"
-                className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
-                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
-                  evmDirty && !evmValid
-                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
-                    : evmValid
-                    ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100 dark:border-emerald-400/40 dark:text-gray-100 dark:focus:ring-emerald-400/10'
-                    : 'border-gray-200 text-gray-900 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
-                )}
-              />
-              {evmDirty && !evmValid && (
-                <XCircle className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-400" />
-              )}
-            </div>
-            {evmDirty && !evmValid && (
-              <p className="flex items-center gap-1 text-xs text-red-500">
-                <Info className="h-3 w-3" /> Enter a valid wallet address that starts with 0x
-              </p>
-            )}
-            {evmValid && (
-              <div className="flex items-center justify-between gap-3">
-                <p className="flex min-w-0 items-center gap-1.5 text-xs text-emerald-600">
-                  <CheckCheck className="h-3 w-3 shrink-0" />
-                  <span className="truncate">
-                    {connectedEvm && evmAddr.toLowerCase() === connectedEvm.toLowerCase()
-                      ? `Connected wallet · ${truncateAddress(evmAddr, 8)}`
-                      : truncateAddress(evmAddr, 8)}
-                  </span>
-                </p>
-                {connectedEvm && evmAddr.toLowerCase() === connectedEvm.toLowerCase() && (
-                  <button
-                    type="button"
-                    onClick={disconnectConnectedEvmRecipient}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 transition-colors hover:bg-zinc-200 hover:text-zinc-950 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
-                    aria-label="Disconnect connected wallet"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            )}
-            <p className="text-xs text-gray-400 dark:text-gray-500">
-              {multiChainMode ? 'EVM address for Base, Arc, or Arbitrum.' : 'Paste EVM address.'}
-            </p>
-          </fieldset>}
-          {(selectedNet === 'solana' || multiChainMode) && !isBankReceive && !isBankSend && (multiChainMode || receiveMode === 'paste') && <fieldset className="space-y-1.5">
-            <label className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-                Solana wallet address
-              </span>
-              <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">No 0x · usually 32-44 chars</span>
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                placeholder="Solana wallet address"
-                value={solanaAddr}
-                onChange={(e) => { setSolanaAddr(e.target.value.trim()); setGeneratedLink('') }}
-                spellCheck={false}
-                autoComplete="off"
-                className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
-                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
-                  solanaDirty && !solanaValid
-                    ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
-                    : solanaValid
-                    ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100 dark:border-emerald-400/40 dark:text-gray-100 dark:focus:ring-emerald-400/10'
-                    : 'border-gray-200 text-gray-900 focus:border-[#14F195]/40 focus:ring-[#14F195]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-emerald-400/40 dark:focus:ring-emerald-400/10',
-                )}
-              />
-              {solanaDirty && !solanaValid && (
-                <XCircle className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-400" />
-              )}
-            </div>
-            {solanaDirty && !solanaValid && (
-              <p className="flex items-center gap-1 text-xs text-red-500">
-                <Info className="h-3 w-3" /> Enter a valid Solana wallet address
-              </p>
-            )}
-            {solanaValid && (
-              <div className="flex items-center justify-between gap-3">
-                <p className="flex min-w-0 items-center gap-1 text-xs text-emerald-600">
-                  <CheckCheck className="h-3 w-3 shrink-0" />
-                  <span className="truncate">
-                    {receiveMode === 'email' && solanaValid
-                      ? `Circle Solana wallet · ${truncateAddress(solanaAddr, 8)}`
-                      : connectedSolana && solanaAddr === connectedSolana
-                      ? `Connected wallet · ${truncateAddress(solanaAddr, 8)}`
-                      : truncateAddress(solanaAddr, 8)}
-                  </span>
-                </p>
-                {connectedSolana && solanaAddr === connectedSolana && (
-                  <button
-                    type="button"
-                    onClick={disconnectConnectedSolanaRecipient}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 transition-colors hover:bg-zinc-200 hover:text-zinc-950 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/15 dark:hover:text-white"
-                    aria-label="Disconnect connected wallet"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            )}
-            {selectedNet === 'solana' && (
-              <p className="text-xs text-gray-400 dark:text-gray-500">
-                {receiveMode === 'email' && solanaValid ? 'Circle Solana wallet.' : 'Paste Solana address.'}
-              </p>
-            )}
-          </fieldset>}
-
-          {/* ── Amount ───────────────────────────────────────────────── */}
-          {flexAmount && (
-            <div className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950">
-                <Sliders className="h-3.5 w-3.5" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold leading-tight text-gray-800 dark:text-gray-100">Flexible amount enabled</p>
-                <p className="mt-0.5 text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">
-                  {isBankReceive || isBankSend ? 'Payer enters the Naira amount.' : 'Payer enters the amount.'}
-                </p>
-              </div>
-            </div>
-          )}
-          {!flexAmount && <fieldset className="space-y-1.5">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-              {isBankReceive || isBankSend ? <Landmark className="h-3.5 w-3.5 text-gray-400" /> : <Coins className="h-3.5 w-3.5 text-gray-400" />}
-              {isBankReceive || isBankSend ? 'Naira amount' : 'Amount'}
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="0.0"
-                value={amt}
-                onChange={(e) => { setAmt(normalizeAmountInput(e.target.value)); setGeneratedLink('') }}
-                className={cn(
-                  'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 pr-28 text-sm',
-                  'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
-                  amtDirty && !isValidAmt
-                    ? 'border-red-300 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
-                    : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
-                )}
-              />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-gray-400 whitespace-nowrap">
-                {isBankReceive || isBankSend ? 'NGN' : 'USDC'}
-              </span>
-            </div>
-            {amtDirty && !isValidAmt && (
-              <p className="flex items-center gap-1 text-xs text-red-500">
-                <Info className="h-3 w-3" /> Enter a valid amount greater than 0
-              </p>
-            )}
-            {!amtDirty && (
-              <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                {isBankReceive
-                  ? 'Enter the Naira amount the payer should pay.'
-                  : isBankSend
-                  ? 'Enter the Naira amount the payer will send from their bank.'
-                  : multiChainMode
-                  ? 'USDC on Base, Arc Testnet, Solana, or Arbitrum — payer chooses the chain'
-                  : `USDC on ${selectedNet === 'arc' ? 'Arc Testnet' : CHAIN_META[selectedNet].label}`}
-              </p>
-            )}
-          </fieldset>}
+          <PocketPaymentAmountField
+            lane={activePocketPayLinkLane}
+            flexible={flexAmount}
+            amount={amt}
+            dirty={amtDirty}
+            valid={isValidAmt}
+            helperText={pocketAmountHelperText}
+            onAmountChange={(value) => {
+              setAmt(normalizeAmountInput(value))
+              setGeneratedLink('')
+            }}
+          />
 
           {/* ── Payment note ──────────────────────────────────────────── */}
           {isBankReceive && (
@@ -4884,21 +2631,13 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </div>
           )}
 
-          <fieldset className="space-y-1.5">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
-              <Tag className="h-3.5 w-3.5 text-gray-400" />
-              Payment note
-              <span className="text-xs font-normal text-gray-400">(optional)</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Coffee, Invoice #042, Split dinner..."
-              value={memo}
-              maxLength={100}
-              onChange={(e) => { setMemo(e.target.value); setGeneratedLink('') }}
-              className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-2.5 text-sm placeholder:text-gray-400 transition-all focus:border-[#0071E3]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-blue-400/40 dark:focus:bg-white/[0.06] dark:focus:ring-blue-400/10"
-            />
-          </fieldset>
+          <PocketPaymentNoteField
+            value={memo}
+            onChange={(value) => {
+              setMemo(value)
+              setGeneratedLink('')
+            }}
+          />
 
           {/* ── Agent URL (Access mode only) ─────────────────────────── */}
           {accessMode && (
@@ -5139,153 +2878,23 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
           </button>}
 
           {/* ── Flexible amount toggle ────────────────────────────────── */}
-          <button
-            type="button"
-            onClick={() => toggleFlexAmount(!flexAmount)}
-            className={cn(
-              'w-full rounded-xl border p-3 text-left transition-all',
-              flexAmount
-                ? 'border-gray-300 bg-white shadow-sm dark:border-white/15 dark:bg-white/[0.05]'
-                : 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/20',
-            )}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className={cn(
-                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all',
-                  flexAmount
-                    ? 'border-gray-900 bg-gray-950 text-white dark:border-white/20 dark:bg-gray-900 dark:text-white'
-                    : 'border-gray-200 bg-white text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500',
-                )}>
-                  <Sliders className="h-3.5 w-3.5" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold leading-tight text-gray-800 dark:text-gray-100">Let payer enter amount</span>
-                  <span className="block text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">
-                    {isBankReceive || isBankSend ? 'Payer enters the Naira amount.' : 'Payer enters the amount.'}
-                  </span>
-                </span>
-              </div>
-              <span className={cn(
-                'relative h-6 w-10 shrink-0 rounded-full p-0.5 transition-all sm:h-7 sm:w-12',
-                flexAmount ? 'bg-gray-950 shadow-inner dark:bg-white' : 'bg-gray-200 dark:bg-white/10',
-              )}>
-                <span className={cn(
-                  'block h-5 w-5 rounded-full bg-white shadow-sm transition-transform dark:bg-gray-950 sm:h-6 sm:w-6',
-                  flexAmount ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0',
-                )} />
-              </span>
-            </div>
-          </button>
+          <PocketFlexibleAmountToggle
+            lane={activePocketPayLinkLane}
+            enabled={flexAmount}
+            onToggle={() => toggleFlexAmount(!flexAmount)}
+          />
 
           {/* ── Generate / checking button ───────────────────────────── */}
-          <div className={cn(
-            'space-y-2',
-            circlePocketShellActive
-              ? 'w-full'
-              : 'p-3 sm:p-4',
-          )}>
-          {vaultStep === 'idle' && (
-            <button
-              onClick={handleGenerate}
-              disabled={!canGenerate || (isBankReceive && posBusy)}
-              className={cn(
-                circlePocketShellActive
-                  ? 'group relative flex min-h-14 w-full items-center justify-center rounded-full px-16 py-1.5 text-center text-sm font-semibold transition-all duration-200 active:scale-[0.98]'
-                  : 'flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-3 text-center text-sm font-semibold leading-tight transition-all duration-200',
-                canGenerate && !(isBankReceive && posBusy)
-                  ? circlePocketShellActive
-                    ? 'bg-gray-950 text-white shadow-sm hover:bg-black dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]'
-                    : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200'
-                  : 'cursor-not-allowed bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500',
-              )}
-            >
-              {(isBankReceive || isBankSend) && posBusy
-                ? <Loader2 className={cn('h-4 w-4 shrink-0 animate-spin', circlePocketShellActive && 'absolute left-5')} />
-                : <Link2 className={cn('h-4 w-4 shrink-0', circlePocketShellActive && 'absolute left-5')} />}
-              <span>{isBankReceive ? 'Create Bank PayLink' : isBankSend ? 'Create Bank-to-USDC PayLink' : 'Generate Payment Link'}</span>
-              {canGenerate && !((isBankReceive || isBankSend) && posBusy) && (
-                circlePocketShellActive
-                  ? <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5"><ArrowRight className="h-4 w-4" /></span>
-                  : <ArrowRight className="h-4 w-4 shrink-0" />
-              )}
-            </button>
-          )}
-
-          {isBankReceive && vaultStep === 'idle' && (
-            <div className="space-y-1 px-2 text-center text-xs leading-snug">
-              {posError && <p className="font-medium text-red-500">{posError}</p>}
-              {!canGenerateBankReceive && !posError && (
-                <p className="text-gray-400 dark:text-gray-500">
-                  Sign in, save your profile, verify bank account, and enter a Naira amount.
-                </p>
-              )}
-            </div>
-          )}
-
-          {isBankSend && vaultStep === 'idle' && (
-            <div className="space-y-1 px-2 text-center text-xs leading-snug">
-              <p className="text-gray-400 dark:text-gray-500">
-                Payer checkout will collect refund bank details before creating the bank transfer order.
-              </p>
-            </div>
-          )}
-
-          {!isBankReceive && !isBankSend && !canGenerate && vaultStep === 'idle' && (
-            multiChainMode
-              ? (!evmDirty && !solanaDirty)
-              : (selectedNet === 'solana' ? !solanaDirty : !evmDirty)
-          ) && (
-            <p className="px-2 text-center text-xs leading-snug text-gray-400 dark:text-gray-500">
-              {multiChainMode
-                ? 'Enter at least one wallet address to continue'
-                : `Enter a ${selectedNet === 'solana' ? 'Solana' : 'wallet'} address to continue`}
-            </p>
-          )}
-          </div>
-
-          {circlePocketShellActive && isBankReceive && !privyAuthenticated && (
-            <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
-              <PrivyConnectButton
-                debugLabel="create-receive-bank"
-                loginOptions={{ loginMethods: ['email'] }}
-                logoutOnAuthenticated={false}
-                className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]"
-              >
-                <Mail className="absolute left-5 h-4 w-4" />
-                <span>Sign in to Bank</span>
-                <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">
-                  <ArrowRight className="h-4 w-4" />
-                </span>
-              </PrivyConnectButton>
-              <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                Secure access keeps bank payouts, settlement history, receipts, and support records connected.
-              </p>
-            </div>
-          )}
-
-          {circlePocketShellActive && !isBankReceive && !isBankSend && receiveMode === 'email' && !privyAuthenticated && (
-            <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
-              <PrivyConnectButton
-                debugLabel="create-receive-email"
-                loginOptions={{ loginMethods: ['email'] }}
-                logoutOnAuthenticated={false}
-                onBeforeLogin={() => {
-                  try { window.sessionStorage.setItem('hashpaylink-circle-email-receive-intent', selectedNet) } catch {}
-                }}
-                className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]"
-              >
-                <Mail className="absolute left-5 h-4 w-4" />
-                <span>Sign in to Circle Pocket</span>
-                <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">
-                  <ArrowRight className="h-4 w-4" />
-                </span>
-              </PrivyConnectButton>
-              <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                Secure access creates your email-backed Circle wallet and keeps payment receipts connected.
-              </p>
-            </div>
-          )}
+          <PocketPayLinkSubmitPanel
+            lane={activePocketPayLinkLane}
+            shellActive={false}
+            idle={vaultStep === 'idle'}
+            canSubmit={activePocketCanSubmit}
+            submitting={activePocketSubmitting}
+            error={isBankReceive ? posError : undefined}
+            addressGuidance={pocketAddressGuidance}
+            onSubmit={isBankSend ? handleGenerate : activePocketPayLinkController.submit}
+          />
             </div>
           </div>
             </>
@@ -5294,139 +2903,25 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
 
         {/* ── Link ready panel ─────────────────────────────────────────── */}
         {linkReady && (
-          <div className="animate-slide-up space-y-4 border-t border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.03] sm:p-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950">
-                    <CheckCheck className="h-3.5 w-3.5" />
-                  </span>
-                  Link Ready
-                </p>
-                <button onClick={handleReset} className="text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200">
-                  Start over
-                </button>
-              </div>
-
-              {/* Preview + QR side by side */}
-              <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04] sm:flex-row sm:items-start">
-                {/* Left — link details */}
-                <div className="min-w-0 flex-1 space-y-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
-                  <div className="flex items-baseline gap-1.5">
-                    {flexAmount
-                      ? <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm font-semibold text-gray-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100"><Sliders className="h-3.5 w-3.5" />{isBankReceive || isBankSend ? 'Flexible NGN' : 'Flexible'}</span>
-                      : <><span className="text-2xl font-bold text-gray-900 dark:text-white">{isBankReceive || isBankSend ? formatNgnAmount(amt) : formatAmount(amt, 6)}</span><span className="text-sm font-medium text-gray-500 dark:text-gray-400">{isBankReceive || isBankSend ? 'NGN' : 'USDC'}</span></>
-                    }
-                  </div>
-                  <div className="space-y-1">
-                    {evmValid && (
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <span>{multiChainMode ? 'Base · Arc Testnet · Arbitrum' : CHAIN_META[selectedNet].label}:</span>
-                        <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(evmAddr, 8)}</span>
-                      </div>
-                    )}
-                    {solanaValid && (
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <span>Solana:</span>
-                        <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(solanaAddr, 8)}</span>
-                      </div>
-                    )}
-                    {memo && (
-                      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <span>Payment note: <span className="font-medium text-gray-700 dark:text-gray-200">"{memo}"</span></span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Right — QR code (single payment mode only) */}
-                {!effectiveEventMode && (
-                  <div className="flex shrink-0 flex-col items-center gap-1.5 self-center sm:self-auto">
-                    <div ref={qrRef} className="relative rounded-xl border border-gray-100 bg-white p-1.5 shadow-sm">
-                      <QRCodeCanvas value={generatedLink} size={112} level="H" includeMargin />
-                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                        <div className="rounded-sm bg-white p-0.5">
-                          <img src="/hash-logo.png" alt="" className="h-4 w-4 object-contain" />
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={downloadQR}
-                      className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-500 transition-all hover:bg-gray-50 hover:text-gray-700 active:scale-[0.98]"
-                    >
-                      <Download className="h-3 w-3" /> Save
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Share + Test buttons */}
-              <div className="grid gap-2.5 sm:grid-cols-[1fr_auto]">
-                <button
-                  onClick={handleShare}
-                  className={cn(
-                    'flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
-                    copied
-                      ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
-                      : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
-                  )}
-                >
-                  {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Share2 className="h-4 w-4" /> Share</>}
-                </button>
-                <a
-                  href={generatedLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Test
-                </a>
-              </div>
-
-              {/* Organizer dashboard — multi-payer / access mode only */}
-              {!effectiveEventMode && (
-                <a
-                  href={buildGlobalDashboardLink()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
-                >
-                  <LayoutDashboard className="h-4 w-4" />
-                  View payments
-                </a>
-              )}
-
-              {effectiveEventMode && (
-                <div className="grid gap-2">
-                  <a
-                    href={buildDashboardLink()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
-                  >
-                    <LayoutDashboard className="h-4 w-4" />
-                    View payments
-                  </a>
-                </div>
-              )}
-
-              {effectiveEventMode && (
-                <p className="text-[11px] text-gray-400">
-                  {accessMode
-                    ? 'Each payer enters their name — used to generate their personal access link after payment.'
-                    : 'Each payer must enter their name before paying — their entry will appear live in the dashboard.'}
-                </p>
-              )}
-
-              {/* Hidden 1024px canvas for UHD download */}
-              <div ref={qrHiResRef} aria-hidden="true"
-                style={{ position: 'absolute', left: '-9999px', visibility: 'hidden' }}>
-                <QRCodeCanvas value={generatedLink} size={1024} level="H" includeMargin />
-              </div>
-            </div>
-          </div>
+          <PocketPayLinkReadyPanel
+            url={generatedLink}
+            copied={copied}
+            flexible={flexAmount}
+            localCurrency={isBankReceive || isBankSend}
+            amountLabel={isBankReceive || isBankSend ? formatNgnAmount(amt) : formatAmount(amt, 6)}
+            networkLabel={multiChainMode ? 'Base · Arc Testnet · Arbitrum' : CHAIN_META[selectedNet].label}
+            evmAddress={evmValid ? evmAddr : undefined}
+            solanaAddress={solanaValid ? solanaAddr : undefined}
+            memo={memo}
+            eventMode={effectiveEventMode}
+            accessMode={accessMode}
+            dashboardUrl={effectiveEventMode ? buildDashboardLink() : buildGlobalDashboardLink()}
+            qrRef={qrRef}
+            qrHiResRef={qrHiResRef}
+            onReset={handleReset}
+            onDownloadQr={downloadQR}
+            onShare={handleShare}
+          />
         )}
           </>
         )}
@@ -5533,44 +3028,6 @@ export default function CreateLink({ initialProduct = 'payment' }: { initialProd
             </Link>
           </div>
         </div>
-      )}
-
-      {circlePocketShellActive && !circlePocketMode && (
-        <nav
-          aria-label="Circle Pocket navigation"
-          className={cn(
-            'pointer-events-none fixed inset-x-0 bottom-0 z-40 bg-transparent px-4 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2.5 transition-transform duration-200',
-            circlePocketKeyboardOpen && 'translate-y-full',
-          )}
-        >
-          <div className="pointer-events-auto mx-auto grid w-full max-w-[430px] grid-cols-4 rounded-full border border-gray-200 bg-[#F5F5F7]/95 p-1.5 shadow-[0_12px_36px_rgba(15,23,42,0.16)] backdrop-blur-2xl dark:border-white/[0.1] dark:bg-[#151518]/95 dark:shadow-[0_16px_50px_rgba(0,0,0,0.4)]">
-            {[
-              { key: 'home', label: 'Home', icon: House },
-              { key: 'move', label: 'Move', icon: ArrowUpDown },
-              { key: 'bills', label: 'Bills', icon: Banknote },
-              { key: 'activity', label: 'Activity', icon: TrendingUp },
-            ].map(({ key, label, icon: Icon }) => {
-              const active = key === 'move'
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  aria-current={active ? 'page' : undefined}
-                  onClick={() => selectCirclePocketNav(key as CirclePocketNavTab)}
-                  className={cn(
-                    'flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-full px-2 text-[10px] font-bold transition-all duration-200 active:scale-95',
-                    active
-                      ? 'bg-gray-950 text-white shadow-sm dark:bg-white/[0.12] dark:text-white dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
-                      : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-white/40 dark:hover:bg-white/[0.05] dark:hover:text-white/70',
-                  )}
-                >
-                  <Icon className={cn('h-[19px] w-[19px]', active && 'stroke-[2.5]')} />
-                  <span>{label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </nav>
       )}
 
       <PayLinkShareSheet

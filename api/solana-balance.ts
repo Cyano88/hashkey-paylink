@@ -27,6 +27,27 @@ function solanaRpcUrls() {
     : [PUBLIC_SOLANA_RPC_URL]
 }
 
+export async function readSolanaUsdcBalance(accountAddress: string) {
+  const owner = new PublicKey(accountAddress)
+  const ata = await getAssociatedTokenAddress(USDC_MINT, owner, true)
+  let lastError: unknown
+  for (const [index, rpcUrl] of solanaRpcUrls().entries()) {
+    try {
+      const connection = new Connection(rpcUrl, 'confirmed')
+      const account = await getAccount(connection, ata)
+      return { balance: account.amount, ata: ata.toBase58() }
+    } catch (error) {
+      if (error instanceof TokenAccountNotFoundError) return { balance: 0n, ata: null }
+      lastError = error
+      console.error('[solana-balance] balance RPC failed', {
+        rpc: index === 0 && solanaRpcUrls().length > 1 ? 'configured' : 'public',
+        message: error instanceof Error ? error.message : 'Solana balance query failed',
+      })
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Solana balance query failed')
+}
+
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -38,37 +59,14 @@ export default async function handler(req: Request, res: Response) {
   }
 
   try {
-    const owner = new PublicKey(accountAddress)
-    const ata = await getAssociatedTokenAddress(USDC_MINT, owner, true)
-
-    let lastError: unknown
-    for (const [index, rpcUrl] of solanaRpcUrls().entries()) {
-      try {
-        const connection = new Connection(rpcUrl, 'confirmed')
-        const account = await getAccount(connection, ata)
-        return res.json({
-          ok: true,
-          balance: account.amount.toString(),
-          ata: ata.toBase58(),
-        })
-      } catch (error) {
-        if (error instanceof TokenAccountNotFoundError) {
-          return res.json({ ok: true, balance: '0', ata: null })
-        }
-        lastError = error
-        const message = error instanceof Error ? error.message : 'Solana balance query failed'
-        console.error('[solana-balance] balance RPC failed', {
-          rpc: index === 0 && solanaRpcUrls().length > 1 ? 'configured' : 'public',
-          message,
-        })
-      }
-    }
-
-    const message = lastError instanceof Error ? lastError.message : 'Solana balance query failed'
-    console.error('[solana-balance] balance query failed', { message })
-    return res.status(500).json({ ok: false, error: message || 'Solana balance query failed' })
+    const result = await readSolanaUsdcBalance(accountAddress)
+    return res.json({ ok: true, balance: result.balance.toString(), ata: result.ata })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Invalid Solana wallet address'
-    return res.status(400).json({ ok: false, error: message || 'Invalid Solana wallet address' })
+    const invalidAddress = (() => {
+      try { new PublicKey(accountAddress); return false } catch { return true }
+    })()
+    if (!invalidAddress) console.error('[solana-balance] balance query failed', { message })
+    return res.status(invalidAddress ? 400 : 500).json({ ok: false, error: message || (invalidAddress ? 'Invalid Solana wallet address' : 'Solana balance query failed') })
   }
 }

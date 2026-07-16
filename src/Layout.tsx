@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
 import { usePrivy } from '@privy-io/react-auth'
-import { ChevronDown, LogOut, X, Sun, Moon, History, Wallet, Radio, Coins, Landmark, Store, Phone, Wifi, Tv, Lightbulb, Banknote } from 'lucide-react'
+import { ChevronDown, LogOut, Sun, Moon, History } from 'lucide-react'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
 import { CHAIN_META } from './lib/chains'
@@ -11,7 +11,8 @@ import { getPaylinkParam, hasPaylinkFlag } from './lib/paylinkParams'
 import { PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyConnectButton } from './lib/PrivyConnectButton'
 import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
-import { TelegramHelperPanel } from './pages/TelegramPaymentLinks'
+import PocketTopSwitch from './pocket/components/PocketTopSwitch'
+import { pocketPathFor, resolvePocketRoute, type PocketRouteState } from './pocket/lib/pocketRoutes'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
 const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
@@ -21,26 +22,6 @@ const TELEGRAM_CHAT_URL = (() => {
   return base.includes('?') ? `${base}&start=payment_links` : `${base}?start=payment_links`
 })()
 const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
-
-type AgentHashMode = 'support' | 'circle-pocket'
-
-function AgentHashCssIcon({ header = false, staticPose = false }: { header?: boolean; staticPose?: boolean }) {
-  return (
-    <div className={`ask-hash-live-agent shrink-0 ${staticPose ? 'ask-hash-live-agent--static' : ''} ${header ? 'ask-hash-live-agent--header' : ''}`} aria-hidden="true">
-      <span className="ask-hash-live-agent__head">
-        <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--left" />
-        <span className="ask-hash-live-agent__eye ask-hash-live-agent__eye--right" />
-        <span className="ask-hash-live-agent__mouth" />
-      </span>
-      <span className="ask-hash-live-agent__antenna" />
-      <span className="ask-hash-live-agent__bubble">
-        <span />
-        <span />
-        <span />
-      </span>
-    </div>
-  )
-}
 
 function TelegramMark({ className }: { className?: string }) {
   return (
@@ -207,9 +188,11 @@ function DashboardRecipientDropdown({ recipients }: { recipients: DashboardRecip
 
 export default function Layout() {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const isPolyDeskSurface = pathname === '/polydesk' || window.location.hostname.toLowerCase().includes('polydesk') || searchParams.get('app') === 'polydesk'
-  const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/create' || pathname === '/polymarket'
+  const isPocketAppPage = pathname === '/pocket' || pathname.startsWith('/pocket/')
+  const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/create' || pathname === '/polymarket' || isPocketAppPage
   const isPayPage  = pathname === '/pay'
   const isNgPosPage = pathname === '/pos/ng'
   const isTelegramPaymentLinksPage = pathname === '/telegram/payment-links'
@@ -226,12 +209,28 @@ export default function Layout() {
   const [showPaymentHistoryShortcut, setShowPaymentHistoryShortcut] = useState(false)
   const [agentHashComposerFocused, setAgentHashComposerFocused] = useState(false)
   const [agentHashViewportTop, setAgentHashViewportTop] = useState(0)
-  const [circlePocketSurface, setCirclePocketSurface] = useState(false)
-  const [circlePocketWalletView, setCirclePocketWalletView] = useState<'smart' | 'x402'>('smart')
-  const [circlePocketHeaderMode, setCirclePocketHeaderMode] = useState<'wallet' | 'move' | 'bills' | 'activity'>('wallet')
-  const [circlePocketMoveView, setCirclePocketMoveView] = useState<'usdc' | 'bank' | 'pos' | ''>('')
-  const [circlePocketBillView, setCirclePocketBillView] = useState<'airtime' | 'data' | 'tv' | 'electricity'>('airtime')
-  const [circlePocketActivityView, setCirclePocketActivityView] = useState<'all' | 'bank' | 'pos' | 'bills'>('all')
+  const pocketRoute = isPocketAppPage
+    ? resolvePocketRoute(pathname.slice('/pocket'.length) || '/')
+    : null
+  const circlePocketHeaderMode = pocketRoute?.section === 'move'
+    ? 'move'
+    : pocketRoute?.section === 'bills'
+      ? 'bills'
+      : pocketRoute?.section === 'activity'
+        ? 'activity'
+        : pocketRoute?.section === 'home'
+          ? 'wallet'
+          : 'wallet'
+  const circlePocketWalletView = pocketRoute?.section === 'home'
+    ? (pocketRoute.view === 'smart-wallet' ? 'smart' : 'x402')
+    : 'smart'
+  const circlePocketMoveView = pocketRoute?.section === 'move' ? pocketRoute.view : ''
+  const circlePocketBillView = pocketRoute?.section === 'bills' ? pocketRoute.view : 'airtime'
+  const circlePocketActivityView = pocketRoute?.section === 'activity' ? pocketRoute.view : 'all'
+
+  const navigatePocketHeader = (state: PocketRouteState) => {
+    navigate(`/pocket${pocketPathFor(state)}`)
+  }
 
   useEffect(() => {
     const handleHomeSurfaceChange = (event: Event) => {
@@ -246,40 +245,16 @@ export default function Layout() {
       const detail = (event as CustomEvent<{ focused?: boolean }>).detail
       setAgentHashComposerFocused(Boolean(detail?.focused))
     }
-    const handleCirclePocketSurface = (event: Event) => {
-      const detail = (event as CustomEvent<{ visible?: boolean }>).detail
-      setCirclePocketSurface(Boolean(detail?.visible))
-    }
-    const handleCirclePocketWalletView = (event: Event) => {
-      const detail = (event as CustomEvent<{ view?: 'smart' | 'x402'; mode?: 'wallet' | 'move' | 'bills' | 'activity' }>).detail
-      if (detail?.mode === 'wallet' || detail?.mode === 'move' || detail?.mode === 'bills' || detail?.mode === 'activity') {
-        setCirclePocketHeaderMode(detail.mode)
-        if (detail.mode === 'move') setCirclePocketMoveView('usdc')
-        if (detail.mode === 'bills') setCirclePocketBillView('airtime')
-        if (detail.mode === 'activity') setCirclePocketActivityView('all')
-      }
-      if (detail?.view === 'smart' || detail?.view === 'x402') setCirclePocketWalletView(detail.view)
-    }
     window.addEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
     window.addEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
     window.addEventListener('hashpaylink-agent-composer-focus', handleAgentHashComposerFocus)
-    window.addEventListener('hashpaylink-circle-pocket-surface', handleCirclePocketSurface)
-    window.addEventListener('hashpaylink-circle-pocket-wallet-view', handleCirclePocketWalletView)
     return () => {
       window.removeEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
       window.removeEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
       window.removeEventListener('hashpaylink-agent-composer-focus', handleAgentHashComposerFocus)
-      window.removeEventListener('hashpaylink-circle-pocket-surface', handleCirclePocketSurface)
-      window.removeEventListener('hashpaylink-circle-pocket-wallet-view', handleCirclePocketWalletView)
       setShowTelegramHomeFab(false)
       setShowPaymentHistoryShortcut(false)
       setAgentHashComposerFocused(false)
-      setCirclePocketSurface(false)
-      setCirclePocketWalletView('smart')
-      setCirclePocketHeaderMode('wallet')
-      setCirclePocketMoveView('')
-      setCirclePocketBillView('airtime')
-      setCirclePocketActivityView('all')
     }
   }, [])
 
@@ -435,66 +410,9 @@ export default function Layout() {
   }
 
   const { theme, toggle: toggleTheme } = useTheme()
-  const navigate = useNavigate()
   const openPaymentHistory = useCallback(() => {
     navigate('/dashboard?src=ngpos')
   }, [navigate])
-
-  const [agentHashSurfaceMode, setAgentHashSurfaceMode] = useState<AgentHashMode>('support')
-  const agentHashMode: AgentHashMode = isPayPage || (isCreatePage && searchParams.get('product') === 'payment') ? 'circle-pocket' : agentHashSurfaceMode
-  const showAgentHashWidget = isCreatePage || isPayPage
-  const [chatOpen,     setChatOpen]     = useState(false)
-  const [chatMounted,  setChatMounted]  = useState(false)
-  const agentHashPanelRef = useRef<HTMLDivElement>(null)
-  const agentHashFabRef = useRef<HTMLAnchorElement>(null)
-  const agentHashCloseTimerRef = useRef<number | null>(null)
-
-  function openAgentHashWidget(mode?: AgentHashMode) {
-    if (mode) setAgentHashSurfaceMode(mode)
-    if (agentHashCloseTimerRef.current) window.clearTimeout(agentHashCloseTimerRef.current)
-    setChatMounted(true)
-    window.requestAnimationFrame(() => setChatOpen(true))
-  }
-
-  function closeAgentHashWidget() {
-    setChatOpen(false)
-    if (agentHashCloseTimerRef.current) window.clearTimeout(agentHashCloseTimerRef.current)
-    agentHashCloseTimerRef.current = window.setTimeout(() => setChatMounted(false), 220)
-  }
-
-  function toggleAgentHashWidget() {
-    if (chatOpen) closeAgentHashWidget()
-    else openAgentHashWidget()
-  }
-
-  useEffect(() => {
-    if (isPayPage) setAgentHashSurfaceMode('circle-pocket')
-    else if (!isCreatePage || searchParams.get('product') !== 'payment') setAgentHashSurfaceMode('support')
-  }, [isCreatePage, isPayPage, pathname, searchParams])
-
-  useEffect(() => {
-    function handleModeEvent(event: Event) {
-      const detail = (event as CustomEvent<{ mode?: AgentHashMode; open?: boolean }>).detail
-      const rawMode = String(detail?.mode ?? '')
-      const mode: AgentHashMode = rawMode === 'circle-pocket' || rawMode === 'payments' ? 'circle-pocket' : 'support'
-      setAgentHashSurfaceMode(mode)
-      if (detail?.open) openAgentHashWidget(mode)
-    }
-    window.addEventListener('agent-hash-mode', handleModeEvent)
-    return () => window.removeEventListener('agent-hash-mode', handleModeEvent)
-  }, [])
-
-  useEffect(() => {
-    if (!chatOpen) return
-    function handleOutsideClick(event: MouseEvent) {
-      const target = event.target as Node | null
-      if (target && agentHashPanelRef.current?.contains(target)) return
-      if (target && agentHashFabRef.current?.contains(target)) return
-      closeAgentHashWidget()
-    }
-    window.addEventListener('mousedown', handleOutsideClick)
-    return () => window.removeEventListener('mousedown', handleOutsideClick)
-  }, [chatOpen])
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col">
@@ -504,84 +422,23 @@ export default function Layout() {
         style={agentHashComposerFocused && agentHashViewportTop > 0
           ? { transform: `translate3d(0, ${agentHashViewportTop}px, 0)` }
           : undefined}
-        className={circlePocketSurface
+        className={isPocketAppPage
           ? 'pointer-events-none fixed inset-x-0 top-0 z-50 bg-transparent'
           : 'sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl transition-transform duration-100 dark:border-white/5 dark:bg-[#111113]/90'}
       >
-        <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${circlePocketSurface ? 'justify-center' : 'justify-between'} ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
-          {circlePocketSurface ? (
-            <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full border border-gray-200 bg-gray-100/95 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_12px_36px_rgba(0,0,0,0.35)] ${circlePocketHeaderMode === 'move' ? 'grid-cols-3' : circlePocketHeaderMode === 'bills' || circlePocketHeaderMode === 'activity' ? 'grid-cols-4' : 'grid-cols-2'}`}>
-              {(circlePocketHeaderMode === 'move'
-                ? [
-                    { key: 'usdc', label: 'USDC', icon: Coins },
-                    { key: 'bank', label: 'Bank', icon: Landmark },
-                    { key: 'pos', label: 'POS', icon: Store },
-                  ]
-                : circlePocketHeaderMode === 'bills'
-                  ? [
-                      { key: 'airtime', label: 'Airtime', icon: Phone },
-                      { key: 'data', label: 'Data', icon: Wifi },
-                      { key: 'tv', label: 'TV', icon: Tv },
-                      { key: 'electricity', label: 'Electricity', icon: Lightbulb },
-                    ]
-                : circlePocketHeaderMode === 'activity'
-                  ? [
-                      { key: 'all', label: 'All', icon: History },
-                      { key: 'bank', label: 'Bank receive', icon: Landmark },
-                      { key: 'pos', label: 'POS', icon: Store },
-                      { key: 'bills', label: 'Bills', icon: Banknote },
-                    ]
-                : [
-                    { key: 'smart', label: 'Smart Wallet', icon: Wallet },
-                    { key: 'x402', label: 'x402', icon: Radio },
-                  ]
-              ).map(({ key, label, icon: Icon }) => {
-                const active = circlePocketHeaderMode === 'move'
-                  ? circlePocketMoveView === key
-                  : circlePocketHeaderMode === 'bills'
-                    ? circlePocketBillView === key
-                  : circlePocketHeaderMode === 'activity'
-                    ? circlePocketActivityView === key
-                  : circlePocketWalletView === key
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => {
-                      if (circlePocketHeaderMode === 'move') {
-                        const view = key as 'usdc' | 'bank' | 'pos'
-                        setCirclePocketMoveView(view)
-                        window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-move-select', { detail: { view } }))
-                        return
-                      }
-                      if (circlePocketHeaderMode === 'bills') {
-                        const view = key as 'airtime' | 'data' | 'tv' | 'electricity'
-                        setCirclePocketBillView(view)
-                        window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-bills-select', { detail: { view } }))
-                        return
-                      }
-                      if (circlePocketHeaderMode === 'activity') {
-                        const view = key as 'all' | 'bank' | 'pos' | 'bills'
-                        setCirclePocketActivityView(view)
-                        window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-activity-select', { detail: { view } }))
-                        return
-                      }
-                      window.dispatchEvent(new CustomEvent('hashpaylink-circle-pocket-wallet-select', { detail: { view: key } }))
-                    }}
-                    className={[
-                      'flex min-h-9 min-w-0 items-center justify-center rounded-full font-black transition-all',
-                      circlePocketHeaderMode === 'bills' || circlePocketHeaderMode === 'activity' ? 'gap-1 px-1 text-[9px]' : 'gap-2 px-3 text-xs',
-                      active
-                        ? 'bg-white text-gray-950 shadow-sm dark:bg-white dark:text-gray-950'
-                        : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white',
-                    ].join(' ')}
-                  >
-                    <Icon className={circlePocketHeaderMode === 'bills' || circlePocketHeaderMode === 'activity' ? 'h-3.5 w-3.5 shrink-0' : 'h-4 w-4'} />
-                    <span className="truncate">{label}</span>
-                  </button>
-                )
-              })}
-            </div>
+        <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'justify-center' : 'justify-between'} ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
+          {isPocketAppPage ? (
+            <PocketTopSwitch
+              mode={circlePocketHeaderMode}
+              walletView={circlePocketWalletView}
+              moveView={circlePocketMoveView}
+              billView={circlePocketBillView}
+              activityView={circlePocketActivityView}
+              onWalletChange={(view) => navigatePocketHeader({ section: 'home', view: view === 'smart' ? 'smart-wallet' : 'x402' })}
+              onMoveChange={(view) => navigatePocketHeader({ section: 'move', view })}
+              onBillChange={(view) => navigatePocketHeader({ section: 'bills', view })}
+              onActivityChange={(view) => navigatePocketHeader({ section: 'activity', view })}
+            />
           ) : (
           <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 focus:outline-none">
             {isPolyDeskSurface ? (
@@ -608,8 +465,8 @@ export default function Layout() {
           )}
 
           {/* Right side — single horizontal baseline */}
-          <div className={circlePocketSurface ? 'hidden' : 'flex items-center gap-x-2'}>
-            {!circlePocketSurface && (
+          <div className={isPocketAppPage ? 'hidden' : 'flex items-center gap-x-2'}>
+            {!isPocketAppPage && (
               <>
             {isPolyDeskSurface && (
               <div className="hidden sm:flex items-center rounded-full border border-gray-200 bg-gray-50/80 p-0.5 dark:border-white/10 dark:bg-[#1c1c20]">
@@ -711,7 +568,7 @@ export default function Layout() {
             {/* Theme toggle — always visible */}
               </>
             )}
-            {!circlePocketSurface && <button
+            {!isPocketAppPage && <button
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] text-gray-500 dark:text-gray-400 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
@@ -744,7 +601,7 @@ export default function Layout() {
       </header>
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
-      <main className={circlePocketSurface
+      <main className={isPocketAppPage
         ? 'w-full flex-1 px-4 py-10 sm:px-6'
         : 'mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6'}>
         <Outlet context={{
@@ -759,7 +616,7 @@ export default function Layout() {
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer
         data-hashpaylink-bottom-bar
-        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 dark:border-white/5 dark:bg-[#111113]/90 ${agentHashComposerFocused || circlePocketSurface ? 'hidden' : 'flex'}`}
+        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 dark:border-white/5 dark:bg-[#111113]/90 ${agentHashComposerFocused || isPocketAppPage ? 'hidden' : 'flex'}`}
       >
           <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
@@ -796,61 +653,9 @@ export default function Layout() {
           </div>
         </footer>
 
-      {/* Agent Hash floating widget */}
-      {showAgentHashWidget && chatMounted && (
-        <div
-          ref={agentHashPanelRef}
-          className={[
-            'fixed bottom-20 left-2 right-2 z-50 flex h-[min(680px,calc(100vh-7rem))] origin-bottom-right flex-col overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.22)] transition-all duration-200 ease-[cubic-bezier(.2,.9,.2,1.08)] dark:border-white/10 dark:bg-[#111114]',
-            'sm:left-auto sm:right-6 sm:w-[430px]',
-            chatOpen ? 'translate-y-0 scale-100 opacity-100' : 'pointer-events-none translate-y-4 scale-90 opacity-0',
-          ].join(' ')}
-        >
-          <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3 dark:border-white/10 dark:bg-[#111114]">
-            <div className="flex min-w-0 items-center gap-3">
-              <AgentHashCssIcon header staticPose={!chatOpen} />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">Agent Hash</p>
-                <p className="mt-0.5 truncate text-[11px] font-medium text-gray-400">
-                  {agentHashMode === 'circle-pocket' ? 'Circle Pocket' : 'Support mode'} · Powered by ZeroScout
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={closeAgentHashWidget}
-              aria-label="Close Agent Hash"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-gray-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <TelegramHelperPanel
-            telegramName="there"
-            ownerKey=""
-            telegramId=""
-            fallbackOwner=""
-            initialEventId=""
-            initialPayer=""
-            initialHelperMode={agentHashMode}
-            lockedHelperMode={agentHashMode}
-            onRecoverTelegramName={() => undefined}
-            onBack={closeAgentHashWidget}
-            welcomeText={agentHashMode === 'circle-pocket'
-              ? 'Circle Pocket is ready. Ask me to receive USDC, settle to bank, create a POS terminal, manage wallets, fund x402, pay bills, or find a receipt.'
-              : 'Support mode is ready. Tell me what is stuck, confusing, or not working.'}
-            inputPlaceholder={agentHashMode === 'circle-pocket' ? 'Ask about Circle Pocket...' : 'Ask Agent Hash...'}
-            fillAvailableHeight
-            onComposerFocusChange={setAgentHashComposerFocused}
-          />
-        </div>
-      )}
-
       {/* Telegram FAB */}
       {showTelegramHomeFab && (
         <a
-          ref={agentHashFabRef}
           href={TELEGRAM_CHAT_URL}
           target="_blank"
           rel="noopener noreferrer"

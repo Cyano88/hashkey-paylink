@@ -174,6 +174,23 @@ function evmWallet(wallets: Array<{ id: string; address: string; blockchain: str
   })
 }
 
+export type CircleUserWallet = {
+  id: string
+  address: string
+  blockchain: string
+}
+
+export async function listCircleUserWallets(userToken: string, chain: string): Promise<CircleUserWallet[]> {
+  if (!userToken) throw new Error('Missing Circle user token')
+  const data = await circleJson<{ wallets: CircleUserWallet[] }>('/v1/w3s/wallets', {
+    method: 'GET',
+    userToken,
+    apiKey: circleApiKey({ chain }),
+    headers: { accept: 'application/json' },
+  })
+  return data.wallets ?? []
+}
+
 function isBytes32(value: string | undefined): value is `0x${string}` {
   return typeof value === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value)
 }
@@ -252,16 +269,11 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'listWallets') {
       const { userToken, chain } = params
       if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
-      const data = await circleJson<{ wallets: Array<{ id: string; address: string; blockchain: string }> }>('/v1/w3s/wallets', {
-        method: 'GET',
-        userToken,
-        apiKey: circleApiKey({ chain }),
-        headers: { accept: 'application/json' },
-      })
+      const wallets = await listCircleUserWallets(userToken, chain)
       const wallet = chain === 'base' || chain === 'arbitrum' || chain === 'arc'
-        ? evmWallet(data.wallets ?? [], chain)
-        : solanaWallet(data.wallets ?? [])
-      return res.json({ ok: true, wallets: data.wallets ?? [], wallet })
+        ? evmWallet(wallets, chain)
+        : solanaWallet(wallets)
+      return res.json({ ok: true, wallets, wallet })
     }
 
     if (action === 'executeEvmPayment') {
@@ -277,7 +289,7 @@ export default async function handler(req: Request, res: Response) {
       }
 
       const total = BigInt(totalUnits)
-      const requestedFeeBps = params.feeBps === 0 || params.feeBps === '0'
+      const requestedFeeBps = String(params.feeBps ?? '') === '0'
         ? 0n
         : PLATFORM_FEE_BPS
       const fee = total * requestedFeeBps / BPS_DENOMINATOR

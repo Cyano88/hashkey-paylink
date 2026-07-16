@@ -27,6 +27,7 @@ async function privyCircleLinkApi(params: {
   chain: CircleLinkChain
   purpose?: 'payment' | 'agent'
   email?: string
+  circleUserToken?: string
   wallet?: { id: string; address: string; blockchain: string }
 }) {
   const res = await fetch('/api/privy-circle-link', {
@@ -40,6 +41,7 @@ async function privyCircleLinkApi(params: {
       chain: params.chain,
       purpose: params.purpose,
       email: params.email,
+      circleUserToken: params.circleUserToken,
       wallet: params.wallet,
     }),
   })
@@ -61,6 +63,7 @@ export async function savePrivyCircleLink(params: {
   chain: CircleLinkChain
   purpose?: 'payment' | 'agent'
   email?: string
+  circleUserToken?: string
   wallet: { id: string; address: string; blockchain: string }
 }) {
   return privyCircleLinkApi({ ...params, action: 'link' })

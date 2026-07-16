@@ -10,9 +10,10 @@ process.env.TELEGRAM_REQUEST_STORE = join(storeDir, 'requests.json')
 process.env.CIRCLE_POCKET_ACTION_STORE = join(storeDir, 'actions.json')
 process.env.CIRCLE_POCKET_ACTION_STORE_KEY = `circle-pocket-actions-smoke-${Date.now()}`
 
-const [{ default: askHandler }, { default: requestHandler }] = await Promise.all([
+const [{ default: askHandler }, { default: requestHandler }, { claimCirclePocketAction, recordCirclePocketAction }] = await Promise.all([
   import('../api/agent-ask.ts'),
   import('../api/telegram-request.ts'),
+  import('../api/circle-pocket-action-journal.ts'),
 ])
 
 async function call(handler, { method = 'POST', headers = {}, query = {}, body = {} } = {}) {
@@ -62,5 +63,22 @@ assert.equal(first.payload.request.id, replay.payload.request.id)
 assert.equal(replay.payload.replayed, true)
 assert.equal('ownerId' in first.payload.request, false)
 assert.equal('idempotencyKey' in first.payload.request, false)
+
+const actionInput = {
+  ownerId: 'journal-owner-1',
+  idempotencyKey: 'pocket:x402-activate:journal-request-0001',
+  action: 'x402.gateway.activate',
+  metadata: { network: 'base', amount: '0.5' },
+}
+const concurrentClaims = await Promise.all([
+  claimCirclePocketAction(actionInput),
+  claimCirclePocketAction(actionInput),
+])
+assert.equal(concurrentClaims.filter(result => result.claimed).length, 1)
+assert.equal(concurrentClaims[0].record.id, concurrentClaims[1].record.id)
+await recordCirclePocketAction({ ...actionInput, status: 'completed' })
+const completedReplay = await claimCirclePocketAction(actionInput)
+assert.equal(completedReplay.claimed, false)
+assert.equal(completedReplay.record.status, 'completed')
 
 console.log('circle pocket agent security smoke ok')

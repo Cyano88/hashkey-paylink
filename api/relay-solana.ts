@@ -147,6 +147,28 @@ function decodeSignedTransaction(tx: string): Buffer {
   }
 }
 
+export function validatePocketSignedSolanaTransaction(input: { tx: string; requiredSigner: string }) {
+  let relayer: Keypair
+  try { relayer = loadRelayer() }
+  catch { throw Object.assign(new Error('Solana relay not configured'), { status: 503 }) }
+  const txBytes = decodeSignedTransaction(input.tx)
+  const transaction = Transaction.from(txBytes)
+  const requiredSigner = parseSolanaAddress('Linked wallet address', input.requiredSigner)
+  if (!transaction.recentBlockhash) throw new Error('Signed Solana transaction is missing a blockhash')
+  if (!transaction.feePayer?.equals(relayer.publicKey)) {
+    throw new Error('Signed Solana transaction has an invalid fee payer')
+  }
+  if (!transaction.verifySignatures(true)) {
+    throw new Error('Signed Solana transaction signatures are invalid')
+  }
+  const linkedWalletApproved = transaction.signatures.some(item => (
+    item.publicKey.equals(requiredSigner) && Boolean(item.signature)
+  ))
+  if (!linkedWalletApproved) {
+    throw new Error('Signed Solana transaction was not approved by the linked wallet')
+  }
+}
+
 function isBlockheightExceeded(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error ?? '')
   return msg.toLowerCase().includes('block height exceeded') || msg.toLowerCase().includes('blockheight exceeded')
