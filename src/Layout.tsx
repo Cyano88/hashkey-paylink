@@ -426,7 +426,7 @@ export default function Layout() {
           ? 'pointer-events-none fixed inset-x-0 top-0 z-50 border-b border-gray-200/80 bg-white/92 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-[#111114]/92 dark:shadow-[0_10px_30px_rgba(0,0,0,0.24)]'
           : 'sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl transition-transform duration-100 dark:border-white/5 dark:bg-[#111113]/90'}
       >
-        <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'justify-center' : 'justify-between'} ${isPocketAppPage ? 'py-0' : isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
+        <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'justify-center' : 'justify-between'} ${isPocketAppPage ? 'py-1' : isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
           {isPocketAppPage ? (
             <PocketTopSwitch
               mode={circlePocketHeaderMode}

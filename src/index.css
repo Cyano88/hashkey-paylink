@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Privy keeps its close control in the modal header. Keep that row clear and
+   render the product name with the branded mark instead of at the top-left. */
+[role='dialog'] div:has(> img[alt='Hash PayLink logo']) {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+[role='dialog'] div:has(> img[alt='Hash PayLink logo'])::after {
+  content: 'Hash PayLink';
+  display: block;
+  color: currentColor;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+}
+
 @layer base {
   *,
   *::before,

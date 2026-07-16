@@ -64,7 +64,7 @@ export default function PocketTopSwitch({
         : walletItems
 
   return (
-    <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 p-1.5 ${mode === 'move' ? 'grid-cols-3' : compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
+    <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full border border-gray-200 bg-gray-100/95 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_12px_36px_rgba(0,0,0,0.35)] ${mode === 'move' ? 'grid-cols-3' : compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
       {items.map(({ key, label, icon: Icon }) => {
         const active = mode === 'move'
           ? moveView === key
@@ -85,11 +85,11 @@ export default function PocketTopSwitch({
               else onWalletChange(key as PocketWalletSwitchView)
             }}
             className={[
-              'flex min-h-10 min-w-0 items-center justify-center rounded-xl font-black transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98]',
+              'flex min-h-9 min-w-0 items-center justify-center rounded-full font-black transition-all',
               compact ? 'gap-1 px-1 text-[9px]' : 'gap-2 px-3 text-xs',
               active
-                ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
-                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-white',
+                ? 'bg-white text-gray-950 shadow-sm dark:bg-white dark:text-gray-950'
+                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white',
             ].join(' ')}
           >
             <Icon className={compact ? 'h-3.5 w-3.5 shrink-0' : 'h-4 w-4'} />
