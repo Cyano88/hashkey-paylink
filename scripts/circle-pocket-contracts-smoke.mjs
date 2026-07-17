@@ -1053,6 +1053,8 @@ assert.doesNotMatch(pocketX402ControllerSource, /fetch\(|['"]\/api\/|AgentWorksp
 const pocketMarketplacePanelSource = await readFile(new URL('../src/pocket/components/PocketMarketplacePanel.tsx', import.meta.url), 'utf8')
 assert.match(pocketMarketplacePanelSource, /autoLoadAttempted\.current/)
 assert.doesNotMatch(pocketMarketplacePanelSource, /!snapshot && !loading/)
+const agentWalletSource = await readFile(new URL('../api/agent-wallet.ts', import.meta.url), 'utf8')
+assert.match(agentWalletSource, /circle-marketplace-registry', 45_000, 8 \* 1024 \* 1024/)
 const pocketTopSwitchSource = await readFile(new URL('../src/pocket/components/PocketTopSwitch.tsx', import.meta.url), 'utf8')
 assert.match(pocketTopSwitchSource, /\{ key: 'x402', label: 'App Pay'/)
 const pocketBankErrorsSource = await readFile(new URL('../src/pocket/controllers/pocketBankErrors.ts', import.meta.url), 'utf8')

@@ -609,12 +609,12 @@ async function walletChoicesWithBalances(wallets: string[], key: string, chain: 
   return choices
 }
 
-async function runCircle(args: string[], key: string, timeoutMs = 60_000) {
+async function runCircle(args: string[], key: string, timeoutMs = 60_000, maxBuffer = 128 * 1024) {
   const sessionHome = resolve(CIRCLE_SESSION_ROOT, safeSessionKey(key))
   await mkdir(sessionHome, { recursive: true })
   const { stdout, stderr } = await execFileAsync(CIRCLE_BIN, args, {
     timeout: timeoutMs,
-    maxBuffer: 128 * 1024,
+    maxBuffer,
     shell: false,
     env: {
       ...process.env,
@@ -652,7 +652,10 @@ export async function searchCircleMarketplaceServices(params: {
     '--output',
     'json',
   ]
-  const output = await runCircle(args, 'circle-marketplace-registry', 45_000)
+  // Registry search returns full schemas for every service and can exceed the
+  // small buffer used by wallet commands. Keep this bounded but large enough
+  // for Circle's 100-item response.
+  const output = await runCircle(args, 'circle-marketplace-registry', 45_000, 8 * 1024 * 1024)
   const parsed = extractJsonFromCliOutput(output)
   if (!parsed || typeof parsed !== 'object') {
     const error = new Error('Circle Marketplace returned an invalid discovery response.') as Error & { status?: number }
