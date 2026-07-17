@@ -22,6 +22,11 @@ type TransferLog = {
   data?: `0x${string}`
 }
 
+type TransactionReceipt = {
+  status?: `0x${string}`
+  blockNumber?: `0x${string}`
+}
+
 function readChain(value: unknown): ChainKey {
   return value === 'arc' || value === 'arbitrum' ? value : 'base'
 }
@@ -34,6 +39,16 @@ function readPositiveBigInt(value: unknown, fallback: bigint) {
     return parsed > 0n ? parsed : fallback
   } catch {
     return fallback
+  }
+}
+
+function readOptionalBlock(value: unknown) {
+  try {
+    if (typeof value !== 'string' || !value.trim()) return null
+    const parsed = BigInt(value.trim())
+    return parsed >= 0n ? parsed : null
+  } catch {
+    return null
   }
 }
 
@@ -104,6 +119,7 @@ export default async function handler(req: Request, res: Response) {
   const recipient = typeof body.recipient === 'string' ? body.recipient.trim() : ''
   const amountUnits = readPositiveBigInt(body.amountUnits, 0n)
   const strict = body.strict === true
+  const requestedFromBlock = readOptionalBlock(body.fromBlock)
   const minUnits = amountUnits > 0n ? (strict ? amountUnits : amountUnits * 98n / 100n) : 1n
   const recovery = body.recovery === true || body.deep === true
 
@@ -126,7 +142,13 @@ export default async function handler(req: Request, res: Response) {
       ? process.env.PAYMENT_TX_LOOKUP_RECOVERY_BLOCKS
       : process.env.PAYMENT_TX_LOOKUP_BLOCKS
     const lookback = readPositiveBigInt(envDefault, recovery ? RECOVERY_LOOKBACK_BLOCKS : DEFAULT_LOOKBACK_BLOCKS)
-    const fromBlock = latestBlock > lookback ? latestBlock - lookback : 0n
+    const lookbackFromBlock = latestBlock > lookback ? latestBlock - lookback : 0n
+    const fromBlock = requestedFromBlock != null && requestedFromBlock > lookbackFromBlock
+      ? requestedFromBlock
+      : lookbackFromBlock
+    if (fromBlock > latestBlock) {
+      return res.json({ ok: true, found: false, latestBlock: latestBlock.toString() })
+    }
     const logs = await getLogsChunked(
       rpcUrl,
       TOKENS[chain],
@@ -143,6 +165,11 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, found: false, latestBlock: latestBlock.toString() })
     }
 
+    const receipt = await rpcCall<TransactionReceipt>(rpcUrl, 'eth_getTransactionReceipt', [match.transactionHash])
+    if (receipt.status !== '0x1') {
+      return res.json({ ok: true, found: false, latestBlock: latestBlock.toString() })
+    }
+
     return res.json({
       ok: true,
       found: true,
@@ -150,6 +177,7 @@ export default async function handler(req: Request, res: Response) {
       amountUnits: (match.data ? BigInt(match.data) : 0n).toString(),
       blockNumber: match.blockNumber ? BigInt(match.blockNumber).toString() : null,
       logIndex: match.logIndex ? Number(BigInt(match.logIndex)) : null,
+      receiptStatus: 'success',
     })
   } catch (err) {
     console.error('[payment-tx-lookup] failed:', err instanceof Error ? err.message : err)

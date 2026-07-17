@@ -556,6 +556,7 @@ export default function PaymentPage() {
   const ngPosRegisteredTx = useRef('')
   const ngPosOfframpMarkedRef = useRef(false)
   const lastCirclePaymentUnitsRef = useRef<bigint | null>(null)
+  const paymentVerificationStartBlockRef = useRef<bigint | null>(null)
   const [paycrestOrder, setPaycrestOrder] = useState<PaycrestCheckoutOrder | null>(null)
   const [paycrestPreparing, setPaycrestPreparing] = useState(false)
   const [paycrestStatusText, setPaycrestStatusText] = useState('')
@@ -1104,6 +1105,20 @@ export default function PaymentPage() {
     const { feeUnits, gasRecoveryUnits, sponsoredRecipientUnits } = evmPaymentBreakdown(totalUnits)
     const conservativeUnits = totalUnits - feeUnits - gasRecoveryUnits
     return grossUpEvmPlatformCharges ? totalUnits : (sponsoredRecipientUnits > 0n ? sponsoredRecipientUnits : totalUnits - feeUnits)
+  }
+
+  async function beginFundingVerificationWindow() {
+    paymentVerificationStartBlockRef.current = null
+    if (!isAgentOrWalletFunding || !isSupportedEvmPayChain(chain) || chain === 'hashkey') return
+    try {
+      const latestBlock = await EVM_CLIENTS[chain].getBlockNumber()
+      // The current block existed before this payment attempt. Only a transfer
+      // mined in a later block is valid fallback proof for this checkout.
+      paymentVerificationStartBlockRef.current = latestBlock + 1n
+    } catch {
+      // A submitted transaction hash can still be verified by its receipt.
+      // Without either proof, funding remains in the confirming state.
+    }
   }
 
   const missingSolana  = chain === 'solana'   && !resolvedSolana
@@ -1711,7 +1726,10 @@ export default function PaymentPage() {
         const expectedUnits = expectedEvmRecipientUnits()
         const scanUnits = receivedAmount != null && receivedAmount > 0n ? receivedAmount : expectedUnits
         const latestBlock = await client.getBlockNumber()
-        const fromBlock = latestBlock > 20_000n ? latestBlock - 20_000n : 0n
+        const fundingStartBlock = isAgentOrWalletFunding ? paymentVerificationStartBlockRef.current : null
+        if (isAgentOrWalletFunding && fundingStartBlock == null) return
+        const fromBlock = fundingStartBlock ?? (latestBlock > 20_000n ? latestBlock - 20_000n : 0n)
+        if (fromBlock > latestBlock) return
         type TransferLog = {
           args: { value?: bigint }
           transactionHash?: `0x${string}` | null
@@ -1736,7 +1754,7 @@ export default function PaymentPage() {
           const value = (log.args as { value?: bigint }).value ?? 0n
           return value >= scanUnits * 98n / 100n
         })
-        if (match) {
+        if (match && (!isAgentOrWalletFunding || Boolean(match.transactionHash))) {
           const value = (match.args as { value?: bigint }).value ?? scanUnits
           setReceivedAmount(value)
           setManualTxHash(match.transactionHash ?? null)
@@ -1772,6 +1790,7 @@ export default function PaymentPage() {
           amountUnits: amountUnits.toString(),
           recovery: recoveryLookup,
           strict: isNgPosPayment,
+          fromBlock: isAgentOrWalletFunding ? paymentVerificationStartBlockRef.current?.toString() : undefined,
         }),
       })
       const data = await res.json() as {
@@ -2865,6 +2884,7 @@ export default function PaymentPage() {
 
         setCircleEvmPaymentProcessing(true)
         setCircleEvmAcceptedPending(false)
+        await beginFundingVerificationWindow()
         const txHash = await sendCircleEvmEmailPayment({
           session,
           recipient: paymentRecipient as `0x${string}`,
@@ -2894,6 +2914,7 @@ export default function PaymentPage() {
         return
       }
 
+      await beginFundingVerificationWindow()
       const result = await sendCirclePasskeyPayment({
         chain,
         email,
@@ -2924,12 +2945,12 @@ export default function PaymentPage() {
       }
       if (message.toLowerCase().includes('transaction hash is not available yet')) {
         setCirclePasskeyError(null)
-        setCircleEvmAcceptedPending(false)
+        setCircleEvmAcceptedPending(true)
         setCircleEvmPaymentProcessing(false)
-        setReceivedAmount(lastCirclePaymentUnitsRef.current ?? expectedEvmRecipientUnits())
+        setReceivedAmount(null)
         setManualTxHash(null)
-        setManualPayDetected(true)
-        setShowCheckButton(false)
+        setManualPayDetected(false)
+        setShowCheckButton(true)
         void refetchCircleWalletBalance()
         return
       }
@@ -3215,13 +3236,28 @@ export default function PaymentPage() {
                         : chain === 'solana'           ? solanaTxHash
                         : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? null)
                         : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash)
-  const paymentConfirmed = (chain === 'solana' ? isSolanaConfirmed : chain === 'arbitrum' ? (isArbitrumRelayConfirmed || isCirclePaymasterConfirmed) : (isEvmConfirmed || isBasePaymasterConfirmed || isCirclePaymasterConfirmed)) || manualPayDetected || directStatus === 'success'
-  // Funding must never enter the success/receipt/redirect path from balance
-  // detection alone. Wait until the real transaction proof is available.
-  const isConfirmed = paymentConfirmed && (!isAgentOrWalletFunding || Boolean(txHash))
+  const receiptConfirmed = chain === 'solana'
+    ? isSolanaConfirmed
+    : chain === 'arbitrum'
+      ? (isArbitrumRelayConfirmed || isCirclePaymasterConfirmed)
+      : (isEvmConfirmed || isBasePaymasterConfirmed || isCirclePaymasterConfirmed)
+  const paymentConfirmed = receiptConfirmed || manualPayDetected || directStatus === 'success'
+  // Funding requires mined on-chain proof. A submitted hash, wallet acceptance,
+  // balance movement, or SDK timeout must never enter success by itself.
+  const fundingTransferLogConfirmed = manualPayDetected && Boolean(manualTxHash)
+  const fundingProofConfirmed = receiptConfirmed || fundingTransferLogConfirmed || directStatus === 'success'
+  const isConfirmed = isAgentOrWalletFunding ? fundingProofConfirmed : paymentConfirmed
   const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (arbitrumRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isArbitrumRelayConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
   const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!arbitrumRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
+  const walletFundingConfirming = isWalletManagerFunding && !isConfirmed && (
+    circleEvmAcceptedPending ||
+    circleEvmPaymentProcessing ||
+    circlePasskeyPending ||
+    isConfirming ||
+    Boolean(txHash) ||
+    manualPayDetected
+  )
   const sendErrorMsg    = chain === 'solana'   ? solanaError
                         : chain === 'arbitrum' ? (circlePaymasterError ?? arbitrumRelayError)
                         : isBasePaymasterStatusError
@@ -3686,6 +3722,100 @@ export default function PaymentPage() {
   //  SUCCESS STATE
   // ────────────────────────────────────────────────────────────────────────────
   if (isConfirmed) {
+    if (isWalletManagerFunding) {
+      const fundedUnits = receivedAmount ?? expectedEvmRecipientUnits()
+      const fundedAmount = fundedUnits > 0n
+        ? formatUnits(fundedUnits, meta.decimals)
+        : effectiveAmt
+      const activitySaved = eventRegStatus === 'ok'
+      const activityFailed = eventRegStatus === 'error'
+
+      return (
+        <div className="mx-auto max-w-md animate-scale-in">
+          <button
+            type="button"
+            onClick={goBackFromCheckout}
+            className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+
+          <div className="overflow-hidden rounded-[1.35rem] border border-emerald-200/80 bg-white shadow-[0_22px_70px_-36px_rgba(16,185,129,0.5)] dark:border-emerald-400/20 dark:bg-[#101114]">
+            <div className="flex items-center justify-between border-b border-emerald-100/80 px-5 py-3.5 dark:border-emerald-400/10">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Pocket Wallet</span>
+              <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-bold text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
+                {pocketFundingNetworkName}
+              </span>
+            </div>
+
+            <div className="bg-gradient-to-br from-emerald-50 via-white to-green-50 px-6 py-9 text-center dark:from-emerald-400/[0.12] dark:via-white/[0.025] dark:to-green-400/[0.08]">
+              <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-emerald-200/80 bg-white shadow-[0_16px_40px_-18px_rgba(16,185,129,0.7)] animate-bounce-in dark:border-emerald-400/20 dark:bg-white/[0.08]">
+                <CheckCircle2 className="h-12 w-12 text-emerald-500" strokeWidth={2.2} />
+              </div>
+              <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">Funding successful</p>
+              <h2 className="mt-1 text-3xl font-black tracking-tight text-gray-950 dark:text-white">Funded</h2>
+              <p className="mt-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
+                {formatAmount(fundedAmount, meta.decimals)} {meta.asset}
+              </p>
+            </div>
+
+            <div className="space-y-3 px-5 py-4">
+              {activitySaved ? (
+                <p className="flex items-center justify-center gap-2 text-center text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Redirecting in 6 seconds...
+                </p>
+              ) : activityFailed ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl bg-red-50 px-3.5 py-3 text-xs font-medium text-red-700 dark:bg-red-400/10 dark:text-red-300">
+                  <span>Funding is confirmed. Activity needs to be saved.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      eventRegistered.current = false
+                      void doRegister(memo || 'x402 wallet funding')
+                    }}
+                    className="shrink-0 rounded-lg bg-red-100 px-2.5 py-1.5 text-[11px] font-bold dark:bg-red-400/15"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <p className="flex items-center justify-center gap-2 text-center text-xs font-semibold text-gray-500 dark:text-gray-400">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving to Activity...
+                </p>
+              )}
+              <a
+                href={agentFundingBackUrl}
+                className="flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300 dark:hover:bg-white/[0.08]"
+              >
+                Return to Pocket now
+              </a>
+            </div>
+          </div>
+
+          <div className="mt-8 animate-fade-in">
+            <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">How it works</p>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { n: '1', title: 'Fund Pocket Wallet' },
+                { n: '2', title: 'Activate x402' },
+                { n: '3', title: 'Return to PolyDesk' },
+              ].map(step => (
+                <div key={step.n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+                  <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">
+                    {step.n === '1' ? <CheckCheck className="h-3.5 w-3.5" /> : step.n}
+                  </div>
+                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{step.title}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     const explorerTxUrl    = txHash      ? `${meta.explorerUrl}/tx/${txHash}`      : null
     void explorerTxUrl
 
@@ -4126,7 +4256,21 @@ export default function PaymentPage() {
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
         <div className={cn('mt-3 border-b border-gray-100 bg-gradient-to-br p-5 text-center dark:border-white/10', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
-          {isFlex ? (
+          {walletFundingConfirming ? (
+            <div className="flex min-h-[190px] flex-col items-center justify-center py-2">
+              <div className="relative flex h-24 w-24 items-center justify-center">
+                <span className="absolute inset-0 rounded-full border-[3px] border-gray-200/80 dark:border-white/10" />
+                <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-transparent border-t-blue-500 border-r-blue-500" />
+                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/80 shadow-sm dark:bg-white/[0.06]">
+                  <Loader2 className="h-7 w-7 animate-spin text-blue-500" strokeWidth={1.8} />
+                </span>
+              </div>
+              <p className="mt-5 text-xl font-black tracking-tight text-gray-950 dark:text-white">Confirming</p>
+              <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                Waiting for {pocketFundingNetworkName} on-chain confirmation
+              </p>
+            </div>
+          ) : isFlex ? (
             <div className="flex flex-col items-center gap-2">
               {isAgentOrWalletFunding ? (
                 <div className="flex flex-col items-center gap-1">
@@ -4379,10 +4523,10 @@ export default function PaymentPage() {
                 ? <>Pocket Wallet receives USDC on {pocketFundingNetworkName}. Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>
                 : <>Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>}
             </p>
-            {isAgentOrWalletFunding && manualPayDetected && !txHash && (
+            {isAgentFunding && manualPayDetected && !txHash && (
               <p className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-500 dark:bg-white/[0.07] dark:text-gray-300">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                Funds detected. Verifying transaction...
+                Payment detected. Verifying transaction...
               </p>
             )}
             {showArbitrumRelayCost && (
@@ -5440,7 +5584,7 @@ export default function PaymentPage() {
       </div>
 
       {/* Pending tx banner */}
-      {txHash && !isConfirmed && !isSendError && (
+      {txHash && !isConfirmed && !isSendError && !isWalletManagerFunding && (
         <div className="mt-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 animate-slide-up">
           <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-blue-500" />
           <div className="min-w-0 flex-1">
