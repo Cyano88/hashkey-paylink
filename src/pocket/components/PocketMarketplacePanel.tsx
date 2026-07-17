@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, CheckCircle2, Clock3, Loader2, Search, ShieldCheck, Store } from 'lucide-react'
+import { cn } from '../../lib/utils'
 import {
   buyPocketMarketplaceService,
   readPocketMarketplace,
@@ -148,7 +149,18 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
             {loading && !snapshot ? (
               <div className="flex items-center justify-center gap-2 py-8 text-xs font-medium text-gray-400"><Loader2 className="h-4 w-4 animate-spin" /> Loading compatible services</div>
             ) : snapshot?.services.length ? snapshot.services.map(item => (
-              <button key={item.resource} type="button" onClick={() => { setPurchase(null); setSelected(item); }} className="flex w-full items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-3 text-left transition hover:border-gray-200 hover:bg-white active:scale-[0.99] dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.06]">
+              <button
+                key={item.resource}
+                type="button"
+                aria-pressed={selected?.resource === item.resource}
+                onClick={() => { setPurchase(null); setSelected(item); }}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition active:scale-[0.99]',
+                  selected?.resource === item.resource
+                    ? 'border-gray-900 bg-white ring-1 ring-gray-900/10 dark:border-white dark:bg-white/[0.09]'
+                    : 'border-gray-100 bg-gray-50/70 hover:border-gray-200 hover:bg-white dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.06]',
+                )}
+              >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-black text-gray-800 shadow-sm dark:bg-white/[0.08] dark:text-white">{item.provider.slice(0, 1).toUpperCase()}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-xs font-bold text-gray-900 dark:text-white">{item.description}</span>
@@ -173,16 +185,19 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
       )}
 
       {selected && (
-        <div className="border-t border-gray-100 bg-gray-50/80 p-3.5 dark:border-white/10 dark:bg-black/10">
-          <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200"><ShieldCheck className="h-4 w-4" /><p className="text-xs font-black uppercase tracking-wider">Confirm purchase</p></div>
-          <p className="mt-2 text-sm font-semibold text-gray-950 dark:text-white">{selected.description}</p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Pay {selected.amount} USDC from Base App Pay to {selected.provider}. You will only approve this request.</p>
-          {!enoughBalance(gatewayBalance, selected.amount) && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">Add at least {selected.amount} USDC to App Pay first.</p>}
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setSelected(null)} disabled={buying} className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">Cancel</button>
-            <button type="button" onClick={() => void buy()} disabled={buying || !canPay} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{buying ? <><Clock3 className="h-4 w-4" /> Paying</> : <>Pay {selected.amount}<ArrowRight className="h-4 w-4" /></>}</button>
+        <>
+          <button type="button" aria-label="Close purchase confirmation" onClick={() => { if (!buying) setSelected(null) }} className="fixed inset-0 z-40 bg-gray-950/20 backdrop-blur-[1px] dark:bg-black/45" />
+          <div role="dialog" aria-modal="true" aria-label="Confirm Marketplace purchase" className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-[calc(100%-2rem)] max-w-[430px] -translate-x-1/2 rounded-[24px] border border-gray-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.28)] dark:border-white/10 dark:bg-[#19191d]">
+            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200"><ShieldCheck className="h-4 w-4" /><p className="text-xs font-black uppercase tracking-wider">Confirm purchase</p></div>
+            <p className="mt-2 line-clamp-2 text-sm font-semibold text-gray-950 dark:text-white">{selected.description}</p>
+            <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Pay {selected.amount} USDC from Base App Pay to {selected.provider}. You approve only this request.</p>
+            {!enoughBalance(gatewayBalance, selected.amount) && <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">Add at least {selected.amount} USDC to App Pay before paying.</p>}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setSelected(null)} disabled={buying} className="rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">Cancel</button>
+              <button type="button" onClick={() => void buy()} disabled={buying || !canPay} className="inline-flex items-center justify-center gap-2 rounded-full bg-gray-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{buying ? <><Clock3 className="h-4 w-4" /> Paying</> : <>Pay {selected.amount}<ArrowRight className="h-4 w-4" /></>}</button>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </section>
   )
