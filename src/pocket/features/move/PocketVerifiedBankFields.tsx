@@ -1,4 +1,5 @@
 import { ChevronDown, Loader2 } from 'lucide-react'
+import { cn } from '../../../lib/utils'
 
 export type PocketBankInstitutionOption = {
   code: string
@@ -20,6 +21,7 @@ type PocketVerifiedBankFieldsProps = {
   onInstitutionChange: (code: string, name: string, resetAccount: boolean) => void
   onAccountChange: (accountNumber: string) => void
   onVerify: () => void
+  embedded?: boolean
 }
 
 export function PocketVerifiedBankFields({
@@ -37,9 +39,15 @@ export function PocketVerifiedBankFields({
   onInstitutionChange,
   onAccountChange,
   onVerify,
+  embedded = false,
 }: PocketVerifiedBankFieldsProps) {
   return (
-    <div className="space-y-2.5 rounded-xl border border-gray-100 bg-gray-50/70 p-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+    <div className={cn(
+      'space-y-2.5 rounded-xl p-2.5',
+      embedded
+        ? 'bg-gray-50/80 dark:bg-white/[0.04]'
+        : 'border border-gray-100 bg-gray-50/70 dark:border-white/10 dark:bg-white/[0.04]',
+    )}>
       <div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Country</p>
         <div className="relative mt-1">

@@ -41,7 +41,7 @@ export function PocketPosShell({
     <div className={cn(
       'space-y-5',
       standalone
-        ? 'fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] top-[68px] mx-auto w-[calc(100%-2rem)] max-w-[430px] overflow-y-auto overscroll-contain pb-5 pt-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+        ? 'pb-5'
         : 'min-h-[590px] p-4 sm:min-h-[640px] sm:p-5',
     )}>
       {!standalone && (

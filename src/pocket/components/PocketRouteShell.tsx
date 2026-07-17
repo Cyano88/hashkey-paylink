@@ -18,11 +18,27 @@ export default function PocketRouteShell({
   const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [pullDistance, setPullDistance] = useState(0)
   const [pullRefreshing, setPullRefreshing] = useState(false)
+  const [headerHeight, setHeaderHeight] = useState(120)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef<number | null>(null)
 
   const isRefreshing = refreshing || pullRefreshing
   const pullProgress = Math.min(1, pullDistance / 68)
+  const contentTop = headerHeight + 16
+
+  useEffect(() => {
+    const header = document.querySelector<HTMLElement>('[data-hashpaylink-top-nav]')
+    if (!header) return
+    const updateHeaderHeight = () => setHeaderHeight(Math.ceil(header.getBoundingClientRect().bottom))
+    updateHeaderHeight()
+    const observer = new ResizeObserver(updateHeaderHeight)
+    observer.observe(header)
+    window.addEventListener('resize', updateHeaderHeight)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updateHeaderHeight)
+    }
+  }, [])
 
   const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
     if (!onRefresh || isRefreshing || (scrollerRef.current?.scrollTop ?? 1) > 0) return
@@ -85,13 +101,16 @@ export default function PocketRouteShell({
             {onRefresh && (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute left-1/2 top-[7.65rem] z-30 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-opacity dark:border-white/10 dark:bg-[#1b1b20] dark:text-gray-300"
-                style={{ opacity: isRefreshing ? 1 : pullProgress, transform: `translate(-50%, ${Math.max(-28, pullDistance - 40)}px) scale(${0.78 + pullProgress * 0.22})` }}
+                className="pointer-events-none absolute left-1/2 z-30 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-opacity dark:border-white/10 dark:bg-[#1b1b20] dark:text-gray-300"
+                style={{ top: headerHeight + 8, opacity: isRefreshing ? 1 : pullProgress, transform: `translate(-50%, ${Math.max(-28, pullDistance - 40)}px) scale(${0.78 + pullProgress * 0.22})` }}
               >
                 {isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" style={{ transform: `rotate(${pullProgress * 180}deg)` }} />}
               </div>
             )}
-            <div className="mx-auto min-h-[calc(100dvh-8.5rem)] w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-[8.5rem]">
+            <div
+              className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))]"
+              style={{ minHeight: `calc(100dvh - ${contentTop}px)`, paddingTop: contentTop }}
+            >
               {children}
             </div>
           </div>

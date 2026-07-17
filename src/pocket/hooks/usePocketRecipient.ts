@@ -5,7 +5,7 @@ import { readPocketWallet, unlinkPocketWallet } from '../api/pocketWalletLinkCli
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 
-type ReceiveMode = 'paste' | 'email' | 'bank'
+type ReceiveMode = 'idle' | 'paste' | 'email' | 'bank'
 type PocketAccessTokenReader = () => Promise<string | null>
 
 const EMAIL_RECEIVE_INTENT_KEY = 'hashpaylink-circle-email-receive-intent'
@@ -99,7 +99,7 @@ export default function usePocketRecipient({
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not disconnect Circle wallet.')
     } finally {
-      setReceiveMode('paste')
+      setReceiveMode('idle')
       if (network === 'solana') setSolanaAddress('')
       else setEvmAddress('')
     }

@@ -1,5 +1,6 @@
 import { CheckCheck, ChevronDown, Loader2, Mail, UserRound } from 'lucide-react'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
+import { cn } from '../../lib/utils'
 import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 
 export type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
@@ -45,6 +46,7 @@ export function LocalCurrencyProfileCard({
   saveLabel = 'Save payout profile',
   savedBadgeLabel = 'Circle Pocket',
   identityBadgeLabel = 'Circle Pocket',
+  embedded = false,
   onDraftChange,
   onSave,
   onEdit,
@@ -63,6 +65,7 @@ export function LocalCurrencyProfileCard({
   saveLabel?: string
   savedBadgeLabel?: string
   identityBadgeLabel?: string
+  embedded?: boolean
   onDraftChange: (next: LocalCurrencyProfile) => void
   onSave: () => void
   onEdit: () => void
@@ -85,7 +88,12 @@ export function LocalCurrencyProfileCard({
         type="button"
         onClick={onEdit}
         aria-label={`Open ${savedFallback.toLowerCase()}`}
-        className="group flex w-full items-center gap-3 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-3.5 py-3 text-left shadow-sm transition-all hover:border-blue-200 hover:shadow-md active:scale-[0.99] dark:border-blue-400/20 dark:from-blue-400/10 dark:to-white/[0.035] dark:hover:border-blue-300/30"
+        className={cn(
+          'group flex w-full items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-all active:scale-[0.99]',
+          embedded
+            ? 'bg-blue-50/80 hover:bg-blue-50 dark:bg-blue-400/10 dark:hover:bg-blue-400/[0.14]'
+            : 'border border-blue-100 bg-gradient-to-br from-blue-50 to-white shadow-sm hover:border-blue-200 hover:shadow-md dark:border-blue-400/20 dark:from-blue-400/10 dark:to-white/[0.035] dark:hover:border-blue-300/30',
+        )}
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-white text-blue-600 shadow-sm dark:border-blue-400/20 dark:bg-white/10 dark:text-blue-200">
           <UserRound className="h-[18px] w-[18px]" />
@@ -108,7 +116,12 @@ export function LocalCurrencyProfileCard({
   }
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+    <div className={cn(
+      'rounded-2xl p-4',
+      embedded
+        ? 'bg-gray-50/80 dark:bg-white/[0.04]'
+        : 'border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.04]',
+    )}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-gray-950 dark:text-white">{title}</p>

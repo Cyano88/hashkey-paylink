@@ -16,7 +16,7 @@ type PocketRecipientAddressFieldsProps = {
   bankSend: boolean
   multiChain: boolean
   selectedNetwork: string
-  receiveMode: 'paste' | 'email' | 'bank'
+  receiveMode: 'idle' | 'paste' | 'email' | 'bank'
   evm: RecipientFieldState
   solana: RecipientFieldState
 }

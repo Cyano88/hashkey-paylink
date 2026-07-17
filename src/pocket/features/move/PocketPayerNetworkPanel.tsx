@@ -15,6 +15,7 @@ type PocketPayerNetworkPanelProps = {
   emailReceive: boolean
   onNetworkSelect: (network: string) => void
   onMultiChainToggle: () => void
+  embedded?: boolean
 }
 
 export function PocketPayerNetworkPanel({
@@ -26,10 +27,16 @@ export function PocketPayerNetworkPanel({
   emailReceive,
   onNetworkSelect,
   onMultiChainToggle,
+  embedded = false,
 }: PocketPayerNetworkPanelProps) {
   return (
     <>
-      {showSelector && <div className="space-y-2.5 rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+      {showSelector && <div className={cn(
+        'space-y-2.5',
+        embedded
+          ? 'border-y border-gray-100 py-3 dark:border-white/[0.07]'
+          : 'rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]',
+      )}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Payer network</p>
