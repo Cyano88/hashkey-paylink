@@ -33,6 +33,8 @@ function response() {
   return {
     statusCode: 200,
     body: undefined,
+    headers: {},
+    setHeader(name, value) { this.headers[String(name).toLowerCase()] = value; return this },
     status(code) { this.statusCode = code; return this },
     json(body) { this.body = body; return this },
   }
@@ -91,6 +93,7 @@ assert.equal(getRes.body.services.length, 1)
 assert.equal(getRes.body.services[0].resource, resource)
 assert.equal(getRes.body.services[0].amount, '0.008')
 assert.equal(getRes.body.arcMarketplaceSupported, false)
+assert.match(getRes.headers['x-request-id'], /^[0-9a-f-]{36}$/)
 
 const postRes = response()
 await handler({

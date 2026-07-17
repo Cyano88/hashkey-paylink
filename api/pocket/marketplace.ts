@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { randomUUID } from 'node:crypto'
 import {
   inspectCircleMarketplaceService,
   payAgentX402Service,
@@ -149,8 +150,19 @@ function purchaseBody(value: unknown) {
   return { resource, maxAmount, amount }
 }
 
+function diagnosticMessage(error: Error) {
+  return String(error.message || 'Unknown Marketplace provider failure')
+    .replace(/https?:\/\/\S+/gi, '[url]')
+    .replace(/\b0x[a-f0-9]{40}\b/gi, '[address]')
+    .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, '[email]')
+    .replace(/bearer\s+\S+/gi, 'Bearer [redacted]')
+    .slice(0, 500)
+}
+
 export function createPocketMarketplaceHandler(dependencies: MarketplaceDependencies) {
   return async function pocketMarketplaceHandler(req: Request, res: Response) {
+    const requestId = String(req.headers['x-request-id'] ?? '').trim().slice(0, 100) || randomUUID()
+    res.setHeader('x-request-id', requestId)
     const rawKey = String(req.headers['idempotency-key'] ?? '').trim()
     function fail(status: number, code: PocketErrorCode, message: string, retryable: boolean) {
       return res.status(status).json({ ok: false, error: { code, message, retryable } })
@@ -265,6 +277,14 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
       if (normalized.status === 404) return fail(404, 'RESOURCE_NOT_FOUND', normalized.message, false)
       if (normalized.status === 409 || normalized.code === 'circle_session_expired') return fail(409, 'SESSION_EXPIRED', normalized.message, false)
       if (normalized.status === 429) return fail(429, 'RATE_LIMITED', normalized.message, true)
+      console.error('[pocket-marketplace] provider request failed', {
+        requestId,
+        method: req.method,
+        status: normalized.status,
+        code: normalized.code,
+        name: normalized.name,
+        message: diagnosticMessage(normalized),
+      })
       return fail(503, 'PROVIDER_UNAVAILABLE', 'Circle Marketplace is temporarily unavailable.', true)
     }
   }

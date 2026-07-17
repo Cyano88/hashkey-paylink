@@ -85,6 +85,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
     && network === 'base'
     && enoughBalance(gatewayBalance, selected.amount)
   ), [gatewayBalance, network, selected])
+  const hasCachedServices = Boolean(snapshot?.services.length)
 
   const buy = async () => {
     if (!selected || !canPay) return
@@ -135,7 +136,16 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
             <button type="submit" disabled={loading} className="text-xs font-bold text-gray-600 disabled:opacity-50 dark:text-gray-300">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}</button>
           </form>
 
-          {error && <p className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
+          {error && (
+            <p className={cn(
+              'rounded-xl border px-3 py-2 text-xs font-medium',
+              hasCachedServices
+                ? 'border-gray-200 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300'
+                : 'border-red-100 bg-red-50 text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200',
+            )}>
+              {hasCachedServices ? 'Couldn\'t refresh Marketplace. Showing the latest available services.' : error}
+            </p>
+          )}
 
           {purchase && (
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
