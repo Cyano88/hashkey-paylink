@@ -405,6 +405,10 @@ export default function PaymentPage() {
     getPaylinkParam(searchParams, 'src', 'src') === 'agent' &&
     searchParams.get('walletManager') === 'service' &&
     !earlyAgentFundingSlug
+  // Pocket always supplies an explicit network. Preserve Arc for older wallet
+  // manager links that predate the network parameter, but never override an
+  // explicit Base request.
+  const walletManagerFundingChain: ChainKey = netParam === 'base' ? 'base' : 'arc'
 
   function goBackFromCheckout() {
     if (isPolymarketBridge) {
@@ -438,7 +442,7 @@ export default function PaymentPage() {
 
   // netParam (from new link format) takes priority; legacy chain param as fallback
   const [chain, setChain] = useState<ChainKey>(() => {
-    if (isWalletManagerFundingLink) return 'arc'
+    if (isWalletManagerFundingLink) return walletManagerFundingChain
     if (netParam === 'base' || netParam === 'arc' || netParam === 'solana' || netParam === 'arbitrum') return netParam
     if (legacyChain === 'base' || legacyChain === 'arc' || legacyChain === 'arbitrum' || legacyChain === 'solana') return legacyChain
     if (resolvedSolana && !resolvedEvm) return 'solana'
@@ -449,7 +453,7 @@ export default function PaymentPage() {
   // locked to the bot-selected network so a Base request stays Base-only.
   const netLocked = isWalletManagerFundingLink || (!!netParam && (!isMultiChain || isTelegramSource))
   const availableChains = isWalletManagerFundingLink
-    ? ['arc' as ChainKey]
+    ? [walletManagerFundingChain]
     : netLocked
     ? [chain]
     : CHAINS.filter(c =>
@@ -517,10 +521,10 @@ export default function PaymentPage() {
   const agentFundingName = isWalletManagerFunding ? 'Pocket Wallet' : isAgentFunding ? agentDisplayNameFromMemo(memo, agentFundingSlug) : ''
   const agentFundingHue = agentAvatarHue(`${agentFundingSlug}:${agentFundingName}`)
   useEffect(() => {
-    if (!isWalletManagerFunding || chain === 'arc') return
-    setChain('arc')
-    onPayChainChange('arc')
-  }, [isWalletManagerFunding, chain, onPayChainChange])
+    if (!isWalletManagerFunding || chain === walletManagerFundingChain) return
+    setChain(walletManagerFundingChain)
+    onPayChainChange(walletManagerFundingChain)
+  }, [isWalletManagerFunding, chain, onPayChainChange, walletManagerFundingChain])
   const paySource        = getPaylinkParam(initParams, 'src', 'src')
   const isNgPosPayment   = paySource === 'ngpos' || paySource === 'bank-receive'
   const isBankReceivePayment = paySource === 'bank-receive'
@@ -919,6 +923,7 @@ export default function PaymentPage() {
     chain === 'solana' ? 'Solana' :
     chain === 'arc' ? 'Arc' :
     meta.label
+  const pocketFundingNetworkName = chain === 'arc' ? 'Arc Testnet' : 'Base'
   const bankSendDestinationLabel = bankSendDestinationNetwork === 'base' ? 'Base' : 'Polygon'
   const circlePaymasterConfig = getCirclePaymasterConfig(chain)
   const showCirclePaymasterButton = !!circlePaymasterConfig && (chain === 'base' || chain === 'arbitrum')
@@ -3205,12 +3210,15 @@ export default function PaymentPage() {
   // immediately transitions to the full-screen success card (same as Solana).
   const isBasePaymasterConfirmed = !!basePaymasterTxHash && basePaymasterStatus?.status === 'success'
   const isBasePaymasterFailed = basePaymasterStatus?.status === 'failure'
-  const isConfirmed     = (chain === 'solana' ? isSolanaConfirmed : chain === 'arbitrum' ? (isArbitrumRelayConfirmed || isCirclePaymasterConfirmed) : (isEvmConfirmed || isBasePaymasterConfirmed || isCirclePaymasterConfirmed)) || manualPayDetected || directStatus === 'success'
   const txHash          = directStatus === 'success'   ? (directTxHash as `0x${string}` | null)
                         : manualPayDetected            ? (manualTxHash ?? circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
                         : chain === 'solana'           ? solanaTxHash
                         : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? null)
                         : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash)
+  const paymentConfirmed = (chain === 'solana' ? isSolanaConfirmed : chain === 'arbitrum' ? (isArbitrumRelayConfirmed || isCirclePaymasterConfirmed) : (isEvmConfirmed || isBasePaymasterConfirmed || isCirclePaymasterConfirmed)) || manualPayDetected || directStatus === 'success'
+  // Funding must never enter the success/receipt/redirect path from balance
+  // detection alone. Wait until the real transaction proof is available.
+  const isConfirmed = paymentConfirmed && (!isAgentOrWalletFunding || Boolean(txHash))
   const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (arbitrumRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isArbitrumRelayConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
   const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!arbitrumRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
@@ -3268,10 +3276,14 @@ export default function PaymentPage() {
     // undefined. Fall back to the vault address as the payer identifier.
     const payer  = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
-    const txH    = manualPayDetected ? manualTxHash
+    const txH    = manualPayDetected ? (manualTxHash ?? circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
                  : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
                  : chain === 'arbitrum' ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? directTxHash ?? null)
                  : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
+    if (isAgentOrWalletFunding && !txH) {
+      eventRegistered.current = false
+      return
+    }
     const txHash = txH ?? `manual_${Date.now()}`
     const actualAmt = receivedAmount != null
       ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
@@ -3613,7 +3625,7 @@ export default function PaymentPage() {
       } catch {
         accessRedirected.current = false
       }
-    }, isAgentOrWalletFunding ? 2600 : 900)
+    }, isAgentOrWalletFunding ? 6000 : 900)
     return () => window.clearTimeout(timer)
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
@@ -4132,12 +4144,12 @@ export default function PaymentPage() {
                     >
                       {isWalletManagerFunding ? <Bot className="h-3.5 w-3.5" /> : <Bot className="h-4 w-4" />}
                     </span>
-                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isWalletManagerFunding ? 'Arc x402 Funding' : 'Agent Funding'}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isWalletManagerFunding ? 'Pocket Wallet Funding' : 'Agent Funding'}</p>
                   </div>
                   <p className="max-w-[15rem] truncate text-sm font-semibold text-gray-800 dark:text-gray-100">
                     {isWalletManagerFunding ? 'Pocket Wallet' : agentFundingName}
                   </p>
-                  {isWalletManagerFunding && (
+                  {isWalletManagerFunding && chain === 'arc' && (
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                       Arc Testnet
                     </span>
@@ -4217,7 +4229,7 @@ export default function PaymentPage() {
               >
                 {isWalletManagerFunding ? <Bot className="h-3.5 w-3.5" /> : <Bot className="h-4 w-4" />}
               </span>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{isWalletManagerFunding ? 'Arc x402 Funding' : 'Agent Funding'}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{isWalletManagerFunding ? 'Pocket Wallet Funding' : 'Agent Funding'}</p>
             </div>
           ) : (
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Payment Request</p>
@@ -4264,7 +4276,7 @@ export default function PaymentPage() {
               )}
               {isWalletManagerFunding && (
                 <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
-                  Return to PolyDesk to activate x402 after funding.
+                  Return to Pocket to add these funds to App Pay.
                 </p>
               )}
             </>
@@ -4356,7 +4368,7 @@ export default function PaymentPage() {
                 {isBankSendPayment
                   ? 'Paying by NGN bank transfer'
                   : isWalletManagerFunding
-                  ? 'Funding Arc Testnet x402'
+                  ? `Funding Pocket wallet on ${pocketFundingNetworkName}`
                   : `Paying on ${consumerNetworkName}`}
               </span>
             </div>
@@ -4364,9 +4376,15 @@ export default function PaymentPage() {
               {isBankSendPayment
                 ? `Recipient receives ${bankSendDestinationLabel} USDC after your bank transfer is confirmed.`
                 : isWalletManagerFunding
-                ? <>Pocket Wallet receives Arc USDC. Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>
+                ? <>Pocket Wallet receives USDC on {pocketFundingNetworkName}. Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>
                 : <>Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>}
             </p>
+            {isAgentOrWalletFunding && manualPayDetected && !txHash && (
+              <p className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-500 dark:bg-white/[0.07] dark:text-gray-300">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Funds detected. Verifying transaction...
+              </p>
+            )}
             {showArbitrumRelayCost && (
               <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
                 <span className="text-[11px] font-normal text-slate-400 tracking-wide">Gas reimb (relayer pays ETH)</span>

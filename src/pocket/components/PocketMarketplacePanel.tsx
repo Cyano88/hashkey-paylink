@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, CheckCircle2, Clock3, Loader2, Search, ShieldCheck, Store } from 'lucide-react'
+import { ArrowRight, Check, CheckCircle2, Clock3, Loader2, Search, Store } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import {
   buyPocketMarketplaceService,
@@ -186,15 +186,37 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
 
       {selected && (
         <>
-          <button type="button" aria-label="Close purchase confirmation" onClick={() => { if (!buying) setSelected(null) }} className="fixed inset-0 z-40 bg-gray-950/20 backdrop-blur-[1px] dark:bg-black/45" />
-          <div role="dialog" aria-modal="true" aria-label="Confirm Marketplace purchase" className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-[calc(100%-2rem)] max-w-[430px] -translate-x-1/2 rounded-[24px] border border-gray-200 bg-white p-4 shadow-[0_24px_70px_rgba(15,23,42,0.28)] dark:border-white/10 dark:bg-[#19191d]">
-            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200"><ShieldCheck className="h-4 w-4" /><p className="text-xs font-black uppercase tracking-wider">Confirm purchase</p></div>
-            <p className="mt-2 line-clamp-2 text-sm font-semibold text-gray-950 dark:text-white">{selected.description}</p>
-            <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Pay {selected.amount} USDC from Base App Pay to {selected.provider}. You approve only this request.</p>
-            {!enoughBalance(gatewayBalance, selected.amount) && <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">Add at least {selected.amount} USDC to App Pay before paying.</p>}
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setSelected(null)} disabled={buying} className="rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">Cancel</button>
-              <button type="button" onClick={() => void buy()} disabled={buying || !canPay} className="inline-flex items-center justify-center gap-2 rounded-full bg-gray-950 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{buying ? <><Clock3 className="h-4 w-4" /> Paying</> : <>Pay {selected.amount}<ArrowRight className="h-4 w-4" /></>}</button>
+          <button type="button" aria-label="Close purchase confirmation" onClick={() => { if (!buying) setSelected(null) }} className="fixed inset-0 z-40 bg-gray-950/30 backdrop-blur-[2px] dark:bg-black/60" />
+          <div role="dialog" aria-modal="true" aria-label="Confirm Marketplace purchase" className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[430px] -translate-x-1/2 overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.32)] dark:border-white/10 dark:bg-[#17181c]">
+            <div className="flex justify-center pt-2.5"><span className="h-1 w-9 rounded-full bg-gray-200 dark:bg-white/15" /></div>
+            <div className="p-5 pt-3.5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[#0071E3] ring-1 ring-blue-100 dark:bg-blue-400/10 dark:text-blue-300 dark:ring-blue-400/20">
+                  <Check className="h-5 w-5 stroke-[2.5]" />
+                </span>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">App Pay</p>
+                  <p className="text-base font-bold tracking-tight text-gray-950 dark:text-white">Confirm purchase</p>
+                </div>
+              </div>
+
+              <p className="mt-4 line-clamp-2 text-sm font-semibold leading-5 text-gray-900 dark:text-white">{selected.description}</p>
+              <div className="mt-3 overflow-hidden rounded-2xl border border-gray-100 bg-gray-50/80 dark:border-white/[0.07] dark:bg-white/[0.04]">
+                <div className="flex items-center justify-between gap-4 px-3.5 py-3">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Service</span>
+                  <span className="max-w-[65%] truncate text-xs font-semibold text-gray-900 dark:text-gray-100">{selected.provider}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4 border-t border-gray-100 px-3.5 py-3 dark:border-white/[0.07]">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Pay from Base App Pay</span>
+                  <span className="text-sm font-black text-gray-950 dark:text-white">{selected.amount} <span className="text-[10px] font-bold text-gray-400">USDC</span></span>
+                </div>
+              </div>
+              <p className="mt-2.5 text-[11px] leading-4 text-gray-400">You are approving this request only. The service cannot make another charge.</p>
+              {!enoughBalance(gatewayBalance, selected.amount) && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">Add at least {selected.amount} USDC to App Pay before paying.</p>}
+              <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <button type="button" onClick={() => setSelected(null)} disabled={buying} className="rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">Cancel</button>
+                <button type="button" onClick={() => void buy()} disabled={buying || !canPay} className="inline-flex items-center justify-center gap-2 rounded-full bg-gray-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-40 dark:bg-white dark:text-gray-950">{buying ? <><Clock3 className="h-4 w-4" /> Paying</> : <>Pay {selected.amount}<ArrowRight className="h-4 w-4" /></>}</button>
+              </div>
             </div>
           </div>
         </>

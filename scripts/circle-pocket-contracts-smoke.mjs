@@ -473,6 +473,13 @@ assert.equal(pocketX402FundUrl.searchParams.get('e'), '0x11111111111111111111111
 assert.equal(pocketX402FundUrl.searchParams.get('walletManager'), 'service')
 assert.equal(pocketX402FundUrl.searchParams.get('g'), 'https://hashpaylink.com/pocket/home/x402')
 assert.equal(pocketX402FundUrl.searchParams.has('agentSlug'), false)
+const pocketBaseX402FundUrl = new URL(buildPocketX402FundUrl({
+  origin: 'https://hashpaylink.com',
+  network: 'base',
+  walletAddress: '0x2222222222222222222222222222222222222222',
+  now: 1_800_000_000_002,
+}), 'https://hashpaylink.com')
+assert.equal(pocketBaseX402FundUrl.searchParams.get('n'), 'base')
 
 assert.deepEqual(parsePocketLocalCurrencyProfileRead({
   ok: true,
@@ -1053,6 +1060,8 @@ assert.doesNotMatch(pocketX402ControllerSource, /fetch\(|['"]\/api\/|AgentWorksp
 const pocketMarketplacePanelSource = await readFile(new URL('../src/pocket/components/PocketMarketplacePanel.tsx', import.meta.url), 'utf8')
 assert.match(pocketMarketplacePanelSource, /autoLoadAttempted\.current/)
 assert.match(pocketMarketplacePanelSource, /role="dialog"/)
+assert.match(pocketMarketplacePanelSource, /<Check className="h-5 w-5 stroke-\[2\.5\]"/)
+assert.match(pocketMarketplacePanelSource, /text-\[#0071E3\]/)
 assert.match(pocketMarketplacePanelSource, /aria-pressed=\{selected\?\.resource === item\.resource\}/)
 assert.doesNotMatch(pocketMarketplacePanelSource, /!snapshot && !loading/)
 const agentWalletSource = await readFile(new URL('../api/agent-wallet.ts', import.meta.url), 'utf8')
@@ -1088,6 +1097,15 @@ assert.doesNotMatch(createLinkSource, /linkPocketWallet\(\{|unlinkPocketWallet\(
 const paymentPageSource = await readFile(new URL('../src/pages/PaymentPage.tsx', import.meta.url), 'utf8')
 assert.match(paymentPageSource, /linkPocketWallet\(\{/)
 assert.doesNotMatch(paymentPageSource, /savePrivyCircleLink|unlinkPrivyCircleLink|resolvePrivyCircleLink/)
+assert.match(paymentPageSource, /if \(isWalletManagerFundingLink\) return walletManagerFundingChain/)
+assert.doesNotMatch(paymentPageSource, /if \(isWalletManagerFundingLink\) return 'arc'/)
+assert.match(paymentPageSource, /!isAgentOrWalletFunding \|\| Boolean\(txHash\)/)
+assert.match(paymentPageSource, /if \(isAgentOrWalletFunding && !txH\)/)
+assert.match(paymentPageSource, /Funds detected\. Verifying transaction/)
+assert.doesNotMatch(paymentPageSource, /Arc x402 Funding|Funding Arc Testnet x402|Return to PolyDesk to activate x402/)
+assert.match(pocketX402ControllerSource, /silent = false/)
+assert.match(pocketX402ControllerSource, /setInterval\(refreshInBackground, 30_000\)/)
+assert.match(pocketX402ControllerSource, /refresh\(\{ silent: true \}\)/)
 const telegramPaymentLinksSource = await readFile(new URL('../src/pages/TelegramPaymentLinks.tsx', import.meta.url), 'utf8')
 assert.match(telegramPaymentLinksSource, /readPocketWallet\(\{/)
 assert.doesNotMatch(telegramPaymentLinksSource, /resolvePrivyCircleLink/)

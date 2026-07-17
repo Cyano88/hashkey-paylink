@@ -82,12 +82,17 @@ export default function usePocketX402Controller({
   const [activationPending, setActivationPending] = useState(false)
   const activationKey = useRef('')
   const refreshRun = useRef(0)
+  const manualRefreshActive = useRef(false)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!authenticated || !email) return
+    if (silent && manualRefreshActive.current) return
     const run = ++refreshRun.current
-    setRefreshing(true)
-    setError('')
+    if (!silent) {
+      manualRefreshActive.current = true
+      setRefreshing(true)
+      setError('')
+    }
     try {
       const next = await loadPocketX402Snapshot({ email, network, getAccessToken, force: true })
       if (run !== refreshRun.current) return
@@ -98,9 +103,10 @@ export default function usePocketX402Controller({
         setOtpNetwork(null)
       }
     } catch (reason) {
-      if (run === refreshRun.current) setError(readableError(reason, 'Could not load x402 wallet status.'))
+      if (!silent && run === refreshRun.current) setError(readableError(reason, 'Could not load x402 wallet status.'))
     } finally {
-      if (run === refreshRun.current) {
+      if (!silent && run === refreshRun.current) {
+        manualRefreshActive.current = false
         setSnapshotReady(true)
         setRefreshing(false)
       }
@@ -108,8 +114,22 @@ export default function usePocketX402Controller({
   }, [authenticated, email, getAccessToken, network])
 
   useEffect(() => {
+    if (!authenticated || !email) return
+    const refreshInBackground = () => {
+      if (document.visibilityState === 'visible') void refresh({ silent: true })
+    }
+    const timer = window.setInterval(refreshInBackground, 30_000)
+    document.addEventListener('visibilitychange', refreshInBackground)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshInBackground)
+    }
+  }, [authenticated, email, refresh])
+
+  useEffect(() => {
     if (!authenticated || !email) {
       refreshRun.current += 1
+      manualRefreshActive.current = false
       setSnapshot(null)
       setSnapshotReady(true)
       setRefreshing(false)
