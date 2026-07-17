@@ -125,10 +125,8 @@ export default function PocketHomePage() {
         rows={wallets.rows}
         wallets={wallets.wallets}
         authenticated={authenticated}
-        balanceBusy={wallets.balanceBusy}
         walletBusy={walletBusy}
         selectedNetwork={network}
-        onRefresh={() => void Promise.all([wallets.refreshBalances(), fx.refresh()])}
         onSelectNetwork={(selectedNetwork, shouldOpen) => {
           setNetwork(selectedNetwork)
           if (shouldOpen) void setupWallet(selectedNetwork)

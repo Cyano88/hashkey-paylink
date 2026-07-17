@@ -81,6 +81,7 @@ export default function usePocketX402Controller({
   const [activationSuccess, setActivationSuccess] = useState('')
   const [activationPending, setActivationPending] = useState(false)
   const activationKey = useRef('')
+  const activationTargetBalance = useRef<number | null>(null)
   const refreshRun = useRef(0)
   const manualRefreshActive = useRef(false)
 
@@ -97,6 +98,21 @@ export default function usePocketX402Controller({
       const next = await loadPocketX402Snapshot({ email, network, getAccessToken, force: true })
       if (run !== refreshRun.current) return
       setSnapshot(next)
+      const refreshedGatewayBalance = Number(next.gatewayBalance ?? '0')
+      const targetBalance = activationTargetBalance.current
+      if (targetBalance != null && next.gatewayBalanceChecked && Number.isFinite(refreshedGatewayBalance)) {
+        if (refreshedGatewayBalance + 0.0000005 >= targetBalance) {
+          setActivationPending(false)
+          setActivationSuccess('')
+          setActivationOpen(false)
+          activationKey.current = ''
+          activationTargetBalance.current = null
+        } else if (!silent) {
+          // Pull-to-refresh removes the large submitted notice while the
+          // disabled Updating CTA continues to prevent a duplicate activation.
+          setActivationSuccess('')
+        }
+      }
       if (!next.connected) setWalletMode(next.found ? 'login' : 'create')
       if (next.connected) {
         setWalletStep('done')
@@ -140,6 +156,9 @@ export default function usePocketX402Controller({
       setExpectedWallet('')
       setWalletChoices([])
       setError('')
+      setActivationSuccess('')
+      setActivationPending(false)
+      activationTargetBalance.current = null
       return
     }
     const cached = pocketX402SnapshotCache.get(x402CacheKey(email, network)) ?? null
@@ -162,6 +181,7 @@ export default function usePocketX402Controller({
     setActivationSuccess('')
     setActivationPending(false)
     activationKey.current = ''
+    activationTargetBalance.current = null
   }, [email, network, walletStep])
 
   const chooseMode = useCallback((mode: PocketX402WalletMode) => {
@@ -234,6 +254,7 @@ export default function usePocketX402Controller({
   const setAmount = useCallback((value: string) => {
     setAmountState(normalizePocketX402Amount(value))
     setActivationSuccess('')
+    activationTargetBalance.current = null
     setActivationPending(false)
   }, [])
 
@@ -252,20 +273,27 @@ export default function usePocketX402Controller({
       if (!accessToken) throw new Error('Sign in again to activate x402.')
       const key = activationKey.current || createPocketIdempotencyKey('x402-activate')
       activationKey.current = key
+      const currentGatewayBalance = Number(snapshot.gatewayBalance ?? '0')
+      const requestedAmount = Number(amount)
+      activationTargetBalance.current = Number.isFinite(currentGatewayBalance) && Number.isFinite(requestedAmount)
+        ? currentGatewayBalance + requestedAmount
+        : null
       const result = await activatePocketX402Gateway({ accessToken, network, amount, idempotencyKey: key })
       if (result.data?.activationStatus === 'available') {
         setActivationSuccess(`${result.data.amount} USDC is available for app payments.`)
         setActivationPending(false)
         setActivationOpen(false)
         activationKey.current = ''
+        activationTargetBalance.current = null
         window.setTimeout(() => setActivationSuccess(''), 5000)
       } else {
-        setActivationSuccess('Gateway activation was submitted. Refresh the balance before starting another activation.')
+        setActivationSuccess('Gateway activation was submitted. Pull down to update the balance.')
         setActivationPending(true)
         setActivationOpen(false)
       }
-      await refresh()
+      await refresh({ silent: true })
     } catch (reason) {
+      activationTargetBalance.current = null
       setError(readableError(reason, 'Could not add App Pay funds.'))
     } finally {
       setActivationBusy(false)

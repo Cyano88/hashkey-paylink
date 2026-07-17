@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn, formatAmount, truncateAddress } from '../../../lib/utils'
 import type { PocketFxQuote } from '../../api/pocketFxClient'
 
@@ -56,10 +56,8 @@ type PocketHomeOverviewProps = {
   rows: PocketHomeBalanceRow[]
   wallets: Partial<Record<PocketHomeNetworkKey, PocketHomeWallet>>
   authenticated: boolean
-  balanceBusy: boolean
   walletBusy: boolean
   selectedNetwork: PocketHomeNetworkKey
-  onRefresh: () => void
   onSelectNetwork: (network: PocketHomeNetworkKey, shouldOpen: boolean) => void
 }
 
@@ -72,10 +70,8 @@ export default function PocketHomeOverview({
   rows,
   wallets,
   authenticated,
-  balanceBusy,
   walletBusy,
   selectedNetwork,
-  onRefresh,
   onSelectNetwork,
 }: PocketHomeOverviewProps) {
   const [balanceCurrency, setBalanceCurrency] = useState<PocketBalanceCurrency>(initialBalanceCurrency)
@@ -131,16 +127,6 @@ export default function PocketHomeOverview({
               </button>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={!authenticated || balanceBusy}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-all hover:text-gray-950 active:scale-90 disabled:opacity-40 dark:text-gray-300 dark:hover:text-white"
-            aria-label="Refresh Circle Pocket balance"
-            title="Refresh balances"
-          >
-            <RefreshCw className={cn('h-4 w-4', balanceBusy && 'animate-spin')} />
-          </button>
         </div>
       </div>
 

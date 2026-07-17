@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Loader2,
   Mail,
-  RefreshCw,
   Wallet,
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
@@ -83,16 +82,6 @@ export default function PocketX402Page() {
                 </span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void refreshAppPay()}
-              disabled={!identityReady || !authenticated || x402.refreshing || x402.walletBusy || x402.activationBusy}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-all hover:text-gray-950 active:scale-90 disabled:opacity-40 dark:text-gray-300 dark:hover:text-white"
-              aria-label="Refresh App Pay balance"
-              title="Refresh App Pay"
-            >
-              <RefreshCw className={cn('h-4 w-4', x402.refreshing && 'animate-spin')} />
-            </button>
           </div>
         </div>
 
@@ -199,7 +188,7 @@ export default function PocketX402Page() {
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Pocket wallet</p>
                   <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402.snapshot?.walletBalanceError}>{balanceText(x402.snapshot?.walletBalance, x402.snapshot?.walletBalanceChecked ?? false, x402.snapshot?.walletBalanceError)}</p>
                 </div>
-                <a href={fundUrl} className="inline-flex h-8 min-w-[82px] items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white dark:bg-white dark:text-gray-950"><ArrowRight className="h-3.5 w-3.5" /> Fund</a>
+                <a href={fundUrl} className="inline-flex h-9 w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white dark:bg-white dark:text-gray-950"><ArrowRight className="h-3.5 w-3.5" /> Fund</a>
               </div>
               <div className="border-t border-gray-100 px-3 py-3 dark:border-white/10">
                 <div className="flex items-center justify-between gap-3">
@@ -207,9 +196,11 @@ export default function PocketX402Page() {
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Available for app payments</p>
                     <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402.snapshot?.gatewayBalanceError}>{balanceText(x402.snapshot?.gatewayBalance, x402.snapshot?.gatewayBalanceChecked ?? false, x402.snapshot?.gatewayBalanceError)}</p>
                   </div>
-                  <button type="button" onClick={() => { x402.setActivationOpen(!x402.activationOpen); }} disabled={x402.activationBusy || treasuryEmpty} className="inline-flex h-8 min-w-[82px] items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"><ArrowRight className="h-3.5 w-3.5" /> Add funds</button>
+                  <button type="button" onClick={() => { x402.setActivationOpen(!x402.activationOpen); }} disabled={x402.activationBusy || x402.activationPending || treasuryEmpty} className="inline-flex h-9 w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
+                    {x402.activationPending ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating</> : <><ArrowRight className="h-3.5 w-3.5" /> Add funds</>}
+                  </button>
                 </div>
-                <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{treasuryEmpty ? 'Add USDC to your Pocket wallet first.' : 'Set aside USDC for apps, AI tools, and pay-per-use services.'}</p>
+                <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{x402.activationPending ? 'Updating App Pay balance...' : treasuryEmpty ? 'Add USDC to your Pocket wallet first.' : 'Set aside USDC for apps, AI tools, and pay-per-use services.'}</p>
               </div>
               {(x402.activationOpen || x402.activationSuccess) && (
                 <div className="border-t border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-black/10">
