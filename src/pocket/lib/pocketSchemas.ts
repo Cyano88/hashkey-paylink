@@ -144,6 +144,8 @@ export type PocketX402ActivationData = {
   network: 'base' | 'arc'
   walletAddress: string
   gatewayBalance: string
+  startingGatewayBalance?: string
+  targetGatewayBalance?: string
   replayed: boolean
 }
 
@@ -486,7 +488,10 @@ export function isPocketX402ActivationData(value: unknown): value is PocketX402A
   if (value.network !== 'base' && value.network !== 'arc') return false
   if (typeof value.amount !== 'string' || !/^\d+(?:\.\d{1,6})?$/.test(value.amount)) return false
   if (!isNonEmptyString(value.walletAddress, 128) || typeof value.gatewayBalance !== 'string') return false
-  return /^\d+(?:\.\d+)?$/.test(value.gatewayBalance) && typeof value.replayed === 'boolean'
+  if (!/^\d+(?:\.\d+)?$/.test(value.gatewayBalance) || typeof value.replayed !== 'boolean') return false
+  if (value.startingGatewayBalance !== undefined && (typeof value.startingGatewayBalance !== 'string' || !/^\d+(?:\.\d+)?$/.test(value.startingGatewayBalance))) return false
+  if (value.targetGatewayBalance !== undefined && (typeof value.targetGatewayBalance !== 'string' || !/^\d+(?:\.\d+)?$/.test(value.targetGatewayBalance))) return false
+  return true
 }
 
 function isOptionalBoundedString(value: unknown, max: number) {

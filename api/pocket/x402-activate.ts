@@ -46,6 +46,8 @@ function replayData(record: CirclePocketActionRecord): PocketX402ActivationData 
     network: metadata.network,
     walletAddress: metadata.walletAddress,
     gatewayBalance: metadata.gatewayBalance,
+    ...(metadata.startingGatewayBalance ? { startingGatewayBalance: metadata.startingGatewayBalance } : {}),
+    ...(metadata.targetGatewayBalance ? { targetGatewayBalance: metadata.targetGatewayBalance } : {}),
     replayed: true,
   }
 }
@@ -114,6 +116,8 @@ export function createPocketX402ActivateHandler(dependencies: PocketX402Activate
         network: result.network,
         walletAddress: result.walletAddress,
         gatewayBalance: result.gatewayBalance,
+        startingGatewayBalance: result.startingGatewayBalance,
+        targetGatewayBalance: result.targetGatewayBalance,
         replayed: false,
       }
       await dependencies.record({
@@ -127,6 +131,8 @@ export function createPocketX402ActivateHandler(dependencies: PocketX402Activate
           activationStatus: data.activationStatus,
           walletAddress: data.walletAddress,
           gatewayBalance: data.gatewayBalance,
+          startingGatewayBalance: data.startingGatewayBalance ?? '',
+          targetGatewayBalance: data.targetGatewayBalance ?? '',
         },
       })
       return res.status(data.activationStatus === 'pending' ? 202 : 200).json({

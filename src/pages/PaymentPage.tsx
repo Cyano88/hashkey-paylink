@@ -3250,11 +3250,11 @@ export default function PaymentPage() {
   const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (arbitrumRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isArbitrumRelayConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
   const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!arbitrumRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
+  // The Circle challenge is still interactive while the wallet SDK call is in
+  // progress. Keep the checkout intact until that challenge has been accepted;
+  // only then replace the amount panel with on-chain confirmation progress.
   const walletFundingConfirming = isWalletManagerFunding && !isConfirmed && (
     circleEvmAcceptedPending ||
-    circleEvmPaymentProcessing ||
-    circlePasskeyPending ||
-    isConfirming ||
     Boolean(txHash) ||
     manualPayDetected
   )
@@ -3721,101 +3721,7 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   //  SUCCESS STATE
   // ────────────────────────────────────────────────────────────────────────────
-  if (isConfirmed) {
-    if (isWalletManagerFunding) {
-      const fundedUnits = receivedAmount ?? expectedEvmRecipientUnits()
-      const fundedAmount = fundedUnits > 0n
-        ? formatUnits(fundedUnits, meta.decimals)
-        : effectiveAmt
-      const activitySaved = eventRegStatus === 'ok'
-      const activityFailed = eventRegStatus === 'error'
-
-      return (
-        <div className="mx-auto max-w-md animate-scale-in">
-          <button
-            type="button"
-            onClick={goBackFromCheckout}
-            className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back
-          </button>
-
-          <div className="overflow-hidden rounded-[1.35rem] border border-emerald-200/80 bg-white shadow-[0_22px_70px_-36px_rgba(16,185,129,0.5)] dark:border-emerald-400/20 dark:bg-[#101114]">
-            <div className="flex items-center justify-between border-b border-emerald-100/80 px-5 py-3.5 dark:border-emerald-400/10">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Pocket Wallet</span>
-              <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-bold text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300">
-                {pocketFundingNetworkName}
-              </span>
-            </div>
-
-            <div className="bg-gradient-to-br from-emerald-50 via-white to-green-50 px-6 py-9 text-center dark:from-emerald-400/[0.12] dark:via-white/[0.025] dark:to-green-400/[0.08]">
-              <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-emerald-200/80 bg-white shadow-[0_16px_40px_-18px_rgba(16,185,129,0.7)] animate-bounce-in dark:border-emerald-400/20 dark:bg-white/[0.08]">
-                <CheckCircle2 className="h-12 w-12 text-emerald-500" strokeWidth={2.2} />
-              </div>
-              <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">Funding successful</p>
-              <h2 className="mt-1 text-3xl font-black tracking-tight text-gray-950 dark:text-white">Funded</h2>
-              <p className="mt-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
-                {formatAmount(fundedAmount, meta.decimals)} {meta.asset}
-              </p>
-            </div>
-
-            <div className="space-y-3 px-5 py-4">
-              {activitySaved ? (
-                <p className="flex items-center justify-center gap-2 text-center text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Redirecting in 6 seconds...
-                </p>
-              ) : activityFailed ? (
-                <div className="flex items-center justify-between gap-3 rounded-xl bg-red-50 px-3.5 py-3 text-xs font-medium text-red-700 dark:bg-red-400/10 dark:text-red-300">
-                  <span>Funding is confirmed. Activity needs to be saved.</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      eventRegistered.current = false
-                      void doRegister(memo || 'x402 wallet funding')
-                    }}
-                    className="shrink-0 rounded-lg bg-red-100 px-2.5 py-1.5 text-[11px] font-bold dark:bg-red-400/15"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : (
-                <p className="flex items-center justify-center gap-2 text-center text-xs font-semibold text-gray-500 dark:text-gray-400">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Saving to Activity...
-                </p>
-              )}
-              <a
-                href={agentFundingBackUrl}
-                className="flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300 dark:hover:bg-white/[0.08]"
-              >
-                Return to Pocket now
-              </a>
-            </div>
-          </div>
-
-          <div className="mt-8 animate-fade-in">
-            <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">How it works</p>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { n: '1', title: 'Fund Pocket Wallet' },
-                { n: '2', title: 'Activate x402' },
-                { n: '3', title: 'Return to PolyDesk' },
-              ].map(step => (
-                <div key={step.n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-                  <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-300">
-                    {step.n === '1' ? <CheckCheck className="h-3.5 w-3.5" /> : step.n}
-                  </div>
-                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">{step.title}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )
-    }
-
+  if (isConfirmed && !isWalletManagerFunding) {
     const explorerTxUrl    = txHash      ? `${meta.explorerUrl}/tx/${txHash}`      : null
     void explorerTxUrl
 
@@ -4256,7 +4162,17 @@ export default function PaymentPage() {
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
         <div className={cn('mt-3 border-b border-gray-100 bg-gradient-to-br p-5 text-center dark:border-white/10', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
-          {walletFundingConfirming ? (
+          {isWalletManagerFunding && isConfirmed ? (
+            <div className="flex min-h-[190px] flex-col items-center justify-center py-2">
+              <div className="flex h-24 w-24 items-center justify-center rounded-full border border-emerald-200/80 bg-white shadow-[0_16px_40px_-18px_rgba(16,185,129,0.7)] animate-bounce-in dark:border-emerald-400/20 dark:bg-white/[0.08]">
+                <CheckCircle2 className="h-12 w-12 text-emerald-500" strokeWidth={2.2} />
+              </div>
+              <h2 className="mt-5 text-xl font-black tracking-tight text-gray-950 dark:text-white">Funded</h2>
+              <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                {formatAmount(receivedAmount != null ? formatUnits(receivedAmount, meta.decimals) : effectiveAmt, meta.decimals)} {meta.asset}
+              </p>
+            </div>
+          ) : walletFundingConfirming ? (
             <div className="flex min-h-[190px] flex-col items-center justify-center py-2">
               <div className="relative flex h-24 w-24 items-center justify-center">
                 <span className="absolute inset-0 rounded-full border-[3px] border-gray-200/80 dark:border-white/10" />
@@ -4523,7 +4439,26 @@ export default function PaymentPage() {
                 ? <>Pocket Wallet receives USDC on {pocketFundingNetworkName}. Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>
                 : <>Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>}
             </p>
-            {isAgentFunding && manualPayDetected && !txHash && (
+            {isWalletManagerFunding && (walletFundingConfirming || isConfirmed) ? (
+              <p className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-500 dark:bg-white/[0.07] dark:text-gray-300">
+                {eventRegStatus === 'ok' ? (
+                  <>Redirecting back in 6 seconds...</>
+                ) : eventRegStatus === 'error' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      eventRegistered.current = false
+                      void doRegister(memo || 'x402 wallet funding')
+                    }}
+                    className="font-semibold text-red-600 underline decoration-red-300 underline-offset-2 dark:text-red-300"
+                  >
+                    Funding confirmed. Retry Activity sync.
+                  </button>
+                ) : (
+                  <><Loader2 className="h-3 w-3 animate-spin" /> Funds detected. Verifying transaction...</>
+                )}
+              </p>
+            ) : isAgentFunding && manualPayDetected && !txHash && (
               <p className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-500 dark:bg-white/[0.07] dark:text-gray-300">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Payment detected. Verifying transaction...
@@ -5081,7 +5016,7 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {payMode === 'wallet' && !isBankSendPayment && (showCircleEmailBridgePay || !!circleSmartAccount || !!circleEvmEmailSession) && chain !== 'solana' && !manualPayDetected && (
+          {!isConfirmed && payMode === 'wallet' && !isBankSendPayment && (showCircleEmailBridgePay || !!circleSmartAccount || !!circleEvmEmailSession) && chain !== 'solana' && !manualPayDetected && (
             <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
               {!circleSmartAccount && !showPrivyCircleEmailPay && (
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
@@ -5519,7 +5454,7 @@ export default function PaymentPage() {
               </div>
                 ) : null}
               </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected ? (
+          ) : !isConfirmed && payMode === 'wallet' && !isBankSendPayment && (usePrivyCircleCheckout || usePrivyCircleSolanaCheckout) && !privyAuthenticated && !manualPayDetected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -5598,7 +5533,7 @@ export default function PaymentPage() {
       )}
 
       {/* Manual check button */}
-      {showCheckButton && !isBankSendPayment && !manualPayDetected && chain !== 'solana' && payMode === 'wallet' && (
+      {showCheckButton && !isConfirmed && !isBankSendPayment && !manualPayDetected && chain !== 'solana' && payMode === 'wallet' && (
         <div className="mt-4 flex justify-center">
           <button
             onClick={handleManualCheck}

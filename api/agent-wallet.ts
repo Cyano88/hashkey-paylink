@@ -559,6 +559,31 @@ function parseBalanceText(output: string) {
   return undefined
 }
 
+function parseUsdcUnits(value: string) {
+  const match = value.match(/^(\d+)(?:\.(\d{1,6}))?$/)
+  if (!match) return null
+  return (BigInt(match[1]) * 1_000_000n) + BigInt((match[2] ?? '').padEnd(6, '0'))
+}
+
+function formatUsdcUnits(value: bigint) {
+  const whole = value / 1_000_000n
+  const fraction = String(value % 1_000_000n).padStart(6, '0').replace(/0+$/, '')
+  return fraction ? `${whole}.${fraction}` : String(whole)
+}
+
+export function gatewayActivationTarget(currentBalance: string, amount: string) {
+  const currentUnits = parseUsdcUnits(currentBalance)
+  const amountUnits = parseUsdcUnits(amount)
+  if (currentUnits === null || amountUnits === null) return null
+  return formatUsdcUnits(currentUnits + amountUnits)
+}
+
+export function gatewayBalanceReached(balance: string, target: string) {
+  const balanceUnits = parseUsdcUnits(balance)
+  const targetUnits = parseUsdcUnits(target)
+  return balanceUnits !== null && targetUnits !== null && balanceUnits >= targetUnits
+}
+
 function isCircleLoginExpired(error: unknown) {
   const err = error as Error & { stdout?: string; stderr?: string }
   const detail = [err.stdout, err.stderr, err.message].filter(Boolean).join('\n')
@@ -624,6 +649,18 @@ async function runCircle(args: string[], key: string, timeoutMs = 60_000, maxBuf
     },
   })
   return [stdout, stderr].filter(Boolean).join('\n').trim()
+}
+
+async function readGatewayBalance(address: string, chain: string, serviceKey: string) {
+  let output = ''
+  try {
+    output = await runCircle(['gateway', 'balance', '--address', address, '--chain', chain, '--output', 'json'], serviceKey, 30_000)
+  } catch {
+    output = await runCircle(['gateway', 'balance', '--address', address, '--chain', chain], serviceKey, 30_000)
+  }
+  const balance = parseBalance(output)
+  if (balance === undefined) throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway returned no balance.')
+  return balance
 }
 
 export async function searchCircleMarketplaceServices(params: {
@@ -721,7 +758,12 @@ export async function readAgentWalletSnapshot(params: {
   const store = await readStore()
   const record = resolveAgentRecord(store, params.agentSlug)
   const balanceChain = params.network === 'arc' ? 'ARC-TESTNET' : 'BASE'
-  const gatewayChain = params.network === 'arc' ? 'ARC-TESTNET' : 'BASE'
+  // Circle CLI's Eco method originates on Base but settles the Gateway
+  // deposit on Polygon. Read the configured Gateway settlement chain so the
+  // source-wallet debit and unified-balance credit are not shown as a loss.
+  const gatewayChain = params.network === 'arc'
+    ? ARC_TESTNET_GATEWAY_CHAIN
+    : normalizeGatewayBalanceChain(undefined)
   let walletBalance: string | undefined
   let walletBalanceError: string | undefined
   let gatewayBalance: string | undefined
@@ -967,6 +1009,8 @@ export type AgentGatewayActivationResult = {
   network: 'base' | 'arc'
   walletAddress: string
   gatewayBalance: string
+  startingGatewayBalance: string
+  targetGatewayBalance: string
 }
 
 export async function activateAgentGateway(params: {
@@ -992,8 +1036,24 @@ export async function activateAgentGateway(params: {
     throw connectionFailure(404, 'wallet_session_not_found', 'Reconnect this wallet before activating x402.')
   }
   const depositChain = params.network === 'arc' ? ARC_TESTNET_GATEWAY_CHAIN : 'BASE'
+  const gatewayBalanceChain = params.network === 'arc'
+    ? ARC_TESTNET_GATEWAY_CHAIN
+    : normalizeGatewayBalanceChain(undefined)
   const method = params.network === 'arc' ? 'direct' : 'eco'
   const serviceKey = `${params.agentSlug}_${record.sessionId}`
+  let startingGatewayBalance = ''
+  try {
+    startingGatewayBalance = await readGatewayBalance(record.walletAddress, gatewayBalanceChain, serviceKey)
+  } catch (error) {
+    if (isCircleLoginExpired(error)) {
+      throw connectionFailure(409, 'circle_session_expired', 'Wallet session expired. Reconnect the wallet, then retry App Pay funding.')
+    }
+    throw connectionFailure(503, 'circle_provider_unavailable', 'Could not verify the current App Pay balance. No funding was submitted.')
+  }
+  const targetGatewayBalance = gatewayActivationTarget(startingGatewayBalance, params.amount)
+  if (!targetGatewayBalance) {
+    throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway returned an invalid balance. No funding was submitted.')
+  }
   try {
     await runCircle([
       'gateway',
@@ -1014,24 +1074,18 @@ export async function activateAgentGateway(params: {
     throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway activation is temporarily unavailable.')
   }
 
-  let gatewayBalance = '0'
+  let gatewayBalance = startingGatewayBalance
   for (let attempt = 1; attempt <= GATEWAY_DEPOSIT_VERIFY_ATTEMPTS; attempt += 1) {
     try {
-      let balanceOutput = ''
-      try {
-        balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain, '--output', 'json'], serviceKey, 30_000)
-      } catch {
-        balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', depositChain], serviceKey, 30_000)
-      }
-      gatewayBalance = parseBalance(balanceOutput) ?? '0'
-      if (Number(gatewayBalance) >= amount) break
+      gatewayBalance = await readGatewayBalance(record.walletAddress, gatewayBalanceChain, serviceKey)
+      if (gatewayBalanceReached(gatewayBalance, targetGatewayBalance)) break
     } catch {
       // A submitted deposit remains pending when the follow-up balance read is unavailable.
     }
     if (attempt < GATEWAY_DEPOSIT_VERIFY_ATTEMPTS) await delay(GATEWAY_DEPOSIT_VERIFY_DELAY_MS)
   }
 
-  const status = Number(gatewayBalance) >= amount ? 'available' : 'pending'
+  const status = gatewayBalanceReached(gatewayBalance, targetGatewayBalance) ? 'available' : 'pending'
   if (status === 'available') {
     await appendAgentActivity({
       agentSlug: params.agentSlug,
@@ -1053,6 +1107,8 @@ export async function activateAgentGateway(params: {
     network: params.network,
     walletAddress: record.walletAddress,
     gatewayBalance,
+    startingGatewayBalance,
+    targetGatewayBalance,
   }
 }
 

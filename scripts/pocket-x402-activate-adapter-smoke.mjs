@@ -2,6 +2,15 @@ import assert from 'node:assert/strict'
 import { createPocketX402ActivateHandler } from '../api/pocket/x402-activate.ts'
 import { activatePocketX402Gateway } from '../src/pocket/api/pocketX402Client.ts'
 import { pocketX402WalletSlug } from '../src/pocket/lib/pocketX402Identity.ts'
+import { gatewayActivationTarget, gatewayBalanceReached } from '../api/agent-wallet.ts'
+
+assert.equal(gatewayActivationTarget('0', '0.5'), '0.5')
+assert.equal(gatewayActivationTarget('0.5', '0.5'), '1')
+assert.equal(gatewayActivationTarget('1.250001', '0.5'), '1.750001')
+assert.equal(gatewayActivationTarget('invalid', '0.5'), null)
+assert.equal(gatewayBalanceReached('0.5', '1'), false)
+assert.equal(gatewayBalanceReached('1', '1'), true)
+assert.equal(gatewayBalanceReached('1.000001', '1'), true)
 
 function responseRecorder() {
   return {
@@ -49,6 +58,8 @@ const handler = createPocketX402ActivateHandler({
       network: input.network,
       walletAddress: '0x1111111111111111111111111111111111111111',
       gatewayBalance: '0.5',
+      startingGatewayBalance: '0',
+      targetGatewayBalance: '0.5',
     }
   },
   record: async input => {
@@ -77,6 +88,8 @@ assert.deepEqual(activated.body.data, {
   network: 'base',
   walletAddress: '0x1111111111111111111111111111111111111111',
   gatewayBalance: '0.5',
+  startingGatewayBalance: '0',
+  targetGatewayBalance: '0.5',
   replayed: false,
 })
 assert.deepEqual(claims, [{
