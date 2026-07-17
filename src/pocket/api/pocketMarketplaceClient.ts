@@ -32,6 +32,7 @@ export type PocketMarketplaceSnapshot = {
 export type PocketMarketplacePurchase = {
   status: 'completed' | 'processing'
   replayed: boolean
+  message?: string
   service?: PocketMarketplaceService
   receiptActivityId?: string
   transaction?: string
@@ -124,6 +125,7 @@ export async function buyPocketMarketplaceService({
   return {
     status: root.status,
     replayed: root.replayed === true,
+    ...(typeof root.message === 'string' ? { message: root.message } : {}),
     ...(service(root.service) ? { service: service(root.service) } : {}),
     ...(typeof root.receiptActivityId === 'string' ? { receiptActivityId: root.receiptActivityId } : {}),
     ...(typeof root.transaction === 'string' ? { transaction: root.transaction } : {}),

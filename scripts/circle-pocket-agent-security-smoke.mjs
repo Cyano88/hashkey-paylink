@@ -81,4 +81,22 @@ const completedReplay = await claimCirclePocketAction(actionInput)
 assert.equal(completedReplay.claimed, false)
 assert.equal(completedReplay.record.status, 'completed')
 
+const marketplaceLock = {
+  ownerId: 'journal-owner-marketplace',
+  action: 'marketplace.service.purchase',
+  metadata: { resource: 'https://service.example/one-tap' },
+  dedupe: {
+    metadataKey: 'resource',
+    metadataValue: 'https://service.example/one-tap',
+    statuses: ['started', 'submitted'],
+    startedAfter: Date.now() - 60_000,
+  },
+}
+const competingMarketplaceClaims = await Promise.all([
+  claimCirclePocketAction({ ...marketplaceLock, idempotencyKey: 'pocket:marketplace:concurrent-0001' }),
+  claimCirclePocketAction({ ...marketplaceLock, idempotencyKey: 'pocket:marketplace:concurrent-0002' }),
+])
+assert.equal(competingMarketplaceClaims.filter(result => result.claimed).length, 1)
+assert.equal(competingMarketplaceClaims[0].record.id, competingMarketplaceClaims[1].record.id)
+
 console.log('circle pocket agent security smoke ok')

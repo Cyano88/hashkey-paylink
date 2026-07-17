@@ -177,6 +177,39 @@ export async function payAgentX402Service(params: {
       error.code = 'circle_session_expired'
       throw error
     }
+    if (isCirclePaymentSubmitted(err)) {
+      const detail = circleErrorDetail(err)
+      const proof = buildX402Proof({
+        buyerAgent: params.agentSlug,
+        sellerAgent: params.sellerAgentSlug,
+        buyerWallet: record.walletAddress,
+        serviceUrl: params.serviceUrl,
+        maxAmount: String(params.maxAmount),
+        circleOutput: detail,
+      })
+      const spendActivity = await appendAgentActivity({
+        agentSlug: params.agentSlug,
+        type: 'x402_spent',
+        title: 'Service payment submitted',
+        amount: String(params.maxAmount),
+        asset: 'USDC',
+        direction: 'out',
+        network: 'Circle Gateway x402',
+        wallet: record.walletAddress,
+        serviceUrl: params.serviceUrl,
+        detail: 'Circle submitted the payment, but the service response failed. Do not retry while this payment is being reconciled.',
+        proof,
+      })
+      const error = new Error('Payment was submitted, but the service did not complete. Do not retry this purchase.') as Error & {
+        status?: number
+        code?: string
+        receiptActivityId?: string
+      }
+      error.status = 409
+      error.code = 'circle_payment_submitted_response_failed'
+      error.receiptActivityId = spendActivity?.id
+      throw error
+    }
     throw err
   }
 
@@ -240,6 +273,49 @@ export async function payAgentX402Service(params: {
     receiptActivityId: spendActivity?.id,
     proof,
     raw: output.slice(0, 3000),
+  }
+}
+
+export async function estimateAgentX402Service(params: {
+  agentSlug: string
+  serviceUrl: string
+  maxAmount: number
+  paymentChain?: string
+}) {
+  if (!CIRCLE_CLI_ENABLED) {
+    const error = new Error('Circle Agent Wallet payments are not enabled on this server.') as Error & { status?: number }
+    error.status = 503
+    throw error
+  }
+  const store = await readStore()
+  const record = resolveAgentRecord(store, params.agentSlug)
+  if (!record?.walletAddress || !record.sessionId) {
+    const error = new Error('Agent wallet session not found. Create the wallet on the web dashboard first.') as Error & { status?: number }
+    error.status = 404
+    throw error
+  }
+  const serviceKey = `${params.agentSlug}_${record.sessionId}`
+  try {
+    return await runCircle([
+      'services',
+      'pay',
+      params.serviceUrl,
+      '--address',
+      record.walletAddress,
+      '--chain',
+      params.paymentChain ?? 'BASE',
+      '--max-amount',
+      String(params.maxAmount),
+      '--estimate',
+    ], serviceKey, 45_000)
+  } catch (err) {
+    if (isCircleLoginExpired(err)) {
+      const error = new Error('Circle Agent Wallet is connected, but the secure spending session expired. Reconnect the wallet on the agent dashboard, then retry.') as Error & { status?: number; code?: string }
+      error.status = 409
+      error.code = 'circle_session_expired'
+      throw error
+    }
+    throw err
   }
 }
 
@@ -588,6 +664,15 @@ function isCircleLoginExpired(error: unknown) {
   const err = error as Error & { stdout?: string; stderr?: string }
   const detail = [err.stdout, err.stderr, err.message].filter(Boolean).join('\n')
   return /not logged in|session expired|run [`']?circle wallet login/i.test(detail)
+}
+
+function circleErrorDetail(error: unknown) {
+  const err = error as Error & { stdout?: string; stderr?: string }
+  return [err.stdout, err.stderr, err.message].filter(Boolean).join('\n')
+}
+
+function isCirclePaymentSubmitted(error: unknown) {
+  return /PAYMENT WAS SUBMITTED|Payment submitted but request failed/i.test(circleErrorDetail(error))
 }
 
 function safeCircleCliError(detail: string) {

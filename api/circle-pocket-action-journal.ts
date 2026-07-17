@@ -12,7 +12,7 @@ const JOURNAL_PATH = process.env.CIRCLE_POCKET_ACTION_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/circle-pocket-actions.json` : './data/circle-pocket-actions.json')
 const JOURNAL_STORE_KEY = (process.env.CIRCLE_POCKET_ACTION_STORE_KEY ?? 'hashpaylink:circle-pocket-actions').trim()
 
-export type CirclePocketActionStatus = 'started' | 'completed' | 'failed'
+export type CirclePocketActionStatus = 'started' | 'submitted' | 'completed' | 'failed'
 export type CirclePocketActionRecord = {
   id: string
   ownerId: string
@@ -85,6 +85,12 @@ export async function claimCirclePocketAction(input: {
   idempotencyKey: string
   action: string
   metadata?: Record<string, string>
+  dedupe?: {
+    metadataKey: string
+    metadataValue: string
+    statuses: CirclePocketActionStatus[]
+    startedAfter?: number
+  }
 }) {
   return mutateActionStore(store => {
     const existing = Object.values(store.actions).find(record => (
@@ -93,6 +99,14 @@ export async function claimCirclePocketAction(input: {
       && record.action === input.action
     ))
     if (existing) return { record: existing, claimed: false }
+    const conflict = input.dedupe && Object.values(store.actions).find(record => (
+      record.ownerId === input.ownerId
+      && record.action === input.action
+      && record.metadata?.[input.dedupe!.metadataKey] === input.dedupe!.metadataValue
+      && input.dedupe!.statuses.includes(record.status)
+      && (record.status !== 'started' || !input.dedupe!.startedAfter || record.updatedAt >= input.dedupe!.startedAfter)
+    ))
+    if (conflict) return { record: conflict, claimed: false }
     const now = Date.now()
     const record: CirclePocketActionRecord = {
       id: crypto.randomUUID(),

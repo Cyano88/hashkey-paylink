@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { randomUUID } from 'node:crypto'
 import {
+  estimateAgentX402Service,
   inspectCircleMarketplaceService,
   payAgentX402Service,
   searchCircleMarketplaceServices,
@@ -8,6 +9,7 @@ import {
 import { listAgentActivity } from '../agent-activity.js'
 import {
   claimCirclePocketAction,
+  listCirclePocketActions,
   recordCirclePocketAction,
   type CirclePocketActionRecord,
 } from '../circle-pocket-action-journal.js'
@@ -26,10 +28,18 @@ type MarketplaceDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   search(input: { query?: string; limit?: number; offset?: number }): Promise<unknown>
   inspect(resource: string): Promise<unknown>
+  estimate(input: Parameters<typeof estimateAgentX402Service>[0]): ReturnType<typeof estimateAgentX402Service>
   pay(input: Parameters<typeof payAgentX402Service>[0]): ReturnType<typeof payAgentX402Service>
   listActivity(agentSlug: string, limit?: number): ReturnType<typeof listAgentActivity>
-  claim(input: { ownerId: string; idempotencyKey: string; action: string; metadata: Record<string, string> }): Promise<{ record: CirclePocketActionRecord; claimed: boolean }>
-  record(input: { ownerId: string; idempotencyKey: string; action: string; status: 'completed' | 'failed'; resourceId?: string; metadata: Record<string, string> }): Promise<CirclePocketActionRecord>
+  listActions(ownerId: string, limit?: number): ReturnType<typeof listCirclePocketActions>
+  claim(input: {
+    ownerId: string
+    idempotencyKey: string
+    action: string
+    metadata: Record<string, string>
+    dedupe?: { metadataKey: string; metadataValue: string; statuses: CirclePocketActionRecord['status'][]; startedAfter?: number }
+  }): Promise<{ record: CirclePocketActionRecord; claimed: boolean }>
+  record(input: { ownerId: string; idempotencyKey: string; action: string; status: 'submitted' | 'completed' | 'failed'; resourceId?: string; metadata: Record<string, string> }): Promise<CirclePocketActionRecord>
 }
 
 type PublicService = {
@@ -56,11 +66,44 @@ function dataRecord(value: unknown) {
   return record(root?.data) ?? root
 }
 
-function hasRequiredInput(metadata: Record<string, unknown>) {
-  const input = record(metadata.input)
-  if (!input) return false
-  return [record(input.pathParams), record(input.queryParams), record(input.body)]
-    .some(schema => strings(schema?.required).length > 0)
+function inputSchemas(value: unknown) {
+  const root = record(value)
+  const data = record(root?.data)
+  const containers = [root, record(root?.metadata), data, record(data?.metadata)].filter(Boolean) as Record<string, unknown>[]
+  const schemas: Record<string, unknown>[] = []
+  for (const container of containers) {
+    const candidates = [
+      container.input,
+      container.inputSchema,
+      record(container.outputSchema)?.input,
+      record(container.schema)?.input,
+    ]
+    for (const candidate of candidates) {
+      const schema = record(candidate)
+      if (schema) schemas.push(schema)
+    }
+  }
+  return schemas
+}
+
+function schemaRequiresInput(value: unknown, depth = 0): boolean {
+  if (depth > 8) return true
+  if (Array.isArray(value)) return value.some(item => schemaRequiresInput(item, depth + 1))
+  const schema = record(value)
+  if (!schema) return false
+  if (schema.required === true || strings(schema.required).length > 0) return true
+  const pathParams = record(schema.pathParams)
+  if (pathParams && Object.keys(record(pathParams.properties) ?? {}).length > 0) return true
+  return Object.values(schema).some(item => schemaRequiresInput(item, depth + 1))
+}
+
+function hasRequiredInput(value: unknown) {
+  return inputSchemas(value).some(schema => schemaRequiresInput(schema))
+}
+
+function explicitlySupportsOneTap(value: unknown) {
+  const schemas = inputSchemas(value)
+  return schemas.length > 0 && !schemas.some(schema => schemaRequiresInput(schema))
 }
 
 function gatewayPrice(item: Record<string, unknown>) {
@@ -83,7 +126,7 @@ function publicService(value: unknown): PublicService | undefined {
   const resource = typeof item?.resource === 'string' ? item.resource : ''
   const method = String(metadata?.method ?? '').toUpperCase()
   if (!item || !metadata || method !== 'GET' || metadata.supportsCircleGateway !== true) return undefined
-  if (!/^https:\/\/[^\s]+$/i.test(resource) || /[{}]/.test(resource) || hasRequiredInput(metadata)) return undefined
+  if (!/^https:\/\/[^\s]+$/i.test(resource) || /[{}]/.test(resource) || !explicitlySupportsOneTap(item)) return undefined
   const price = gatewayPrice(item)
   if (!price) return undefined
   return {
@@ -114,7 +157,8 @@ function inspectDetail(value: unknown) {
   const amountAtomic = typeof price?.amount === 'string' && /^\d+$/.test(price.amount) ? price.amount : ''
   const amount = amountAtomic ? Number(amountAtomic) / 1_000_000 : NaN
   if (
-    data.status !== 'payable'
+    hasRequiredInput(value)
+    || data.status !== 'payable'
     || String(data.method).toUpperCase() !== 'GET'
     || data.scheme !== 'GatewayWalletBatched'
     || !strings(data.chains).includes(BASE_CAIP2)
@@ -204,6 +248,24 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
       const body = purchaseBody(req.body)
       if (!body) return fail(400, 'VALIDATION_FAILED', `Marketplace purchases must be valid HTTPS services costing no more than ${MAX_PURCHASE_USDC} USDC.`, false)
 
+      const previousActions = await dependencies.listActions(identity.userId, 100)
+      const pending = previousActions.find(item => (
+        item.action === ACTION
+        && item.metadata?.resource === body.resource
+        && (item.status === 'submitted' || (item.status === 'started' && Date.now() - item.updatedAt < 10 * 60_000))
+      ))
+      if (pending) {
+        return res.status(202).json({
+          ok: true,
+          status: 'processing',
+          replayed: true,
+          receiptActivityId: pending.resourceId,
+          message: pending.status === 'submitted'
+            ? 'Payment was already submitted and is being reconciled. Do not retry.'
+            : 'This purchase is already being processed.',
+        })
+      }
+
       const discovered = await dependencies.search({ query: body.resource, limit: 20, offset: 0 })
       const service = exactService(discovered, body.resource)
       if (!service) return fail(403, 'FORBIDDEN', 'This endpoint is not currently a one-tap Circle Gateway Marketplace service.', false)
@@ -215,18 +277,51 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
         return fail(409, 'VERSION_CONFLICT', 'The service price is higher than the approved maximum. Refresh before paying.', false)
       }
 
+      try {
+        await dependencies.estimate({
+          agentSlug,
+          serviceUrl: body.resource,
+          maxAmount: Number(inspected.amount),
+          paymentChain: 'BASE',
+        })
+      } catch (error) {
+        const normalized = error as Error & { code?: string }
+        if (normalized.code === 'circle_session_expired') throw error
+        console.warn('[pocket-marketplace] one-tap estimate rejected', {
+          requestId,
+          message: diagnosticMessage(normalized),
+        })
+        return fail(409, 'VERSION_CONFLICT', 'This service could not be safely verified for a one-tap purchase. No payment was submitted.', false)
+      }
+
       const claim = await dependencies.claim({
         ownerId: identity.userId,
         idempotencyKey: rawKey,
         action: ACTION,
         metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'base' },
+        dedupe: {
+          metadataKey: 'resource',
+          metadataValue: body.resource,
+          statuses: ['started', 'submitted'],
+          startedAfter: Date.now() - 10 * 60_000,
+        },
       })
       if (!claim.claimed) {
         if (claim.record.metadata?.resource !== body.resource) return fail(409, 'DUPLICATE_REQUEST', 'This approval key was already used for another service.', false)
         if (claim.record.status === 'completed') {
           return res.json({ ok: true, status: 'completed', replayed: true, receiptActivityId: claim.record.resourceId })
         }
-        if (claim.record.status === 'started') return res.status(202).json({ ok: true, status: 'processing', replayed: true })
+        if (claim.record.status === 'started' || claim.record.status === 'submitted') {
+          return res.status(202).json({
+            ok: true,
+            status: 'processing',
+            replayed: true,
+            receiptActivityId: claim.record.resourceId,
+            message: claim.record.status === 'submitted'
+              ? 'Payment was already submitted and is being reconciled. Do not retry.'
+              : 'This purchase is already being processed.',
+          })
+        }
         return fail(409, 'DUPLICATE_REQUEST', 'This purchase attempt already failed. Refresh before trying again.', false)
       }
 
@@ -261,6 +356,24 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           result: safeResult(paid.response),
         })
       } catch (error) {
+        const normalized = error as Error & { code?: string; receiptActivityId?: string }
+        if (normalized.code === 'circle_payment_submitted_response_failed') {
+          await dependencies.record({
+            ownerId: identity.userId,
+            idempotencyKey: rawKey,
+            action: ACTION,
+            status: 'submitted',
+            resourceId: normalized.receiptActivityId,
+            metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'base' },
+          })
+          return res.status(202).json({
+            ok: true,
+            status: 'processing',
+            replayed: false,
+            receiptActivityId: normalized.receiptActivityId,
+            message: 'Payment was submitted, but the service did not complete. It is being reconciled; do not retry.',
+          })
+        }
         await dependencies.record({
           ownerId: identity.userId,
           idempotencyKey: rawKey,
@@ -275,7 +388,8 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
       if (normalized.status === 401) return fail(401, 'AUTH_REQUIRED', normalized.message, false)
       if (normalized.status === 403) return fail(403, 'FORBIDDEN', normalized.message, false)
       if (normalized.status === 404) return fail(404, 'RESOURCE_NOT_FOUND', normalized.message, false)
-      if (normalized.status === 409 || normalized.code === 'circle_session_expired') return fail(409, 'SESSION_EXPIRED', normalized.message, false)
+      if (normalized.code === 'circle_session_expired') return fail(409, 'SESSION_EXPIRED', normalized.message, false)
+      if (normalized.status === 409) return fail(409, 'VERSION_CONFLICT', normalized.message, false)
       if (normalized.status === 429) return fail(429, 'RATE_LIMITED', normalized.message, true)
       console.error('[pocket-marketplace] provider request failed', {
         requestId,
@@ -294,8 +408,10 @@ export default createPocketMarketplaceHandler({
   verifyUser: verifiedPrivyUser,
   search: searchCircleMarketplaceServices,
   inspect: inspectCircleMarketplaceService,
+  estimate: estimateAgentX402Service,
   pay: payAgentX402Service,
   listActivity: listAgentActivity,
+  listActions: listCirclePocketActions,
   claim: claimCirclePocketAction,
   record: recordCirclePocketAction,
 })

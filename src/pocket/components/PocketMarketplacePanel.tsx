@@ -8,6 +8,7 @@ import {
   type PocketMarketplaceService,
   type PocketMarketplaceSnapshot,
 } from '../api/pocketMarketplaceClient'
+import { createPocketIdempotencyKey } from '../lib/pocketSchemas'
 
 type Props = {
   connected: boolean
@@ -42,23 +43,25 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
   const [query, setQuery] = useState('')
   const [snapshot, setSnapshot] = useState<PocketMarketplaceSnapshot | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [purchaseError, setPurchaseError] = useState('')
   const [selected, setSelected] = useState<PocketMarketplaceService | null>(null)
   const [buying, setBuying] = useState(false)
   const [purchase, setPurchase] = useState<PocketMarketplacePurchase | null>(null)
   const autoLoadAttempted = useRef(false)
   const lastRefreshToken = useRef(refreshToken)
+  const purchaseKey = useRef('')
 
   const load = useCallback(async (nextQuery = query) => {
     if (!connected) return
     setLoading(true)
-    setError('')
+    setLoadError('')
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to open Marketplace.')
       setSnapshot(await readPocketMarketplace({ accessToken: token, query: nextQuery }))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Circle Marketplace is temporarily unavailable.')
+      setLoadError(reason instanceof Error ? reason.message : 'Circle Marketplace is temporarily unavailable.')
     } finally {
       setLoading(false)
     }
@@ -90,16 +93,18 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
   const buy = async () => {
     if (!selected || !canPay) return
     setBuying(true)
-    setError('')
+    setPurchaseError('')
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again before paying.')
-      const next = await buyPocketMarketplaceService({ accessToken: token, selected })
+      if (!purchaseKey.current) purchaseKey.current = createPocketIdempotencyKey('marketplace')
+      const next = await buyPocketMarketplaceService({ accessToken: token, selected, idempotencyKey: purchaseKey.current })
       setPurchase(next)
       setSelected(null)
+      purchaseKey.current = ''
       await load(query)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Marketplace payment failed.')
+      setPurchaseError(reason instanceof Error ? reason.message : 'Marketplace payment failed.')
     } finally {
       setBuying(false)
     }
@@ -136,22 +141,31 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
             <button type="submit" disabled={loading} className="text-xs font-bold text-gray-600 disabled:opacity-50 dark:text-gray-300">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}</button>
           </form>
 
-          {error && (
+          {loadError && (
             <p className={cn(
               'rounded-xl border px-3 py-2 text-xs font-medium',
               hasCachedServices
                 ? 'border-gray-200 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300'
                 : 'border-red-100 bg-red-50 text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200',
             )}>
-              {hasCachedServices ? 'Couldn\'t refresh Marketplace. Showing the latest available services.' : error}
+              {hasCachedServices ? 'Couldn\'t refresh Marketplace. Showing the latest available services.' : loadError}
             </p>
           )}
 
           {purchase && (
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-200"><CheckCircle2 className="h-4 w-4" /><p className="text-xs font-bold">Service completed</p></div>
-              {resultPreview(purchase.result) && <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white/70 p-2 text-[10px] leading-4 text-gray-600 dark:bg-black/20 dark:text-gray-300">{resultPreview(purchase.result)}</pre>}
-              {purchase.receiptActivityId && <a href={`/receipt/${encodeURIComponent(purchase.receiptActivityId)}`} className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-200">View receipt <ArrowRight className="h-3 w-3" /></a>}
+            <div className={cn(
+              'rounded-xl border p-3',
+              purchase.status === 'completed'
+                ? 'border-emerald-100 bg-emerald-50/70 dark:border-emerald-400/20 dark:bg-emerald-400/10'
+                : 'border-amber-100 bg-amber-50/70 dark:border-amber-400/20 dark:bg-amber-400/10',
+            )}>
+              <div className={cn('flex items-center gap-2', purchase.status === 'completed' ? 'text-emerald-700 dark:text-emerald-200' : 'text-amber-700 dark:text-amber-200')}>
+                {purchase.status === 'completed' ? <CheckCircle2 className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
+                <p className="text-xs font-bold">{purchase.status === 'completed' ? 'Service completed' : 'Payment submitted — reconciliation pending'}</p>
+              </div>
+              {purchase.message && <p className="mt-1.5 text-[11px] leading-4 text-gray-500 dark:text-gray-300">{purchase.message}</p>}
+              {purchase.status === 'completed' && resultPreview(purchase.result) && <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white/70 p-2 text-[10px] leading-4 text-gray-600 dark:bg-black/20 dark:text-gray-300">{resultPreview(purchase.result)}</pre>}
+              {purchase.receiptActivityId && <a href={`/receipt/${encodeURIComponent(purchase.receiptActivityId)}`} className={cn('mt-2 inline-flex items-center gap-1 text-[11px] font-bold', purchase.status === 'completed' ? 'text-emerald-700 dark:text-emerald-200' : 'text-amber-700 dark:text-amber-200')}>View activity <ArrowRight className="h-3 w-3" /></a>}
             </div>
           )}
 
@@ -163,7 +177,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
                 key={item.resource}
                 type="button"
                 aria-pressed={selected?.resource === item.resource}
-                onClick={() => { setPurchase(null); setSelected(item); }}
+                onClick={() => { setPurchase(null); setPurchaseError(''); purchaseKey.current = createPocketIdempotencyKey('marketplace'); setSelected(item); }}
                 className={cn(
                   'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition active:scale-[0.99]',
                   selected?.resource === item.resource
@@ -223,6 +237,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
               </div>
               <p className="mt-2.5 text-[11px] leading-4 text-gray-400">You are approving this request only. The service cannot make another charge.</p>
               {!enoughBalance(gatewayBalance, selected.amount) && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">Add at least {selected.amount} USDC to App Pay before paying.</p>}
+              {purchaseError && <p className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{purchaseError}</p>}
               <div className="mt-4 grid grid-cols-2 gap-2.5">
                 <button type="button" onClick={() => setSelected(null)} disabled={buying} className="rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">Cancel</button>
                 <button type="button" onClick={() => void buy()} disabled={buying || !canPay} className="inline-flex items-center justify-center gap-2 rounded-full bg-gray-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-40 dark:bg-white dark:text-gray-950">{buying ? <><Clock3 className="h-4 w-4" /> Paying</> : <>Pay {selected.amount}<ArrowRight className="h-4 w-4" /></>}</button>
