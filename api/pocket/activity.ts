@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { listNgPosHistoryForOwner } from '../ng-pos.js'
+import { listCirclePocketActions, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
 import {
   verifiedPrivyUser,
   type VerifiedLinkUser,
@@ -13,6 +14,35 @@ import {
 type PocketActivityHandlerDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   readHistory(ownerId: string): Promise<{ payments: unknown[] }>
+  readActions(ownerId: string, limit?: number): ReturnType<typeof listCirclePocketActions>
+}
+
+function appPayActivityRow(item: CirclePocketActionRecord): PocketActivityRow | undefined {
+  if (item.action !== 'marketplace.service.purchase') return undefined
+  const status = item.status === 'completed'
+    ? 'completed'
+    : item.status === 'submitted'
+      ? 'reconciling'
+      : item.status === 'started'
+        ? 'processing'
+        : 'needs review'
+  return {
+    eventId: item.id,
+    txHash: item.resourceId || `pocket-action:${item.id}`,
+    chain: item.metadata?.network || 'base',
+    payer: 'Pocket App Pay',
+    memo: item.metadata?.provider || 'Marketplace service',
+    amount: item.metadata?.amount || '0',
+    ts: item.updatedAt,
+    source: 'app-pay',
+    contextLabel: status === 'needs review'
+      ? 'Payment outcome needs review before retrying'
+      : status === 'reconciling'
+        ? 'Payment outcome is being reconciled'
+        : 'Circle Marketplace service purchase',
+    settlementType: 'app_pay',
+    paycrestStatus: status,
+  }
 }
 
 function sanitizedActivityRow(value: unknown): PocketActivityRow {
@@ -47,8 +77,11 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
     try {
       const identity = await dependencies.verifyUser(req)
       const history = await dependencies.readHistory(identity.userId)
-      const payments = history.payments
-        .map(sanitizedActivityRow)
+      const appPay = (await dependencies.readActions(identity.userId, 100)).flatMap(item => {
+        const row = appPayActivityRow(item)
+        return row ? [row] : []
+      })
+      const payments = [...history.payments.map(sanitizedActivityRow), ...appPay]
         .sort((a, b) => b.ts - a.ts)
       return res.json({ ok: true, payments })
     } catch (error) {
@@ -65,4 +98,5 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
 export default createPocketActivityHandler({
   verifyUser: verifiedPrivyUser,
   readHistory: listNgPosHistoryForOwner,
+  readActions: listCirclePocketActions,
 })

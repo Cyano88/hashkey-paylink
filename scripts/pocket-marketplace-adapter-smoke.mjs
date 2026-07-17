@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
 import { createPocketMarketplaceHandler } from '../api/pocket/marketplace.ts'
+import { classifyCirclePaymentFailure } from '../api/agent-wallet.ts'
+
+assert.equal(classifyCirclePaymentFailure(new Error('PAYMENT WAS SUBMITTED - funds may have moved')), 'submitted')
+assert.equal(classifyCirclePaymentFailure(new Error('Error: terminated')), 'unknown')
 
 const resource = 'https://service.example/ready'
 const gatewayAccept = {
@@ -53,20 +57,24 @@ const action = {
 
 let paid = 0
 let payInput
+let searchError
 let estimateError
 let payError
 let actions = []
 const recorded = []
 const handler = createPocketMarketplaceHandler({
   verifyUser: async () => ({ userId: 'did:privy:user', email: 'pocket@example.com' }),
-  search: async ({ query }) => discovered(query ? [item()] : [
-    item(),
-    item({ resource: 'https://service.example/unknown-inputs', metadata: { ...item().metadata, outputSchema: undefined } }),
-    item({ resource: 'https://service.example/{required}' }),
-    item({ resource: 'https://service.example/form', metadata: { ...item().metadata, input: { queryParams: { required: ['city'] } } } }),
-    item({ resource: 'https://service.example/ticker', metadata: { ...item().metadata, outputSchema: { input: { queryParams: { type: 'object', required: ['ticker'], properties: { ticker: { type: 'string' } } } } } } }),
-    item({ resource: 'https://service.example/plain', metadata: { ...item().metadata, supportsCircleGateway: false } }),
-  ]),
+  search: async ({ query }) => {
+    if (searchError) throw searchError
+    return discovered(query ? [item()] : [
+      item(),
+      item({ resource: 'https://service.example/unknown-inputs', metadata: { ...item().metadata, outputSchema: undefined } }),
+      item({ resource: 'https://service.example/{required}' }),
+      item({ resource: 'https://service.example/form', metadata: { ...item().metadata, input: { queryParams: { required: ['city'] } } } }),
+      item({ resource: 'https://service.example/ticker', metadata: { ...item().metadata, outputSchema: { input: { queryParams: { type: 'object', required: ['ticker'], properties: { ticker: { type: 'string' } } } } } } }),
+      item({ resource: 'https://service.example/plain', metadata: { ...item().metadata, supportsCircleGateway: false } }),
+    ])
+  },
   inspect: async () => ({ data: {
     status: 'payable',
     method: 'GET',
@@ -158,6 +166,25 @@ assert.equal(submittedRes.body.status, 'processing')
 assert.equal(submittedRes.body.receiptActivityId, 'receipt-pending')
 assert.equal(recorded.at(-1).status, 'submitted')
 assert.equal(paid, 2)
+
+payError = Object.assign(new Error('Error: terminated'), {
+  status: 409,
+  code: 'circle_payment_outcome_unknown',
+  receiptActivityId: 'receipt-unknown',
+})
+const unknownOutcomeRes = response()
+await handler({
+  method: 'POST',
+  query: {},
+  headers: { 'idempotency-key': 'pocket:marketplace:unknownoutcome1' },
+  body: { resource, maxAmount: '0.008' },
+}, unknownOutcomeRes)
+assert.equal(unknownOutcomeRes.statusCode, 202)
+assert.equal(unknownOutcomeRes.body.status, 'processing')
+assert.equal(unknownOutcomeRes.body.receiptActivityId, 'receipt-unknown')
+assert.match(unknownOutcomeRes.body.message, /without a final result/)
+assert.equal(recorded.at(-1).status, 'submitted')
+assert.equal(paid, 3)
 payError = undefined
 
 actions = [{
@@ -179,7 +206,17 @@ await handler({
 assert.equal(duplicateSubmittedRes.statusCode, 202)
 assert.equal(duplicateSubmittedRes.body.replayed, true)
 assert.equal(duplicateSubmittedRes.body.receiptActivityId, 'receipt-pending')
-assert.equal(paid, 2)
+assert.equal(paid, 3)
+
+searchError = new Error('Circle registry timed out')
+const degradedGetRes = response()
+await handler({ method: 'GET', query: {}, headers: {} }, degradedGetRes)
+assert.equal(degradedGetRes.statusCode, 200)
+assert.equal(degradedGetRes.body.catalogAvailable, false)
+assert.equal(degradedGetRes.body.services.length, 0)
+assert.equal(degradedGetRes.body.activity.length, 1)
+assert.match(degradedGetRes.body.activity[0].title, /Reconciliation pending/)
+searchError = undefined
 actions = []
 
 const overCapRes = response()
@@ -190,6 +227,6 @@ await handler({
   body: { resource, maxAmount: '0.5' },
 }, overCapRes)
 assert.equal(overCapRes.statusCode, 400)
-assert.equal(paid, 2)
+assert.equal(paid, 3)
 
 console.log('pocket marketplace adapter smoke passed')

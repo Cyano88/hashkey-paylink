@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Banknote, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
+import { Activity, ArrowRight, Banknote, Cpu, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatAmount, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
@@ -7,7 +7,7 @@ export type { PocketActivityRow } from '../../models/pocketActivity'
 
 export type PocketActivityView = 'all' | 'bank' | 'pos' | 'bills'
 
-type ActivityKind = Exclude<PocketActivityView, 'all'>
+type ActivityKind = Exclude<PocketActivityView, 'all'> | 'app-pay'
 
 type PocketActivityPanelProps = {
   view: PocketActivityView
@@ -21,6 +21,7 @@ type PocketActivityPanelProps = {
 function activityKind(row: PocketActivityRow): ActivityKind {
   const source = String(row.source ?? '').toLowerCase()
   const settlement = String(row.settlementType ?? '').toLowerCase()
+  if (source === 'app-pay' || settlement === 'app_pay') return 'app-pay'
   if (source === 'bills' || settlement === 'bill_payment') return 'bills'
   if (source === 'bank-receive' || source === 'bank_receive') return 'bank'
   if (source === 'ngpos' || source === 'pos') return 'pos'
@@ -33,7 +34,9 @@ function supportedRows(rows: PocketActivityRow[]) {
     const source = String(row.source ?? '').toLowerCase()
     const settlement = String(row.settlementType ?? '').toLowerCase()
     if (source === 'bank-send' || source === 'bank_send' || settlement === 'paycrest_onramp') return false
-    return source === 'ngpos'
+    return source === 'app-pay'
+      || settlement === 'app_pay'
+      || source === 'ngpos'
       || source === 'pos'
       || source === 'bank-receive'
       || source === 'bank_receive'
@@ -92,11 +95,11 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                     <div className="flex items-start justify-between gap-3">
                       <span className="flex min-w-0 items-center gap-3">
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
-                          {kind === 'bank' ? <Landmark className="h-4 w-4" /> : kind === 'bills' ? <Banknote className="h-4 w-4" /> : <Store className="h-4 w-4" />}
+                          {kind === 'bank' ? <Landmark className="h-4 w-4" /> : kind === 'bills' ? <Banknote className="h-4 w-4" /> : kind === 'app-pay' ? <Cpu className="h-4 w-4" /> : <Store className="h-4 w-4" />}
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">
-                            {kind === 'bank' ? 'Bank receive' : kind === 'bills' ? 'Bill payment' : 'POS payment'}
+                            {kind === 'bank' ? 'Bank receive' : kind === 'bills' ? 'Bill payment' : kind === 'app-pay' ? 'App Pay service' : 'POS payment'}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-400">
                             {row.contextLabel || row.memo || row.payer || 'Circle Pocket receipt'}
@@ -126,7 +129,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
               </span>
               <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">No activity to show yet</h3>
               <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
-                {view === 'all' ? 'Bank receive, POS, and bill records will appear here.' : `Your ${view === 'bank' ? 'bank receive' : view.toUpperCase()} records will appear here.`}
+                {view === 'all' ? 'App Pay, bank receive, POS, and bill records will appear here.' : `Your ${view === 'bank' ? 'bank receive' : view.toUpperCase()} records will appear here.`}
               </p>
             </div>
           ) : null}

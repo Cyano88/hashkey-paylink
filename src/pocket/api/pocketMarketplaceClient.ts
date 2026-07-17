@@ -24,6 +24,8 @@ export type PocketMarketplaceActivity = {
 export type PocketMarketplaceSnapshot = {
   services: PocketMarketplaceService[]
   activity: PocketMarketplaceActivity[]
+  catalogAvailable: boolean
+  catalogMessage?: string
   paymentNetwork: 'base'
   arcMarketplaceSupported: boolean
   maxPurchaseUsdc: string
@@ -92,6 +94,8 @@ export async function readPocketMarketplace({
   return {
     services,
     activity,
+    catalogAvailable: root?.catalogAvailable !== false,
+    ...(typeof root?.catalogMessage === 'string' ? { catalogMessage: root.catalogMessage } : {}),
     paymentNetwork: 'base',
     arcMarketplaceSupported: root?.arcMarketplaceSupported === true,
     maxPurchaseUsdc: typeof root?.maxPurchaseUsdc === 'string' ? root.maxPurchaseUsdc : '0.05',

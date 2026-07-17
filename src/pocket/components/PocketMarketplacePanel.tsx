@@ -59,7 +59,13 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to open Marketplace.')
-      setSnapshot(await readPocketMarketplace({ accessToken: token, query: nextQuery }))
+      const next = await readPocketMarketplace({ accessToken: token, query: nextQuery })
+      if (!next.catalogAvailable) {
+        setLoadError(next.catalogMessage || 'Couldn\'t refresh Marketplace. App Pay history is still available.')
+        setSnapshot(current => ({ ...next, services: current?.services ?? [] }))
+      } else {
+        setSnapshot(next)
+      }
     } catch (reason) {
       setLoadError(reason instanceof Error ? reason.message : 'Circle Marketplace is temporarily unavailable.')
     } finally {
@@ -192,19 +198,21 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
                 </span>
                 <span className="shrink-0 text-right"><span className="block text-xs font-black text-gray-900 dark:text-white">{item.amount}</span><span className="block text-[9px] font-bold text-gray-400">USDC</span></span>
               </button>
-            )) : (
+            )) : snapshot && !snapshot.catalogAvailable ? (
+              <p className="py-8 text-center text-xs text-gray-400">Catalog temporarily unavailable. Pull down to retry.</p>
+            ) : (
               <p className="py-8 text-center text-xs text-gray-400">No one-tap Gateway services matched this search.</p>
             )}
           </div>
 
-          {snapshot?.activity.length ? (
-            <details className="rounded-xl border border-gray-100 px-3 py-2 dark:border-white/[0.07]">
-              <summary className="cursor-pointer list-none text-[11px] font-bold text-gray-500 dark:text-gray-300">Recent purchases</summary>
+          <div className="rounded-xl border border-gray-100 px-3 py-2.5 dark:border-white/[0.07]">
+            <p className="text-[11px] font-bold text-gray-500 dark:text-gray-300">App Pay history</p>
+            {snapshot?.activity.length ? (
               <div className="mt-2 space-y-2 border-t border-gray-100 pt-2 dark:border-white/[0.07]">
-                {snapshot.activity.map(item => <div key={item.id} className="flex items-center justify-between gap-3 text-[10px]"><span className="min-w-0 truncate text-gray-500 dark:text-gray-400">{item.title}</span><span className="shrink-0 font-bold text-gray-700 dark:text-gray-200">{item.amount} {item.asset}</span></div>)}
+                {snapshot.activity.map(item => <div key={item.id} className="flex items-center justify-between gap-3 text-[10px]"><span className="min-w-0 truncate text-gray-500 dark:text-gray-400">{item.title}</span><span className="shrink-0 font-bold text-gray-700 dark:text-gray-200">{item.amount || '—'} {item.asset || ''}</span></div>)}
               </div>
-            </details>
-          ) : null}
+            ) : <p className="mt-1 text-[10px] leading-4 text-gray-400">No App Pay attempts recorded yet.</p>}
+          </div>
         </div>
       )}
 

@@ -184,6 +184,24 @@ function safeResult(value: unknown) {
   }
 }
 
+function marketplaceActionActivity(item: CirclePocketActionRecord) {
+  if (item.action !== ACTION) return undefined
+  const status = item.status === 'completed'
+    ? 'Completed'
+    : item.status === 'submitted'
+      ? 'Reconciliation pending'
+      : item.status === 'started'
+        ? 'Processing'
+        : 'Outcome needs review'
+  return {
+    id: item.resourceId ?? item.id,
+    title: `${item.metadata?.provider || 'App Pay service'} · ${status}`,
+    amount: item.metadata?.amount,
+    asset: 'USDC',
+    createdAt: item.updatedAt,
+  }
+}
+
 function purchaseBody(value: unknown) {
   const body = record(value)
   const resource = typeof body?.resource === 'string' ? body.resource.trim() : ''
@@ -219,11 +237,13 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
 
       if (req.method === 'GET') {
         const query = String(req.query.query ?? '').trim().slice(0, 120)
-        const discovered = await dependencies.search({ query, limit: 100, offset: 0 })
-        const services = searchItems(discovered).map(publicService).filter(Boolean).slice(0, 30)
-        const activity = (await dependencies.listActivity(agentSlug, 20))
+        const actions = await dependencies.listActions(identity.userId, 100)
+        const actionActivity = actions.flatMap(item => {
+          const activity = marketplaceActionActivity(item)
+          return activity ? [activity] : []
+        })
+        const agentActivity = (await dependencies.listActivity(agentSlug, 20))
           .filter(item => item.type === 'x402_spent')
-          .slice(0, 5)
           .map(item => ({
             id: item.id,
             title: item.title,
@@ -233,10 +253,28 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
             createdAt: item.createdAt,
             transaction: item.proof?.transaction,
           }))
+        const actionIds = new Set(actionActivity.map(item => item.id))
+        const activity = [...actionActivity, ...agentActivity.filter(item => !actionIds.has(item.id))]
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, 10)
+        let services: PublicService[] = []
+        let catalogAvailable = true
+        try {
+          const discovered = await dependencies.search({ query, limit: 100, offset: 0 })
+          services = searchItems(discovered).map(publicService).filter(Boolean).slice(0, 30) as PublicService[]
+        } catch (error) {
+          catalogAvailable = false
+          console.warn('[pocket-marketplace] catalog refresh failed', {
+            requestId,
+            message: diagnosticMessage(error as Error),
+          })
+        }
         return res.json({
           ok: true,
           services,
           activity,
+          catalogAvailable,
+          ...(!catalogAvailable ? { catalogMessage: 'Circle Marketplace catalog is temporarily unavailable. App Pay history is still available.' } : {}),
           paymentNetwork: 'base',
           arcMarketplaceSupported: false,
           maxPurchaseUsdc: String(MAX_PURCHASE_USDC),
@@ -357,7 +395,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
         })
       } catch (error) {
         const normalized = error as Error & { code?: string; receiptActivityId?: string }
-        if (normalized.code === 'circle_payment_submitted_response_failed') {
+        if (normalized.code === 'circle_payment_submitted_response_failed' || normalized.code === 'circle_payment_outcome_unknown') {
           await dependencies.record({
             ownerId: identity.userId,
             idempotencyKey: rawKey,
@@ -371,7 +409,9 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
             status: 'processing',
             replayed: false,
             receiptActivityId: normalized.receiptActivityId,
-            message: 'Payment was submitted, but the service did not complete. It is being reconciled; do not retry.',
+            message: normalized.code === 'circle_payment_submitted_response_failed'
+              ? 'Payment was submitted, but the service did not complete. It is being reconciled; do not retry.'
+              : 'The payment command ended without a final result. It is being reconciled; do not retry.',
           })
         }
         await dependencies.record({

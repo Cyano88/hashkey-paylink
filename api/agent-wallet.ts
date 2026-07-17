@@ -177,40 +177,42 @@ export async function payAgentX402Service(params: {
       error.code = 'circle_session_expired'
       throw error
     }
-    if (isCirclePaymentSubmitted(err)) {
-      const detail = circleErrorDetail(err)
-      const proof = buildX402Proof({
-        buyerAgent: params.agentSlug,
-        sellerAgent: params.sellerAgentSlug,
-        buyerWallet: record.walletAddress,
-        serviceUrl: params.serviceUrl,
-        maxAmount: String(params.maxAmount),
-        circleOutput: detail,
-      })
-      const spendActivity = await appendAgentActivity({
-        agentSlug: params.agentSlug,
-        type: 'x402_spent',
-        title: 'Service payment submitted',
-        amount: String(params.maxAmount),
-        asset: 'USDC',
-        direction: 'out',
-        network: 'Circle Gateway x402',
-        wallet: record.walletAddress,
-        serviceUrl: params.serviceUrl,
-        detail: 'Circle submitted the payment, but the service response failed. Do not retry while this payment is being reconciled.',
-        proof,
-      })
-      const error = new Error('Payment was submitted, but the service did not complete. Do not retry this purchase.') as Error & {
-        status?: number
-        code?: string
-        receiptActivityId?: string
-      }
-      error.status = 409
-      error.code = 'circle_payment_submitted_response_failed'
-      error.receiptActivityId = spendActivity?.id
-      throw error
+    const explicitlySubmitted = classifyCirclePaymentFailure(err) === 'submitted'
+    const detail = circleErrorDetail(err)
+    const proof = buildX402Proof({
+      buyerAgent: params.agentSlug,
+      sellerAgent: params.sellerAgentSlug,
+      buyerWallet: record.walletAddress,
+      serviceUrl: params.serviceUrl,
+      maxAmount: String(params.maxAmount),
+      circleOutput: detail,
+    })
+    const spendActivity = await appendAgentActivity({
+      agentSlug: params.agentSlug,
+      type: 'x402_spent',
+      title: explicitlySubmitted ? 'Service payment submitted' : 'Service payment outcome pending',
+      amount: String(params.maxAmount),
+      asset: 'USDC',
+      direction: 'out',
+      network: 'Circle Gateway x402',
+      wallet: record.walletAddress,
+      serviceUrl: params.serviceUrl,
+      detail: explicitlySubmitted
+        ? 'Circle submitted the payment, but the service response failed. Do not retry while this payment is being reconciled.'
+        : 'The Circle payment command ended without a final result. The outcome must be reconciled before retrying.',
+      proof,
+    }).catch(() => undefined)
+    const error = new Error(explicitlySubmitted
+      ? 'Payment was submitted, but the service did not complete. Do not retry this purchase.'
+      : 'The payment command ended without a final result. Do not retry while the outcome is being reconciled.') as Error & {
+      status?: number
+      code?: string
+      receiptActivityId?: string
     }
-    throw err
+    error.status = 409
+    error.code = explicitlySubmitted ? 'circle_payment_submitted_response_failed' : 'circle_payment_outcome_unknown'
+    error.receiptActivityId = spendActivity?.id
+    throw error
   }
 
   const parsedResponse = extractJsonFromCliOutput(output) as X402ServiceResponse | undefined
@@ -673,6 +675,10 @@ function circleErrorDetail(error: unknown) {
 
 function isCirclePaymentSubmitted(error: unknown) {
   return /PAYMENT WAS SUBMITTED|Payment submitted but request failed/i.test(circleErrorDetail(error))
+}
+
+export function classifyCirclePaymentFailure(error: unknown): 'submitted' | 'unknown' {
+  return isCirclePaymentSubmitted(error) ? 'submitted' : 'unknown'
 }
 
 function safeCircleCliError(detail: string) {
