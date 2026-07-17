@@ -13,6 +13,7 @@ import { cn } from '../../lib/utils'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
+import PocketMarketplacePanel from '../components/PocketMarketplacePanel'
 import usePocketX402Controller from '../controllers/usePocketX402Controller'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { buildPocketX402FundUrl } from '../lib/pocketX402FundUrl'
@@ -58,21 +59,23 @@ export default function PocketX402Page() {
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-violet-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-violet-500/[0.08]">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">x402 service balance</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Available for app payments</p>
+                <span className="rounded-full border border-gray-200 bg-white/70 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-gray-400 dark:border-white/10 dark:bg-white/[0.05]">x402</span>
+              </div>
               <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
                 {x402.snapshot?.gatewayBalance !== undefined
                   ? Number(x402.snapshot.gatewayBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })
                   : '0.00'} <span className="text-sm font-bold text-gray-400">USDC</span>
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
-                <span className="rounded-full border border-gray-200 bg-white/80 px-2 py-1 text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400">Circle Gateway</span>
                 <span className={cn(
                   'rounded-full border px-2 py-1',
                   connected
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
                     : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400',
                 )}>
-                  {connected ? 'Connected' : 'Not connected'}
+                  {connected ? 'Wallet linked' : 'Setup needed'}
                 </span>
               </div>
             </div>
@@ -80,31 +83,35 @@ export default function PocketX402Page() {
               type="button"
               onClick={() => void x402.refresh()}
               disabled={!authenticated || x402.refreshing || x402.walletBusy || x402.activationBusy}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white/80 text-gray-600 transition-all hover:bg-white disabled:opacity-40 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
-              aria-label="Refresh x402 balance"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-all hover:text-gray-950 active:scale-90 disabled:opacity-40 dark:text-gray-300 dark:hover:text-white"
+              aria-label="Refresh App Pay balance"
+              title="Refresh App Pay"
             >
               <RefreshCw className={cn('h-4 w-4', x402.refreshing && 'animate-spin')} />
             </button>
           </div>
         </div>
 
-        <div className="mb-2 flex items-center justify-between gap-3 px-1">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Balance network</p>
-            <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-              {connected ? 'Balances and actions appear below.' : 'Connect wallet access to view balances.'}
-            </p>
+        <details className="group rounded-xl border border-gray-100 bg-white/70 px-3 py-2 dark:border-white/[0.07] dark:bg-white/[0.025]">
+          <summary className="cursor-pointer list-none text-[11px] font-semibold text-gray-400 transition hover:text-gray-700 dark:hover:text-gray-200">
+            Technical details
+          </summary>
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-white/[0.07]">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">x402 · Circle Gateway</p>
+              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Payment network</p>
+            </div>
+            <select
+              value={x402.network}
+              onChange={event => x402.selectNetwork(event.target.value === 'arc' ? 'arc' : 'base')}
+              disabled={x402.walletStep === 'otp'}
+              className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
+            >
+              <option value="base">Base</option>
+              <option value="arc">Arc Testnet</option>
+            </select>
           </div>
-          <select
-            value={x402.network}
-            onChange={event => x402.selectNetwork(event.target.value === 'arc' ? 'arc' : 'base')}
-            disabled={x402.walletStep === 'otp'}
-            className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
-          >
-            <option value="base">Base</option>
-            <option value="arc">Arc Testnet</option>
-          </select>
-        </div>
+        </details>
 
         {!authenticated ? (
           <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95">
@@ -115,7 +122,7 @@ export default function PocketX402Page() {
               className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white/[0.12]"
             >
               <Mail className="absolute left-5 h-4 w-4" />
-              <span>Sign in to x402</span>
+              <span>Sign in to Pocket</span>
               <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
                 <ArrowRight className="h-4 w-4" />
               </span>
@@ -125,9 +132,9 @@ export default function PocketX402Page() {
         ) : !connected ? (
           <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95">
             <div className="px-1 pb-1">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Wallet access</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Set up App Pay</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {x402.snapshot?.found ? 'Confirm the Circle email for this wallet to view balances and receipts.' : 'Create or link a Circle wallet for x402 services.'}
+                {x402.snapshot?.found ? 'Verify access to your secure payment wallet.' : 'Use a secure wallet to fund pay-per-use apps and AI tools.'}
               </p>
             </div>
 
@@ -141,12 +148,12 @@ export default function PocketX402Page() {
                   </div>
                 </div>
                 <button type="button" onClick={() => x402.chooseMode('create')} disabled={x402.walletBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
-                  <Wallet className="h-4 w-4" /> Create wallet
+                  <Wallet className="h-4 w-4" /> Continue with Pocket wallet
                 </button>
                 <button type="button" onClick={() => x402.chooseMode('login')} disabled={x402.walletBusy} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
-                  <ExternalLink className="h-4 w-4" /> Link existing
+                  <ExternalLink className="h-4 w-4" /> Use existing Circle wallet
                 </button>
-                <p className="text-center text-[11px] font-medium text-gray-400">Circle wallet access</p>
+                  <p className="text-center text-[11px] font-medium text-gray-400">Secure wallet access powered by Circle</p>
               </>
             ) : x402.walletStep === 'otp' ? (
               <div className="space-y-2">
@@ -167,7 +174,7 @@ export default function PocketX402Page() {
                 <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                   <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200"><Wallet className="h-4 w-4" /></span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{x402.walletMode === 'create' ? 'Create Circle wallet' : 'Link existing wallet'}</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{x402.walletMode === 'create' ? 'Pocket wallet setup' : 'Existing wallet verification'}</p>
                     <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">{email || 'Email session active'}</p>
                   </div>
                 </div>
@@ -184,10 +191,10 @@ export default function PocketX402Page() {
                   </div>
                 )}
                 <button type="button" onClick={() => void x402.beginConnection()} disabled={x402.walletBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950">
-                  {x402.walletBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening Circle wallet</> : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen dark:invert-0 dark:mix-blend-multiply" /> {x402.walletMode === 'create' ? 'Create wallet' : 'Send code'}</>}
+                  {x402.walletBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Verifying wallet</> : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen dark:invert-0 dark:mix-blend-multiply" /> {x402.walletMode === 'create' ? 'Continue' : 'Send verification code'}</>}
                 </button>
                 <p className="text-center text-[11px] font-medium text-gray-400">Circle will email a one-time code.</p>
-                {!x402.snapshot?.found && <button type="button" onClick={() => x402.chooseMode(x402.walletMode === 'create' ? 'login' : 'create')} className="w-full text-xs font-semibold text-gray-500">{x402.walletMode === 'create' ? 'Link existing instead' : 'Create wallet instead'}</button>}
+                {!x402.snapshot?.found && <button type="button" onClick={() => x402.chooseMode(x402.walletMode === 'create' ? 'login' : 'create')} className="w-full text-xs font-semibold text-gray-500">{x402.walletMode === 'create' ? 'Use an existing Circle wallet instead' : 'Use a new Pocket wallet instead'}</button>}
               </div>
             )}
             {x402.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-950/20 dark:text-red-300">{x402.error}</p>}
@@ -197,7 +204,7 @@ export default function PocketX402Page() {
             <div className="overflow-hidden rounded-lg border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
               <div className="flex items-center justify-between gap-3 px-3 py-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Circle wallet balance</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Pocket wallet</p>
                   <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402.snapshot?.walletBalanceError}>{balanceText(x402.snapshot?.walletBalance, x402.snapshot?.walletBalanceChecked ?? false, x402.snapshot?.walletBalanceError)}</p>
                 </div>
                 <a href={fundUrl} className="inline-flex h-8 min-w-[82px] items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white dark:bg-white dark:text-gray-950"><ArrowRight className="h-3.5 w-3.5" /> Fund</a>
@@ -205,25 +212,25 @@ export default function PocketX402Page() {
               <div className="border-t border-gray-100 px-3 py-3 dark:border-white/10">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">x402 service balance</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Available for app payments</p>
                     <p className="mt-0.5 text-sm font-semibold text-gray-900 dark:text-white" title={x402.snapshot?.gatewayBalanceError}>{balanceText(x402.snapshot?.gatewayBalance, x402.snapshot?.gatewayBalanceChecked ?? false, x402.snapshot?.gatewayBalanceError)}</p>
                   </div>
-                  <button type="button" onClick={() => { x402.setActivationOpen(!x402.activationOpen); }} disabled={x402.activationBusy || treasuryEmpty} className="inline-flex h-8 min-w-[82px] items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"><ArrowRight className="h-3.5 w-3.5" /> Activate</button>
+                  <button type="button" onClick={() => { x402.setActivationOpen(!x402.activationOpen); }} disabled={x402.activationBusy || treasuryEmpty} className="inline-flex h-8 min-w-[82px] items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"><ArrowRight className="h-3.5 w-3.5" /> Add funds</button>
                 </div>
-                <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{treasuryEmpty ? 'Fund Circle wallet balance before activation.' : 'Move Circle wallet USDC into x402 service balance.'}</p>
+                <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{treasuryEmpty ? 'Add USDC to your Pocket wallet first.' : 'Set aside USDC for apps, AI tools, and pay-per-use services.'}</p>
               </div>
               {(x402.activationOpen || x402.activationSuccess) && (
                 <div className="border-t border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-black/10">
                   {x402.activationSuccess ? (
                     <div className="py-2 text-center">
                       <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-200"><CheckCircle2 className="h-5 w-5" /></div>
-                      <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{x402.activationPending ? 'x402 activation pending' : 'x402 activated'}</p>
+                      <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-white">{x402.activationPending ? 'Adding App Pay funds' : 'App Pay funded'}</p>
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{x402.activationSuccess}</p>
                     </div>
                   ) : (
                     <>
-                      <p className="text-xs font-semibold text-gray-900 dark:text-white">Activate x402</p>
-                      <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Move USDC from Circle wallet balance into x402 service balance.</p>
+                      <p className="text-xs font-semibold text-gray-900 dark:text-white">Add App Pay funds</p>
+                      <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Set aside USDC from your Pocket wallet for pay-per-use services.</p>
                       <label className="mb-1.5 mt-3 block text-xs font-semibold text-gray-600 dark:text-gray-300">Amount</label>
                       <div className="flex h-10 max-w-[150px] overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
                         <input value={x402.amount} onChange={event => x402.setAmount(event.target.value)} inputMode="decimal" className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-semibold text-gray-900 outline-none dark:text-white" />
@@ -232,7 +239,7 @@ export default function PocketX402Page() {
                       {(x402.activationError || x402.error) && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">{x402.activationError || x402.error}</p>}
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <button type="button" onClick={() => x402.setActivationOpen(false)} disabled={x402.activationBusy} className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">Cancel</button>
-                        <button type="button" onClick={() => void x402.activate()} disabled={x402.activationBusy || Boolean(x402.activationError)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{x402.activationBusy ? <><span>Activating</span><Loader2 className="h-4 w-4 animate-spin" /></> : <><ArrowRight className="h-4 w-4" /> Activate</>}</button>
+                        <button type="button" onClick={() => void x402.activate()} disabled={x402.activationBusy || Boolean(x402.activationError)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{x402.activationBusy ? <><span>Adding funds</span><Loader2 className="h-4 w-4 animate-spin" /></> : <><ArrowRight className="h-4 w-4" /> Add funds</>}</button>
                       </div>
                     </>
                   )}
@@ -240,6 +247,13 @@ export default function PocketX402Page() {
               )}
             </div>
             {x402.error && !x402.activationOpen && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:bg-red-950/20 dark:text-red-300">{x402.error}</p>}
+            <PocketMarketplacePanel
+              connected={connected}
+              network={x402.network}
+              gatewayBalance={x402.snapshot?.gatewayBalance}
+              getAccessToken={getAccessToken}
+              onUseBase={() => x402.selectNetwork('base')}
+            />
           </div>
         )}
       </div>

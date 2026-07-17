@@ -3253,11 +3253,11 @@ export default function PaymentPage() {
 
   useEffect(() => {
     const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
-    if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge) return
+    if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge || polymarketBridgeComplete) return
     void refreshPolymarketBridgeStatus()
     const timer = window.setInterval(() => void refreshPolymarketBridgeStatus(), 5_000)
     return () => window.clearInterval(timer)
-  }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, refreshPolymarketBridgeStatus])
+  }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketBridgeComplete, refreshPolymarketBridgeStatus])
 
   // ── Direct Send display address ───────────────────────────────────────────
   const directDisplayAddr = directVault
@@ -3832,6 +3832,14 @@ export default function PaymentPage() {
                   </div>
                 </div>
               )}
+              {isPolymarketBridge && polymarketBridgeLatestTx && polymarketBridgeLatestTx !== txHash && (
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <span className="text-sm text-gray-500">Bridge Tx</span>
+                  <span className="truncate font-mono text-xs font-semibold text-gray-700" title={polymarketBridgeLatestTx}>
+                    {truncateAddress(polymarketBridgeLatestTx, 6)}
+                  </span>
+                </div>
+              )}
               {!txHash && manualPayDetected && chain !== 'solana' && !isNgPosPaycrestOfframp && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">Tx</span>
@@ -3970,15 +3978,29 @@ export default function PaymentPage() {
                 </a>
               </div>
             ) : isPolymarketBridge && polymarketReturnToAgentHash ? (
-              <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                {polymarketBridgeComplete ? 'Funded. Redirecting back to Agent Hash in 7 seconds...' : polymarketBridgeProgressText}
-                {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
-              </p>
+              <div className="space-y-2">
+                <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
+                  {polymarketBridgeComplete ? 'Funded. Redirecting back to Agent Hash in 7 seconds...' : polymarketBridgeProgressText}
+                  {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
+                </p>
+                {polymarketBridgeComplete && (
+                  <a href={polymarketAgentHashUrl} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
+                    Return to Agent Hash now
+                  </a>
+                )}
+              </div>
             ) : isPolymarketBridge ? (
-              <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                {polymarketBridgeComplete ? 'Funded. Redirecting back to PolyDesk in 7 seconds...' : polymarketBridgeProgressText}
-                {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
-              </p>
+              <div className="space-y-2">
+                <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
+                  {polymarketBridgeComplete ? 'Funded. Redirecting back to PolyDesk in 7 seconds...' : polymarketBridgeProgressText}
+                  {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
+                </p>
+                {polymarketBridgeComplete && (
+                  <a href={polymarketBridgeReturnUrl} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
+                    Return to PolyDesk now
+                  </a>
+                )}
+              </div>
             ) : isPolymarketFunding ? (
               <p className="text-center text-[11px] font-medium text-gray-400">Funding complete.</p>
             ) : telegramUrl ? (

@@ -37,7 +37,7 @@ export default function PocketRouteShell({
       <div className="min-h-[100dvh] w-full min-w-0 bg-white dark:bg-[#111114]">
         <div className="flex h-[100dvh] w-full flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]">
-            <div className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-28 pt-[4.75rem]">
+            <div className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-28 pt-[8.5rem]">
               {children}
             </div>
           </div>

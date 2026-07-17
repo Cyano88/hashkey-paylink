@@ -79,10 +79,12 @@ import {
 } from './api/pocket/solana-transfers.js'
 import pocketActivityHandler from './api/pocket/activity.js'
 import pocketBalancesHandler from './api/pocket/balances.js'
+import pocketFxQuoteHandler from './api/pocket/fx-quote.js'
 import pocketRecipientBalanceHandler from './api/pocket/recipient-balance.js'
 import pocketX402Handler from './api/pocket/x402.js'
 import pocketX402ConnectHandler from './api/pocket/x402-connect.js'
 import pocketX402ActivateHandler from './api/pocket/x402-activate.js'
+import pocketMarketplaceHandler from './api/pocket/marketplace.js'
 import pocketAgentAskHandler from './api/pocket/agent-ask.js'
 import pocketWalletsHandler from './api/pocket/wallets/index.js'
 import pocketWalletLinkHandler from './api/pocket/wallets/link.js'
@@ -249,11 +251,13 @@ app.all('/api/pocket/transfers/prepare',  strictLimiter, pocketSolanaTransferPre
 app.all('/api/pocket/transfers/submit',   strictLimiter, pocketSolanaTransferSubmitHandler)
 app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)
 app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
+app.all('/api/pocket/fx-quote',          readLimiter, pocketFxQuoteHandler)
 app.all('/api/pocket/balances/recipient', readLimiter, pocketRecipientBalanceHandler)
 app.all('/api/pocket/activity',          readLimiter, pocketActivityHandler)
 app.all('/api/pocket/x402',              readLimiter, pocketX402Handler)
 app.all('/api/pocket/x402/connect',      strictLimiter, pocketX402ConnectHandler)
 app.all('/api/pocket/x402/activate',     strictLimiter, pocketX402ActivateHandler)
+app.all('/api/pocket/marketplace',       strictLimiter, pocketMarketplaceHandler)
 app.all('/api/pocket/agent/ask',         strictLimiter, pocketAgentAskHandler)
 app.all('/api/pocket/wallets/link',      strictLimiter, pocketWalletLinkHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)

@@ -5,6 +5,7 @@ import PocketActivityPage from './pages/PocketActivityPage'
 import PocketAssistantPage from './pages/PocketAssistantPage'
 import PocketBillsPage from './pages/PocketBillsPage'
 import PocketHomePage from './pages/PocketHomePage'
+import PocketLandingPage from './pages/PocketLandingPage'
 import PocketMoveBankPage from './pages/PocketMoveBankPage'
 import PocketMovePosPage from './pages/PocketMovePosPage'
 import PocketMoveUsdcPage from './pages/PocketMoveUsdcPage'
@@ -20,12 +21,16 @@ function pocketRelativePath(pathname: string) {
 export default function CirclePocketApp() {
   const location = useLocation()
   const navigate = useNavigate()
-  const route = useMemo(() => resolvePocketRoute(pocketRelativePath(location.pathname)), [location.pathname])
+  const relativePath = pocketRelativePath(location.pathname)
+  const landing = relativePath === '/'
+  const route = useMemo(() => landing ? null : resolvePocketRoute(relativePath), [landing, relativePath])
 
   useEffect(() => {
-    if (route) return
+    if (landing || route) return
     navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.smartWallet}`, { replace: true })
-  }, [navigate, route])
+  }, [landing, navigate, route])
+
+  if (landing) return <PocketLandingPage />
 
   if (!route) return null
 

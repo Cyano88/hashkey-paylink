@@ -56,6 +56,8 @@ import {
   readPocketWallets,
   unlinkPocketWallet,
 } from '../src/pocket/api/pocketWalletLinkClient.ts'
+import { parsePocketFxQuote, readPocketFxQuote } from '../src/pocket/api/pocketFxClient.ts'
+import { createPocketFxQuoteReader } from '../api/pocket/fx-quote.ts'
 
 async function readPocketSourceTree(directoryUrl) {
   const sources = []
@@ -95,6 +97,56 @@ for (const [path, expected] of routeCases) {
   assert.ok(resolved)
   assert.deepEqual(resolvePocketRoute(pocketPathFor(resolved)), expected)
 }
+
+const fxEnvelope = {
+  ok: true,
+  quote: {
+    currency: 'NGN',
+    symbol: '₦',
+    rate: 1373.43,
+    source: 'paycrest',
+    side: 'sell',
+    quotedAt: 1_800_000_000_000,
+    expiresAt: 1_800_000_060_000,
+  },
+}
+assert.deepEqual(parsePocketFxQuote(fxEnvelope), fxEnvelope.quote)
+assert.throws(() => parsePocketFxQuote({ ...fxEnvelope, quote: { ...fxEnvelope.quote, source: 'fixer' } }), /invalid/)
+let fxClientUrl = ''
+assert.deepEqual(await readPocketFxQuote(async url => {
+  fxClientUrl = String(url)
+  return { ok: true, json: async () => fxEnvelope }
+}), fxEnvelope.quote)
+assert.equal(fxClientUrl, '/api/pocket/fx-quote?currency=NGN')
+
+let fxNow = 1_800_000_000_000
+let paycrestRateCalls = 0
+let paycrestRateUnavailable = false
+const readFxQuote = createPocketFxQuoteReader({
+  now: () => fxNow,
+  fetcher: async url => {
+    paycrestRateCalls += 1
+    assert.equal(String(url), 'https://api.paycrest.io/v2/rates/base/USDC/1/NGN?side=sell')
+    if (paycrestRateUnavailable) {
+      return { ok: false, json: async () => ({ status: 'error', message: 'Rate unavailable' }) }
+    }
+    return {
+      ok: true,
+      json: async () => ({ status: 'success', data: { sell: { rate: '1373.43' } } }),
+    }
+  },
+})
+const [firstFxQuote, deduplicatedFxQuote] = await Promise.all([readFxQuote(), readFxQuote()])
+assert.deepEqual(firstFxQuote, deduplicatedFxQuote)
+assert.equal(paycrestRateCalls, 1)
+fxNow += 29_999
+assert.deepEqual(await readFxQuote(), firstFxQuote)
+assert.equal(paycrestRateCalls, 1)
+fxNow += 2
+paycrestRateUnavailable = true
+await assert.rejects(readFxQuote(), /Rate unavailable/)
+assert.equal(paycrestRateCalls, 2)
+
 assert.equal(resolvePocketRoute('/unknown'), null)
 assert.equal(pocketLegacyEntryUrl({ section: 'move', view: 'bank' }), '/?product=circle-pocket&pocket=move%3Abank')
 assert.equal(pocketLegacyEntryUrl({ section: 'assistant', view: 'circle-pocket' }), '/?product=circle-pocket&agent=hash')
@@ -732,7 +784,7 @@ const createLinkSource = await readFile(new URL('../src/pages/CreateLink.tsx', i
 assert.match(createLinkSource, /usePocketIdentity\(\)/)
 assert.match(createLinkSource, /usePocketProfile\(\{ authenticated: privyAuthenticated, email: privyEmail, getAccessToken \}\)/)
 assert.doesNotMatch(createLinkSource, /initialPocketRoute|pocketBasePath|startsInStandalonePocket|startsInPocketUsdc|navigatePocket/)
-assert.match(createLinkSource, /const POCKET_SMART_WALLET_PATH = '\/pocket\/home\/smart-wallet'/)
+assert.match(createLinkSource, /const POCKET_ENTRY_PATH = '\/pocket'/)
 assert.match(createLinkSource, /function openStandaloneCirclePocket\(replace = false\)/)
 assert.match(createLinkSource, /if \(product === 'circle-pocket'\) \{\s*openStandaloneCirclePocket\(true\)/)
 assert.match(createLinkSource, /title: 'Circle Pocket Wallet'.*action: openStandaloneCirclePocket/)
@@ -760,7 +812,23 @@ const pocketWalletsHookSource = await readFile(new URL('../src/pocket/hooks/useP
 assert.match(pocketWalletsHookSource, /readPocketLinkedWallets\(\{ accessToken: token \}\)/)
 assert.match(pocketWalletsHookSource, /readPocketBalances\(\{ accessToken: token \}\)/)
 assert.match(pocketWalletsHookSource, /if \(!authenticated \|\| !email\)/)
+assert.match(pocketWalletsHookSource, /POCKET_BALANCE_REFRESH_INTERVAL_MS = 45_000/)
+assert.match(pocketWalletsHookSource, /window\.addEventListener\('focus', refreshVisibleBalance\)/)
+assert.match(pocketWalletsHookSource, /document\.addEventListener\('visibilitychange', refreshVisibleBalance\)/)
+assert.match(pocketWalletsHookSource, /if \(balanceReadInFlight\.current\) return/)
 assert.doesNotMatch(pocketWalletsHookSource, /linkPocketWallet|unlinkPocketWallet|connectCircle|signCircle|executePocket|preparePocket|submitPocket/)
+const pocketFxHookSource = await readFile(new URL('../src/pocket/hooks/usePocketFxQuote.ts', import.meta.url), 'utf8')
+assert.match(pocketFxHookSource, /POCKET_FX_REFRESH_INTERVAL_MS = 30_000/)
+assert.match(pocketFxHookSource, /window\.addEventListener\('focus', refreshVisibleQuote\)/)
+assert.match(pocketFxHookSource, /document\.addEventListener\('visibilitychange', refreshVisibleQuote\)/)
+assert.match(pocketFxHookSource, /quote\.expiresAt - Date\.now\(\)/)
+const pocketFxEndpointSource = await readFile(new URL('../api/pocket/fx-quote.ts', import.meta.url), 'utf8')
+assert.match(pocketFxEndpointSource, /PAYCREST_QUOTE_CACHE_MS = 30_000/)
+assert.match(pocketFxEndpointSource, /\/v2\/rates\/base\/USDC\/1\/NGN\?side=sell/)
+assert.match(pocketFxEndpointSource, /Cache-Control', 'no-store'/)
+assert.doesNotMatch(pocketFxEndpointSource, /fixer|configured|stale/i)
+const serverSource = await readFile(new URL('../server.ts', import.meta.url), 'utf8')
+assert.match(serverSource, /app\.all\('\/api\/pocket\/fx-quote',\s+readLimiter, pocketFxQuoteHandler\)/)
 const pocketActivityHookSource = await readFile(new URL('../src/pocket/hooks/usePocketActivity.ts', import.meta.url), 'utf8')
 assert.match(pocketActivityHookSource, /readPocketActivity\(\{ accessToken: token \}\)/)
 assert.match(pocketActivityHookSource, /data\.payments\.slice\(\)\.sort/)
@@ -806,6 +874,9 @@ assert.match(layoutSource, /onMoveChange=\{\(view\) => navigatePocketHeader\(\{ 
 assert.match(layoutSource, /onBillChange=\{\(view\) => navigatePocketHeader\(\{ section: 'bills'/)
 assert.match(layoutSource, /onActivityChange=\{\(view\) => navigatePocketHeader\(\{ section: 'activity'/)
 assert.match(layoutSource, /navigate\(`\/pocket\$\{pocketPathFor\(state\)\}`\)/)
+assert.match(layoutSource, /<CPurseIcon size=\{32\}/)
+assert.match(layoutSource, /aria-label=\{theme === 'dark' \? 'Switch to light mode' : 'Switch to dark mode'\}/)
+assert.match(layoutSource, /<PocketAccountMenu \/>/)
 const circlePocketAppSource = await readFile(new URL('../src/pocket/CirclePocketApp.tsx', import.meta.url), 'utf8')
 const standalonePocketSources = await readPocketSourceTree(new URL('../src/pocket/', import.meta.url))
 for (const { path, source } of standalonePocketSources) {
@@ -825,6 +896,8 @@ assert.match(circlePocketAppSource, /import PocketAssistantPage from '.\/pages\/
 assert.match(circlePocketAppSource, /route\.section === 'assistant'/)
 assert.match(circlePocketAppSource, /<PocketAssistantPage \/>/)
 assert.match(circlePocketAppSource, /import PocketHomePage from '.\/pages\/PocketHomePage'/)
+assert.match(circlePocketAppSource, /import PocketLandingPage from '.\/pages\/PocketLandingPage'/)
+assert.match(circlePocketAppSource, /if \(landing\) return <PocketLandingPage \/>/)
 assert.match(circlePocketAppSource, /route\.section === 'home' && route\.view === 'smart-wallet'/)
 assert.match(circlePocketAppSource, /<PocketHomePage \/>/)
 assert.match(circlePocketAppSource, /import PocketMoveUsdcPage from '.\/pages\/PocketMoveUsdcPage'/)
@@ -852,20 +925,48 @@ assert.doesNotMatch(pocketActivityPageSource, /CreateLink|fetch\(|['"]\/api\/|si
 const pocketRouteShellSource = await readFile(new URL('../src/pocket/components/PocketRouteShell.tsx', import.meta.url), 'utf8')
 assert.match(pocketRouteShellSource, /window\.innerHeight - viewportHeight > 140/)
 assert.match(pocketRouteShellSource, /<PocketBottomNav active=\{active\} keyboardOpen=\{keyboardOpen\}/)
-assert.match(pocketRouteShellSource, /max-w-\[430px\].*pb-28.*pt-\[4\.75rem\]/)
+assert.match(pocketRouteShellSource, /max-w-\[430px\].*pb-28.*pt-\[8\.5rem\]/)
 assert.doesNotMatch(pocketRouteShellSource, /CreateLink|fetch\(|['"]\/api\//i)
 const pocketHomePageSource = await readFile(new URL('../src/pocket/pages/PocketHomePage.tsx', import.meta.url), 'utf8')
 assert.match(pocketHomePageSource, /usePocketIdentity\(\)/)
 assert.match(pocketHomePageSource, /usePocketWallets\(\{ authenticated, email, getAccessToken \}\)/)
-assert.match(pocketHomePageSource, /usePocketProfile\(\{ authenticated, email, getAccessToken \}\)/)
 assert.match(pocketHomePageSource, /usePocketWalletController\(\{/)
 assert.match(pocketHomePageSource, /usePocketWithdrawalController\(\{/)
 assert.match(pocketHomePageSource, /<PocketHomeOverview/)
+assert.match(pocketHomePageSource, /usePocketFxQuote\(\)/)
+assert.match(pocketHomePageSource, /Promise\.all\(\[wallets\.refreshBalances\(\), fx\.refresh\(\)\]\)/)
 assert.match(pocketHomePageSource, /<PocketHomeControls/)
 assert.match(pocketHomePageSource, /<PocketRouteShell active="home"/)
 assert.match(pocketHomePageSource, /Circle wallet setup was cancelled\./)
 assert.match(pocketHomePageSource, /Copied \$\{networkLabel\} funding address/)
+assert.doesNotMatch(pocketHomePageSource, /LocalCurrencyProfileCard|profileSlot/)
 assert.doesNotMatch(pocketHomePageSource, /CreateLink|fetch\(|['"]\/api\/|signCircleSolanaTransaction|preparePocketSolanaTransfer|submitPocketSolanaTransfer|executePocketEvmTransfer|linkPocketWallet/i)
+const pocketHomeOverviewSource = await readFile(new URL('../src/pocket/features/home/PocketHomeOverview.tsx', import.meta.url), 'utf8')
+for (const logo of ['base', 'arbitrum', 'arc', 'solana']) {
+  assert.match(pocketHomeOverviewSource, new RegExp(`/brand/${logo}-logo\\.jpeg`))
+}
+assert.match(pocketHomeOverviewSource, /logoCanvas === 'dark'/)
+assert.match(pocketHomeOverviewSource, /grayscale contrast-200 mix-blend-multiply dark:mix-blend-screen/)
+assert.match(pocketHomeOverviewSource, /network\.key === 'arc'[\s\S]*Testnet/)
+assert.match(pocketHomeOverviewSource, /h-8 w-8[\s\S]*title="Refresh balances"/)
+assert.match(pocketHomeOverviewSource, /POCKET_BALANCE_CURRENCIES.*'USDC'.*'NGN'/)
+assert.match(pocketHomeOverviewSource, /Previous balance currency/)
+assert.match(pocketHomeOverviewSource, /Next balance currency/)
+assert.match(pocketHomeOverviewSource, /Paycrest rate/)
+assert.doesNotMatch(pocketHomeOverviewSource, /Wallet not opened|Sign in to open|\bready\b|openedWalletCount|wallets open/i)
+const pocketLandingPageSource = await readFile(new URL('../src/pocket/pages/PocketLandingPage.tsx', import.meta.url), 'utf8')
+assert.match(pocketLandingPageSource, /usePocketProfile\(\{ authenticated, email, getAccessToken \}\)/)
+assert.match(pocketLandingPageSource, /profile\.loaded/)
+assert.match(pocketLandingPageSource, /await profile\.save\(\)/)
+assert.match(pocketLandingPageSource, /What is your first name\?/)
+assert.match(pocketLandingPageSource, /And your last name\?/)
+assert.match(pocketLandingPageSource, /Open my Pocket/)
+const pocketAccountMenuSource = await readFile(new URL('../src/pocket/components/PocketAccountMenu.tsx', import.meta.url), 'utf8')
+assert.match(pocketAccountMenuSource, /initialsFor\(fullName, email\)/)
+assert.match(pocketAccountMenuSource, /avatarGradient\(`/)
+assert.match(pocketAccountMenuSource, /View profile/)
+assert.match(pocketAccountMenuSource, /Edit profile/)
+assert.match(pocketAccountMenuSource, /Sign out/)
 const pocketMoveUsdcPageSource = await readFile(new URL('../src/pocket/pages/PocketMoveUsdcPage.tsx', import.meta.url), 'utf8')
 assert.match(pocketMoveUsdcPageSource, /usePocketUsdcDraftController\(selectedNet\)/)
 assert.match(pocketMoveUsdcPageSource, /usePocketRecipient\(\{/)
@@ -927,18 +1028,26 @@ assert.doesNotMatch(pocketPosPageControllerSource, /['"]\/api\/|KEEP_CRYPTO|crea
 assert.match(circlePocketAppSource, /route\.section === 'home' && route\.view === 'x402'\) return <PocketX402Page \/>/)
 const pocketX402PageSource = await readFile(new URL('../src/pocket/pages/PocketX402Page.tsx', import.meta.url), 'utf8')
 assert.match(pocketX402PageSource, /<PocketRouteShell active="home"/)
-assert.match(pocketX402PageSource, /Sign in to x402/)
-assert.match(pocketX402PageSource, /Create wallet/)
-assert.match(pocketX402PageSource, /Link existing/)
+assert.match(pocketX402PageSource, /Available for app payments/)
+assert.match(pocketX402PageSource, /Technical details/)
+assert.match(pocketX402PageSource, /Sign in to Pocket/)
+assert.match(pocketX402PageSource, /Continue with Pocket wallet/)
+assert.match(pocketX402PageSource, /Use existing Circle wallet/)
 assert.match(pocketX402PageSource, /Verify latest code/)
-assert.match(pocketX402PageSource, /Move Circle wallet USDC into x402 service balance\./)
+assert.match(pocketX402PageSource, /Add App Pay funds/)
+assert.match(pocketX402PageSource, /Set aside USDC from your Pocket wallet for pay-per-use services\./)
+assert.doesNotMatch(pocketX402PageSource, /Sign in to x402|Activate x402|x402 service balance|Balance network|Circle wallet balance/)
 assert.doesNotMatch(pocketX402PageSource, /CreateLink|AgentWorkspace|TelegramPaymentLinks|LP Scout|pay-lp-scout|fetch\(|['"]\/api\/|agentSlug/i)
 const pocketX402ControllerSource = await readFile(new URL('../src/pocket/controllers/usePocketX402Controller.ts', import.meta.url), 'utf8')
 assert.match(pocketX402ControllerSource, /readPocketX402Snapshot\(\{ accessToken, network: params\.network \}\)/)
 assert.match(pocketX402ControllerSource, /connectPocketX402Wallet\(\{/)
 assert.match(pocketX402ControllerSource, /activatePocketX402Gateway\(\{ accessToken, network, amount, idempotencyKey: key \}\)/)
 assert.match(pocketX402ControllerSource, /Finish this OTP login or resend OTP before changing network\./)
+assert.match(pocketX402ControllerSource, /USDC is available for app payments\./)
+assert.match(pocketX402ControllerSource, /Could not add App Pay funds\./)
 assert.doesNotMatch(pocketX402ControllerSource, /fetch\(|['"]\/api\/|AgentWorkspace|LP Scout|pay-lp-scout|receipt|disconnect/i)
+const pocketTopSwitchSource = await readFile(new URL('../src/pocket/components/PocketTopSwitch.tsx', import.meta.url), 'utf8')
+assert.match(pocketTopSwitchSource, /\{ key: 'x402', label: 'App Pay'/)
 const pocketBankErrorsSource = await readFile(new URL('../src/pocket/controllers/pocketBankErrors.ts', import.meta.url), 'utf8')
 assert.match(pocketBankErrorsSource, /Bank payouts are temporarily unavailable\. Please try again later\./)
 assert.doesNotMatch(pocketBankErrorsSource, /window\.|document\.|navigator\.|fetch\(|['"]\/api\//i)

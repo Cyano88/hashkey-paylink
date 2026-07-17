@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { Activity, ArrowRight, CheckCheck, Copy, Download, LayoutDashboard, Loader2, Mail, Wallet } from 'lucide-react'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatAmount } from '../../../lib/utils'
@@ -7,7 +6,6 @@ import type { PocketHomeNetwork, PocketHomeNetworkKey } from './PocketHomeOvervi
 export type PocketHomeTab = 'balance' | 'fund' | 'withdraw' | 'activity'
 
 type PocketHomeControlsProps = {
-  profileSlot: ReactNode
   tab: PocketHomeTab
   networks: PocketHomeNetwork[]
   selectedNetwork: PocketHomeNetworkKey
@@ -56,7 +54,6 @@ export function PocketHomeSignInCard() {
 }
 
 export default function PocketHomeControls({
-  profileSlot,
   tab,
   networks,
   selectedNetwork,
@@ -83,8 +80,6 @@ export default function PocketHomeControls({
 }: PocketHomeControlsProps) {
   return (
     <div className="space-y-3">
-      {profileSlot}
-
       <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
         {tabs.map(({ key, label, icon: Icon }) => (
           <button

@@ -626,6 +626,77 @@ async function runCircle(args: string[], key: string, timeoutMs = 60_000) {
   return [stdout, stderr].filter(Boolean).join('\n').trim()
 }
 
+export async function searchCircleMarketplaceServices(params: {
+  query?: string
+  limit?: number
+  offset?: number
+}) {
+  if (!CIRCLE_CLI_ENABLED) {
+    const error = new Error('Circle Marketplace discovery is not enabled on this server.') as Error & { status?: number }
+    error.status = 503
+    throw error
+  }
+  const query = String(params.query ?? '').trim().slice(0, 120)
+  const limit = Math.max(1, Math.min(Math.floor(params.limit ?? 80), 100))
+  const offset = Math.max(0, Math.min(Math.floor(params.offset ?? 0), 10_000))
+  const args = [
+    'services',
+    'search',
+    ...(query ? [query] : []),
+    '--type',
+    'http',
+    '--limit',
+    String(limit),
+    '--offset',
+    String(offset),
+    '--output',
+    'json',
+  ]
+  const output = await runCircle(args, 'circle-marketplace-registry', 45_000)
+  const parsed = extractJsonFromCliOutput(output)
+  if (!parsed || typeof parsed !== 'object') {
+    const error = new Error('Circle Marketplace returned an invalid discovery response.') as Error & { status?: number }
+    error.status = 502
+    throw error
+  }
+  return parsed
+}
+
+export async function inspectCircleMarketplaceService(resource: string) {
+  if (!CIRCLE_CLI_ENABLED) {
+    const error = new Error('Circle Marketplace inspection is not enabled on this server.') as Error & { status?: number }
+    error.status = 503
+    throw error
+  }
+  let url: URL
+  try {
+    url = new URL(resource)
+  } catch {
+    const error = new Error('The marketplace service URL is invalid.') as Error & { status?: number }
+    error.status = 400
+    throw error
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    const error = new Error('Marketplace services must use a public HTTPS URL.') as Error & { status?: number }
+    error.status = 400
+    throw error
+  }
+  const output = await runCircle([
+    'services',
+    'inspect',
+    url.toString(),
+    '--output',
+    'json',
+  ], 'circle-marketplace-registry', 45_000)
+  const parsed = extractJsonFromCliOutput(output)
+  if (!parsed || typeof parsed !== 'object') {
+    const error = new Error('Circle Marketplace returned an invalid inspection response.') as Error & { status?: number }
+    error.status = 502
+    throw error
+  }
+  return parsed
+}
+
 export type AgentWalletReadSnapshot = {
   found: boolean
   walletAddress?: string

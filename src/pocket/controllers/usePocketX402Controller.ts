@@ -224,7 +224,7 @@ export default function usePocketX402Controller({
       activationKey.current = key
       const result = await activatePocketX402Gateway({ accessToken, network, amount, idempotencyKey: key })
       if (result.data?.activationStatus === 'available') {
-        setActivationSuccess(`${result.data.amount} USDC moved into x402 service balance.`)
+        setActivationSuccess(`${result.data.amount} USDC is available for app payments.`)
         setActivationPending(false)
         setActivationOpen(false)
         activationKey.current = ''
@@ -236,7 +236,7 @@ export default function usePocketX402Controller({
       }
       await refresh()
     } catch (reason) {
-      setError(readableError(reason, 'x402 activation failed.'))
+      setError(readableError(reason, 'Could not add App Pay funds.'))
     } finally {
       setActivationBusy(false)
     }

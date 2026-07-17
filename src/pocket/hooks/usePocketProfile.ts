@@ -24,7 +24,9 @@ export default function usePocketProfile({
   const [draft, setDraft] = useState<LocalCurrencyProfile>(() => cached ?? { ...emptyProfile, email })
   const [editing, setEditing] = useState(() => cached === null)
   const [busy, setBusy] = useState(false)
+  const [loaded, setLoaded] = useState(() => !authenticated || cached !== undefined)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
 
   const load = useCallback(async (isCurrent: () => boolean = () => true) => {
     if (!authenticated) {
@@ -32,7 +34,9 @@ export default function usePocketProfile({
       setDraft(emptyProfile)
       setEditing(false)
       setBusy(false)
+      setLoaded(true)
       setError('')
+      setLoadError('')
       return
     }
     const immediate = pocketProfileCache.get(email)
@@ -41,8 +45,10 @@ export default function usePocketProfile({
       setDraft(immediate ?? { ...emptyProfile, email })
       setEditing(!immediate)
     }
+    setLoaded(immediate !== undefined)
     setBusy(immediate === undefined)
     setError('')
+    setLoadError('')
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to save local currency profile.')
@@ -57,11 +63,15 @@ export default function usePocketProfile({
         email: nextProfile?.email ?? data.email ?? email,
       })
       setEditing(!nextProfile)
+      setLoaded(true)
     } catch (reason) {
       if (!isCurrent()) return
-      setError(reason instanceof Error ? reason.message : 'Could not load payout profile.')
+      const message = reason instanceof Error ? reason.message : 'Could not load payout profile.'
+      setError(message)
+      setLoadError(message)
       setDraft(current => ({ ...current, email: email || current.email }))
       setEditing(true)
+      setLoaded(true)
     } finally {
       if (isCurrent()) setBusy(false)
     }
@@ -82,8 +92,10 @@ export default function usePocketProfile({
       setDraft(data.profile)
       pocketProfileCache.set(email, data.profile)
       setEditing(false)
+      return data.profile
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save payout profile.')
+      return null
     } finally {
       setBusy(false)
     }
@@ -111,5 +123,18 @@ export default function usePocketProfile({
     }
   }, [load])
 
-  return { profile, draft, setDraft, editing, busy, error, save, edit, cancel }
+  return {
+    profile,
+    draft,
+    setDraft,
+    editing,
+    busy,
+    loaded,
+    error,
+    loadError,
+    save,
+    edit,
+    cancel,
+    reload: () => load(),
+  }
 }

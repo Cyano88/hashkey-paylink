@@ -81,7 +81,7 @@ const VISIBLE_CREATE_CHAINS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
 const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const HASHPAYSTREAM_APP_URL = import.meta.env.VITE_HASHPAYSTREAM_APP_URL || 'https://hashpaystream.app'
 const POLYDESK_APP_URL = import.meta.env.VITE_POLYDESK_APP_URL || 'https://polydesk-i96m.onrender.com'
-const POCKET_SMART_WALLET_PATH = '/pocket/home/smart-wallet'
+const POCKET_ENTRY_PATH = '/pocket'
 const AGENT_HASH_HEADER_PROMPTS = [
   { text: 'I can help with payments and Hash PayLink services.', delayMs: 9500 },
   { text: 'I am Agent Hash.', delayMs: 7000 },
@@ -871,7 +871,7 @@ export default function CreateLink({
   }
 
   function openStandaloneCirclePocket(replace = false) {
-    navigate(POCKET_SMART_WALLET_PATH, { replace })
+    navigate(POCKET_ENTRY_PATH, { replace })
   }
 
   function openPaymentMenu(push = true) {

@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CHAIN_META } from '../../lib/chains'
 import { copyToClipboard } from '../../lib/utils'
-import { LocalCurrencyProfileCard } from '../components/LocalCurrencyProfileCard'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import usePocketWalletController from '../controllers/usePocketWalletController'
@@ -11,7 +10,7 @@ import { prefetchPocketX402Snapshot } from '../controllers/usePocketX402Controll
 import PocketHomeControls, { PocketHomeSignInCard, type PocketHomeTab } from '../features/home/PocketHomeControls'
 import PocketHomeOverview, { POCKET_HOME_NETWORKS, type PocketHomeNetworkKey } from '../features/home/PocketHomeOverview'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import usePocketProfile from '../hooks/usePocketProfile'
+import usePocketFxQuote from '../hooks/usePocketFxQuote'
 import usePocketWallets from '../hooks/usePocketWallets'
 import { pocketPathFor } from '../lib/pocketRoutes'
 
@@ -27,7 +26,7 @@ export default function PocketHomePage() {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const profile = usePocketProfile({ authenticated, email, getAccessToken })
+  const fx = usePocketFxQuote()
   const [tab, setTab] = useState<PocketHomeTab>('balance')
   const [network, setNetwork] = useState<PocketHomeNetworkKey>('base')
   const [walletBusy, setWalletBusy] = useState(false)
@@ -55,11 +54,6 @@ export default function PocketHomePage() {
   const selectedBalance = wallets.rows.find(row => row.key === network)?.balance ?? 0
   const selectedAddress = selectedWallet?.address ?? ''
   const networkLabel = network === 'solana' ? 'Solana' : CHAIN_META[network].label
-  const openedWalletCount = useMemo(
-    () => Object.values(wallets.wallets).filter(wallet => Boolean(wallet?.address)).length,
-    [wallets.wallets],
-  )
-
   const unlockWallet = useCallback(async (selectedNetwork: PocketHomeNetworkKey) => {
     wallets.setError('')
     const wallet = await walletController.ensureWallet(selectedNetwork)
@@ -119,7 +113,9 @@ export default function PocketHomePage() {
     <PocketRouteShell active="home" onSelect={selectNav}>
       <PocketHomeOverview
         globalBalance={wallets.total}
-        openedWalletCount={openedWalletCount}
+        fxQuote={fx.quote}
+        fxBusy={fx.busy}
+        fxError={fx.error}
         networks={POCKET_HOME_NETWORKS}
         rows={wallets.rows}
         wallets={wallets.wallets}
@@ -127,7 +123,7 @@ export default function PocketHomePage() {
         balanceBusy={wallets.balanceBusy}
         walletBusy={walletBusy}
         selectedNetwork={network}
-        onRefresh={() => void wallets.refreshBalances()}
+        onRefresh={() => void Promise.all([wallets.refreshBalances(), fx.refresh()])}
         onSelectNetwork={(selectedNetwork, shouldOpen) => {
           setNetwork(selectedNetwork)
           if (shouldOpen) void setupWallet(selectedNetwork)
@@ -138,26 +134,6 @@ export default function PocketHomePage() {
         <PocketHomeSignInCard />
       ) : (
         <PocketHomeControls
-          profileSlot={(
-            <LocalCurrencyProfileCard
-              profile={profile.profile}
-              draft={profile.draft}
-              email={email}
-              busy={profile.busy}
-              error={profile.error}
-              editing={profile.editing}
-              title="Your Circle Pocket identity"
-              body="Your verified email, name, receipts, refunds, and local-currency records stay attached to one Circle Pocket identity."
-              savedFallback="Circle Pocket profile"
-              saveLabel="Save Circle Pocket profile"
-              savedBadgeLabel="Verified"
-              identityBadgeLabel="Verified"
-              onDraftChange={profile.setDraft}
-              onSave={profile.save}
-              onEdit={profile.edit}
-              onCancel={profile.cancel}
-            />
-          )}
           tab={tab}
           networks={POCKET_HOME_NETWORKS}
           selectedNetwork={network}

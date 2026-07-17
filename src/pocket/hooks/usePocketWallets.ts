@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { UnifiedBalanceBreakdown } from '../../lib/unifiedBalance'
 import { readPocketBalances, readPocketLinkedWallets } from '../api/pocketReadClient'
 import type { CirclePocketWallets } from '../models/pocketWallet'
@@ -12,6 +12,8 @@ type PocketWalletCacheEntry = {
 }
 
 const pocketWalletCache = new Map<string, PocketWalletCacheEntry>()
+const POCKET_BALANCE_REFRESH_INTERVAL_MS = 45_000
+const POCKET_BALANCE_FOCUS_THROTTLE_MS = 10_000
 
 type PocketWalletReadState = {
   wallets: CirclePocketWallets
@@ -39,8 +41,12 @@ export default function usePocketWallets({
   const [total, setTotal] = useState(() => cached?.total ?? 0)
   const [balanceBusy, setBalanceBusy] = useState(false)
   const [error, setError] = useState('')
+  const balanceReadInFlight = useRef(false)
+  const lastBalanceReadAt = useRef(0)
 
   const refreshBalances = useCallback(async () => {
+    if (balanceReadInFlight.current) return
+    balanceReadInFlight.current = true
     setBalanceBusy(true)
     setError('')
     try {
@@ -49,6 +55,7 @@ export default function usePocketWallets({
       const result = await readPocketBalances({ accessToken: token })
       setRows(result.rows)
       setTotal(result.total)
+      lastBalanceReadAt.current = Date.now()
       pocketWalletCache.set(email, {
         wallets,
         rows: result.rows,
@@ -57,6 +64,7 @@ export default function usePocketWallets({
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Circle Pocket balance refresh failed.')
     } finally {
+      balanceReadInFlight.current = false
       setBalanceBusy(false)
     }
   }, [email, getAccessToken, wallets])
@@ -78,6 +86,8 @@ export default function usePocketWallets({
 
     let cancelled = false
     async function hydrate() {
+      if (balanceReadInFlight.current) return
+      balanceReadInFlight.current = true
       try {
         const token = await getAccessToken()
         if (!token || cancelled) return
@@ -95,6 +105,7 @@ export default function usePocketWallets({
         if ('result' in balanceOutcome) {
           setRows(balanceOutcome.result.rows)
           setTotal(balanceOutcome.result.total)
+          lastBalanceReadAt.current = Date.now()
           pocketWalletCache.set(email, {
             wallets: nextWallets,
             rows: balanceOutcome.result.rows,
@@ -103,6 +114,7 @@ export default function usePocketWallets({
         } else if (!Object.keys(nextWallets).length) {
           setRows([])
           setTotal(0)
+          lastBalanceReadAt.current = Date.now()
           pocketWalletCache.set(email, { wallets: nextWallets, rows: [], total: 0 })
         } else {
           setError(balanceOutcome.reason instanceof Error ? balanceOutcome.reason.message : 'Circle Pocket balance refresh failed.')
@@ -113,7 +125,6 @@ export default function usePocketWallets({
             total: previous?.total ?? 0,
           })
         }
-        setBalanceBusy(false)
       } catch {
         if (!cancelled) {
           const previous = pocketWalletCache.get(email)
@@ -122,8 +133,10 @@ export default function usePocketWallets({
             setRows([])
             setTotal(0)
           }
-          setBalanceBusy(false)
         }
+      } finally {
+        balanceReadInFlight.current = false
+        if (!cancelled) setBalanceBusy(false)
       }
     }
 
@@ -132,6 +145,25 @@ export default function usePocketWallets({
       cancelled = true
     }
   }, [authenticated, email, getAccessToken])
+
+  useEffect(() => {
+    if (!authenticated || !email) return
+
+    const refreshVisibleBalance = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastBalanceReadAt.current < POCKET_BALANCE_FOCUS_THROTTLE_MS) return
+      void refreshBalances()
+    }
+
+    const interval = window.setInterval(refreshVisibleBalance, POCKET_BALANCE_REFRESH_INTERVAL_MS)
+    window.addEventListener('focus', refreshVisibleBalance)
+    document.addEventListener('visibilitychange', refreshVisibleBalance)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshVisibleBalance)
+      document.removeEventListener('visibilitychange', refreshVisibleBalance)
+    }
+  }, [authenticated, email, refreshBalances])
 
   return { wallets, setWallets, rows, total, balanceBusy, error, setError, refreshBalances }
 }

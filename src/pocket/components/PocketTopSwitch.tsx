@@ -20,7 +20,7 @@ type PocketTopSwitchProps = {
 
 const walletItems = [
   { key: 'smart', label: 'Smart Wallet', icon: Wallet },
-  { key: 'x402', label: 'x402', icon: Radio },
+  { key: 'x402', label: 'App Pay', icon: Radio },
 ] as const
 
 const moveItems = [

@@ -11,6 +11,8 @@ import { getPaylinkParam, hasPaylinkFlag } from './lib/paylinkParams'
 import { PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyConnectButton } from './lib/PrivyConnectButton'
 import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
+import PocketAccountMenu from './pocket/components/PocketAccountMenu'
+import { CPurseIcon } from './pocket/components/CPurseIcon'
 import PocketTopSwitch from './pocket/components/PocketTopSwitch'
 import { pocketPathFor, resolvePocketRoute, type PocketRouteState } from './pocket/lib/pocketRoutes'
 
@@ -192,6 +194,7 @@ export default function Layout() {
   const [searchParams] = useSearchParams()
   const isPolyDeskSurface = pathname === '/polydesk' || window.location.hostname.toLowerCase().includes('polydesk') || searchParams.get('app') === 'polydesk'
   const isPocketAppPage = pathname === '/pocket' || pathname.startsWith('/pocket/')
+  const isPocketLandingPage = pathname === '/pocket' || pathname === '/pocket/'
   const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/create' || pathname === '/polymarket' || isPocketAppPage
   const isPayPage  = pathname === '/pay'
   const isNgPosPage = pathname === '/pos/ng'
@@ -422,23 +425,45 @@ export default function Layout() {
         style={agentHashComposerFocused && agentHashViewportTop > 0
           ? { transform: `translate3d(0, ${agentHashViewportTop}px, 0)` }
           : undefined}
-        className={isPocketAppPage
+        className={isPocketLandingPage
+          ? 'hidden'
+          : isPocketAppPage
           ? 'pointer-events-none fixed inset-x-0 top-0 z-50 border-b border-gray-200/80 bg-white/92 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-[#111114]/92 dark:shadow-[0_10px_30px_rgba(0,0,0,0.24)]'
           : 'sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl transition-transform duration-100 dark:border-white/5 dark:bg-[#111113]/90'}
       >
-        <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'justify-center' : 'justify-between'} ${isPocketAppPage ? 'py-1' : isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}>
+        <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'flex-col gap-1.5 py-2' : `justify-between ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}`}>
           {isPocketAppPage ? (
-            <PocketTopSwitch
-              mode={circlePocketHeaderMode}
-              walletView={circlePocketWalletView}
-              moveView={circlePocketMoveView}
-              billView={circlePocketBillView}
-              activityView={circlePocketActivityView}
-              onWalletChange={(view) => navigatePocketHeader({ section: 'home', view: view === 'smart' ? 'smart-wallet' : 'x402' })}
-              onMoveChange={(view) => navigatePocketHeader({ section: 'move', view })}
-              onBillChange={(view) => navigatePocketHeader({ section: 'bills', view })}
-              onActivityChange={(view) => navigatePocketHeader({ section: 'activity', view })}
-            />
+            <>
+              <div className="pointer-events-auto flex h-10 w-full items-center justify-between">
+                <Link to="/pocket/home/smart-wallet" className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
+                  <CPurseIcon size={32} title="" className="shrink-0" />
+                  <span className="text-sm font-black tracking-[-0.025em]">Pocket</span>
+                </Link>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleTheme}
+                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition-colors hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.13]"
+                  >
+                    {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  </button>
+                  <PocketAccountMenu />
+                </div>
+              </div>
+              <PocketTopSwitch
+                mode={circlePocketHeaderMode}
+                walletView={circlePocketWalletView}
+                moveView={circlePocketMoveView}
+                billView={circlePocketBillView}
+                activityView={circlePocketActivityView}
+                onWalletChange={(view) => navigatePocketHeader({ section: 'home', view: view === 'smart' ? 'smart-wallet' : 'x402' })}
+                onMoveChange={(view) => navigatePocketHeader({ section: 'move', view })}
+                onBillChange={(view) => navigatePocketHeader({ section: 'bills', view })}
+                onActivityChange={(view) => navigatePocketHeader({ section: 'activity', view })}
+              />
+            </>
           ) : (
           <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 focus:outline-none">
             {isPolyDeskSurface ? (
@@ -601,7 +626,9 @@ export default function Layout() {
       </header>
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
-      <main className={isPocketAppPage
+      <main className={isPocketLandingPage
+        ? 'w-full flex-1 px-4 py-10 sm:px-6'
+        : isPocketAppPage
         ? 'w-full flex-1 px-4 py-10 sm:px-6'
         : 'mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6'}>
         <Outlet context={{

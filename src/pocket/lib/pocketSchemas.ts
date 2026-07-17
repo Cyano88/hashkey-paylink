@@ -345,6 +345,7 @@ export const POCKET_API = {
   wallets: '/api/pocket/wallets',
   walletLink: '/api/pocket/wallets/link',
   balances: '/api/pocket/balances',
+  fxQuote: '/api/pocket/fx-quote',
   recipientBalance: '/api/pocket/balances/recipient',
   transferPrepare: '/api/pocket/transfers/prepare',
   transferSubmit: '/api/pocket/transfers/submit',
@@ -360,6 +361,7 @@ export const POCKET_API = {
   x402: '/api/pocket/x402',
   x402Connect: '/api/pocket/x402/connect',
   x402Activate: '/api/pocket/x402/activate',
+  marketplace: '/api/pocket/marketplace',
   agentAsk: '/api/pocket/agent/ask',
   agentConfirm: '/api/pocket/agent/confirm',
 } as const
