@@ -9,7 +9,7 @@ import { createPocketIdempotencyKey, type PocketX402SnapshotData, type PocketX40
 import { normalizePocketX402Amount, pocketX402ActivationError } from './pocketX402Validation'
 
 type PocketX402Network = 'base' | 'arc'
-type PocketX402WalletMode = 'choose' | 'create' | 'login'
+type PocketX402WalletMode = 'create' | 'login'
 type PocketX402WalletStep = 'idle' | 'otp' | 'done'
 
 const pocketX402SnapshotCache = new Map<string, PocketX402SnapshotData>()
@@ -65,8 +65,9 @@ export default function usePocketX402Controller({
 }) {
   const [network, setNetworkState] = useState<PocketX402Network>('base')
   const [snapshot, setSnapshot] = useState<PocketX402SnapshotData | null>(() => pocketX402SnapshotCache.get(x402CacheKey(email, 'base')) ?? null)
+  const [snapshotReady, setSnapshotReady] = useState(() => !authenticated || !email || pocketX402SnapshotCache.has(x402CacheKey(email, 'base')))
   const [refreshing, setRefreshing] = useState(false)
-  const [walletMode, setWalletMode] = useState<PocketX402WalletMode>('choose')
+  const [walletMode, setWalletMode] = useState<PocketX402WalletMode>('create')
   const [walletStep, setWalletStep] = useState<PocketX402WalletStep>('idle')
   const [otp, setOtp] = useState('')
   const [otpNetwork, setOtpNetwork] = useState<PocketX402Network | null>(null)
@@ -91,7 +92,7 @@ export default function usePocketX402Controller({
       const next = await loadPocketX402Snapshot({ email, network, getAccessToken, force: true })
       if (run !== refreshRun.current) return
       setSnapshot(next)
-      if (next.found && !next.connected) setWalletMode('login')
+      if (!next.connected) setWalletMode(next.found ? 'login' : 'create')
       if (next.connected) {
         setWalletStep('done')
         setOtpNetwork(null)
@@ -99,7 +100,10 @@ export default function usePocketX402Controller({
     } catch (reason) {
       if (run === refreshRun.current) setError(readableError(reason, 'Could not load x402 wallet status.'))
     } finally {
-      if (run === refreshRun.current) setRefreshing(false)
+      if (run === refreshRun.current) {
+        setSnapshotReady(true)
+        setRefreshing(false)
+      }
     }
   }, [authenticated, email, getAccessToken, network])
 
@@ -107,8 +111,9 @@ export default function usePocketX402Controller({
     if (!authenticated || !email) {
       refreshRun.current += 1
       setSnapshot(null)
+      setSnapshotReady(true)
       setRefreshing(false)
-      setWalletMode('choose')
+      setWalletMode('create')
       setWalletStep('idle')
       setOtp('')
       setOtpNetwork(null)
@@ -117,8 +122,11 @@ export default function usePocketX402Controller({
       setError('')
       return
     }
+    const cached = pocketX402SnapshotCache.get(x402CacheKey(email, network)) ?? null
+    setSnapshot(cached)
+    setSnapshotReady(Boolean(cached))
     void refresh()
-  }, [authenticated, email, refresh])
+  }, [authenticated, email, network, refresh])
 
   const selectNetwork = useCallback((next: PocketX402Network) => {
     if (next === network) return
@@ -127,14 +135,16 @@ export default function usePocketX402Controller({
       return
     }
     setNetworkState(next)
-    setSnapshot(pocketX402SnapshotCache.get(x402CacheKey(email, next)) ?? null)
+    const cached = pocketX402SnapshotCache.get(x402CacheKey(email, next)) ?? null
+    setSnapshot(cached)
+    setSnapshotReady(Boolean(cached))
     setActivationOpen(false)
     setActivationSuccess('')
     setActivationPending(false)
     activationKey.current = ''
   }, [email, network, walletStep])
 
-  const chooseMode = useCallback((mode: Exclude<PocketX402WalletMode, 'choose'>) => {
+  const chooseMode = useCallback((mode: PocketX402WalletMode) => {
     setWalletMode(mode)
     setWalletStep('idle')
     setOtp('')
@@ -245,6 +255,7 @@ export default function usePocketX402Controller({
   return {
     network,
     snapshot,
+    snapshotReady,
     refreshing,
     walletMode,
     walletStep,

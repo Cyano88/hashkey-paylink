@@ -25,7 +25,7 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
   }
 
   return (
-    <PocketRouteShell active="activity" onSelect={selectNav}>
+    <PocketRouteShell active="activity" onSelect={selectNav} onRefresh={activity.refresh} refreshing={activity.busy}>
       <PocketActivityPanel
         view={view}
         rows={activity.rows}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, CheckCircle2, Clock3, Loader2, Search, ShieldCheck, Store } from 'lucide-react'
 import {
   buyPocketMarketplaceService,
@@ -14,6 +14,7 @@ type Props = {
   gatewayBalance?: string
   getAccessToken(): Promise<string | null>
   onUseBase(): void
+  refreshToken?: number
 }
 
 function categoryLabel(value: string) {
@@ -36,7 +37,7 @@ function resultPreview(value: unknown) {
   }
 }
 
-export default function PocketMarketplacePanel({ connected, network, gatewayBalance, getAccessToken, onUseBase }: Props) {
+export default function PocketMarketplacePanel({ connected, network, gatewayBalance, getAccessToken, onUseBase, refreshToken = 0 }: Props) {
   const [query, setQuery] = useState('')
   const [snapshot, setSnapshot] = useState<PocketMarketplaceSnapshot | null>(null)
   const [loading, setLoading] = useState(false)
@@ -44,6 +45,8 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
   const [selected, setSelected] = useState<PocketMarketplaceService | null>(null)
   const [buying, setBuying] = useState(false)
   const [purchase, setPurchase] = useState<PocketMarketplacePurchase | null>(null)
+  const autoLoadAttempted = useRef(false)
+  const lastRefreshToken = useRef(refreshToken)
 
   const load = useCallback(async (nextQuery = query) => {
     if (!connected) return
@@ -61,8 +64,20 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
   }, [connected, getAccessToken, query])
 
   useEffect(() => {
-    if (connected && network === 'base' && !snapshot && !loading) void load('')
-  }, [connected, load, loading, network, snapshot])
+    if (!connected) {
+      autoLoadAttempted.current = false
+      return
+    }
+    if (network !== 'base' || autoLoadAttempted.current) return
+    autoLoadAttempted.current = true
+    void load('')
+  }, [connected, load, network])
+
+  useEffect(() => {
+    if (lastRefreshToken.current === refreshToken) return
+    lastRefreshToken.current = refreshToken
+    if (connected && network === 'base') void load(query)
+  }, [connected, load, network, query, refreshToken])
 
   const canPay = useMemo(() => (
     selected !== null

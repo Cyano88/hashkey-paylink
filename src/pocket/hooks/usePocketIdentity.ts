@@ -15,9 +15,10 @@ export function emailFromPocketPrivyUser(user: unknown) {
 }
 
 export default function usePocketIdentity() {
-  const { authenticated, user, logout, getAccessToken } = usePrivy()
+  const { ready, authenticated, user, logout, getAccessToken } = usePrivy()
 
   return {
+    ready,
     authenticated,
     email: emailFromPocketPrivyUser(user),
     user,

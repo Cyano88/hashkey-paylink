@@ -1,9 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
   CheckCircle2,
-  ExternalLink,
   Loader2,
   Mail,
   RefreshCw,
@@ -28,8 +27,10 @@ function balanceText(value: string | undefined, checked: boolean, error?: string
 
 export default function PocketX402Page() {
   const navigate = useNavigate()
-  const { authenticated, email, getAccessToken } = usePocketIdentity()
+  const { ready: identityReady, authenticated, email, getAccessToken } = usePocketIdentity()
   const x402 = usePocketX402Controller({ authenticated, email, getAccessToken })
+  const [marketplaceRefreshToken, setMarketplaceRefreshToken] = useState(0)
+  const sessionChecking = !identityReady || (authenticated && !x402.snapshotReady)
   const connected = Boolean(x402.snapshot?.connected && x402.snapshot.walletAddress)
   const walletBalance = Number(x402.snapshot?.walletBalance ?? '0')
   const treasuryEmpty = x402.snapshot?.walletBalanceChecked && (!Number.isFinite(walletBalance) || walletBalance <= 0)
@@ -53,20 +54,23 @@ export default function PocketX402Page() {
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
+  const refreshAppPay = async () => {
+    if (!authenticated) return
+    await x402.refresh()
+    setMarketplaceRefreshToken(value => value + 1)
+  }
+
   return (
-    <PocketRouteShell active="home" onSelect={selectNav}>
+    <PocketRouteShell active="home" onSelect={selectNav} onRefresh={authenticated ? refreshAppPay : undefined} refreshing={x402.refreshing}>
       <div className="space-y-3">
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-violet-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-violet-500/[0.08]">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Available for app payments</p>
-                <span className="rounded-full border border-gray-200 bg-white/70 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-gray-400 dark:border-white/10 dark:bg-white/[0.05]">x402</span>
-              </div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Available for app payments</p>
               <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
                 {x402.snapshot?.gatewayBalance !== undefined
                   ? Number(x402.snapshot.gatewayBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })
-                  : '0.00'} <span className="text-sm font-bold text-gray-400">USDC</span>
+                  : sessionChecking ? '—' : '0.00'} <span className="text-sm font-bold text-gray-400">USDC</span>
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
                 <span className={cn(
@@ -75,14 +79,14 @@ export default function PocketX402Page() {
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
                     : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400',
                 )}>
-                  {connected ? 'Wallet linked' : 'Setup needed'}
+                  {sessionChecking ? 'Restoring session' : connected ? 'Wallet linked' : 'Setup needed'}
                 </span>
               </div>
             </div>
             <button
               type="button"
-              onClick={() => void x402.refresh()}
-              disabled={!authenticated || x402.refreshing || x402.walletBusy || x402.activationBusy}
+              onClick={() => void refreshAppPay()}
+              disabled={!identityReady || !authenticated || x402.refreshing || x402.walletBusy || x402.activationBusy}
               className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-600 transition-all hover:text-gray-950 active:scale-90 disabled:opacity-40 dark:text-gray-300 dark:hover:text-white"
               aria-label="Refresh App Pay balance"
               title="Refresh App Pay"
@@ -94,12 +98,12 @@ export default function PocketX402Page() {
 
         <details className="group rounded-xl border border-gray-100 bg-white/70 px-3 py-2 dark:border-white/[0.07] dark:bg-white/[0.025]">
           <summary className="cursor-pointer list-none text-[11px] font-semibold text-gray-400 transition hover:text-gray-700 dark:hover:text-gray-200">
-            Technical details
+            Payment network
           </summary>
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-white/[0.07]">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">x402 · Circle Gateway</p>
-              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Payment network</p>
+              <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Circle Gateway</p>
+              <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Choose where apps are paid</p>
             </div>
             <select
               value={x402.network}
@@ -113,17 +117,21 @@ export default function PocketX402Page() {
           </div>
         </details>
 
-        {!authenticated ? (
+        {sessionChecking ? (
+          <div className="flex min-h-28 items-center justify-center gap-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 text-xs font-semibold text-gray-400 dark:border-white/10 dark:bg-[#151518]/95">
+            <Loader2 className="h-4 w-4 animate-spin" /> Restoring App Pay
+          </div>
+        ) : !authenticated ? (
           <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95">
             <PrivyConnectButton
               debugLabel="x402-wallet-email"
               loginOptions={{ loginMethods: ['email', 'wallet'] }}
               logoutOnAuthenticated={false}
-              className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white/[0.12]"
+              className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >
               <Mail className="absolute left-5 h-4 w-4" />
               <span>Sign in to Pocket</span>
-              <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10">
+              <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 dark:bg-black/10">
                 <ArrowRight className="h-4 w-4" />
               </span>
             </PrivyConnectButton>
@@ -138,24 +146,7 @@ export default function PocketX402Page() {
               </p>
             </div>
 
-            {x402.walletMode === 'choose' ? (
-              <>
-                <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200"><CheckCircle2 className="h-4 w-4" /></span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Wallet email</p>
-                    <p className="mt-0.5 truncate text-sm font-medium text-gray-800 dark:text-gray-100">{email || 'Email session active'}</p>
-                  </div>
-                </div>
-                <button type="button" onClick={() => x402.chooseMode('create')} disabled={x402.walletBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
-                  <Wallet className="h-4 w-4" /> Continue with Pocket wallet
-                </button>
-                <button type="button" onClick={() => x402.chooseMode('login')} disabled={x402.walletBusy} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">
-                  <ExternalLink className="h-4 w-4" /> Use existing Circle wallet
-                </button>
-                  <p className="text-center text-[11px] font-medium text-gray-400">Secure wallet access powered by Circle</p>
-              </>
-            ) : x402.walletStep === 'otp' ? (
+            {x402.walletStep === 'otp' ? (
               <div className="space-y-2">
                 <p className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
                   Code sent to {email || 'your email'} - {x402.network === 'arc' ? 'Arc Testnet' : 'Base'} Circle wallet
@@ -163,10 +154,11 @@ export default function PocketX402Page() {
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                   <input value={x402.otp} onChange={event => x402.setOtp(event.target.value.trim())} placeholder="Enter Circle OTP" disabled={x402.walletBusy} className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none dark:text-white" />
                 </div>
-                <button type="button" onClick={() => void x402.completeConnection()} disabled={x402.walletBusy || !x402.otp.trim()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950">
-                  {x402.walletBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Verify latest code
+                <button type="button" onClick={() => void x402.completeConnection()} disabled={x402.walletBusy || !x402.otp.trim()} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950">
+                  {x402.walletBusy ? <Loader2 className="absolute left-5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="absolute left-5 h-4 w-4" />} Verify latest code
+                  <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 dark:bg-black/10"><ArrowRight className="h-4 w-4" /></span>
                 </button>
-                <button type="button" onClick={() => void x402.resendOtp()} disabled={x402.walletBusy} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">Resend OTP</button>
+                <button type="button" onClick={() => void x402.resendOtp()} disabled={x402.walletBusy} className="w-full py-1 text-xs font-semibold text-gray-500 transition hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white">Resend code</button>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Use the newest email code. Resending replaces the previous code.</p>
               </div>
             ) : (
@@ -190,8 +182,8 @@ export default function PocketX402Page() {
                     <p className="px-1 text-[11px] text-amber-700/80 dark:text-amber-200/80">After choosing, resend OTP and verify again so Circle confirms this exact wallet.</p>
                   </div>
                 )}
-                <button type="button" onClick={() => void x402.beginConnection()} disabled={x402.walletBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-3.5 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950">
-                  {x402.walletBusy ? <><Loader2 className="h-4 w-4 animate-spin" /> Verifying wallet</> : <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert mix-blend-screen dark:invert-0 dark:mix-blend-multiply" /> {x402.walletMode === 'create' ? 'Continue' : 'Send verification code'}</>}
+                <button type="button" onClick={() => void x402.beginConnection()} disabled={x402.walletBusy} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950">
+                  {x402.walletBusy ? <><Loader2 className="absolute left-5 h-4 w-4 animate-spin" /> Verifying wallet</> : <><Wallet className="absolute left-5 h-4 w-4" /><span>{x402.walletMode === 'create' ? 'Create App Pay wallet' : 'Reconnect App Pay'}</span><span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 dark:bg-black/10"><ArrowRight className="h-4 w-4" /></span></>}
                 </button>
                 <p className="text-center text-[11px] font-medium text-gray-400">Circle will email a one-time code.</p>
                 {!x402.snapshot?.found && <button type="button" onClick={() => x402.chooseMode(x402.walletMode === 'create' ? 'login' : 'create')} className="w-full text-xs font-semibold text-gray-500">{x402.walletMode === 'create' ? 'Use an existing Circle wallet instead' : 'Use a new Pocket wallet instead'}</button>}
@@ -253,6 +245,7 @@ export default function PocketX402Page() {
               gatewayBalance={x402.snapshot?.gatewayBalance}
               getAccessToken={getAccessToken}
               onUseBase={() => x402.selectNetwork('base')}
+              refreshToken={marketplaceRefreshToken}
             />
           </div>
         )}

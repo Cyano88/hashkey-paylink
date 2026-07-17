@@ -110,7 +110,12 @@ export default function PocketHomePage() {
   }
 
   return (
-    <PocketRouteShell active="home" onSelect={selectNav}>
+    <PocketRouteShell
+      active="home"
+      onSelect={selectNav}
+      onRefresh={() => Promise.all([wallets.refreshBalances(), fx.refresh()]).then(() => undefined)}
+      refreshing={wallets.balanceBusy || fx.busy}
+    >
       <PocketHomeOverview
         globalBalance={wallets.total}
         fxQuote={fx.quote}
