@@ -249,6 +249,12 @@ async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> 
   return data as T
 }
 
+function challengeCorrelationId(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const ids = (value as Record<string, unknown>).correlationIds
+  return Array.isArray(ids) && typeof ids[0] === 'string' && ids[0] ? ids[0] : null
+}
+
 function capturePocketViewport() {
   const scroller = document.querySelector<HTMLElement>('[data-pocket-scroller]')
   const scrollTop = scroller?.scrollTop ?? 0
@@ -719,6 +725,26 @@ export async function sendCircleEvmEmailWithdraw(params: {
   return null
 }
 
+async function pollChallengeTransactionId(session: CircleEvmEmailSession, challengeId: string, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const data = await circleWalletApi<{ challenge?: Record<string, unknown> }>({
+      action: 'getChallenge',
+      userToken: session.userToken,
+      challengeId,
+      chain: session.chain,
+    })
+    const transactionId = challengeCorrelationId(data.challenge)
+    if (transactionId) return transactionId
+    const state = transactionState(data.challenge)
+    if (state.includes('FAILED') || state.includes('EXPIRED') || state.includes('CANCEL')) {
+      throw new Error('Circle bridge confirmation did not produce a transaction.')
+    }
+    await new Promise(resolve => setTimeout(resolve, 1_500))
+  }
+  return null
+}
+
 export async function bridgeCircleEvmEmailWallet(params: {
   session: CircleEvmEmailSession
   destination: 'base' | 'arbitrum' | 'solana'
@@ -756,12 +782,13 @@ export async function bridgeCircleEvmEmailWallet(params: {
   )
   const txHash = findTxHash(result)
   if (txHash) return txHash
-  const transactionId = findTransactionId(result) ?? findTransactionId(challenge)
+  const transactionId = await pollChallengeTransactionId(params.session, challenge.challengeId)
+    .catch(() => findTransactionId(result) ?? findTransactionId(challenge))
   if (transactionId) {
     const hash = await pollTransactionHash(params.session, transactionId)
     if (hash) return hash
   }
-  throw new Error('Circle accepted the bridge, but the source transaction is not available yet.')
+  throw new Error('Bridge submitted and is being reconciled. Do not retry this bridge.')
 }
 
 function findSignature(value: unknown): Hex | null {

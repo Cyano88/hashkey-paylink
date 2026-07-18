@@ -108,8 +108,17 @@ export default function usePocketBridgeController(input: {
       await input.refresh()
       input.onActivity()
     } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Bridge failed.'
+      if (message.includes('submitted and is being reconciled')) {
+        setStatus('bridging')
+        setNotice(message)
+        setError('')
+        await input.refresh().catch(() => undefined)
+        input.onActivity()
+        return
+      }
       setStatus('idle')
-      setError(reason instanceof Error ? reason.message : 'Bridge failed.')
+      setError(message)
     }
   }, [amount, destination, input, refreshQuote])
 

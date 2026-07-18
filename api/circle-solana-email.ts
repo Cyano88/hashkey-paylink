@@ -740,6 +740,18 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, transaction: data.transaction ?? data })
     }
 
+    if (action === 'getChallenge') {
+      const { userToken, challengeId, chain } = params
+      if (!userToken || !challengeId) return res.status(400).json({ ok: false, error: 'Missing userToken or challengeId' })
+      const data = await circleJson<{ challenge?: Record<string, unknown> }>(`/v1/w3s/user/challenges/${encodeURIComponent(challengeId)}`, {
+        method: 'GET',
+        userToken,
+        apiKey: circleApiKey({ chain }),
+        headers: { accept: 'application/json' },
+      })
+      return res.json({ ok: true, challenge: data.challenge ?? data })
+    }
+
     if (action === 'signTypedData') {
       const { userToken, walletId, data: typedData, memo, chain } = params
       if (!userToken || !walletId || !typedData) {
