@@ -80,6 +80,26 @@ assert.equal(serialized.includes('wallet-address'), false)
 assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)
 
+const testnetBalanceHandler = createPocketBalancesHandler({
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  readLink: async key => {
+    const chain = key.split(':').at(-1)
+    return {
+      privyUserId: 'privy-user-1',
+      chain,
+      purpose: 'payment',
+      circleWalletId: `${chain}-wallet-id`,
+      circleWalletAddress: `${chain}-wallet-address`,
+      circleBlockchain: chain === 'solana' ? 'SOL' : chain.toUpperCase(),
+      updatedAt: 1_800_000_000_001,
+    }
+  },
+  readBalance: async network => network === 'arc' ? 66 : 1,
+})
+const testnetBalance = await request(testnetBalanceHandler)
+assert.equal(testnetBalance.body.rows.find(row => row.key === 'arc').balance, 66)
+assert.equal(testnetBalance.body.total, 3)
+
 const unauthorizedHandler = createPocketBalancesHandler({
   verifyUser: async () => { throw Object.assign(new Error('Missing Privy access token.'), { status: 401 }) },
   readLink: async () => null,

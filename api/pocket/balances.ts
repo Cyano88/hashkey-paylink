@@ -135,7 +135,8 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
           })
         }
       }
-      return res.json({ ok: true, total: rows.reduce((sum, row) => sum + row.balance, 0), rows })
+      const mainnetTotal = rows.reduce((sum, row) => row.key === 'arc' ? sum : sum + row.balance, 0)
+      return res.json({ ok: true, total: mainnetTotal, rows })
     } catch (error) {
       const normalized = error as Error & { status?: number }
       if (normalized.status === 401) return fail(401, 'AUTH_REQUIRED', normalized.message, false)
