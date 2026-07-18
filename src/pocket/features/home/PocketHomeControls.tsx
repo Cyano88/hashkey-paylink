@@ -4,6 +4,7 @@ import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatAmount } from '../../../lib/utils'
 import type { PocketHomeNetwork, PocketHomeNetworkKey } from './PocketHomeOverview'
 import PocketSlideAction, { type PocketSlideActionStatus } from '../../components/PocketSlideAction'
+import PocketSelect from '../../components/PocketSelect'
 import type { PocketActivityRow } from '../../models/pocketActivity'
 
 export type PocketHomeTab = 'balance' | 'fund' | 'move' | 'activity'
@@ -113,6 +114,9 @@ export default function PocketHomeControls({
     setMoveModeState(next)
   }
   const withdrawalValue = Number(withdrawAmount)
+  const bridgeValue = Number(bridgeAmount)
+  const bridgeAmountReady = /^\d+(?:\.\d{1,6})?$/.test(bridgeAmount.trim()) && Number.isFinite(bridgeValue) && bridgeValue > 0
+  const bridgeSourceMeta = networks.find(item => item.key === selectedNetwork)
   const withdrawalReady = Boolean(
     selectedAddress
     && withdrawAddress.trim()
@@ -144,7 +148,8 @@ export default function PocketHomeControls({
       </div>
 
       {(tab === 'fund' || tab === 'move') && (
-        <div className="grid grid-cols-4 gap-1.5">
+        <div>
+          <div className="grid grid-cols-4 gap-1.5">
           {networks.map(network => (
           <button
             key={network.key}
@@ -166,6 +171,7 @@ export default function PocketHomeControls({
               {network.key === 'arc' && <span className="rounded-full bg-blue-500/10 px-1.5 text-[7px] font-black uppercase tracking-wide text-blue-600 dark:text-blue-300">Test</span>}
             </button>
           ))}
+          </div>
         </div>
       )}
 
@@ -291,23 +297,31 @@ export default function PocketHomeControls({
 
       {tab === 'move' && moveMode === 'bridge' && (
         <div className="space-y-3 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
-          <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
-            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">From {selectedNetworkLabel}</span>
-            <span className="text-sm font-black tabular-nums text-gray-950 dark:text-white">${formatAmount(selectedBalance, 6)} USDC</span>
-          </div>
-          <div>
-            <p className="mb-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400">To your Pocket wallet</p>
-            <div className="grid grid-cols-2 gap-2">
-              {bridgeDestinations.map(destination => {
-                const meta = networks.find(item => item.key === destination)!
-                return (
-                  <button key={destination} type="button" onClick={() => onBridgeDestinationChange(destination)} className={cn('flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-black transition-all', bridgeDestination === destination ? 'border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300' : 'border-gray-200 bg-white text-gray-500 hover:border-blue-400/40 hover:bg-blue-500/[0.05] dark:border-white/10 dark:bg-white/[0.03] dark:text-gray-400')}>
-                    <span className={cn('h-6 w-6 overflow-hidden rounded-lg', meta.logoCanvas === 'dark' ? 'bg-gray-950' : 'bg-white')}><img src={meta.logo} alt="" className="h-full w-full object-contain grayscale" /></span>
-                    {meta.label}
-                  </button>
-                )
-              })}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">From</p>
+              <div className="flex min-h-12 items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 text-sm font-black text-gray-900 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-white">
+                {bridgeSourceMeta && <span className={cn('h-6 w-6 shrink-0 overflow-hidden rounded-lg', bridgeSourceMeta.logoCanvas === 'dark' ? 'bg-gray-950' : 'bg-white')}><img src={bridgeSourceMeta.logo} alt="" className="h-full w-full object-contain grayscale" /></span>}
+                <span className="min-w-0 truncate">{selectedNetworkLabel}</span>
+              </div>
             </div>
+            <div>
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Destination</p>
+              <PocketSelect
+                value={bridgeDestination}
+                options={bridgeDestinations.map(destination => ({
+                  value: destination,
+                  label: networks.find(item => item.key === destination)?.label ?? destination,
+                }))}
+                onChange={value => onBridgeDestinationChange(value as 'base' | 'arbitrum' | 'solana')}
+                ariaLabel="Select bridge destination network"
+                buttonClassName="min-h-12 rounded-2xl px-3 font-black"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {selectedNetworkLabel}</span>
+            <span className="text-sm font-black tabular-nums text-gray-950 dark:text-white">${formatAmount(selectedBalance, 6)} USDC</span>
           </div>
           <label className="block">
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span>
@@ -329,7 +343,7 @@ export default function PocketHomeControls({
             status={bridgeStatus === 'successful' ? 'successful' : bridgeStatus === 'bridging' ? 'submitted' : bridgeStatus === 'confirming' ? 'pending' : 'idle'}
             disabled={!bridgeQuote || Number(bridgeQuote.total) > selectedBalance || bridgeStatus === 'quoting'}
             onConfirm={onBridge}
-            labels={{ idle: 'Slide to bridge', pending: 'Confirm in Circle', submitted: 'Bridging', successful: 'Bridge complete' }}
+            labels={{ disabled: bridgeStatus === 'quoting' && bridgeAmountReady ? 'Getting live quote' : 'Enter bridge amount', idle: 'Slide to bridge', pending: 'Confirm in Circle', submitted: 'Bridging', successful: 'Bridge complete' }}
           />
           <p className="text-center text-[10px] leading-4 text-gray-400">Native USDC via Circle CCTP. Destination gas is handled by Circle; source network gas may apply.</p>
           {bridgeNotice && <p className={cn('text-center text-xs font-semibold', bridgeStatus === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bridgeNotice}</p>}

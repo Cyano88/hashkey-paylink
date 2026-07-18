@@ -99,6 +99,11 @@ const testnetBalanceHandler = createPocketBalancesHandler({
 const testnetBalance = await request(testnetBalanceHandler)
 assert.equal(testnetBalance.body.rows.find(row => row.key === 'arc').balance, 66)
 assert.equal(testnetBalance.body.total, 3)
+assert.equal(isPocketBalancesReadData(testnetBalance.body), true)
+
+const invalidTestnetTotal = structuredClone(testnetBalance.body)
+invalidTestnetTotal.total += invalidTestnetTotal.rows.find(row => row.key === 'arc').balance
+assert.equal(isPocketBalancesReadData(invalidTestnetTotal), false)
 
 const unauthorizedHandler = createPocketBalancesHandler({
   verifyUser: async () => { throw Object.assign(new Error('Missing Privy access token.'), { status: 401 }) },
