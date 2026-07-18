@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
-import { ArrowRight, Banknote, ChevronDown, Copy, Landmark, Mail, Send } from 'lucide-react'
+import { ArrowRight, ChevronDown, Landmark, Mail, Send } from 'lucide-react'
 import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
-import { copyToClipboard, formatNgnAmount } from '../../lib/utils'
+import { formatNgnAmount } from '../../lib/utils'
 import { LocalCurrencyProfileCard } from '../components/LocalCurrencyProfileCard'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketSlideAction from '../components/PocketSlideAction'
 import usePocketBankReceiveController from '../controllers/usePocketBankReceiveController'
 import usePocketBankWithdrawController from '../controllers/usePocketBankWithdrawController'
-import usePocketBankFundController from '../controllers/usePocketBankFundController'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import {
   PocketFlexibleAmountToggle,
@@ -29,28 +28,17 @@ import { pocketPathFor } from '../lib/pocketRoutes'
 
 const POCKET_BASE_PATH = '/pocket'
 
-function formatTransferDeadline(value: string) {
-  const timestamp = Date.parse(value)
-  if (!Number.isFinite(timestamp)) return ''
-  return new Intl.DateTimeFormat('en-NG', {
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(timestamp)
-}
-
 export default function PocketMoveBankPage() {
   const navigate = useNavigate()
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const [mode, setModeState] = useState<'idle' | 'request' | 'withdraw' | 'fund'>(() => {
+  const [mode, setModeState] = useState<'idle' | 'request' | 'withdraw'>(() => {
     const saved = window.sessionStorage.getItem('pocket:bank:mode')
-    return saved === 'request' || saved === 'withdraw' || saved === 'fund' ? saved : 'idle'
+    return saved === 'request' || saved === 'withdraw' ? saved : 'idle'
   })
-  const setMode = useCallback((next: 'idle' | 'request' | 'withdraw' | 'fund') => {
+  const setMode = useCallback((next: 'idle' | 'request' | 'withdraw') => {
     window.sessionStorage.setItem('pocket:bank:mode', next)
     setModeState(next)
   }, [])
@@ -82,20 +70,6 @@ export default function PocketMoveBankPage() {
     getAccessToken,
     onSent: wallets.refreshBalances,
   })
-  const funding = usePocketBankFundController({
-    authenticated,
-    firstName: profile.profile?.firstName || profile.draft.firstName,
-    lastName: profile.profile?.lastName || profile.draft.lastName,
-    bankCode: bank.bankCode,
-    bankName: bank.bankName,
-    accountNumber: bank.accountNumber,
-    accountName: bank.accountName,
-    bankVerified: bank.verified,
-    getAccessToken,
-    ensureBaseWallet,
-    onFunded: wallets.refreshBalances,
-  })
-  const [fundingCopied, setFundingCopied] = useState(false)
   const directAmountDirty = direct.amount.length > 0
   const directAmountValid = /^\d+(?:\.\d{1,2})?$/.test(direct.amount) && Number(direct.amount) > 0
   const directSlideStatus = direct.status === 'sent'
@@ -106,7 +80,6 @@ export default function PocketMoveBankPage() {
         ? 'pending'
         : 'idle'
   const directLocked = direct.status === 'preparing' || direct.status === 'authorizing' || direct.status === 'processing'
-  const fundingLocked = funding.status === 'preparing'
 
   useEffect(() => {
     if (selectedNet !== 'base') onNetworkSelect('base')
@@ -130,7 +103,6 @@ export default function PocketMoveBankPage() {
           {([
             { key: 'request', label: 'Payment Request', icon: Landmark, body: 'Create a link for someone to pay you.' },
             { key: 'withdraw', label: 'Direct Bank Payout', icon: Send, body: 'Withdraw Circle wallet USDC to your bank.' },
-            { key: 'fund', label: 'Fund with Bank', icon: Banknote, body: 'Add Base USDC from a Nigerian bank.' },
           ] as const).filter(option => mode === 'idle' || mode === option.key).map(option => {
             const Icon = option.icon
             const active = mode === option.key
@@ -154,7 +126,7 @@ export default function PocketMoveBankPage() {
         </div>
 
         {mode !== 'idle' && <div className="space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/[0.035] dark:shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">{mode === 'request' ? 'Payment request' : mode === 'withdraw' ? 'Direct bank payout' : 'Base USDC funding'}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">{mode === 'request' ? 'Payment request' : 'Direct bank payout'}</p>
 
           {!authenticated && (
             <div className="overflow-hidden rounded-[22px] bg-[#F5F5F7]/95 p-2 dark:bg-[#151518]/95">
@@ -176,7 +148,7 @@ export default function PocketMoveBankPage() {
             </div>
           )}
 
-          {authenticated && <fieldset disabled={mode === 'withdraw' ? directLocked : mode === 'fund' ? fundingLocked : false} aria-busy={mode === 'withdraw' ? directLocked : mode === 'fund' ? fundingLocked : false} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className="space-y-3.5">
+          {authenticated && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className="space-y-3.5">
             <LocalCurrencyProfileCard
               profile={profile.profile}
               draft={profile.draft}
@@ -298,51 +270,6 @@ export default function PocketMoveBankPage() {
               </div>
             </>}
 
-            {mode === 'fund' && <>
-              {!funding.result && <>
-                <PocketPaymentAmountField
-                  lane="bank"
-                  flexible={false}
-                  amount={funding.amount}
-                  dirty={funding.amount.length > 0}
-                  valid={/^\d+(?:\.\d{1,2})?$/.test(funding.amount) && Number(funding.amount) > 0}
-                  helperText="Enter the Naira amount to convert to Base USDC."
-                  onAmountChange={funding.setAmount}
-                />
-                <div className="border-y border-gray-100 py-3 dark:border-white/[0.07]">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0"><p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Destination</p><p className="mt-0.5 truncate text-[11px] text-gray-400 dark:text-gray-500">Your Base Pocket wallet · {wallets.wallets.base?.address || 'opens when you continue'}</p></div>
-                    <span className="inline-flex shrink-0 rounded-xl border border-gray-900 bg-gray-950 px-3 py-2 text-xs font-bold text-white dark:border-white dark:bg-white dark:text-gray-950">Base</span>
-                  </div>
-                </div>
-                <p className="px-2 text-center text-[11px] leading-4 text-gray-400 dark:text-gray-500">Your verified bank is used only as the refund account if this funding order cannot complete.</p>
-                <PocketSlideAction
-                  status={funding.status === 'preparing' ? 'pending' : 'idle'}
-                  disabled={!funding.canSubmit}
-                  onConfirm={() => void funding.prepare()}
-                  labels={{ idle: 'Slide to get bank details', disabled: 'Complete funding details', pending: 'Preparing bank transfer' }}
-                />
-              </>}
-
-              {funding.result && <div className="space-y-3 rounded-[20px] border border-gray-200 bg-gray-50 p-3.5 dark:border-white/10 dark:bg-white/[0.04]">
-                <div className="text-center"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Transfer exactly</p><p className="mt-1 text-2xl font-black tabular-nums tracking-[-0.04em] text-gray-950 dark:text-white">{formatNgnAmount(funding.result.amountNgn)}</p></div>
-                <div className="space-y-2 rounded-2xl bg-white p-3 dark:bg-black/20">
-                  <div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Bank</p><p className="mt-0.5 text-sm font-bold text-gray-900 dark:text-white">{funding.result.institution}</p></div>
-                  <div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Account name</p><p className="mt-0.5 text-sm font-semibold text-gray-700 dark:text-gray-200">{funding.result.accountName}</p></div>
-                  <div className="flex items-end justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Account number</p><p className="mt-0.5 text-lg font-black tracking-[0.08em] text-gray-950 dark:text-white">{funding.result.accountNumber}</p></div><button type="button" onClick={() => void copyToClipboard(funding.result!.accountNumber).then(() => { setFundingCopied(true); window.setTimeout(() => setFundingCopied(false), 1000) })} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 text-[11px] font-bold text-gray-700 shadow-sm dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"><Copy className="h-3.5 w-3.5" />{fundingCopied ? 'Copied' : 'Copy'}</button></div>
-                </div>
-                {formatTransferDeadline(funding.result.validUntil) && <p className="px-2 text-center text-[11px] font-medium text-amber-600 dark:text-amber-400">Use these bank details before {formatTransferDeadline(funding.result.validUntil)}.</p>}
-                <PocketSlideAction
-                  status={funding.status === 'funded' ? 'successful' : 'submitted'}
-                  disabled
-                  onConfirm={() => undefined}
-                  labels={{ submitted: funding.status === 'processing' ? 'Bank payment detected' : 'Waiting for bank transfer', successful: 'Funded' }}
-                />
-                <p className="text-center text-xs font-semibold text-gray-500 dark:text-gray-400">{funding.status === 'funded' ? 'Base USDC added to your Pocket wallet' : 'USDC is delivered automatically after your bank transfer is confirmed.'}</p>
-                {(funding.status === 'funded' || funding.status === 'failed') && <button type="button" onClick={funding.reset} className="w-full rounded-full border border-gray-200 px-4 py-2.5 text-xs font-bold text-gray-700 transition hover:bg-white dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/[0.06]">Fund again</button>}
-              </div>}
-              {funding.error && <p className="px-2 text-center text-xs font-medium text-red-500">{funding.error}</p>}
-            </>}
           </fieldset>}
         </div>}
       </div>

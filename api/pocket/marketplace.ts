@@ -26,6 +26,7 @@ const configuredMaxPurchaseUsdc = Number(process.env.POCKET_MARKETPLACE_MAX_PURC
 const MAX_PURCHASE_USDC = Number.isFinite(configuredMaxPurchaseUsdc) && configuredMaxPurchaseUsdc > 0
   ? Math.max(0.001, configuredMaxPurchaseUsdc)
   : 0.05
+const RECONCILIATION_REVIEW_AFTER_MS = 30 * 60_000
 
 type MarketplaceDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
@@ -193,17 +194,20 @@ function marketplaceActionActivity(item: CirclePocketActionRecord) {
   if (item.action !== ACTION) return undefined
   const paymentSettled = ['confirmed', 'completed'].includes(item.metadata?.paymentState ?? '')
   const paymentAccepted = ['received', 'batched'].includes(item.metadata?.paymentState ?? '')
+  const paymentNeedsReview = item.metadata?.paymentState === 'needs_review'
   const status = item.status === 'completed'
     ? 'Completed'
     : paymentSettled
       ? 'Paid · result unavailable'
       : paymentAccepted
         ? 'Payment accepted · settlement pending'
-        : item.status === 'submitted'
-          ? 'Reconciliation pending'
-          : item.status === 'started'
-            ? 'Processing'
-            : 'Outcome needs review'
+        : paymentNeedsReview
+          ? 'Payment outcome needs review'
+          : item.status === 'submitted'
+            ? 'Reconciliation pending'
+            : item.status === 'started'
+              ? 'Processing'
+              : 'Outcome needs review'
   return {
     id: item.resourceId ?? item.id,
     title: `${item.metadata?.provider || 'App Pay service'} · ${status}`,
@@ -211,6 +215,27 @@ function marketplaceActionActivity(item: CirclePocketActionRecord) {
     asset: 'USDC',
     createdAt: item.createdAt,
     ...(item.metadata?.paymentTransferId ? { transaction: item.metadata.paymentTransferId } : {}),
+  }
+}
+
+function latestMarketplacePurchase(actions: CirclePocketActionRecord[]) {
+  const item = actions.find(action => action.action === ACTION)
+  if (!item || item.status === 'completed' || item.status === 'failed') return undefined
+  const paymentState = item.metadata?.paymentState ?? ''
+  const status = ['confirmed', 'completed'].includes(paymentState)
+    ? 'paid'
+    : paymentState === 'needs_review'
+      ? 'needs_review'
+      : 'processing'
+  return {
+    status,
+    replayed: true,
+    ...(item.resourceId ? { receiptActivityId: item.resourceId } : {}),
+    message: status === 'paid'
+      ? 'Payment was confirmed, but the service did not return a result. Do not pay for this service again.'
+      : status === 'needs_review'
+        ? 'The payment outcome could not be confirmed automatically. Review Activity before retrying this service.'
+        : 'Payment reconciliation is still in progress. Do not retry this service.',
   }
 }
 
@@ -254,7 +279,7 @@ async function reconcileMarketplaceActions(params: {
   const candidates = params.actions.filter(item => (
     item.action === ACTION
     && (item.status === 'submitted' || item.status === 'failed')
-    && item.metadata?.paymentState !== 'failed'
+    && !['failed', 'needs_review'].includes(item.metadata?.paymentState ?? '')
   ))
   if (!candidates.length) return params.actions
   const payer = await params.dependencies.walletAddress(params.agentSlug)
@@ -282,7 +307,23 @@ async function reconcileMarketplaceActions(params: {
         })
         .sort((a, b) => Math.abs((transferTime(a) ?? 0) - action.createdAt) - Math.abs((transferTime(b) ?? 0) - action.createdAt))[0]
     }
-    if (!match) continue
+    if (!match) {
+      if (Date.now() - action.createdAt < RECONCILIATION_REVIEW_AFTER_MS) continue
+      const updated = await params.dependencies.record({
+        ownerId: action.ownerId,
+        idempotencyKey: action.idempotencyKey,
+        action: action.action,
+        status: 'submitted',
+        resourceId: action.resourceId,
+        metadata: {
+          ...(action.metadata ?? {}),
+          paymentState: 'needs_review',
+          reconciledAt: new Date().toISOString(),
+        },
+      })
+      reconciled.set(action.id, updated)
+      continue
+    }
     unused.delete(match.id)
     const metadata = {
       ...(action.metadata ?? {}),
@@ -355,7 +396,14 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
         let catalogAvailable = true
         try {
           const discovered = await dependencies.search({ query, limit: 100, offset: 0 })
-          services = searchItems(discovered).map(publicService).filter(Boolean).slice(0, 30) as PublicService[]
+          const quarantined = new Set(actions
+            .filter(item => item.action === ACTION && item.metadata?.failureKind === 'service_response_failed')
+            .map(item => item.metadata?.resource)
+            .filter(Boolean))
+          services = searchItems(discovered)
+            .map(publicService)
+            .filter((item): item is PublicService => Boolean(item) && !quarantined.has(item?.resource))
+            .slice(0, 30)
         } catch (error) {
           catalogAvailable = false
           console.warn('[pocket-marketplace] catalog refresh failed', {
@@ -367,6 +415,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           ok: true,
           services,
           activity,
+          latestPurchase: latestMarketplacePurchase(actions),
           catalogAvailable,
           ...(!catalogAvailable ? { catalogMessage: 'Circle Marketplace catalog is temporarily unavailable. App Pay history is still available.' } : {}),
           paymentNetwork: 'circle-gateway-mainnet',
@@ -387,7 +436,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           (item.status === 'started' && Date.now() - item.updatedAt < 10 * 60_000)
           || (
             item.status === 'submitted'
-            && !['confirmed', 'completed', 'failed'].includes(item.metadata?.paymentState ?? '')
+            && !['confirmed', 'completed', 'failed', 'needs_review'].includes(item.metadata?.paymentState ?? '')
           )
         )
       ))
@@ -412,7 +461,9 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           replayed: true,
           receiptActivityId: pending.resourceId,
           message: pending.status === 'submitted'
-            ? 'Payment was already submitted and is being reconciled. Do not retry.'
+            ? pending.metadata?.paymentState === 'needs_review'
+              ? 'This service payment needs review. Open Activity before retrying.'
+              : 'Payment was already submitted and is being reconciled. Do not retry.'
             : 'This purchase is already being processed.',
         })
       }
@@ -529,6 +580,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
               ...(reconciliation?.network ? { paymentNetwork: reconciliation.network } : {}),
               ...(reconciliation?.amountAtomic ? { paymentAmountAtomic: reconciliation.amountAtomic } : {}),
               ...(reconciliation?.scheme ? { paymentScheme: reconciliation.scheme } : {}),
+              ...(normalized.code === 'circle_payment_submitted_response_failed' ? { failureKind: 'service_response_failed' } : {}),
             },
           })
           return res.status(202).json({

@@ -252,8 +252,28 @@ assert.equal(degradedGetRes.body.services.length, 0)
 assert.equal(degradedGetRes.body.activity.length, 1)
 assert.match(degradedGetRes.body.activity[0].title, /Paid · result unavailable/)
 assert.equal(degradedGetRes.body.activity[0].transaction, 'gateway-transfer-1')
+assert.equal(degradedGetRes.body.latestPurchase.status, 'paid')
 assert.equal(recorded.at(-1).metadata.paymentState, 'completed')
 searchError = undefined
+actions = []
+
+actions = [{
+  ...action,
+  id: 'stale-submitted-action',
+  idempotencyKey: 'pocket:marketplace:stale-submitted',
+  status: 'submitted',
+  resourceId: 'receipt-stale-submitted',
+  metadata: { resource, amount: '0.008', failureKind: 'service_response_failed' },
+  createdAt: Date.now() - 31 * 60_000,
+  updatedAt: Date.now() - 31 * 60_000,
+}]
+transfers = []
+const needsReviewGetRes = response()
+await handler({ method: 'GET', query: {}, headers: {} }, needsReviewGetRes)
+assert.equal(needsReviewGetRes.statusCode, 200)
+assert.equal(needsReviewGetRes.body.latestPurchase.status, 'needs_review')
+assert.equal(needsReviewGetRes.body.services.length, 0)
+assert.equal(recorded.at(-1).metadata.paymentState, 'needs_review')
 actions = []
 
 const overCapRes = response()

@@ -67,6 +67,12 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
       } else {
         setSnapshot(next)
       }
+      if (next.latestPurchase) {
+        setPurchase(current => {
+          if (current?.status === 'completed' && current.receiptActivityId !== next.latestPurchase.receiptActivityId) return current
+          return next.latestPurchase
+        })
+      }
     } catch (reason) {
       setLoadError(reason instanceof Error ? reason.message : 'Circle Marketplace is temporarily unavailable.')
     } finally {
@@ -96,6 +102,8 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
     && enoughBalance(gatewayBalance, selected.amount)
   ), [gatewayBalance, network, selected])
   const hasCachedServices = Boolean(snapshot?.services.length)
+  const purchaseResolved = purchase?.status === 'completed' || purchase?.status === 'paid'
+  const purchaseNeedsReview = purchase?.status === 'needs_review'
 
   const buy = async () => {
     if (!selected || !canPay) return
@@ -162,17 +170,17 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
           {purchase && (
             <div className={cn(
               'rounded-xl border p-3',
-              purchase.status === 'completed'
+              purchaseResolved
                 ? 'border-emerald-100 bg-emerald-50/70 dark:border-emerald-400/20 dark:bg-emerald-400/10'
                 : 'border-amber-100 bg-amber-50/70 dark:border-amber-400/20 dark:bg-amber-400/10',
             )}>
-              <div className={cn('flex items-center gap-2', purchase.status === 'completed' ? 'text-emerald-700 dark:text-emerald-200' : 'text-amber-700 dark:text-amber-200')}>
-                {purchase.status === 'completed' ? <CheckCircle2 className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
-                <p className="text-xs font-bold">{purchase.status === 'completed' ? 'Service completed' : 'Payment submitted — reconciliation pending'}</p>
+              <div className={cn('flex items-center gap-2', purchaseResolved ? 'text-emerald-700 dark:text-emerald-200' : 'text-amber-700 dark:text-amber-200')}>
+                {purchaseResolved ? <CheckCircle2 className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
+                <p className="text-xs font-bold">{purchase.status === 'completed' ? 'Service completed' : purchase.status === 'paid' ? 'Payment confirmed' : purchaseNeedsReview ? 'Payment needs review' : 'Payment submitted — reconciliation pending'}</p>
               </div>
               {purchase.message && <p className="mt-1.5 text-[11px] leading-4 text-gray-500 dark:text-gray-300">{purchase.message}</p>}
               {purchase.status === 'completed' && resultPreview(purchase.result) && <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white/70 p-2 text-[10px] leading-4 text-gray-600 dark:bg-black/20 dark:text-gray-300">{resultPreview(purchase.result)}</pre>}
-              {purchase.receiptActivityId && <a href={`/receipt/${encodeURIComponent(purchase.receiptActivityId)}`} className={cn('mt-2 inline-flex items-center gap-1 text-[11px] font-bold', purchase.status === 'completed' ? 'text-emerald-700 dark:text-emerald-200' : 'text-amber-700 dark:text-amber-200')}>View activity <ArrowRight className="h-3 w-3" /></a>}
+              {purchase.receiptActivityId && <a href={`/receipt/${encodeURIComponent(purchase.receiptActivityId)}`} className={cn('mt-2 inline-flex items-center gap-1 text-[11px] font-bold', purchaseResolved ? 'text-emerald-700 dark:text-emerald-200' : 'text-amber-700 dark:text-amber-200')}>View activity <ArrowRight className="h-3 w-3" /></a>}
             </div>
           )}
 
