@@ -7,6 +7,7 @@ const PAYCREST_QUOTE_TIMEOUT_MS = 5_000
 export type PocketFxQuote = {
   currency: 'NGN'
   symbol: '₦'
+  amount: string
   rate: number
   source: 'paycrest'
   side: 'sell'
@@ -26,16 +27,17 @@ export function createPocketFxQuoteReader({
   baseUrl = process.env.PAYCREST_API_BASE ?? 'https://api.paycrest.io',
 }: PocketFxQuoteReaderDependencies = {}) {
   let cached: PocketFxQuote | null = null
-  let inFlight: Promise<PocketFxQuote> | null = null
+  let inFlight: { amount: string; promise: Promise<PocketFxQuote> } | null = null
 
-  return async function readPocketFxQuote(): Promise<PocketFxQuote> {
+  return async function readPocketFxQuote(amount = '1'): Promise<PocketFxQuote> {
     const currentTime = now()
-    if (cached && currentTime - cached.quotedAt < PAYCREST_QUOTE_CACHE_MS) return cached
-    if (inFlight) return inFlight
+    if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) throw new Error('Enter a valid USDC quote amount.')
+    if (cached?.amount === amount && currentTime - cached.quotedAt < PAYCREST_QUOTE_CACHE_MS) return cached
+    if (inFlight?.amount === amount) return inFlight.promise
 
-    inFlight = (async () => {
+    const promise = (async () => {
       const response = await fetcher(
-        `${baseUrl.replace(/\/+$/, '')}/v2/rates/base/USDC/1/NGN?side=sell`,
+        `${baseUrl.replace(/\/+$/, '')}/v2/rates/base/USDC/${encodeURIComponent(amount)}/NGN?side=sell`,
         { method: 'GET', signal: AbortSignal.timeout(PAYCREST_QUOTE_TIMEOUT_MS) },
       )
       const body = await response.json().catch(() => undefined) as {
@@ -54,6 +56,7 @@ export function createPocketFxQuoteReader({
       cached = {
         currency: 'NGN',
         symbol: '₦',
+        amount,
         rate,
         source: 'paycrest',
         side: 'sell',
@@ -62,14 +65,15 @@ export function createPocketFxQuoteReader({
       }
       return cached
     })().finally(() => {
-      inFlight = null
+      if (inFlight?.promise === promise) inFlight = null
     })
-    return inFlight
+    inFlight = { amount, promise }
+    return promise
   }
 }
 
 type PocketFxQuoteHandlerDependencies = {
-  readQuote: () => Promise<PocketFxQuote>
+  readQuote: (amount?: string) => Promise<PocketFxQuote>
 }
 
 export function createPocketFxQuoteHandler({ readQuote }: PocketFxQuoteHandlerDependencies) {
@@ -82,8 +86,13 @@ export function createPocketFxQuoteHandler({ readQuote }: PocketFxQuoteHandlerDe
       return res.status(400).json({ ok: false, error: 'Pocket live FX currently supports NGN only.' })
     }
 
+    const amount = String(req.query.amount ?? '1').trim()
+    if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) {
+      return res.status(400).json({ ok: false, error: 'Enter a valid USDC quote amount.' })
+    }
+
     try {
-      const quote = await readQuote()
+      const quote = await readQuote(amount)
       return res.json({ ok: true, quote })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Paycrest FX quote is unavailable.'

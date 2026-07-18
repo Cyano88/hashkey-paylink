@@ -73,6 +73,7 @@ import pocketBankReceiveHandler from './api/pocket/bank-receive.js'
 import pocketBankInstitutionsHandler from './api/pocket/bank-receive-institutions.js'
 import pocketBankVerifyHandler from './api/pocket/bank-receive-verify.js'
 import pocketBankSendHandler from './api/pocket/bank-send.js'
+import pocketBankWithdrawHandler from './api/pocket/bank-withdraw.js'
 import {
   pocketSolanaTransferPrepareHandler,
   pocketSolanaTransferSubmitHandler,
@@ -247,6 +248,7 @@ app.all('/api/pocket/bank-receive',      strictLimiter, pocketBankReceiveHandler
 app.all('/api/pocket/bank-receive/institutions', readLimiter, pocketBankInstitutionsHandler)
 app.all('/api/pocket/bank-receive/verify', strictLimiter, pocketBankVerifyHandler)
 app.all('/api/pocket/bank-send',          strictLimiter, pocketBankSendHandler)
+app.all('/api/pocket/bank-withdraw',      strictLimiter, pocketBankWithdrawHandler)
 app.all('/api/pocket/transfers/prepare',  strictLimiter, pocketSolanaTransferPrepareHandler)
 app.all('/api/pocket/transfers/submit',   strictLimiter, pocketSolanaTransferSubmitHandler)
 app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)

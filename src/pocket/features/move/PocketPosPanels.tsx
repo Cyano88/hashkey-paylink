@@ -8,6 +8,7 @@ import type {
   PocketPosActions,
   PocketPosDraft,
 } from '../../controllers/usePocketMoveControllers'
+import PocketSelect from '../../components/PocketSelect'
 
 export type PocketPosNetworkOption = {
   key: string
@@ -208,19 +209,20 @@ export function PocketPosSetupPanel({
               <label className="block">
                 <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Bank</span>
                 {bankInstitutions.length ? (
-                  <select
+                  <PocketSelect
                     value={bankCode}
-                    onChange={event => {
-                      const selected = bankInstitutions.find(institution => institution.code === event.target.value)
-                      controller.actions.setBankInstitution(event.target.value, selected?.name ?? '')
+                    options={bankInstitutions.map(institution => ({
+                      value: institution.code,
+                      label: `${institution.name} (${institution.code})`,
+                    }))}
+                    onChange={value => {
+                      const selected = bankInstitutions.find(institution => institution.code === value)
+                      controller.actions.setBankInstitution(value, selected?.name ?? '')
                     }}
-                    className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-gray-950 dark:text-white dark:focus:border-white/25"
-                  >
-                    <option value="">{bankInstitutionsBusy ? 'Loading banks...' : 'Select bank'}</option>
-                    {bankInstitutions.map(institution => (
-                      <option key={institution.code} value={institution.code}>{institution.name} ({institution.code})</option>
-                    ))}
-                  </select>
+                    placeholder={bankInstitutionsBusy ? 'Loading banks...' : 'Select bank'}
+                    ariaLabel="POS payout bank"
+                    className="mt-1"
+                  />
                 ) : (
                   <input
                     value={bankCode}

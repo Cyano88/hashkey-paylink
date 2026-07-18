@@ -29,7 +29,7 @@ function validTxHash(value: string | undefined) {
 }
 
 function receiptSource(order: PaycrestOrderRecord) {
-  return order.source === 'ngpos' ? 'ngpos' : 'bank-receive'
+  return order.source === 'ngpos' ? 'ngpos' : order.source === 'bank-withdraw' ? 'bank-withdraw' : 'bank-receive'
 }
 
 function isSettledPaycrestStatus(value: string | undefined) {
@@ -43,7 +43,7 @@ async function registerOrderReceipt(order: PaycrestOrderRecord, txHash: string) 
     eventId: `ngpos-${order.merchant_id}`,
     txHash,
     payer: order.payer_name || order.payer_wallet || order.payer_email || 'Circle wallet payer',
-    memo: order.payer_name || (source === 'ngpos' ? 'Retail POS payment' : 'Bank receive payment'),
+    memo: order.payer_name || (source === 'ngpos' ? 'Retail POS payment' : source === 'bank-withdraw' ? 'Direct bank payout' : 'Bank receive payment'),
     chain: 'base',
     amount: order.amount_usdc,
     requestedAmount: order.amount_usdc,

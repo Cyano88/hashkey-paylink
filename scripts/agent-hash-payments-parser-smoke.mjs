@@ -279,7 +279,7 @@ const reconcileStatusBody = ngPosSource.match(/function isReconcileablePaycrestS
 assert.doesNotMatch(visibleStatusBody, /'pending'/)
 assert.match(reconcileStatusBody, /'pending'/)
 assert.match(ngPosSource, /requestedSettlementType !== merchant\.payout_preference/)
-assert.match(ngPosSource, /source: isBankSendOrder \? 'bank-send' : isBankReceiveOrder \? 'bank-receive' : 'ngpos'/)
+assert.match(ngPosSource, /source: isBankSendOrder \? 'bank-send' : isBankWithdrawOrder \? 'bank-withdraw' : isBankReceiveOrder \? 'bank-receive' : 'ngpos'/)
 
 const pocketActivitySource = await readFile(new URL('../src/pocket/features/activity/PocketActivityPanel.tsx', import.meta.url), 'utf8')
 const activityKindBody = pocketActivitySource.match(/function activityKind[\s\S]*?\n\}/)?.[0] ?? ''

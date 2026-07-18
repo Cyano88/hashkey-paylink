@@ -26,7 +26,7 @@ export default function PocketHomePage() {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const fx = usePocketFxQuote()
+  const fx = usePocketFxQuote(wallets.total)
   const [tab, setTab] = useState<PocketHomeTab>('balance')
   const [network, setNetwork] = useState<PocketHomeNetworkKey>('base')
   const [walletBusy, setWalletBusy] = useState(false)
@@ -149,6 +149,7 @@ export default function PocketHomePage() {
           withdrawAmount={withdrawal.amount}
           withdrawPending={withdrawal.pending}
           withdrawNotice={withdrawal.notice}
+          withdrawStatus={withdrawal.status}
           withdrawTxHash={withdrawal.txHash}
           sessionActivity={sessionActivity}
           error={withdrawal.error || wallets.error}

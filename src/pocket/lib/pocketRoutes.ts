@@ -7,7 +7,7 @@ export type PocketMoveView = typeof POCKET_MOVE_VIEWS[number]
 export const POCKET_BILL_VIEWS = ['airtime', 'data', 'tv', 'electricity'] as const
 export type PocketBillView = typeof POCKET_BILL_VIEWS[number]
 
-export const POCKET_ACTIVITY_VIEWS = ['all', 'bank', 'pos', 'bills'] as const
+export const POCKET_ACTIVITY_VIEWS = ['all', 'bank', 'pos', 'bills', 'app-pay'] as const
 export type PocketActivityView = typeof POCKET_ACTIVITY_VIEWS[number]
 
 export type PocketRouteState =
@@ -32,6 +32,7 @@ export const POCKET_ROUTES = {
   bankActivity: '/activity/bank',
   posActivity: '/activity/pos',
   billsActivity: '/activity/bills',
+  appPayActivity: '/activity/app-pay',
   assistant: '/assistant',
 } as const
 
@@ -56,6 +57,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   if (path === POCKET_ROUTES.bankActivity) return { section: 'activity', view: 'bank' }
   if (path === POCKET_ROUTES.posActivity) return { section: 'activity', view: 'pos' }
   if (path === POCKET_ROUTES.billsActivity) return { section: 'activity', view: 'bills' }
+  if (path === POCKET_ROUTES.appPayActivity) return { section: 'activity', view: 'app-pay' }
   if (path === POCKET_ROUTES.assistant) return { section: 'assistant', view: 'circle-pocket' }
   return null
 }
@@ -70,7 +72,9 @@ export function pocketPathFor(state: PocketRouteState) {
     ? POCKET_ROUTES.bankActivity
     : state.view === 'pos'
       ? POCKET_ROUTES.posActivity
-      : POCKET_ROUTES.billsActivity
+      : state.view === 'bills'
+        ? POCKET_ROUTES.billsActivity
+        : POCKET_ROUTES.appPayActivity
 }
 
 export function pocketLegacyEntryUrl(state: PocketRouteState) {

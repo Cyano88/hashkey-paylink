@@ -103,6 +103,7 @@ const fxEnvelope = {
   quote: {
     currency: 'NGN',
     symbol: '₦',
+    amount: '1.309814',
     rate: 1373.43,
     source: 'paycrest',
     side: 'sell',
@@ -113,11 +114,11 @@ const fxEnvelope = {
 assert.deepEqual(parsePocketFxQuote(fxEnvelope), fxEnvelope.quote)
 assert.throws(() => parsePocketFxQuote({ ...fxEnvelope, quote: { ...fxEnvelope.quote, source: 'fixer' } }), /invalid/)
 let fxClientUrl = ''
-assert.deepEqual(await readPocketFxQuote(async url => {
+assert.deepEqual(await readPocketFxQuote('1.309814', async url => {
   fxClientUrl = String(url)
   return { ok: true, json: async () => fxEnvelope }
 }), fxEnvelope.quote)
-assert.equal(fxClientUrl, '/api/pocket/fx-quote?currency=NGN')
+assert.equal(fxClientUrl, '/api/pocket/fx-quote?currency=NGN&amount=1.309814')
 
 let fxNow = 1_800_000_000_000
 let paycrestRateCalls = 0
@@ -126,7 +127,7 @@ const readFxQuote = createPocketFxQuoteReader({
   now: () => fxNow,
   fetcher: async url => {
     paycrestRateCalls += 1
-    assert.equal(String(url), 'https://api.paycrest.io/v2/rates/base/USDC/1/NGN?side=sell')
+    assert.equal(String(url), 'https://api.paycrest.io/v2/rates/base/USDC/1.309814/NGN?side=sell')
     if (paycrestRateUnavailable) {
       return { ok: false, json: async () => ({ status: 'error', message: 'Rate unavailable' }) }
     }
@@ -136,15 +137,15 @@ const readFxQuote = createPocketFxQuoteReader({
     }
   },
 })
-const [firstFxQuote, deduplicatedFxQuote] = await Promise.all([readFxQuote(), readFxQuote()])
+const [firstFxQuote, deduplicatedFxQuote] = await Promise.all([readFxQuote('1.309814'), readFxQuote('1.309814')])
 assert.deepEqual(firstFxQuote, deduplicatedFxQuote)
 assert.equal(paycrestRateCalls, 1)
 fxNow += 29_999
-assert.deepEqual(await readFxQuote(), firstFxQuote)
+assert.deepEqual(await readFxQuote('1.309814'), firstFxQuote)
 assert.equal(paycrestRateCalls, 1)
 fxNow += 2
 paycrestRateUnavailable = true
-await assert.rejects(readFxQuote(), /Rate unavailable/)
+await assert.rejects(readFxQuote('1.309814'), /Rate unavailable/)
 assert.equal(paycrestRateCalls, 2)
 
 assert.equal(resolvePocketRoute('/unknown'), null)
@@ -831,7 +832,7 @@ assert.match(pocketFxHookSource, /document\.addEventListener\('visibilitychange'
 assert.match(pocketFxHookSource, /quote\.expiresAt - Date\.now\(\)/)
 const pocketFxEndpointSource = await readFile(new URL('../api/pocket/fx-quote.ts', import.meta.url), 'utf8')
 assert.match(pocketFxEndpointSource, /PAYCREST_QUOTE_CACHE_MS = 30_000/)
-assert.match(pocketFxEndpointSource, /\/v2\/rates\/base\/USDC\/1\/NGN\?side=sell/)
+assert.match(pocketFxEndpointSource, /\/v2\/rates\/base\/USDC\/\$\{encodeURIComponent\(amount\)\}\/NGN\?side=sell/)
 assert.match(pocketFxEndpointSource, /Cache-Control', 'no-store'/)
 assert.doesNotMatch(pocketFxEndpointSource, /fixer|configured|stale/i)
 const serverSource = await readFile(new URL('../server.ts', import.meta.url), 'utf8')
@@ -870,7 +871,8 @@ assert.match(pocketWithdrawalControllerSource, /signCircleSolanaTransaction\(\{/
 assert.match(pocketWithdrawalControllerSource, /submitPocketSolanaTransfer\(\{/)
 assert.match(pocketWithdrawalControllerSource, /executePocketEvmTransfer\(\{/)
 assert.match(pocketWithdrawalControllerSource, /Hash PayLink Circle Pocket withdraw/)
-assert.match(pocketWithdrawalControllerSource, /Withdraw sent\. Check the destination wallet in a moment\./)
+assert.match(pocketWithdrawalControllerSource, /Submitted on-chain\. Confirmation is still pending\./)
+assert.match(pocketWithdrawalControllerSource, /Confirmed on-chain\./)
 assert.doesNotMatch(pocketWithdrawalControllerSource, /fetch\(|['"]\/api\/|\/api\/solana-build-tx|\/api\/solana-relay/)
 const layoutSource = await readFile(new URL('../src/Layout.tsx', import.meta.url), 'utf8')
 assert.match(layoutSource, /resolvePocketRoute\(pathname\.slice\('\/pocket'\.length\) \|\| '\/'\)/)
@@ -943,7 +945,7 @@ assert.match(pocketHomePageSource, /usePocketWallets\(\{ authenticated, email, g
 assert.match(pocketHomePageSource, /usePocketWalletController\(\{/)
 assert.match(pocketHomePageSource, /usePocketWithdrawalController\(\{/)
 assert.match(pocketHomePageSource, /<PocketHomeOverview/)
-assert.match(pocketHomePageSource, /usePocketFxQuote\(\)/)
+assert.match(pocketHomePageSource, /usePocketFxQuote\(wallets\.total\)/)
 assert.match(pocketHomePageSource, /Promise\.all\(\[wallets\.refreshBalances\(\), fx\.refresh\(\)\]\)/)
 assert.match(pocketHomePageSource, /<PocketHomeControls/)
 assert.match(pocketHomePageSource, /<PocketRouteShell[\s\S]*active="home"/)
@@ -962,7 +964,8 @@ assert.doesNotMatch(pocketHomeOverviewSource, /RefreshCw|Refresh Circle Pocket b
 assert.match(pocketHomeOverviewSource, /POCKET_BALANCE_CURRENCIES.*'USDC'.*'NGN'/)
 assert.match(pocketHomeOverviewSource, /Previous balance currency/)
 assert.match(pocketHomeOverviewSource, /Next balance currency/)
-assert.match(pocketHomeOverviewSource, /Paycrest rate/)
+assert.doesNotMatch(pocketHomeOverviewSource, /Paycrest rate/)
+assert.match(pocketHomeOverviewSource, /globalBalance \* fxQuote\.rate/)
 assert.doesNotMatch(pocketHomeOverviewSource, /Wallet not opened|Sign in to open|\bready\b|openedWalletCount|wallets open/i)
 const pocketLandingPageSource = await readFile(new URL('../src/pocket/pages/PocketLandingPage.tsx', import.meta.url), 'utf8')
 assert.match(pocketLandingPageSource, /usePocketProfile\(\{ authenticated, email, getAccessToken \}\)/)
@@ -1000,7 +1003,11 @@ assert.match(pocketMoveBankPageSource, /usePocketBankReceiveController\(\{/)
 assert.match(pocketMoveBankPageSource, /usePocketProfile\(\{ authenticated, email, getAccessToken \}\)/)
 assert.match(pocketMoveBankPageSource, /<PocketVerifiedBankFields/)
 assert.match(pocketMoveBankPageSource, /<PocketRouteShell active="move"/)
-assert.match(pocketMoveBankPageSource, />Bank payment request<\/p>/)
+assert.match(pocketMoveBankPageSource, /Payment Request/)
+assert.match(pocketMoveBankPageSource, /Direct Bank Payout/)
+assert.match(pocketMoveBankPageSource, /Withdrawal network/)
+assert.match(pocketMoveBankPageSource, /Slide to confirm/)
+assert.match(pocketMoveBankPageSource, /usePocketBankWithdrawController\(\{/)
 assert.match(pocketMoveBankPageSource, /\{authenticated && <>/)
 assert.match(pocketMoveBankPageSource, /<LocalCurrencyProfileCard[\s\S]*?embedded/)
 assert.match(pocketMoveBankPageSource, /<PocketVerifiedBankFields[\s\S]*?embedded/)

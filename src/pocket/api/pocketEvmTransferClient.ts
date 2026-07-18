@@ -8,9 +8,26 @@ type PocketEvmTransferExecutor = (input: {
   amount: string
 }) => Promise<`0x${string}` | null>
 
+type PocketEvmTransferConfirmer = (input: {
+  chain: 'base' | 'arbitrum' | 'arc'
+  txHash: `0x${string}`
+}) => Promise<'confirmed' | 'submitted'>
+
 const defaultExecutor: PocketEvmTransferExecutor = async input => {
   const { sendCircleEvmEmailWithdraw } = await import('../../lib/circleEvmEmailWallet')
   return sendCircleEvmEmailWithdraw(input)
+}
+
+const defaultConfirmer: PocketEvmTransferConfirmer = async ({ chain, txHash }) => {
+  try {
+    const { EVM_CLIENTS } = await import('../../lib/router')
+    const receipt = await EVM_CLIENTS[chain].waitForTransactionReceipt({ hash: txHash, confirmations: 1, timeout: 45_000 })
+    if (receipt.status === 'reverted') throw new Error('Withdrawal transaction reverted on-chain.')
+    return 'confirmed'
+  } catch (reason) {
+    if (reason instanceof Error && reason.message === 'Withdrawal transaction reverted on-chain.') throw reason
+    return 'submitted'
+  }
 }
 
 export async function executePocketEvmTransfer({
@@ -19,12 +36,14 @@ export async function executePocketEvmTransfer({
   recipient,
   amount,
   executor = defaultExecutor,
+  confirmer = defaultConfirmer,
 }: {
   session: CircleEvmEmailSession
   linkedWalletAddress: string
   recipient: Address
   amount: string
   executor?: PocketEvmTransferExecutor
+  confirmer?: PocketEvmTransferConfirmer
 }) {
   if (!['base', 'arbitrum', 'arc'].includes(session.chain)) {
     throw new Error('Circle Pocket EVM withdrawal does not support this network.')
@@ -47,5 +66,7 @@ export async function executePocketEvmTransfer({
   }
   if (amountUnits <= 0n) throw new Error('Enter a USDC withdrawal amount greater than zero.')
   const txHash = await executor({ session, recipient, amount })
-  return { txHash }
+  if (!txHash) return { txHash, status: 'submitted' as const }
+  const status = await confirmer({ chain: session.chain, txHash })
+  return { txHash, status }
 }

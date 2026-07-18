@@ -12,6 +12,7 @@ import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketMarketplacePanel from '../components/PocketMarketplacePanel'
+import PocketSelect from '../components/PocketSelect'
 import usePocketX402Controller from '../controllers/usePocketX402Controller'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { buildPocketX402FundUrl } from '../lib/pocketX402FundUrl'
@@ -94,15 +95,15 @@ export default function PocketX402Page() {
               <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Circle Gateway</p>
               <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Choose where apps are paid</p>
             </div>
-            <select
+            <PocketSelect
               value={x402.network}
-              onChange={event => x402.selectNetwork(event.target.value === 'arc' ? 'arc' : 'base')}
+              options={[{ value: 'base', label: 'Base' }, { value: 'arc', label: 'Arc Testnet' }]}
+              onChange={value => x402.selectNetwork(value === 'arc' ? 'arc' : 'base')}
               disabled={x402.walletStep === 'otp'}
-              className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs font-semibold text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:border-gray-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
-            >
-              <option value="base">Base</option>
-              <option value="arc">Arc Testnet</option>
-            </select>
+              ariaLabel="App Pay network"
+              className="w-[132px]"
+              buttonClassName="min-h-8 rounded-lg py-1 text-xs"
+            />
           </div>
         </details>
 

@@ -23,6 +23,7 @@ export default function PocketRouteShell({
   const touchStartY = useRef<number | null>(null)
 
   const isRefreshing = refreshing || pullRefreshing
+  const showPullIndicator = pullRefreshing || pullDistance > 0
   const pullProgress = Math.min(1, pullDistance / 68)
   const contentTop = headerHeight + 16
 
@@ -98,13 +99,13 @@ export default function PocketRouteShell({
             onTouchCancel={() => { touchStartY.current = null; setPullDistance(0) }}
             className="h-full w-full overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
           >
-            {onRefresh && (
+            {onRefresh && showPullIndicator && (
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute left-1/2 z-30 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-opacity dark:border-white/10 dark:bg-[#1b1b20] dark:text-gray-300"
-                style={{ top: headerHeight + 8, opacity: isRefreshing ? 1 : pullProgress, transform: `translate(-50%, ${Math.max(-28, pullDistance - 40)}px) scale(${0.78 + pullProgress * 0.22})` }}
+                style={{ top: headerHeight + 8, opacity: pullRefreshing ? 1 : pullProgress, transform: `translate(-50%, ${Math.max(-28, pullDistance - 40)}px) scale(${0.78 + pullProgress * 0.22})` }}
               >
-                {isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" style={{ transform: `rotate(${pullProgress * 180}deg)` }} />}
+                {pullRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" style={{ transform: `rotate(${pullProgress * 180}deg)` }} />}
               </div>
             )}
             <div

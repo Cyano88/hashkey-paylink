@@ -1,5 +1,5 @@
-import { ChevronDown } from 'lucide-react'
 import { cn } from '../../../lib/utils'
+import PocketSelect from '../../components/PocketSelect'
 
 type NetworkOption = {
   value: string
@@ -44,28 +44,15 @@ export function PocketPayerNetworkPanel({
               {multiChain ? 'Payer chooses at checkout' : selectedNetworkLabel}
             </p>
           </div>
-          <div className="relative shrink-0">
-            <select
-              value={multiChain ? 'multi' : selectedNetwork}
-              disabled={multiChain}
-              onChange={event => onNetworkSelect(event.target.value)}
-              className={cn(
-                'min-w-[128px] appearance-none rounded-lg border px-3 py-2 pr-8 text-xs font-bold outline-none transition-all',
-                multiChain
-                  ? 'cursor-default border-gray-200 bg-gray-100 text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400'
-                  : 'border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950',
-              )}
-            >
-              {multiChain ? (
-                <option value="multi">Any supported</option>
-              ) : (
-                options.map(network => (
-                  <option key={network.value} value={network.value}>{network.label}</option>
-                ))
-              )}
-            </select>
-            {!multiChain && <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/70 dark:text-gray-500" />}
-          </div>
+          <PocketSelect
+            value={multiChain ? 'multi' : selectedNetwork}
+            options={multiChain ? [{ value: 'multi', label: 'Any supported' }] : options}
+            disabled={multiChain}
+            onChange={onNetworkSelect}
+            ariaLabel="Payer network"
+            className="w-[142px] shrink-0"
+            buttonClassName="min-h-9 rounded-lg py-1.5 text-xs"
+          />
         </div>
 
         <button

@@ -2,6 +2,7 @@ import { Activity, ArrowRight, CheckCheck, Copy, Download, LayoutDashboard, Load
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatAmount } from '../../../lib/utils'
 import type { PocketHomeNetwork, PocketHomeNetworkKey } from './PocketHomeOverview'
+import PocketSlideAction, { type PocketSlideActionStatus } from '../../components/PocketSlideAction'
 
 export type PocketHomeTab = 'balance' | 'fund' | 'withdraw' | 'activity'
 
@@ -18,6 +19,7 @@ type PocketHomeControlsProps = {
   withdrawAmount: string
   withdrawPending: boolean
   withdrawNotice: string
+  withdrawStatus: PocketSlideActionStatus
   withdrawTxHash: string
   sessionActivity: string[]
   error: string
@@ -66,6 +68,7 @@ export default function PocketHomeControls({
   withdrawAmount,
   withdrawPending,
   withdrawNotice,
+  withdrawStatus,
   withdrawTxHash,
   sessionActivity,
   error,
@@ -78,6 +81,16 @@ export default function PocketHomeControls({
   onWithdrawMax,
   onWithdraw,
 }: PocketHomeControlsProps) {
+  const withdrawalValue = Number(withdrawAmount)
+  const withdrawalReady = Boolean(
+    selectedAddress
+    && withdrawAddress.trim()
+    && /^\d+(?:\.\d{1,6})?$/.test(withdrawAmount.trim())
+    && Number.isFinite(withdrawalValue)
+    && withdrawalValue > 0
+    && withdrawalValue <= selectedBalance,
+  )
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
@@ -100,20 +113,24 @@ export default function PocketHomeControls({
       </div>
 
       {(tab === 'fund' || tab === 'withdraw') && (
-        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        <div className="grid grid-cols-4 gap-1.5">
           {networks.map(network => (
             <button
               key={network.key}
               type="button"
               onClick={() => onNetworkChange(network.key)}
               className={cn(
-                'rounded-xl border px-2 py-2.5 text-[11px] font-bold transition-all',
+                'flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-[9px] font-bold transition-all',
                 selectedNetwork === network.key
                   ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
                   : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
               )}
             >
-              {network.label}
+              <span className={cn('flex h-6 w-6 items-center justify-center overflow-hidden rounded-lg', network.logoCanvas === 'dark' ? 'bg-gray-950' : 'bg-white')}>
+                <img src={network.logo} alt="" className="h-full w-full object-contain grayscale" />
+              </span>
+              <span className="truncate">{network.label}</span>
+              {network.key === 'arc' && <span className="rounded-full bg-blue-500/10 px-1.5 text-[7px] font-black uppercase tracking-wide text-blue-600 dark:text-blue-300">Test</span>}
             </button>
           ))}
         </div>
@@ -161,7 +178,7 @@ export default function PocketHomeControls({
       )}
 
       {tab === 'withdraw' && (
-        <div className="space-y-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="space-y-3 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
           <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {selectedNetworkLabel}</span>
             <span className="text-sm font-black tabular-nums text-gray-950 dark:text-white">${formatAmount(selectedBalance, 6)} USDC</span>
@@ -192,15 +209,11 @@ export default function PocketHomeControls({
                   <button type="button" onClick={onWithdrawMax} className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-white/10 dark:text-gray-200">Max</button>
                 </span>
               </label>
-              <button
-                type="button"
-                onClick={onWithdraw}
-                disabled={withdrawPending}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
-              >
-                {withdrawPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                {withdrawPending ? 'Sending…' : 'Withdraw USDC'}
-              </button>
+              <PocketSlideAction
+                status={withdrawPending ? 'pending' : withdrawStatus}
+                disabled={!withdrawalReady}
+                onConfirm={onWithdraw}
+              />
             </>
           ) : (
             <button
@@ -213,7 +226,7 @@ export default function PocketHomeControls({
               Open {selectedNetworkLabel} wallet first
             </button>
           )}
-          {withdrawNotice && <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{withdrawNotice}</p>}
+          {withdrawNotice && <p className={cn('text-center text-xs font-semibold', withdrawStatus === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-300')}>{withdrawNotice}</p>}
           {withdrawTxHash && <p className="break-all text-[11px] text-gray-400">Tx: {withdrawTxHash}</p>}
         </div>
       )}

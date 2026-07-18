@@ -3,6 +3,7 @@ import { POCKET_API } from '../lib/pocketSchemas'
 export type PocketFxQuote = {
   currency: 'NGN'
   symbol: '₦'
+  amount: string
   rate: number
   source: 'paycrest'
   side: 'sell'
@@ -23,6 +24,9 @@ export function parsePocketFxQuote(value: unknown): PocketFxQuote {
   if (
     quote.currency !== 'NGN'
     || quote.symbol !== '₦'
+    || typeof quote.amount !== 'string'
+    || !/^\d+(?:\.\d{1,6})?$/.test(quote.amount)
+    || Number(quote.amount) <= 0
     || quote.source !== 'paycrest'
     || quote.side !== 'sell'
     || typeof quote.rate !== 'number'
@@ -37,8 +41,9 @@ export function parsePocketFxQuote(value: unknown): PocketFxQuote {
   return quote as PocketFxQuote
 }
 
-export async function readPocketFxQuote(fetcher: typeof fetch = fetch): Promise<PocketFxQuote> {
-  const response = await fetcher(`${POCKET_API.fxQuote}?currency=NGN`, { method: 'GET' })
+export async function readPocketFxQuote(amount = '1', fetcher: typeof fetch = fetch): Promise<PocketFxQuote> {
+  const params = new URLSearchParams({ currency: 'NGN', amount })
+  const response = await fetcher(`${POCKET_API.fxQuote}?${params.toString()}`, { method: 'GET' })
   const data = await response.json().catch(() => undefined)
   if (!response.ok) {
     const message = isRecord(data) && typeof data.error === 'string' ? data.error : 'Live FX rate is unavailable.'

@@ -61,7 +61,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
       if (!token) throw new Error('Sign in again to open Marketplace.')
       const next = await readPocketMarketplace({ accessToken: token, query: nextQuery })
       if (!next.catalogAvailable) {
-        setLoadError(next.catalogMessage || 'Couldn\'t refresh Marketplace. App Pay history is still available.')
+        setLoadError(next.catalogMessage || 'Couldn\'t refresh Marketplace. Pull down to try again.')
         setSnapshot(current => ({ ...next, services: current?.services ?? [] }))
       } else {
         setSnapshot(next)
@@ -205,14 +205,6 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
             )}
           </div>
 
-          <div className="rounded-xl border border-gray-100 px-3 py-2.5 dark:border-white/[0.07]">
-            <p className="text-[11px] font-bold text-gray-500 dark:text-gray-300">App Pay history</p>
-            {snapshot?.activity.length ? (
-              <div className="mt-2 space-y-2 border-t border-gray-100 pt-2 dark:border-white/[0.07]">
-                {snapshot.activity.map(item => <div key={item.id} className="flex items-center justify-between gap-3 text-[10px]"><span className="min-w-0 truncate text-gray-500 dark:text-gray-400">{item.title}</span><span className="shrink-0 font-bold text-gray-700 dark:text-gray-200">{item.amount || '—'} {item.asset || ''}</span></div>)}
-              </div>
-            ) : <p className="mt-1 text-[10px] leading-4 text-gray-400">No App Pay attempts recorded yet.</p>}
-          </div>
         </div>
       )}
 

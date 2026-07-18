@@ -21,7 +21,7 @@ export type PaycrestOrderRecord = {
   payer_email?: string
   payer_wallet?: string
   payer_name?: string
-  source?: 'ngpos' | 'bank-receive' | 'bank-send'
+  source?: 'ngpos' | 'bank-receive' | 'bank-withdraw' | 'bank-send'
   tx_hash?: string
   status: string
   valid_until?: string
@@ -242,7 +242,7 @@ export async function createPaycrestOfframpOrder(input: {
   payerEmail?: string
   payerWallet?: string
   payerName?: string
-  source?: 'ngpos' | 'bank-receive'
+  source?: 'ngpos' | 'bank-receive' | 'bank-withdraw'
   memo?: string
 }) {
   if (!isAddress(input.refundAddress)) throw new Error('A valid Circle refund wallet is required.')

@@ -43,6 +43,7 @@ export default function usePocketWithdrawalController({
   const [amount, setAmount] = useState('')
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState('')
+  const [status, setStatus] = useState<'idle' | 'pending' | 'submitted' | 'successful'>('idle')
   const [txHash, setTxHash] = useState('')
   const [error, setError] = useState('')
 
@@ -50,17 +51,42 @@ export default function usePocketWithdrawalController({
     setError('')
     setNotice('')
     setTxHash('')
+    setStatus('idle')
   }, [resetKey])
 
   const setMax = useCallback(() => {
-    if (balance > 0) setAmount(String(balance))
+    if (balance > 0) {
+      setAmount(String(balance))
+      setNotice('')
+      setTxHash('')
+      setStatus('idle')
+    }
   }, [balance])
+
+  const updateAddress = useCallback((value: string) => {
+    setAddress(value)
+    if (!pending) {
+      setNotice('')
+      setTxHash('')
+      setStatus('idle')
+    }
+  }, [pending])
+
+  const updateAmount = useCallback((value: string) => {
+    setAmount(value)
+    if (!pending) {
+      setNotice('')
+      setTxHash('')
+      setStatus('idle')
+    }
+  }, [pending])
 
   const withdraw = useCallback(async () => {
     clearExternalError()
     setError('')
     setNotice('')
     setTxHash('')
+    setStatus('idle')
     let recipient: string
     try {
       recipient = validatePocketWithdrawal({ network, address, amount, balance }).recipient
@@ -70,7 +96,9 @@ export default function usePocketWithdrawalController({
     }
 
     setPending(true)
+    setStatus('pending')
     try {
+      let confirmed = false
       const selectedWallet = wallet ?? await ensureWallet(network)
       if (!selectedWallet) throw new Error('Circle wallet setup was cancelled.')
       if (network === 'solana') {
@@ -89,6 +117,7 @@ export default function usePocketWithdrawalController({
           lastValidBlockHeight: prepared.lastValidBlockHeight,
         })
         setTxHash(submitted.txHash)
+        confirmed = submitted.status === 'confirmed'
       } else {
         const session = await getEvmSession(network, selectedWallet.address)
         const result = await executePocketEvmTransfer({
@@ -98,13 +127,16 @@ export default function usePocketWithdrawalController({
           amount,
         })
         if (result.txHash) setTxHash(result.txHash)
+        confirmed = result.status === 'confirmed'
       }
-      setNotice('Withdraw sent. Check the destination wallet in a moment.')
+      setStatus(confirmed ? 'successful' : 'submitted')
+      setNotice(confirmed ? 'Confirmed on-chain.' : 'Submitted on-chain. Confirmation is still pending.')
       onActivity(`Withdrew ${amount} USDC on ${networkLabel}`)
       setAmount('')
       setAddress('')
       await refreshBalances()
     } catch (reason) {
+      setStatus('idle')
       setError(reason instanceof Error && reason.message ? reason.message : typeof reason === 'string' && reason ? reason : 'Withdraw failed.')
     } finally {
       setPending(false)
@@ -113,11 +145,12 @@ export default function usePocketWithdrawalController({
 
   return {
     address,
-    setAddress,
+    setAddress: updateAddress,
     amount,
-    setAmount,
+    setAmount: updateAmount,
     pending,
     notice,
+    status,
     txHash,
     error,
     setMax,

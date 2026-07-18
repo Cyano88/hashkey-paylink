@@ -356,6 +356,7 @@ export const POCKET_API = {
   bankInstitutions: '/api/pocket/bank-receive/institutions',
   bankVerify: '/api/pocket/bank-receive/verify',
   bankSend: '/api/pocket/bank-send',
+  bankWithdraw: '/api/pocket/bank-withdraw',
   pos: '/api/pocket/pos',
   billsQuote: '/api/pocket/bills/quote',
   billsPay: '/api/pocket/bills/pay',

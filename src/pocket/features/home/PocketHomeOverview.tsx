@@ -104,7 +104,7 @@ export default function PocketHomeOverview({
               <p className="mt-1 text-[11px] font-semibold text-gray-400">
                 {nairaBalance === null
                   ? `${formatAmount(globalBalance, 6)} USDC · ${fxBusy ? 'Loading live rate' : fxError || 'Live rate unavailable'}`
-                  : `≈ ${formatAmount(globalBalance, 6)} USDC · Paycrest rate`}
+                  : `≈ ${formatAmount(globalBalance, 6)} USDC`}
               </p>
             ) : null}
             <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-white/75 p-0.5 text-[10px] font-black text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">

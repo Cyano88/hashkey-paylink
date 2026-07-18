@@ -4,7 +4,7 @@ export type PocketHeaderMode = 'wallet' | 'move' | 'bills' | 'activity'
 export type PocketWalletSwitchView = 'smart' | 'x402'
 export type PocketMoveSwitchView = 'usdc' | 'bank' | 'pos'
 export type PocketBillSwitchView = 'airtime' | 'data' | 'tv' | 'electricity'
-export type PocketActivitySwitchView = 'all' | 'bank' | 'pos' | 'bills'
+export type PocketActivitySwitchView = 'all' | 'bank' | 'pos' | 'bills' | 'app-pay'
 
 type PocketTopSwitchProps = {
   mode: PocketHeaderMode
@@ -41,6 +41,7 @@ const activityItems = [
   { key: 'bank', label: 'Bank receive', icon: Landmark },
   { key: 'pos', label: 'POS', icon: Store },
   { key: 'bills', label: 'Bills', icon: Banknote },
+  { key: 'app-pay', label: 'App Pay', icon: Radio },
 ] as const
 
 export default function PocketTopSwitch({
@@ -64,7 +65,7 @@ export default function PocketTopSwitch({
         : walletItems
 
   return (
-    <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full border border-gray-200 bg-gray-100/95 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_12px_36px_rgba(0,0,0,0.35)] ${mode === 'move' ? 'grid-cols-3' : compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
+    <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full border border-gray-200 bg-gray-100/95 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_12px_36px_rgba(0,0,0,0.35)] ${mode === 'move' ? 'grid-cols-3' : mode === 'activity' ? 'grid-cols-5' : compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
       {items.map(({ key, label, icon: Icon }) => {
         const active = mode === 'move'
           ? moveView === key

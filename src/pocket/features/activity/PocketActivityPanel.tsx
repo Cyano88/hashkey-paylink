@@ -5,9 +5,9 @@ import type { PocketActivityRow } from '../../models/pocketActivity'
 
 export type { PocketActivityRow } from '../../models/pocketActivity'
 
-export type PocketActivityView = 'all' | 'bank' | 'pos' | 'bills'
+export type PocketActivityView = 'all' | 'bank' | 'pos' | 'bills' | 'app-pay'
 
-type ActivityKind = Exclude<PocketActivityView, 'all'> | 'app-pay'
+type ActivityKind = Exclude<PocketActivityView, 'all'>
 
 type PocketActivityPanelProps = {
   view: PocketActivityView
@@ -23,7 +23,7 @@ function activityKind(row: PocketActivityRow): ActivityKind {
   const settlement = String(row.settlementType ?? '').toLowerCase()
   if (source === 'app-pay' || settlement === 'app_pay') return 'app-pay'
   if (source === 'bills' || settlement === 'bill_payment') return 'bills'
-  if (source === 'bank-receive' || source === 'bank_receive') return 'bank'
+  if (source === 'bank-receive' || source === 'bank_receive' || source === 'bank-withdraw' || source === 'bank_withdraw') return 'bank'
   if (source === 'ngpos' || source === 'pos') return 'pos'
   if (settlement === 'instant_fiat') return 'bank'
   return 'pos'
@@ -40,6 +40,8 @@ function supportedRows(rows: PocketActivityRow[]) {
       || source === 'pos'
       || source === 'bank-receive'
       || source === 'bank_receive'
+      || source === 'bank-withdraw'
+      || source === 'bank_withdraw'
       || source === 'bills'
       || settlement === 'instant_fiat'
       || settlement === 'bill_payment'
@@ -55,7 +57,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-slate-50 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-white/[0.04]">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Activity</p>
         <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 dark:text-white">
-          {view === 'all' ? 'All activity' : view === 'bank' ? 'Bank receive' : view === 'pos' ? 'POS activity' : 'Bills activity'}
+          {view === 'all' ? 'All activity' : view === 'bank' ? 'Bank receive' : view === 'pos' ? 'POS activity' : view === 'bills' ? 'Bills activity' : 'App Pay activity'}
         </h2>
         <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
           Receipts, payouts, reversals, and support records stay connected to your Circle Pocket account.
@@ -99,7 +101,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">
-                            {kind === 'bank' ? 'Bank receive' : kind === 'bills' ? 'Bill payment' : kind === 'app-pay' ? 'App Pay service' : 'POS payment'}
+                            {kind === 'bank' ? (String(row.source).toLowerCase().includes('withdraw') ? 'Bank payout' : 'Bank receive') : kind === 'bills' ? 'Bill payment' : kind === 'app-pay' ? 'App Pay service' : 'POS payment'}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-400">
                             {row.contextLabel || row.memo || row.payer || 'Circle Pocket receipt'}
@@ -129,7 +131,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
               </span>
               <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">No activity to show yet</h3>
               <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
-                {view === 'all' ? 'App Pay, bank receive, POS, and bill records will appear here.' : `Your ${view === 'bank' ? 'bank receive' : view.toUpperCase()} records will appear here.`}
+                {view === 'all' ? 'App Pay, bank receive, POS, and bill records will appear here.' : `Your ${view === 'bank' ? 'bank receive' : view === 'app-pay' ? 'App Pay' : view.toUpperCase()} records will appear here.`}
               </p>
             </div>
           ) : null}

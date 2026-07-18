@@ -66,7 +66,7 @@ type MerchantProfile = {
   supported_networks?: PosNetwork[]
   kyc_status: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'RESTRICTED'
   settlement_enabled: boolean
-  source?: 'pos' | 'bank-receive'
+  source?: 'pos' | 'bank-receive' | 'bank-withdraw'
   created_at: string
   updated_at: string
   idempotency_key?: string
@@ -85,7 +85,7 @@ type OfframpIntent = {
   amount_ngn: string
   estimated_amount_usdc: string
   fx_rate_ngn_per_usdc: string
-  source?: 'pos' | 'bank-receive'
+  source?: 'pos' | 'bank-receive' | 'bank-withdraw'
   created_at: string
   expires_at: string
 }
@@ -485,6 +485,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
       const isBankSendOrder = order.source === 'bank-send'
       const link = isBankSendOrder ? bankSendById.get(order.merchant_id) : undefined
       const merchant = merchantById.get(order.merchant_id)
+      const isBankWithdrawOrder = !isBankSendOrder && (order.source === 'bank-withdraw' || merchant?.source === 'bank-withdraw')
       const isBankReceiveOrder = !isBankSendOrder && (order.source === 'bank-receive' || merchant?.source === 'bank-receive')
       return {
         eventId: isBankSendOrder ? `bank-send-${order.merchant_id}` : `ngpos-${order.merchant_id}`,
@@ -495,18 +496,20 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
           : (order.payer_wallet || order.payer_email || 'Circle wallet payer'),
         memo: isBankSendOrder
           ? (link?.display_name || 'Bank send funding')
+          : isBankWithdrawOrder
+            ? 'Direct bank payout'
           : isBankReceiveOrder
             ? 'Bank receive payment'
             : 'Retail POS payment',
         amount: order.amount_usdc,
         ts: new Date(order.updated_at || order.created_at).getTime(),
-        source: isBankSendOrder ? 'bank-send' : isBankReceiveOrder ? 'bank-receive' : 'ngpos',
+        source: isBankSendOrder ? 'bank-send' : isBankWithdrawOrder ? 'bank-withdraw' : isBankReceiveOrder ? 'bank-receive' : 'ngpos',
         merchantId: order.merchant_id,
         contextLabel: isBankSendOrder
           ? `${order.destination_network || link?.destination_network || 'base'} USDC ${shortAddress(order.destination_address || link?.destination_address || '')}`.trim()
           : order.bank_name
             ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim()
-            : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
+            : isBankWithdrawOrder ? 'Direct bank payout' : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
         settlementType: isBankSendOrder ? 'PAYCREST_ONRAMP' : 'INSTANT_FIAT',
         amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
         paycrestStatus: order.status,
@@ -673,8 +676,10 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   const idempotencyKey = creationIdempotencyKey(req, body)
   if (!idempotencyKey) throw ngPosRequestError(400, 'Missing or invalid idempotency key.')
   const store = await readStore()
+  const directPayout = body.direct_payout === true
+  const merchantSource = directPayout ? 'bank-withdraw' : 'bank-receive'
   const existingMerchant = Object.values(store.merchants).find(merchant => (
-    merchant.owner_id === ownerId && merchant.source === 'bank-receive' && merchant.idempotency_key === idempotencyKey
+    merchant.owner_id === ownerId && merchant.source === merchantSource && merchant.idempotency_key === idempotencyKey
   ))
   if (existingMerchant?.creation_response) return { ...existingMerchant.creation_response, replayed: true }
   const suppliedOwnerEmail = cleanText(body.owner_email, '').toLowerCase()
@@ -684,7 +689,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   const ownerEmail = session.email || suppliedOwnerEmail
   const ownerFirstName = cleanText(body.owner_first_name, '')
   const ownerLastName = cleanText(body.owner_last_name, '')
-  const displayName = cleanText(body.display_name || body.memo, 'Bank receive')
+  const displayName = cleanText(body.display_name || body.memo, directPayout ? 'Direct bank payout' : 'Bank receive')
   const flexibleAmount = body.flexible_amount === true || body.flexible_amount === 'true'
   const amount = cleanAmount(body.amount)
   const useSavedBank = body.use_saved_bank === true || body.use_saved_bank === 'true'
@@ -731,7 +736,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
     supported_networks: ['base'],
     kyc_status: 'UNVERIFIED',
     settlement_enabled: true,
-    source: 'bank-receive',
+    source: merchantSource,
     created_at: now,
     updated_at: now,
     idempotency_key: idempotencyKey,
@@ -768,7 +773,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
       amount_ngn: amountNgnText,
       estimated_amount_usdc: amountUsdcText,
       fx_rate_ngn_per_usdc: rateText,
-      source: 'bank-receive',
+      source: merchantSource,
       created_at: now,
       expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
     }
@@ -795,7 +800,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   await recordCirclePocketAction({
     ownerId: createHash('sha256').update(`privy:${ownerId}`.toLowerCase()).digest('hex').slice(0, 32),
     idempotencyKey,
-    action: 'create-bank-receive-paylink',
+    action: directPayout ? 'prepare-direct-bank-payout' : 'create-bank-receive-paylink',
     status: 'completed',
     resourceId: merchant.merchant_id,
     metadata: { amount: amountNgnText || 'payer-selected', network: 'base' },
@@ -997,7 +1002,7 @@ export default async function handler(req: Request, res: Response) {
       let fiatExecutionReady = true
       if (settlementType === 'INSTANT_FIAT') {
         if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for naira settlement yet.' })
-        const intentSource = merchant.source === 'bank-receive' ? 'bank-receive' : 'pos'
+        const intentSource = merchant.source === 'bank-withdraw' ? 'bank-withdraw' : merchant.source === 'bank-receive' ? 'bank-receive' : 'pos'
         store.intents ??= {}
         store.intents[intentId] = {
           intent_id: intentId,
@@ -1109,7 +1114,7 @@ export default async function handler(req: Request, res: Response) {
         payerEmail,
         payerWallet: isAddress(payerWallet) ? payerWallet : refundAddress,
         payerName,
-        source: intent.source === 'bank-receive' ? 'bank-receive' : 'ngpos',
+        source: intent.source === 'bank-withdraw' ? 'bank-withdraw' : intent.source === 'bank-receive' ? 'bank-receive' : 'ngpos',
         memo: payerName.slice(0, 40) || 'Hash PayLink',
       })
       schedulePaycrestOrderReconciliation(order.intent_id)

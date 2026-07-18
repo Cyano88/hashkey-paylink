@@ -169,7 +169,7 @@ export default function PocketMoveUsdcPage() {
       <span className="flex items-center justify-between gap-2 text-sm font-semibold">
         <span className="flex min-w-0 items-center gap-2">
           <Mail className="h-4 w-4 shrink-0 text-blue-500" />
-          <span className="truncate">Receive with email</span>
+          <span className="leading-tight">Receive with email</span>
         </span>
         <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', receiveMode === 'email' && 'rotate-180')} />
       </span>

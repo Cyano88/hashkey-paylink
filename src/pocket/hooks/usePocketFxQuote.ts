@@ -6,8 +6,14 @@ const POCKET_FX_FOCUS_THROTTLE_MS = 10_000
 
 let cachedQuote: PocketFxQuote | null = null
 
-export default function usePocketFxQuote() {
-  const initialQuote = cachedQuote && cachedQuote.expiresAt > Date.now() ? cachedQuote : null
+function quoteAmount(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '1'
+  return value.toFixed(6).replace(/\.?0+$/, '')
+}
+
+export default function usePocketFxQuote(balance: number) {
+  const amount = quoteAmount(balance)
+  const initialQuote = cachedQuote?.amount === amount && cachedQuote.expiresAt > Date.now() ? cachedQuote : null
   const [quote, setQuote] = useState<PocketFxQuote | null>(initialQuote)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -20,7 +26,7 @@ export default function usePocketFxQuote() {
     lastRequestAt.current = Date.now()
     setBusy(true)
     try {
-      const nextQuote = await readPocketFxQuote()
+      const nextQuote = await readPocketFxQuote(amount)
       cachedQuote = nextQuote
       setQuote(nextQuote)
       setError('')
@@ -30,7 +36,7 @@ export default function usePocketFxQuote() {
       requestInFlight.current = false
       setBusy(false)
     }
-  }, [])
+  }, [amount])
 
   useEffect(() => {
     if (!quote) return
@@ -65,5 +71,5 @@ export default function usePocketFxQuote() {
     }
   }, [initialQuote, refresh])
 
-  return { quote, busy, error, refresh }
+  return { quote: quote?.amount === amount ? quote : null, busy, error, refresh }
 }

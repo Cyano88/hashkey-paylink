@@ -57,7 +57,7 @@ export function PocketReceiveMethodPanel({
         </label>
       )}
       {receiveMode === 'bank' && bankSignInControl}
-      {receiveMode !== 'bank' && <div className={cn('grid gap-2', receiveMode === 'idle' && canReceiveWithEmail ? 'grid-cols-2' : 'grid-cols-1')}>
+      {receiveMode !== 'bank' && <div className="grid grid-cols-1 gap-2">
         {receiveMode !== 'email' && <button
           type="button"
           onClick={onSelectPaste}
@@ -71,7 +71,7 @@ export function PocketReceiveMethodPanel({
           <span className="flex items-center justify-between gap-2 text-sm font-semibold">
             <span className="flex min-w-0 items-center gap-2">
               <Wallet className={cn('h-4 w-4 shrink-0', receiveMode === 'paste' ? 'text-white/70 dark:text-gray-500' : 'text-gray-500')} />
-              <span className="truncate">{addressOptionLabel ?? 'Receive with address'}</span>
+              <span className="leading-tight">{addressOptionLabel ?? 'Receive with address'}</span>
             </span>
             <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', receiveMode === 'paste' && 'rotate-180')} />
           </span>
@@ -94,7 +94,7 @@ export function PocketReceiveMethodPanel({
             <span className="flex items-center justify-between gap-2 text-sm font-semibold">
               <span className="flex min-w-0 items-center gap-2">
                 {recipientPending ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Mail className="h-4 w-4 shrink-0 text-blue-500" />}
-                <span className="truncate">Receive with email</span>
+                <span className="leading-tight">Receive with email</span>
               </span>
               <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', receiveMode === 'email' && 'rotate-180')} />
             </span>
