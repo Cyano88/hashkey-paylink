@@ -381,6 +381,25 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
       if (!body) return fail(400, 'VALIDATION_FAILED', `Marketplace purchases must be valid HTTPS services costing no more than ${MAX_PURCHASE_USDC} USDC.`, false)
 
       const previousActions = await dependencies.listActions(identity.userId, 100)
+      const unresolved = previousActions.find(item => (
+        item.action === ACTION
+        && (
+          (item.status === 'started' && Date.now() - item.updatedAt < 10 * 60_000)
+          || (
+            item.status === 'submitted'
+            && !['confirmed', 'completed', 'failed'].includes(item.metadata?.paymentState ?? '')
+          )
+        )
+      ))
+      if (unresolved) {
+        return res.status(202).json({
+          ok: true,
+          status: 'processing',
+          replayed: true,
+          receiptActivityId: unresolved.resourceId,
+          message: 'A previous App Pay payment is still being reconciled. Pull down to refresh before approving another purchase.',
+        })
+      }
       const pending = previousActions.find(item => (
         item.action === ACTION
         && item.metadata?.resource === body.resource

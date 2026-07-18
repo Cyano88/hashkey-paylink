@@ -194,6 +194,27 @@ payError = undefined
 
 actions = [{
   ...action,
+  id: 'other-submitted-action',
+  idempotencyKey: 'pocket:marketplace:other-submitted',
+  status: 'submitted',
+  resourceId: 'receipt-other-pending',
+  metadata: { resource: 'https://service.example/other', amount: '0.02' },
+  updatedAt: Date.now(),
+}]
+const globalPendingRes = response()
+await handler({
+  method: 'POST',
+  query: {},
+  headers: { 'idempotency-key': 'pocket:marketplace:blockedbyother1' },
+  body: { resource, maxAmount: '0.008' },
+}, globalPendingRes)
+assert.equal(globalPendingRes.statusCode, 202)
+assert.equal(globalPendingRes.body.receiptActivityId, 'receipt-other-pending')
+assert.match(globalPendingRes.body.message, /previous App Pay payment/)
+assert.equal(paid, 3)
+
+actions = [{
+  ...action,
   id: 'submitted-action',
   idempotencyKey: 'pocket:marketplace:submitted1',
   status: 'submitted',
