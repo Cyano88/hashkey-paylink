@@ -261,7 +261,7 @@ export default function PocketMoveBankPage() {
                   }}
                 />
                 {direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
-                {direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">USDC is confirmed. Your bank payout is processing.</p>}
+                {direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.txHash ? 'USDC is confirmed. Your bank payout is processing.' : 'Circle is reconciling the submitted transfer. Do not retry this payout.'}</p>}
                 {direct.status === 'sent' && <p className="px-2 text-center text-xs font-medium text-emerald-600 dark:text-emerald-400">Sent to {direct.result?.bankName || bank.bankName}{direct.result?.bankLast4 ? ` ••••${direct.result.bankLast4}` : ''}. It is now in Activity.</p>}
                 {direct.error && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
                 {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Save your profile, verify the bank account, and enter a Naira amount.</p>}

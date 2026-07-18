@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { cn, formatAmount, truncateAddress } from '../../../lib/utils'
+import { cn, truncateAddress } from '../../../lib/utils'
 import type { PocketFxQuote } from '../../api/pocketFxClient'
+import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
 
 type PocketBalanceCurrency = 'USDC' | 'NGN'
 const POCKET_BALANCE_CURRENCIES: PocketBalanceCurrency[] = ['USDC', 'NGN']
@@ -59,6 +60,8 @@ type PocketHomeOverviewProps = {
   walletBusy: boolean
   selectedNetwork: PocketHomeNetworkKey
   onSelectNetwork: (network: PocketHomeNetworkKey, shouldOpen: boolean) => void
+  controls?: ReactNode
+  showNetworks: boolean
 }
 
 export default function PocketHomeOverview({
@@ -73,6 +76,8 @@ export default function PocketHomeOverview({
   walletBusy,
   selectedNetwork,
   onSelectNetwork,
+  controls,
+  showNetworks,
 }: PocketHomeOverviewProps) {
   const [balanceCurrency, setBalanceCurrency] = useState<PocketBalanceCurrency>(initialBalanceCurrency)
   const nairaBalance = fxQuote ? globalBalance * fxQuote.rate : null
@@ -93,9 +98,9 @@ export default function PocketHomeOverview({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
-            <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
+            <p className="mt-1 text-2xl font-semibold tabular-nums tracking-[-0.025em] text-gray-950 dark:text-white">
               {balanceCurrency === 'USDC'
-                ? `$${formatAmount(globalBalance, 6)}`
+                ? <>{formatPocketDisplayAmount(globalBalance)} <span className="text-sm font-semibold tracking-normal text-gray-400">USDC</span></>
                 : nairaBalance === null
                   ? '₦—'
                   : formatNaira(nairaBalance)}
@@ -103,8 +108,8 @@ export default function PocketHomeOverview({
             {balanceCurrency === 'NGN' ? (
               <p className="mt-1 text-[11px] font-semibold text-gray-400">
                 {nairaBalance === null
-                  ? `${formatAmount(globalBalance, 6)} USDC · ${fxBusy ? 'Loading live rate' : fxError || 'Live rate unavailable'}`
-                  : `≈ ${formatAmount(globalBalance, 6)} USDC`}
+                  ? `${formatPocketDisplayAmount(globalBalance)} USDC · ${fxBusy ? 'Loading live rate' : fxError || 'Live rate unavailable'}`
+                  : `≈ ${formatPocketDisplayAmount(globalBalance)} USDC`}
               </p>
             ) : null}
             <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-white/75 p-0.5 text-[10px] font-black text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
@@ -130,7 +135,9 @@ export default function PocketHomeOverview({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
+      {controls}
+
+      {showNetworks && <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
         <div className="border-b border-gray-100 px-4 py-3 dark:border-white/[0.07]">
           <div>
             <p className="text-sm font-black text-gray-950 dark:text-white">Wallet networks</p>
@@ -182,7 +189,7 @@ export default function PocketHomeOverview({
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-black text-gray-950 dark:text-white">${formatAmount(row?.balance ?? 0, 6)}</p>
+                  <p className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(row?.balance ?? 0)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></p>
                   {showStatus ? (
                     <p className={cn('mt-0.5 text-[9px] font-black uppercase tracking-wider', row?.status === 'error' && wallet?.address ? 'text-amber-500' : 'text-blue-500')}>
                       {walletBusy && selectedNetwork === network.key ? 'Opening' : statusLabel}
@@ -193,7 +200,7 @@ export default function PocketHomeOverview({
             )
           })}
         </div>
-      </div>
+      </div>}
     </>
   )
 }

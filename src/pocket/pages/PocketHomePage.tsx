@@ -8,7 +8,7 @@ import usePocketWalletController from '../controllers/usePocketWalletController'
 import usePocketWithdrawalController from '../controllers/usePocketWithdrawalController'
 import usePocketBridgeController from '../controllers/usePocketBridgeController'
 import { prefetchPocketX402Snapshot } from '../controllers/usePocketX402Controller'
-import PocketHomeControls, { PocketHomeSignInCard, type PocketHomeTab } from '../features/home/PocketHomeControls'
+import PocketHomeControls, { PocketHomeSignInCard, PocketHomeTabBar, type PocketHomeTab } from '../features/home/PocketHomeControls'
 import PocketHomeOverview, { POCKET_HOME_NETWORKS, type PocketHomeNetworkKey } from '../features/home/PocketHomeOverview'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
@@ -17,13 +17,7 @@ import usePocketWallets from '../hooks/usePocketWallets'
 import { pocketPathFor } from '../lib/pocketRoutes'
 
 const POCKET_BASE_PATH = '/pocket'
-const POCKET_HOME_TAB_KEY = 'pocket:home:tab'
 const POCKET_HOME_NETWORK_KEY = 'pocket:home:network'
-
-function restoredHomeTab(): PocketHomeTab {
-  const saved = window.sessionStorage.getItem(POCKET_HOME_TAB_KEY)
-  return saved === 'fund' || saved === 'move' || saved === 'activity' ? saved : 'balance'
-}
 
 function restoredHomeNetwork(): PocketHomeNetworkKey {
   const saved = window.sessionStorage.getItem(POCKET_HOME_NETWORK_KEY)
@@ -41,14 +35,13 @@ export default function PocketHomePage() {
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const fx = usePocketFxQuote(wallets.total)
-  const [tab, setTabState] = useState<PocketHomeTab>(restoredHomeTab)
+  const [tab, setTabState] = useState<PocketHomeTab>('balance')
   const [network, setNetworkState] = useState<PocketHomeNetworkKey>(restoredHomeNetwork)
   const [walletBusy, setWalletBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const activity = usePocketActivity({ authenticated, email, enabled: tab === 'activity', getAccessToken })
 
   const setTab = useCallback((next: PocketHomeTab) => {
-    window.sessionStorage.setItem(POCKET_HOME_TAB_KEY, next)
     setTabState(next)
   }, [])
   const setNetwork = useCallback((next: PocketHomeNetworkKey) => {
@@ -126,7 +119,7 @@ export default function PocketHomePage() {
     if (!selectedAddress) return
     await copyToClipboard(selectedAddress)
     setCopied(true)
-    setTimeout(() => setCopied(false), 1800)
+    setTimeout(() => setCopied(false), 1200)
   }, [selectedAddress])
 
   const selectNav = (selectedTab: PocketNavTab) => {
@@ -165,6 +158,8 @@ export default function PocketHomePage() {
           setNetwork(selectedNetwork)
           if (shouldOpen) void setupWallet(selectedNetwork)
         }}
+        controls={authenticated ? <PocketHomeTabBar tab={tab} onTabChange={setTab} /> : null}
+        showNetworks={!authenticated || tab === 'balance'}
       />
 
       {!authenticated ? (
@@ -195,7 +190,6 @@ export default function PocketHomePage() {
           bridgeNotice={bridge.notice}
           bridgeError={bridge.error}
           error={withdrawal.error || wallets.error}
-          onTabChange={setTab}
           onNetworkChange={setNetwork}
           onCopyAddress={() => void copyAddress()}
           onOpenWallet={() => void setupWallet()}

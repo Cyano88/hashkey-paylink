@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, Check, CheckCircle2, Clock3, Loader2, Search, Store } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 import {
   buyPocketMarketplaceService,
   readPocketMarketplace,
@@ -196,7 +197,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
                   <span className="block truncate text-xs font-bold text-gray-900 dark:text-white">{item.description}</span>
                   <span className="mt-0.5 block truncate text-[10px] text-gray-400">{item.provider} · {categoryLabel(item.category)}</span>
                 </span>
-                <span className="shrink-0 text-right"><span className="block text-xs font-black text-gray-900 dark:text-white">{item.amount}</span><span className="block text-[9px] font-bold text-gray-400">USDC</span></span>
+                <span className="shrink-0 text-right"><span className="block text-xs font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(item.amount)}</span><span className="block text-[9px] font-bold text-gray-400">USDC</span></span>
               </button>
             )) : snapshot && !snapshot.catalogAvailable ? (
               <p className="py-8 text-center text-xs text-gray-400">Catalog temporarily unavailable. Pull down to retry.</p>
@@ -232,7 +233,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
                 </div>
                 <div className="flex items-center justify-between gap-4 border-t border-gray-100 px-3.5 py-3 dark:border-white/[0.07]">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Pay from App Pay</span>
-                  <span className="text-sm font-black text-gray-950 dark:text-white">{selected.amount} <span className="text-[10px] font-bold text-gray-400">USDC</span></span>
+                  <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(selected.amount)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></span>
                 </div>
               </div>
               <p className="mt-2.5 text-[11px] leading-4 text-gray-400">You are approving this request only. The service cannot make another charge.</p>

@@ -153,8 +153,14 @@ export default function usePocketBankWithdrawController({
       if (confirmed) setResult(confirmed)
       await pollUntilSettled(accessToken, prepared.intentId)
     } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Bank payout failed.'
+      if (message.includes('submitted and is being reconciled')) {
+        setStatus('processing')
+        setError('')
+        return
+      }
       setStatus('idle')
-      setError(reason instanceof Error ? reason.message : 'Bank payout failed.')
+      setError(message)
     }
   }, [accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, getEvmSession, lastName, memo, pollUntilSettled, wallet])
 

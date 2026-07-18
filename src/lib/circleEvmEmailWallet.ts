@@ -717,12 +717,14 @@ export async function sendCircleEvmEmailWithdraw(params: {
   )
   const txHash = findTxHash(result)
   if (txHash) return txHash
-  const transactionId = findTransactionId(result) ?? findTransactionId(challenge)
+  const transactionId = findTransactionId(result)
+    ?? findTransactionId(challenge)
+    ?? await pollChallengeTransactionId(params.session, challenge.challengeId)
   if (transactionId) {
     const hash = await pollTransactionHash(params.session, transactionId)
     if (hash) return hash
   }
-  return null
+  throw new Error('Withdrawal submitted and is being reconciled. Do not retry this payout.')
 }
 
 async function pollChallengeTransactionId(session: CircleEvmEmailSession, challengeId: string, timeoutMs = 30_000) {
@@ -738,7 +740,7 @@ async function pollChallengeTransactionId(session: CircleEvmEmailSession, challe
     if (transactionId) return transactionId
     const state = transactionState(data.challenge)
     if (state.includes('FAILED') || state.includes('EXPIRED') || state.includes('CANCEL')) {
-      throw new Error('Circle bridge confirmation did not produce a transaction.')
+      throw new Error('Circle confirmation did not produce a transaction.')
     }
     await new Promise(resolve => setTimeout(resolve, 1_500))
   }

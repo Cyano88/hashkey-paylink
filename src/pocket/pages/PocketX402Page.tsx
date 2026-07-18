@@ -17,11 +17,12 @@ import usePocketX402Controller from '../controllers/usePocketX402Controller'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { buildPocketX402FundUrl } from '../lib/pocketX402FundUrl'
 import { pocketPathFor } from '../lib/pocketRoutes'
+import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 
 const POCKET_BASE_PATH = '/pocket'
 
 function balanceText(value: string | undefined, checked: boolean, error?: string) {
-  if (value !== undefined) return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC`
+  if (value !== undefined) return `${formatPocketDisplayAmount(value)} USDC`
   return error || checked ? 'Unavailable' : 'Checking...'
 }
 
@@ -67,9 +68,9 @@ export default function PocketX402Page() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Available for app payments</p>
-              <p className="mt-1 text-2xl font-black tracking-tight text-gray-950 dark:text-white">
+              <p className="mt-1 text-2xl font-semibold tabular-nums tracking-[-0.025em] text-gray-950 dark:text-white">
                 {x402.snapshot?.gatewayBalance !== undefined
-                  ? Number(x402.snapshot.gatewayBalance).toLocaleString(undefined, { maximumFractionDigits: 6 })
+                  ? formatPocketDisplayAmount(x402.snapshot.gatewayBalance)
                   : sessionChecking ? '—' : '0.00'} <span className="text-sm font-bold text-gray-400">USDC</span>
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold">
@@ -166,7 +167,7 @@ export default function PocketX402Page() {
                     {x402.walletChoices.map(choice => (
                       <button key={choice.address} type="button" onClick={() => x402.setExpectedWallet(choice.address)} className={cn('w-full rounded-lg border px-2.5 py-2 text-left', x402.expectedWallet.toLowerCase() === choice.address.toLowerCase() ? 'border-gray-900 bg-white dark:border-white dark:bg-white/[0.12]' : 'border-amber-100 bg-white/80 dark:border-amber-400/20 dark:bg-black/10')}>
                         <span className="block truncate font-mono text-xs">{choice.address}</span>
-                        <span className="mt-0.5 block text-[11px] text-gray-500">{choice.balance !== undefined ? `${Number(choice.balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} USDC` : choice.balanceError || 'Balance unavailable'}</span>
+                        <span className="mt-0.5 block text-[11px] font-medium tabular-nums tracking-[-0.02em] text-gray-500">{choice.balance !== undefined ? `${formatPocketDisplayAmount(choice.balance)} USDC` : choice.balanceError || 'Balance unavailable'}</span>
                       </button>
                     ))}
                     <p className="px-1 text-[11px] text-amber-700/80 dark:text-amber-200/80">After choosing, resend OTP and verify again so Circle confirms this exact wallet.</p>

@@ -101,7 +101,8 @@ export default function usePocketBridgeController(input: {
         complete = next?.status === 'confirmed' || next?.status === 'complete'
       }
       setStatus(complete ? 'successful' : 'bridging')
-      setNotice(complete ? 'Bridge complete' : 'Bridge submitted. It will continue safely in the background.')
+      setNotice(complete ? '' : 'Bridge submitted. It will continue safely in the background.')
+      if (complete && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       if (complete) await recordPocketBridge({ accessToken, source: input.source, destination, amount, txHash, status: 'completed' }).catch(() => undefined)
       setAmount('')
       setQuote(null)

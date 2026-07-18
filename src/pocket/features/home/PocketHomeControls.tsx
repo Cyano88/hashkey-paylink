@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, CheckCheck, Copy, Download, LayoutDashboard, Loader2, Mail, Send, Wallet } from 'lucide-react'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
-import { cn, formatAmount } from '../../../lib/utils'
+import { cn } from '../../../lib/utils'
 import type { PocketHomeNetwork, PocketHomeNetworkKey } from './PocketHomeOverview'
 import PocketSlideAction, { type PocketSlideActionStatus } from '../../components/PocketSlideAction'
 import PocketSelect from '../../components/PocketSelect'
 import type { PocketActivityRow } from '../../models/pocketActivity'
+import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
 
 export type PocketHomeTab = 'balance' | 'fund' | 'move' | 'activity'
 
@@ -34,7 +35,6 @@ type PocketHomeControlsProps = {
   bridgeNotice: string
   bridgeError: string
   error: string
-  onTabChange: (tab: PocketHomeTab) => void
   onNetworkChange: (network: PocketHomeNetworkKey) => void
   onCopyAddress: () => void
   onOpenWallet: () => void
@@ -54,6 +54,29 @@ const tabs = [
   { key: 'move', label: 'Move', icon: ArrowLeftRight },
   { key: 'activity', label: 'Activity', icon: LayoutDashboard },
 ] as const
+
+export function PocketHomeTabBar({ tab, onTabChange }: { tab: PocketHomeTab; onTabChange: (tab: PocketHomeTab) => void }) {
+  return (
+    <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
+      {tabs.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onTabChange(key)}
+          className={cn(
+            'flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-bold transition-all',
+            tab === key
+              ? 'border-gray-300 bg-gray-100 text-gray-950 shadow-sm dark:border-white/15 dark:bg-white/[0.12] dark:text-white'
+              : 'border-transparent bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
+          )}
+        >
+          <Icon className="h-3.5 w-3.5" />
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export function PocketHomeSignInCard() {
   return (
@@ -95,7 +118,6 @@ export default function PocketHomeControls({
   bridgeNotice,
   bridgeError,
   error,
-  onTabChange,
   onNetworkChange,
   onCopyAddress,
   onOpenWallet,
@@ -128,25 +150,6 @@ export default function PocketHomeControls({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
-        {tabs.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => onTabChange(key)}
-            className={cn(
-              'flex min-h-[46px] flex-col items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-bold transition-all',
-              tab === key
-                ? 'border-gray-300 bg-gray-100 text-gray-950 shadow-sm dark:border-white/15 dark:bg-white/[0.12] dark:text-white'
-                : 'border-transparent bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/[0.06] dark:hover:text-gray-200',
-            )}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
-          </button>
-        ))}
-      </div>
-
       {(tab === 'fund' || tab === 'move') && (
         <div>
           <div className="grid grid-cols-4 gap-1.5">
@@ -195,10 +198,10 @@ export default function PocketHomeControls({
                   onClick={onCopyAddress}
                   aria-label={copied ? 'Funding address copied' : 'Copy funding address'}
                   title={copied ? 'Copied' : 'Copy address'}
-                  className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-2 text-[10px] font-bold text-gray-600 shadow-sm transition-all active:scale-95 dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-200"
+                  className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 shadow-sm transition-all active:scale-95 dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-200"
                 >
-                  {copied ? <CheckCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copied && <span>Copied</span>}
+                  {copied ? <CheckCheck className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  {copied && <span className="absolute -top-6 right-0 rounded-md bg-gray-950 px-1.5 py-0.5 text-[8px] font-bold text-white shadow-sm dark:bg-white dark:text-gray-950">Copied</span>}
                 </button>
               </div>
             </div>
@@ -241,7 +244,7 @@ export default function PocketHomeControls({
         <div className="space-y-3 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
           <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {selectedNetworkLabel}</span>
-            <span className="text-sm font-black tabular-nums text-gray-950 dark:text-white">${formatAmount(selectedBalance, 6)} USDC</span>
+            <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(selectedBalance)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></span>
           </div>
           {selectedAddress ? (
             <>
@@ -321,7 +324,7 @@ export default function PocketHomeControls({
           </div>
           <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {selectedNetworkLabel}</span>
-            <span className="text-sm font-black tabular-nums text-gray-950 dark:text-white">${formatAmount(selectedBalance, 6)} USDC</span>
+            <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(selectedBalance)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></span>
           </div>
           <label className="block">
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span>
@@ -334,9 +337,9 @@ export default function PocketHomeControls({
             <div className="flex items-center justify-center gap-2 rounded-xl bg-gray-50 px-3 py-3 text-xs font-semibold text-gray-500 dark:bg-white/[0.04]"><Loader2 className="h-3.5 w-3.5 animate-spin" />Getting a live Circle quote</div>
           ) : bridgeQuote ? (
             <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-white/10 dark:bg-white/[0.04]">
-              <div className="flex justify-between gap-3"><span className="text-gray-500">You receive</span><span className="font-black text-gray-900 dark:text-white">{bridgeQuote.receive} USDC</span></div>
-              <div className="flex justify-between gap-3"><span className="text-gray-500">Circle + destination fee</span><span className="font-bold text-gray-700 dark:text-gray-200">{bridgeQuote.fee} USDC</span></div>
-              <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10"><span className="text-gray-500">Total from {selectedNetworkLabel}</span><span className="font-black text-gray-900 dark:text-white">{bridgeQuote.total} USDC</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-500">You receive</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(bridgeQuote.receive)} USDC</span></div>
+              <div className="flex justify-between gap-3"><span className="text-gray-500">Circle + destination fee</span><span className="font-medium tabular-nums tracking-[-0.02em] text-gray-700 dark:text-gray-200">{formatPocketDisplayAmount(bridgeQuote.fee)} USDC</span></div>
+              <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10"><span className="text-gray-500">Total from {selectedNetworkLabel}</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(bridgeQuote.total)} USDC</span></div>
             </div>
           ) : null}
           <PocketSlideAction
@@ -368,7 +371,7 @@ export default function PocketHomeControls({
                     <span className="mt-0.5 block truncate text-[10px] font-medium capitalize text-gray-400">{item.chain}{item.contextLabel ? ` · ${item.contextLabel}` : ''}</span>
                   </span>
                   <span className="shrink-0 text-right">
-                    <span className="block text-xs font-black tabular-nums text-gray-900 dark:text-gray-100">{deposit ? '+' : bridge ? '' : '-'}{formatAmount(Number(item.amount), 6)} USDC</span>
+                    <span className="block text-xs font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-gray-100">{deposit ? '+' : bridge ? '' : '-'}{formatPocketDisplayAmount(Number(item.amount))} USDC</span>
                     <span className="mt-0.5 block text-[9px] font-semibold text-gray-400">{new Date(item.ts).toLocaleDateString()}</span>
                   </span>
                 </div>

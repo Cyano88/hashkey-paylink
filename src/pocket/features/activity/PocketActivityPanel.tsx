@@ -1,7 +1,8 @@
 import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, Cpu, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
-import { cn, formatAmount, formatNgnAmount } from '../../../lib/utils'
+import { cn, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
+import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
 
 export type { PocketActivityRow } from '../../models/pocketActivity'
 
@@ -117,8 +118,8 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                         </span>
                       </span>
                       <span className="shrink-0 text-right">
-                        <span className="block text-xs font-black text-gray-900 dark:text-gray-100">
-                          {amountNgn ? `NGN ${amountNgn}` : Number.isFinite(amountUsdc) ? `${formatAmount(amountUsdc, 6)} USDC` : 'Receipt'}
+                        <span className="block text-xs font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-gray-100">
+                          {amountNgn ? `NGN ${amountNgn}` : Number.isFinite(amountUsdc) ? `${formatPocketDisplayAmount(amountUsdc)} USDC` : 'Receipt'}
                         </span>
                         <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{row.paycrestStatus || 'settled'}</span>
                       </span>
