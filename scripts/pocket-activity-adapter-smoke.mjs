@@ -69,6 +69,23 @@ const handler = createPocketActivityHandler({
     createdAt: 1_740_000_000_000,
     updatedAt: 1_740_000_000_000,
   }],
+  readWalletHistory: async ownerId => {
+    ownerIds.push(ownerId)
+    return [{
+      eventId: 'base:0xdeposit:1',
+      txHash: '0xdeposit',
+      chain: 'base',
+      payer: '0xpayer',
+      memo: 'USDC deposit',
+      amount: '1.5',
+      ts: 1_735_000_000_000,
+      source: 'wallet-deposit',
+      contextLabel: 'From 0xpayer',
+      settlementType: 'wallet_transfer',
+      paycrestStatus: 'confirmed',
+      internalWalletId: 'must-not-leak-wallet',
+    }]
+  },
 })
 
 const wrongMethod = await request(handler, 'POST')
@@ -79,8 +96,8 @@ const loaded = await request(handler)
 assert.equal(loaded.statusCode, 200)
 assert.equal(loaded.body.ok, true)
 assert.equal(isPocketActivityReadData(loaded.body), true)
-assert.deepEqual(ownerIds, ['privy-user-1'])
-assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['pocket-action:marketplace-action-1', 'paycrest_intent-2', '0xolder'])
+assert.deepEqual(ownerIds, ['privy-user-1', 'privy-user-1'])
+assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['pocket-action:marketplace-action-1', '0xdeposit', 'paycrest_intent-2', '0xolder'])
 assert.equal(loaded.body.payments[0].source, 'app-pay')
 assert.equal(loaded.body.payments[0].paycrestStatus, 'needs review')
 const serialized = JSON.stringify(loaded.body)
@@ -88,6 +105,7 @@ assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)
 assert.equal(serialized.includes('must-not-leak'), false)
 assert.equal(serialized.includes('Must not leak separately'), false)
+assert.equal(serialized.includes('must-not-leak-wallet'), false)
 
 const unauthorizedHandler = createPocketActivityHandler({
   verifyUser: async () => { throw Object.assign(new Error('Missing Privy access token.'), { status: 401 }) },

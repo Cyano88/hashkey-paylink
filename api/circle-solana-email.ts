@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import crypto from 'crypto'
 import { PublicKey } from '@solana/web3.js'
 import { encodeFunctionData, isAddress, parseAbi } from 'viem'
+import { CCTP_DOMAIN, CCTP_FORWARD_HOOK, CCTP_TOKEN_MESSENGER_V2, cctpForwardHookForSolana, cctpMintRecipient, readCctpForwardQuote, solanaRecipient, type PocketBridgeNetwork } from './pocket/cctp.js'
 
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 const PLATFORM_FEE_BPS = 20n
@@ -29,6 +30,8 @@ const EVM_CHAINS = {
 } as const
 
 const ERC20_TRANSFER_ABI = parseAbi(['function transfer(address to, uint256 amount) returns (bool)'])
+const ERC20_APPROVE_ABI = parseAbi(['function approve(address spender, uint256 amount) returns (bool)'])
+const CCTP_TOKEN_MESSENGER_ABI = parseAbi(['function depositForBurnWithHook(uint256 amount,uint32 destinationDomain,bytes32 mintRecipient,address burnToken,bytes32 destinationCaller,uint256 maxFee,uint32 minFinalityThreshold,bytes hookData) returns (uint64 nonce)'])
 const SMART_WALLET_BATCH_ABI = parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 const STREAM_FACTORY_ABI = parseAbi([
   'function createStream(address recipient,uint256 totalAmount,uint64 startTime,uint64 endTime,bytes32 salt) returns (address vault)',
@@ -382,6 +385,74 @@ export default async function handler(req: Request, res: Response) {
           walletId,
           feeLevel: 'HIGH',
           refId: `hashpaylink-${chain}-withdraw`,
+          contractAddress: walletAddress,
+          callData: batchCallData,
+        }),
+      })
+      return res.json({ ok: true, ...data })
+    }
+
+    if (action === 'executeEvmBridge') {
+      const { userToken, walletId, walletAddress, chain, destination, destinationAddress, amountUnits } = params
+      if (!userToken || !walletId || !walletAddress || !chain || !destination || !destinationAddress || !amountUnits) {
+        return res.status(400).json({ ok: false, error: 'Missing bridge parameters' })
+      }
+      if ((chain !== 'base' && chain !== 'arbitrum') || (destination !== 'base' && destination !== 'arbitrum' && destination !== 'solana') || chain === destination) {
+        return res.status(400).json({ ok: false, error: 'Unsupported mainnet bridge route' })
+      }
+      if (!isAddress(walletAddress) || (destination !== 'solana' && !isAddress(destinationAddress))) {
+        return res.status(400).json({ ok: false, error: 'Invalid bridge wallet address' })
+      }
+      const ownedWallets = await listCircleUserWallets(userToken, chain)
+      if (!ownedWallets.some(wallet => wallet.address.toLowerCase() === destinationAddress.toLowerCase())) {
+        return res.status(403).json({ ok: false, error: 'Bridge destination must be one of your Circle Pocket wallets' })
+      }
+      const transferUnits = BigInt(amountUnits)
+      if (transferUnits <= 0n) return res.status(400).json({ ok: false, error: 'Invalid bridge amount' })
+      const destinationNetwork = destination as PocketBridgeNetwork
+      const solana = destinationNetwork === 'solana' ? await solanaRecipient(destinationAddress) : null
+      const quote = await readCctpForwardQuote(chain, destinationNetwork, transferUnits, solana?.needsSetup)
+      const mintRecipient = destinationNetwork === 'solana'
+        ? `0x${Buffer.from(solana!.ata.toBytes()).toString('hex')}`
+        : cctpMintRecipient(destinationNetwork, destinationAddress)
+      const hookData = solana ? cctpForwardHookForSolana(solana.wallet, solana.needsSetup) : CCTP_FORWARD_HOOK
+      const tokenAddress = EVM_CHAINS[chain].tokenAddress
+      const approveData = encodeFunctionData({
+        abi: ERC20_APPROVE_ABI,
+        functionName: 'approve',
+        args: [CCTP_TOKEN_MESSENGER_V2, quote.totalUnits],
+      })
+      const burnData = encodeFunctionData({
+        abi: CCTP_TOKEN_MESSENGER_ABI,
+        functionName: 'depositForBurnWithHook',
+        args: [
+          quote.totalUnits,
+          CCTP_DOMAIN[destinationNetwork],
+          mintRecipient as `0x${string}`,
+          tokenAddress,
+          `0x${'0'.repeat(64)}`,
+          quote.maxFeeUnits,
+          quote.finalityThreshold,
+          hookData as `0x${string}`,
+        ],
+      })
+      const batchCallData = encodeFunctionData({
+        abi: SMART_WALLET_BATCH_ABI,
+        functionName: 'executeBatch',
+        args: [[
+          { target: tokenAddress as `0x${string}`, value: 0n, data: approveData },
+          { target: CCTP_TOKEN_MESSENGER_V2 as `0x${string}`, value: 0n, data: burnData },
+        ]],
+      })
+      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ chain }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          walletId,
+          feeLevel: 'HIGH',
+          refId: `circle-pocket-${chain}-to-${destination}`,
           contractAddress: walletAddress,
           callData: batchCallData,
         }),

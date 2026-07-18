@@ -80,6 +80,7 @@ import {
   pocketSolanaTransferSubmitHandler,
 } from './api/pocket/solana-transfers.js'
 import pocketActivityHandler from './api/pocket/activity.js'
+import pocketBridgeHandler from './api/pocket/bridge.js'
 import pocketBalancesHandler from './api/pocket/balances.js'
 import pocketFxQuoteHandler from './api/pocket/fx-quote.js'
 import pocketRecipientBalanceHandler from './api/pocket/recipient-balance.js'
@@ -258,6 +259,7 @@ app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/fx-quote',          readLimiter, pocketFxQuoteHandler)
 app.all('/api/pocket/balances/recipient', readLimiter, pocketRecipientBalanceHandler)
 app.all('/api/pocket/activity',          readLimiter, pocketActivityHandler)
+app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
 app.all('/api/pocket/x402',              readLimiter, pocketX402Handler)
 app.all('/api/pocket/x402/connect',      strictLimiter, pocketX402ConnectHandler)
 app.all('/api/pocket/x402/activate',     strictLimiter, pocketX402ActivateHandler)

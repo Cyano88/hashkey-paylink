@@ -249,16 +249,32 @@ async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> 
   return data as T
 }
 
+function capturePocketViewport() {
+  const scroller = document.querySelector<HTMLElement>('[data-pocket-scroller]')
+  const scrollTop = scroller?.scrollTop ?? 0
+  return () => {
+    const restore = () => {
+      const current = document.querySelector<HTMLElement>('[data-pocket-scroller]')
+      if (current) current.scrollTop = scrollTop
+    }
+    window.requestAnimationFrame(restore)
+    window.setTimeout(restore, 180)
+  }
+}
+
 function executeChallenge(sdk: W3SSdk, challengeId: string) {
+  const restorePocketViewport = capturePocketViewport()
   return new Promise<CircleChallengeResult>((resolve, reject) => {
     const handleClose = (event: MessageEvent) => {
       if (!isCircleCloseMessage(event.data)) return
       window.removeEventListener('message', handleClose)
+      restorePocketViewport()
       reject(new Error('Payment cancelled. Try again.'))
     }
     window.addEventListener('message', handleClose)
     sdk.execute(challengeId, (error, result) => {
       window.removeEventListener('message', handleClose)
+      restorePocketViewport()
       if (error) {
         reject(new Error(sdkError(error)))
         return
@@ -519,15 +535,18 @@ export async function connectCircleEvmEmailWallet(
     throw new Error(emailVerificationError(err))
   }
   let currentOtp = otp
+  const restorePocketViewport = capturePocketViewport()
 
   const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
     const handleClose = (event: MessageEvent) => {
       if (!event.data?.onClose) return
       window.removeEventListener('message', handleClose)
+      restorePocketViewport()
       reject(new Error('Payment cancelled.'))
     }
     const onLoginComplete = (error?: unknown, result?: CircleEmailLoginResult) => {
       window.removeEventListener('message', handleClose)
+      restorePocketViewport()
       if (error) {
         closeCircleSdkModal()
         reject(new Error(emailVerificationError(error)))
@@ -698,6 +717,51 @@ export async function sendCircleEvmEmailWithdraw(params: {
     if (hash) return hash
   }
   return null
+}
+
+export async function bridgeCircleEvmEmailWallet(params: {
+  session: CircleEvmEmailSession
+  destination: 'base' | 'arbitrum' | 'solana'
+  destinationAddress: string
+  amount: string
+}) {
+  const sdk = authenticatedSdk(params.session)
+  applyHashPayLinkCircleUi(sdk, {
+    amount: params.amount,
+    asset: 'USDC',
+    recipient: params.destinationAddress,
+    chainLabel: `${CHAIN_META[params.session.chain].label} to ${params.destination === 'solana' ? 'Solana' : CHAIN_META[params.destination].label}`,
+  })
+  const amountUnits = parseUnits(params.amount || '0', 6)
+  const challenge = await circleWalletApi<{
+    challengeId?: string
+    id?: string
+    transactionId?: string
+    transaction?: Record<string, unknown>
+  }>({
+    action: 'executeEvmBridge',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    walletAddress: params.session.wallet.address,
+    chain: params.session.chain,
+    destination: params.destination,
+    destinationAddress: params.destinationAddress,
+    amountUnits: amountUnits.toString(),
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a bridge confirmation challenge.')
+  const result = await executeChallengeWithTimeout(
+    sdk,
+    challenge.challengeId,
+    'Circle bridge confirmation did not finish. If you approved it, review Activity in a moment.',
+  )
+  const txHash = findTxHash(result)
+  if (txHash) return txHash
+  const transactionId = findTransactionId(result) ?? findTransactionId(challenge)
+  if (transactionId) {
+    const hash = await pollTransactionHash(params.session, transactionId)
+    if (hash) return hash
+  }
+  throw new Error('Circle accepted the bridge, but the source transaction is not available yet.')
 }
 
 function findSignature(value: unknown): Hex | null {

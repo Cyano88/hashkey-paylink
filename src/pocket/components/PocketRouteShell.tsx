@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode, type TouchEvent } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type TouchEvent, type UIEvent } from 'react'
 import { Loader2, RefreshCw } from 'lucide-react'
+import { useLocation } from 'react-router-dom'
 import PocketBottomNav, { type PocketNavTab } from './PocketBottomNav'
 
 export default function PocketRouteShell({
@@ -15,12 +16,14 @@ export default function PocketRouteShell({
   onRefresh?: () => void | Promise<void>
   refreshing?: boolean
 }) {
+  const { pathname } = useLocation()
   const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [pullDistance, setPullDistance] = useState(0)
   const [pullRefreshing, setPullRefreshing] = useState(false)
   const [headerHeight, setHeaderHeight] = useState(120)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef<number | null>(null)
+  const scrollFrame = useRef<number | null>(null)
 
   const isRefreshing = refreshing || pullRefreshing
   const showPullIndicator = pullRefreshing || pullDistance > 0
@@ -40,6 +43,26 @@ export default function PocketRouteShell({
       window.removeEventListener('resize', updateHeaderHeight)
     }
   }, [])
+
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const saved = Number(window.sessionStorage.getItem(`pocket:scroll:${pathname}`) || 0)
+    if (Number.isFinite(saved) && saved > 0) scroller.scrollTop = saved
+    return () => {
+      if (scrollFrame.current !== null) window.cancelAnimationFrame(scrollFrame.current)
+      window.sessionStorage.setItem(`pocket:scroll:${pathname}`, String(scroller.scrollTop))
+    }
+  }, [pathname])
+
+  const rememberScroll = (event: UIEvent<HTMLDivElement>) => {
+    const top = event.currentTarget.scrollTop
+    if (scrollFrame.current !== null) return
+    scrollFrame.current = window.requestAnimationFrame(() => {
+      window.sessionStorage.setItem(`pocket:scroll:${pathname}`, String(top))
+      scrollFrame.current = null
+    })
+  }
 
   const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
     if (!onRefresh || isRefreshing || (scrollerRef.current?.scrollTop ?? 1) > 0) return
@@ -89,15 +112,18 @@ export default function PocketRouteShell({
   }, [])
 
   return (
-    <div className="-mx-4 -my-10 w-[calc(100%+2rem)] max-w-none min-w-0 sm:-mx-6 sm:w-[calc(100%+3rem)]">
-      <div className="relative h-[100dvh] min-h-[100svh] w-full min-w-0 overflow-x-hidden bg-white dark:bg-[#111114]">
+    <div className="h-full min-h-0 w-full max-w-none min-w-0">
+      <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-white dark:bg-[#111114]">
           <div
+            data-pocket-scroller
             ref={scrollerRef}
+            onScroll={rememberScroll}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={() => void finishPull()}
             onTouchCancel={() => { touchStartY.current = null; setPullDistance(0) }}
             className="h-full w-full overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
+            style={{ scrollPaddingTop: contentTop, scrollPaddingBottom: 'calc(7.5rem + env(safe-area-inset-bottom))' }}
           >
             {onRefresh && showPullIndicator && (
               <div

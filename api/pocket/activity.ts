@@ -10,14 +10,33 @@ import {
   type PocketActivityRow,
   type PocketErrorCode,
 } from '../../src/pocket/lib/pocketSchemas.js'
+import { readPocketWalletChainActivity } from './wallet-chain-activity.js'
 
 type PocketActivityHandlerDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   readHistory(ownerId: string): Promise<{ payments: unknown[] }>
   readActions(ownerId: string, limit?: number): ReturnType<typeof listCirclePocketActions>
+  readWalletHistory?(ownerId: string): Promise<unknown[]>
 }
 
 function appPayActivityRow(item: CirclePocketActionRecord): PocketActivityRow | undefined {
+  if (item.action === 'wallet.bridge') {
+    const source = item.metadata?.source || 'wallet'
+    const destination = item.metadata?.destination || 'wallet'
+    return {
+      eventId: item.id,
+      txHash: item.metadata?.txHash || item.resourceId || `pocket-action:${item.id}`,
+      chain: source,
+      payer: 'Circle Pocket',
+      memo: 'USDC bridge',
+      amount: item.metadata?.amount || '0',
+      ts: item.createdAt,
+      source: 'wallet-bridge',
+      contextLabel: `${source} to ${destination}`,
+      settlementType: 'wallet_bridge',
+      paycrestStatus: item.status === 'completed' ? 'confirmed' : 'bridging',
+    }
+  }
   if (item.action !== 'marketplace.service.purchase') return undefined
   const paymentSettled = ['confirmed', 'completed'].includes(item.metadata?.paymentState ?? '')
   const paymentAccepted = ['received', 'batched'].includes(item.metadata?.paymentState ?? '')
@@ -87,11 +106,15 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
     try {
       const identity = await dependencies.verifyUser(req)
       const history = await dependencies.readHistory(identity.userId)
+      const walletHistory = await dependencies.readWalletHistory?.(identity.userId) ?? []
       const appPay = (await dependencies.readActions(identity.userId, 100)).flatMap(item => {
         const row = appPayActivityRow(item)
         return row ? [row] : []
       })
-      const payments = [...history.payments.map(sanitizedActivityRow), ...appPay]
+      const payments = [...appPay, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
+        .filter((row, index, rows) => rows.findIndex(candidate => candidate.txHash === row.txHash && (
+          candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
+        )) === index)
         .sort((a, b) => b.ts - a.ts)
       return res.json({ ok: true, payments })
     } catch (error) {
@@ -109,4 +132,5 @@ export default createPocketActivityHandler({
   verifyUser: verifiedPrivyUser,
   readHistory: listNgPosHistoryForOwner,
   readActions: listCirclePocketActions,
+  readWalletHistory: readPocketWalletChainActivity,
 })

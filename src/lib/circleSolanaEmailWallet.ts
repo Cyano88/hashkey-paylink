@@ -120,9 +120,24 @@ function sdkError(error?: unknown) {
   return message.slice(0, 160)
 }
 
+function capturePocketViewport() {
+  const scroller = document.querySelector<HTMLElement>('[data-pocket-scroller]')
+  const scrollTop = scroller?.scrollTop ?? 0
+  return () => {
+    const restore = () => {
+      const current = document.querySelector<HTMLElement>('[data-pocket-scroller]')
+      if (current) current.scrollTop = scrollTop
+    }
+    window.requestAnimationFrame(restore)
+    window.setTimeout(restore, 180)
+  }
+}
+
 function executeChallenge(sdk: W3SSdk, challengeId: string) {
+  const restorePocketViewport = capturePocketViewport()
   return new Promise<CircleChallengeResult>((resolve, reject) => {
     sdk.execute(challengeId, (error, result) => {
+      restorePocketViewport()
       if (error) {
         reject(new Error(sdkError(error)))
         return
@@ -243,15 +258,18 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
     email,
   })
   let currentOtp = otp
+  const restorePocketViewport = capturePocketViewport()
 
   const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
     const handleClose = (event: MessageEvent) => {
       if (!isCircleCloseMessage(event.data)) return
       window.removeEventListener('message', handleClose)
+      restorePocketViewport()
       reject(new Error('Payment cancelled. Try again.'))
     }
     const onLoginComplete = (error?: unknown, result?: CircleEmailLoginResult) => {
       window.removeEventListener('message', handleClose)
+      restorePocketViewport()
       if (error) {
         closeCircleSdkModal()
         reject(new Error(emailVerificationError(error)))

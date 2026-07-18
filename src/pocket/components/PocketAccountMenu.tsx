@@ -24,7 +24,7 @@ function avatarGradient(seed: string) {
 
 export default function PocketAccountMenu() {
   const location = useLocation()
-  const { authenticated, email, getAccessToken, logout } = usePocketIdentity()
+  const { ready, authenticated, email, getAccessToken, logout } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<AccountMenuMode>('menu')
@@ -56,6 +56,10 @@ export default function PocketAccountMenu() {
     setMode(profile.loadError || profile.profile ? 'menu' : 'edit')
     setOpen(true)
   }, [authenticated, profile.busy, profile.loadError, profile.loaded, profile.profile, promptProfileAfterLogin])
+
+  if (!ready) {
+    return <span className="pointer-events-none h-9 w-9 animate-pulse rounded-full border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/[0.08]" aria-hidden="true" />
+  }
 
   if (!authenticated) {
     return (

@@ -6,15 +6,29 @@ import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import usePocketWithdrawalController from '../controllers/usePocketWithdrawalController'
+import usePocketBridgeController from '../controllers/usePocketBridgeController'
 import { prefetchPocketX402Snapshot } from '../controllers/usePocketX402Controller'
 import PocketHomeControls, { PocketHomeSignInCard, type PocketHomeTab } from '../features/home/PocketHomeControls'
 import PocketHomeOverview, { POCKET_HOME_NETWORKS, type PocketHomeNetworkKey } from '../features/home/PocketHomeOverview'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
+import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketWallets from '../hooks/usePocketWallets'
 import { pocketPathFor } from '../lib/pocketRoutes'
 
 const POCKET_BASE_PATH = '/pocket'
+const POCKET_HOME_TAB_KEY = 'pocket:home:tab'
+const POCKET_HOME_NETWORK_KEY = 'pocket:home:network'
+
+function restoredHomeTab(): PocketHomeTab {
+  const saved = window.sessionStorage.getItem(POCKET_HOME_TAB_KEY)
+  return saved === 'fund' || saved === 'move' || saved === 'activity' ? saved : 'balance'
+}
+
+function restoredHomeNetwork(): PocketHomeNetworkKey {
+  const saved = window.sessionStorage.getItem(POCKET_HOME_NETWORK_KEY)
+  return saved === 'arbitrum' || saved === 'arc' || saved === 'solana' ? saved : 'base'
+}
 
 function errorMessage(reason: unknown, fallback: string) {
   if (reason instanceof Error && reason.message) return reason.message
@@ -27,19 +41,25 @@ export default function PocketHomePage() {
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const fx = usePocketFxQuote(wallets.total)
-  const [tab, setTab] = useState<PocketHomeTab>('balance')
-  const [network, setNetwork] = useState<PocketHomeNetworkKey>('base')
+  const [tab, setTabState] = useState<PocketHomeTab>(restoredHomeTab)
+  const [network, setNetworkState] = useState<PocketHomeNetworkKey>(restoredHomeNetwork)
   const [walletBusy, setWalletBusy] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [sessionActivity, setSessionActivity] = useState<string[]>([])
+  const activity = usePocketActivity({ authenticated, email, enabled: tab === 'activity', getAccessToken })
+
+  const setTab = useCallback((next: PocketHomeTab) => {
+    window.sessionStorage.setItem(POCKET_HOME_TAB_KEY, next)
+    setTabState(next)
+  }, [])
+  const setNetwork = useCallback((next: PocketHomeNetworkKey) => {
+    window.sessionStorage.setItem(POCKET_HOME_NETWORK_KEY, next)
+    setNetworkState(next)
+  }, [])
 
   useEffect(() => {
     void prefetchPocketX402Snapshot({ authenticated, email, getAccessToken }).catch(() => undefined)
   }, [authenticated, email, getAccessToken])
 
-  const recordActivity = useCallback((message: string) => {
-    setSessionActivity(current => [message, ...current].slice(0, 5))
-  }, [])
   const onWalletReady = useCallback((readyNetwork: PocketHomeNetworkKey, wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
     wallets.setWallets(current => ({ ...current, [readyNetwork]: wallet }))
   }, [wallets.setWallets])
@@ -73,7 +93,20 @@ export default function PocketHomePage() {
     getSolanaSession: walletController.getSolanaSession,
     refreshBalances: wallets.refreshBalances,
     clearExternalError: () => wallets.setError(''),
-    onActivity: recordActivity,
+    onActivity: () => void activity.refresh(),
+  })
+  const bridgeSource = network === 'arc' ? 'base' : network
+  const bridgeSourceBalance = wallets.rows.find(row => row.key === bridgeSource)?.balance ?? 0
+  const bridge = usePocketBridgeController({
+    source: bridgeSource,
+    sourceBalance: bridgeSourceBalance,
+    wallets: wallets.wallets,
+    ensureWallet: walletController.ensureWallet,
+    getEvmSession: walletController.getEvmSession,
+    getSolanaSession: walletController.getSolanaSession,
+    getAccessToken,
+    refresh: wallets.refreshBalances,
+    onActivity: () => void activity.refresh(),
   })
 
   const setupWallet = useCallback(async (selectedNetwork: PocketHomeNetworkKey = network) => {
@@ -82,21 +115,19 @@ export default function PocketHomePage() {
     try {
       await unlockWallet(selectedNetwork)
       await wallets.refreshBalances()
-      recordActivity(`${selectedNetwork === 'solana' ? 'Solana' : CHAIN_META[selectedNetwork].label} wallet ready`)
     } catch (reason) {
       wallets.setError(errorMessage(reason, 'Circle Pocket setup failed.'))
     } finally {
       setWalletBusy(false)
     }
-  }, [network, recordActivity, unlockWallet, wallets.refreshBalances, wallets.setError])
+  }, [network, unlockWallet, wallets.refreshBalances, wallets.setError])
 
   const copyAddress = useCallback(async () => {
     if (!selectedAddress) return
     await copyToClipboard(selectedAddress)
     setCopied(true)
-    recordActivity(`Copied ${networkLabel} funding address`)
     setTimeout(() => setCopied(false), 1800)
-  }, [networkLabel, recordActivity, selectedAddress])
+  }, [selectedAddress])
 
   const selectNav = (selectedTab: PocketNavTab) => {
     const path = selectedTab === 'move'
@@ -113,8 +144,11 @@ export default function PocketHomePage() {
     <PocketRouteShell
       active="home"
       onSelect={selectNav}
-      onRefresh={() => Promise.all([wallets.refreshBalances(), fx.refresh()]).then(() => undefined)}
-      refreshing={wallets.balanceBusy || fx.busy}
+      onRefresh={async () => {
+        await Promise.all([wallets.refreshBalances(), fx.refresh()])
+        if (tab === 'activity') await activity.refresh()
+      }}
+      refreshing={wallets.balanceBusy || fx.busy || (tab === 'activity' && activity.busy)}
     >
       <PocketHomeOverview
         globalBalance={wallets.total}
@@ -150,7 +184,16 @@ export default function PocketHomePage() {
           withdrawPending={withdrawal.pending}
           withdrawNotice={withdrawal.notice}
           withdrawStatus={withdrawal.status}
-          sessionActivity={sessionActivity}
+          activityRows={activity.rows.filter(row => ['wallet_transfer', 'wallet_bridge'].includes(String(row.settlementType).toLowerCase()))}
+          activityBusy={activity.busy}
+          activityError={activity.error}
+          bridgeDestinations={bridge.destinations}
+          bridgeDestination={bridge.destination}
+          bridgeAmount={bridge.amount}
+          bridgeQuote={bridge.quote}
+          bridgeStatus={bridge.status}
+          bridgeNotice={bridge.notice}
+          bridgeError={bridge.error}
           error={withdrawal.error || wallets.error}
           onTabChange={setTab}
           onNetworkChange={setNetwork}
@@ -160,6 +203,10 @@ export default function PocketHomePage() {
           onWithdrawAmountChange={withdrawal.setAmount}
           onWithdrawMax={withdrawal.setMax}
           onWithdraw={() => void withdrawal.withdraw()}
+          onBridgeDestinationChange={bridge.setDestination}
+          onBridgeAmountChange={bridge.setAmount}
+          onBridgeMax={() => bridge.setAmount(Math.max(0, bridgeSourceBalance - Number(bridge.quote?.fee || 0.25)).toFixed(6).replace(/\.?0+$/, ''))}
+          onBridge={() => void bridge.bridge()}
         />
       )}
     </PocketRouteShell>

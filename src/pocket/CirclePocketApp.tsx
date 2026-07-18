@@ -10,6 +10,8 @@ import PocketMoveBankPage from './pages/PocketMoveBankPage'
 import PocketMovePosPage from './pages/PocketMovePosPage'
 import PocketMoveUsdcPage from './pages/PocketMoveUsdcPage'
 import PocketX402Page from './pages/PocketX402Page'
+import { CPurseIcon } from './components/CPurseIcon'
+import usePocketIdentity from './hooks/usePocketIdentity'
 
 const POCKET_BASE_PATH = '/pocket'
 
@@ -24,11 +26,24 @@ export default function CirclePocketApp() {
   const relativePath = pocketRelativePath(location.pathname)
   const landing = relativePath === '/'
   const route = useMemo(() => landing ? null : resolvePocketRoute(relativePath), [landing, relativePath])
+  const { ready } = usePocketIdentity()
 
   useEffect(() => {
     if (landing || route) return
     navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.smartWallet}`, { replace: true })
   }, [landing, navigate, route])
+
+  if (!ready) {
+    return (
+      <div className="flex h-full min-h-[100dvh] w-full items-center justify-center bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white" aria-label="Restoring Pocket session">
+        <div className="text-center">
+          <CPurseIcon size={64} title="" className="mx-auto opacity-90" />
+          <span className="mx-auto mt-5 block h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-50" />
+          <p className="mt-3 text-xs font-semibold text-gray-400 dark:text-white/40">Restoring your Pocket</p>
+        </div>
+      </div>
+    )
+  }
 
   if (landing) return <PocketLandingPage />
 

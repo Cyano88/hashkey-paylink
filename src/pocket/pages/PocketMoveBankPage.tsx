@@ -33,7 +33,14 @@ export default function PocketMoveBankPage() {
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const [mode, setMode] = useState<'idle' | 'request' | 'withdraw'>('idle')
+  const [mode, setModeState] = useState<'idle' | 'request' | 'withdraw'>(() => {
+    const saved = window.sessionStorage.getItem('pocket:bank:mode')
+    return saved === 'request' || saved === 'withdraw' ? saved : 'idle'
+  })
+  const setMode = useCallback((next: 'idle' | 'request' | 'withdraw') => {
+    window.sessionStorage.setItem('pocket:bank:mode', next)
+    setModeState(next)
+  }, [])
   const bank = usePocketBankReceiveController({
     authenticated,
     email,

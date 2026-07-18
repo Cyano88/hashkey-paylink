@@ -418,7 +418,7 @@ export default function Layout() {
   }, [navigate])
 
   return (
-    <div className="min-h-screen bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col">
+    <div className={`${isPocketAppPage ? 'h-[100dvh] min-h-0 overflow-hidden' : 'min-h-screen'} bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col`}>
       {/* ── Sticky frosted-glass header ─────────────────────────────────── */}
       <header
         data-hashpaylink-top-nav
@@ -627,9 +627,9 @@ export default function Layout() {
 
       {/* ── Page content ─────────────────────────────────────────────────── */}
       <main className={isPocketLandingPage
-        ? 'w-full flex-1 px-4 py-10 sm:px-6'
+        ? 'h-full min-h-0 w-full flex-1 overflow-hidden p-0'
         : isPocketAppPage
-        ? 'w-full flex-1 px-4 py-10 sm:px-6'
+        ? 'h-full min-h-0 w-full flex-1 overflow-hidden p-0'
         : 'mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6'}>
         <Outlet context={{
           selectedNet: selectedNet ?? 'base',
