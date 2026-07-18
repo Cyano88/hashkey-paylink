@@ -25,6 +25,7 @@ function activityKind(row: PocketActivityRow): ActivityKind {
   if (source === 'app-pay' || settlement === 'app_pay') return 'app-pay'
   if (source === 'wallet-deposit' || source === 'wallet-withdrawal' || source === 'wallet-bridge' || settlement === 'wallet_transfer' || settlement === 'wallet_bridge') return 'wallet'
   if (source === 'bills' || settlement === 'bill_payment') return 'bills'
+  if (source === 'bank-send' || source === 'bank_send' || settlement === 'paycrest_onramp') return 'bank'
   if (source === 'bank-receive' || source === 'bank_receive' || source === 'bank-withdraw' || source === 'bank_withdraw') return 'bank'
   if (source === 'ngpos' || source === 'pos') return 'pos'
   if (settlement === 'instant_fiat') return 'bank'
@@ -35,7 +36,6 @@ function supportedRows(rows: PocketActivityRow[]) {
   return rows.filter(row => {
     const source = String(row.source ?? '').toLowerCase()
     const settlement = String(row.settlementType ?? '').toLowerCase()
-    if (source === 'bank-send' || source === 'bank_send' || settlement === 'paycrest_onramp') return false
     return source === 'app-pay'
       || settlement === 'app_pay'
       || source === 'wallet-deposit'
@@ -49,8 +49,11 @@ function supportedRows(rows: PocketActivityRow[]) {
       || source === 'bank_receive'
       || source === 'bank-withdraw'
       || source === 'bank_withdraw'
+      || source === 'bank-send'
+      || source === 'bank_send'
       || source === 'bills'
       || settlement === 'instant_fiat'
+      || settlement === 'paycrest_onramp'
       || settlement === 'bill_payment'
   })
 }
@@ -64,7 +67,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-slate-50 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-white/[0.04]">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Activity</p>
         <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 dark:text-white">
-          {view === 'all' ? 'All activity' : view === 'bank' ? 'Bank receive' : view === 'pos' ? 'POS activity' : view === 'bills' ? 'Bills activity' : 'App Pay activity'}
+          {view === 'all' ? 'All activity' : view === 'bank' ? 'Bank activity' : view === 'pos' ? 'POS activity' : view === 'bills' ? 'Bills activity' : 'App Pay activity'}
         </h2>
         <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
           Receipts, payouts, reversals, and support records stay connected to your Circle Pocket account.

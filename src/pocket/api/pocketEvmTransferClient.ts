@@ -35,6 +35,7 @@ export async function executePocketEvmTransfer({
   linkedWalletAddress,
   recipient,
   amount,
+  confirm = true,
   executor = defaultExecutor,
   confirmer = defaultConfirmer,
 }: {
@@ -42,6 +43,7 @@ export async function executePocketEvmTransfer({
   linkedWalletAddress: string
   recipient: Address
   amount: string
+  confirm?: boolean
   executor?: PocketEvmTransferExecutor
   confirmer?: PocketEvmTransferConfirmer
 }) {
@@ -67,6 +69,7 @@ export async function executePocketEvmTransfer({
   if (amountUnits <= 0n) throw new Error('Enter a USDC withdrawal amount greater than zero.')
   const txHash = await executor({ session, recipient, amount })
   if (!txHash) return { txHash, status: 'submitted' as const }
+  if (!confirm) return { txHash, status: 'submitted' as const }
   const status = await confirmer({ chain: session.chain, txHash })
   return { txHash, status }
 }

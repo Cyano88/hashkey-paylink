@@ -3,8 +3,8 @@ import type { Address } from 'viem'
 import { signCircleSolanaTransaction } from '../../lib/circleSolanaEmailWallet'
 import { formatAmount } from '../../lib/utils'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
-import { readPocketEvmTransferStatus } from '../api/pocketEvmTransferStatusClient'
 import { preparePocketSolanaTransfer, submitPocketSolanaTransfer } from '../api/pocketSolanaTransferClient'
+import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
@@ -12,7 +12,6 @@ import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { validatePocketWithdrawal } from './pocketWithdrawalValidation'
 
 type PocketAccessTokenReader = () => Promise<string | null>
-const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 
 export default function usePocketWithdrawalController({
   network,
@@ -100,7 +99,7 @@ export default function usePocketWithdrawalController({
     setPending(true)
     setStatus('pending')
     try {
-      let confirmed = false
+      let handedOff = false
       const selectedWallet = wallet ?? await ensureWallet(network)
       if (!selectedWallet) throw new Error('Circle wallet setup was cancelled.')
       if (network === 'solana') {
@@ -119,7 +118,7 @@ export default function usePocketWithdrawalController({
           lastValidBlockHeight: prepared.lastValidBlockHeight,
         })
         setTxHash(submitted.txHash)
-        confirmed = submitted.status === 'confirmed'
+        handedOff = Boolean(submitted.txHash)
       } else {
         const session = await getEvmSession(network, selectedWallet.address)
         const result = await executePocketEvmTransfer({
@@ -127,33 +126,18 @@ export default function usePocketWithdrawalController({
           linkedWalletAddress: selectedWallet.address,
           recipient: recipient as Address,
           amount,
+          confirm: false,
         })
         if (result.txHash) setTxHash(result.txHash)
-        confirmed = result.status === 'confirmed'
-        if (!confirmed && result.txHash) {
-          const accessToken = await getAccessToken()
-          if (!accessToken) throw new Error('Sign in again to confirm this withdrawal.')
-          setStatus('submitted')
-          setNotice('Confirming transfer…')
-          for (let attempt = 0; attempt < 30 && !confirmed; attempt += 1) {
-            if (attempt > 0) await wait(4_000)
-            const receiptStatus = await readPocketEvmTransferStatus({
-              accessToken,
-              chain: network,
-              txHash: result.txHash,
-              recipient: recipient as Address,
-              amount,
-            }).catch(() => 'pending' as const)
-            confirmed = receiptStatus === 'confirmed'
-          }
-        }
+        handedOff = Boolean(result.txHash)
       }
-      setStatus(confirmed ? 'successful' : 'submitted')
-      setNotice(confirmed ? 'Sent' : 'Still confirming. Your transfer is safe to review in Activity.')
+      setPending(false)
+      setStatus(handedOff ? 'successful' : 'submitted')
+      setNotice(handedOff ? `${formatPocketDisplayAmount(amount)} USDC sent on ${networkLabel}` : 'Still confirming. Your transfer is safe to review in Activity.')
       onActivity(`Withdrew ${amount} USDC on ${networkLabel}`)
       setAmount('')
       setAddress('')
-      await refreshBalances()
+      void refreshBalances().catch(() => undefined)
     } catch (reason) {
       setStatus('idle')
       setError(reason instanceof Error && reason.message ? reason.message : typeof reason === 'string' && reason ? reason : 'Withdraw failed.')

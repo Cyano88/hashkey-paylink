@@ -253,6 +253,7 @@ export default function PocketHomeControls({
                 <input
                   type="text"
                   value={withdrawAddress}
+                  onFocus={() => { if (withdrawStatus === 'successful') onWithdrawAddressChange('') }}
                   onChange={event => onWithdrawAddressChange(event.target.value.trim())}
                   placeholder={selectedNetwork === 'solana' ? 'Destination Solana address' : '0x destination address'}
                   className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
@@ -265,6 +266,7 @@ export default function PocketHomeControls({
                     type="text"
                     inputMode="decimal"
                     value={withdrawAmount}
+                    onFocus={() => { if (withdrawStatus === 'successful') onWithdrawAmountChange('') }}
                     onChange={event => onWithdrawAmountChange(event.target.value)}
                     placeholder="0.00"
                     className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
@@ -329,7 +331,7 @@ export default function PocketHomeControls({
           <label className="block">
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span>
             <span className="mt-1 flex gap-2">
-              <input type="text" inputMode="decimal" value={bridgeAmount} onChange={event => onBridgeAmountChange(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
+              <input type="text" inputMode="decimal" value={bridgeAmount} onFocus={() => { if (bridgeStatus === 'successful') onBridgeAmountChange('') }} onChange={event => onBridgeAmountChange(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
               <button type="button" onClick={onBridgeMax} className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-white/10 dark:text-gray-200">Max</button>
             </span>
           </label>
@@ -346,7 +348,7 @@ export default function PocketHomeControls({
             status={bridgeStatus === 'successful' ? 'successful' : bridgeStatus === 'bridging' ? 'submitted' : bridgeStatus === 'confirming' ? 'pending' : 'idle'}
             disabled={!bridgeQuote || Number(bridgeQuote.total) > selectedBalance || bridgeStatus === 'quoting'}
             onConfirm={onBridge}
-            labels={{ disabled: bridgeStatus === 'quoting' && bridgeAmountReady ? 'Getting live quote' : 'Enter bridge amount', idle: 'Slide to bridge', pending: 'Confirm in Circle', submitted: 'Bridging', successful: 'Bridge complete' }}
+            labels={{ disabled: bridgeStatus === 'quoting' && bridgeAmountReady ? 'Getting live quote' : 'Enter bridge amount', idle: 'Slide to bridge', pending: 'Confirm in Circle', submitted: 'Bridging', successful: 'Sent' }}
           />
           <p className="text-center text-[10px] leading-4 text-gray-400">Native USDC via Circle CCTP. Destination gas is handled by Circle; source network gas may apply.</p>
           {bridgeNotice && <p className={cn('text-center text-xs font-semibold', bridgeStatus === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bridgeNotice}</p>}

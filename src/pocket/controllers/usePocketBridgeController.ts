@@ -4,10 +4,12 @@ import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge, type
 import { bridgeCircleSolanaWallet } from '../lib/pocketSolanaBridge'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
 import type { CirclePocketWallet } from '../models/pocketWallet'
+import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 
 export type PocketBridgeStatus = 'idle' | 'quoting' | 'confirming' | 'bridging' | 'successful'
 
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
+const bridgeNetworkLabel = (network: PocketBridgeNetwork) => network === 'solana' ? 'Solana' : network === 'base' ? 'Base' : 'Arbitrum'
 
 export default function usePocketBridgeController(input: {
   source: PocketBridgeNetwork
@@ -27,6 +29,15 @@ export default function usePocketBridgeController(input: {
   const [status, setStatus] = useState<PocketBridgeStatus>('idle')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+
+  const updateAmount = useCallback((value: string) => {
+    setAmount(value)
+    if (status === 'successful') {
+      setStatus('idle')
+      setNotice('')
+      setError('')
+    }
+  }, [status])
 
   useEffect(() => {
     if (!destinations.includes(destination)) setDestinationState(destinations[0])
@@ -89,25 +100,28 @@ export default function usePocketBridgeController(input: {
       const txHash = input.source === 'solana'
         ? await bridgeCircleSolanaWallet({ session: await input.getSolanaSession(sourceWallet.address), destination: destination as 'base' | 'arbitrum', destinationAddress: destinationWallet.address, amount })
         : await bridgeCircleEvmEmailWallet({ session: await input.getEvmSession(input.source, sourceWallet.address), destination, destinationAddress: destinationWallet.address, amount })
-      setStatus('bridging')
-      setNotice('USDC is moving to your destination wallet.')
-      const accessToken = await input.getAccessToken()
-      if (!accessToken) throw new Error('Sign in again to track this bridge.')
-      await recordPocketBridge({ accessToken, source: input.source, destination, amount, txHash, status: 'submitted' })
-      let complete = false
-      for (let attempt = 0; attempt < 36 && !complete; attempt += 1) {
-        if (attempt) await wait(5_000)
-        const next = await readPocketBridgeStatus({ accessToken, source: input.source, txHash }).catch(() => null)
-        complete = next?.status === 'confirmed' || next?.status === 'complete'
-      }
-      setStatus(complete ? 'successful' : 'bridging')
-      setNotice(complete ? '' : 'Bridge submitted. It will continue safely in the background.')
-      if (complete && typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
-      if (complete) await recordPocketBridge({ accessToken, source: input.source, destination, amount, txHash, status: 'completed' }).catch(() => undefined)
+      setStatus('successful')
+      setNotice(`${formatPocketDisplayAmount(amount)} USDC sent from ${bridgeNetworkLabel(input.source)} · Arriving on ${bridgeNetworkLabel(destination)}`)
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       setAmount('')
       setQuote(null)
-      await input.refresh()
-      input.onActivity()
+      void input.refresh().catch(() => undefined)
+      void (async () => {
+        const accessToken = await input.getAccessToken()
+        if (!accessToken) return
+        const recorded = await recordPocketBridge({ accessToken, source: input.source, destination, amount, txHash, status: 'submitted' })
+          .then(() => true)
+          .catch(() => false)
+        if (!recorded) return
+        input.onActivity()
+        let complete = false
+        for (let attempt = 0; attempt < 36 && !complete; attempt += 1) {
+          if (attempt) await wait(5_000)
+          const next = await readPocketBridgeStatus({ accessToken, source: input.source, txHash }).catch(() => null)
+          complete = next?.status === 'confirmed' || next?.status === 'complete'
+        }
+        if (complete) await recordPocketBridge({ accessToken, source: input.source, destination, amount, txHash, status: 'completed' }).catch(() => undefined)
+      })()
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Bridge failed.'
       if (message.includes('submitted and is being reconciled')) {
@@ -123,5 +137,5 @@ export default function usePocketBridgeController(input: {
     }
   }, [amount, destination, input, refreshQuote])
 
-  return { destinations, destination, setDestination, amount, setAmount, quote, status, error, notice, refreshQuote, bridge }
+  return { destinations, destination, setDestination, amount, setAmount: updateAmount, quote, status, error, notice, refreshQuote, bridge }
 }

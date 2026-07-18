@@ -331,6 +331,9 @@ export async function createPaycrestOnrampOrder(input: {
   if (!isAddress(input.destinationAddress)) throw new Error('A valid USDC recipient wallet is required.')
   const network = input.destinationNetwork.trim().toLowerCase()
   if (network !== 'base' && network !== 'polygon') throw new Error('Bank-to-USDC currently supports Base and Polygon USDC.')
+  const onrampRate = await getPaycrestOnrampRate({ network, token: 'USDC', fiat: 'NGN', amount: '1' })
+  const estimatedAmountUsdc = (Number(input.amountNgn) / onrampRate).toFixed(6).replace(/\.?0+$/, '')
+  if (!estimatedAmountUsdc || Number(estimatedAmountUsdc) <= 0) throw new Error('Paycrest did not return a usable Base USDC quote.')
   const reference = `banksend-${input.intentId}`.slice(0, 90)
   const senderFeePercent = process.env.PAYCREST_SENDER_FEE_PERCENT?.trim()
   const payload: Record<string, unknown> = {
@@ -354,6 +357,7 @@ export async function createPaycrestOnrampOrder(input: {
       },
     },
     reference,
+    rate: onrampRate.toFixed(8).replace(/\.?0+$/, ''),
   }
   if (senderFeePercent) payload.senderFeePercent = senderFeePercent
 
@@ -376,7 +380,7 @@ export async function createPaycrestOnrampOrder(input: {
     paycrest_order_id: firstText(data?.id, data?.orderId, data?.order_id),
     merchant_id: input.merchantId,
     amount_ngn: input.amountNgn,
-    amount_usdc: firstText(data?.amount, data?.amountOut, data?.amount_out),
+    amount_usdc: firstText(data?.amountOut, data?.amount_out, estimatedAmountUsdc),
     receive_address: input.destinationAddress,
     refund_address: '',
     payer_email: input.payerEmail,

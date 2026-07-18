@@ -47,6 +47,7 @@ export default function usePocketBankWithdrawController({
   const [error, setError] = useState('')
   const [result, setResult] = useState<PocketBankWithdrawData | null>(null)
   const idempotencyKey = useRef('')
+  const activeIntentId = useRef('')
   const cancelled = useRef(false)
 
   useEffect(() => () => { cancelled.current = true }, [])
@@ -57,6 +58,7 @@ export default function usePocketBankWithdrawController({
       setError('')
       setResult(null)
       idempotencyKey.current = ''
+      activeIntentId.current = ''
     }
   }, [status])
 
@@ -82,23 +84,17 @@ export default function usePocketBankWithdrawController({
       if (attempt > 0) await wait(attempt <= 40 ? 3_000 : 12_000)
       const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
       if (!next) continue
-      setResult(next)
+      const active = activeIntentId.current === intentId
+      if (active) setResult(next)
       if (next.state === 'sent') {
-        setStatus('sent')
-        setAmountState('')
-        setMemoState('')
-        idempotencyKey.current = ''
         await onSent()
-        await wait(1_800)
-        if (!cancelled.current) {
-          setStatus('idle')
-          setResult(null)
-        }
         return
       }
       if (next.state === 'refunded') {
-        setStatus('idle')
-        setError('The payout was refunded. Your USDC should return to the Circle wallet.')
+        if (active) {
+          setStatus('idle')
+          setError('The payout was refunded. Your USDC should return to the Circle wallet.')
+        }
         return
       }
     }
@@ -136,6 +132,7 @@ export default function usePocketBankWithdrawController({
         },
       })
       reconciliation = { accessToken, intentId: prepared.intentId }
+      activeIntentId.current = prepared.intentId
       setResult(prepared)
       setStatus('authorizing')
       const session = await getEvmSession(selectedWallet.address)
@@ -144,9 +141,15 @@ export default function usePocketBankWithdrawController({
         linkedWalletAddress: selectedWallet.address,
         recipient: prepared.receiveAddress as Address,
         amount: prepared.amountUsdc,
+        confirm: false,
       })
       if (!transfer.txHash) throw new Error('Circle accepted the payout, but no transaction hash was returned. Check Activity before retrying.')
-      setStatus('processing')
+      setResult({ ...prepared, txHash: transfer.txHash })
+      setStatus('sent')
+      setAmountState('')
+      setMemoState('')
+      idempotencyKey.current = ''
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       const confirmed = await confirmPocketBankWithdraw({
         accessToken,
         request: {
@@ -156,14 +159,14 @@ export default function usePocketBankWithdrawController({
           wallet_address: selectedWallet.address,
         },
       }).catch(() => null)
-      if (confirmed) setResult(confirmed)
-      await pollUntilSettled(accessToken, prepared.intentId)
+      if (confirmed && activeIntentId.current === prepared.intentId) setResult(confirmed)
+      void pollUntilSettled(accessToken, prepared.intentId)
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Bank payout failed.'
       if (message.includes('submitted and is being reconciled')) {
         setStatus('processing')
         setError('')
-        if (reconciliation) await pollUntilSettled(reconciliation.accessToken, reconciliation.intentId)
+        if (reconciliation) void pollUntilSettled(reconciliation.accessToken, reconciliation.intentId)
         return
       }
       setStatus('idle')
@@ -171,5 +174,5 @@ export default function usePocketBankWithdrawController({
     }
   }, [accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, getEvmSession, lastName, memo, pollUntilSettled, wallet])
 
-  return { amount, memo, status, error, result, canSubmit, setAmount, setMemo, submit }
+  return { amount, memo, status, error, result, canSubmit, setAmount, setMemo, resetResult, submit }
 }

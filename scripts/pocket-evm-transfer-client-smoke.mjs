@@ -43,6 +43,21 @@ assert.equal(calls.length, 1)
 assert.deepEqual(calls[0], { session, recipient, amount: '1.25' })
 assert.deepEqual(confirmationCalls, [{ chain: 'base', txHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }])
 
+const handedOff = await executePocketEvmTransfer({
+  session,
+  linkedWalletAddress: walletAddress,
+  recipient,
+  amount: '0.75',
+  confirm: false,
+  executor,
+  confirmer,
+})
+assert.deepEqual(handedOff, {
+  txHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  status: 'submitted',
+})
+assert.equal(confirmationCalls.length, 1)
+
 await assert.rejects(() => executePocketEvmTransfer({
   session,
   linkedWalletAddress: '0x3333333333333333333333333333333333333333',
@@ -51,7 +66,7 @@ await assert.rejects(() => executePocketEvmTransfer({
   executor,
   confirmer,
 }), /does not match the linked Pocket wallet/)
-assert.equal(calls.length, 1)
+assert.equal(calls.length, 2)
 
 await assert.rejects(() => executePocketEvmTransfer({
   session,
@@ -61,7 +76,7 @@ await assert.rejects(() => executePocketEvmTransfer({
   executor,
   confirmer,
 }), /valid EVM destination/)
-assert.equal(calls.length, 1)
+assert.equal(calls.length, 2)
 
 await assert.rejects(() => executePocketEvmTransfer({
   session,
@@ -71,7 +86,7 @@ await assert.rejects(() => executePocketEvmTransfer({
   executor,
   confirmer,
 }), /greater than zero/)
-assert.equal(calls.length, 1)
+assert.equal(calls.length, 2)
 
 await assert.rejects(() => executePocketEvmTransfer({
   session,
@@ -81,7 +96,7 @@ await assert.rejects(() => executePocketEvmTransfer({
   executor,
   confirmer,
 }), /valid USDC withdrawal amount/)
-assert.equal(calls.length, 1)
+assert.equal(calls.length, 2)
 
 const fetchCalls = []
 const confirmedStatus = await readPocketEvmTransferStatus({
