@@ -83,7 +83,19 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) return res.status(400).json({ ok: false, error: 'Open your Base Circle wallet before withdrawing.' })
         if (accountNumber.length !== 10 || !text(req.body?.account_name) || !text(req.body?.bank_code)) return res.status(400).json({ ok: false, error: 'Verify the destination bank account first.' })
 
-        const created = await dependencies.createBankReceive({ ...req, body: { ...req.body, amount, flexible_amount: false, direct_payout: true, display_name: text(req.body?.memo) || 'Direct bank payout', client_origin: text(req.body?.client_origin) } } as Request)
+        const forwardedRequest = {
+          ...req,
+          headers: req.headers,
+          body: {
+            ...req.body,
+            amount,
+            flexible_amount: false,
+            direct_payout: true,
+            display_name: text(req.body?.memo) || 'Direct bank payout',
+            client_origin: text(req.body?.client_origin),
+          },
+        } as Request
+        const created = await dependencies.createBankReceive(forwardedRequest)
         const link = (created as any)?.link
         if (!link?.intent_id || !link?.merchant_id) throw Object.assign(new Error('Could not prepare the bank payout intent.'), { status: 502 })
         const prepared = await dependencies.invokeLegacy(req, {

@@ -34,7 +34,7 @@ const calls = []
 const handler = createPocketBankWithdrawHandler({
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   createBankReceive: async req => {
-    calls.push({ kind: 'create', body: req.body })
+    calls.push({ kind: 'create', body: req.body, headers: req.headers })
     return { ok: true, link: { intent_id: processingOrder.intent_id, merchant_id: processingOrder.merchant_id } }
   },
   listHistory: async () => ({ merchants: [{ merchant_id: processingOrder.merchant_id }], orders: [], bankSendLinks: [], bankSendOrders: [] }),
@@ -58,12 +58,13 @@ const prepareBody = {
   wallet_address: '0x2222222222222222222222222222222222222222',
 }
 const idempotencyKey = 'pocket:bank-withdraw:test-request-0001'
-const prepared = await request(handler, prepareBody, { 'idempotency-key': idempotencyKey })
+const prepared = await request(handler, prepareBody, { authorization: 'Bearer privy-token', 'idempotency-key': idempotencyKey })
 assert.equal(prepared.statusCode, 200)
 assert.equal(prepared.body.data.state, 'processing')
 assert.equal(prepared.body.data.amountUsdc, '1')
 assert.equal(calls[0].body.direct_payout, true)
 assert.equal(calls[0].body.flexible_amount, false)
+assert.equal(calls[0].headers.authorization, 'Bearer privy-token')
 assert.equal(calls[1].body.action, 'createOfframpOrder')
 
 const confirmed = await request(handler, {

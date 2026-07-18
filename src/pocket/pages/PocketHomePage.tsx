@@ -150,7 +150,6 @@ export default function PocketHomePage() {
           withdrawPending={withdrawal.pending}
           withdrawNotice={withdrawal.notice}
           withdrawStatus={withdrawal.status}
-          withdrawTxHash={withdrawal.txHash}
           sessionActivity={sessionActivity}
           error={withdrawal.error || wallets.error}
           onTabChange={setTab}

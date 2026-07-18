@@ -20,7 +20,6 @@ type PocketHomeControlsProps = {
   withdrawPending: boolean
   withdrawNotice: string
   withdrawStatus: PocketSlideActionStatus
-  withdrawTxHash: string
   sessionActivity: string[]
   error: string
   onTabChange: (tab: PocketHomeTab) => void
@@ -69,7 +68,6 @@ export default function PocketHomeControls({
   withdrawPending,
   withdrawNotice,
   withdrawStatus,
-  withdrawTxHash,
   sessionActivity,
   error,
   onTabChange,
@@ -213,6 +211,11 @@ export default function PocketHomeControls({
                 status={withdrawPending ? 'pending' : withdrawStatus}
                 disabled={!withdrawalReady}
                 onConfirm={onWithdraw}
+                labels={{
+                  pending: 'Confirming transfer',
+                  submitted: 'Still confirming',
+                  successful: 'Sent',
+                }}
               />
             </>
           ) : (
@@ -227,7 +230,6 @@ export default function PocketHomeControls({
             </button>
           )}
           {withdrawNotice && <p className={cn('text-center text-xs font-semibold', withdrawStatus === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-300')}>{withdrawNotice}</p>}
-          {withdrawTxHash && <p className="break-all text-[11px] text-gray-400">Tx: {withdrawTxHash}</p>}
         </div>
       )}
 
