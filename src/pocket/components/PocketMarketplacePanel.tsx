@@ -129,15 +129,15 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
               <p className="mt-0.5 text-[11px] leading-4 text-gray-500 dark:text-gray-400">Buy compatible data and AI services with App Pay.</p>
             </div>
           </div>
-          <span className="shrink-0 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">Base</span>
+          <span className="shrink-0 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">Circle Gateway</span>
         </div>
       </div>
 
       {network === 'arc' ? (
         <div className="p-3.5">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">Marketplace payments currently use Base</p>
-          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Circle’s live registry does not currently advertise Arc Testnet marketplace endpoints.</p>
-          <button type="button" onClick={onUseBase} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white dark:bg-white dark:text-gray-950"><ArrowRight className="h-4 w-4" /> Use Base App Pay</button>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Marketplace payments use mainnet App Pay</p>
+          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Circle Gateway routes purchases from your unified mainnet balance. Arc Testnet is not used for live purchases.</p>
+          <button type="button" onClick={onUseBase} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white dark:bg-white dark:text-gray-950"><ArrowRight className="h-4 w-4" /> Use mainnet App Pay</button>
         </div>
       ) : (
         <div className="space-y-3 p-3.5">
@@ -239,7 +239,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
                   <span className="max-w-[65%] truncate text-xs font-semibold text-gray-900 dark:text-gray-100">{selected.provider}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4 border-t border-gray-100 px-3.5 py-3 dark:border-white/[0.07]">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">Pay from Base App Pay</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Pay from App Pay</span>
                   <span className="text-sm font-black text-gray-950 dark:text-white">{selected.amount} <span className="text-[10px] font-bold text-gray-400">USDC</span></span>
                 </div>
               </div>

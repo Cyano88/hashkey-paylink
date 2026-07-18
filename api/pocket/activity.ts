@@ -19,27 +19,37 @@ type PocketActivityHandlerDependencies = {
 
 function appPayActivityRow(item: CirclePocketActionRecord): PocketActivityRow | undefined {
   if (item.action !== 'marketplace.service.purchase') return undefined
+  const paymentSettled = ['confirmed', 'completed'].includes(item.metadata?.paymentState ?? '')
+  const paymentAccepted = ['received', 'batched'].includes(item.metadata?.paymentState ?? '')
   const status = item.status === 'completed'
     ? 'completed'
-    : item.status === 'submitted'
-      ? 'reconciling'
-      : item.status === 'started'
-        ? 'processing'
-        : 'needs review'
+    : paymentSettled
+      ? 'paid'
+      : paymentAccepted
+        ? 'settling'
+        : item.status === 'submitted'
+          ? 'reconciling'
+          : item.status === 'started'
+            ? 'processing'
+            : 'needs review'
   return {
     eventId: item.id,
-    txHash: item.resourceId || `pocket-action:${item.id}`,
-    chain: item.metadata?.network || 'base',
+    txHash: item.metadata?.paymentTransferId || item.resourceId || `pocket-action:${item.id}`,
+    chain: item.metadata?.paymentNetwork || item.metadata?.network || 'circle-gateway-mainnet',
     payer: 'Pocket App Pay',
     memo: item.metadata?.provider || 'Marketplace service',
     amount: item.metadata?.amount || '0',
-    ts: item.updatedAt,
+    ts: item.createdAt,
     source: 'app-pay',
     contextLabel: status === 'needs review'
       ? 'Payment outcome needs review before retrying'
-      : status === 'reconciling'
-        ? 'Payment outcome is being reconciled'
-        : 'Circle Marketplace service purchase',
+      : status === 'paid'
+        ? 'Payment confirmed · service result unavailable'
+        : status === 'settling'
+          ? 'Payment accepted · settlement pending'
+          : status === 'reconciling'
+            ? 'Payment outcome is being reconciled'
+            : 'Circle Marketplace service purchase',
     settlementType: 'app_pay',
     paycrestStatus: status,
   }

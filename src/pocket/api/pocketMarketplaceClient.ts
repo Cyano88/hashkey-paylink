@@ -8,7 +8,7 @@ export type PocketMarketplaceService = {
   method: 'GET'
   amount: string
   amountAtomic: string
-  network: 'base'
+  network: 'circle-gateway-mainnet'
 }
 
 export type PocketMarketplaceActivity = {
@@ -26,7 +26,7 @@ export type PocketMarketplaceSnapshot = {
   activity: PocketMarketplaceActivity[]
   catalogAvailable: boolean
   catalogMessage?: string
-  paymentNetwork: 'base'
+  paymentNetwork: 'circle-gateway-mainnet'
   arcMarketplaceSupported: boolean
   maxPurchaseUsdc: string
 }
@@ -61,7 +61,7 @@ function service(value: unknown): PocketMarketplaceService | undefined {
     || item.method !== 'GET'
     || typeof item.amount !== 'string'
     || typeof item.amountAtomic !== 'string'
-    || item.network !== 'base'
+    || item.network !== 'circle-gateway-mainnet'
   ) return undefined
   return item as PocketMarketplaceService
 }
@@ -96,7 +96,7 @@ export async function readPocketMarketplace({
     activity,
     catalogAvailable: root?.catalogAvailable !== false,
     ...(typeof root?.catalogMessage === 'string' ? { catalogMessage: root.catalogMessage } : {}),
-    paymentNetwork: 'base',
+    paymentNetwork: 'circle-gateway-mainnet',
     arcMarketplaceSupported: root?.arcMarketplaceSupported === true,
     maxPurchaseUsdc: typeof root?.maxPurchaseUsdc === 'string' ? root.maxPurchaseUsdc : '0.05',
   }

@@ -4,7 +4,10 @@ import {
   estimateAgentX402Service,
   inspectCircleMarketplaceService,
   payAgentX402Service,
+  readAgentWalletAddress,
+  searchCircleGatewayX402Transfers,
   searchCircleMarketplaceServices,
+  type CircleGatewayX402Transfer,
 } from '../agent-wallet.js'
 import { listAgentActivity } from '../agent-activity.js'
 import {
@@ -32,6 +35,8 @@ type MarketplaceDependencies = {
   pay(input: Parameters<typeof payAgentX402Service>[0]): ReturnType<typeof payAgentX402Service>
   listActivity(agentSlug: string, limit?: number): ReturnType<typeof listAgentActivity>
   listActions(ownerId: string, limit?: number): ReturnType<typeof listCirclePocketActions>
+  walletAddress(agentSlug: string): Promise<string | undefined>
+  searchTransfers(input: Parameters<typeof searchCircleGatewayX402Transfers>[0]): ReturnType<typeof searchCircleGatewayX402Transfers>
   claim(input: {
     ownerId: string
     idempotencyKey: string
@@ -50,7 +55,7 @@ type PublicService = {
   method: 'GET'
   amount: string
   amountAtomic: string
-  network: 'base'
+  network: 'circle-gateway-mainnet'
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -137,7 +142,7 @@ function publicService(value: unknown): PublicService | undefined {
     method: 'GET',
     amount: price.amount,
     amountAtomic: price.atomic,
-    network: 'base',
+    network: 'circle-gateway-mainnet',
   }
 }
 
@@ -186,19 +191,26 @@ function safeResult(value: unknown) {
 
 function marketplaceActionActivity(item: CirclePocketActionRecord) {
   if (item.action !== ACTION) return undefined
+  const paymentSettled = ['confirmed', 'completed'].includes(item.metadata?.paymentState ?? '')
+  const paymentAccepted = ['received', 'batched'].includes(item.metadata?.paymentState ?? '')
   const status = item.status === 'completed'
     ? 'Completed'
-    : item.status === 'submitted'
-      ? 'Reconciliation pending'
-      : item.status === 'started'
-        ? 'Processing'
-        : 'Outcome needs review'
+    : paymentSettled
+      ? 'Paid · result unavailable'
+      : paymentAccepted
+        ? 'Payment accepted · settlement pending'
+        : item.status === 'submitted'
+          ? 'Reconciliation pending'
+          : item.status === 'started'
+            ? 'Processing'
+            : 'Outcome needs review'
   return {
     id: item.resourceId ?? item.id,
     title: `${item.metadata?.provider || 'App Pay service'} · ${status}`,
     amount: item.metadata?.amount,
     asset: 'USDC',
-    createdAt: item.updatedAt,
+    createdAt: item.createdAt,
+    ...(item.metadata?.paymentTransferId ? { transaction: item.metadata.paymentTransferId } : {}),
   }
 }
 
@@ -221,6 +233,80 @@ function diagnosticMessage(error: Error) {
     .slice(0, 500)
 }
 
+function usdcMicros(value: unknown) {
+  const clean = String(value ?? '').replace(/[$,]/g, '').replace(/\s*USDC\s*/i, '').trim()
+  if (!/^\d+(?:\.\d{1,6})?$/.test(clean)) return undefined
+  if (!clean.includes('.') && Number(clean) > MAX_PURCHASE_USDC) return BigInt(clean)
+  const [whole, fraction = ''] = clean.split('.')
+  return (BigInt(whole) * 1_000_000n) + BigInt(fraction.padEnd(6, '0'))
+}
+
+function transferTime(item: CircleGatewayX402Transfer) {
+  const timestamp = Date.parse(item.createdAt ?? '')
+  return Number.isFinite(timestamp) ? timestamp : undefined
+}
+
+async function reconcileMarketplaceActions(params: {
+  agentSlug: string
+  actions: CirclePocketActionRecord[]
+  dependencies: MarketplaceDependencies
+}) {
+  const candidates = params.actions.filter(item => (
+    item.action === ACTION
+    && (item.status === 'submitted' || item.status === 'failed')
+    && item.metadata?.paymentState !== 'failed'
+  ))
+  if (!candidates.length) return params.actions
+  const payer = await params.dependencies.walletAddress(params.agentSlug)
+  if (!payer) return params.actions
+  const oldest = Math.min(...candidates.map(item => item.createdAt)) - 10 * 60_000
+  const newest = Math.max(...candidates.map(item => item.createdAt)) + 10 * 60_000
+  const transfers = await params.dependencies.searchTransfers({
+    from: payer,
+    startDate: new Date(oldest).toISOString(),
+    endDate: new Date(newest).toISOString(),
+    pageSize: 100,
+  })
+  const unused = new Set(transfers.map(item => item.id))
+  const reconciled = new Map<string, CirclePocketActionRecord>()
+  for (const action of [...candidates].sort((a, b) => a.createdAt - b.createdAt)) {
+    const nonce = action.metadata?.paymentNonce
+    let match = nonce ? transfers.find(item => unused.has(item.id) && item.nonce === nonce) : undefined
+    if (!match) {
+      const amount = usdcMicros(action.metadata?.amount)
+      match = transfers
+        .filter(item => {
+          if (!unused.has(item.id) || amount === undefined || usdcMicros(item.amount) !== amount) return false
+          const createdAt = transferTime(item)
+          return createdAt !== undefined && Math.abs(createdAt - action.createdAt) <= 10 * 60_000
+        })
+        .sort((a, b) => Math.abs((transferTime(a) ?? 0) - action.createdAt) - Math.abs((transferTime(b) ?? 0) - action.createdAt))[0]
+    }
+    if (!match) continue
+    unused.delete(match.id)
+    const metadata = {
+      ...(action.metadata ?? {}),
+      paymentTransferId: match.id,
+      paymentState: match.status,
+      paymentNetwork: match.sendingNetwork ?? match.recipientNetwork ?? action.metadata?.paymentNetwork ?? 'circle-gateway-mainnet',
+      ...(match.nonce ? { paymentNonce: match.nonce } : {}),
+      ...(match.txHash ? { paymentTxHash: match.txHash } : {}),
+      ...(match.createdAt ? { paymentCreatedAt: match.createdAt } : {}),
+      reconciledAt: new Date().toISOString(),
+    }
+    const updated = await params.dependencies.record({
+      ownerId: action.ownerId,
+      idempotencyKey: action.idempotencyKey,
+      action: action.action,
+      status: match.status === 'failed' ? 'failed' : 'submitted',
+      resourceId: action.resourceId,
+      metadata,
+    })
+    reconciled.set(action.id, updated)
+  }
+  return params.actions.map(item => reconciled.get(item.id) ?? item)
+}
+
 export function createPocketMarketplaceHandler(dependencies: MarketplaceDependencies) {
   return async function pocketMarketplaceHandler(req: Request, res: Response) {
     const requestId = String(req.headers['x-request-id'] ?? '').trim().slice(0, 100) || randomUUID()
@@ -237,7 +323,15 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
 
       if (req.method === 'GET') {
         const query = String(req.query.query ?? '').trim().slice(0, 120)
-        const actions = await dependencies.listActions(identity.userId, 100)
+        let actions = await dependencies.listActions(identity.userId, 100)
+        try {
+          actions = await reconcileMarketplaceActions({ agentSlug, actions, dependencies })
+        } catch (error) {
+          console.warn('[pocket-marketplace] payment reconciliation refresh failed', {
+            requestId,
+            message: diagnosticMessage(error as Error),
+          })
+        }
         const actionActivity = actions.flatMap(item => {
           const activity = marketplaceActionActivity(item)
           return activity ? [activity] : []
@@ -275,7 +369,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           activity,
           catalogAvailable,
           ...(!catalogAvailable ? { catalogMessage: 'Circle Marketplace catalog is temporarily unavailable. App Pay history is still available.' } : {}),
-          paymentNetwork: 'base',
+          paymentNetwork: 'circle-gateway-mainnet',
           arcMarketplaceSupported: false,
           maxPurchaseUsdc: String(MAX_PURCHASE_USDC),
         })
@@ -336,7 +430,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
         ownerId: identity.userId,
         idempotencyKey: rawKey,
         action: ACTION,
-        metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'base' },
+        metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'circle-gateway-mainnet' },
         dedupe: {
           metadataKey: 'resource',
           metadataValue: body.resource,
@@ -382,7 +476,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           action: ACTION,
           status: 'completed',
           resourceId: paid.receiptActivityId,
-          metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'base' },
+          metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'circle-gateway-mainnet' },
         })
         return res.json({
           ok: true,
@@ -394,15 +488,29 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           result: safeResult(paid.response),
         })
       } catch (error) {
-        const normalized = error as Error & { code?: string; receiptActivityId?: string }
+        const normalized = error as Error & {
+          code?: string
+          receiptActivityId?: string
+          reconciliation?: { nonce?: string; network?: string; amountAtomic?: string; scheme?: string }
+        }
         if (normalized.code === 'circle_payment_submitted_response_failed' || normalized.code === 'circle_payment_outcome_unknown') {
+          const reconciliation = normalized.reconciliation
           await dependencies.record({
             ownerId: identity.userId,
             idempotencyKey: rawKey,
             action: ACTION,
             status: 'submitted',
             resourceId: normalized.receiptActivityId,
-            metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'base' },
+            metadata: {
+              resource: body.resource,
+              amount: inspected.amount,
+              provider: inspected.provider,
+              network: 'circle-gateway-mainnet',
+              ...(reconciliation?.nonce ? { paymentNonce: reconciliation.nonce } : {}),
+              ...(reconciliation?.network ? { paymentNetwork: reconciliation.network } : {}),
+              ...(reconciliation?.amountAtomic ? { paymentAmountAtomic: reconciliation.amountAtomic } : {}),
+              ...(reconciliation?.scheme ? { paymentScheme: reconciliation.scheme } : {}),
+            },
           })
           return res.status(202).json({
             ok: true,
@@ -419,7 +527,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           idempotencyKey: rawKey,
           action: ACTION,
           status: 'failed',
-          metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'base' },
+          metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'circle-gateway-mainnet' },
         }).catch(() => undefined)
         throw error
       }
@@ -452,6 +560,8 @@ export default createPocketMarketplaceHandler({
   pay: payAgentX402Service,
   listActivity: listAgentActivity,
   listActions: listCirclePocketActions,
+  walletAddress: readAgentWalletAddress,
+  searchTransfers: searchCircleGatewayX402Transfers,
   claim: claimCirclePocketAction,
   record: recordCirclePocketAction,
 })

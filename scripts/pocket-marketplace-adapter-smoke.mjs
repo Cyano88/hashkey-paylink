@@ -61,6 +61,7 @@ let searchError
 let estimateError
 let payError
 let actions = []
+let transfers = []
 const recorded = []
 const handler = createPocketMarketplaceHandler({
   verifyUser: async () => ({ userId: 'did:privy:user', email: 'pocket@example.com' }),
@@ -102,6 +103,8 @@ const handler = createPocketMarketplaceHandler({
   },
   listActivity: async () => [],
   listActions: async () => actions,
+  walletAddress: async () => '0x0000000000000000000000000000000000000001',
+  searchTransfers: async () => transfers,
   claim: async () => ({ record: action, claimed: true }),
   record: async input => {
     recorded.push(input)
@@ -116,6 +119,8 @@ assert.equal(getRes.body.ok, true)
 assert.equal(getRes.body.services.length, 1)
 assert.equal(getRes.body.services[0].resource, resource)
 assert.equal(getRes.body.services[0].amount, '0.008')
+assert.equal(getRes.body.services[0].network, 'circle-gateway-mainnet')
+assert.equal(getRes.body.paymentNetwork, 'circle-gateway-mainnet')
 assert.equal(getRes.body.arcMarketplaceSupported, false)
 assert.match(getRes.headers['x-request-id'], /^[0-9a-f-]{36}$/)
 
@@ -193,7 +198,7 @@ actions = [{
   idempotencyKey: 'pocket:marketplace:submitted1',
   status: 'submitted',
   resourceId: 'receipt-pending',
-  metadata: { resource },
+  metadata: { resource, amount: '0.008' },
   updatedAt: Date.now(),
 }]
 const duplicateSubmittedRes = response()
@@ -209,13 +214,24 @@ assert.equal(duplicateSubmittedRes.body.receiptActivityId, 'receipt-pending')
 assert.equal(paid, 3)
 
 searchError = new Error('Circle registry timed out')
+transfers = [{
+  id: 'gateway-transfer-1',
+  status: 'completed',
+  amount: '8000',
+  sendingNetwork: 'eip155:137',
+  nonce: 'payment-nonce-1',
+  txHash: '0xgatewaytx',
+  createdAt: new Date(actions[0].createdAt).toISOString(),
+}]
 const degradedGetRes = response()
 await handler({ method: 'GET', query: {}, headers: {} }, degradedGetRes)
 assert.equal(degradedGetRes.statusCode, 200)
 assert.equal(degradedGetRes.body.catalogAvailable, false)
 assert.equal(degradedGetRes.body.services.length, 0)
 assert.equal(degradedGetRes.body.activity.length, 1)
-assert.match(degradedGetRes.body.activity[0].title, /Reconciliation pending/)
+assert.match(degradedGetRes.body.activity[0].title, /Paid · result unavailable/)
+assert.equal(degradedGetRes.body.activity[0].transaction, 'gateway-transfer-1')
+assert.equal(recorded.at(-1).metadata.paymentState, 'completed')
 searchError = undefined
 actions = []
 

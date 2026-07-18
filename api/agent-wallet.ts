@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { execFile } from 'node:child_process'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import crypto from 'node:crypto'
@@ -36,6 +36,7 @@ const GATEWAY_DEPOSIT_CHAIN = process.env.AGENT_WALLET_GATEWAY_DEPOSIT_CHAIN ?? 
 const ARC_TESTNET_GATEWAY_CHAIN = 'ARC-TESTNET'
 const GATEWAY_DEPOSIT_VERIFY_ATTEMPTS = Math.max(1, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_ATTEMPTS ?? '6') || 6)
 const GATEWAY_DEPOSIT_VERIFY_DELAY_MS = Math.max(500, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_DELAY_MS ?? '5000') || 5000)
+const CIRCLE_GATEWAY_X402_API_BASE = (process.env.CIRCLE_GATEWAY_X402_API_BASE ?? 'https://gateway-api.circle.com').replace(/\/+$/, '')
 
 const ARC_TESTNET = defineChain({
   id: 5042002,
@@ -111,6 +112,52 @@ type StoreData = {
   activity?: Record<string, unknown[]>
 }
 
+function circleSessionHome(key: string) {
+  return resolve(CIRCLE_SESSION_ROOT, safeSessionKey(key))
+}
+
+async function readRecentCirclePaymentDebug(params: {
+  serviceKey: string
+  serviceUrl: string
+  payer: string
+  startedAt: number
+}): Promise<CirclePaymentDebug | undefined> {
+  const paymentsPath = resolve(circleSessionHome(params.serviceKey), '.circle-cli', 'payments')
+  let names: string[]
+  try {
+    names = (await readdir(paymentsPath))
+      .filter(name => /^payment-.*\.json$/i.test(name))
+      .sort()
+      .reverse()
+      .slice(0, 12)
+  } catch {
+    return undefined
+  }
+  for (const name of names) {
+    try {
+      const parsed = JSON.parse(await readFile(resolve(paymentsPath, name), 'utf8')) as Record<string, unknown>
+      const timestamp = Date.parse(String(parsed.timestamp ?? ''))
+      if (!Number.isFinite(timestamp) || timestamp < params.startedAt - 5_000) continue
+      const payload = parsed.paymentPayload as Record<string, unknown> | undefined
+      const resource = payload?.resource as Record<string, unknown> | undefined
+      const signedPayload = payload?.payload as Record<string, unknown> | undefined
+      const authorization = signedPayload?.authorization as Record<string, unknown> | undefined
+      const accepted = payload?.accepted as Record<string, unknown> | undefined
+      if (String(resource?.url ?? parsed.url ?? '') !== params.serviceUrl) continue
+      if (String(authorization?.from ?? '').toLowerCase() !== params.payer.toLowerCase()) continue
+      return {
+        ...(typeof authorization?.nonce === 'string' ? { nonce: authorization.nonce } : {}),
+        ...(typeof accepted?.network === 'string' ? { network: accepted.network } : {}),
+        ...(typeof accepted?.amount === 'string' ? { amountAtomic: accepted.amount } : {}),
+        ...(typeof accepted?.scheme === 'string' ? { scheme: accepted.scheme } : {}),
+      }
+    } catch {
+      // Ignore malformed or unrelated CLI diagnostics.
+    }
+  }
+  return undefined
+}
+
 type X402ServiceResponse = {
   service?: string
   payment?: {
@@ -157,6 +204,7 @@ export async function payAgentX402Service(params: {
   }
 
   const serviceKey = `${params.agentSlug}_${record.sessionId}`
+  const paymentStartedAt = Date.now()
   let output = ''
   try {
     output = await runCircle([
@@ -179,6 +227,12 @@ export async function payAgentX402Service(params: {
     }
     const explicitlySubmitted = classifyCirclePaymentFailure(err) === 'submitted'
     const detail = circleErrorDetail(err)
+    const paymentDebug = await readRecentCirclePaymentDebug({
+      serviceKey,
+      serviceUrl: params.serviceUrl,
+      payer: record.walletAddress,
+      startedAt: paymentStartedAt,
+    })
     const proof = buildX402Proof({
       buyerAgent: params.agentSlug,
       sellerAgent: params.sellerAgentSlug,
@@ -208,10 +262,12 @@ export async function payAgentX402Service(params: {
       status?: number
       code?: string
       receiptActivityId?: string
+      reconciliation?: CirclePaymentDebug
     }
     error.status = 409
     error.code = explicitlySubmitted ? 'circle_payment_submitted_response_failed' : 'circle_payment_outcome_unknown'
     error.receiptActivityId = spendActivity?.id
+    error.reconciliation = paymentDebug
     throw error
   }
 
@@ -276,6 +332,26 @@ export async function payAgentX402Service(params: {
     proof,
     raw: output.slice(0, 3000),
   }
+}
+
+export type CircleGatewayX402Transfer = {
+  id: string
+  status: 'received' | 'batched' | 'confirmed' | 'completed' | 'failed'
+  token?: string
+  sendingNetwork?: string
+  recipientNetwork?: string
+  amount: string
+  nonce?: string
+  txHash?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+type CirclePaymentDebug = {
+  nonce?: string
+  network?: string
+  amountAtomic?: string
+  scheme?: string
 }
 
 export async function estimateAgentX402Service(params: {
@@ -726,7 +802,7 @@ async function walletChoicesWithBalances(wallets: string[], key: string, chain: 
 }
 
 async function runCircle(args: string[], key: string, timeoutMs = 60_000, maxBuffer = 128 * 1024) {
-  const sessionHome = resolve(CIRCLE_SESSION_ROOT, safeSessionKey(key))
+  const sessionHome = circleSessionHome(key)
   await mkdir(sessionHome, { recursive: true })
   const { stdout, stderr } = await execFileAsync(CIRCLE_BIN, args, {
     timeout: timeoutMs,
@@ -826,6 +902,75 @@ export async function inspectCircleMarketplaceService(resource: string) {
     throw error
   }
   return parsed
+}
+
+export async function readAgentWalletAddress(agentSlug: string) {
+  const store = await readStore()
+  return resolveAgentRecord(store, agentSlug)?.walletAddress
+}
+
+function circleGatewayTransfer(value: unknown): CircleGatewayX402Transfer | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const item = value as Record<string, unknown>
+  const statuses = new Set(['received', 'batched', 'confirmed', 'completed', 'failed'])
+  const id = typeof item.id === 'string' ? item.id : ''
+  const status = typeof item.status === 'string' ? item.status : ''
+  const amount = typeof item.amount === 'string' ? item.amount : ''
+  if (!id || !statuses.has(status) || !amount) return undefined
+  return {
+    id,
+    status: status as CircleGatewayX402Transfer['status'],
+    amount,
+    ...(typeof item.token === 'string' ? { token: item.token } : {}),
+    ...(typeof item.sendingNetwork === 'string' ? { sendingNetwork: item.sendingNetwork } : {}),
+    ...(typeof item.recipientNetwork === 'string' ? { recipientNetwork: item.recipientNetwork } : {}),
+    ...(typeof item.nonce === 'string' ? { nonce: item.nonce } : {}),
+    ...(typeof item.txHash === 'string' ? { txHash: item.txHash } : {}),
+    ...(typeof item.createdAt === 'string' ? { createdAt: item.createdAt } : {}),
+    ...(typeof item.updatedAt === 'string' ? { updatedAt: item.updatedAt } : {}),
+  }
+}
+
+export async function searchCircleGatewayX402Transfers(params: {
+  from: string
+  nonce?: string
+  startDate?: string
+  endDate?: string
+  pageSize?: number
+}): Promise<CircleGatewayX402Transfer[]> {
+  if (!/^0x[a-fA-F0-9]{40}$/.test(params.from)) return []
+  const url = new URL(`${CIRCLE_GATEWAY_X402_API_BASE}/v1/x402/transfers`)
+  url.searchParams.set('from', params.from)
+  if (params.nonce) url.searchParams.set('nonce', params.nonce)
+  if (params.startDate) url.searchParams.set('startDate', params.startDate)
+  if (params.endDate) url.searchParams.set('endDate', params.endDate)
+  url.searchParams.set('pageSize', String(Math.max(1, Math.min(params.pageSize ?? 100, 100))))
+  const response = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(12_000),
+  })
+  const body = await response.json().catch(() => undefined) as { transfers?: unknown[]; message?: string; error?: string } | undefined
+  if (!response.ok) {
+    const error = new Error(body?.message ?? body?.error ?? 'Circle Gateway transfer history is temporarily unavailable.') as Error & { status?: number }
+    error.status = response.status
+    throw error
+  }
+  const rawTransfers = Array.isArray(body?.transfers) ? body.transfers : []
+  const transfers = await Promise.all(rawTransfers.slice(0, 100).map(async value => {
+    const direct = circleGatewayTransfer(value)
+    if (direct) return direct
+    const id = value && typeof value === 'object' && !Array.isArray(value) && typeof (value as Record<string, unknown>).id === 'string'
+      ? String((value as Record<string, unknown>).id)
+      : ''
+    if (!/^[0-9a-f-]{20,}$/i.test(id)) return undefined
+    const detailResponse = await fetch(`${CIRCLE_GATEWAY_X402_API_BASE}/v1/x402/transfers/${encodeURIComponent(id)}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(12_000),
+    })
+    if (!detailResponse.ok) return undefined
+    return circleGatewayTransfer(await detailResponse.json().catch(() => undefined))
+  }))
+  return transfers.filter((item): item is CircleGatewayX402Transfer => Boolean(item))
 }
 
 export type AgentWalletReadSnapshot = {
