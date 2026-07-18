@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ArrowRight, Check, CheckCircle2, Clock3, Loader2, Search, Store } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
@@ -180,7 +181,9 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
               </div>
               {purchase.message && <p className="mt-1.5 text-[11px] leading-4 text-gray-500 dark:text-gray-300">{purchase.message}</p>}
               {purchase.status === 'completed' && resultPreview(purchase.result) && <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white/70 p-2 text-[10px] leading-4 text-gray-600 dark:bg-black/20 dark:text-gray-300">{resultPreview(purchase.result)}</pre>}
-              {purchase.receiptActivityId && <a href={`/receipt/${encodeURIComponent(purchase.receiptActivityId)}`} className={cn('mt-2 inline-flex items-center gap-1 text-[11px] font-bold', purchaseResolved ? 'text-emerald-700 dark:text-emerald-200' : 'text-amber-700 dark:text-amber-200')}>View activity <ArrowRight className="h-3 w-3" /></a>}
+              {purchase.status === 'completed' && purchase.receiptActivityId
+                ? <Link to={`/receipt/${encodeURIComponent(purchase.receiptActivityId)}`} className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-200">View receipt <ArrowRight className="h-3 w-3" /></Link>
+                : <Link to="/pocket/activity/app-pay" className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-200">View App Pay activity <ArrowRight className="h-3 w-3" /></Link>}
             </div>
           )}
 

@@ -363,6 +363,7 @@ export const POCKET_API = {
   billsPay: '/api/pocket/bills/pay',
   activity: '/api/pocket/activity',
   bridge: '/api/pocket/bridge',
+  solanaRpc: '/api/pocket/solana-rpc',
   x402: '/api/pocket/x402',
   x402Connect: '/api/pocket/x402/connect',
   x402Activate: '/api/pocket/x402/activate',

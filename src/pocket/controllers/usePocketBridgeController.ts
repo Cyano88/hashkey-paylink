@@ -96,9 +96,11 @@ export default function usePocketBridgeController(input: {
         input.wallets[destination] ?? input.ensureWallet(destination),
       ])
       if (!sourceWallet || !destinationWallet) throw new Error('Open both Pocket wallets to bridge USDC.')
+      const accessToken = await input.getAccessToken()
+      if (!accessToken) throw new Error('Sign in again to bridge USDC.')
       setStatus('confirming')
       const txHash = input.source === 'solana'
-        ? await bridgeCircleSolanaWallet({ session: await input.getSolanaSession(sourceWallet.address), destination: destination as 'base' | 'arbitrum', destinationAddress: destinationWallet.address, amount })
+        ? await bridgeCircleSolanaWallet({ session: await input.getSolanaSession(sourceWallet.address), destination: destination as 'base' | 'arbitrum', destinationAddress: destinationWallet.address, amount, accessToken })
         : await bridgeCircleEvmEmailWallet({ session: await input.getEvmSession(input.source, sourceWallet.address), destination, destinationAddress: destinationWallet.address, amount })
       setStatus('successful')
       setNotice(`${formatPocketDisplayAmount(amount)} USDC sent from ${bridgeNetworkLabel(input.source)} · Arriving on ${bridgeNetworkLabel(destination)}`)
@@ -107,8 +109,6 @@ export default function usePocketBridgeController(input: {
       setQuote(null)
       void input.refresh().catch(() => undefined)
       void (async () => {
-        const accessToken = await input.getAccessToken()
-        if (!accessToken) return
         const recorded = await recordPocketBridge({ accessToken, source: input.source, destination, amount, txHash, status: 'submitted' })
           .then(() => true)
           .catch(() => false)

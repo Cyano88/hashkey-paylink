@@ -2,6 +2,7 @@ import { Connection, PublicKey, Transaction, VersionedTransaction } from '@solan
 import { signCircleSolanaTransaction } from '../../lib/circleSolanaEmailWallet'
 import type { PocketSolanaEmailSession } from '../controllers/usePocketWalletController'
 import type { PocketBridgeNetwork } from '../api/pocketBridgeClient'
+import { POCKET_API } from './pocketSchemas'
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = ''
@@ -34,12 +35,16 @@ export async function bridgeCircleSolanaWallet(input: {
   destination: Exclude<PocketBridgeNetwork, 'solana'>
   destinationAddress: string
   amount: string
+  accessToken: string
 }) {
   const [{ BridgeKit }, { createSolanaAdapterFromProvider }] = await Promise.all([
     import('@circle-fin/bridge-kit'),
     import('@circle-fin/adapter-solana'),
   ])
-  const connection = new Connection(import.meta.env.VITE_SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com', 'confirmed')
+  const connection = new Connection(new URL(POCKET_API.solanaRpc, window.location.origin).toString(), {
+    commitment: 'confirmed',
+    httpHeaders: { authorization: `Bearer ${input.accessToken}` },
+  })
   const publicKey = new PublicKey(input.session.wallet.address)
   const signOne = async (transaction: unknown) => {
     const versioned = transaction instanceof VersionedTransaction

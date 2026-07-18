@@ -64,8 +64,8 @@ const handler = createPocketActivityHandler({
     ownerId: 'privy-user-1',
     idempotencyKey: 'pocket:marketplace:activity-0001',
     action: 'marketplace.service.purchase',
-    status: 'failed',
-    metadata: { provider: 'AIsa API', amount: '0.008', network: 'base', resource: 'https://service.example/ticker' },
+    status: 'submitted',
+    metadata: { provider: 'AIsa API', amount: '0.008', network: 'base', resource: 'https://service.example/ticker', paymentState: 'needs_review' },
     createdAt: 1_740_000_000_000,
     updatedAt: 1_740_000_000_000,
   }],
@@ -100,6 +100,7 @@ assert.deepEqual(ownerIds, ['privy-user-1', 'privy-user-1'])
 assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['pocket-action:marketplace-action-1', '0xdeposit', 'paycrest_intent-2', '0xolder'])
 assert.equal(loaded.body.payments[0].source, 'app-pay')
 assert.equal(loaded.body.payments[0].paycrestStatus, 'needs review')
+assert.equal(loaded.body.payments[0].contextLabel, 'Payment outcome needs review before retrying')
 const serialized = JSON.stringify(loaded.body)
 assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)

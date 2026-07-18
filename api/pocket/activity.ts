@@ -40,17 +40,20 @@ function appPayActivityRow(item: CirclePocketActionRecord): PocketActivityRow | 
   if (item.action !== 'marketplace.service.purchase') return undefined
   const paymentSettled = ['confirmed', 'completed'].includes(item.metadata?.paymentState ?? '')
   const paymentAccepted = ['received', 'batched'].includes(item.metadata?.paymentState ?? '')
+  const paymentNeedsReview = item.metadata?.paymentState === 'needs_review'
   const status = item.status === 'completed'
     ? 'completed'
     : paymentSettled
       ? 'paid'
       : paymentAccepted
         ? 'settling'
-        : item.status === 'submitted'
-          ? 'reconciling'
-          : item.status === 'started'
-            ? 'processing'
-            : 'needs review'
+        : paymentNeedsReview
+          ? 'needs review'
+          : item.status === 'submitted'
+            ? 'reconciling'
+            : item.status === 'started'
+              ? 'processing'
+              : 'needs review'
   return {
     eventId: item.id,
     txHash: item.metadata?.paymentTransferId || item.resourceId || `pocket-action:${item.id}`,
