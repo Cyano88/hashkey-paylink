@@ -78,8 +78,8 @@ export default function usePocketBankWithdrawController({
     && status === 'idle'
 
   const pollUntilSettled = useCallback(async (accessToken: string, intentId: string) => {
-    for (let attempt = 0; attempt < 40 && !cancelled.current; attempt += 1) {
-      if (attempt > 0) await wait(3_000)
+    for (let attempt = 0; !cancelled.current; attempt += 1) {
+      if (attempt > 0) await wait(attempt <= 40 ? 3_000 : 12_000)
       const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
       if (!next) continue
       setResult(next)
@@ -89,6 +89,11 @@ export default function usePocketBankWithdrawController({
         setMemoState('')
         idempotencyKey.current = ''
         await onSent()
+        await wait(1_800)
+        if (!cancelled.current) {
+          setStatus('idle')
+          setResult(null)
+        }
         return
       }
       if (next.state === 'refunded') {
@@ -97,11 +102,11 @@ export default function usePocketBankWithdrawController({
         return
       }
     }
-    if (!cancelled.current) setStatus('processing')
   }, [onSent])
 
   const submit = useCallback(async () => {
     if (!canSubmit) return
+    let reconciliation: { accessToken: string; intentId: string } | null = null
     cancelled.current = false
     setError('')
     setResult(null)
@@ -130,6 +135,7 @@ export default function usePocketBankWithdrawController({
           client_origin: window.location.origin,
         },
       })
+      reconciliation = { accessToken, intentId: prepared.intentId }
       setResult(prepared)
       setStatus('authorizing')
       const session = await getEvmSession(selectedWallet.address)
@@ -157,6 +163,7 @@ export default function usePocketBankWithdrawController({
       if (message.includes('submitted and is being reconciled')) {
         setStatus('processing')
         setError('')
+        if (reconciliation) await pollUntilSettled(reconciliation.accessToken, reconciliation.intentId)
         return
       }
       setStatus('idle')

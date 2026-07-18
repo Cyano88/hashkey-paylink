@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { POCKET_ROUTES, resolvePocketRoute } from './lib/pocketRoutes'
 import PocketActivityPage from './pages/PocketActivityPage'
@@ -12,6 +12,7 @@ import PocketMoveUsdcPage from './pages/PocketMoveUsdcPage'
 import PocketX402Page from './pages/PocketX402Page'
 import { CPurseIcon } from './components/CPurseIcon'
 import usePocketIdentity from './hooks/usePocketIdentity'
+import { prefetchPocketWalletSnapshot } from './hooks/usePocketWallets'
 
 const POCKET_BASE_PATH = '/pocket'
 
@@ -26,14 +27,36 @@ export default function CirclePocketApp() {
   const relativePath = pocketRelativePath(location.pathname)
   const landing = relativePath === '/'
   const route = useMemo(() => landing ? null : resolvePocketRoute(relativePath), [landing, relativePath])
-  const { ready } = usePocketIdentity()
+  const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
+  const [appReady, setAppReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!ready) {
+      setAppReady(false)
+      return () => { cancelled = true }
+    }
+
+    setAppReady(false)
+    void (async () => {
+      const fontsReady = document.fonts?.ready ?? Promise.resolve()
+      const pocketDataReady = authenticated && email
+        ? prefetchPocketWalletSnapshot({ email, getAccessToken })
+        : Promise.resolve()
+      await Promise.allSettled([fontsReady, pocketDataReady])
+      await new Promise<void>(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve())))
+      if (!cancelled) setAppReady(true)
+    })()
+
+    return () => { cancelled = true }
+  }, [authenticated, email, getAccessToken, ready])
 
   useEffect(() => {
     if (landing || route) return
     navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.smartWallet}`, { replace: true })
   }, [landing, navigate, route])
 
-  if (!ready) {
+  if (!ready || !appReady) {
     return (
       <div className="flex h-full min-h-[100dvh] w-full items-center justify-center bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white" aria-label="Restoring Pocket session">
         <div className="text-center">

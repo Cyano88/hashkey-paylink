@@ -78,6 +78,12 @@ services:
         sync: false                   # Circle TEST_API key for Arc testnet StreamPay
       - key: CIRCLE_BASE_URL
         value: "https://api.circle.com"
+      - key: PAYCREST_API_BASE
+        value: "https://api.paycrest.io"
+      - key: PAYCREST_API_KEY
+        sync: false                   # Paycrest Sender API key
+      - key: PAYCREST_API_SECRET
+        sync: false                   # verifies /api/paycrest-webhook signatures
       - key: CIRCLE_CLI_ENABLED
         value: "true"                 # required for reader wallet login, x402 balance checks, Gateway activation, and x402 pay
       - key: DATABASE_URL

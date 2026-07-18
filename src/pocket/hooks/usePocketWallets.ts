@@ -12,6 +12,7 @@ type PocketWalletCacheEntry = {
 }
 
 const pocketWalletCache = new Map<string, PocketWalletCacheEntry>()
+const pocketWalletPrefetches = new Map<string, Promise<void>>()
 const POCKET_BALANCE_REFRESH_INTERVAL_MS = 45_000
 const POCKET_BALANCE_FOCUS_THROTTLE_MS = 10_000
 
@@ -24,6 +25,38 @@ type PocketWalletReadState = {
   error: string
   setError: Dispatch<SetStateAction<string>>
   refreshBalances: () => Promise<void>
+}
+
+export async function prefetchPocketWalletSnapshot({
+  email,
+  getAccessToken,
+}: {
+  email: string
+  getAccessToken: PocketAccessTokenReader
+}) {
+  if (!email || pocketWalletCache.has(email)) return
+  const active = pocketWalletPrefetches.get(email)
+  if (active) return active
+
+  const prefetch = (async () => {
+    const token = await getAccessToken()
+    if (!token) throw new Error('Pocket session is not ready.')
+    const [wallets, balanceOutcome] = await Promise.all([
+      readPocketLinkedWallets({ accessToken: token }),
+      readPocketBalances({ accessToken: token })
+        .then(result => ({ result }))
+        .catch(reason => ({ reason })),
+    ])
+    const previous = pocketWalletCache.get(email)
+    pocketWalletCache.set(email, 'result' in balanceOutcome
+      ? { wallets, rows: balanceOutcome.result.rows, total: balanceOutcome.result.total }
+      : { wallets, rows: previous?.rows ?? [], total: previous?.total ?? 0 })
+  })().finally(() => {
+    pocketWalletPrefetches.delete(email)
+  })
+
+  pocketWalletPrefetches.set(email, prefetch)
+  return prefetch
 }
 
 export default function usePocketWallets({
