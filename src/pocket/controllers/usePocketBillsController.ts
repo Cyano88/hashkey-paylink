@@ -15,6 +15,7 @@ import type { CirclePocketWallet } from '../models/pocketWallet'
 type AccessTokenReader = () => Promise<string | null>
 type FlowStatus = 'idle' | 'quoting' | 'ready' | 'paying' | 'confirming' | 'processing' | 'successful' | 'error'
 const ACTIVE_BILL_KEY = 'pocket:bills:active'
+const VTPASS_SANDBOX_SUCCESS_PHONE = '08011111111'
 
 function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
@@ -76,6 +77,7 @@ export default function usePocketBillsController({
         if (cancelled) return
         setEnvironment(result.environment)
         setLimits({ minNgn: result.minNgn, maxNgn: result.maxNgn })
+        if (result.environment === 'sandbox') setPhoneState(VTPASS_SANDBOX_SUCCESS_PHONE)
         setAvailability(result.enabled ? 'enabled' : 'disabled')
       })
       .catch(() => { if (!cancelled) setAvailability('disabled') })
@@ -109,7 +111,7 @@ export default function usePocketBillsController({
     setIntent(next)
     if (next.state === 'delivered') {
       setStatus('successful')
-      setNotice(`${next.serviceName} sent to ${next.phone}`)
+      setNotice(environment === 'sandbox' ? 'VTpass sandbox test completed.' : `${next.serviceName} sent to ${next.phone}`)
       window.localStorage.removeItem(ACTIVE_BILL_KEY)
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       void refreshBalances().catch(() => undefined)
@@ -131,7 +133,7 @@ export default function usePocketBillsController({
       setStatus('processing')
       setNotice('Payment received. Airtime delivery is processing.')
     }
-  }, [refreshBalances])
+  }, [environment, refreshBalances])
 
   const reconcile = useCallback(async (intentId: string, txHash: string, accessToken: string) => {
     let next: PocketBillIntent | null = null
@@ -255,7 +257,10 @@ export default function usePocketBillsController({
   }, [authenticated, intent, reconcile, token])
 
   const processing = ['quoting', 'paying', 'confirming', 'processing'].includes(status)
-  const formReady = /^0\d{10}$/.test(phone) && Number(amountNgn) >= limits.minNgn && Number(amountNgn) <= limits.maxNgn
+  const formReady = /^0\d{10}$/.test(phone)
+    && (environment !== 'sandbox' || phone === VTPASS_SANDBOX_SUCCESS_PHONE)
+    && Number(amountNgn) >= limits.minNgn
+    && Number(amountNgn) <= limits.maxNgn
 
   return {
     availability,

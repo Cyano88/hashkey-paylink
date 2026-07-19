@@ -156,6 +156,10 @@ async function createQuote(idempotencyKey, phone = '08011111111') {
 const quoted = await createQuote('bill:handler:quote:0001')
 assert.equal(quoted.statusCode, 200)
 assert.equal(quoted.body.data.intent.state, 'quoted')
+
+const realSandboxPhone = await createQuote('bill:handler:quote:real-phone', '08106849696')
+assert.equal(realSandboxPhone.statusCode, 400)
+assert.equal(realSandboxPhone.body.error.message, 'VTpass sandbox Airtime uses the test number 08011111111. No real Airtime is delivered.')
 assert.equal(quoted.body.data.intent.amountUsdc, '0.071429')
 assert.equal(quoted.body.data.replayed, false)
 assert.equal(quoted.headers['cache-control'], 'no-store')
@@ -181,7 +185,7 @@ assert.equal(verificationCalls, 1)
 
 // Two confirmations may verify independently, but only one may cross the
 // atomic vending claim and call VTpass.
-const concurrentQuote = await createQuote('bill:handler:quote:0002', '08022222222')
+const concurrentQuote = await createQuote('bill:handler:quote:0002')
 const concurrentId = concurrentQuote.body.data.intent.id
 await request(payHandler, { action: 'prepare', intent_id: concurrentId })
 const concurrentTx = `0x${'b'.repeat(64)}`
@@ -197,7 +201,7 @@ assert.ok(['vending', 'delivered'].includes(concurrentB.body.data.intent.state))
 // An ambiguous provider submission must remain pending and become delivered
 // only after a provider requery returns a final result.
 providerMode = 'unknown'
-const pendingQuote = await createQuote('bill:handler:quote:0003', '08033333333')
+const pendingQuote = await createQuote('bill:handler:quote:0003')
 const pendingId = pendingQuote.body.data.intent.id
 await request(payHandler, { action: 'prepare', intent_id: pendingId })
 const pendingConfirm = await request(payHandler, { action: 'confirm', intent_id: pendingId, tx_hash: `0x${'c'.repeat(64)}` })
@@ -210,7 +214,7 @@ assert.equal(reconciled.body.data.intent.state, 'delivered')
 
 // A final provider failure after a verified payment must route to refund review.
 providerMode = 'denied'
-const failedQuote = await createQuote('bill:handler:quote:0004', '08044444444')
+const failedQuote = await createQuote('bill:handler:quote:0004')
 const failedId = failedQuote.body.data.intent.id
 await request(payHandler, { action: 'prepare', intent_id: failedId })
 const failed = await request(payHandler, { action: 'confirm', intent_id: failedId, tx_hash: `0x${'d'.repeat(64)}` })
@@ -219,7 +223,7 @@ providerMode = 'delivered'
 
 // Chain uncertainty is retryable and never invokes the provider.
 verifyMode = 'pending'
-const unverifiedQuote = await createQuote('bill:handler:quote:0005', '08055555555')
+const unverifiedQuote = await createQuote('bill:handler:quote:0005')
 const unverifiedId = unverifiedQuote.body.data.intent.id
 await request(payHandler, { action: 'prepare', intent_id: unverifiedId })
 const callsBeforeUnverified = purchaseCalls
@@ -236,7 +240,7 @@ assert.equal(forbidden.statusCode, 403)
 assert.equal(forbidden.body.error.code, 'FORBIDDEN')
 
 providerBalance = 5000
-const reserveBlocked = await createQuote('bill:handler:quote:0006', '08066666666')
+const reserveBlocked = await createQuote('bill:handler:quote:0006')
 assert.equal(reserveBlocked.statusCode, 503)
 assert.equal(reserveBlocked.body.error.code, 'PROVIDER_UNAVAILABLE')
 providerBalance = 2_000_000

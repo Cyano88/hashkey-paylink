@@ -93,6 +93,12 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
         </div>
       ) : (
         <>
+          {bills.environment === 'sandbox' && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+              <span className="font-black">Sandbox test</span>
+              <span className="block">VTpass simulates delivery to 08011111111. Your Base USDC payment is real; no Airtime is sent to a phone.</span>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
             <span className="min-w-0">
               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-gray-400">Paying from Base</span>
@@ -118,8 +124,8 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
             </div>
 
             <label className="block">
-              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Phone number</span>
-              <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? 'VTpass test number' : 'Phone number'}</span>
+              <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked || bills.environment === 'sandbox'} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
             </label>
             <label className="block">
               <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Airtime amount</span>
@@ -149,7 +155,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
                   status={slideStatus}
                   disabled={bills.status !== 'ready' || Number(bills.intent.amountUsdc) > baseBalance}
                   onConfirm={() => void bills.pay()}
-                  labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: 'Slide to pay', pending: 'Confirm in Circle', submitted: 'Delivering Airtime', successful: 'Airtime sent' }}
+                  labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? 'Running Airtime test' : 'Delivering Airtime', successful: bills.environment === 'sandbox' ? 'Test complete' : 'Airtime sent' }}
                 />
               </>
             )}

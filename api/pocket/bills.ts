@@ -201,6 +201,12 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       const amountNgn = canonicalNgn(req.body?.amount_ngn)
       const payerWallet = cleanText(req.body?.payer_wallet, 80)
       if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', 'Enter a valid Nigerian phone number.'), 'phone')
+      if (dependencies.config.environment === 'sandbox' && phone !== '08011111111') {
+        return respond.fail(new PocketBillsStoreError(
+          'BILLS_SANDBOX_PHONE_REQUIRED',
+          'VTpass sandbox Airtime uses the test number 08011111111. No real Airtime is delivered.',
+        ), 'phone')
+      }
       if (!amountNgn) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_AMOUNT', 'Enter a valid Naira amount.'), 'amountNgn')
       const linkedPayerWallet = await dependencies.readPayerWallet(identity.userId)
       if (!linkedPayerWallet || linkedPayerWallet.toLowerCase() !== payerWallet.toLowerCase()) {
