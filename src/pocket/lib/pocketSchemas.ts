@@ -163,6 +163,8 @@ export type PocketActivityRow = {
   settlementType?: string
   amountNgn?: string
   paycrestStatus?: string
+  activityLabel?: string
+  providerReference?: string
 }
 
 export type PocketActivityReadData = {
@@ -525,6 +527,8 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.settlementType, 80)
     && isOptionalBoundedString(value.amountNgn, 80)
     && isOptionalBoundedString(value.paycrestStatus, 80)
+    && isOptionalBoundedString(value.activityLabel, 80)
+    && isOptionalBoundedString(value.providerReference, 160)
 }
 
 export function isPocketActivityReadData(value: unknown): value is PocketActivityReadData {

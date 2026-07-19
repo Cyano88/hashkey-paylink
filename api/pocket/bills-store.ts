@@ -42,6 +42,7 @@ export type PocketBillsIntent = {
   txHash: string
   providerCode: string
   providerStatus: string
+  providerEnvironment: 'sandbox' | 'live'
   providerTransactionId: string
   providerDescription: string
   providerAttemptedAt: number
@@ -313,6 +314,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         txHash: '',
         providerCode: '',
         providerStatus: '',
+        providerEnvironment: config.environment,
         providerTransactionId: '',
         providerDescription: '',
         providerAttemptedAt: 0,
@@ -337,7 +339,17 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   async function listOwnedIntents(ownerIdInput: string, limit = 50) {
     const ownerId = cleanText(ownerIdInput, 200)
     if (!ownerId) throw new PocketBillsStoreError('BILLS_AUTH_REQUIRED', 'Pocket authentication is required.', 401)
-    const store = await read()
+    let store = await read()
+    // Persist the pilot environment on legacy records once, so their receipt
+    // wording cannot change when the provider is later switched to live.
+    if (Object.values(store.intents).some(intent => !['sandbox', 'live'].includes(intent.providerEnvironment))) {
+      store = await mutate(current => {
+        for (const intent of Object.values(current.intents)) {
+          if (!['sandbox', 'live'].includes(intent.providerEnvironment)) intent.providerEnvironment = config.environment
+        }
+        return current
+      })
+    }
     const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(Math.floor(limit), 100)) : 50
     return Object.values(store.intents)
       .filter(intent => intent.ownerId === ownerId)

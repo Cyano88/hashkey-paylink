@@ -94,6 +94,7 @@ const handler = createPocketActivityHandler({
       amountNgn: '100', amountNgnMinor: '10000', amountUsdc: '0.071429', fxRateNgnPerUsdc: '1400', network: 'base',
       treasuryAddress: '0x1111111111111111111111111111111111111111', payerWallet: '0x2222222222222222222222222222222222222222',
       quoteExpiresAt: 1_740_000_000_000, txHash: '0xbill', providerCode: '000', providerStatus: 'delivered', providerTransactionId: 'provider-bill-1',
+      providerEnvironment: 'sandbox',
       providerDescription: 'TRANSACTION SUCCESSFUL', providerAttemptedAt: 1_738_000_000_000, requeryAttempts: 1, lastRequeryAt: 1_738_000_000_000,
       refundTxHash: '', failureReason: '', createdAt: 1_737_000_000_000, updatedAt: 1_738_000_000_000,
     }]
@@ -115,7 +116,9 @@ assert.equal(loaded.body.payments[0].paycrestStatus, 'needs review')
 assert.equal(loaded.body.payments[0].contextLabel, 'Payment outcome needs review before retrying')
 assert.equal(loaded.body.payments[1].source, 'bills')
 assert.equal(loaded.body.payments[1].amountNgn, '100')
-assert.equal(loaded.body.payments[1].paycrestStatus, 'delivered')
+assert.equal(loaded.body.payments[1].paycrestStatus, 'test complete')
+assert.equal(loaded.body.payments[1].activityLabel, 'Airtime sandbox test')
+assert.equal(loaded.body.payments[1].providerReference, 'provider-bill-1')
 const serialized = JSON.stringify(loaded.body)
 assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)

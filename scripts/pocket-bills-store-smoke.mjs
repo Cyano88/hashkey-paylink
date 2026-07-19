@@ -76,6 +76,7 @@ assert.equal(first.created, true)
 assert.equal(first.intent.state, 'quoted')
 assert.match(first.intent.requestId, /^202607191300[a-zA-Z0-9]+$/)
 assert.equal(first.intent.network, 'base')
+assert.equal(first.intent.providerEnvironment, 'sandbox')
 
 const replay = await store.createQuote(quoteInput({
   idempotencyKey: 'bill:idempotency:0001',

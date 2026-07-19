@@ -24,8 +24,9 @@ type PocketActivityHandlerDependencies = {
 
 function billActivityRow(intent: PocketBillsIntent): PocketActivityRow | undefined {
   if (!intent.txHash) return undefined
+  const sandboxTest = intent.providerEnvironment === 'sandbox'
   const status = intent.state === 'delivered'
-    ? 'delivered'
+    ? sandboxTest ? 'test complete' : 'delivered'
     : intent.state === 'refunded'
       ? 'refunded'
       : intent.state === 'refund_pending'
@@ -49,6 +50,8 @@ function billActivityRow(intent: PocketBillsIntent): PocketActivityRow | undefin
     settlementType: 'bill_payment',
     amountNgn: intent.amountNgn,
     paycrestStatus: status,
+    activityLabel: sandboxTest ? 'Airtime sandbox test' : 'Bill payment',
+    ...(intent.providerTransactionId ? { providerReference: intent.providerTransactionId } : {}),
   }
 }
 
@@ -128,6 +131,8 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     ...(value.settlementType !== undefined ? { settlementType: value.settlementType } : {}),
     ...(value.amountNgn !== undefined ? { amountNgn: value.amountNgn } : {}),
     ...(value.paycrestStatus !== undefined ? { paycrestStatus: value.paycrestStatus } : {}),
+    ...(value.activityLabel !== undefined ? { activityLabel: value.activityLabel } : {}),
+    ...(value.providerReference !== undefined ? { providerReference: value.providerReference } : {}),
   }
 }
 

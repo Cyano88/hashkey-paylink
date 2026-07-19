@@ -1,4 +1,5 @@
-import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, Cpu, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
+import { useState } from 'react'
+import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Cpu, ExternalLink, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
@@ -59,6 +60,7 @@ function supportedRows(rows: PocketActivityRow[]) {
 }
 
 export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefresh }: PocketActivityPanelProps) {
+  const [expandedReceipt, setExpandedReceipt] = useState('')
   const supported = supportedRows(rows)
   const visibleRows = view === 'all' ? supported : supported.filter(row => activityKind(row) === view)
 
@@ -113,7 +115,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">
-                            {kind === 'wallet' ? (String(row.source).toLowerCase() === 'wallet-deposit' ? 'USDC deposit' : String(row.source).toLowerCase() === 'wallet-bridge' ? 'USDC bridge' : 'USDC sent') : kind === 'bank' ? (String(row.source).toLowerCase().includes('withdraw') ? 'Bank payout' : 'Bank receive') : kind === 'bills' ? 'Bill payment' : kind === 'app-pay' ? 'App Pay service' : 'POS payment'}
+                            {row.activityLabel || (kind === 'wallet' ? (String(row.source).toLowerCase() === 'wallet-deposit' ? 'USDC deposit' : String(row.source).toLowerCase() === 'wallet-bridge' ? 'USDC bridge' : 'USDC sent') : kind === 'bank' ? (String(row.source).toLowerCase().includes('withdraw') ? 'Bank payout' : 'Bank receive') : kind === 'bills' ? 'Bill payment' : kind === 'app-pay' ? 'App Pay service' : 'POS payment')}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-400">
                             {row.contextLabel || row.memo || row.payer || 'Circle Pocket receipt'}
@@ -131,6 +133,38 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                       <p className="mt-3 border-t border-gray-100 pt-2 text-[10px] font-medium text-gray-400 dark:border-white/10">
                         {timestamp.toLocaleDateString()} at {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
+                    )}
+                    {kind === 'bills' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedReceipt(current => current === row.eventId ? '' : row.eventId)}
+                          className="mt-2 flex w-full items-center justify-between rounded-xl bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-500 transition hover:text-gray-900 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:text-white"
+                          aria-expanded={expandedReceipt === row.eventId}
+                        >
+                          <span>Receipt details</span>
+                          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', expandedReceipt === row.eventId && 'rotate-180')} />
+                        </button>
+                        {expandedReceipt === row.eventId && (
+                          <div className="mt-2 space-y-2 rounded-xl border border-gray-100 px-3 py-2.5 text-[10px] dark:border-white/10">
+                            <div className="flex items-start justify-between gap-3">
+                              <span className="font-semibold text-gray-400">Base transaction</span>
+                              {/^(0x)?[a-fA-F0-9]{64}$/.test(row.txHash) ? (
+                                <a href={`https://base.blockscout.com/tx/${row.txHash}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-mono font-semibold text-blue-600 hover:underline dark:text-blue-300">
+                                  {row.txHash.slice(0, 8)}...{row.txHash.slice(-6)}
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              ) : <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.txHash}</span>}
+                            </div>
+                            {row.providerReference && (
+                              <div className="flex items-start justify-between gap-3">
+                                <span className="font-semibold text-gray-400">VTpass reference</span>
+                                <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.providerReference}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )

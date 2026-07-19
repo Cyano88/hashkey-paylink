@@ -12,4 +12,6 @@ export type PocketActivityRow = {
   settlementType?: string
   amountNgn?: string
   paycrestStatus?: string
+  activityLabel?: string
+  providerReference?: string
 }
