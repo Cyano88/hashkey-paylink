@@ -16,7 +16,6 @@ import {
 } from 'wagmi'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import {
-  parseEther,
   parseUnits,
   formatUnits,
   isAddress,
@@ -49,15 +48,19 @@ import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
 import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
-import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment, sendCircleEvmEmailWithdraw } from '../lib/circleEvmEmailWallet'
+import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment } from '../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
 import { getPaylinkParam, hasPaylinkFlag, isTelegramSourceParam } from '../lib/paylinkParams'
+import { hostedCheckoutPresentation, resolveHostedCheckoutKind } from '../lib/hostedCheckout'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import { ReceiptIcon } from '../components/ReceiptIcon'
+import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
+import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
+import PocketSelect from '../pocket/components/PocketSelect'
 import { linkPocketWallet, readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
 import {
   compactReceiptAmount,
@@ -106,6 +109,7 @@ type BankSendQuote = {
   destination_network?: string
 }
 const CHAINS: ChainKey[] = ['base', 'solana', 'arbitrum']
+const HOSTED_CHECKOUT_CHAINS: ChainKey[] = ['base', 'arbitrum', 'arc']
 const POLYMARKET_SIGNUP_URL = 'https://polymarket.com'
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 type SupportedEvmPayChain = 'base' | 'arc' | 'arbitrum'
@@ -338,10 +342,20 @@ function trustedPolydeskOrigin(raw: string) {
 
 export default function PaymentPage() {
   const [searchParams] = useSearchParams()
+  const checkoutPresentation = hostedCheckoutPresentation(resolveHostedCheckoutKind(searchParams))
   const navigate = useNavigate()
   const { onPayChainChange, onPayWalletStateChange, onPaySuccessVisibleChange } = useOutletContext<LayoutOutletContext>()
 
   const evmParam    = getPaylinkParam(searchParams, 'evm', 'e') || searchParams.get('to') || ''
+  const hostedEvmRecipients: Partial<Record<Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>, string>> = {
+    base: (searchParams.get('e_base') ?? '').trim(),
+    arbitrum: (searchParams.get('e_arbitrum') ?? '').trim(),
+    arc: (searchParams.get('e_arc') ?? '').trim(),
+  }
+  const hasScopedEvmRecipients = Object.values(hostedEvmRecipients).some(Boolean)
+  const evmRecipientForChain = (candidate: ChainKey) =>
+    candidate === 'solana' ? '' : hasScopedEvmRecipients ? hostedEvmRecipients[candidate] || '' : evmParam
+  const hasEvmRecipient = (['base', 'arbitrum', 'arc'] as const).some(candidate => isAddress(evmRecipientForChain(candidate)))
   const amt         = getPaylinkParam(searchParams, 'amt', 'a')
   const memo        = getPaylinkParam(searchParams, 'memo', 'm')
   const legacyChain = searchParams.get('chain')  as ChainKey | null
@@ -396,9 +410,9 @@ export default function PaymentPage() {
     ? polymarketStandalonePortfolioTradingUrl
     : polymarketPortfolioTradingUrl
 
-  const resolvedEvm    = evmParam
   const resolvedSolana = getPaylinkParam(searchParams, 'sol', 's').trim()
   const isMultiChain   = hasPaylinkFlag(searchParams, 'multi', 'x')
+  const hasHostedCheckoutParam = /^chk_[a-zA-Z0-9]{8,40}$/.test(getPaylinkParam(searchParams, 'checkout', 'checkout'))
   const isFlex         = hasPaylinkFlag(searchParams, 'flex', 'f')
   const earlyAgentFundingSlug = getPaylinkParam(searchParams, 'agentSlug', 'agent')
   const isWalletManagerFundingLink =
@@ -411,6 +425,10 @@ export default function PaymentPage() {
   const walletManagerFundingChain: ChainKey = netParam === 'base' ? 'base' : 'arc'
 
   function goBackFromCheckout() {
+    if (isHostedService && hostedReturnUrl) {
+      window.location.assign(hostedReturnUrl)
+      return
+    }
     if (isPolymarketBridge) {
       window.location.assign(polymarketBridgeReturnUrl)
       return
@@ -445,7 +463,7 @@ export default function PaymentPage() {
     if (isWalletManagerFundingLink) return walletManagerFundingChain
     if (netParam === 'base' || netParam === 'arc' || netParam === 'solana' || netParam === 'arbitrum') return netParam
     if (legacyChain === 'base' || legacyChain === 'arc' || legacyChain === 'arbitrum' || legacyChain === 'solana') return legacyChain
-    if (resolvedSolana && !resolvedEvm) return 'solana'
+    if (isValidSolanaAddress(resolvedSolana) && !hasEvmRecipient) return 'solana'
     return 'base'
   })
 
@@ -456,10 +474,18 @@ export default function PaymentPage() {
     ? [walletManagerFundingChain]
     : netLocked
     ? [chain]
-    : CHAINS.filter(c =>
-        (c === 'solana' && !!resolvedSolana) ||
-        (c !== 'solana' && !!resolvedEvm),
+    : (hasHostedCheckoutParam ? HOSTED_CHECKOUT_CHAINS : CHAINS).filter(c =>
+        (c === 'solana' && isValidSolanaAddress(resolvedSolana)) ||
+        (c !== 'solana' && isAddress(evmRecipientForChain(c))),
       )
+  const resolvedEvm = evmRecipientForChain(chain)
+  const hostedCheckoutNetworkOptions = [
+    ...availableChains.map(value => ({
+      value,
+      label: value === 'arc' ? 'Arc Test' : CHAIN_META[value].label,
+    })),
+    { value: 'solana', label: 'Solana Soon', disabled: true },
+  ]
 
   // Sync header pill with initial chain on mount
   useEffect(() => { onPayChainChange(chain) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -479,6 +505,7 @@ export default function PaymentPage() {
   const [receiptPollAttempts, setReceiptPollAttempts] = useState(0)
   const [receiptArchiveTimedOut, setReceiptArchiveTimedOut] = useState(false)
   const [manualPayDetected, setManualPayDetected] = useState(false)
+  const [paymentAttemptStarted, setPaymentAttemptStarted] = useState(false)
   const [manualTxHash,      setManualTxHash]      = useState<`0x${string}` | null>(null)
   const [receivedAmount,    setReceivedAmount]    = useState<bigint | null>(null)
   const [showCheckButton,   setShowCheckButton]   = useState(false)
@@ -496,6 +523,19 @@ export default function PaymentPage() {
   const isEventMode      = hasPaylinkFlag(initParams, 'event', 'v')
   const eventId          = initParams.get('id') ?? ''
   const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
+  const hostedCheckoutId = getPaylinkParam(initParams, 'checkout', 'checkout')
+  const isHostedCheckout = /^chk_[a-zA-Z0-9]{8,40}$/.test(hostedCheckoutId)
+  const hostedKind = getPaylinkParam(initParams, 'hostedKind', 'hostedKind')
+  const hostedSettlementMode = getPaylinkParam(initParams, 'settlementMode', 'settlementMode')
+  const isHostedNairaSettlement = isHostedCheckout && hostedSettlementMode === 'ngn'
+  const isHostedService = isHostedCheckout && (getPaylinkParam(initParams, 'src', 'src') === 'service' || hostedKind === 'service')
+  const [hostedIntentStatus, setHostedIntentStatus] = useState<'idle' | 'checking' | 'verified' | 'error'>(() => isHostedCheckout ? 'checking' : 'idle')
+  const [hostedIntentError, setHostedIntentError] = useState('')
+  const [hostedConfirmationStatus, setHostedConfirmationStatus] = useState<'idle' | 'checking' | 'processing' | 'verified' | 'error'>('idle')
+  const [hostedConfirmationError, setHostedConfirmationError] = useState('')
+  const [hostedReturnUrl, setHostedReturnUrl] = useState('')
+  const hostedMerchantName = getPaylinkParam(initParams, 'merchantName', 'merchantName').slice(0, 80)
+  const hostedCheckoutTitle = getPaylinkParam(initParams, 'checkoutTitle', 'checkoutTitle').slice(0, 100)
   const autoAccessRedirect = getPaylinkParam(initParams, 'ad', 'autoRedirect') === '1'
   const isHelperAccess   = getPaylinkParam(initParams, 'src', 'src') === 'telegram-helper' && !!agentUrl
   const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
@@ -548,6 +588,7 @@ export default function PaymentPage() {
   const eventRegistered  = useRef(false)
   const ordinaryReceiptRegistered = useRef(false)
   const accessRedirected = useRef(false)
+  const hostedServiceRedirected = useRef(false)
   const polymarketReturnRedirected = useRef(false)
   const polymarketBridgeWaitStartedAtRef = useRef(0)
   const polymarketFundingMarkRef = useRef('')
@@ -573,6 +614,37 @@ export default function PaymentPage() {
   const [bankSendQuote, setBankSendQuote] = useState<BankSendQuote | null>(null)
   const [bankSendQuoteBusy, setBankSendQuoteBusy] = useState(false)
   const requiresAttendeeName = (isEventMode || isNgPosPayment) && !isPolymarketFunding && !isAgentOrWalletFunding && !isHelperAccess
+
+  useEffect(() => {
+    if (!isHostedCheckout) return
+    let cancelled = false
+    setHostedIntentStatus('checking')
+    setHostedIntentError('')
+    void fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}&purpose=return`, { cache: 'no-store' })
+      .then(async response => {
+        const body = await response.json().catch(() => undefined) as { ok?: boolean; paymentUrl?: string; returnUrl?: string; error?: string } | undefined
+        if (!response.ok || !body?.ok || !body.paymentUrl?.startsWith('/pay?')) {
+          throw new Error(body?.error || 'This hosted checkout could not be verified.')
+        }
+        if (isHostedService && !body.returnUrl) throw new Error('This service checkout has no verified return destination.')
+        const expected = new URL(body.paymentUrl, window.location.origin)
+        const current = new URL(window.location.href)
+        if (expected.pathname !== current.pathname || expected.search !== current.search) {
+          window.location.replace(`${expected.pathname}${expected.search}`)
+          return
+        }
+        if (!cancelled) {
+          setHostedReturnUrl(body.returnUrl || '')
+          setHostedIntentStatus('verified')
+        }
+      })
+      .catch(error => {
+        if (cancelled) return
+        setHostedIntentStatus('error')
+        setHostedIntentError(error instanceof Error ? error.message : 'This hosted checkout could not be verified.')
+      })
+    return () => { cancelled = true }
+  }, [hostedCheckoutId, isHostedCheckout, isHostedService])
 
   useEffect(() => {
     if (isFlex && isBankReceivePayment && isNgPosPaycrestOfframp) setFxInputMode('local')
@@ -640,7 +712,7 @@ export default function PaymentPage() {
       ? (!localAmt || parseFloat(localAmt) <= 0 || !fxRate)
       : (!flexAmt  || parseFloat(flexAmt)  <= 0)
   )
-  const paymentAmountBlocked = flexPayDisabled
+  const paymentAmountBlocked = flexPayDisabled || (isHostedCheckout && hostedIntentStatus !== 'verified')
 
   // ── Direct Send state (shared across Base, Arc, and Arbitrum) ─────────────
   const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && isMainHashPaylinkPayment ? 'direct' : 'wallet')
@@ -703,14 +775,7 @@ export default function PaymentPage() {
   const [circleEvmEmailSession, setCircleEvmEmailSession] = useState<CircleEvmEmailSession | null>(null)
   const [circleEvmPaymentProcessing, setCircleEvmPaymentProcessing] = useState(false)
   const [circleWalletCopied, setCircleWalletCopied] = useState(false)
-  const [circleWalletPanel, setCircleWalletPanel] = useState<'fund' | 'withdraw'>('fund')
   const circleWalletDetailsRef = useRef<HTMLDetailsElement | null>(null)
-  const [circleWithdrawAddress, setCircleWithdrawAddress] = useState('')
-  const [circleWithdrawAmount, setCircleWithdrawAmount] = useState('')
-  const [circleWithdrawPending, setCircleWithdrawPending] = useState(false)
-  const [circleWithdrawError, setCircleWithdrawError] = useState<string | null>(null)
-  const [circleWithdrawNotice, setCircleWithdrawNotice] = useState<string | null>(null)
-  const [circleWithdrawTxHash, setCircleWithdrawTxHash] = useState<`0x${string}` | null>(null)
   const [privyCircleLinkError, setPrivyCircleLinkError] = useState<string | null>(null)
   const [privyCircleLinkLoading, setPrivyCircleLinkLoading] = useState(false)
 
@@ -723,10 +788,6 @@ export default function PaymentPage() {
     setCircleWalletCopied(false)
     setCirclePasskeyError(null)
     setPrivyCircleLinkError(null)
-    setCircleWithdrawError(null)
-    setCircleWithdrawNotice(null)
-    setCircleWithdrawTxHash(null)
-    setCircleWithdrawPending(false)
     setCircleSolanaSession(null)
     setCircleSolanaAddress('')
     setCircleSolanaBalance(null)
@@ -874,14 +935,7 @@ export default function PaymentPage() {
   const [circleSolanaBalanceError, setCircleSolanaBalanceError] = useState(false)
   const [circleSolanaFetching, setCircleSolanaFetching] = useState(false)
   const [circleSolanaCopied,   setCircleSolanaCopied]   = useState(false)
-  const [circleSolanaPanel, setCircleSolanaPanel] = useState<'fund' | 'withdraw'>('fund')
   const circleSolanaDetailsRef = useRef<HTMLDetailsElement | null>(null)
-  const [circleSolanaWithdrawAddress, setCircleSolanaWithdrawAddress] = useState('')
-  const [circleSolanaWithdrawAmount, setCircleSolanaWithdrawAmount] = useState('')
-  const [circleSolanaWithdrawPending, setCircleSolanaWithdrawPending] = useState(false)
-  const [circleSolanaWithdrawError, setCircleSolanaWithdrawError] = useState<string | null>(null)
-  const [circleSolanaWithdrawNotice, setCircleSolanaWithdrawNotice] = useState<string | null>(null)
-  const [circleSolanaWithdrawTxHash, setCircleSolanaWithdrawTxHash] = useState<string | null>(null)
 
   useEffect(() => {
     const connected = !!circleSmartAccount || !!circleEvmEmailSession || !!circleSolanaSession || !!circleSolanaAddress
@@ -901,9 +955,7 @@ export default function PaymentPage() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isEvmChain    = chain !== 'solana'
-  const isHskOnly     = legacyChain === 'hashkey'
   const meta          = CHAIN_META[chain]
-  const finalPayLabel = 'Pay'
   const targetChainId =
     chain === 'base'     ? CHAIN_META.base.chainId     :
     chain === 'arc'      ? CHAIN_META.arc.chainId      :
@@ -1079,8 +1131,7 @@ export default function PaymentPage() {
     circleSolanaBalance < circleRequiredUnits
   const circleSolanaWalletChecking = !!circleSolanaSession && circleRequiredUnits > 0n && circleSolanaBalance === null && !circleSolanaBalanceError
 
-  function openCircleWalletPanel(panel: 'fund' | 'withdraw') {
-    setCircleWalletPanel(panel)
+  function openCircleWalletPanel() {
     window.requestAnimationFrame(() => {
       const details = circleWalletDetailsRef.current
       if (!details) return
@@ -1089,8 +1140,7 @@ export default function PaymentPage() {
     })
   }
 
-  function openCircleSolanaPanel(panel: 'fund' | 'withdraw') {
-    setCircleSolanaPanel(panel)
+  function openCircleSolanaPanel() {
     window.requestAnimationFrame(() => {
       const details = circleSolanaDetailsRef.current
       if (!details) return
@@ -1107,9 +1157,9 @@ export default function PaymentPage() {
     return grossUpEvmPlatformCharges ? totalUnits : (sponsoredRecipientUnits > 0n ? sponsoredRecipientUnits : totalUnits - feeUnits)
   }
 
-  async function beginFundingVerificationWindow() {
+  async function beginPaymentVerificationWindow() {
     paymentVerificationStartBlockRef.current = null
-    if (!isAgentOrWalletFunding || !isSupportedEvmPayChain(chain) || chain === 'hashkey') return
+    if (!isSupportedEvmPayChain(chain)) return
     try {
       const latestBlock = await EVM_CLIENTS[chain].getBlockNumber()
       // The current block existed before this payment attempt. Only a transfer
@@ -1121,7 +1171,8 @@ export default function PaymentPage() {
     }
   }
 
-  const missingSolana  = chain === 'solana'   && !resolvedSolana
+  const validSolanaRecipient = isValidSolanaAddress(resolvedSolana)
+  const missingSolana  = chain === 'solana' && !resolvedSolana
   const effectiveMemo  = requiresAttendeeName ? attendeeName : (isFlex ? (flexMemo || memo) : memo)
 
   const hasPaycrestMerchantRecipient = isNgPosPaycrestOfframp && !!ngPosMerchantId
@@ -1160,11 +1211,14 @@ export default function PaymentPage() {
       : bankSendStatus === 'pending'
       ? 'verifying'
       : bankSendStatus
+  const selectedRecipientValid = chain === 'solana'
+    ? validSolanaRecipient
+    : isAddress(resolvedEvm) || hasPaycrestMerchantRecipient
   const isValidParams =
     hasBankSendRecipient ||
     (
       (isFlex || (!isNaN(parseFloat(amt)) && parseFloat(amt) > 0)) &&
-      (isAddress(resolvedEvm) || !!resolvedSolana || hasPaycrestMerchantRecipient)
+      selectedRecipientValid
     )
 
   useEffect(() => {
@@ -1211,6 +1265,7 @@ export default function PaymentPage() {
   // Whether the secondary direct-pay option should be shown for normal Hash PayLink payments.
   const canDirectSend =
     isMainHashPaylinkPayment &&
+    !isHostedCheckout &&
     (
       ((chain === 'base' || chain === 'arc' || chain === 'arbitrum') && isAddress(resolvedEvm)) ||
       (chain === 'solana' && !!resolvedSolana)
@@ -1355,34 +1410,15 @@ export default function PaymentPage() {
   // ── Step 2: Real-time payment listener ───────────────────────────────────
   useEffect(() => {
     const evmRecipient = isAddress(activeRecipient) ? activeRecipient as `0x${string}` : null
-    if (manualPayDetected || !isSupportedEvmPayChain(chain) || !evmRecipient) return
+    const payerCandidate = circleEvmEmailSession?.wallet.address || circleSmartAccount || address || ''
+    const expectedPayer = isAddress(payerCandidate) ? payerCandidate as `0x${string}` : null
+    if (manualPayDetected || payMode !== 'wallet' || !paymentAttemptStarted || !expectedPayer || !isSupportedEvmPayChain(chain) || !evmRecipient) return
 
     const evmChain = chain
     const client   = EVM_CLIENTS[evmChain]
 
     let unwatchTransfer: (() => void) | undefined
-    let hskTimer:        ReturnType<typeof setInterval> | undefined
-
-    if (chain === 'hashkey') {
-      let initialBalance: bigint | null = null
-      const requestedWei = parseEther(effectiveAmt || '0')
-
-      hskTimer = setInterval(async () => {
-        if (detectedRef.current) { clearInterval(hskTimer); return }
-        try {
-          const bal = await client.getBalance({ address: evmRecipient })
-          if (initialBalance === null) { initialBalance = bal; return }
-          if (bal > initialBalance && bal >= initialBalance + requestedWei * 99n / 100n) {
-            const received = bal - initialBalance
-            setReceivedAmount(received)
-            setManualTxHash(null)
-            setManualPayDetected(true)
-          }
-        } catch { /* rpc hiccup — retry next tick */ }
-      }, 2_000)
-
-    } else {
-      const tokenAddress = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
+    const tokenAddress = CHAIN_META[evmChain].tokenAddress
 
       const isCircleEmailEvmWatch =
         payMode === 'wallet' &&
@@ -1396,18 +1432,18 @@ export default function PaymentPage() {
           ? circleEvmEmailMerchantUnits
           : parseUnits(effectiveAmt || '0', meta.decimals)
 
-      unwatchTransfer = client.watchContractEvent({
+    unwatchTransfer = client.watchContractEvent({
         address:         tokenAddress,
         abi:             ERC20_TRANSFER_ABI,
         eventName:       'Transfer',
-        args:            { to: watchTarget },
+        args:            { from: expectedPayer, to: watchTarget },
         pollingInterval: 2_000,
         onLogs(logs) {
           if (detectedRef.current) return
           const log   = logs[0]
           if (!log)   return
           const value = (log.args as { value?: bigint }).value ?? 0n
-          if (value >= requestedUnits * 99n / 100n) {
+          if (value >= (isHostedCheckout ? requestedUnits : requestedUnits * 99n / 100n)) {
             setReceivedAmount(
               isCircleEmailEvmWatch
                 ? circleRequiredUnits
@@ -1420,13 +1456,10 @@ export default function PaymentPage() {
             setManualPayDetected(true)
           }
         },
-      })
-
-    }
+    })
 
     return () => {
       unwatchTransfer?.()
-      if (hskTimer) clearInterval(hskTimer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -1436,6 +1469,9 @@ export default function PaymentPage() {
     amt,
     effectiveAmt,
     payMode,
+    paymentAttemptStarted,
+    address,
+    circleSmartAccount,
     showCircleEvmEmailPay,
     circleEvmEmailSession?.wallet.address,
     circleEvmEmailMerchantUnits?.toString(),
@@ -1446,6 +1482,11 @@ export default function PaymentPage() {
   useEffect(() => {
     setPayMode(modeParam === 'direct' && isSupportedEvmPayChain(chain) && isMainHashPaylinkPayment ? 'direct' : 'wallet')
   }, [chain, modeParam, isMainHashPaylinkPayment])
+
+  useEffect(() => {
+    setPaymentAttemptStarted(false)
+    paymentVerificationStartBlockRef.current = null
+  }, [chain, payMode])
 
   // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
   useEffect(() => {
@@ -1690,7 +1731,9 @@ export default function PaymentPage() {
 
   async function handleManualCheck() {
     const evmRecipient = isAddress(activeRecipient) ? activeRecipient as `0x${string}` : null
-    if (!evmRecipient) return
+    const payerCandidate = circleEvmEmailSession?.wallet.address || circleSmartAccount || address || ''
+    const expectedPayer = isAddress(payerCandidate) ? payerCandidate as `0x${string}` : null
+    if (!evmRecipient || !expectedPayer || !paymentAttemptStarted) return
     if (isManualChecking) return
     setIsManualChecking(true)
     try {
@@ -1703,7 +1746,7 @@ export default function PaymentPage() {
           const receipt = await client.getTransactionReceipt({ hash: knownTxHash })
           if (receipt.status === 'success') {
             setManualTxHash(knownTxHash)
-            setReceivedAmount(chain === 'hashkey' ? parseEther(effectiveAmt || '0') : expectedEvmRecipientUnits())
+            setReceivedAmount(expectedEvmRecipientUnits())
             setCircleEvmPaymentProcessing(false)
             setCirclePasskeyPending(false)
             setCircleEvmAcceptedPending(false)
@@ -1714,21 +1757,15 @@ export default function PaymentPage() {
           }
         } catch { /* receipt may not be indexed yet; fall through to transfer scan */ }
       }
-      if (chain === 'hashkey') {
-        const bal          = await client.getBalance({ address: evmRecipient })
-        const requestedWei = parseEther(effectiveAmt || '0')
-        if (bal >= requestedWei * 99n / 100n) {
-          setReceivedAmount(bal); setManualTxHash(null); setCircleEvmAcceptedPending(false); setManualPayDetected(true); setShowCheckButton(false)
-        }
-      } else {
-        const tokenAddress = CHAIN_META[evmChain as 'base' | 'arc' | 'arbitrum'].tokenAddress
+      {
+        const tokenAddress = CHAIN_META[evmChain].tokenAddress
         const target = evmRecipient
         const expectedUnits = expectedEvmRecipientUnits()
         const scanUnits = receivedAmount != null && receivedAmount > 0n ? receivedAmount : expectedUnits
         const latestBlock = await client.getBlockNumber()
-        const fundingStartBlock = isAgentOrWalletFunding ? paymentVerificationStartBlockRef.current : null
-        if (isAgentOrWalletFunding && fundingStartBlock == null) return
-        const fromBlock = fundingStartBlock ?? (latestBlock > 20_000n ? latestBlock - 20_000n : 0n)
+        const paymentStartBlock = paymentVerificationStartBlockRef.current
+        if (paymentStartBlock == null) return
+        const fromBlock = paymentStartBlock
         if (fromBlock > latestBlock) return
         type TransferLog = {
           args: { value?: bigint }
@@ -1738,7 +1775,7 @@ export default function PaymentPage() {
           address: `0x${string}`
           abi: typeof ERC20_TRANSFER_ABI
           eventName: 'Transfer'
-          args: { to: `0x${string}` }
+          args: { from: `0x${string}`; to: `0x${string}` }
           fromBlock: bigint
           toBlock: bigint
         }) => Promise<TransferLog[]>
@@ -1746,18 +1783,18 @@ export default function PaymentPage() {
           address: tokenAddress,
           abi: ERC20_TRANSFER_ABI,
           eventName: 'Transfer',
-          args: { to: target },
+          args: { from: expectedPayer, to: target },
           fromBlock,
           toBlock: latestBlock,
         })
         const match = [...logs].reverse().find(log => {
           const value = (log.args as { value?: bigint }).value ?? 0n
-          return value >= scanUnits * 98n / 100n
+          return value >= (isHostedCheckout ? scanUnits : scanUnits * 98n / 100n)
         })
-        if (match && (!isAgentOrWalletFunding || Boolean(match.transactionHash))) {
+        if (match?.transactionHash) {
           const value = (match.args as { value?: bigint }).value ?? scanUnits
           setReceivedAmount(value)
-          setManualTxHash(match.transactionHash ?? null)
+          setManualTxHash(match.transactionHash)
           setCircleEvmPaymentProcessing(false)
           setCirclePasskeyPending(false)
           setCircleEvmAcceptedPending(false)
@@ -1774,7 +1811,10 @@ export default function PaymentPage() {
 
   async function lookupPaymentTxHash() {
     const evmRecipient = isAddress(activeRecipient) ? activeRecipient as `0x${string}` : null
-    if (!evmRecipient || manualTxHash || chain === 'solana' || chain === 'hashkey') return
+    const payerCandidate = circleEvmEmailSession?.wallet.address || circleSmartAccount || address || ''
+    const expectedPayer = isAddress(payerCandidate) ? payerCandidate as `0x${string}` : null
+    const paymentStartBlock = paymentVerificationStartBlockRef.current
+    if (!evmRecipient || !expectedPayer || paymentStartBlock == null || manualTxHash || chain === 'solana') return
     const recoveryLookup = txSyncTick >= 30
     const amountUnits = receivedAmount != null && receivedAmount > 0n
       ? receivedAmount
@@ -1786,11 +1826,12 @@ export default function PaymentPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chain,
+          payer: expectedPayer,
           recipient: evmRecipient,
           amountUnits: amountUnits.toString(),
           recovery: recoveryLookup,
-          strict: isNgPosPayment,
-          fromBlock: isAgentOrWalletFunding ? paymentVerificationStartBlockRef.current?.toString() : undefined,
+          strict: isNgPosPayment || isHostedCheckout,
+          fromBlock: paymentStartBlock.toString(),
         }),
       })
       const data = await res.json() as {
@@ -1825,7 +1866,7 @@ export default function PaymentPage() {
   }, [circleEvmAcceptedPending, manualPayDetected, chain, payMode, isManualChecking])
 
   useEffect(() => {
-    if (!manualPayDetected || manualTxHash || chain === 'solana' || chain === 'hashkey' || !isAddress(activeRecipient)) return
+    if (!manualPayDetected || manualTxHash || chain === 'solana' || !isAddress(activeRecipient)) return
     const first = setTimeout(() => {
       void lookupPaymentTxHash()
     }, 2_000)
@@ -1999,7 +2040,6 @@ export default function PaymentPage() {
 
   // ── Chain switch ──────────────────────────────────────────────────────────
   function handleChainSwitch(c: ChainKey) {
-    if (isHskOnly && c !== 'hashkey') return
     if (c === chain) return
     // Chains that don't support Send via Address — fall back to wallet connect
     // Auto-disconnect: switching TO Solana drops EVM; switching AWAY from Solana drops Solana
@@ -2105,166 +2145,12 @@ export default function PaymentPage() {
     setTimeout(() => setReceiptShared(false), 1800)
   }
 
-  function handleCircleWithdrawMax() {
-    if (typeof circleWalletBalance !== 'bigint') return
-    setCircleWithdrawAmount(formatUnits(circleWalletBalance, meta.decimals))
-  }
-
-  async function handleCircleWithdraw() {
-    setCircleWithdrawError(null)
-    setCircleWithdrawNotice(null)
-    setCircleWithdrawTxHash(null)
-    if (chain !== 'base' && chain !== 'arbitrum') {
-      setCircleWithdrawError('Withdraw is available on Base and Arbitrum.')
-      return
-    }
-    const recipient = circleWithdrawAddress.trim()
-    if (!isAddress(recipient)) {
-      setCircleWithdrawError('Enter a valid wallet or exchange address.')
-      return
-    }
-    let amountUnits: bigint
-    try {
-      amountUnits = parseUnits(circleWithdrawAmount || '0', meta.decimals)
-    } catch {
-      setCircleWithdrawError('Enter a valid amount.')
-      return
-    }
-    if (amountUnits <= 0n) {
-      setCircleWithdrawError('Enter an amount to withdraw.')
-      return
-    }
-    if (typeof circleWalletBalance === 'bigint' && amountUnits > circleWalletBalance) {
-      setCircleWithdrawError('Amount is higher than your wallet balance.')
-      return
-    }
-
-    setCircleWithdrawPending(true)
-    try {
-      let session = circleEvmEmailSession
-      if (!session || session.chain !== chain) {
-        const email = (showPrivyCircleEmailPay ? privyEmail : circleEmail).trim()
-        if (!email) {
-          setCircleWithdrawError(showPrivyCircleEmailPay ? 'Unlock your wallet to withdraw.' : 'Enter your email to unlock this wallet.')
-          return
-        }
-        session = await connectCircleEvmEmailWallet(email, chain)
-        if (isConnected) disconnectEvm()
-        setCircleEvmEmailSession(session)
-        setCircleSmartAccount(session.wallet.address)
-      }
-      const txHash = await sendCircleEvmEmailWithdraw({
-        session,
-        recipient,
-        amount: circleWithdrawAmount,
-      })
-      if (txHash) {
-        setCircleWithdrawTxHash(txHash)
-      } else {
-        setCircleWithdrawNotice('Withdraw accepted. Check the destination wallet in a moment.')
-      }
-      setCircleWithdrawAmount('')
-      setCircleWithdrawAddress('')
-      void refetchCircleWalletBalance()
-    } catch (err) {
-      setCircleWithdrawError(readableErrorMsg(err, 'Withdraw failed.'))
-    } finally {
-      setCircleWithdrawPending(false)
-    }
-  }
-
   async function handleCopyCircleSolanaWallet() {
     const walletAddress = circleSolanaSession?.wallet.address || circleSolanaAddress
     if (!walletAddress) return
     await copyToClipboard(walletAddress)
     setCircleSolanaCopied(true)
     setTimeout(() => setCircleSolanaCopied(false), 2200)
-  }
-
-  function handleCircleSolanaWithdrawMax() {
-    if (circleSolanaBalance === null) return
-    setCircleSolanaWithdrawAmount(formatUnits(circleSolanaBalance, 6))
-  }
-
-  async function handleCircleSolanaWithdraw() {
-    setCircleSolanaWithdrawError(null)
-    setCircleSolanaWithdrawNotice(null)
-    setCircleSolanaWithdrawTxHash(null)
-
-    const recipient = circleSolanaWithdrawAddress.trim()
-    if (!isValidSolanaAddress(recipient)) {
-      setCircleSolanaWithdrawError('Enter a valid wallet or exchange address.')
-      return
-    }
-
-    let amountUnits: bigint
-    try {
-      amountUnits = parseUnits(circleSolanaWithdrawAmount || '0', 6)
-    } catch {
-      setCircleSolanaWithdrawError('Enter a valid amount.')
-      return
-    }
-    if (amountUnits <= 0n) {
-      setCircleSolanaWithdrawError('Enter an amount to withdraw.')
-      return
-    }
-    if (circleSolanaBalance !== null && amountUnits > circleSolanaBalance) {
-      setCircleSolanaWithdrawError('Amount is higher than your wallet balance.')
-      return
-    }
-
-    setCircleSolanaWithdrawPending(true)
-    try {
-      let session = circleSolanaSession
-      if (!session) {
-        const email = (showPrivyCircleSolanaEmailPay ? privyEmail : circleSolanaEmail).trim()
-        if (!email) {
-          setCircleSolanaWithdrawError(showPrivyCircleSolanaEmailPay ? 'Unlock your wallet to withdraw.' : 'Enter your email to unlock this wallet.')
-          return
-        }
-        session = await connectCircleSolanaEmailWallet(email)
-        setCircleSolanaSession(session)
-        setCircleSolanaAddress(session.wallet.address)
-        if (solanaWalletAddr) disconnectSolana()
-      }
-
-      const buildRes = await fetch('/api/solana-build-tx', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: session.wallet.address,
-          to: recipient,
-          amount: circleSolanaWithdrawAmount,
-          mode: 'withdraw',
-        }),
-      })
-      const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
-      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build withdraw transaction')
-
-      const signedB64 = await signCircleSolanaTransaction({
-        session,
-        rawTransaction: buildData.tx,
-        memo: `Hash PayLink withdraw ${formatAmount(circleSolanaWithdrawAmount, 6)} USDC`,
-      })
-
-      const relayRes = await fetch('/api/solana-relay', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tx: signedB64, lastValidBlockHeight: buildData.lastValidBlockHeight }),
-      })
-      const relayData = await readApiJson<{ ok: boolean; txHash?: string; error?: string }>(relayRes, 'Solana relay')
-      if (!relayData.ok || !relayData.txHash) throw new Error(relayData.error ?? 'Relay failed')
-
-      setCircleSolanaWithdrawTxHash(relayData.txHash)
-      setCircleSolanaWithdrawNotice('Withdraw sent. Check the destination wallet in a moment.')
-      setCircleSolanaWithdrawAmount('')
-      setCircleSolanaWithdrawAddress('')
-      void refreshCircleSolanaBalance(session.wallet.address)
-    } catch (err) {
-      setCircleSolanaWithdrawError(readableErrorMsg(err, 'Withdraw failed.'))
-    } finally {
-      setCircleSolanaWithdrawPending(false)
-    }
   }
 
   // ── Fetch Arbitrum USDC gas estimate when Arbitrum chain is active ───────
@@ -2352,10 +2238,11 @@ export default function PaymentPage() {
 
   async function handlePay() {
     if (!activeRecipient) return
+    setPaymentAttemptStarted(true)
+    await beginPaymentVerificationWindow()
     if (chain === 'arbitrum') await handleArbitrumPay()
     else if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
-    else if (chain === 'solana') await handleSolanaPay()
-    else handleHashKeyPay()
+    else await handleSolanaPay()
   }
 
   async function refreshCircleSolanaBalance(walletAddress = circleSolanaSession?.wallet.address || circleSolanaAddress) {
@@ -2406,6 +2293,7 @@ export default function PaymentPage() {
       return
     }
 
+    setPaymentAttemptStarted(true)
     setCircleSolanaPending(true)
     setCircleSolanaError(null)
     let wasConnecting = false
@@ -2826,6 +2714,7 @@ export default function PaymentPage() {
       return
     }
 
+    setPaymentAttemptStarted(true)
     setCirclePasskeyPending(true)
     setCirclePasskeyError(null)
     setCirclePaymasterTxHash(null)
@@ -2884,7 +2773,7 @@ export default function PaymentPage() {
 
         setCircleEvmPaymentProcessing(true)
         setCircleEvmAcceptedPending(false)
-        await beginFundingVerificationWindow()
+        await beginPaymentVerificationWindow()
         const txHash = await sendCircleEvmEmailPayment({
           session,
           recipient: paymentRecipient as `0x${string}`,
@@ -2914,7 +2803,7 @@ export default function PaymentPage() {
         return
       }
 
-      await beginFundingVerificationWindow()
+      await beginPaymentVerificationWindow()
       const result = await sendCirclePasskeyPayment({
         chain,
         email,
@@ -3220,12 +3109,6 @@ export default function PaymentPage() {
     }
   }
 
-  function handleHashKeyPay() {
-    void chainId
-    setBasePaymasterError('HashKey payments are no longer supported. Use Base, Arc, Arbitrum, or Solana.')
-  }
-
-
   // ── Unified aliases ───────────────────────────────────────────────────────
   // directStatus === 'success' is included so EVM Send-via-Address relay
   // immediately transitions to the full-screen success card (same as Solana).
@@ -3250,6 +3133,38 @@ export default function PaymentPage() {
   const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (arbitrumRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isArbitrumRelayConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
   const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!arbitrumRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
+  const checkoutSlideStatus: SlideActionStatus = isConfirmed
+    ? 'successful'
+    : isSendError
+      ? 'error'
+    : isConfirming || Boolean(txHash) || circleEvmAcceptedPending
+      ? 'submitted'
+      : isWalletPending
+        ? 'pending'
+        : 'idle'
+  const checkoutSlideLabels = {
+    idle: checkoutPresentation.action,
+    disabled: paymentAmountBlocked ? 'Enter payment amount' : 'Complete payment details',
+    pending: checkoutPresentation.pending,
+    submitted: checkoutPresentation.submitted,
+    successful: checkoutPresentation.successful,
+    error: 'Payment failed',
+  }
+  function resetCheckoutError() {
+    setPaymentAttemptStarted(false)
+    setShowCheckButton(false)
+    if (chain === 'solana') {
+      setSolanaError(null)
+      setIsSolanaPending(false)
+      setIsSolanaConfirming(false)
+      return
+    }
+    resetEvmSend()
+    resetPermitSign()
+    setArbitrumRelayError(null)
+    setBasePaymasterError(null)
+    setCirclePaymasterError(null)
+  }
   // The Circle challenge is still interactive while the wallet SDK call is in
   // progress. Keep the checkout intact until that challenge has been accepted;
   // only then replace the amount panel with on-chain confirmation progress.
@@ -3322,7 +3237,7 @@ export default function PaymentPage() {
     }
     const txHash = txH ?? `manual_${Date.now()}`
     const actualAmt = receivedAmount != null
-      ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+      ? formatUnits(receivedAmount, meta.decimals)
       : effectiveAmt
     const payload = {
       eventId,
@@ -3334,7 +3249,6 @@ export default function PaymentPage() {
       agentSlug: agentFundingSlug || undefined,
       contextLabel: memo || eventId,
     }
-    console.log('[EventReg] posting:', payload)
     setEventRegStatus('pending')
     try {
       const res  = await fetch('/api/event-register', {
@@ -3343,7 +3257,6 @@ export default function PaymentPage() {
         body:    JSON.stringify(payload),
       })
       const data = await res.json() as { ok: boolean; error?: string; receiptId?: string }
-      console.log('[EventReg] response:', data)
       if (data.ok && data.receiptId) setPaymentReceiptId(data.receiptId)
       setEventRegStatus(data.ok ? 'ok' : 'error')
     } catch (err) {
@@ -3366,7 +3279,7 @@ export default function PaymentPage() {
     try {
       const units = expectedEvmRecipientUnits()
       if (units <= 0n) return effectiveAmt
-      return (Number(units) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+      return formatUnits(units, meta.decimals)
     } catch {
       return effectiveAmt
     }
@@ -3394,7 +3307,7 @@ export default function PaymentPage() {
     if (!txH) return
     const txHash = txH
     const actualAmt = receivedAmount != null
-      ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+      ? formatUnits(receivedAmount, meta.decimals)
       : payableAmt
     const expectedSettlementAmt = expectedNgPosSettlementAmount()
     if (!amountCoversRequest(actualAmt, expectedSettlementAmt)) {
@@ -3437,6 +3350,11 @@ export default function PaymentPage() {
           setPaycrestStatusText('Payment detected. Paycrest is confirming the Naira payout.')
         }
       }
+      if (isHostedCheckout) {
+        ngPosRegistered.current = true
+        ngPosRegisteredTx.current = txHash
+        return
+      }
       const res = await fetch('/api/event-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3458,31 +3376,52 @@ export default function PaymentPage() {
     const payer = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const actualAmt = receivedAmount != null
-      ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+      ? formatUnits(receivedAmount, meta.decimals)
       : effectiveAmt
-    try {
-      const res = await fetch('/api/event-register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventId: `paylink-${chain}-${txHash}`,
-          txHash,
-          chain,
-          payer: payer || activeRecipient || 'Hash PayLink payer',
-          memo: memo || 'Hash PayLink payment',
-          amount: actualAmt,
-          requestedAmount: effectiveAmt,
-          source: 'paylink',
-          merchantId: activeRecipient,
-          contextLabel: memo || activeRecipient,
-          settlementType: 'payment',
-        }),
-      })
-      const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptId?: string } | undefined
-      if (data?.ok && data.receiptId) setPaymentReceiptId(data.receiptId)
-    } catch {
-      // Receipt registration is non-blocking; the payment success state is already confirmed.
+    const hosted = isHostedCheckout
+    if (hosted) {
+      setHostedConfirmationStatus('checking')
+      setHostedConfirmationError('')
     }
+    const payload = {
+      eventId: hosted ? `hosted-${hostedCheckoutId}` : `paylink-${chain}-${txHash}`,
+      txHash,
+      chain,
+      payer: payer || activeRecipient || 'Hash PayLink payer',
+      memo: hosted ? (hostedCheckoutTitle || memo || 'Hosted checkout') : (memo || 'Hash PayLink payment'),
+      amount: actualAmt,
+      requestedAmount: effectiveAmt,
+      source: hosted ? 'hosted-checkout' : 'paylink',
+      merchantId: hosted ? hostedCheckoutId : activeRecipient,
+      contextLabel: hosted ? (hostedMerchantName || 'Hosted checkout') : (memo || activeRecipient),
+      settlementType: hosted ? 'hosted_payment' : 'payment',
+    }
+    let lastError = ''
+    const attempts = hosted ? 4 : 1
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const res = await fetch('/api/event-register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        const data = await res.json().catch(() => undefined) as { ok?: boolean; receiptId?: string; error?: string } | undefined
+        if (!res.ok || !data?.ok) throw new Error(data?.error || 'Checkout verification is still pending.')
+        if (data.receiptId) setPaymentReceiptId(data.receiptId)
+        if (hosted) setHostedConfirmationStatus(isHostedNairaSettlement ? 'processing' : 'verified')
+        return
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : 'Checkout verification is still pending.'
+        if (attempt + 1 < attempts) {
+          await new Promise(resolve => window.setTimeout(resolve, 1_500 * (attempt + 1)))
+        }
+      }
+    }
+    if (hosted) {
+      setHostedConfirmationStatus('error')
+      setHostedConfirmationError(lastError || 'Checkout verification is still pending.')
+    }
+    // Ordinary pay-link receipt registration stays non-blocking after on-chain confirmation.
   }
 
   async function registerPolymarketFundingReceipt() {
@@ -3490,7 +3429,7 @@ export default function PaymentPage() {
     const payer = chain === 'solana' ? (circleSolanaSession?.wallet.address ?? solanaWalletAddr ?? solanaVaultAddr ?? '')
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const actualAmt = receivedAmount != null
-      ? (Number(receivedAmount) / Math.pow(10, meta.decimals)).toFixed(meta.decimals <= 6 ? 6 : 8)
+      ? formatUnits(receivedAmount, meta.decimals)
       : effectiveAmt
     try {
       const res = await fetch('/api/event-register', {
@@ -3542,7 +3481,6 @@ export default function PaymentPage() {
   useEffect(() => {
     if (!isConfirmed || !isEventMode || !eventId || eventRegistered.current) return
     const name = isAgentOrWalletFunding ? (memo || (isWalletManagerFunding ? 'x402 wallet funding' : 'Agent wallet funding')) : attendeeName.trim()
-    console.log('[EventReg] triggered — name:', name, 'eventId:', eventId)
     if (!name) return
     eventRegistered.current = true
     void doRegister(name)
@@ -3558,6 +3496,39 @@ export default function PaymentPage() {
     void doRegisterNgPos()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirmed, attendeeName, manualPayDetected, manualTxHash, chain, circlePaymasterTxHash, basePaymasterTxHash, evmTxHash, directTxHash])
+
+  useEffect(() => {
+    if (!isConfirmed || !txHash || !isHostedCheckout || !isNgPosPayment || ordinaryReceiptRegistered.current) return
+    ordinaryReceiptRegistered.current = true
+    void registerOrdinaryReceipt()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfirmed, txHash, isHostedCheckout, isNgPosPayment])
+
+  useEffect(() => {
+    if (!isHostedNairaSettlement || hostedConfirmationStatus !== 'processing') return
+    let cancelled = false
+    let timer: number | undefined
+    async function pollSettlement() {
+      try {
+        const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}`, { cache: 'no-store' })
+        const data = await response.json().catch(() => undefined) as { checkout?: { status?: string } } | undefined
+        if (!cancelled && response.ok) {
+          if (data?.checkout?.status === 'paid') {
+            setHostedConfirmationStatus('verified')
+            return
+          }
+          if (data?.checkout?.status === 'failed') {
+            setHostedConfirmationError('Bank settlement was not completed. Do not pay again; check the refund wallet or contact support.')
+            setHostedConfirmationStatus('error')
+            return
+          }
+        }
+      } catch { /* Paycrest webhook or a later poll can still complete settlement. */ }
+      if (!cancelled) timer = window.setTimeout(pollSettlement, 3_000)
+    }
+    void pollSettlement()
+    return () => { cancelled = true; if (timer) window.clearTimeout(timer) }
+  }, [hostedCheckoutId, hostedConfirmationStatus, isHostedNairaSettlement])
 
   // Fallback: also register when Send-via-Address relay succeeds (directStatus='success')
   // in case the Transfer event watcher hasn't set manualPayDetected yet.
@@ -3666,6 +3637,13 @@ export default function PaymentPage() {
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
   useEffect(() => {
+    if (!isConfirmed || !isHostedService || !hostedReturnUrl || hostedConfirmationStatus !== 'verified' || hostedServiceRedirected.current) return
+    hostedServiceRedirected.current = true
+    const timer = window.setTimeout(() => window.location.assign(hostedReturnUrl), 6_000)
+    return () => window.clearTimeout(timer)
+  }, [hostedConfirmationStatus, hostedReturnUrl, isConfirmed, isHostedService])
+
+  useEffect(() => {
     const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
     if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge || !polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
     if (polymarketBridgeStatus !== 'complete') return
@@ -3747,9 +3725,7 @@ export default function PaymentPage() {
       ? (comparisonAmount - (recipientAmt ?? 0)).toFixed(meta.decimals <= 6 ? 4 : 6)
       : null
 
-    const primaryExplorerUrl = chain === 'hashkey'
-      ? (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
-      : (txHash ? `${meta.explorerUrl}/tx/${txHash}` : null)
+    const primaryExplorerUrl = txHash ? `${meta.explorerUrl}/tx/${txHash}` : null
     const ogExplorerUrl = paymentReceipt?.proof?.ogExplorer || (paymentReceipt?.proof?.ogTxHash ? `https://chainscan.0g.ai/tx/${paymentReceipt.proof.ogTxHash}` : '')
     const ogProofValue = paymentReceipt?.proof?.ogTxHash || paymentReceipt?.proof?.ogRootHash || ''
     const receiptReady = Boolean(paymentReceipt)
@@ -3771,32 +3747,30 @@ export default function PaymentPage() {
       <div className="mx-auto max-w-md animate-scale-in">
         <div
           className={cn(
-            'overflow-hidden rounded-2xl border bg-white shadow-card',
-            isUnder ? 'border-red-200' : 'border-emerald-100',
+            'overflow-hidden rounded-[1.75rem] border bg-white shadow-[0_24px_70px_rgba(15,23,42,0.10)] dark:bg-[#111216]',
+            isUnder ? 'border-red-200 dark:border-red-400/25' : 'border-gray-200 dark:border-white/10',
           )}
-          style={{ boxShadow: isUnder ? '0 4px 32px -4px rgba(239,68,68,0.15)' : `0 4px 32px -4px rgba(16,185,129,0.18), ${meta.glowStyle}` }}
         >
           <div className={cn(
-            'bg-gradient-to-br p-8 text-center',
-            isUnder ? 'from-red-50 to-orange-50' : 'from-emerald-50 to-green-50',
+            'p-8 text-center',
+            isUnder ? 'bg-red-50 dark:bg-red-400/10' : 'bg-gray-50/80 dark:bg-white/[0.025]',
           )}>
-            <div className={cn(
-              'mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm animate-bounce-in',
-            )}>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center animate-bounce-in">
               {isUnder
-                ? <AlertCircle  className="h-8 w-8 text-red-500" />
+                ? <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-red-500 shadow-sm ring-1 ring-red-100 dark:bg-white/10 dark:ring-red-400/20"><AlertCircle className="h-8 w-8" /></span>
                 : polymarketBridgePending
-                ? <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
-                : <CheckCircle2  className="h-8 w-8 text-emerald-500" />
+                ? <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-gray-100 dark:bg-white/10 dark:ring-white/10"><Loader2 className="h-8 w-8 animate-spin text-gray-700 dark:text-white" /></span>
+                : <PocketStatusCheck className="h-16 w-16" />
               }
             </div>
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
               {isUnder ? 'Underpayment Detected'
                : polymarketBridgePending ? 'Confirming funding'
-               : isPolymarketFunding ? 'Funded'
-               : 'Payment Sent!'}
+               : isHostedNairaSettlement && hostedConfirmationStatus === 'processing' ? 'Sending Naira'
+               : isHostedCheckout && hostedConfirmationStatus !== 'verified' ? 'Payment received'
+               : checkoutPresentation.successful}
             </h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
               {recipientAmt != null ? (
                 <>
                   <span className={cn('font-semibold', isUnder ? 'text-amber-700' : 'text-gray-900')}>
@@ -4008,7 +3982,49 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {isAgentOrWalletFunding ? (
+            {isHostedCheckout ? (
+              <div className="space-y-2">
+                {hostedConfirmationStatus === 'verified' ? (
+                  <p className="text-center text-[11px] font-medium text-gray-400">
+                    {isHostedService
+                      ? `Checkout verified. Returning to ${hostedMerchantName || 'the service'} in 6 seconds.`
+                      : 'Checkout verified and receipt recorded.'}
+                  </p>
+                ) : hostedConfirmationStatus === 'processing' ? (
+                  <p className="flex items-center justify-center gap-2 text-center text-[11px] font-medium text-gray-500 dark:text-gray-300">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    USDC confirmed. Bank delivery is processing.
+                  </p>
+                ) : hostedConfirmationStatus === 'error' ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center dark:border-amber-300/20 dark:bg-amber-300/10">
+                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">Payment is on-chain; checkout verification is pending. Do not pay again.</p>
+                    <p className="mt-1 text-[11px] text-amber-700/80 dark:text-amber-200/70">{hostedConfirmationError}</p>
+                  </div>
+                ) : (
+                  <p className="flex items-center justify-center gap-2 text-center text-[11px] font-medium text-gray-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Verifying checkout securely…
+                  </p>
+                )}
+                {isHostedService && hostedConfirmationStatus === 'verified' && hostedReturnUrl && (
+                  <a
+                    href={hostedReturnUrl}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
+                  >
+                    Return to service now
+                  </a>
+                )}
+                {hostedConfirmationStatus === 'error' && (
+                  <button
+                    type="button"
+                    onClick={() => void registerOrdinaryReceipt()}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+                  >
+                    Retry verification
+                  </button>
+                )}
+              </div>
+            ) : isAgentOrWalletFunding ? (
               <div className="space-y-2">
                 <p className="flex items-center justify-center gap-1 text-center text-[11px] font-medium text-gray-400">
                   Redirecting in a few seconds
@@ -4071,7 +4087,7 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
-      {isNgPosSource || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess ? (
+      {isNgPosSource || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess || isHostedService ? (
         <button
           type="button"
           onClick={goBackFromCheckout}
@@ -4088,11 +4104,27 @@ export default function PaymentPage() {
       )}
 
       <div
-        className="overflow-hidden rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"
+        className="overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"
         style={{ boxShadow: `0 18px 60px -32px rgba(15,23,42,0.42), ${meta.glowStyle}`, borderColor: meta.accentColor + '24' }}
       >
-        {/* ── Chain toggle ─────────────────────────────────────────────── */}
-        {!isBankSendPayment && <div className="flex justify-center px-4 pb-0 pt-4">
+        {/* ── Payment network ──────────────────────────────────────────── */}
+        {!isBankSendPayment && isHostedCheckout && (
+          <div className="px-4 pb-0 pt-4">
+            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+              Payment network
+            </p>
+            <PocketSelect
+              value={chain}
+              options={hostedCheckoutNetworkOptions}
+              onChange={value => handleChainSwitch(value as ChainKey)}
+              disabled={netLocked}
+              ariaLabel="Payment network"
+              buttonClassName="min-h-11 rounded-2xl px-3.5 shadow-none"
+            />
+          </div>
+        )}
+
+        {!isBankSendPayment && !isHostedCheckout && <div className="flex justify-center px-4 pb-0 pt-4">
           <div className={cn(
             'flex items-center justify-center overflow-x-auto',
             availableChains.length === 1
@@ -4102,11 +4134,9 @@ export default function PaymentPage() {
             {availableChains.map((c) => {
               const m          = CHAIN_META[c]
               const isActive   = chain === c
-              const hskLocked  = isHskOnly && c !== 'hashkey'
-              const unavailable = isMultiChain
-                ? (c === 'solana' ? !resolvedSolana : !resolvedEvm)
-                : hskLocked ||
-                  (c === 'solana' ? !resolvedSolana : !resolvedEvm)
+              const unavailable = c === 'solana'
+                ? !isValidSolanaAddress(resolvedSolana)
+                : !isAddress(evmRecipientForChain(c))
               return (
                 <div key={c} className="relative">
                   <button
@@ -4123,6 +4153,7 @@ export default function PaymentPage() {
                       isActive ? 'bg-white/80' : unavailable ? 'bg-gray-200' : m.dotColor,
                     )} />
                     {m.label}
+                    {c === 'arc' && <span className="text-[8px] font-bold uppercase opacity-70">Test</span>}
                   </button>
                 </div>
               )
@@ -4259,6 +4290,13 @@ export default function PaymentPage() {
                 </button>
               ) : null}
             </div>
+          ) : isHostedService ? (
+            <div className="mb-2 flex items-center justify-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
+                <img src="/hash-logo-transparent.png" alt="" className="h-4 w-4 object-contain invert dark:invert-0" />
+              </span>
+              <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">{hostedMerchantName || 'Verified service'}</p>
+            </div>
           ) : chain === 'arc' ? (
             <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
               <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">Testnet</span>
@@ -4325,7 +4363,9 @@ export default function PaymentPage() {
               )}
               {memo && !isAgentOrWalletFunding && (
                 <p className="mt-1 text-sm font-medium text-gray-500 dark:text-gray-300">
-                  {isHelperAccess ? (
+                  {isHostedService ? (
+                    hostedCheckoutTitle || memo
+                  ) : isHelperAccess ? (
                     'Hash PayLink Agent Helper'
                   ) : isPolymarketFunding ? (
                     polymarketFundingLabel
@@ -4422,7 +4462,16 @@ export default function PaymentPage() {
 
         <div className="space-y-4 p-5">
           {/* Payment details */}
-          <div className="space-y-1.5 text-center">
+          {isHostedCheckout ? (
+            (feeAmount > 0 && effectiveAmt) || showArbitrumRelayCost ? (
+              <div className="space-y-1 text-center text-[11px] font-medium text-slate-400">
+                {feeAmount > 0 && effectiveAmt && <p>Fee {formatAmount(feeAmount.toString(), 6)} {meta.asset}</p>}
+                {showArbitrumRelayCost && arbitrumGasEstimate > 0n && (
+                  <p>Network fee ~{formatAmount(formatUnits(arbitrumGasEstimate, 6), 6)} USDC</p>
+                )}
+              </div>
+            ) : null
+          ) : <div className="space-y-1.5 text-center">
             <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-100">
               <span>
                 {isBankSendPayment
@@ -4474,7 +4523,7 @@ export default function PaymentPage() {
                 </span>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* ── Attendee name (event mode) ───────────────────────────────── */}
           {isNgPosPaycrestOfframp && (
@@ -4530,26 +4579,24 @@ export default function PaymentPage() {
               {!paycrestOrder && (
                 <div className="space-y-2">
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr]">
-                    <label className="space-y-1.5">
+                    <div className="space-y-1.5">
                       <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Refund bank</span>
-                      <select
+                      <PocketSelect
                         value={bankSendBankCode}
-                        onChange={(event) => {
-                          const code = event.target.value
+                        options={bankSendInstitutions.map(institution => ({ value: institution.code, label: institution.name }))}
+                        onChange={(code) => {
                           const selected = bankSendInstitutions.find((institution) => institution.code === code)
                           setBankSendBankCode(code)
                           setBankSendBankName(selected?.name || '')
                           setBankSendBankVerified(false)
                           setBankSendAccountName('')
                         }}
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
-                      >
-                        <option value="">{bankSendBanksBusy ? 'Loading banks...' : 'Select bank'}</option>
-                        {bankSendInstitutions.map((institution) => (
-                          <option key={institution.code} value={institution.code}>{institution.name}</option>
-                        ))}
-                      </select>
-                    </label>
+                        disabled={bankSendBanksBusy}
+                        placeholder={bankSendBanksBusy ? 'Loading banks...' : 'Select bank'}
+                        ariaLabel="Select refund bank"
+                        buttonClassName="min-h-[42px] bg-gray-50/60 shadow-none dark:bg-white/[0.04]"
+                      />
+                    </div>
                     <label className="space-y-1.5">
                       <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Account number</span>
                       <input
@@ -4583,7 +4630,7 @@ export default function PaymentPage() {
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:disabled:bg-white/10 dark:disabled:text-gray-400"
                   >
                     {paycrestPreparing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-                    Prepare bank transfer
+                    {paycrestPreparing ? 'Preparing transfer details' : 'Get transfer details'}
                   </button>
                 </div>
               )}
@@ -5001,6 +5048,23 @@ export default function PaymentPage() {
             )
           })()}
 
+          {isHostedCheckout && hostedIntentStatus === 'checking' && (
+            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50/70 px-3 py-2.5 text-xs font-medium text-gray-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Verifying hosted checkout
+            </div>
+          )}
+
+          {isHostedCheckout && hostedIntentStatus === 'error' && (
+            <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-500/30 dark:bg-red-500/10">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-red-500" />
+              <div>
+                <p className="text-xs font-semibold text-red-800 dark:text-red-200">Checkout verification failed</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-red-600 dark:text-red-300">{hostedIntentError}</p>
+              </div>
+            </div>
+          )}
+
           {/* Send error */}
           {payMode === 'wallet' && isSendError && (
             <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4">
@@ -5010,7 +5074,7 @@ export default function PaymentPage() {
                 <p className="mt-0.5 text-xs text-red-600">
                   {friendlyErrorMsg(sendErrorMsg ?? 'An unknown error occurred')}
                 </p>
-                <button onClick={() => { resetEvmSend(); setBasePaymasterError(null); setCirclePaymasterError(null) }}
+                <button onClick={resetCheckoutError}
                   className="mt-2 text-xs font-bold text-red-700 hover:text-red-900">Try again</button>
               </div>
             </div>
@@ -5030,47 +5094,50 @@ export default function PaymentPage() {
                   />
                 </div>
               )}
-              <button
-                onClick={() => {
-                  if (circleSmartAccount && circleEvmWalletChecking) {
-                    void refetchCircleWalletBalance()
-                    return
-                  }
-                  if (circleSmartAccount && circleEvmWalletUnlocked && circleWalletNeedsFunds) {
-                    openCircleWalletPanel('fund')
-                    if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
-                    return
-                  }
-                  handleCirclePasskeyPay()
-                }}
-                disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
-                className={cn(
-                  'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
-                  circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
-                    ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                    : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
-                )}
-              >
-                {circleEvmPaymentProcessing || circleEvmAcceptedPending
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Payment processing</>
-                  : paycrestPreparing
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Preparing payout</>
-                  : circlePasskeyPending
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleEvmWalletUnlocked ? 'Confirming payment' : 'Opening Smart wallet'}</>
-                  : privyCircleLinkLoading
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
-                  : circleSmartAccount
-                    ? isNgPosPaycrestOfframp && !paycrestOrder
-                      ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Prepare naira payout</span></>
-                      : circleEvmWalletChecking
-                      ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
-                      : circleEvmWalletUnlocked && circleWalletNeedsFunds
-                      ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
-                      : circleEvmWalletUnlocked
-                      ? <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
-                      : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>
-                    : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
-              </button>
+              {circleSmartAccount && circleEvmWalletUnlocked && !circleWalletNeedsFunds && (!isNgPosPaycrestOfframp || Boolean(paycrestOrder)) ? (
+                <SlideAction
+                  status={checkoutSlideStatus}
+                  disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                  onConfirm={handleCirclePasskeyPay}
+                  labels={checkoutSlideLabels}
+                />
+              ) : (
+                <button
+                  onClick={() => {
+                    if (circleSmartAccount && circleEvmWalletChecking) {
+                      void refetchCircleWalletBalance()
+                      return
+                    }
+                    if (circleSmartAccount && circleEvmWalletUnlocked && circleWalletNeedsFunds) {
+                      openCircleWalletPanel()
+                      if (isSmartWalletBalanceError(circlePasskeyError)) setCirclePasskeyError(null)
+                      return
+                    }
+                    handleCirclePasskeyPay()
+                  }}
+                  disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                  className={cn(
+                    'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
+                    circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
+                      ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
+                      : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
+                  )}
+                >
+                  {paycrestPreparing
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Preparing payout</>
+                    : circlePasskeyPending
+                      ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening Smart wallet</>
+                      : privyCircleLinkLoading
+                        ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
+                        : circleSmartAccount && isNgPosPaycrestOfframp && !paycrestOrder
+                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Prepare naira payout</span></>
+                          : circleSmartAccount && circleEvmWalletChecking
+                            ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
+                            : circleSmartAccount && circleEvmWalletUnlocked && circleWalletNeedsFunds
+                              ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
+                              : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
+                </button>
+              )}
               {privyCircleLinkError && circleSmartAccount && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                   {privyCircleLinkError}
@@ -5092,119 +5159,23 @@ export default function PaymentPage() {
                     </span>
                   </summary>
                   <div className="mt-2 border-t border-gray-100 pt-2 dark:border-white/10">
-                    <div className="mb-2 grid grid-cols-2 rounded-md bg-gray-100 p-0.5 text-[10px] font-semibold dark:bg-white/[0.06]">
-                      {(['fund', 'withdraw'] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => openCircleWalletPanel(mode)}
-                          className={cn(
-                            'rounded px-2 py-1 capitalize transition-colors',
-                            circleWalletPanel === mode
-                              ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white'
-                              : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200',
-                          )}
-                        >
-                          {mode}
-                        </button>
-                      ))}
-                    </div>
-
-                    {circleWalletPanel === 'fund' ? (
-                      <>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                              Gasless wallet
-                            </p>
-                            <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">
-                              {`${meta.label} ${meta.asset} ready`}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleCopyCircleWallet}
-                            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200 dark:hover:bg-white/[0.14]"
-                          >
-                            {circleWalletCopied ? 'Copied' : 'Copy address'}
-                          </button>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between text-[11px]">
-                          <span className="text-gray-400 dark:text-gray-500">{meta.label} balance</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-semibold text-gray-700 dark:text-gray-100">
-                              {circleWalletBalance == null
-                                ? 'Checking...'
-                                : `${formatAmount((Number(circleWalletBalance) / Math.pow(10, meta.decimals)).toString(), meta.decimals)} ${meta.asset}`}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => refetchCircleWalletBalance()}
-                              className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
-                              aria-label="Refresh smart wallet balance"
-                              title="Refresh balance"
-                            >
-                              <RefreshCw className={cn('h-3 w-3', isCircleWalletBalanceFetching && 'animate-spin')} />
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-[1fr_72px] gap-2">
-                          <input
-                            value={circleWithdrawAddress}
-                            onChange={(event) => setCircleWithdrawAddress(event.target.value)}
-                            placeholder="Wallet or exchange address"
-                            className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:placeholder:text-gray-500"
-                          />
-                          <div className="flex h-8 items-center rounded-md border border-gray-200 bg-white px-2 dark:border-white/10 dark:bg-white/[0.05]">
-                            <input
-                              value={circleWithdrawAmount}
-                              onChange={(event) => setCircleWithdrawAmount(event.target.value)}
-                              placeholder="0.00"
-                              inputMode="decimal"
-                              className="min-w-0 flex-1 bg-transparent text-right text-[11px] font-semibold text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-[10px]">
-                          <button
-                            type="button"
-                            onClick={handleCircleWithdrawMax}
-                            className="font-semibold text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-white"
-                          >
-                            Max {circleWalletBalance == null ? '' : `${formatAmount((Number(circleWalletBalance) / Math.pow(10, meta.decimals)).toString(), meta.decimals)} ${meta.asset}`}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleCircleWithdraw}
-                            disabled={circleWithdrawPending}
-                            className="rounded-md bg-gray-900 px-3 py-1.5 font-semibold text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                          >
-                            {circleWithdrawPending ? 'Working...' : circleEvmEmailSession ? 'Withdraw' : 'Unlock'}
-                          </button>
-                        </div>
-                        {!circleEvmEmailSession && (
-                          <p className="text-[10px] font-medium text-amber-600 dark:text-amber-300">Unlock wallet to withdraw.</p>
-                        )}
-                        {circleWithdrawError && (
-                          <p className="text-[10px] font-medium text-red-600 dark:text-red-300">{circleWithdrawError}</p>
-                        )}
-                        {circleWithdrawNotice && (
-                          <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-300">{circleWithdrawNotice}</p>
-                        )}
-                        {circleWithdrawTxHash && (
-                          <p className="truncate text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
-                            Withdraw sent: {truncateAddress(circleWithdrawTxHash)}
-                          </p>
-                        )}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Add funds</p>
+                        <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">Send {meta.asset} on {meta.label} to this wallet</p>
                       </div>
-                    )}
+                      <button
+                        type="button"
+                        onClick={handleCopyCircleWallet}
+                        className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200 dark:hover:bg-white/[0.14]"
+                      >
+                        {circleWalletCopied ? 'Copied' : 'Copy address'}
+                      </button>
+                    </div>
                   </div>
                 </details>
               )}
-              {circlePasskeyError && circleWalletPanel !== 'withdraw' && (
+              {circlePasskeyError && (
                 <p className="text-center text-[11px] font-medium text-red-600 dark:text-red-300">{circlePasskeyError}</p>
               )}
               <CheckoutTrustLine />
@@ -5233,39 +5204,46 @@ export default function PaymentPage() {
                         />
                       </div>
                     )}
-                    <button
-                      onClick={() => {
-                        if (circleSolanaWalletChecking) {
-                          void refreshCircleSolanaBalance()
-                          return
-                        }
-                        if (circleSolanaSession && circleSolanaNeedsFunds) {
-                          openCircleSolanaPanel('fund')
-                          if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
-                          return
-                        }
-                        handleCircleSolanaEmailPay()
-                      }}
-                      disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
-                      className={cn(
-                        'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
-                        circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
-                          ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
-                      )}
-                    >
-                      {circleSolanaPending
-                        ? <><Loader2 className="h-4 w-4 animate-spin" /> {circleSolanaSession ? 'Payment processing' : 'Opening Smart wallet'}</>
-                        : privyCircleLinkLoading
-                          ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
-                        : circleSolanaSession
-                          ? circleSolanaWalletChecking
-                            ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
-                            : circleSolanaNeedsFunds
-                            ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
-                            : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>
-                          : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
-                    </button>
+                    {circleSolanaSession && !circleSolanaNeedsFunds ? (
+                      <SlideAction
+                        status={checkoutSlideStatus}
+                        disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                        onConfirm={handleCircleSolanaEmailPay}
+                        labels={checkoutSlideLabels}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => {
+                          if (circleSolanaWalletChecking) {
+                            void refreshCircleSolanaBalance()
+                            return
+                          }
+                          if (circleSolanaSession && circleSolanaNeedsFunds) {
+                            openCircleSolanaPanel()
+                            if (isSmartWalletBalanceError(circleSolanaError)) setCircleSolanaError(null)
+                            return
+                          }
+                          handleCircleSolanaEmailPay()
+                        }}
+                        disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                        className={cn(
+                          'relative flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3.5 text-sm font-bold transition-all',
+                          circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked
+                            ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
+                            : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
+                        )}
+                      >
+                        {circleSolanaPending
+                          ? <><Loader2 className="h-4 w-4 animate-spin" /> Opening Smart wallet</>
+                          : privyCircleLinkLoading
+                            ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
+                            : circleSolanaSession && circleSolanaWalletChecking
+                              ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
+                              : circleSolanaSession && circleSolanaNeedsFunds
+                                ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
+                                : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
+                      </button>
+                    )}
                     {circleSolanaSession && circleSolanaBalance !== null && (
                       <details ref={circleSolanaDetailsRef} className="group rounded-lg border border-gray-200 bg-white/60 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] font-medium text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 [&::-webkit-details-marker]:hidden">
@@ -5284,117 +5262,19 @@ export default function PaymentPage() {
                           </span>
                         </summary>
                         <div className="mt-2 border-t border-gray-100 pt-2 dark:border-white/10">
-                          <div className="mb-2 grid grid-cols-2 rounded-md bg-gray-100 p-0.5 text-[10px] font-semibold dark:bg-white/[0.06]">
-                            {(['fund', 'withdraw'] as const).map((mode) => (
-                              <button
-                                key={mode}
-                                type="button"
-                                onClick={() => openCircleSolanaPanel(mode)}
-                                className={cn(
-                                  'rounded px-2 py-1 capitalize transition-colors',
-                                  circleSolanaPanel === mode
-                                    ? 'bg-white text-gray-900 shadow-sm dark:bg-white/15 dark:text-white'
-                                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200',
-                                )}
-                              >
-                                {mode}
-                              </button>
-                            ))}
-                          </div>
-
-                          {circleSolanaPanel === 'fund' ? (
-                            <>
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                                    Circle wallet
-                                  </p>
-                                  <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">
-                                    Solana USDC ready
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={handleCopyCircleSolanaWallet}
-                                  className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200 dark:hover:bg-white/[0.14]"
-                                >
-                                  {circleSolanaCopied ? 'Copied' : 'Copy address'}
-                                </button>
-                              </div>
-                              <div className="mt-2 flex items-center justify-between text-[11px]">
-                                <span className="text-gray-400 dark:text-gray-500">Solana balance</span>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono font-semibold text-gray-700 dark:text-gray-100">
-                                    {circleSolanaBalanceError
-                                      ? 'Unavailable'
-                                      : circleSolanaBalance == null
-                                      ? 'Checking...'
-                                      : `${formatAmount((Number(circleSolanaBalance) / 1_000_000).toString(), 6)} USDC`}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => refreshCircleSolanaBalance()}
-                                    className="rounded-md p-1 text-gray-400 transition-all hover:bg-gray-100 hover:text-gray-700 active:scale-95 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200"
-                                    aria-label="Refresh smart wallet balance"
-                                    title="Refresh balance"
-                                  >
-                                    <RefreshCw className={cn('h-3 w-3', circleSolanaFetching && 'animate-spin')} />
-                                  </button>
-                                </div>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="space-y-2">
-                              <div className="grid grid-cols-[1fr_72px] gap-2">
-                                <input
-                                  value={circleSolanaWithdrawAddress}
-                                  onChange={(event) => setCircleSolanaWithdrawAddress(event.target.value)}
-                                  placeholder="Wallet or exchange address"
-                                  className="h-8 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:placeholder:text-gray-500"
-                                />
-                                <div className="flex h-8 items-center rounded-md border border-gray-200 bg-white px-2 dark:border-white/10 dark:bg-white/[0.05]">
-                                  <input
-                                    value={circleSolanaWithdrawAmount}
-                                    onChange={(event) => setCircleSolanaWithdrawAmount(event.target.value)}
-                                    placeholder="0.00"
-                                    inputMode="decimal"
-                                    className="min-w-0 flex-1 bg-transparent text-right text-[11px] font-semibold text-gray-900 outline-none placeholder:text-gray-400 dark:text-white dark:placeholder:text-gray-500"
-                                  />
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between gap-2 text-[10px]">
-                                <button
-                                  type="button"
-                                  onClick={handleCircleSolanaWithdrawMax}
-                                  className="font-semibold text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-white"
-                                >
-                                  Max {circleSolanaBalance === null ? '' : `${formatAmount((Number(circleSolanaBalance) / 1_000_000).toString(), 6)} USDC`}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleCircleSolanaWithdraw}
-                                  disabled={circleSolanaWithdrawPending}
-                                  className="rounded-md bg-gray-900 px-3 py-1.5 font-semibold text-white transition-all hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-                                >
-                                  {circleSolanaWithdrawPending ? 'Working...' : circleSolanaSession ? 'Withdraw' : 'Unlock'}
-                                </button>
-                              </div>
-                              {!circleSolanaSession && (
-                                <p className="text-[10px] font-medium text-amber-600 dark:text-amber-300">Unlock wallet to withdraw.</p>
-                              )}
-                              {circleSolanaWithdrawError && (
-                                <p className="text-[10px] font-medium text-red-600 dark:text-red-300">{circleSolanaWithdrawError}</p>
-                              )}
-                              {circleSolanaWithdrawNotice && (
-                                <p className="text-[10px] font-medium text-emerald-600 dark:text-emerald-300">{circleSolanaWithdrawNotice}</p>
-                              )}
-                              {circleSolanaWithdrawTxHash && (
-                                <p className="truncate text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
-                                  Withdraw sent: {truncateAddress(circleSolanaWithdrawTxHash)}
-                                </p>
-                              )}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Add funds</p>
+                              <p className="truncate text-[11px] text-gray-500 dark:text-gray-300">Send USDC on Solana to this wallet</p>
                             </div>
-                          )}
+                            <button
+                              type="button"
+                              onClick={handleCopyCircleSolanaWallet}
+                              className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-all hover:bg-gray-50 active:scale-95 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200 dark:hover:bg-white/[0.14]"
+                            >
+                              {circleSolanaCopied ? 'Copied' : 'Copy address'}
+                            </button>
+                          </div>
                         </div>
                       </details>
                     )}
@@ -5436,20 +5316,12 @@ export default function PaymentPage() {
                   </div>
                 ) : !smartWalletOnlyFunding && !showCircleSolanaEmailBridgePay && !walletConnectBlocked && !isTelegramSource ? (
               <div className="space-y-2">
-              <button
-                onClick={handlePay}
-                      disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
-                      className={cn(
-                        'relative flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold transition-all',
-                        isSolanaPending || isSolanaConfirming
-                          ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                          : 'bg-black text-white shadow-button hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
-                )}
-                    >
-                      {isSolanaPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
-                      : isSolanaConfirming ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                      : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>}
-                    </button>
+              <SlideAction
+                status={checkoutSlideStatus}
+                disabled={isSolanaPending || isSolanaConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                onConfirm={handlePay}
+                labels={checkoutSlideLabels}
+              />
               <CheckoutTrustLine />
               </div>
                 ) : null}
@@ -5494,19 +5366,12 @@ export default function PaymentPage() {
             </div>
           ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
-              <button onClick={handlePay} disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
-              className={cn(
-                'relative flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold transition-all',
-                isWalletPending || isConfirming ? 'cursor-not-allowed bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'
-                  : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200',
-              )}>
-              {isSignPending        ? <><Loader2 className="h-4 w-4 animate-spin" /> Sign Permit in Wallet…</>
-              : arbitrumRelayPending     ? <><Loader2 className="h-4 w-4 animate-spin" /> Relaying via HashPayLink…</>
-              : isBasePaymasterPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Requesting sponsored gas…</>
-              : isEvmWalletPending  ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirm in Wallet…</>
-              : isConfirming        ? <><Loader2 className="h-4 w-4 animate-spin" /> Confirming on Chain…</>
-                : <><span className="mx-auto">{finalPayLabel}</span><Lock className="absolute right-4 h-4 w-4" strokeWidth={2} /></>}
-              </button>
+              <SlideAction
+                status={checkoutSlideStatus}
+                disabled={isWalletPending || isConfirming || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                onConfirm={handlePay}
+                labels={checkoutSlideLabels}
+              />
               <CheckoutTrustLine />
             </div>
           ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected ? (

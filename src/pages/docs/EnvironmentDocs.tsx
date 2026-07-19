@@ -38,6 +38,20 @@ export default function EnvironmentDocs() {
         />
       </Section>
 
+      <Section title="Hosted Checkout private beta">
+        <Table
+          headers={['Variable', 'Required', 'Description']}
+          rows={[
+            ['HOSTED_CHECKOUT_SIGNING_SECRET', 'Partner checkout API', 'Server-only random secret of at least 32 characters used to protect immutable checkout intents.'],
+            ['HASH_PAYLINK_PARTNER_API_KEYS', 'Partner checkout API', 'Server-only JSON map of API keys to partner ids and exact allowlisted return origins.'],
+            ['DEVELOPER_PORTAL_SECRET', 'Self-serve developer API', 'Random server-only secret of at least 32 characters used to hash generated API keys and encrypt sensitive project configuration.'],
+            ['DEVELOPER_PROJECT_STORE_KEY', 'Optional', 'Durable store key for Privy-owned developer projects.'],
+            ['HOSTED_CHECKOUT_STORE_KEY', 'Optional', 'Durable Postgres store key for signed checkout intents.'],
+            ['PARTNER_ACCESS_STORE_KEY', 'Optional', 'Durable Postgres store key for Foundation access requests.'],
+          ]}
+        />
+      </Section>
+
       <Section title="EVM payments">
         <Table
           headers={['Variable', 'Required', 'Description']}

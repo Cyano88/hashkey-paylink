@@ -4,6 +4,7 @@ import handler from '../api/payment-tx-lookup.ts'
 const originalFetch = globalThis.fetch
 const originalRpcUrl = process.env.PRIVATE_RPC_URL
 const recipient = '0x00000000000000000000000000000000000000aa'
+const payer = '0x00000000000000000000000000000000000000bb'
 const txHash = `0x${'ab'.repeat(32)}`
 const transferUnits = 1_000_000n
 
@@ -39,6 +40,8 @@ try {
     if (rpc.method === 'eth_getLogs') {
       logQueries += 1
       assert.equal(rpc.params[0].fromBlock, '0x65')
+      assert.equal(rpc.params[0].topics[1].toLowerCase(), `0x${payer.slice(2).padStart(64, '0')}`)
+      assert.equal(rpc.params[0].topics[2].toLowerCase(), `0x${recipient.slice(2).padStart(64, '0')}`)
       return rpcResponse([{
         transactionHash: txHash,
         blockNumber: '0x66',
@@ -54,6 +57,7 @@ try {
 
   const confirmed = await request({
     chain: 'base',
+    payer,
     recipient,
     amountUnits: transferUnits.toString(),
     fromBlock: '101',
@@ -81,6 +85,7 @@ try {
 
   const reverted = await request({
     chain: 'base',
+    payer,
     recipient,
     amountUnits: transferUnits.toString(),
     fromBlock: '101',
@@ -97,6 +102,7 @@ try {
   }
   const future = await request({
     chain: 'base',
+    payer,
     recipient,
     amountUnits: transferUnits.toString(),
     fromBlock: '999',

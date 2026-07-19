@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { publicVtpassPhase0Status, readVtpassPhase0Config } from './vtpass-config.js'
 
 function publicEnv(...names: string[]) {
   for (const name of names) {
@@ -17,6 +18,8 @@ export default function handler(_req: Request, res: Response) {
   res.setHeader('Cache-Control', 'no-store')
   const privyAppId = publicEnv('VITE_PRIVY_APP_ID', 'PRIVY_APP_ID')
   const authBridge = publicEnv('VITE_AUTH_BRIDGE', 'AUTH_BRIDGE') || 'legacy'
+  const billsConfig = readVtpassPhase0Config()
+  const bills = publicVtpassPhase0Status(billsConfig)
   res.json({
     ok: true,
     auth: {
@@ -34,6 +37,13 @@ export default function handler(_req: Request, res: Response) {
         'CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET',
       ),
       evmEmailEnabled: String(process.env.VITE_CIRCLE_EVM_EMAIL_ENABLED ?? 'true').toLowerCase() !== 'false',
+    },
+    bills: {
+      enabled: bills.billsEnabled && bills.canVend,
+      environment: bills.environment,
+      category: 'airtime',
+      minNgn: billsConfig.minNgn,
+      maxNgn: billsConfig.maxNgn,
     },
   })
 }

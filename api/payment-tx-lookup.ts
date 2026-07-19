@@ -90,12 +90,14 @@ async function rpcCall<T>(rpcUrl: string, method: string, params: unknown[]): Pr
 async function getLogsChunked(
   rpcUrl: string,
   tokenAddress: string,
+  payer: string,
   recipient: string,
   fromBlock: bigint,
   toBlock: bigint,
 ) {
   const logs: TransferLog[] = []
   const chunkSize = readPositiveBigInt(process.env.PAYMENT_TX_LOOKUP_CHUNK_SIZE, DEFAULT_CHUNK_SIZE)
+  const payerTopic = pad(payer as Address, { size: 32 })
   const recipientTopic = pad(recipient as Address, { size: 32 })
   for (let from = fromBlock; from <= toBlock; from += chunkSize) {
     const end = from + chunkSize - 1n > toBlock ? toBlock : from + chunkSize - 1n
@@ -103,7 +105,7 @@ async function getLogsChunked(
       address: tokenAddress,
       fromBlock: `0x${from.toString(16)}`,
       toBlock: `0x${end.toString(16)}`,
-      topics: [TRANSFER_TOPIC, null, recipientTopic],
+      topics: [TRANSFER_TOPIC, payerTopic, recipientTopic],
     }]))
   }
   return logs
@@ -116,6 +118,7 @@ export default async function handler(req: Request, res: Response) {
 
   const body = (req.body ?? {}) as Record<string, unknown>
   const chain = readChain(body.chain)
+  const payer = typeof body.payer === 'string' ? body.payer.trim() : ''
   const recipient = typeof body.recipient === 'string' ? body.recipient.trim() : ''
   const amountUnits = readPositiveBigInt(body.amountUnits, 0n)
   const strict = body.strict === true
@@ -123,6 +126,9 @@ export default async function handler(req: Request, res: Response) {
   const minUnits = amountUnits > 0n ? (strict ? amountUnits : amountUnits * 98n / 100n) : 1n
   const recovery = body.recovery === true || body.deep === true
 
+  if (!isAddress(payer)) {
+    return res.status(400).json({ ok: false, error: 'Invalid payer address' })
+  }
   if (!isAddress(recipient)) {
     return res.status(400).json({ ok: false, error: 'Invalid recipient address' })
   }
@@ -152,6 +158,7 @@ export default async function handler(req: Request, res: Response) {
     const logs = await getLogsChunked(
       rpcUrl,
       TOKENS[chain],
+      payer,
       recipient,
       fromBlock,
       latestBlock,

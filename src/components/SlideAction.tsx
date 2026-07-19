@@ -1,0 +1,128 @@
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
+import { AlertCircle, ArrowRight, Loader2 } from 'lucide-react'
+import { cn } from '../lib/utils'
+import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
+
+export type SlideActionStatus = 'idle' | 'pending' | 'submitted' | 'successful' | 'error'
+
+type SlideActionLabels = Partial<Record<'idle' | 'disabled' | 'pending' | 'submitted' | 'successful' | 'error', string>>
+
+export default function SlideAction({
+  status,
+  disabled,
+  onConfirm,
+  labels,
+}: {
+  status: SlideActionStatus
+  disabled: boolean
+  onConfirm: () => void
+  labels?: SlideActionLabels
+}) {
+  const railRef = useRef<HTMLDivElement>(null)
+  const startX = useRef(0)
+  const dragging = useRef(false)
+  const progressRef = useRef(0)
+  const activationLocked = useRef(false)
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    const nextProgress = status === 'idle' ? 0 : 1
+    progressRef.current = nextProgress
+    setProgress(nextProgress)
+    dragging.current = false
+    if (status === 'idle') activationLocked.current = false
+  }, [status])
+
+  const confirmOnce = () => {
+    if (activationLocked.current) return
+    activationLocked.current = true
+    progressRef.current = 1
+    setProgress(1)
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
+    onConfirm()
+  }
+
+  const finish = () => {
+    if (!dragging.current) return
+    dragging.current = false
+    if (progressRef.current >= 0.82) {
+      confirmOnce()
+    } else {
+      progressRef.current = 0
+      setProgress(0)
+    }
+  }
+
+  const label = status === 'error'
+    ? labels?.error ?? 'Payment failed'
+    : status === 'pending'
+    ? labels?.pending ?? 'Confirming payment'
+    : status === 'successful'
+      ? labels?.successful ?? 'Payment successful'
+      : status === 'submitted'
+        ? labels?.submitted ?? 'Payment submitted'
+        : disabled
+          ? labels?.disabled ?? 'Complete payment details'
+          : labels?.idle ?? 'Slide to pay'
+
+  return (
+    <div
+      ref={railRef}
+      role="button"
+      tabIndex={disabled || status !== 'idle' ? -1 : 0}
+      aria-label={label}
+      aria-disabled={disabled || status !== 'idle'}
+      onKeyDown={event => {
+        if ((event.key === 'Enter' || event.key === ' ') && !disabled && status === 'idle') {
+          event.preventDefault()
+          confirmOnce()
+        }
+      }}
+      onPointerDown={event => {
+        if (disabled || status !== 'idle') return
+        dragging.current = true
+        startX.current = event.clientX
+        progressRef.current = 0
+        setProgress(0)
+        event.currentTarget.setPointerCapture(event.pointerId)
+      }}
+      onPointerMove={(event: PointerEvent<HTMLDivElement>) => {
+        if (!dragging.current || status !== 'idle') return
+        const travel = Math.max(1, (railRef.current?.clientWidth ?? 0) - 58)
+        const nextProgress = Math.max(0, Math.min(1, (event.clientX - startX.current) / travel))
+        progressRef.current = nextProgress
+        setProgress(nextProgress)
+      }}
+      onPointerUp={finish}
+      onPointerCancel={() => {
+        dragging.current = false
+        progressRef.current = 0
+        setProgress(0)
+      }}
+      className={cn(
+        'relative isolate h-14 select-none overflow-hidden rounded-full bg-gray-950 p-1.5 text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] outline-none ring-offset-2 transition-all focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-white dark:text-gray-950 dark:ring-offset-[#111216]',
+        disabled && status === 'idle' && 'cursor-not-allowed opacity-45',
+        !disabled && status === 'idle' && 'cursor-grab active:cursor-grabbing',
+        status === 'successful' && 'bg-emerald-600 dark:bg-emerald-500 dark:text-white',
+        status === 'error' && 'bg-red-600 dark:bg-red-500 dark:text-white',
+      )}
+      style={{ touchAction: 'none' }}
+    >
+      <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-16 text-sm font-bold tracking-tight">
+        {label}
+      </span>
+      <span
+        className="pointer-events-none absolute bottom-1.5 top-1.5 flex aspect-square items-center justify-center rounded-full bg-white/12 shadow-sm ring-1 ring-white/10 transition-[left,background-color] duration-200 dark:bg-gray-950/10 dark:ring-gray-950/10"
+        style={{ left: `calc(6px + ${progress} * (100% - 58px))` }}
+      >
+        {status === 'pending' || status === 'submitted'
+          ? <Loader2 className="h-5 w-5 animate-spin" />
+          : status === 'successful'
+            ? <PocketStatusCheck className="h-11 w-11 bg-white text-emerald-600 shadow-none ring-0" />
+            : status === 'error'
+              ? <AlertCircle className="h-5 w-5" />
+            : <ArrowRight className="h-5 w-5" />}
+      </span>
+    </div>
+  )
+}

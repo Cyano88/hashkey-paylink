@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Menu, X } from 'lucide-react'
+import { ArrowRight, Check, Loader2, Menu, X } from 'lucide-react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 
 const APP_URL = 'https://app.hashpaylink.com'
 
@@ -42,7 +42,7 @@ const products = [
     index: '06',
     title: 'Developer SDK',
     copy: 'Add Hash PayLink checkout to your app with hosted links and React buttons.',
-    href: '/docs/sdk',
+    href: '/developers',
   },
 ]
 
@@ -219,12 +219,44 @@ export default function FoundationPage() {
   const [faqHeights, setFaqHeights] = useState<number[]>([])
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [activeRetailImage, setActiveRetailImage] = useState(0)
+  const [partnerForm, setPartnerForm] = useState({
+    name: '',
+    email: '',
+    company: '',
+    website: '',
+    product: 'hosted-checkout',
+    useCase: '',
+    fax: '',
+  })
+  const [partnerRequestState, setPartnerRequestState] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle')
+  const [partnerRequestMessage, setPartnerRequestMessage] = useState('')
+
+  async function submitPartnerRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (partnerRequestState === 'submitting') return
+    setPartnerRequestState('submitting')
+    setPartnerRequestMessage('')
+    try {
+      const response = await fetch('/api/partner-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(partnerForm),
+      })
+      const body = await response.json().catch(() => undefined) as { ok?: boolean; requestId?: string; error?: string } | undefined
+      if (!response.ok || !body?.ok) throw new Error(body?.error || 'Could not submit your request.')
+      setPartnerRequestState('sent')
+      setPartnerRequestMessage(body.requestId && body.requestId !== 'received' ? `Request ${body.requestId} received.` : 'Request received.')
+    } catch (error) {
+      setPartnerRequestState('error')
+      setPartnerRequestMessage(error instanceof Error ? error.message : 'Could not submit your request.')
+    }
+  }
   const retailImages = [
     {
       src: '/brand/africa-terminal-payment.jpeg',
       alt: 'Customer paying with Hash PayLink USDC QR terminal',
       title: 'Phone-to-QR checkout',
-      meta: 'Africa',
+      meta: 'Nigeria · Live',
       imageClass: 'h-[230px] sm:h-[340px] lg:h-[360px]',
       wrapperClass: 'retail-motion w-full sm:absolute sm:left-[1%] sm:top-[5%] sm:z-30 sm:w-[70%] lg:w-[62%]',
       cardClass: 'retail-photo-card p-2 sm:-rotate-[2.5deg]',
@@ -233,8 +265,8 @@ export default function FoundationPage() {
     {
       src: '/brand/africa-terminal-units.jpeg',
       alt: 'Hash PayLink physical QR terminal units',
-      title: 'Reusable POS QR',
-      meta: 'USDC',
+      title: 'Reusable contactless QR',
+      meta: 'Base USDC',
       imageClass: 'h-[220px] sm:h-[330px] lg:h-[360px]',
       wrapperClass: 'retail-motion w-full sm:absolute sm:right-0 sm:top-[30%] sm:z-20 sm:w-[43%] lg:w-[38%]',
       cardClass: 'retail-photo-card p-2 sm:rotate-[5deg]',
@@ -243,8 +275,8 @@ export default function FoundationPage() {
     {
       src: '/brand/africa-terminal-live.jpeg',
       alt: 'Hash PayLink QR terminal at a retail checkout',
-      title: 'Retail-ready flow',
-      meta: 'Circle + 0G',
+      title: 'USDC or Naira settlement',
+      meta: 'Circle · Paycrest · 0G',
       imageClass: 'h-[210px] sm:h-[290px] lg:h-[310px]',
       wrapperClass: 'retail-motion w-full sm:absolute sm:bottom-[2%] sm:left-[9%] sm:z-10 sm:w-[55%] lg:w-[48%]',
       cardClass: 'retail-photo-card p-2 sm:rotate-[2deg]',
@@ -706,9 +738,9 @@ export default function FoundationPage() {
           position: relative;
           overflow: hidden;
           border-radius: 30px;
-          border: 1px solid rgba(255,255,255,.12);
-          background: rgba(255,255,255,.05);
-          box-shadow: 0 34px 110px rgba(0,0,0,.46);
+          border: 1px solid rgba(255,255,255,.92);
+          background: rgba(255,255,255,.86);
+          box-shadow: 0 34px 100px rgba(30,64,175,.14), 0 2px 8px rgba(15,23,42,.06);
           backdrop-filter: blur(10px);
         }
         .retail-photo-card::after {
@@ -982,7 +1014,8 @@ export default function FoundationPage() {
               <a href="#products" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Products</a>
               <a href="#traction" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Traction</a>
               <a href="https://defillama.com/protocol/hash-paylink" target="_blank" rel="noreferrer" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">DeFiLlama</a>
-              <Link to="/docs/sdk" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Developers</Link>
+              <a href="#api" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">API</a>
+              <Link to="/developers" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Developers</Link>
               <a href="#about" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">About</a>
               <a href="#contact" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Contact</a>
             </nav>
@@ -1029,8 +1062,9 @@ export default function FoundationPage() {
               <nav className="mx-auto mt-7 grid w-full max-w-7xl gap-1.5 text-sm font-medium text-white/86">
                 <a href="#products" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Products</a>
                 <a href="#traction" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Traction</a>
+                <a href="#api" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Hosted Checkout API</a>
                 <a href="https://defillama.com/protocol/hash-paylink" target="_blank" rel="noreferrer" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">DeFiLlama</a>
-                <Link to="/docs/sdk" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Developers</Link>
+                <Link to="/developers" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Developers</Link>
                 <a href="#about" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">About</a>
                 <a href="#contact" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Contact</a>
               </nav>
@@ -1193,50 +1227,59 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <section id="traction" ref={retailSectionRef} className="foundation-mobile-section hpl-snap-section relative overflow-hidden bg-[#050609] px-5 py-24 text-white sm:px-8 lg:px-10">
-        <div className="absolute inset-0">
-          <img
-            src="/brand/africa-business-bg.jpeg"
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full scale-110 object-cover object-center opacity-52 blur-[5px] saturate-[.86]"
-          />
-        </div>
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,5,10,.70)_0%,rgba(4,5,8,.80)_52%,rgba(3,4,7,.92)_100%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#030407] to-transparent" />
+      <section id="traction" ref={retailSectionRef} className="foundation-mobile-section hpl-snap-section relative overflow-hidden bg-[#f6f8fc] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_12%,rgba(37,99,235,.12),transparent_30%),radial-gradient(circle_at_92%_74%,rgba(6,182,212,.11),transparent_28%),linear-gradient(145deg,#fbfdff_0%,#f3f7ff_48%,#f7fafc_100%)]" />
+        <div className="absolute left-[42%] top-1/2 h-[620px] w-[620px] -translate-y-1/2 rounded-full bg-blue-100/35 blur-3xl" />
 
-        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 max-sm:min-h-0 max-sm:gap-4 lg:grid-cols-[.76fr_1.24fr]">
-          <div className="retail-motion max-w-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/75 max-sm:text-[10px] max-sm:tracking-[0.22em]">Retail settlement layer</p>
-            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-white max-sm:mt-2 sm:text-5xl">
-              USDC checkout for real-world counters.
-            </h2>
-            <p className="mt-5 text-sm leading-6 text-white/68 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-              Hash PayLink turns a merchant counter into a clean stablecoin checkout surface: one QR, familiar phone payment flow, gasless Circle wallet support, and a 0G-backed record after payment.
-            </p>
+        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-8 max-sm:min-h-0 max-sm:gap-5 lg:grid-cols-[1.02fr_.98fr]">
+          <article className="retail-motion relative flex min-h-[680px] overflow-hidden rounded-[32px] border border-white/20 bg-[#101722] p-8 text-white shadow-[0_34px_110px_rgba(30,64,175,.18)] max-sm:min-h-[610px] max-sm:rounded-[24px] max-sm:p-5 sm:p-10">
+            <img src="/brand/africa-retail-story.jpeg" alt="West African retail culture" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover object-center saturate-[.92]" />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,11,20,.24)_0%,rgba(5,11,20,.34)_34%,rgba(5,10,19,.94)_100%)]" />
+            <div className="relative z-10 flex w-full flex-col justify-between gap-12">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-cyan-100/80">Retail settlement layer</p>
+              </div>
 
-            <div className="mt-9 space-y-5 max-sm:mt-3 max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:space-y-0">
-              {[
-                ['01', 'Scan and pay', 'Customers pay from the wallet or exchange they already use.'],
-                ['02', 'Settle in USDC', 'Merchants receive stablecoin value without rebuilding their store workflow.'],
-                ['03', 'Onboard with Circle', 'Over 100 users have been natively onboarded into Circle smart-wallet USDC checkout flows.'],
-                ['04', 'Verify the receipt', 'Important payment records can be archived through 0G for durable proof.'],
-              ].map(([index, title, value]) => (
-                <div key={title} className="grid grid-cols-[42px_1fr] gap-4 border-t border-white/10 pt-4 max-sm:grid-cols-[24px_1fr] max-sm:gap-2 max-sm:pt-2">
-                  <p className="text-xs font-semibold text-cyan-200/55 max-sm:text-[10px]">{index}</p>
-                  <div>
-                    <p className="text-sm font-semibold tracking-[-0.01em] text-white max-sm:text-xs">{title}</p>
-                    <p className="mt-1 text-xs leading-5 text-white/52 max-sm:mt-0.5 max-sm:text-[10px] max-sm:leading-4 max-sm:text-white/48">{value}</p>
-                  </div>
+              <div>
+                <h2 className="max-w-[620px] text-[clamp(2.65rem,4.8vw,4.6rem)] font-semibold leading-[.95] tracking-[-0.065em] text-white">
+                  Contactless QR checkout for African counters.
+                </h2>
+                <p className="mt-5 max-w-[540px] text-[13px] leading-6 text-white/70">
+                  One reusable QR gives customers a familiar phone payment flow while merchants receive USDC or settle directly to a verified Nigerian bank account.
+                </p>
+
+                <div className="mt-7 grid grid-cols-2 gap-x-5 gap-y-4 rounded-[22px] border border-white/12 bg-black/25 p-5 backdrop-blur-xl max-sm:grid-cols-1 max-sm:gap-3 max-sm:p-4">
+                  {[
+                    ['01', 'Wallet networks', 'Your USDC across supported networks.'],
+                    ['02', 'Your funding address', 'Open your Circle wallet on the selected network.'],
+                    ['03', 'Send USDC · Bridge USDC', 'Native USDC via Circle CCTP.'],
+                    ['04', 'Receipts and 0G archive', '0G archive proof appears only when verified proof metadata is ready.'],
+                  ].map(([index, title, value]) => (
+                    <div key={title} className="grid grid-cols-[24px_1fr] gap-2.5 border-t border-white/12 pt-3">
+                      <p className="text-[10px] font-bold text-cyan-100/55">{index}</p>
+                      <div>
+                        <p className="text-xs font-semibold tracking-[-0.01em] text-white">{title}</p>
+                        <p className="mt-1 text-[10px] leading-4 text-white/52">{value}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            <p className="mt-8 max-w-lg text-xs leading-5 text-white/42 max-sm:mt-3 max-sm:text-[10px] max-sm:leading-4 max-sm:text-white/38">
-              Built for storefronts, events, pop-ups, and agent-assisted commerce where the payment must feel simple before the infrastructure becomes visible.
-            </p>
-          </div>
+                <div className="mt-5 grid grid-cols-3 overflow-hidden rounded-xl border border-white/14 bg-black/20 text-[10px] backdrop-blur-md">
+                  {[
+                    ['Nigeria', 'Active'],
+                    ['Ghana', 'Coming soon'],
+                    ['Kenya', 'Coming soon'],
+                  ].map(([country, status], index) => (
+                    <div key={country} className={`px-3 py-3 ${index ? 'border-l border-white/12' : ''}`}>
+                      <p className="font-semibold text-white/88">{country}</p>
+                      <p className={`mt-1 ${status === 'Active' ? 'text-cyan-100/75' : 'text-white/42'}`}>{status}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </article>
 
           <div className="space-y-4 sm:relative sm:min-h-[620px] sm:space-y-0 lg:min-h-[680px]">
             {retailImages.map((image, index) => (
@@ -1256,10 +1299,10 @@ export default function FoundationPage() {
                     className={`${image.imageClass} w-full rounded-[22px] object-cover object-center max-sm:h-[210px]`}
                   />
                   <div className="flex items-center justify-between px-3 py-3 max-sm:py-2">
-                    <p className="text-xs font-semibold text-white/84">{image.title}</p>
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-100/42">{image.meta}</p>
+                    <p className="text-xs font-semibold text-gray-900">{image.title}</p>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-blue-600/60">{image.meta}</p>
                   </div>
-                  <div className="hidden px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/36 max-sm:block">
+                  <div className="hidden px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 max-sm:block">
                     Tap to switch {activeRetailImage + 1}/{retailImages.length}
                   </div>
                 </div>
@@ -1482,6 +1525,151 @@ export default function FoundationPage() {
                 Open App <ArrowRight className="h-4 w-4" />
               </a>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="api" className="foundation-mobile-section hpl-snap-section relative overflow-hidden bg-[#050609] px-5 py-24 text-white sm:px-8 lg:px-10">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(37,99,235,.20),transparent_32%),radial-gradient(circle_at_86%_78%,rgba(6,182,212,.12),transparent_30%)]" />
+        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 lg:grid-cols-[.82fr_1.18fr]">
+          <div className="max-w-xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-300">Hosted Checkout API</p>
+            <h2 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">One checkout your users already understand.</h2>
+            <p className="mt-5 max-w-lg text-sm leading-6 text-white/58">
+              Accept USDC on Base or Arbitrum through one hosted checkout. Partners set the available networks; payers choose at checkout. Arc remains testnet.
+            </p>
+
+            <div className="mt-8 max-w-md rounded-[1.75rem] border border-white/10 bg-white/[.055] p-4 shadow-[0_28px_80px_rgba(0,0,0,.30)] backdrop-blur-xl">
+              <div className="flex items-center justify-between gap-3 px-1 pb-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">Payment request</p>
+                  <p className="mt-1 text-sm font-semibold">Your service</p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-white/[.06] px-2.5 py-1 text-[10px] font-semibold text-white/64">Base · USDC</span>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-5 text-center">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35">Total</p>
+                <p className="mt-2 text-3xl font-semibold tracking-[-0.04em]">10 <span className="text-base text-white/45">USDC</span></p>
+              </div>
+              <div className="relative mt-4 h-14 overflow-hidden rounded-full bg-white p-1.5 text-gray-950">
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold">Slide to pay</span>
+                <span className="absolute bottom-1.5 left-1.5 top-1.5 flex aspect-square items-center justify-center rounded-full bg-gray-950 text-white">
+                  <ArrowRight className="h-5 w-5" />
+                </span>
+              </div>
+              <p className="mt-4 text-center text-[10px] font-medium text-white/32">Hash PayLink checkout · Secure</p>
+            </div>
+
+            <div className="mt-7 grid gap-3 text-xs text-white/48 sm:grid-cols-3">
+              {['Create checkout', 'Share hosted link', 'Verify payment status'].map((step, index) => (
+                <div key={step} className="border-t border-white/10 pt-3"><span className="mr-2 text-white/26">0{index + 1}</span>{step}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-white/10 bg-white/[.965] p-5 text-gray-950 shadow-[0_30px_100px_rgba(0,0,0,.38)] sm:p-7">
+            {partnerRequestState === 'sent' ? (
+              <div className="flex min-h-[480px] flex-col items-center justify-center text-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-[0_16px_44px_rgba(5,150,105,.24)]">
+                  <Check className="h-6 w-6" strokeWidth={2.4} />
+                </span>
+                <h3 className="mt-5 text-2xl font-semibold tracking-[-0.035em]">Request received</h3>
+                <p className="mt-2 max-w-sm text-sm leading-6 text-gray-500">{partnerRequestMessage} We will review the payment flow and contact you using the email provided.</p>
+                <Link to="/docs/sdk" className="mt-7 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-semibold text-white">
+                  Read integration docs <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            ) : (
+              <form onSubmit={submitPartnerRequest} className="space-y-5">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-700">Developer access</p>
+                  <h3 className="mt-2 text-2xl font-semibold tracking-[-0.035em]">Start with the hosted checkout API</h3>
+                  <p className="mt-2 text-sm leading-6 text-gray-500">Sign in with Privy, pin your payment routing and create a server key. Naira settlement remains reviewed.</p>
+                  <Link to="/developers" className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800">
+                    Open developer dashboard <ArrowRight className="h-4 w-4" />
+                  </Link>
+                  <div className="flex items-center gap-3 pt-1"><span className="h-px flex-1 bg-gray-200" /><span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Reviewed access</span><span className="h-px flex-1 bg-gray-200" /></div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {([
+                    ['name', 'Your name', 'Ada Lovelace', 'text'],
+                    ['email', 'Work email', 'ada@company.com', 'email'],
+                    ['company', 'Company or project', 'Company name', 'text'],
+                    ['website', 'Website', 'https://company.com', 'url'],
+                  ] as const).map(([key, label, placeholder, type]) => (
+                    <label key={key} className="space-y-1.5">
+                      <span className="text-xs font-semibold text-gray-600">{label}</span>
+                      <input
+                        type={type}
+                        required={key !== 'website'}
+                        value={partnerForm[key]}
+                        onChange={event => setPartnerForm(current => ({ ...current, [key]: event.target.value }))}
+                        placeholder={placeholder}
+                        className="h-11 w-full rounded-xl border border-black/10 bg-gray-50 px-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                <fieldset>
+                  <legend className="text-xs font-semibold text-gray-600">What do you need?</legend>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {[
+                      ['hosted-checkout', 'Hosted checkout'],
+                      ['api-services', 'Paid API or service'],
+                      ['pos', 'Retail POS'],
+                      ['bank-requests', 'Bank requests'],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={partnerForm.product === value}
+                        onClick={() => setPartnerForm(current => ({ ...current, product: value }))}
+                        className={`rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition ${partnerForm.product === value ? 'border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-100' : 'border-black/10 bg-white text-gray-600 hover:border-blue-300 hover:bg-blue-50/50'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-semibold text-gray-600">What will users pay for?</span>
+                  <textarea
+                    required
+                    minLength={20}
+                    rows={4}
+                    value={partnerForm.useCase}
+                    onChange={event => setPartnerForm(current => ({ ...current, useCase: event.target.value }))}
+                    placeholder="Describe the product, service, expected payer flow, and where users should return after payment."
+                    className="w-full resize-none rounded-xl border border-black/10 bg-gray-50 px-3 py-3 text-sm leading-5 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                  />
+                </label>
+
+                <input
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden="true"
+                  value={partnerForm.fax}
+                  onChange={event => setPartnerForm(current => ({ ...current, fax: event.target.value }))}
+                  className="hidden"
+                />
+
+                {partnerRequestState === 'error' && (
+                  <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{partnerRequestMessage}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={partnerRequestState === 'submitting'}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {partnerRequestState === 'submitting' ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending request</> : <>Request API access <ArrowRight className="h-4 w-4" /></>}
+                </button>
+                <p className="text-center text-[10px] leading-4 text-gray-400">Private beta access is reviewed manually. Never include API secrets, wallet keys, or customer financial data.</p>
+              </form>
+            )}
           </div>
         </div>
       </section>

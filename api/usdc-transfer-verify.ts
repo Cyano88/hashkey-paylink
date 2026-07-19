@@ -1,4 +1,4 @@
-import { isAddress, pad, parseUnits, type Address } from 'viem'
+import { formatUnits, isAddress, pad, parseUnits, type Address } from 'viem'
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 
@@ -18,8 +18,11 @@ type TxReceiptLog = {
 
 type TxReceipt = {
   status?: `0x${string}`
+  blockNumber?: `0x${string}`
   logs?: TxReceiptLog[]
 }
+
+type RpcBlock = { timestamp?: `0x${string}` }
 
 type TransferLog = {
   transactionHash?: `0x${string}`
@@ -128,7 +131,7 @@ export async function findEvmUsdcTransfer(input: {
   return {
     txHash: match.transactionHash,
     amountUnits: amountUnits.toString(),
-    amount: (Number(amountUnits) / 1_000_000).toFixed(6).replace(/\.?0+$/, ''),
+    amount: formatUnits(amountUnits, 6),
     blockNumber: match.blockNumber ? BigInt(match.blockNumber).toString() : null,
     logIndex: match.logIndex ? Number(BigInt(match.logIndex)) : null,
   }
@@ -137,20 +140,41 @@ export async function findEvmUsdcTransfer(input: {
 export async function verifyEvmUsdcTransfer(input: {
   chain: EvmUsdcChain
   txHash: string
+  payer?: string
   recipient: string
   minAmount: string
+  notBefore?: string
+  notAfter?: string
 }) {
   if (!/^0x[a-fA-F0-9]{64}$/.test(input.txHash)) throw new Error('Invalid transaction hash.')
   if (!isAddress(input.recipient)) throw new Error('Invalid USDC recipient.')
+  if (input.payer && !isAddress(input.payer)) throw new Error('Invalid USDC payer.')
   const rpcUrl = rpcFor(input.chain)
   if (!rpcUrl) throw new Error(`PRIVATE_RPC_URL is not configured for ${input.chain}.`)
 
   const receipt = await rpcCall<TxReceipt | null>(rpcUrl, 'eth_getTransactionReceipt', [input.txHash])
   if (!receipt) throw new Error('Transaction receipt was not found yet.')
-  if (receipt.status && receipt.status !== '0x1') throw new Error('Transaction did not succeed.')
+  if (receipt.status !== '0x1') throw new Error('Transaction did not succeed.')
+
+  let confirmedAt: string | undefined
+  if (input.notBefore || input.notAfter) {
+    const earliest = input.notBefore ? Date.parse(input.notBefore) : Number.NEGATIVE_INFINITY
+    const deadline = input.notAfter ? Date.parse(input.notAfter) : Number.POSITIVE_INFINITY
+    if (!Number.isFinite(earliest) && input.notBefore) throw new Error('Invalid checkout creation time.')
+    if (!Number.isFinite(deadline) && input.notAfter) throw new Error('Invalid checkout expiry.')
+    if (!receipt.blockNumber) throw new Error('Transaction confirmation block was not available.')
+    const block = await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', [receipt.blockNumber, false])
+    if (!block.timestamp) throw new Error('Transaction confirmation time was not available.')
+    const confirmedAtMs = Number(BigInt(block.timestamp) * 1_000n)
+    if (!Number.isSafeInteger(confirmedAtMs)) throw new Error('Transaction confirmation time was invalid.')
+    if (confirmedAtMs < earliest) throw new Error('Transaction confirmed before the checkout was created.')
+    if (confirmedAtMs > deadline) throw new Error('Transaction confirmed after the checkout expired.')
+    confirmedAt = new Date(confirmedAtMs).toISOString()
+  }
 
   const token = USDC_TOKENS[input.chain].toLowerCase()
   const recipientTopic = pad(input.recipient as Address, { size: 32 }).toLowerCase()
+  const payerTopic = input.payer ? pad(input.payer as Address, { size: 32 }).toLowerCase() : ''
   const minUnits = usdcAmountUnits(input.minAmount)
   let matchedUnits = 0n
 
@@ -158,6 +182,7 @@ export async function verifyEvmUsdcTransfer(input: {
     const topics = (log.topics ?? []).map(topic => topic.toLowerCase())
     if (String(log.address ?? '').toLowerCase() !== token) continue
     if (topics[0] !== TRANSFER_TOPIC) continue
+    if (payerTopic && topics[1] !== payerTopic) continue
     if (topics[2] !== recipientTopic) continue
     const value = log.data ? BigInt(log.data) : 0n
     if (value > matchedUnits) matchedUnits = value
@@ -165,7 +190,8 @@ export async function verifyEvmUsdcTransfer(input: {
       return {
         ok: true,
         amountUnits: value.toString(),
-        amount: (Number(value) / 1_000_000).toFixed(6).replace(/\.?0+$/, ''),
+        amount: formatUnits(value, 6),
+        confirmedAt,
       }
     }
   }

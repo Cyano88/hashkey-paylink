@@ -21,7 +21,7 @@ export type PaycrestOrderRecord = {
   payer_email?: string
   payer_wallet?: string
   payer_name?: string
-  source?: 'ngpos' | 'bank-receive' | 'bank-withdraw' | 'bank-send'
+  source?: 'ngpos' | 'bank-receive' | 'bank-withdraw' | 'bank-send' | 'hosted-checkout'
   tx_hash?: string
   status: string
   valid_until?: string
@@ -242,11 +242,11 @@ export async function createPaycrestOfframpOrder(input: {
   payerEmail?: string
   payerWallet?: string
   payerName?: string
-  source?: 'ngpos' | 'bank-receive' | 'bank-withdraw'
+  source?: 'ngpos' | 'bank-receive' | 'bank-withdraw' | 'hosted-checkout'
   memo?: string
 }) {
   if (!isAddress(input.refundAddress)) throw new Error('A valid Circle refund wallet is required.')
-  const reference = `ngpos-${input.intentId}`.slice(0, 90)
+  const reference = `${input.source === 'hosted-checkout' ? 'checkout' : 'ngpos'}-${input.intentId}`.slice(0, 90)
   const senderFeePercent = process.env.PAYCREST_SENDER_FEE_PERCENT?.trim()
   const payload: Record<string, unknown> = {
     amount: input.amountNgn,
@@ -449,6 +449,12 @@ export async function markPaycrestPosPayment(input: { id: string; txHash: string
   store.orders[updated.intent_id] = updated
   store.orders[updated.paycrest_order_id] = updated
   await writeStore(store)
+  if (updated.source === 'hosted-checkout') {
+    const { markHostedCheckoutNairaPayout } = await import('./hosted-checkouts.js')
+    await markHostedCheckoutNairaPayout({ intentId: updated.intent_id, status: updated.status }).catch(error => {
+      console.error('[paycrest-status] hosted checkout update failed:', error instanceof Error ? error.message : String(error))
+    })
+  }
   return updated
 }
 
@@ -484,6 +490,12 @@ export async function refreshPaycrestOrderStatus(id: string) {
   store.orders[updated.intent_id] = updated
   store.orders[updated.paycrest_order_id] = updated
   await writeStore(store)
+  if (updated.source === 'hosted-checkout') {
+    const { markHostedCheckoutNairaPayout } = await import('./hosted-checkouts.js')
+    await markHostedCheckoutNairaPayout({ intentId: updated.intent_id, status: updated.status }).catch(error => {
+      console.error('[paycrest-refresh] hosted checkout update failed:', error instanceof Error ? error.message : String(error))
+    })
+  }
   return updated
 }
 
@@ -537,5 +549,11 @@ export async function paycrestWebhookHandler(req: Request, res: Response) {
   store.orders[updated.intent_id] = updated
   store.orders[updated.paycrest_order_id] = updated
   await writeStore(store)
+  if (updated.source === 'hosted-checkout') {
+    const { markHostedCheckoutNairaPayout } = await import('./hosted-checkouts.js')
+    await markHostedCheckoutNairaPayout({ intentId: updated.intent_id, status: updated.status }).catch(error => {
+      console.error('[paycrest-webhook] hosted checkout update failed:', error instanceof Error ? error.message : String(error))
+    })
+  }
   return res.json({ ok: true })
 }

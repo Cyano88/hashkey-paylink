@@ -7,6 +7,7 @@ import crypto from 'crypto'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson, writeDurableJson } from './render-durable-store.js'
 import { getPaycrestPosOrder } from './paycrest-pos.js'
 import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from './usdc-transfer-verify.js'
+import { hostedCheckoutPaymentOption, markHostedCheckoutPaid, readVerifiedHostedCheckoutRecord } from './hosted-checkouts.js'
 
 type PaymentEntry = {
   eventId:     string
@@ -358,6 +359,16 @@ function paymentError(message: string, status = 400) {
   return error
 }
 
+function usdcMicroUnits(value: string) {
+  if (!/^\d+(?:\.\d{1,6})?$/.test(value)) return null
+  const [whole, fraction = ''] = value.split('.')
+  try {
+    return BigInt(`${whole}${fraction.padEnd(6, '0')}`)
+  } catch {
+    return null
+  }
+}
+
 export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   let eventId: string
   let txHash: string
@@ -391,6 +402,58 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     intentId = cleanOptionalString(input?.intentId ?? input?.intent_id, MAX_TEXT_LENGTH).replace(/[^a-zA-Z0-9_-]/g, '')
   } catch (err) {
     throw paymentError(err instanceof Error ? err.message : 'Invalid request', 400)
+  }
+
+  if (source === 'hosted-checkout') {
+    if (txHash.startsWith('manual_')) {
+      throw paymentError('A confirmed on-chain transaction is required for this checkout.', 400)
+    }
+    const checkout = await readVerifiedHostedCheckoutRecord(merchantId, { allowExpiredForReconciliation: true })
+    if (!checkout) {
+      throw paymentError('Hosted checkout is invalid or has expired.', 409)
+    }
+    if (eventId !== `hosted-${checkout.id}`) {
+      throw paymentError('Hosted checkout reference does not match.', 400)
+    }
+    const evmChain = normalizeEvmUsdcChain(chain)
+    const paymentOption = evmChain ? hostedCheckoutPaymentOption(checkout, evmChain) : null
+    if (!evmChain || !paymentOption) throw paymentError('Hosted checkout network is not available.', 409)
+    const actualUnits = usdcMicroUnits(amount)
+    const requestedUnits = usdcMicroUnits(requestedAmount)
+    const signedUnits = checkout.flexible ? null : usdcMicroUnits(checkout.amount)
+    if (!actualUnits || actualUnits <= 0n || !requestedUnits || requestedUnits <= 0n) {
+      throw paymentError('Invalid hosted checkout amount.', 400)
+    }
+    if (signedUnits && requestedUnits !== signedUnits) {
+      throw paymentError('Hosted checkout amount does not match.', 409)
+    }
+    const minimumAmount = checkout.flexible ? amount : checkout.amount
+    try {
+      const verifiedTransfer = await verifyEvmUsdcTransfer({
+        chain: evmChain,
+        txHash,
+        payer,
+        recipient: paymentOption.recipient,
+        minAmount: minimumAmount,
+        notBefore: checkout.createdAt,
+        notAfter: checkout.expiresAt,
+      })
+      if (!verifiedTransfer.confirmedAt) throw new Error('Hosted checkout confirmation time was not verified.')
+      amount = verifiedTransfer.amount
+      await markHostedCheckoutPaid({
+        id: checkout.id,
+        txHash,
+        payer,
+        amount: verifiedTransfer.amount,
+        confirmedAt: verifiedTransfer.confirmedAt,
+        network: evmChain,
+      })
+    } catch (error) {
+      throw paymentError(error instanceof Error ? error.message : 'Hosted checkout could not be verified on-chain.', 409)
+    }
+    memo = checkout.title
+    contextLabel = checkout.merchantName
+    settlementType = checkout.kind === 'service' ? 'hosted_service' : 'hosted_payment'
   }
 
   if (source === 'ngpos' || source === 'bank-receive') {

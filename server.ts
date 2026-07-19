@@ -114,6 +114,10 @@ import checkAgentUrlHandler from './api/check-agent-url.js'
 import dashboardPaymentsHandler from './api/dashboard-payments.js'
 import paymentTxLookupHandler from './api/payment-tx-lookup.js'
 import publicConfigHandler from './api/public-config.js'
+import partnerAccessHandler from './api/partner-access.js'
+import developerProjectsHandler from './api/developer-projects.js'
+import hostedCheckoutsHandler from './api/hosted-checkouts.js'
+import { pocketBillsPayHandler, pocketBillsQuoteHandler } from './api/pocket/bills.js'
 import { rateLimit } from './api/rate-limit.js'
 
 loadEnv({ path: '.env.local', override: false })
@@ -291,6 +295,13 @@ app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
 app.get('/api/dashboard-payments',     readLimiter, dashboardPaymentsHandler)
 app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)
 app.get('/api/public-config',          readLimiter, publicConfigHandler)
+app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
+app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
+app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
+app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
+app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)
+app.all('/api/pocket/bills/quote',     strictLimiter, pocketBillsQuoteHandler)
+app.all('/api/pocket/bills/pay',       strictLimiter, pocketBillsPayHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)

@@ -11,12 +11,45 @@ import {
   type PocketErrorCode,
 } from '../../src/pocket/lib/pocketSchemas.js'
 import { readPocketWalletChainActivity } from './wallet-chain-activity.js'
+import { createPocketBillsStore, PocketBillsStoreError, type PocketBillsIntent } from './bills-store.js'
+import { readVtpassPhase0Config } from '../vtpass-config.js'
 
 type PocketActivityHandlerDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   readHistory(ownerId: string): Promise<{ payments: unknown[] }>
   readActions(ownerId: string, limit?: number): ReturnType<typeof listCirclePocketActions>
   readWalletHistory?(ownerId: string): Promise<unknown[]>
+  readBills?(ownerId: string): Promise<PocketBillsIntent[]>
+}
+
+function billActivityRow(intent: PocketBillsIntent): PocketActivityRow | undefined {
+  if (!intent.txHash) return undefined
+  const status = intent.state === 'delivered'
+    ? 'delivered'
+    : intent.state === 'refunded'
+      ? 'refunded'
+      : intent.state === 'refund_pending'
+        ? 'refund pending'
+        : intent.state === 'needs_review'
+          ? 'needs review'
+          : intent.state === 'pending' || intent.state === 'vending'
+            ? 'processing'
+            : 'paid'
+  return {
+    eventId: `pocket-bill:${intent.id}`,
+    txHash: intent.txHash,
+    chain: intent.network,
+    payer: 'Circle Pocket',
+    memo: intent.serviceName,
+    amount: intent.amountUsdc,
+    ts: intent.updatedAt,
+    source: 'bills',
+    merchantId: intent.id,
+    contextLabel: `${intent.serviceName} · ${intent.phone.slice(0, 4)}***${intent.phone.slice(-4)}`,
+    settlementType: 'bill_payment',
+    amountNgn: intent.amountNgn,
+    paycrestStatus: status,
+  }
 }
 
 function appPayActivityRow(item: CirclePocketActionRecord): PocketActivityRow | undefined {
@@ -110,11 +143,15 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
       const identity = await dependencies.verifyUser(req)
       const history = await dependencies.readHistory(identity.userId)
       const walletHistory = await dependencies.readWalletHistory?.(identity.userId) ?? []
+      const bills = (await dependencies.readBills?.(identity.userId) ?? []).flatMap(intent => {
+        const row = billActivityRow(intent)
+        return row ? [row] : []
+      })
       const appPay = (await dependencies.readActions(identity.userId, 100)).flatMap(item => {
         const row = appPayActivityRow(item)
         return row ? [row] : []
       })
-      const payments = [...appPay, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
+      const payments = [...appPay, ...bills, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
         .filter((row, index, rows) => rows.findIndex(candidate => candidate.txHash === row.txHash && (
           candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
         )) === index)
@@ -136,4 +173,16 @@ export default createPocketActivityHandler({
   readHistory: listNgPosHistoryForOwner,
   readActions: listCirclePocketActions,
   readWalletHistory: readPocketWalletChainActivity,
+  readBills: async ownerId => {
+    const config = readVtpassPhase0Config()
+    try {
+      return await createPocketBillsStore({ config }).listOwnedIntents(ownerId, 100)
+    } catch (error) {
+      // Activity remains available during local development or an emergency
+      // Bills rollback. Other durable activity sources must not be hidden just
+      // because the isolated Bills store is unavailable.
+      if (error instanceof PocketBillsStoreError && error.code === 'BILLS_STORAGE_NOT_CONFIGURED') return []
+      throw error
+    }
+  },
 })

@@ -35,7 +35,7 @@ const ROUTES: Record<CirclePocketCapability, Omit<CirclePocketRoute, 'source' | 
     action: { label: 'Open Retail POS', url: '/pocket/move/pos' },
   },
   bills: {
-    answer: 'Bills is prepared for airtime, data, electricity, and TV payments. Checkout stays unavailable until the biller catalog, validation, and durable receipt flow are verified.',
+    answer: 'Bills starts with Nigerian Airtime. Sign in, choose a mobile network, review the live Naira-to-USDC quote, and pay from your Base Circle Pocket wallet when the protected pilot is enabled.',
     action: { label: 'Open Bills', url: '/pocket/bills/airtime' },
   },
   'x402-wallet': {

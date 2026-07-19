@@ -86,6 +86,18 @@ const handler = createPocketActivityHandler({
       internalWalletId: 'must-not-leak-wallet',
     }]
   },
+  readBills: async ownerId => {
+    ownerIds.push(ownerId)
+    return [{
+      id: 'bill-intent-1', ownerId, idempotencyKey: 'bill:activity:test:0001', requestFingerprint: '{}', requestId: '202607191200bill',
+      state: 'delivered', category: 'airtime', serviceId: 'mtn', serviceName: 'MTN Airtime', phone: '08011111111',
+      amountNgn: '100', amountNgnMinor: '10000', amountUsdc: '0.071429', fxRateNgnPerUsdc: '1400', network: 'base',
+      treasuryAddress: '0x1111111111111111111111111111111111111111', payerWallet: '0x2222222222222222222222222222222222222222',
+      quoteExpiresAt: 1_740_000_000_000, txHash: '0xbill', providerCode: '000', providerStatus: 'delivered', providerTransactionId: 'provider-bill-1',
+      providerDescription: 'TRANSACTION SUCCESSFUL', providerAttemptedAt: 1_738_000_000_000, requeryAttempts: 1, lastRequeryAt: 1_738_000_000_000,
+      refundTxHash: '', failureReason: '', createdAt: 1_737_000_000_000, updatedAt: 1_738_000_000_000,
+    }]
+  },
 })
 
 const wrongMethod = await request(handler, 'POST')
@@ -96,11 +108,14 @@ const loaded = await request(handler)
 assert.equal(loaded.statusCode, 200)
 assert.equal(loaded.body.ok, true)
 assert.equal(isPocketActivityReadData(loaded.body), true)
-assert.deepEqual(ownerIds, ['privy-user-1', 'privy-user-1'])
-assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['pocket-action:marketplace-action-1', '0xdeposit', 'paycrest_intent-2', '0xolder'])
+assert.deepEqual(ownerIds, ['privy-user-1', 'privy-user-1', 'privy-user-1'])
+assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['pocket-action:marketplace-action-1', '0xbill', '0xdeposit', 'paycrest_intent-2', '0xolder'])
 assert.equal(loaded.body.payments[0].source, 'app-pay')
 assert.equal(loaded.body.payments[0].paycrestStatus, 'needs review')
 assert.equal(loaded.body.payments[0].contextLabel, 'Payment outcome needs review before retrying')
+assert.equal(loaded.body.payments[1].source, 'bills')
+assert.equal(loaded.body.payments[1].amountNgn, '100')
+assert.equal(loaded.body.payments[1].paycrestStatus, 'delivered')
 const serialized = JSON.stringify(loaded.body)
 assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)

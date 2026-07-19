@@ -84,6 +84,40 @@ services:
         sync: false                   # Paycrest Sender API key
       - key: PAYCREST_API_SECRET
         sync: false                   # verifies /api/paycrest-webhook signatures
+      # Circle Pocket Bills / VTpass Phase 0. Sandbox controls are explicit
+      # dashboard settings; live vending and refunds remain hard-disabled.
+      - key: VTPASS_ENVIRONMENT
+        value: "sandbox"
+      - key: VTPASS_API_BASE
+        value: "https://sandbox.vtpass.com"
+      - key: VTPASS_API_KEY
+        sync: false                   # VTpass server-only static API key
+      - key: VTPASS_PUBLIC_KEY
+        sync: false                   # VTpass server-only GET key
+      - key: VTPASS_SECRET_KEY
+        sync: false                   # VTpass server-only POST key
+      - key: POCKET_BILLS_ENABLED
+        sync: false                   # explicitly enable only for the sandbox pilot
+      - key: VTPASS_SANDBOX_VENDING_ENABLED
+        sync: false                   # explicitly enable only after provider checks pass
+      - key: VTPASS_LIVE_VENDING_ENABLED
+        value: "false"
+      - key: VTPASS_AIRTIME_WHITELIST_CONFIRMED
+        sync: false                   # explicit operator acknowledgement
+      - key: POCKET_BILLS_REFUNDS_READY
+        value: "false"
+      - key: POCKET_BILLS_TREASURY_ADDRESS
+        sync: false                   # dedicated Base USDC treasury; no platform fallback
+      - key: POCKET_BILLS_MIN_NGN
+        value: "100"
+      - key: POCKET_BILLS_MAX_NGN
+        value: "1000"
+      - key: POCKET_BILLS_DAILY_LIMIT_NGN
+        value: "10000"
+      - key: VTPASS_MINIMUM_WALLET_BALANCE_NGN
+        value: "5000"
+      - key: POCKET_BILLS_STORE_KEY
+        value: "hashpaylink:pocket-bills:v1"
       - key: CIRCLE_CLI_ENABLED
         value: "true"                 # required for reader wallet login, x402 balance checks, Gateway activation, and x402 pay
       - key: DATABASE_URL

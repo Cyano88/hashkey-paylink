@@ -38,6 +38,7 @@ function isSettledPaycrestStatus(value: string | undefined) {
 }
 
 async function registerOrderReceipt(order: PaycrestOrderRecord, txHash: string) {
+  if (order.source === 'hosted-checkout') return null
   const source = receiptSource(order)
   return registerVerifiedPayment({
     eventId: `ngpos-${order.merchant_id}`,
