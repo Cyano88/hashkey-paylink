@@ -17,11 +17,12 @@ function stop(message) {
 if (!TX_PATTERN.test(txHash)) {
   stop('Provide the exact Base payment hash with --tx=0x...')
 } else {
-  const [{ readVtpassPhase0Config }, { readCircleTreasuryConfig }, { readDurableJson }, { createPocketBillsStore }] = await Promise.all([
+  const [{ readVtpassPhase0Config }, { readCircleTreasuryConfig }, { readDurableJson }, { createPocketBillsStore }, { verifyEvmUsdcTransfer }] = await Promise.all([
     import('../api/vtpass-config.ts'),
     import('../api/circle-developer-treasury.ts'),
     import('../api/render-durable-store.ts'),
     import('../api/pocket/bills-store.ts'),
+    import('../api/usdc-transfer-verify.ts'),
   ])
 
   const config = readVtpassPhase0Config()
@@ -36,13 +37,26 @@ if (!TX_PATTERN.test(txHash)) {
     if (intents.length !== 1) stop(intents.length ? 'Payment hash is connected to multiple Bills records.' : 'Payment hash was not found in the durable Bills store.')
     else {
       const intent = intents[0]
+      let paymentAmountUsdc = intent.paymentAmountUsdc
+      let paymentAmountSource = paymentAmountUsdc ? 'persisted' : ''
+      if (!paymentAmountUsdc) {
+        const verified = await verifyEvmUsdcTransfer({
+          chain: 'base',
+          txHash: intent.txHash,
+          payer: intent.payerWallet,
+          recipient: intent.treasuryAddress,
+          minAmount: intent.amountUsdc,
+        })
+        paymentAmountUsdc = verified.amount
+        paymentAmountSource = 'onchain'
+      }
       const checks = {
         sandboxReceipt: intent.providerEnvironment === 'sandbox',
         officialTestNumber: intent.phone === '08011111111',
         delivered: intent.state === 'delivered',
         basePayment: intent.network === 'base',
         configuredTreasury: intent.treasuryAddress.toLowerCase() === config.treasuryAddress.toLowerCase(),
-        exactPaymentAmount: Boolean(intent.paymentAmountUsdc),
+        exactPaymentAmount: Boolean(paymentAmountUsdc),
       }
       const eligible = Object.values(checks).every(Boolean)
 
@@ -57,7 +71,8 @@ if (!TX_PATTERN.test(txHash)) {
             network: intent.network,
             treasuryAddress: intent.treasuryAddress,
             configuredTreasuryAddress: config.treasuryAddress,
-            paymentAmountUsdc: intent.paymentAmountUsdc || '',
+            paymentAmountUsdc: paymentAmountUsdc || '',
+            paymentAmountSource,
           },
         }, null, 2))
         stop('Payment is not an eligible delivered VTpass sandbox receipt on the configured Circle treasury.')
@@ -69,12 +84,21 @@ if (!TX_PATTERN.test(txHash)) {
           intentId: intent.id,
           state: intent.state,
           amountNgn: intent.amountNgn,
-          paymentAmountUsdc: intent.paymentAmountUsdc,
+          paymentAmountUsdc,
+          paymentAmountSource,
           txHash: intent.txHash,
           message: 'Audit passed. Re-run with --apply to create the refund-pending drill state.',
         }, null, 2))
       } else {
         const store = createPocketBillsStore({ config })
+        if (!intent.paymentAmountUsdc) {
+          await store.backfillVerifiedPaymentAmount({
+            ownerId: intent.ownerId,
+            intentId: intent.id,
+            txHash: intent.txHash,
+            paymentAmountUsdc,
+          })
+        }
         const updated = await store.recordProviderResult(intent.ownerId, intent.id, {
           status: 'reversed',
           providerCode: 'REFUND_DRILL',

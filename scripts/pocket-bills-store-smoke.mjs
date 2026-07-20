@@ -45,6 +45,9 @@ function memoryStorage() {
         release()
       }
     },
+    unsafeUpdate(fn) {
+      value = structuredClone(fn(structuredClone(value)))
+    },
   }
 }
 
@@ -148,6 +151,28 @@ const delivered = await store.recordProviderResult('privy:owner-1', first.intent
   requeryRequired: false,
 })
 assert.equal(delivered.state, 'delivered')
+
+storage.unsafeUpdate(data => {
+  data.intents[first.intent.id].paymentAmountUsdc = ''
+  return data
+})
+const backfilled = await store.backfillVerifiedPaymentAmount({
+  ownerId: 'privy:owner-1',
+  intentId: first.intent.id,
+  txHash: paymentHash,
+  paymentAmountUsdc: '0.072675',
+})
+assert.equal(backfilled.state, 'delivered')
+assert.equal(backfilled.paymentAmountUsdc, '0.072675')
+await assert.rejects(
+  () => store.backfillVerifiedPaymentAmount({
+    ownerId: 'privy:owner-1',
+    intentId: first.intent.id,
+    txHash: paymentHash,
+    paymentAmountUsdc: '0.072674',
+  }),
+  error => error instanceof PocketBillsStoreError && error.code === 'BILLS_PAYMENT_AMOUNT_MISMATCH',
+)
 
 const noDowngrade = await store.recordProviderResult('privy:owner-1', first.intent.id, {
   status: 'pending', providerCode: '099', providerStatus: 'pending', responseDescription: 'PROCESSING',

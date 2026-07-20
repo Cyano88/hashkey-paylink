@@ -451,6 +451,26 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     })
   }
 
+  async function backfillVerifiedPaymentAmount(input: { ownerId: string; intentId: string; txHash: string; paymentAmountUsdc: string }) {
+    const txHash = cleanText(input.txHash, 80).toLowerCase()
+    if (!EVM_TX_PATTERN.test(txHash)) throw new PocketBillsStoreError('BILLS_INVALID_TX_HASH', 'A valid Base transaction hash is required.')
+    const paymentAmountUsdc = canonicalDecimal(input.paymentAmountUsdc, 6, 'Verified USDC amount')
+    return updateOwned(input.ownerId, input.intentId, (intent, store) => {
+      assertState(intent, ['payment_confirmed', 'vending', 'pending', 'delivered', 'refund_pending', 'needs_review'], 'Payment evidence backfill')
+      if (intent.txHash !== txHash) throw new PocketBillsStoreError('BILLS_TX_HASH_MISMATCH', 'Payment evidence does not match this bill payment.', 409)
+      if (BigInt(decimalToMinor(paymentAmountUsdc, 6)) < BigInt(decimalToMinor(intent.amountUsdc, 6))) {
+        throw new PocketBillsStoreError('BILLS_PAYMENT_AMOUNT_MISMATCH', 'Verified USDC amount is below the bill quote.', 409)
+      }
+      if (intent.paymentAmountUsdc && intent.paymentAmountUsdc !== paymentAmountUsdc) {
+        throw new PocketBillsStoreError('BILLS_PAYMENT_AMOUNT_MISMATCH', 'Stored and verified USDC amounts do not match.', 409)
+      }
+      const claimedBy = store.transactionHashes[txHash]
+      if (claimedBy && claimedBy !== intent.id) throw new PocketBillsStoreError('BILLS_TX_HASH_REUSED', 'This transaction is already connected to another bill payment.', 409)
+      store.transactionHashes[txHash] = intent.id
+      intent.paymentAmountUsdc = paymentAmountUsdc
+    })
+  }
+
   async function claimVending(ownerId: string, intentId: string) {
     const cleanOwnerId = cleanText(ownerId, 200)
     const cleanIntentId = cleanText(intentId, 100)
@@ -652,6 +672,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     getIntentById,
     markAwaitingPayment,
     recordVerifiedPayment,
+    backfillVerifiedPaymentAmount,
     claimVending,
     recordProviderResult,
     recordRequeryFailure,
