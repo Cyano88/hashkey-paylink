@@ -117,14 +117,10 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
 
 export function parsePocketBillsAvailability(value: unknown) {
   const bills = record(record(value).bills)
-  const minNgn = Number(bills.minNgn)
-  const maxNgn = Number(bills.maxNgn)
   const categories = Array.isArray(bills.categories) ? bills.categories.map(String) : []
   return {
     enabled: bills.enabled === true,
     environment: bills.environment === 'live' ? 'live' as const : 'sandbox' as const,
-    minNgn: Number.isFinite(minNgn) && minNgn > 0 ? minNgn : 100,
-    maxNgn: Number.isFinite(maxNgn) && maxNgn > 0 ? maxNgn : 1000,
     airtimeEnabled: categories.includes('airtime'),
     dataEnabled: categories.includes('data'),
     tvEnabled: categories.includes('tv'),

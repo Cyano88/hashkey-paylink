@@ -169,7 +169,7 @@ function normalizeDataRecipient(value: unknown, serviceId: string, environment: 
   return normalizePhone(recipient, environment)
 }
 
-function normalizeAmount(value: unknown, config: VtpassPhase0Config, enforceConfiguredMaximum = true) {
+function normalizeAmount(value: unknown) {
   const raw = text(value)
   if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) {
     throw new VtpassClientError({ code: 'VTPASS_INVALID_AMOUNT', message: 'Enter a valid Naira amount.', status: 400 })
@@ -177,12 +177,6 @@ function normalizeAmount(value: unknown, config: VtpassPhase0Config, enforceConf
   const amount = Number(raw)
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new VtpassClientError({ code: 'VTPASS_INVALID_AMOUNT', message: 'Enter a valid Naira amount.', status: 400 })
-  }
-  if (config.minNgn !== null && amount < config.minNgn) {
-    throw new VtpassClientError({ code: 'VTPASS_AMOUNT_BELOW_LIMIT', message: `Minimum bill amount is NGN ${config.minNgn}.`, status: 400 })
-  }
-  if (enforceConfiguredMaximum && config.maxNgn !== null && amount > config.maxNgn) {
-    throw new VtpassClientError({ code: 'VTPASS_AMOUNT_ABOVE_LIMIT', message: `Maximum bill amount is NGN ${config.maxNgn}.`, status: 400 })
   }
   return amount
 }
@@ -536,7 +530,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
     assertPurchaseRequestIdDate(requestId, currentTime)
     const serviceID = normalizeAirtimeServiceId(input.serviceId)
     const phone = normalizePhone(input.phone, config.environment)
-    const amount = normalizeAmount(input.amountNgn, config)
+    const amount = normalizeAmount(input.amountNgn)
     const { body } = await requestJson('/api/pay', 'POST', { request_id: requestId, serviceID, amount, phone }, true)
     return normalizeVtpassTransaction(body, requestId)
   }
@@ -552,7 +546,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
     const serviceID = normalizeDataServiceId(input.serviceId)
     const variation_code = normalizeVariationCode(input.variationCode)
     const phone = normalizeDataRecipient(input.phone, serviceID, config.environment)
-    const amount = normalizeAmount(input.amountNgn, config, false)
+    const amount = normalizeAmount(input.amountNgn)
     const { body } = await requestJson('/api/pay', 'POST', {
       request_id: requestId,
       serviceID,
@@ -574,7 +568,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
     const billersCode = normalizeBillerCode(input.smartcard, 'smartcard number')
     const variation_code = normalizeVariationCode(input.variationCode)
     const phone = normalizePhone(input.contactPhone, config.environment)
-    const amount = normalizeAmount(input.amountNgn, config, false)
+    const amount = normalizeAmount(input.amountNgn)
     const { body } = await requestJson('/api/pay', 'POST', {
       request_id: requestId, serviceID, billersCode, variation_code, amount, phone,
       ...(serviceID === 'dstv' || serviceID === 'gotv' ? { subscription_type: 'change', quantity: 1 } : {}),
@@ -591,7 +585,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
     const billersCode = normalizeBillerCode(input.meterNumber, 'meter number')
     const variation_code = normalizeMeterType(input.meterType)
     const phone = normalizePhone(input.contactPhone, config.environment)
-    const amount = normalizeAmount(input.amountNgn, config)
+    const amount = normalizeAmount(input.amountNgn)
     const { body } = await requestJson('/api/pay', 'POST', { request_id: requestId, serviceID, billersCode, variation_code, amount, phone }, true)
     return normalizeVtpassTransaction(body, requestId)
   }

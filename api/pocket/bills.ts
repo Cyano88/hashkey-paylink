@@ -469,13 +469,12 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
       const service = services.find(item => item.serviceId === serviceId)
       if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${categoryLabel(category)} provider.`), 'serviceId')
       if (category === 'electricity') return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations: [] })
-      const min = dependencies.config.minNgn ?? Number.NEGATIVE_INFINITY
       const variations = (await dependencies.provider.listServiceVariations(serviceId))
         .map(item => ({
           variationCode: item.variationCode,
           name: item.name,
           amountNgn: canonicalNgn(String(item.amount)),
-          available: item.amount >= min,
+          available: Number.isFinite(item.amount) && item.amount > 0,
         }))
       if (!variations.length) throw new PocketBillsStoreError('BILLS_PLANS_UNAVAILABLE', `No ${category === 'tv' ? 'TV packages' : 'Data plans'} are currently available from this provider.`, 503)
       return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations })

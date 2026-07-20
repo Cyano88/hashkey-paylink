@@ -115,6 +115,14 @@ const wrongHost = readVtpassPhase0Config({ ...base, VTPASS_API_BASE: 'https://ex
 assert.equal(wrongHost.credentialsReady, false)
 assert.equal(wrongHost.canReadProvider, false)
 
+const noStaticMoneyCaps = readVtpassPhase0Config({
+  ...base,
+  POCKET_BILLS_MIN_NGN: '',
+  POCKET_BILLS_MAX_NGN: '',
+  POCKET_BILLS_DAILY_LIMIT_NGN: '',
+})
+assert.equal(noStaticMoneyCaps.policyReady, true)
+
 const invalidPolicy = readVtpassPhase0Config({
   ...base,
   POCKET_BILLS_TREASURY_ADDRESS: '',

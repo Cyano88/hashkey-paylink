@@ -18,9 +18,6 @@ export type VtpassPhase0Config = {
   refundsReady: boolean
   circleTreasuryReady: boolean
   treasuryAddress: string
-  minNgn: number | null
-  maxNgn: number | null
-  dailyLimitNgn: number | null
   minimumProviderBalanceNgn: number | null
   storeKey: string
   credentialsReady: boolean
@@ -84,9 +81,6 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   const refundsReady = enabled(env.POCKET_BILLS_REFUNDS_READY)
   const circleTreasury = readCircleTreasuryConfig(env)
   const treasuryAddress = env.POCKET_BILLS_TREASURY_ADDRESS?.trim() || ''
-  const minNgn = positiveNumber(env.POCKET_BILLS_MIN_NGN)
-  const maxNgn = positiveNumber(env.POCKET_BILLS_MAX_NGN)
-  const dailyLimitNgn = positiveNumber(env.POCKET_BILLS_DAILY_LIMIT_NGN)
   const minimumProviderBalanceNgn = positiveNumber(env.VTPASS_MINIMUM_WALLET_BALANCE_NGN)
   const storeKey = env.POCKET_BILLS_STORE_KEY?.trim() || 'hashpaylink:pocket-bills:v1'
   const issues: string[] = []
@@ -96,11 +90,6 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   if (!publicKey) issues.push('VTPASS_PUBLIC_KEY is missing.')
   if (!secretKey) issues.push('VTPASS_SECRET_KEY is missing.')
   if (!treasuryAddress || !isAddress(treasuryAddress)) issues.push('POCKET_BILLS_TREASURY_ADDRESS must be an explicit valid EVM address.')
-  if (minNgn === null) issues.push('POCKET_BILLS_MIN_NGN must be a positive number.')
-  if (maxNgn === null) issues.push('POCKET_BILLS_MAX_NGN must be a positive number.')
-  if (minNgn !== null && maxNgn !== null && minNgn > maxNgn) issues.push('POCKET_BILLS_MIN_NGN cannot exceed POCKET_BILLS_MAX_NGN.')
-  if (dailyLimitNgn === null) issues.push('POCKET_BILLS_DAILY_LIMIT_NGN must be a positive number.')
-  if (maxNgn !== null && dailyLimitNgn !== null && dailyLimitNgn < maxNgn) issues.push('POCKET_BILLS_DAILY_LIMIT_NGN cannot be lower than the per-payment maximum.')
   if (minimumProviderBalanceNgn === null) issues.push('VTPASS_MINIMUM_WALLET_BALANCE_NGN must be a positive number.')
   if (!storeKey) issues.push('POCKET_BILLS_STORE_KEY is missing.')
   if (environment === 'sandbox' && liveVendingEnabled) issues.push('VTPASS_LIVE_VENDING_ENABLED cannot be enabled in sandbox mode.')
@@ -112,11 +101,6 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   const policyReady = Boolean(
     treasuryAddress
     && isAddress(treasuryAddress)
-    && minNgn !== null
-    && maxNgn !== null
-    && minNgn <= maxNgn
-    && dailyLimitNgn !== null
-    && dailyLimitNgn >= maxNgn
     && minimumProviderBalanceNgn !== null
     && storeKey,
   )
@@ -150,9 +134,6 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
     refundsReady,
     circleTreasuryReady: circleTreasury.verificationReady,
     treasuryAddress,
-    minNgn,
-    maxNgn,
-    dailyLimitNgn,
     minimumProviderBalanceNgn,
     storeKey,
     credentialsReady,

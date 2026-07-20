@@ -80,7 +80,6 @@ export default function usePocketBillsController({
   const activeBillKey = `pocket:bills:active:${category}`
   const [availability, setAvailability] = useState<'loading' | 'enabled' | 'disabled'>('loading')
   const [environment, setEnvironment] = useState<'sandbox' | 'live'>('sandbox')
-  const [limits, setLimits] = useState({ minNgn: 100, maxNgn: 1000 })
   const [airtimeEnabled, setAirtimeEnabled] = useState(false)
   const [dataEnabled, setDataEnabled] = useState(false)
   const [tvEnabled, setTvEnabled] = useState(false)
@@ -131,7 +130,6 @@ export default function usePocketBillsController({
       .then(result => {
         if (cancelled) return
         setEnvironment(result.environment)
-        setLimits({ minNgn: result.minNgn, maxNgn: result.maxNgn })
         setAirtimeEnabled(result.airtimeEnabled)
         setDataEnabled(result.dataEnabled)
         setTvEnabled(result.tvEnabled)
@@ -279,11 +277,13 @@ export default function usePocketBillsController({
     const remaining = intent.quoteExpiresAt - Date.now()
     if (remaining <= 0) {
       setStatus('error')
+      setErrorCode('BILLS_QUOTE_EXPIRED')
       setError(`The ${billLabel(category)} quote expired. Review the payment again.`)
       return
     }
     const timeout = window.setTimeout(() => {
       setStatus('error')
+      setErrorCode('BILLS_QUOTE_EXPIRED')
       setError(`The ${billLabel(category)} quote expired. Review the payment again.`)
     }, remaining)
     return () => window.clearTimeout(timeout)
@@ -359,7 +359,7 @@ export default function usePocketBillsController({
         : category === 'tv' ? await quotePocketTv({ accessToken, serviceId, variationCode, smartcard: phone, contactPhone, payerWallet: wallet.address })
           : category === 'electricity' ? await quotePocketElectricity({ accessToken, serviceId, meterType: variationCode as 'prepaid' | 'postpaid', meterNumber: phone, contactPhone, amountNgn, payerWallet: wallet.address })
             : await quotePocketAirtime({ accessToken, serviceId, phone, amountNgn, payerWallet: wallet.address })
-      if (result.intent.quoteExpiresAt <= Date.now()) throw new Error(`The ${billLabel(category)} quote expired. Review it again.`)
+      if (result.intent.quoteExpiresAt <= Date.now()) throw new PocketBillsApiError(`The ${billLabel(category)} quote expired. Review it again.`, { code: 'BILLS_QUOTE_EXPIRED', status: 409 })
       setIntent(result.intent)
       setStatus('ready')
     } catch (reason) {
@@ -417,15 +417,13 @@ export default function usePocketBillsController({
   const recipientReady = category === 'airtime' ? /^0\d{10}$/.test(phone) : category === 'data' ? /^\d{10,12}$/.test(phone) : /^\d{8,15}$/.test(phone)
   const formReady = recipientReady
     && (environment !== 'sandbox' || phone === expectedSandboxRecipient)
-    && Number(amountNgn) >= limits.minNgn
-    && (category === 'data' || category === 'tv' || Number(amountNgn) <= limits.maxNgn)
+    && Number(amountNgn) > 0
     && (category === 'airtime' || Boolean(variationCode))
     && ((category !== 'tv' && category !== 'electricity') || (Boolean(verification) && /^0\d{10}$/.test(contactPhone)))
 
   return {
     availability,
     environment,
-    limits,
     airtimeEnabled,
     dataEnabled,
     tvEnabled,

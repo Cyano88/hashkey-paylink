@@ -269,10 +269,11 @@ await assert.rejects(
   () => deliveredClient.purchaseAirtime({ serviceId: 'mtn', phone: 'invalid', amountNgn: 100 }),
   error => error instanceof VtpassClientError && error.code === 'VTPASS_INVALID_PHONE',
 )
-await assert.rejects(
-  () => deliveredClient.purchaseAirtime({ serviceId: 'mtn', phone: '08011111111', amountNgn: 1001 }),
-  error => error instanceof VtpassClientError && error.code === 'VTPASS_AMOUNT_ABOVE_LIMIT',
-)
+const liftedLimitCalls = []
+const liftedLimitClient = queuedClient([jsonResponse({ code: '000', content: { transactions: { status: 'delivered', amount: 26450 } }, requestId: '202607201200lifted' })], liftedLimitCalls)
+const liftedLimitResult = await liftedLimitClient.purchaseAirtime({ serviceId: 'mtn', phone: '08011111111', amountNgn: 26450 })
+assert.equal(liftedLimitResult.status, 'delivered')
+assert.equal(JSON.parse(liftedLimitCalls[0].init.body).amount, 26450)
 await assert.rejects(
   () => deliveredClient.purchaseAirtime({ serviceId: 'mtn', phone: '08011111111', amountNgn: 100, requestId: '202607181105older' }),
   error => error instanceof VtpassClientError && error.code === 'VTPASS_INVALID_REQUEST_ID_DATE',

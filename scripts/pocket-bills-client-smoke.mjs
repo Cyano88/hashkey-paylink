@@ -20,8 +20,8 @@ const intent = {
   txHash: '', providerStatus: '', providerDescription: '', failureReason: '', createdAt: Date.now(), updatedAt: Date.now(),
 }
 
-assert.deepEqual(parsePocketBillsAvailability({ bills: { enabled: true, environment: 'sandbox', categories: ['airtime', 'data'], minNgn: 50, maxNgn: 5000 } }), { enabled: true, environment: 'sandbox', minNgn: 50, maxNgn: 5000, airtimeEnabled: true, dataEnabled: true, tvEnabled: false, electricityEnabled: false })
-assert.deepEqual(parsePocketBillsAvailability({}), { enabled: false, environment: 'sandbox', minNgn: 100, maxNgn: 1000, airtimeEnabled: false, dataEnabled: false, tvEnabled: false, electricityEnabled: false })
+assert.deepEqual(parsePocketBillsAvailability({ bills: { enabled: true, environment: 'sandbox', categories: ['airtime', 'data'] } }), { enabled: true, environment: 'sandbox', airtimeEnabled: true, dataEnabled: true, tvEnabled: false, electricityEnabled: false })
+assert.deepEqual(parsePocketBillsAvailability({}), { enabled: false, environment: 'sandbox', airtimeEnabled: false, dataEnabled: false, tvEnabled: false, electricityEnabled: false })
 assert.equal(parsePocketBillIntent(intent).amountUsdc, '0.071429')
 assert.throws(() => parsePocketBillIntent({ ...intent, state: 'invented' }), PocketBillsApiError)
 
@@ -76,10 +76,10 @@ await assert.rejects(
   error => error instanceof PocketBillsApiError && error.code === 'CONFIRMATION_REQUIRED' && error.retryable && error.status === 409,
 )
 
-const dailyLimitFetcher = async () => new Response(JSON.stringify({ ok: false, error: { code: 'VERSION_CONFLICT', reason: 'BILLS_DAILY_LIMIT_EXCEEDED', message: 'Daily bill-payment limit reached.', retryable: false } }), { status: 409, headers: { 'content-type': 'application/json' } })
+const expiredQuoteFetcher = async () => new Response(JSON.stringify({ ok: false, error: { code: 'VERSION_CONFLICT', reason: 'BILLS_QUOTE_EXPIRED', message: 'Bill quote expired.', retryable: false } }), { status: 409, headers: { 'content-type': 'application/json' } })
 await assert.rejects(
-  () => quotePocketAirtime({ accessToken: 'privy-token', serviceId: 'mtn', phone: '08011111111', amountNgn: '100', payerWallet: intent.payerWallet, fetcher: dailyLimitFetcher }),
-  error => error instanceof PocketBillsApiError && error.code === 'BILLS_DAILY_LIMIT_EXCEEDED' && error.status === 409,
+  () => quotePocketAirtime({ accessToken: 'privy-token', serviceId: 'mtn', phone: '08011111111', amountNgn: '100', payerWallet: intent.payerWallet, fetcher: expiredQuoteFetcher }),
+  error => error instanceof PocketBillsApiError && error.code === 'BILLS_QUOTE_EXPIRED' && error.status === 409,
 )
 
 let refundRequest

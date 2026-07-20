@@ -42,8 +42,6 @@ export default function handler(_req: Request, res: Response) {
       enabled: bills.billsEnabled && bills.canVend,
       environment: bills.environment,
       categories: bills.environment === 'sandbox' ? ['airtime', 'data', 'tv', 'electricity'] : bills.liveCategories,
-      minNgn: billsConfig.minNgn,
-      maxNgn: billsConfig.maxNgn,
     },
   })
 }

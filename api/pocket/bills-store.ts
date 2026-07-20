@@ -192,24 +192,6 @@ function decimalToMinor(value: string, decimals: number) {
   return (BigInt(whole) * (10n ** BigInt(decimals)) + BigInt(fraction.padEnd(decimals, '0'))).toString()
 }
 
-function policyMinor(value: number | null, label: string) {
-  if (value === null || !Number.isFinite(value) || value <= 0) {
-    throw new PocketBillsStoreError('BILLS_POLICY_NOT_READY', `${label} is not configured.`, 503)
-  }
-  return BigInt(Math.round(value * 100))
-}
-
-function lagosDay(timestamp: number) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Africa/Lagos',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(timestamp))
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value || ''
-  return `${part('year')}-${part('month')}-${part('day')}`
-}
-
 function idempotencyIndex(ownerId: string, idempotencyKey: string) {
   return `${ownerId}:${idempotencyKey}`
 }
@@ -373,11 +355,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     }
 
     const amountMinor = BigInt(amountNgnMinor)
-    const minimumMinor = policyMinor(config.minNgn, 'Minimum bill amount')
-    const maximumMinor = policyMinor(config.maxNgn, 'Maximum bill amount')
-    const dailyLimitMinor = policyMinor(config.dailyLimitNgn, 'Daily bill limit')
-    if (amountMinor < minimumMinor) throw new PocketBillsStoreError('BILLS_AMOUNT_BELOW_LIMIT', `Minimum bill amount is NGN ${config.minNgn}.`)
-    if (category !== 'data' && category !== 'tv' && amountMinor > maximumMinor) throw new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_LIMIT', `Maximum bill amount is NGN ${config.maxNgn}.`)
+    if (amountMinor <= 0n) throw new PocketBillsStoreError('BILLS_INVALID_AMOUNT', 'Enter a valid Naira amount.')
 
     // Idempotency follows the user's semantic request. Server-generated quote
     // values and expiry may drift between retries, but the original stored quote
@@ -392,17 +370,6 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
           throw new PocketBillsStoreError('BILLS_IDEMPOTENCY_CONFLICT', 'This idempotency key belongs to a different bill request.', 409)
         }
         return { intent: existing, created: false }
-      }
-
-      const day = lagosDay(createdAt)
-      const reserved = Object.values(store.intents).reduce((total, intent) => {
-        if (intent.ownerId !== ownerId || lagosDay(intent.createdAt) !== day) return total
-        const abandoned = ['quoted', 'awaiting_payment'].includes(intent.state) && intent.quoteExpiresAt <= createdAt
-        const released = intent.state === 'failed' || intent.state === 'refunded'
-        return abandoned || released ? total : total + BigInt(intent.amountNgnMinor)
-      }, 0n)
-      if (reserved + amountMinor > dailyLimitMinor) {
-        throw new PocketBillsStoreError('BILLS_DAILY_LIMIT_EXCEEDED', 'Daily bill-payment limit reached.', 409)
       }
 
       const id = uuid()

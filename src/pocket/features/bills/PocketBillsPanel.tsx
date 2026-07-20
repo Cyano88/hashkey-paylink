@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Clock3, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
+import { AlertCircle, ArrowRight, Check, Clock3, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import PocketSlideAction from '../../components/PocketSlideAction'
@@ -41,11 +41,6 @@ function dataServiceLabel(name: string) {
     .replace(/\s+Data$/i, '')
 }
 
-function money(value: string) {
-  const amount = Number(value)
-  return Number.isFinite(amount) ? new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 2 }).format(amount) : '₦0'
-}
-
 function SignInCard() {
   return (
     <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
@@ -79,7 +74,15 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
     ? bills.dataServices.map(service => ({ value: service.serviceId, label: dataServiceLabel(service.name) }))
     : [...NETWORKS]
   const categoryEnabled = view === 'data' ? bills.dataEnabled : view === 'tv' ? bills.tvEnabled : view === 'electricity' ? bills.electricityEnabled : bills.airtimeEnabled
-  const dailyLimitReached = bills.errorCode === 'BILLS_DAILY_LIMIT_EXCEEDED'
+  const quoteExpired = bills.errorCode === 'BILLS_QUOTE_EXPIRED'
+  const providerUnavailable = bills.errorCode === 'PROVIDER_UNAVAILABLE'
+    || bills.errorCode === 'BILLS_PROVIDER_RESERVE_LOW'
+    || bills.errorCode === 'BILLS_DISABLED'
+  const errorPresentation = quoteExpired
+    ? { title: 'Quote expired', body: 'Rates can move. Review your details to get a fresh quote.', action: 'Review again', icon: Clock3 }
+    : providerUnavailable
+      ? { title: 'Bills temporarily unavailable', body: 'Your details are safe. Try again shortly.', action: 'Try again', icon: Clock3 }
+      : { title: 'Check your details', body: bills.error, action: '', icon: AlertCircle }
 
   return (
     <div className="space-y-4">
@@ -185,7 +188,6 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
                   <span className="text-sm font-black text-gray-400">₦</span>
                   <input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" />
                 </span>
-                <span className="mt-1.5 block text-[10px] font-medium text-gray-400">{money(String(bills.limits.minNgn))}–{money(String(bills.limits.maxNgn))} during the pilot</span>
               </label>
             ) : null}
 
@@ -212,7 +214,6 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Electricity amount</span>
                 <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]"><span className="text-sm font-black text-gray-400">₦</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
-                <span className="mt-1.5 block text-[10px] font-medium text-gray-400">{money(String(bills.limits.minNgn))}–{money(String(bills.limits.maxNgn))} during the pilot</span>
               </label>
             )}
 
@@ -246,23 +247,21 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
             )}
 
             {bills.notice && <p className={cn('text-center text-xs font-semibold', bills.status === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bills.notice}</p>}
-            {bills.error && (dailyLimitReached ? (
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3.5 dark:border-blue-400/15 dark:bg-blue-400/[0.08]">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-blue-600 shadow-sm dark:bg-white/[0.08] dark:text-blue-300"><Clock3 className="h-4 w-4" /></span>
-                  <span className="min-w-0">
-                    <span className="block text-xs font-black text-gray-950 dark:text-white">Today’s Bills limit reached</span>
-                    <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">This payment is above your remaining daily allowance. Choose a lower-value option or try again after midnight WAT.</span>
-                  </span>
+            {bills.error && (() => {
+              const ErrorIcon = errorPresentation.icon
+              return (
+                <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-3.5 dark:border-white/10 dark:bg-white/[0.04]">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm dark:bg-white/[0.07] dark:text-gray-300"><ErrorIcon className="h-4 w-4" /></span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-black text-gray-950 dark:text-white">{errorPresentation.title}</span>
+                      <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{errorPresentation.body}</span>
+                    </span>
+                  </div>
+                  {errorPresentation.action && <button type="button" onClick={bills.edit} className="mt-3 min-h-9 w-full rounded-full border border-gray-200 bg-white text-[11px] font-bold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 active:scale-[0.99] dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200 dark:hover:bg-blue-400/10 dark:hover:text-blue-300">{errorPresentation.action}</button>}
                 </div>
-                <button type="button" onClick={bills.edit} className="mt-3 min-h-9 w-full rounded-full border border-blue-200 bg-white text-[11px] font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 active:scale-[0.99] dark:border-blue-400/20 dark:bg-white/[0.05] dark:text-blue-300 dark:hover:bg-blue-400/10">Choose another option</button>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-                <span className="block text-xs font-black text-gray-900 dark:text-gray-100">Payment needs attention</span>
-                <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{bills.error}</span>
-              </div>
-            ))}
+              )
+            })()}
           </div>
         </>
       )}

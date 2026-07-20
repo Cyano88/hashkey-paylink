@@ -296,15 +296,12 @@ const concurrencyStore = createPocketBillsStore({
 })
 const concurrent = await Promise.allSettled([0, 1, 2, 3].map(index => concurrencyStore.createQuote({
   ...quoteInput(),
-  ownerId: 'privy:daily-limit-owner',
+  ownerId: 'privy:concurrent-owner',
   idempotencyKey: `bill:parallel:${String(index).padStart(16, '0')}`,
   phone: `0801111111${index}`,
   quoteExpiresAt: currentTime + 5 * 60_000,
 })))
-assert.equal(concurrent.filter(result => result.status === 'fulfilled').length, 3)
-const rejected = concurrent.find(result => result.status === 'rejected')
-assert.ok(rejected)
-assert.equal(rejected.reason.code, 'BILLS_DAILY_LIMIT_EXCEEDED')
+assert.equal(concurrent.filter(result => result.status === 'fulfilled').length, 4)
 
 const idempotencyStorage = memoryStorage()
 let idempotencyUuid = 0
