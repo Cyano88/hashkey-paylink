@@ -1,4 +1,5 @@
 import { isAddress } from 'viem'
+import { readCircleTreasuryConfig } from './circle-developer-treasury.js'
 
 export type VtpassEnvironment = 'sandbox' | 'live'
 
@@ -13,6 +14,7 @@ export type VtpassPhase0Config = {
   liveVendingEnabled: boolean
   airtimeWhitelistConfirmed: boolean
   refundsReady: boolean
+  circleTreasuryReady: boolean
   treasuryAddress: string
   minNgn: number | null
   maxNgn: number | null
@@ -72,6 +74,7 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   const liveVendingEnabled = enabled(env.VTPASS_LIVE_VENDING_ENABLED)
   const airtimeWhitelistConfirmed = enabled(env.VTPASS_AIRTIME_WHITELIST_CONFIRMED)
   const refundsReady = enabled(env.POCKET_BILLS_REFUNDS_READY)
+  const circleTreasury = readCircleTreasuryConfig(env)
   const treasuryAddress = env.POCKET_BILLS_TREASURY_ADDRESS?.trim() || ''
   const minNgn = positiveNumber(env.POCKET_BILLS_MIN_NGN)
   const maxNgn = positiveNumber(env.POCKET_BILLS_MAX_NGN)
@@ -93,6 +96,9 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   if (minimumProviderBalanceNgn === null) issues.push('VTPASS_MINIMUM_WALLET_BALANCE_NGN must be a positive number.')
   if (!storeKey) issues.push('POCKET_BILLS_STORE_KEY is missing.')
   if (environment === 'sandbox' && liveVendingEnabled) issues.push('VTPASS_LIVE_VENDING_ENABLED cannot be enabled in sandbox mode.')
+  if (refundsReady && !circleTreasury.verificationReady) {
+    issues.push('POCKET_BILLS_REFUNDS_READY requires a fully configured Circle developer-controlled treasury.')
+  }
 
   const credentialsReady = Boolean(apiKey && publicKey && secretKey && apiBase.valid)
   const policyReady = Boolean(
@@ -117,6 +123,7 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
     && liveVendingEnabled
     && airtimeWhitelistConfirmed
     && refundsReady
+    && circleTreasury.verificationReady
     && credentialsReady
     && policyReady
   const canVend = canSandboxVend || canLiveVend
@@ -132,6 +139,7 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
     liveVendingEnabled,
     airtimeWhitelistConfirmed,
     refundsReady,
+    circleTreasuryReady: circleTreasury.verificationReady,
     treasuryAddress,
     minNgn,
     maxNgn,
@@ -156,6 +164,7 @@ export function publicVtpassPhase0Status(config: VtpassPhase0Config) {
     liveVendingEnabled: config.liveVendingEnabled,
     airtimeWhitelistConfirmed: config.airtimeWhitelistConfirmed,
     refundsReady: config.refundsReady,
+    circleTreasuryReady: config.circleTreasuryReady,
     credentialsReady: config.credentialsReady,
     policyReady: config.policyReady,
     canReadProvider: config.canReadProvider,

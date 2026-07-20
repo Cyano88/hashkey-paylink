@@ -106,8 +106,18 @@ services:
         sync: false                   # explicit operator acknowledgement
       - key: POCKET_BILLS_REFUNDS_READY
         value: "false"
+      - key: CIRCLE_ENTITY_SECRET
+        sync: false                   # Circle developer-controlled wallet secret; never expose to the browser
+      - key: POCKET_BILLS_TREASURY_WALLET_SET_IDEMPOTENCY_KEY
+        sync: false                   # stable UUID v4 used only to make wallet-set creation idempotent
+      - key: POCKET_BILLS_TREASURY_WALLET_IDEMPOTENCY_KEY
+        sync: false                   # stable UUID v4 used only to make wallet creation idempotent
+      - key: POCKET_BILLS_TREASURY_WALLET_SET_ID
+        sync: false                   # Circle developer-controlled wallet set
+      - key: POCKET_BILLS_TREASURY_WALLET_ID
+        sync: false                   # Circle developer-controlled Base SCA wallet
       - key: POCKET_BILLS_TREASURY_ADDRESS
-        sync: false                   # dedicated Base USDC treasury; no platform fallback
+        sync: false                   # must exactly match the verified Circle Base SCA wallet
       - key: POCKET_BILLS_MIN_NGN
         value: "100"
       - key: POCKET_BILLS_MAX_NGN

@@ -12,6 +12,12 @@ const base = {
   VTPASS_LIVE_VENDING_ENABLED: 'false',
   VTPASS_AIRTIME_WHITELIST_CONFIRMED: 'false',
   POCKET_BILLS_REFUNDS_READY: 'false',
+  CIRCLE_API_KEY: 'circle-api-key',
+  CIRCLE_ENTITY_SECRET: 'ab'.repeat(32),
+  POCKET_BILLS_TREASURY_WALLET_SET_IDEMPOTENCY_KEY: '980240be-d888-4d75-ad86-88531d9a36e7',
+  POCKET_BILLS_TREASURY_WALLET_IDEMPOTENCY_KEY: '3c85923c-f25e-41f9-bd98-e76207246608',
+  POCKET_BILLS_TREASURY_WALLET_SET_ID: '38f57bc0-57f0-4f4d-afb8-48d7bb40a30c',
+  POCKET_BILLS_TREASURY_WALLET_ID: '54f095b9-17bc-4189-b4a1-0513e956d739',
   POCKET_BILLS_TREASURY_ADDRESS: '0x1111111111111111111111111111111111111111',
   POCKET_BILLS_MIN_NGN: '100',
   POCKET_BILLS_MAX_NGN: '1000',
@@ -60,6 +66,21 @@ const liveEnabled = readVtpassPhase0Config({
 })
 assert.equal(liveEnabled.canVend, true)
 assert.equal(liveEnabled.canLiveVend, true)
+assert.equal(liveEnabled.circleTreasuryReady, true)
+
+const liveWithoutCircleTreasury = readVtpassPhase0Config({
+  ...base,
+  VTPASS_ENVIRONMENT: 'live',
+  VTPASS_API_BASE: 'https://vtpass.com',
+  POCKET_BILLS_ENABLED: 'true',
+  VTPASS_LIVE_VENDING_ENABLED: 'true',
+  VTPASS_AIRTIME_WHITELIST_CONFIRMED: 'true',
+  POCKET_BILLS_REFUNDS_READY: 'true',
+  CIRCLE_ENTITY_SECRET: '',
+  POCKET_BILLS_TREASURY_WALLET_ID: '',
+})
+assert.equal(liveWithoutCircleTreasury.canLiveVend, false)
+assert.match(liveWithoutCircleTreasury.issues.join(' '), /developer-controlled treasury/i)
 
 const noRefunds = readVtpassPhase0Config({
   ...base,
