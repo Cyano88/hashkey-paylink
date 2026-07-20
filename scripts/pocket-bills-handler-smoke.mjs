@@ -14,6 +14,9 @@ const env = {
   VTPASS_SANDBOX_VENDING_ENABLED: 'true',
   VTPASS_LIVE_VENDING_ENABLED: 'false',
   VTPASS_AIRTIME_WHITELIST_CONFIRMED: 'true',
+  VTPASS_DATA_WHITELIST_CONFIRMED: 'true',
+  VTPASS_TV_WHITELIST_CONFIRMED: 'true',
+  VTPASS_ELECTRICITY_WHITELIST_CONFIRMED: 'true',
   POCKET_BILLS_REFUNDS_READY: 'false',
   POCKET_BILLS_TREASURY_ADDRESS: '0x1111111111111111111111111111111111111111',
   POCKET_BILLS_MIN_NGN: '100',
@@ -189,6 +192,9 @@ const quoteHandler = createPocketBillsQuoteHandler(dependencies)
 const payHandler = createPocketBillsPayHandler(dependencies)
 const catalogHandler = createPocketBillsCatalogHandler(dependencies)
 const verifyHandler = createPocketBillsVerifyHandler(dependencies)
+const tvDisabledConfig = readVtpassPhase0Config({ ...env, VTPASS_TV_WHITELIST_CONFIRMED: 'false' })
+const tvDisabledCatalogHandler = createPocketBillsCatalogHandler({ ...dependencies, config: tvDisabledConfig })
+const tvDisabledQuoteHandler = createPocketBillsQuoteHandler({ ...dependencies, config: tvDisabledConfig })
 
 async function createQuote(idempotencyKey, phone = '08011111111') {
   return request(quoteHandler, {
@@ -209,6 +215,15 @@ async function createTvQuote(idempotencyKey) {
 async function createElectricityQuote(idempotencyKey) {
   return request(quoteHandler, { category: 'electricity', service_id: 'ikeja-electric', variation_code: 'prepaid', phone: '1111111111111', contact_phone: '08011111111', amount_ngn: '100', payer_wallet: '0x2222222222222222222222222222222222222222' }, { idempotencyKey })
 }
+
+const disabledTvCatalog = await request(tvDisabledCatalogHandler, {}, { method: 'GET', query: { category: 'tv' } })
+assert.equal(disabledTvCatalog.statusCode, 503)
+assert.equal(disabledTvCatalog.body.error.code, 'PROVIDER_UNAVAILABLE')
+assert.equal(disabledTvCatalog.body.error.reason, 'BILLS_CATEGORY_DISABLED')
+const disabledTvQuote = await request(tvDisabledQuoteHandler, { category: 'tv', service_id: 'dstv', variation_code: 'dstv-yanga', phone: '1212121212', contact_phone: '08011111111', payer_wallet: '0x2222222222222222222222222222222222222222' }, { idempotencyKey: 'bill:handler:tv:disabled' })
+assert.equal(disabledTvQuote.statusCode, 503)
+assert.equal(disabledTvQuote.body.error.code, 'PROVIDER_UNAVAILABLE')
+assert.equal(disabledTvQuote.body.error.reason, 'BILLS_CATEGORY_DISABLED')
 
 const dataServices = await request(catalogHandler, {}, { method: 'GET' })
 assert.deepEqual(dataServices.body.data.services, [{ serviceId: 'mtn-data', name: 'MTN Data' }])

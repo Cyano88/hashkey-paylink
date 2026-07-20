@@ -199,7 +199,8 @@ export default function usePocketBillsController({
       void refreshBalances().catch(() => undefined)
     } else if (next.state === 'refunded') {
       setStatus('error')
-      setError(`The ${billLabel(category)} payment was refunded. No retry is needed.`)
+      setErrorCode('BILLS_REFUNDED')
+      setError(`Your ${billLabel(category)} payment was returned. No retry is needed.`)
       window.localStorage.removeItem(activeBillKey)
     } else if (next.state === 'provider_failed_unverified') {
       setStatus('processing')

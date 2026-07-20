@@ -82,14 +82,18 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
     : [...NETWORKS]
   const categoryEnabled = view === 'data' ? bills.dataEnabled : view === 'tv' ? bills.tvEnabled : view === 'electricity' ? bills.electricityEnabled : bills.airtimeEnabled
   const quoteExpired = bills.errorCode === 'BILLS_QUOTE_EXPIRED'
+  const refundComplete = bills.errorCode === 'BILLS_REFUNDED'
   const providerUnavailable = bills.errorCode === 'PROVIDER_UNAVAILABLE'
     || bills.errorCode === 'BILLS_PROVIDER_RESERVE_LOW'
     || bills.errorCode === 'BILLS_DISABLED'
-  const errorPresentation = quoteExpired
-    ? { title: 'Quote expired', body: 'Rates can move. Review your details to get a fresh quote.', action: 'Review again', icon: Clock3 }
+    || bills.errorCode === 'BILLS_CATEGORY_DISABLED'
+  const errorPresentation = refundComplete
+    ? { title: 'Refund complete', body: bills.error, action: '', icon: Check, success: true }
+    : quoteExpired
+    ? { title: 'Quote expired', body: 'Rates can move. Review your details to get a fresh quote.', action: 'Review again', icon: Clock3, success: false }
     : providerUnavailable
-      ? { title: 'Bills temporarily unavailable', body: 'Your details are safe. Try again shortly.', action: 'Try again', icon: Clock3 }
-      : { title: 'Check your details', body: bills.error, action: '', icon: AlertCircle }
+      ? { title: 'Bills temporarily unavailable', body: 'Your details are safe. Try again shortly.', action: 'Try again', icon: Clock3, success: false }
+      : { title: 'Check your details', body: bills.error, action: '', icon: AlertCircle, success: false }
 
   return (
     <div className="space-y-4">
@@ -257,9 +261,9 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
             {bills.error && (() => {
               const ErrorIcon = errorPresentation.icon
               return (
-                <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-3.5 dark:border-white/10 dark:bg-white/[0.04]">
+                <div className={cn('rounded-2xl border p-3.5', errorPresentation.success ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-400/20 dark:bg-emerald-400/10' : 'border-gray-200 bg-gray-50/80 dark:border-white/10 dark:bg-white/[0.04]')}>
                   <div className="flex items-start gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-gray-600 shadow-sm dark:bg-white/[0.07] dark:text-gray-300"><ErrorIcon className="h-4 w-4" /></span>
+                    <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]', errorPresentation.success ? 'text-emerald-600 dark:text-emerald-300' : 'text-gray-600 dark:text-gray-300')}><ErrorIcon className="h-4 w-4" /></span>
                     <span className="min-w-0">
                       <span className="block text-xs font-black text-gray-950 dark:text-white">{errorPresentation.title}</span>
                       <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{errorPresentation.body}</span>
