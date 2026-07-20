@@ -11,6 +11,10 @@ const walletId = '54f095b9-17bc-4189-b4a1-0513e956d739'
 const walletSetIdempotencyKey = '980240be-d888-4d75-ad86-88531d9a36e7'
 const walletIdempotencyKey = '3c85923c-f25e-41f9-bd98-e76207246608'
 const address = '0x1111111111111111111111111111111111111111'
+const destinationAddress = '0x2222222222222222222222222222222222222222'
+const tokenAddress = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'
+const transferIdempotencyKey = '7f0ea9ef-cad6-4dab-89ba-152d0e2d3c58'
+const transactionId = '6c9fd099-c33b-5215-b5cd-f02678e01352'
 const entitySecret = 'ab'.repeat(32)
 const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 4096 })
 const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' }).toString()
@@ -60,6 +64,23 @@ const fetchImpl = async (url, init = {}) => {
   if (String(url).endsWith(`/v1/w3s/wallets/${walletId}`)) {
     return new Response(JSON.stringify({ data: { wallet } }), { status: 200 })
   }
+  if (String(url).endsWith('/v1/w3s/developer/transactions/transfer')) {
+    return new Response(JSON.stringify({ data: { id: transactionId } }), { status: 201 })
+  }
+  if (String(url).includes(`/v1/w3s/transactions/${transactionId}?txType=OUTBOUND`)) {
+    return new Response(JSON.stringify({ data: { transaction: {
+      id: transactionId,
+      blockchain: 'BASE',
+      state: 'COMPLETE',
+      transactionType: 'OUTBOUND',
+      walletId,
+      sourceAddress: address,
+      destinationAddress,
+      amounts: ['0.071'],
+      txHash: `0x${'a'.repeat(64)}`,
+      refId: 'pocket-bills-refund:intent-1',
+    } } }), { status: 200 })
+  }
   return new Response(JSON.stringify({ code: 404, message: 'Not found' }), { status: 404 })
 }
 
@@ -71,6 +92,14 @@ const client = createCircleDeveloperTreasuryClient({
 assert.deepEqual(await client.createWalletSet(), { id: walletSetId })
 assert.equal((await client.createWallet(walletSetId)).accountType, 'SCA')
 assert.equal((await client.verifyConfiguredWallet()).address, address)
+assert.deepEqual(await client.createUsdcTransfer({
+  idempotencyKey: transferIdempotencyKey,
+  destinationAddress,
+  amount: '0.071',
+  refId: 'pocket-bills-refund:intent-1',
+  tokenAddress,
+}), { id: transactionId })
+assert.equal((await client.getTransaction(transactionId)).state, 'COMPLETE')
 
 const mutationBodies = requests
   .filter(request => request.init.method === 'POST')
@@ -78,7 +107,11 @@ const mutationBodies = requests
 assert.equal(mutationBodies[0].idempotencyKey, walletSetIdempotencyKey)
 assert.equal(mutationBodies[1].accountType, 'SCA')
 assert.deepEqual(mutationBodies[1].blockchains, ['BASE'])
-assert.notEqual(mutationBodies[0].entitySecretCiphertext, mutationBodies[1].entitySecretCiphertext)
+assert.equal(mutationBodies[2].walletAddress, address)
+assert.equal(mutationBodies[2].destinationAddress, destinationAddress)
+assert.deepEqual(mutationBodies[2].amounts, ['0.071'])
+assert.equal(mutationBodies[2].tokenAddress, tokenAddress)
+assert.equal(new Set(mutationBodies.map(body => body.entitySecretCiphertext)).size, 3)
 assert.equal(requests.every(request => request.init.headers.Authorization === 'Bearer TEST_API_KEY'), true)
 
 const badHost = readCircleTreasuryConfig({

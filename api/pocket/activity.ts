@@ -31,6 +31,8 @@ function billActivityRow(intent: PocketBillsIntent): PocketActivityRow | undefin
       ? 'refunded'
       : intent.state === 'refund_pending'
         ? 'refund pending'
+        : intent.state === 'refunding' || intent.state === 'refund_submitted'
+          ? 'refunding'
         : intent.state === 'needs_review'
           ? 'needs review'
           : intent.state === 'pending' || intent.state === 'vending'
@@ -42,7 +44,7 @@ function billActivityRow(intent: PocketBillsIntent): PocketActivityRow | undefin
     chain: intent.network,
     payer: 'Circle Pocket',
     memo: intent.serviceName,
-    amount: intent.amountUsdc,
+    amount: intent.paymentAmountUsdc || intent.amountUsdc,
     ts: intent.updatedAt,
     source: 'bills',
     merchantId: intent.id,

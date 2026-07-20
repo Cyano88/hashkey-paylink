@@ -270,6 +270,7 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
         const current = await dependencies.store.getOwnedIntent(identity.userId, intentId)
         const txHash = cleanText(req.body?.tx_hash, 80).toLowerCase()
         let confirmedAt: string | undefined
+        let paymentAmountUsdc: string | undefined
         if (!current.txHash) {
           try {
             const verification = await dependencies.verifyTransfer({
@@ -282,11 +283,12 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
               notAfter: new Date(current.quoteExpiresAt).toISOString(),
             })
             confirmedAt = verification.confirmedAt
+            paymentAmountUsdc = verification.amount
           } catch (error) {
             throw paymentVerificationError(error)
           }
         }
-        const paid = await dependencies.store.recordVerifiedPayment({ ownerId: identity.userId, intentId, txHash, confirmedAt })
+        const paid = await dependencies.store.recordVerifiedPayment({ ownerId: identity.userId, intentId, txHash, paymentAmountUsdc, confirmedAt })
         if (paid.state !== 'payment_confirmed') return respond.success({ intent: publicPocketBillsIntent(paid) }, paid.state === 'delivered' ? 'completed' : 'processing')
         if (!dependencies.config.canVend) {
           const review = await dependencies.store.markNeedsReview(identity.userId, intentId, 'Provider vending was disabled after on-chain payment confirmation.')

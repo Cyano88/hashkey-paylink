@@ -17,6 +17,8 @@ export type PocketBillsIntentState =
   | 'delivered'
   | 'failed'
   | 'refund_pending'
+  | 'refunding'
+  | 'refund_submitted'
   | 'refunded'
   | 'needs_review'
 
@@ -40,6 +42,7 @@ export type PocketBillsIntent = {
   payerWallet: string
   quoteExpiresAt: number
   txHash: string
+  paymentAmountUsdc: string
   providerCode: string
   providerStatus: string
   providerEnvironment: 'sandbox' | 'live'
@@ -49,6 +52,13 @@ export type PocketBillsIntent = {
   requeryAttempts: number
   lastRequeryAt: number
   refundTxHash: string
+  refundIdempotencyKey: string
+  refundCircleTransactionId: string
+  refundCircleState: string
+  refundClaimedAt: number
+  refundSubmittedAt: number
+  refundConfirmedAt: number
+  refundLastCheckedAt: number
   failureReason: string
   createdAt: number
   updatedAt: number
@@ -56,7 +66,16 @@ export type PocketBillsIntent = {
 
 export type PublicPocketBillsIntent = Omit<
   PocketBillsIntent,
-  'ownerId' | 'idempotencyKey' | 'requestFingerprint' | 'amountNgnMinor'
+  | 'ownerId'
+  | 'idempotencyKey'
+  | 'requestFingerprint'
+  | 'amountNgnMinor'
+  | 'refundIdempotencyKey'
+  | 'refundCircleTransactionId'
+  | 'refundCircleState'
+  | 'refundClaimedAt'
+  | 'refundSubmittedAt'
+  | 'refundLastCheckedAt'
 >
 
 type BillsStoreData = {
@@ -95,6 +114,8 @@ export class PocketBillsStoreError extends Error {
 const SERVICE_IDS = new Set(['mtn', 'airtel', 'glo', 'etisalat', '9mobile'])
 const IDEMPOTENCY_PATTERN = /^[a-zA-Z0-9:_-]{16,128}$/
 const EVM_TX_PATTERN = /^0x[a-fA-F0-9]{64}$/
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MAX_QUOTE_LIFETIME_MS = 15 * 60_000
 
 function emptyStore(): BillsStoreData {
@@ -175,6 +196,12 @@ function publicIntent(intent: PocketBillsIntent): PublicPocketBillsIntent {
     idempotencyKey: _idempotencyKey,
     requestFingerprint: _requestFingerprint,
     amountNgnMinor: _amountNgnMinor,
+    refundIdempotencyKey: _refundIdempotencyKey,
+    refundCircleTransactionId: _refundCircleTransactionId,
+    refundCircleState: _refundCircleState,
+    refundClaimedAt: _refundClaimedAt,
+    refundSubmittedAt: _refundSubmittedAt,
+    refundLastCheckedAt: _refundLastCheckedAt,
     ...safe
   } = intent
   return { ...safe }
@@ -312,6 +339,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         payerWallet,
         quoteExpiresAt,
         txHash: '',
+        paymentAmountUsdc: '',
         providerCode: '',
         providerStatus: '',
         providerEnvironment: config.environment,
@@ -321,6 +349,13 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         requeryAttempts: 0,
         lastRequeryAt: 0,
         refundTxHash: '',
+        refundIdempotencyKey: '',
+        refundCircleTransactionId: '',
+        refundCircleState: '',
+        refundClaimedAt: 0,
+        refundSubmittedAt: 0,
+        refundConfirmedAt: 0,
+        refundLastCheckedAt: 0,
         failureReason: '',
         createdAt,
         updatedAt: createdAt,
@@ -378,7 +413,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     })
   }
 
-  async function recordVerifiedPayment(input: { ownerId: string; intentId: string; txHash: string; confirmedAt?: string | number }) {
+  async function recordVerifiedPayment(input: { ownerId: string; intentId: string; txHash: string; paymentAmountUsdc?: string; confirmedAt?: string | number }) {
     const txHash = cleanText(input.txHash, 80).toLowerCase()
     if (!EVM_TX_PATTERN.test(txHash)) throw new PocketBillsStoreError('BILLS_INVALID_TX_HASH', 'A valid Base transaction hash is required.')
     const confirmedAt = input.confirmedAt === undefined
@@ -390,7 +425,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       throw new PocketBillsStoreError('BILLS_INVALID_CONFIRMATION_TIME', 'Payment confirmation time is invalid.')
     }
     return updateOwned(input.ownerId, input.intentId, (intent, store, timestamp) => {
-      if (intent.txHash === txHash && ['payment_confirmed', 'vending', 'pending', 'delivered', 'refund_pending', 'refunded', 'needs_review'].includes(intent.state)) return
+      if (intent.txHash === txHash && ['payment_confirmed', 'vending', 'pending', 'delivered', 'refund_pending', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)) return
       assertState(intent, ['quoted', 'awaiting_payment'], 'Payment confirmation')
       // A delayed callback/retry is valid when the chain proves that the transfer
       // itself confirmed inside the quote window. Direct callers without that
@@ -405,6 +440,13 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       }
       store.transactionHashes[txHash] = intent.id
       intent.txHash = txHash
+      const paymentAmountUsdc = input.paymentAmountUsdc
+        ? canonicalDecimal(input.paymentAmountUsdc, 6, 'Verified USDC amount')
+        : intent.amountUsdc
+      if (BigInt(decimalToMinor(paymentAmountUsdc, 6)) < BigInt(decimalToMinor(intent.amountUsdc, 6))) {
+        throw new PocketBillsStoreError('BILLS_PAYMENT_AMOUNT_MISMATCH', 'Verified USDC amount is below the bill quote.', 409)
+      }
+      intent.paymentAmountUsdc = paymentAmountUsdc
       intent.state = 'payment_confirmed'
     })
   }
@@ -414,7 +456,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const cleanIntentId = cleanText(intentId, 100)
     return mutate(store => {
       const intent = assertOwner(store.intents[cleanIntentId], cleanOwnerId)
-      if (['vending', 'pending', 'delivered', 'refund_pending', 'refunded', 'needs_review'].includes(intent.state)) {
+      if (['vending', 'pending', 'delivered', 'refund_pending', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)) {
         return { intent, claimed: false }
       }
       assertState(intent, ['payment_confirmed'], 'Bill vending')
@@ -476,7 +518,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
 
   async function markNeedsReview(ownerId: string, intentId: string, reason: string) {
     return updateOwned(ownerId, intentId, intent => {
-      assertState(intent, ['payment_confirmed', 'vending', 'pending', 'refund_pending'], 'Manual review')
+      assertState(intent, ['payment_confirmed', 'vending', 'pending', 'refund_pending', 'refunding', 'refund_submitted'], 'Manual review')
       intent.failureReason = cleanText(reason, 240) || 'Bill payment needs reconciliation.'
       intent.state = 'needs_review'
     })
@@ -494,20 +536,111 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const refundTxHash = cleanText(input.refundTxHash, 80).toLowerCase()
     if (!EVM_TX_PATTERN.test(refundTxHash)) throw new PocketBillsStoreError('BILLS_INVALID_REFUND_TX_HASH', 'A valid refund transaction hash is required.')
     return updateOwned(input.ownerId, input.intentId, (intent, store) => {
-      assertState(intent, ['refund_pending', 'needs_review'], 'Refund submission')
+      assertState(intent, ['refund_pending', 'refunding', 'refund_submitted', 'needs_review'], 'Refund submission')
       if (refundTxHash === intent.txHash) throw new PocketBillsStoreError('BILLS_TX_HASH_REUSED', 'Refund transaction must differ from the original payment.', 409)
       const claimedBy = store.transactionHashes[refundTxHash]
       if (claimedBy && claimedBy !== intent.id) throw new PocketBillsStoreError('BILLS_TX_HASH_REUSED', 'This transaction is already connected to another bill payment.', 409)
       store.transactionHashes[refundTxHash] = intent.id
       intent.refundTxHash = refundTxHash
-      intent.state = 'refund_pending'
+      intent.state = 'refund_submitted'
+    })
+  }
+
+  async function getIntentById(intentIdInput: string) {
+    const store = await read()
+    const intent = store.intents[cleanText(intentIdInput, 100)]
+    if (!intent) throw new PocketBillsStoreError('BILLS_NOT_FOUND', 'Bill payment was not found.', 404)
+    return intent
+  }
+
+  async function claimRefund(input: { intentId: string; treasuryAddress: string; leaseMs?: number }) {
+    const intentId = cleanText(input.intentId, 100)
+    const treasuryAddress = cleanText(input.treasuryAddress, 80)
+    const leaseMs = Math.max(30_000, Math.min(Number(input.leaseMs) || 120_000, 10 * 60_000))
+    return mutate(store => {
+      const intent = store.intents[intentId]
+      if (!intent) throw new PocketBillsStoreError('BILLS_NOT_FOUND', 'Bill payment was not found.', 404)
+      if (!isAddress(treasuryAddress) || intent.treasuryAddress.toLowerCase() !== treasuryAddress.toLowerCase()) {
+        throw new PocketBillsStoreError('BILLS_REFUND_TREASURY_MISMATCH', 'Bill payment does not belong to the configured Circle treasury.', 409)
+      }
+      if (!intent.txHash || !isAddress(intent.payerWallet)) {
+        throw new PocketBillsStoreError('BILLS_REFUND_PAYMENT_INVALID', 'Original bill payment is incomplete.', 409)
+      }
+      if (['refund_submitted', 'refunded'].includes(intent.state)) return { intent, claimed: false }
+      const timestamp = now()
+      if (intent.state === 'refunding') {
+        const claimedAt = Number(intent.refundClaimedAt) || 0
+        if (claimedAt > 0 && timestamp - claimedAt < leaseMs) return { intent, claimed: false }
+      } else {
+        assertState(intent, ['refund_pending'], 'Refund claim')
+      }
+      const idempotencyKey = cleanText(intent.refundIdempotencyKey, 80) || uuid()
+      if (!UUID_V4_PATTERN.test(idempotencyKey)) {
+        throw new PocketBillsStoreError('BILLS_REFUND_IDEMPOTENCY_INVALID', 'Refund idempotency key is invalid.', 500)
+      }
+      intent.refundIdempotencyKey = idempotencyKey
+      intent.refundClaimedAt = timestamp
+      intent.refundCircleState = intent.refundCircleState || 'INITIATED'
+      intent.state = 'refunding'
+      intent.updatedAt = timestamp
+      return { intent, claimed: true }
+    })
+  }
+
+  async function recordCircleRefundSubmission(input: { intentId: string; circleTransactionId: string }) {
+    const circleTransactionId = cleanText(input.circleTransactionId, 80)
+    if (!UUID_PATTERN.test(circleTransactionId)) {
+      throw new PocketBillsStoreError('BILLS_REFUND_CIRCLE_TX_INVALID', 'Circle refund transaction ID is invalid.', 502)
+    }
+    return mutate(store => {
+      const intent = store.intents[cleanText(input.intentId, 100)]
+      if (!intent) throw new PocketBillsStoreError('BILLS_NOT_FOUND', 'Bill payment was not found.', 404)
+      assertState(intent, ['refunding', 'refund_submitted'], 'Circle refund submission')
+      if (intent.refundCircleTransactionId && intent.refundCircleTransactionId !== circleTransactionId) {
+        throw new PocketBillsStoreError('BILLS_REFUND_CIRCLE_TX_MISMATCH', 'A different Circle refund transaction is already connected.', 409)
+      }
+      const timestamp = now()
+      intent.refundCircleTransactionId = circleTransactionId
+      intent.refundCircleState = intent.refundCircleState || 'INITIATED'
+      intent.refundSubmittedAt = intent.refundSubmittedAt || timestamp
+      intent.state = 'refund_submitted'
+      intent.updatedAt = timestamp
+      return intent
+    })
+  }
+
+  async function recordCircleRefundStatus(input: { intentId: string; circleState: string; refundTxHash?: string }) {
+    const circleState = cleanText(input.circleState, 40).toUpperCase()
+    if (!circleState) throw new PocketBillsStoreError('BILLS_REFUND_CIRCLE_STATE_INVALID', 'Circle refund state is invalid.', 502)
+    const refundTxHash = cleanText(input.refundTxHash, 80).toLowerCase()
+    if (refundTxHash && !EVM_TX_PATTERN.test(refundTxHash)) {
+      throw new PocketBillsStoreError('BILLS_INVALID_REFUND_TX_HASH', 'Circle returned an invalid refund transaction hash.', 502)
+    }
+    return mutate(store => {
+      const intent = store.intents[cleanText(input.intentId, 100)]
+      if (!intent) throw new PocketBillsStoreError('BILLS_NOT_FOUND', 'Bill payment was not found.', 404)
+      assertState(intent, ['refunding', 'refund_submitted'], 'Circle refund reconciliation')
+      const timestamp = now()
+      intent.refundCircleState = circleState
+      intent.refundLastCheckedAt = timestamp
+      if (refundTxHash) {
+        if (refundTxHash === intent.txHash) throw new PocketBillsStoreError('BILLS_TX_HASH_REUSED', 'Refund transaction must differ from the original payment.', 409)
+        const claimedBy = store.transactionHashes[refundTxHash]
+        if (claimedBy && claimedBy !== intent.id) throw new PocketBillsStoreError('BILLS_TX_HASH_REUSED', 'This transaction is already connected to another bill payment.', 409)
+        store.transactionHashes[refundTxHash] = intent.id
+        intent.refundTxHash = refundTxHash
+      }
+      intent.state = 'refund_submitted'
+      intent.updatedAt = timestamp
+      return intent
     })
   }
 
   async function markRefunded(ownerId: string, intentId: string) {
     return updateOwned(ownerId, intentId, intent => {
-      assertState(intent, ['refund_pending'], 'Refund confirmation')
+      assertState(intent, ['refund_submitted'], 'Refund confirmation')
       if (!intent.refundTxHash) throw new PocketBillsStoreError('BILLS_REFUND_NOT_SUBMITTED', 'Refund transaction is not available.', 409)
+      intent.refundConfirmedAt = now()
       intent.state = 'refunded'
     })
   }
@@ -516,6 +649,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     createQuote,
     getOwnedIntent,
     listOwnedIntents,
+    getIntentById,
     markAwaitingPayment,
     recordVerifiedPayment,
     claimVending,
@@ -524,6 +658,9 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     markNeedsReview,
     failBeforePayment,
     markRefundSubmitted,
+    claimRefund,
+    recordCircleRefundSubmission,
+    recordCircleRefundStatus,
     markRefunded,
   }
 }

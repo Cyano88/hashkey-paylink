@@ -118,6 +118,7 @@ import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import hostedCheckoutsHandler from './api/hosted-checkouts.js'
 import { pocketBillsPayHandler, pocketBillsQuoteHandler } from './api/pocket/bills.js'
+import { pocketBillsRefundHandler } from './api/pocket/bills-refunds.js'
 import { rateLimit } from './api/rate-limit.js'
 
 loadEnv({ path: '.env.local', override: false })
@@ -302,6 +303,7 @@ app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
 app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)
 app.all('/api/pocket/bills/quote',     strictLimiter, pocketBillsQuoteHandler)
 app.all('/api/pocket/bills/pay',       strictLimiter, pocketBillsPayHandler)
+app.post('/api/admin/pocket/bills/refunds/process', strictLimiter, pocketBillsRefundHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)

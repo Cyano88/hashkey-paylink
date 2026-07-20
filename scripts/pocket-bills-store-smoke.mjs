@@ -195,9 +195,21 @@ await assert.rejects(
   error => error instanceof PocketBillsStoreError && error.code === 'BILLS_TX_HASH_REUSED',
 )
 const refundHash = `0x${'b'.repeat(64)}`
-await store.markRefundSubmitted({ ownerId: 'privy:owner-1', intentId: first.intent.id, refundTxHash: refundHash })
+const refundClaims = await Promise.all([
+  store.claimRefund({ intentId: first.intent.id, treasuryAddress: config.treasuryAddress }),
+  store.claimRefund({ intentId: first.intent.id, treasuryAddress: config.treasuryAddress }),
+])
+assert.equal(refundClaims.filter(item => item.claimed).length, 1)
+assert.match(refundClaims[0].intent.refundIdempotencyKey, /^[0-9a-f-]{36}$/i)
+await assert.rejects(
+  () => store.claimRefund({ intentId: first.intent.id, treasuryAddress: '0x3333333333333333333333333333333333333333' }),
+  error => error instanceof PocketBillsStoreError && error.code === 'BILLS_REFUND_TREASURY_MISMATCH',
+)
+await store.recordCircleRefundSubmission({ intentId: first.intent.id, circleTransactionId: '99999999-9999-5999-8999-999999999999' })
+await store.recordCircleRefundStatus({ intentId: first.intent.id, circleState: 'COMPLETE', refundTxHash: refundHash })
 const refunded = await store.markRefunded('privy:owner-1', first.intent.id)
 assert.equal(refunded.state, 'refunded')
+assert.equal(refunded.refundCircleState, 'COMPLETE')
 
 const second = await store.createQuote(quoteInput({
   ownerId: 'privy:owner-2',

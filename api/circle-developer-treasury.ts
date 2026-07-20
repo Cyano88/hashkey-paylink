@@ -38,6 +38,22 @@ export type CircleDeveloperWallet = {
   refId?: string
 }
 
+export type CircleDeveloperTransaction = {
+  id: string
+  blockchain: string
+  state: string
+  transactionType: string
+  walletId: string
+  sourceAddress: string
+  destinationAddress: string
+  amounts: string[]
+  tokenId: string
+  txHash: string
+  refId: string
+  errorReason: string
+  errorDetails: string
+}
+
 type FetchLike = typeof fetch
 
 export class CircleTreasuryError extends Error {
@@ -147,6 +163,36 @@ function assertWallet(value: unknown): CircleDeveloperWallet {
     accountType: clean(wallet.accountType),
     name: clean(wallet.name) || undefined,
     refId: clean(wallet.refId) || undefined,
+  }
+}
+
+function assertTransaction(value: unknown): CircleDeveloperTransaction {
+  if (!value || typeof value !== 'object') {
+    throw new CircleTreasuryError('CIRCLE_INVALID_RESPONSE', 'Circle returned an invalid transaction response.', 502)
+  }
+  const transaction = value as Record<string, unknown>
+  const id = clean(transaction.id)
+  const state = clean(transaction.state)
+  const amounts = Array.isArray(transaction.amounts)
+    ? transaction.amounts.map(amount => clean(amount)).filter(Boolean)
+    : []
+  if (!UUID_PATTERN.test(id) || !state) {
+    throw new CircleTreasuryError('CIRCLE_INVALID_RESPONSE', 'Circle returned an incomplete transaction response.', 502)
+  }
+  return {
+    id,
+    blockchain: clean(transaction.blockchain),
+    state,
+    transactionType: clean(transaction.transactionType),
+    walletId: clean(transaction.walletId),
+    sourceAddress: clean(transaction.sourceAddress),
+    destinationAddress: clean(transaction.destinationAddress),
+    amounts,
+    tokenId: clean(transaction.tokenId),
+    txHash: clean(transaction.txHash).toLowerCase(),
+    refId: clean(transaction.refId),
+    errorReason: clean(transaction.errorReason),
+    errorDetails: clean(transaction.errorDetails),
   }
 }
 
@@ -280,10 +326,62 @@ export function createCircleDeveloperTreasuryClient(options: {
     return wallet
   }
 
+  async function createUsdcTransfer(input: {
+    idempotencyKey: string
+    destinationAddress: string
+    amount: string
+    refId: string
+    tokenAddress: string
+  }) {
+    if (!config.verificationReady) {
+      throw new CircleTreasuryError('CIRCLE_TREASURY_VERIFICATION_NOT_READY', 'Circle treasury verification configuration is incomplete.', 503)
+    }
+    if (!UUID_V4_PATTERN.test(input.idempotencyKey)) {
+      throw new CircleTreasuryError('CIRCLE_IDEMPOTENCY_KEY_INVALID', 'Circle transfer idempotency key must be a UUID v4.', 400)
+    }
+    if (!isAddress(input.destinationAddress) || !isAddress(input.tokenAddress)) {
+      throw new CircleTreasuryError('CIRCLE_TRANSFER_ADDRESS_INVALID', 'Circle transfer addresses are invalid.', 400)
+    }
+    if (!/^\d+(?:\.\d{1,6})?$/.test(input.amount) || Number(input.amount) <= 0) {
+      throw new CircleTreasuryError('CIRCLE_TRANSFER_AMOUNT_INVALID', 'Circle transfer amount is invalid.', 400)
+    }
+    const refId = clean(input.refId).slice(0, 100)
+    if (!refId) throw new CircleTreasuryError('CIRCLE_TRANSFER_REFERENCE_INVALID', 'Circle transfer reference is required.', 400)
+    const body = await request('/v1/w3s/developer/transactions/transfer', {
+      method: 'POST',
+      body: JSON.stringify({
+        idempotencyKey: input.idempotencyKey,
+        destinationAddress: input.destinationAddress,
+        entitySecretCiphertext: await freshEntitySecretCiphertext(),
+        amounts: [input.amount],
+        feeLevel: 'MEDIUM',
+        refId,
+        tokenAddress: input.tokenAddress,
+        blockchain: config.blockchain,
+        walletAddress: config.treasuryAddress,
+      }),
+    })
+    const id = clean(body?.data?.id)
+    if (!UUID_PATTERN.test(id)) {
+      throw new CircleTreasuryError('CIRCLE_INVALID_RESPONSE', 'Circle returned an invalid transfer response.', 502)
+    }
+    return { id }
+  }
+
+  async function getTransaction(transactionId: string) {
+    if (!UUID_PATTERN.test(transactionId)) {
+      throw new CircleTreasuryError('CIRCLE_TRANSACTION_ID_INVALID', 'Circle transaction ID is invalid.', 400)
+    }
+    const body = await request(`/v1/w3s/transactions/${encodeURIComponent(transactionId)}?txType=OUTBOUND`)
+    return assertTransaction(body?.data?.transaction)
+  }
+
   return {
     createWalletSet,
     createWallet,
     getWallet,
     verifyConfiguredWallet,
+    createUsdcTransfer,
+    getTransaction,
   }
 }
