@@ -129,6 +129,7 @@ const EVM_TX_PATTERN = /^0x[a-fA-F0-9]{64}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MAX_QUOTE_LIFETIME_MS = 15 * 60_000
+export const POCKET_BILLS_CONFIRMATION_GRACE_MS = 5 * 60_000
 
 function emptyStore(): BillsStoreData {
   return {
@@ -527,11 +528,14 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     return updateOwned(input.ownerId, input.intentId, (intent, store, timestamp) => {
       if (intent.txHash === txHash && ['payment_confirmed', 'vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)) return
       assertState(intent, ['quoted', 'awaiting_payment'], 'Payment confirmation')
-      // A delayed callback/retry is valid when the chain proves that the transfer
-      // itself confirmed inside the quote window. Direct callers without that
-      // proof still fail closed at the current time.
+      // Payment authorization must begin before quote expiry. Once authorized,
+      // Base may mine the transfer shortly after that deadline, so confirmation
+      // receives a separate bounded grace period. This prevents a successful
+      // transfer from becoming untracked solely because block production was slow.
+      // Direct callers without chain confirmation proof still fail closed.
       const effectiveConfirmationTime = confirmedAt ?? timestamp
-      if (effectiveConfirmationTime < intent.createdAt || effectiveConfirmationTime > intent.quoteExpiresAt) {
+      const confirmationDeadline = intent.quoteExpiresAt + (confirmedAt === null ? 0 : POCKET_BILLS_CONFIRMATION_GRACE_MS)
+      if (effectiveConfirmationTime < intent.createdAt || effectiveConfirmationTime > confirmationDeadline) {
         throw new PocketBillsStoreError('BILLS_QUOTE_EXPIRED', 'Bill quote expired before payment confirmation.', 409)
       }
       const claimedBy = store.transactionHashes[txHash]

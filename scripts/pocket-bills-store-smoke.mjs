@@ -285,6 +285,28 @@ const delayedReconciliation = await store.recordVerifiedPayment({
 })
 assert.equal(delayedReconciliation.state, 'payment_confirmed')
 
+const gracePeriodIntent = await store.createQuote(quoteInput({ idempotencyKey: 'bill:idempotency:grace-period', phone: '08044444445' }))
+currentTime = gracePeriodIntent.intent.quoteExpiresAt + 4 * 60_000
+const gracePeriodPayment = await store.recordVerifiedPayment({
+  ownerId: 'privy:owner-1',
+  intentId: gracePeriodIntent.intent.id,
+  txHash: `0x${'e'.repeat(64)}`,
+  confirmedAt: gracePeriodIntent.intent.quoteExpiresAt + 4 * 60_000,
+})
+assert.equal(gracePeriodPayment.state, 'payment_confirmed')
+
+const beyondGraceIntent = await store.createQuote(quoteInput({ idempotencyKey: 'bill:idempotency:beyond-grace', phone: '08044444446' }))
+currentTime = beyondGraceIntent.intent.quoteExpiresAt + 5 * 60_000 + 1
+await assert.rejects(
+  () => store.recordVerifiedPayment({
+    ownerId: 'privy:owner-1',
+    intentId: beyondGraceIntent.intent.id,
+    txHash: `0x${'f'.repeat(64)}`,
+    confirmedAt: beyondGraceIntent.intent.quoteExpiresAt + 5 * 60_000 + 1,
+  }),
+  error => error instanceof PocketBillsStoreError && error.code === 'BILLS_QUOTE_EXPIRED',
+)
+
 currentTime = Date.parse('2026-07-20T08:00:00.000Z')
 const failedIntent = await store.createQuote(quoteInput({ idempotencyKey: 'bill:idempotency:failed', phone: '08055555555' }))
 const failedBeforePayment = await store.failBeforePayment('privy:owner-1', failedIntent.intent.id, 'Customer cancelled')

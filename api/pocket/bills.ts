@@ -11,6 +11,7 @@ import {
 import { readVtpassPhase0Config, type VtpassPhase0Config } from '../vtpass-config.js'
 import {
   PocketBillsStoreError,
+  POCKET_BILLS_CONFIRMATION_GRACE_MS,
   createPocketBillsStore,
   publicPocketBillsIntent,
   type PocketBillsIntent,
@@ -19,6 +20,8 @@ import { isPocketIdempotencyKey, type PocketErrorCode } from '../../src/pocket/l
 
 type VtpassClient = ReturnType<typeof createVtpassClient>
 type BillsStore = ReturnType<typeof createPocketBillsStore>
+
+const POCKET_BILLS_QUOTE_LIFETIME_MS = 5 * 60_000
 
 type BillsDependencies = {
   config: VtpassPhase0Config
@@ -308,7 +311,10 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
         amountUsdc: usdcForNgn(amountNgn, fx.rate),
         fxRateNgnPerUsdc: String(fx.rate),
         payerWallet,
-        quoteExpiresAt: Math.min(fx.expiresAt, dependencies.now() + 60_000),
+        // The FX rate is validated when it is read, then fixed for this intent.
+        // Give the user enough time to review and authorize without racing a
+        // short-lived provider cache timestamp.
+        quoteExpiresAt: dependencies.now() + POCKET_BILLS_QUOTE_LIFETIME_MS,
       })
       return respond.success({ intent: publicPocketBillsIntent(created.intent), replayed: !created.created })
     } catch (error) {
@@ -360,7 +366,7 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
               recipient: current.treasuryAddress,
               minAmount: current.amountUsdc,
               notBefore: new Date(current.createdAt).toISOString(),
-              notAfter: new Date(current.quoteExpiresAt).toISOString(),
+              notAfter: new Date(current.quoteExpiresAt + POCKET_BILLS_CONFIRMATION_GRACE_MS).toISOString(),
             })
             confirmedAt = verification.confirmedAt
             paymentAmountUsdc = verification.amount

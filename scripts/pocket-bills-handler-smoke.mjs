@@ -78,6 +78,7 @@ let dataPurchaseCalls = 0
 let tvPurchaseCalls = 0
 let electricityPurchaseCalls = 0
 let verificationCalls = 0
+let lastVerificationInput
 let providerMode = 'delivered'
 let requeryMode = 'delivered'
 let providerBalance = 2_000_000
@@ -177,6 +178,7 @@ const dependencies = {
   readFxQuote: async () => ({ rate: 1400, fetchedAt: now, expiresAt: now + 60_000, source: 'paycrest' }),
   verifyTransfer: async input => {
     verificationCalls += 1
+    lastVerificationInput = input
     assert.equal(input.chain, 'base')
     assert.equal(input.recipient, config.treasuryAddress)
     assert.equal(input.payer, '0x2222222222222222222222222222222222222222')
@@ -282,6 +284,7 @@ now += 61_000
 const quoted = await createQuote('bill:handler:quote:0001')
 assert.equal(quoted.statusCode, 200)
 assert.equal(quoted.body.data.intent.state, 'quoted')
+assert.equal(quoted.body.data.intent.quoteExpiresAt - now, 5 * 60_000)
 
 const realSandboxPhone = await createQuote('bill:handler:quote:real-phone', '08106849696')
 assert.equal(realSandboxPhone.statusCode, 400)
@@ -300,6 +303,7 @@ assert.equal(prepared.body.data.intent.state, 'awaiting_payment')
 const txHash = `0x${'a'.repeat(64)}`
 const confirmed = await request(payHandler, { action: 'confirm', intent_id: quoted.body.data.intent.id, tx_hash: txHash })
 assert.equal(confirmed.statusCode, 200)
+assert.equal(Date.parse(lastVerificationInput.notAfter), quoted.body.data.intent.quoteExpiresAt + 5 * 60_000)
 assert.equal(confirmed.body.status, 'completed')
 assert.equal(confirmed.body.data.intent.state, 'delivered')
 assert.equal(purchaseCalls, 1)

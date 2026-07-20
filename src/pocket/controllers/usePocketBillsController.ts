@@ -40,6 +40,17 @@ function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
+function confirmationPollDelay(attempt: number) {
+  if (attempt === 0) return 600
+  if (attempt === 1) return 1_000
+  if (attempt === 2) return 1_500
+  return 2_500
+}
+
+function deliveryPollDelay(attempt: number) {
+  return attempt < 4 ? 1_000 : attempt < 8 ? 2_000 : 4_000
+}
+
 function finalState(intent: PocketBillIntent) {
   return ['delivered', 'failed', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)
 }
@@ -237,7 +248,7 @@ export default function usePocketBillsController({
         } catch (reason) {
           if (!(reason instanceof PocketBillsApiError) || reason.code !== 'CONFIRMATION_REQUIRED' || attempt === 15) throw reason
           if (mounted.current) setStatus('confirming')
-          await sleep(3_000)
+          await sleep(confirmationPollDelay(attempt))
         }
       }
     } else {
@@ -250,7 +261,7 @@ export default function usePocketBillsController({
         setStatus('processing')
         setNotice(`Payment received. ${billLabel(category)} delivery is processing.`)
       }
-      await sleep(attempt < 5 ? 2_000 : 5_000)
+      await sleep(deliveryPollDelay(attempt))
       next = await refreshPocketAirtime({ accessToken, intentId, refresh: true })
       if (mounted.current) setIntent(next)
     }
