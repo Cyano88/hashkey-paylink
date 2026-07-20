@@ -41,6 +41,13 @@ function dataServiceLabel(name: string) {
     .replace(/\s+Data$/i, '')
 }
 
+function money(value: string) {
+  const amount = Number(value)
+  return Number.isFinite(amount)
+    ? new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 2 }).format(amount)
+    : '₦0'
+}
+
 function SignInCard() {
   return (
     <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
