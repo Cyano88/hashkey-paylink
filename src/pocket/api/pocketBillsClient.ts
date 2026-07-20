@@ -20,12 +20,15 @@ export type PocketBillIntent = {
   id: string
   requestId: string
   state: PocketBillIntentState
-  category: 'airtime' | 'data'
+  category: 'airtime' | 'data' | 'tv' | 'electricity'
   serviceId: string
   serviceName: string
   variationCode: string
   variationName: string
   phone: string
+  contactPhone: string
+  customerName: string
+  customerAddress: string
   amountNgn: string
   amountUsdc: string
   fxRateNgnPerUsdc: string
@@ -71,7 +74,7 @@ function isIntentState(value: unknown): value is PocketBillIntentState {
 
 export function parsePocketBillIntent(value: unknown): PocketBillIntent {
   const intent = record(value)
-  const category = intent.category === 'data' ? 'data' as const : intent.category === 'airtime' ? 'airtime' as const : undefined
+  const category = intent.category === 'data' ? 'data' as const : intent.category === 'tv' ? 'tv' as const : intent.category === 'electricity' ? 'electricity' as const : intent.category === 'airtime' ? 'airtime' as const : undefined
   if (!text(intent.id) || !text(intent.requestId) || !isIntentState(intent.state) || !category) {
     throw new PocketBillsApiError('Bill-payment response was invalid.')
   }
@@ -91,6 +94,9 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
     variationCode: text(intent.variationCode),
     variationName: text(intent.variationName),
     phone: text(intent.phone),
+    contactPhone: text(intent.contactPhone),
+    customerName: text(intent.customerName),
+    customerAddress: text(intent.customerAddress),
     amountNgn: text(intent.amountNgn),
     amountUsdc: text(intent.amountUsdc),
     fxRateNgnPerUsdc: text(intent.fxRateNgnPerUsdc),
@@ -120,6 +126,8 @@ export function parsePocketBillsAvailability(value: unknown) {
     minNgn: Number.isFinite(minNgn) && minNgn > 0 ? minNgn : 100,
     maxNgn: Number.isFinite(maxNgn) && maxNgn > 0 ? maxNgn : 1000,
     dataEnabled: categories.includes('data'),
+    tvEnabled: categories.includes('tv'),
+    electricityEnabled: categories.includes('electricity'),
   }
 }
 
@@ -189,19 +197,24 @@ export async function quotePocketAirtime(input: {
 
 export type PocketDataService = { serviceId: string; name: string }
 export type PocketDataVariation = { variationCode: string; name: string; amountNgn: string; available: boolean }
+export type PocketBillService = PocketDataService
+export type PocketBillVariation = PocketDataVariation
 
 export async function readPocketDataCatalog(input: {
   accessToken: string
   serviceId?: string
+  category?: 'data' | 'tv' | 'electricity'
   fetcher?: typeof fetch
 }) {
-  const query = input.serviceId ? `?service_id=${encodeURIComponent(input.serviceId)}` : ''
+  const params = new URLSearchParams({ category: input.category ?? 'data' })
+  if (input.serviceId) params.set('service_id', input.serviceId)
+  const query = `?${params.toString()}`
   const response = await (input.fetcher ?? fetch)(`${POCKET_API.billsCatalog}${query}`, {
     headers: { authorization: `Bearer ${input.accessToken}` },
     cache: 'no-store',
   })
   const body = await response.json().catch(() => undefined)
-  if (!response.ok) throw apiError(body, response.status, 'Data plans are temporarily unavailable.')
+  if (!response.ok) throw apiError(body, response.status, 'Bills catalog is temporarily unavailable.')
   const data = record(record(body).data)
   const services = Array.isArray(data.services) ? data.services.flatMap(value => {
     const item = record(value)
@@ -213,10 +226,49 @@ export async function readPocketDataCatalog(input: {
       ? [{ variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false }]
       : []
   }) : []
-  if (input.serviceId ? !variations.length : !services.length) {
-    throw new PocketBillsApiError('Data catalog response was invalid.', { status: 502, retryable: true })
+  if (input.serviceId ? input.category !== 'electricity' && !variations.length : !services.length) {
+    throw new PocketBillsApiError('Bills catalog response was invalid.', { status: 502, retryable: true })
   }
   return { services, variations }
+}
+
+export type PocketBillVerification = {
+  valid: true
+  serviceId: string
+  billersCode: string
+  variationCode: string
+  customerName: string
+  customerAddress: string
+  currentBouquet: string
+  renewalAmount: number | null
+  minimumAmount: number | null
+  maximumAmount: number | null
+}
+
+export async function verifyPocketBillCustomer(input: {
+  accessToken: string
+  category: 'tv' | 'electricity'
+  serviceId: string
+  billersCode: string
+  variationCode?: string
+  fetcher?: typeof fetch
+}) {
+  const data = await postBills({
+    endpoint: POCKET_API.billsVerify,
+    accessToken: input.accessToken,
+    idempotencyKey: createPocketIdempotencyKey('bill-verify'),
+    fetcher: input.fetcher,
+    body: { category: input.category, service_id: input.serviceId, billers_code: input.billersCode, variation_code: input.variationCode },
+  })
+  const value = record(data.verification)
+  if (value.valid !== true || !text(value.serviceId) || !text(value.billersCode) || !text(value.customerName)) throw new PocketBillsApiError('Customer verification response was invalid.', { status: 502, retryable: true })
+  const nullableNumber = (candidate: unknown) => candidate === null || candidate === undefined ? null : Number.isFinite(Number(candidate)) ? Number(candidate) : null
+  return {
+    valid: true as const,
+    serviceId: text(value.serviceId), billersCode: text(value.billersCode), variationCode: text(value.variationCode),
+    customerName: text(value.customerName), customerAddress: text(value.customerAddress), currentBouquet: text(value.currentBouquet),
+    renewalAmount: nullableNumber(value.renewalAmount), minimumAmount: nullableNumber(value.minimumAmount), maximumAmount: nullableNumber(value.maximumAmount),
+  }
 }
 
 export async function quotePocketData(input: {
@@ -235,6 +287,22 @@ export async function quotePocketData(input: {
     fetcher: input.fetcher,
     body: { category: 'data', service_id: input.serviceId, variation_code: input.variationCode, phone: input.phone, payer_wallet: input.payerWallet },
   })
+  return { intent: parsePocketBillIntent(data.intent), replayed: data.replayed === true }
+}
+
+export async function quotePocketTv(input: {
+  accessToken: string; serviceId: string; variationCode: string; smartcard: string; contactPhone: string; payerWallet: string; idempotencyKey?: string; fetcher?: typeof fetch
+}) {
+  const data = await postBills({ endpoint: POCKET_API.billsQuote, accessToken: input.accessToken, idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('tv-quote'), fetcher: input.fetcher,
+    body: { category: 'tv', service_id: input.serviceId, variation_code: input.variationCode, phone: input.smartcard, contact_phone: input.contactPhone, payer_wallet: input.payerWallet } })
+  return { intent: parsePocketBillIntent(data.intent), replayed: data.replayed === true }
+}
+
+export async function quotePocketElectricity(input: {
+  accessToken: string; serviceId: string; meterType: 'prepaid' | 'postpaid'; meterNumber: string; contactPhone: string; amountNgn: string; payerWallet: string; idempotencyKey?: string; fetcher?: typeof fetch
+}) {
+  const data = await postBills({ endpoint: POCKET_API.billsQuote, accessToken: input.accessToken, idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('electricity-quote'), fetcher: input.fetcher,
+    body: { category: 'electricity', service_id: input.serviceId, variation_code: input.meterType, phone: input.meterNumber, contact_phone: input.contactPhone, amount_ngn: input.amountNgn, payer_wallet: input.payerWallet } })
   return { intent: parsePocketBillIntent(data.intent), replayed: data.replayed === true }
 }
 

@@ -52,6 +52,29 @@ function normalizeDataRecipient(value: unknown, serviceId: string, environment: 
   return /^0\d{10}$/.test(recipient) ? recipient : ''
 }
 
+type BillsCategory = 'airtime' | 'data' | 'tv' | 'electricity'
+
+function normalizeCategory(value: unknown): BillsCategory {
+  const category = cleanText(value, 20).toLowerCase()
+  return category === 'data' || category === 'tv' || category === 'electricity' ? category : 'airtime'
+}
+
+function categoryLabel(category: BillsCategory) {
+  return category === 'tv' ? 'TV' : category === 'electricity' ? 'Electricity' : category === 'data' ? 'Data' : 'Airtime'
+}
+
+function normalizeBillerCode(value: unknown, category: 'tv' | 'electricity') {
+  const code = cleanText(value, 24).replace(/\D/g, '')
+  return /^\d{8,15}$/.test(code) ? code : ''
+}
+
+async function servicesForCategory(provider: VtpassClient, category: BillsCategory) {
+  if (category === 'data') return provider.listDataServices()
+  if (category === 'tv') return provider.listTvServices()
+  if (category === 'electricity') return provider.listElectricityServices()
+  return provider.listAirtimeServices()
+}
+
 function canonicalNgn(value: unknown) {
   const raw = cleanText(value, 30)
   if (!/^\d+(?:\.\d{1,2})?$/.test(raw) || Number(raw) <= 0) return ''
@@ -206,17 +229,19 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
     try {
       const identity = await dependencies.verifyUser(req)
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'quote', windowMs: 60_000, max: 12 })
-      const category = cleanText(req.body?.category, 20).toLowerCase() === 'data' ? 'data' as const : 'airtime' as const
-      if (category === 'data' && dependencies.config.environment !== 'sandbox') {
-        return respond.fail(new PocketBillsStoreError('BILLS_DATA_LIVE_DISABLED', 'Data bundles remain sandbox-only during this pilot.', 503))
+      const category = normalizeCategory(req.body?.category)
+      if (category !== 'airtime' && dependencies.config.environment !== 'sandbox') {
+        return respond.fail(new PocketBillsStoreError('BILLS_CATEGORY_LIVE_DISABLED', `${categoryLabel(category)} remains sandbox-only during this pilot.`, 503))
       }
       const serviceId = cleanText(req.body?.service_id, 40).toLowerCase()
-      const phone = category === 'data'
-        ? normalizeDataRecipient(req.body?.phone, serviceId, dependencies.config.environment)
-        : normalizeNigerianPhone(req.body?.phone)
+      const phone = category === 'data' ? normalizeDataRecipient(req.body?.phone, serviceId, dependencies.config.environment)
+        : category === 'tv' || category === 'electricity' ? normalizeBillerCode(req.body?.phone, category)
+          : normalizeNigerianPhone(req.body?.phone)
+      const contactPhone = category === 'tv' || category === 'electricity' ? normalizeNigerianPhone(req.body?.contact_phone) : ''
       let amountNgn = canonicalNgn(req.body?.amount_ngn)
       const payerWallet = cleanText(req.body?.payer_wallet, 80)
-      if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'data' ? 'Use the VTpass sandbox test account for this provider.' : 'Enter a valid Nigerian phone number.'), 'phone')
+      if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'tv' ? 'Enter a valid smartcard number.' : category === 'electricity' ? 'Enter a valid meter number.' : category === 'data' ? 'Use the VTpass sandbox test account for this provider.' : 'Enter a valid Nigerian phone number.'), 'phone')
+      if ((category === 'tv' || category === 'electricity') && !contactPhone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', 'Enter a valid Nigerian contact phone number.'), 'contactPhone')
       if (dependencies.config.environment === 'sandbox' && category === 'airtime' && phone !== '08011111111') {
         return respond.fail(new PocketBillsStoreError(
           'BILLS_SANDBOX_PHONE_REQUIRED',
@@ -230,20 +255,34 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
         return respond.fail(new PocketBillsStoreError('BILLS_WALLET_NOT_LINKED', 'Open your linked Base Circle wallet first.', 409), 'payerWallet')
       }
 
-      const services = category === 'data'
-        ? await dependencies.provider.listDataServices()
-        : await dependencies.provider.listAirtimeServices()
+      const services = await servicesForCategory(dependencies.provider, category)
       const service = services.find(item => item.serviceId === serviceId)
-      if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${category === 'data' ? 'Data' : 'Airtime'} network.`), 'serviceId')
+      if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${categoryLabel(category)} provider.`), 'serviceId')
       let variationCode = ''
       let variationName = ''
-      if (category === 'data') {
+      let customerName = ''
+      let customerAddress = ''
+      if (category === 'data' || category === 'tv') {
         variationCode = cleanText(req.body?.variation_code, 100)
         const variations = await dependencies.provider.listServiceVariations(serviceId)
         const variation = variations.find(item => item.variationCode === variationCode)
-        if (!variation) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_VARIATION', 'Select an available Data plan.'), 'variationCode')
+        if (!variation) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_VARIATION', `Select an available ${category === 'tv' ? 'TV package' : 'Data plan'}.`), 'variationCode')
         amountNgn = canonicalNgn(String(variation.amount))
         variationName = variation.name
+      }
+      if (category === 'electricity') {
+        variationCode = cleanText(req.body?.variation_code, 20).toLowerCase()
+        if (variationCode !== 'prepaid' && variationCode !== 'postpaid') return respond.fail(new PocketBillsStoreError('BILLS_INVALID_VARIATION', 'Select prepaid or postpaid.'), 'variationCode')
+        variationName = variationCode === 'prepaid' ? 'Prepaid meter' : 'Postpaid meter'
+      }
+      if (category === 'tv' || category === 'electricity') {
+        const verified = await dependencies.provider.verifyCustomer({ category, serviceId, billersCode: phone, variationCode })
+        customerName = verified.customerName
+        customerAddress = verified.customerAddress
+        if (!customerName) return respond.fail(new PocketBillsStoreError('BILLS_CUSTOMER_NOT_VERIFIED', `VTpass did not confirm this ${category === 'tv' ? 'smartcard' : 'meter'}.`), 'phone')
+        const amount = Number(amountNgn)
+        if (category === 'electricity' && verified.minimumAmount !== null && amount < verified.minimumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_BELOW_PROVIDER_LIMIT', `Minimum electricity amount is NGN ${verified.minimumAmount}.`), 'amountNgn')
+        if (category === 'electricity' && verified.maximumAmount !== null && amount > verified.maximumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_PROVIDER_LIMIT', `Maximum electricity amount is NGN ${verified.maximumAmount}.`), 'amountNgn')
       }
       if (!amountNgn) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_AMOUNT', 'Enter a valid Naira amount.'), 'amountNgn')
       const amount = Number(amountNgn)
@@ -261,6 +300,9 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
         variationCode,
         variationName,
         phone,
+        contactPhone,
+        customerName,
+        customerAddress,
         amountNgn,
         amountUsdc: usdcForNgn(amountNgn, fx.rate),
         fxRateNgnPerUsdc: String(fx.rate),
@@ -342,13 +384,20 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
         const claim = await dependencies.store.claimVending(identity.userId, intentId)
         if (!claim.claimed) return respond.success({ intent: publicPocketBillsIntent(claim.intent) }, claim.intent.state === 'delivered' ? 'completed' : 'processing')
         try {
-          const result = claim.intent.category === 'data'
-            ? await dependencies.provider.purchaseData({
+          const result = claim.intent.category === 'data' ? await dependencies.provider.purchaseData({
                 serviceId: claim.intent.serviceId,
                 variationCode: claim.intent.variationCode,
                 phone: claim.intent.phone,
                 amountNgn: claim.intent.amountNgn,
                 requestId: claim.intent.requestId,
+              })
+            : claim.intent.category === 'tv' ? await dependencies.provider.purchaseTv({
+                serviceId: claim.intent.serviceId, variationCode: claim.intent.variationCode, smartcard: claim.intent.phone,
+                contactPhone: claim.intent.contactPhone, amountNgn: claim.intent.amountNgn, requestId: claim.intent.requestId,
+              })
+            : claim.intent.category === 'electricity' ? await dependencies.provider.purchaseElectricity({
+                serviceId: claim.intent.serviceId, meterType: claim.intent.variationCode, meterNumber: claim.intent.phone,
+                contactPhone: claim.intent.contactPhone, amountNgn: claim.intent.amountNgn, requestId: claim.intent.requestId,
               })
             : await dependencies.provider.purchaseAirtime({
                 serviceId: claim.intent.serviceId,
@@ -405,17 +454,20 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
     const respond = createResponder(req, res, requestId)
     if (req.method !== 'GET') return respond.fail(new PocketBillsStoreError('BILLS_METHOD_NOT_ALLOWED', 'Method not allowed.', 405))
     if (!dependencies.config.canVend) return respond.fail(new PocketBillsStoreError('BILLS_DISABLED', 'Bill payments are not enabled on this server.', 503))
-    if (dependencies.config.environment !== 'sandbox') return respond.fail(new PocketBillsStoreError('BILLS_DATA_LIVE_DISABLED', 'Data bundles remain sandbox-only during this pilot.', 503))
+    if (dependencies.config.environment !== 'sandbox') return respond.fail(new PocketBillsStoreError('BILLS_CATALOG_LIVE_DISABLED', 'This Bills catalog remains sandbox-only during the pilot.', 503))
     try {
       const identity = await dependencies.verifyUser(req)
-      await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'catalog:data', windowMs: 60_000, max: 20 })
+      const category = normalizeCategory(req.query?.category || 'data')
+      if (category === 'airtime') return respond.fail(new PocketBillsStoreError('BILLS_INVALID_CATEGORY', 'Select Data, TV, or Electricity.'))
+      await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: `catalog:${category}`, windowMs: 60_000, max: 20 })
       const serviceId = cleanText(req.query?.service_id, 40).toLowerCase()
-      const services = await dependencies.provider.listDataServices()
+      const services = await servicesForCategory(dependencies.provider, category)
       if (!serviceId) {
         return respond.success({ services: services.map(service => ({ serviceId: service.serviceId, name: service.name })) })
       }
       const service = services.find(item => item.serviceId === serviceId)
-      if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', 'Select a supported Data network.'), 'serviceId')
+      if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${categoryLabel(category)} provider.`), 'serviceId')
+      if (category === 'electricity') return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations: [] })
       const min = dependencies.config.minNgn ?? Number.NEGATIVE_INFINITY
       const variations = (await dependencies.provider.listServiceVariations(serviceId))
         .map(item => ({
@@ -424,8 +476,33 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
           amountNgn: canonicalNgn(String(item.amount)),
           available: item.amount >= min,
         }))
-      if (!variations.length) throw new PocketBillsStoreError('BILLS_DATA_PLANS_UNAVAILABLE', 'No Data plans are currently available from this provider.', 503)
+      if (!variations.length) throw new PocketBillsStoreError('BILLS_PLANS_UNAVAILABLE', `No ${category === 'tv' ? 'TV packages' : 'Data plans'} are currently available from this provider.`, 503)
       return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations })
+    } catch (error) {
+      return respond.fail(error)
+    }
+  }
+}
+
+export function createPocketBillsVerifyHandler(dependencies: BillsDependencies) {
+  return async function pocketBillsVerifyHandler(req: Request, res: Response) {
+    res.setHeader('Cache-Control', 'private, no-store')
+    const respond = createResponder(req, res, dependencies.requestId())
+    if (req.method !== 'POST') return respond.fail(new PocketBillsStoreError('BILLS_METHOD_NOT_ALLOWED', 'Method not allowed.', 405))
+    if (!dependencies.config.canVend || dependencies.config.environment !== 'sandbox') return respond.fail(new PocketBillsStoreError('BILLS_VERIFY_DISABLED', 'Customer verification is not enabled for this pilot.', 503))
+    try {
+      const identity = await dependencies.verifyUser(req)
+      await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'verify', windowMs: 60_000, max: 12 })
+      const category = normalizeCategory(req.body?.category)
+      if (category !== 'tv' && category !== 'electricity') return respond.fail(new PocketBillsStoreError('BILLS_INVALID_CATEGORY', 'Select TV or Electricity.'))
+      const serviceId = cleanText(req.body?.service_id, 40).toLowerCase()
+      const services = await servicesForCategory(dependencies.provider, category)
+      if (!services.some(service => service.serviceId === serviceId)) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${categoryLabel(category)} provider.`), 'serviceId')
+      const billersCode = normalizeBillerCode(req.body?.billers_code, category)
+      if (!billersCode) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_ACCOUNT', `Enter a valid ${category === 'tv' ? 'smartcard' : 'meter'} number.`), 'billersCode')
+      const variationCode = category === 'electricity' ? cleanText(req.body?.variation_code, 20).toLowerCase() : ''
+      const verification = await dependencies.provider.verifyCustomer({ category, serviceId, billersCode, variationCode })
+      return respond.success({ verification: { ...verification, serviceId, billersCode, variationCode } })
     } catch (error) {
       return respond.fail(error)
     }
@@ -436,6 +513,7 @@ let defaultHandlers: {
   catalog: ReturnType<typeof createPocketBillsCatalogHandler>
   quote: ReturnType<typeof createPocketBillsQuoteHandler>
   pay: ReturnType<typeof createPocketBillsPayHandler>
+  verify: ReturnType<typeof createPocketBillsVerifyHandler>
 } | null = null
 
 function getDefaultHandlers() {
@@ -458,6 +536,7 @@ function getDefaultHandlers() {
     catalog: createPocketBillsCatalogHandler(dependencies),
     quote: createPocketBillsQuoteHandler(dependencies),
     pay: createPocketBillsPayHandler(dependencies),
+    verify: createPocketBillsVerifyHandler(dependencies),
   }
   return defaultHandlers
 }
@@ -472,4 +551,8 @@ export async function pocketBillsQuoteHandler(req: Request, res: Response) {
 
 export async function pocketBillsPayHandler(req: Request, res: Response) {
   return getDefaultHandlers().pay(req, res)
+}
+
+export async function pocketBillsVerifyHandler(req: Request, res: Response) {
+  return getDefaultHandlers().verify(req, res)
 }

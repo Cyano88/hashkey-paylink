@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createPocketBillsCatalogHandler, createPocketBillsQuoteHandler, createPocketBillsPayHandler } from '../api/pocket/bills.ts'
+import { createPocketBillsCatalogHandler, createPocketBillsQuoteHandler, createPocketBillsPayHandler, createPocketBillsVerifyHandler } from '../api/pocket/bills.ts'
 import { createPocketBillsStore } from '../api/pocket/bills-store.ts'
 import { VtpassClientError } from '../api/vtpass-client.ts'
 import { readVtpassPhase0Config } from '../api/vtpass-config.ts'
@@ -72,6 +72,8 @@ let now = Date.parse('2026-07-19T12:00:00.000Z')
 let uuidCounter = 0
 let purchaseCalls = 0
 let dataPurchaseCalls = 0
+let tvPurchaseCalls = 0
+let electricityPurchaseCalls = 0
 let verificationCalls = 0
 let providerMode = 'delivered'
 let requeryMode = 'delivered'
@@ -110,12 +112,23 @@ const provider = {
   async listDataServices() {
     return [{ serviceId: 'mtn-data', name: 'MTN Data', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' }]
   },
+  async listTvServices() {
+    return [{ serviceId: 'dstv', name: 'DStv', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' }]
+  },
+  async listElectricityServices() {
+    return [{ serviceId: 'ikeja-electric', name: 'Ikeja Electric', minimumAmount: 100, maximumAmount: 1000, convenienceFee: '0', productType: 'flexible', imageUrl: '' }]
+  },
   async listServiceVariations(serviceId) {
+    if (serviceId === 'dstv') return [{ variationCode: 'dstv-yanga', name: 'DStv Yanga', amount: 1500, fixedPrice: true }]
     assert.equal(serviceId, 'mtn-data')
     return [
       { variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amount: 100, fixedPrice: true },
       { variationCode: 'mtn-2gb-1500', name: 'N1500 2GB - 30 days', amount: 1500, fixedPrice: true },
     ]
+  },
+  async verifyCustomer(input) {
+    assert.ok(input.category === 'tv' || input.category === 'electricity')
+    return { valid: true, customerName: 'TEST CUSTOMER', customerAddress: '1 Test Street', currentBouquet: '', renewalAmount: null, minimumAmount: input.category === 'electricity' ? 100 : null, maximumAmount: input.category === 'electricity' ? 1000 : null }
   },
   async purchaseAirtime(input) {
     purchaseCalls += 1
@@ -132,6 +145,16 @@ const provider = {
     assert.equal(input.serviceId, 'mtn-data')
     assert.equal(input.variationCode, 'mtn-100mb-100')
     return { ...providerResult(input, providerMode), productName: 'MTN Data' }
+  },
+  async purchaseTv(input) {
+    tvPurchaseCalls += 1
+    assert.equal(input.smartcard, '1212121212')
+    return { ...providerResult({ ...input, phone: input.smartcard }, providerMode), productName: 'DStv Yanga' }
+  },
+  async purchaseElectricity(input) {
+    electricityPurchaseCalls += 1
+    assert.equal(input.meterNumber, '1111111111111')
+    return { ...providerResult({ ...input, phone: input.meterNumber }, providerMode), productName: 'Ikeja Electric' }
   },
   async requeryTransaction(requestId) {
     if (requeryMode === 'error') throw new VtpassClientError({ code: 'VTPASS_UNAVAILABLE', message: 'Provider status unavailable.', status: 503, retryable: true })
@@ -154,10 +177,10 @@ const dependencies = {
     assert.equal(input.chain, 'base')
     assert.equal(input.recipient, config.treasuryAddress)
     assert.equal(input.payer, '0x2222222222222222222222222222222222222222')
-    assert.equal(input.minAmount, '0.071429')
+    assert.ok(/^\d+(?:\.\d{1,6})?$/.test(input.minAmount))
     if (verifyMode === 'pending') throw new Error('Transaction receipt was not found yet.')
     if (verifyMode === 'invalid') throw new Error('No matching USDC transfer to recipient for at least 0.071429 USDC.')
-    return { ok: true, amountUnits: '71429', amount: '0.071429', confirmedAt: new Date(now + 10_000).toISOString() }
+    return { ok: true, amountUnits: String(BigInt(Math.round(Number(input.minAmount) * 1_000_000))), amount: input.minAmount, confirmedAt: new Date(now + 10_000).toISOString() }
   },
   now: () => now,
   requestId: () => `http-request-${++uuidCounter}`,
@@ -165,6 +188,7 @@ const dependencies = {
 const quoteHandler = createPocketBillsQuoteHandler(dependencies)
 const payHandler = createPocketBillsPayHandler(dependencies)
 const catalogHandler = createPocketBillsCatalogHandler(dependencies)
+const verifyHandler = createPocketBillsVerifyHandler(dependencies)
 
 async function createQuote(idempotencyKey, phone = '08011111111') {
   return request(quoteHandler, {
@@ -178,6 +202,14 @@ async function createDataQuote(idempotencyKey, variationCode = 'mtn-100mb-100') 
   }, { idempotencyKey })
 }
 
+async function createTvQuote(idempotencyKey) {
+  return request(quoteHandler, { category: 'tv', service_id: 'dstv', variation_code: 'dstv-yanga', phone: '1212121212', contact_phone: '08011111111', payer_wallet: '0x2222222222222222222222222222222222222222' }, { idempotencyKey })
+}
+
+async function createElectricityQuote(idempotencyKey) {
+  return request(quoteHandler, { category: 'electricity', service_id: 'ikeja-electric', variation_code: 'prepaid', phone: '1111111111111', contact_phone: '08011111111', amount_ngn: '100', payer_wallet: '0x2222222222222222222222222222222222222222' }, { idempotencyKey })
+}
+
 const dataServices = await request(catalogHandler, {}, { method: 'GET' })
 assert.deepEqual(dataServices.body.data.services, [{ serviceId: 'mtn-data', name: 'MTN Data' }])
 const dataPlans = await request(catalogHandler, {}, { method: 'GET', query: { service_id: 'mtn-data' } })
@@ -185,6 +217,17 @@ assert.deepEqual(dataPlans.body.data.variations, [
   { variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amountNgn: '100.00', available: true },
   { variationCode: 'mtn-2gb-1500', name: 'N1500 2GB - 30 days', amountNgn: '1500.00', available: true },
 ])
+
+const tvServices = await request(catalogHandler, {}, { method: 'GET', query: { category: 'tv' } })
+assert.deepEqual(tvServices.body.data.services, [{ serviceId: 'dstv', name: 'DStv' }])
+const tvPlans = await request(catalogHandler, {}, { method: 'GET', query: { category: 'tv', service_id: 'dstv' } })
+assert.equal(tvPlans.body.data.variations[0].variationCode, 'dstv-yanga')
+const electricityServices = await request(catalogHandler, {}, { method: 'GET', query: { category: 'electricity' } })
+assert.deepEqual(electricityServices.body.data.services, [{ serviceId: 'ikeja-electric', name: 'Ikeja Electric' }])
+const verifiedTv = await request(verifyHandler, { category: 'tv', service_id: 'dstv', billers_code: '1212121212' })
+assert.equal(verifiedTv.body.data.verification.customerName, 'TEST CUSTOMER')
+const verifiedMeter = await request(verifyHandler, { category: 'electricity', service_id: 'ikeja-electric', billers_code: '1111111111111', variation_code: 'prepaid' })
+assert.equal(verifiedMeter.body.data.verification.customerName, 'TEST CUSTOMER')
 
 const badDataPlan = await createDataQuote('bill:handler:data:bad-plan', 'invented-plan')
 assert.equal(badDataPlan.statusCode, 400)
@@ -202,6 +245,23 @@ await request(payHandler, { action: 'prepare', intent_id: dataQuote.body.data.in
 const dataConfirmed = await request(payHandler, { action: 'confirm', intent_id: dataQuote.body.data.intent.id, tx_hash: `0x${'9'.repeat(64)}` })
 assert.equal(dataConfirmed.body.data.intent.state, 'delivered')
 assert.equal(dataPurchaseCalls, 1)
+
+const tvQuote = await createTvQuote('bill:handler:tv:quote:0001')
+assert.equal(tvQuote.statusCode, 200)
+assert.equal(tvQuote.body.data.intent.category, 'tv')
+assert.equal(tvQuote.body.data.intent.customerName, 'TEST CUSTOMER')
+await request(payHandler, { action: 'prepare', intent_id: tvQuote.body.data.intent.id })
+const tvConfirmed = await request(payHandler, { action: 'confirm', intent_id: tvQuote.body.data.intent.id, tx_hash: `0x${'8'.repeat(64)}` })
+assert.equal(tvConfirmed.body.data.intent.state, 'delivered')
+assert.equal(tvPurchaseCalls, 1)
+const electricityQuote = await createElectricityQuote('bill:handler:electricity:quote:0001')
+assert.equal(electricityQuote.statusCode, 200)
+assert.equal(electricityQuote.body.data.intent.category, 'electricity')
+await request(payHandler, { action: 'prepare', intent_id: electricityQuote.body.data.intent.id })
+const electricityConfirmed = await request(payHandler, { action: 'confirm', intent_id: electricityQuote.body.data.intent.id, tx_hash: `0x${'7'.repeat(64)}` })
+assert.equal(electricityConfirmed.body.data.intent.state, 'delivered')
+assert.equal(electricityPurchaseCalls, 1)
+now += 61_000
 
 const quoted = await createQuote('bill:handler:quote:0001')
 assert.equal(quoted.statusCode, 200)
@@ -231,7 +291,7 @@ assert.equal(purchaseCalls, 1)
 const confirmedReplay = await request(payHandler, { action: 'confirm', intent_id: quoted.body.data.intent.id, tx_hash: txHash })
 assert.equal(confirmedReplay.body.data.intent.state, 'delivered')
 assert.equal(purchaseCalls, 1)
-assert.equal(verificationCalls, 2)
+assert.equal(verificationCalls, 4)
 
 // Two confirmations may verify independently, but only one may cross the
 // atomic vending claim and call VTpass.

@@ -117,7 +117,7 @@ import publicConfigHandler from './api/public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import hostedCheckoutsHandler from './api/hosted-checkouts.js'
-import { pocketBillsCatalogHandler, pocketBillsPayHandler, pocketBillsQuoteHandler } from './api/pocket/bills.js'
+import { pocketBillsCatalogHandler, pocketBillsPayHandler, pocketBillsQuoteHandler, pocketBillsVerifyHandler } from './api/pocket/bills.js'
 import { pocketBillsRefundHandler, pocketBillsUserRefundHandler } from './api/pocket/bills-refunds.js'
 import vtpassBillsWebhookHandler from './api/pocket/bills-webhook.js'
 import { rateLimit } from './api/rate-limit.js'
@@ -328,6 +328,7 @@ app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
 app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)
 app.all('/api/pocket/bills/quote',     billsQuoteLimiter, billsBrowserBoundary, pocketBillsQuoteHandler)
 app.get('/api/pocket/bills/catalog',   billsQuoteLimiter, billsBrowserBoundary, pocketBillsCatalogHandler)
+app.post('/api/pocket/bills/verify',   billsQuoteLimiter, billsBrowserBoundary, pocketBillsVerifyHandler)
 app.all('/api/pocket/bills/pay',       billsPayLimiter, billsBrowserBoundary, pocketBillsPayHandler)
 app.post('/api/pocket/bills/refund',   billsRefundLimiter, billsBrowserBoundary, pocketBillsUserRefundHandler)
 app.post('/api/admin/pocket/bills/refunds/process', strictLimiter, pocketBillsRefundHandler)

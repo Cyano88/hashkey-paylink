@@ -162,6 +162,40 @@ assert.deepEqual(JSON.parse(spectranetCalls[0].init.body), {
   quantity: 1,
 })
 
+const tvCalls = []
+const tvClient = queuedClient([
+  jsonResponse({ response_description: '000', content: { Customer_Name: 'TEST CUSTOMER', Current_Bouquet: 'DStv Yanga', Renewal_Amount: '4200' } }),
+  jsonResponse({ code: '000', response_description: 'TRANSACTION SUCCESSFUL', content: { transactions: { status: 'delivered', transactionId: 'tv-tx-1' } } }),
+], tvCalls)
+const tvCustomer = await tvClient.verifyCustomer({ category: 'tv', serviceId: 'dstv', billersCode: '1212121212' })
+assert.equal(tvCustomer.customerName, 'TEST CUSTOMER')
+await tvClient.purchaseTv({ serviceId: 'dstv', variationCode: 'dstv-yanga', smartcard: '1212121212', contactPhone: '08011111111', amountNgn: '1500' })
+assert.deepEqual(JSON.parse(tvCalls[0].init.body), { billersCode: '1212121212', serviceID: 'dstv' })
+assert.deepEqual(JSON.parse(tvCalls[1].init.body), {
+  request_id: '202607191105fixed123', serviceID: 'dstv', billersCode: '1212121212', variation_code: 'dstv-yanga', amount: 1500,
+  phone: '08011111111', subscription_type: 'change', quantity: 1,
+})
+
+const electricityCalls = []
+const electricityClient = queuedClient([
+  jsonResponse({ response_description: '000', content: { Customer_Name: 'METER CUSTOMER', Address: '1 Test Street', Min_Purchase_Amount: '100', MAX_Purchase_Amount: '100000' } }),
+  jsonResponse({ code: '000', response_description: 'TRANSACTION SUCCESSFUL', content: { transactions: { status: 'delivered', transactionId: 'power-tx-1' } } }),
+], electricityCalls)
+const meterCustomer = await electricityClient.verifyCustomer({ category: 'electricity', serviceId: 'ikeja-electric', billersCode: '1111111111111', variationCode: 'prepaid' })
+assert.equal(meterCustomer.customerName, 'METER CUSTOMER')
+assert.equal(meterCustomer.minimumAmount, 100)
+await electricityClient.purchaseElectricity({ serviceId: 'ikeja-electric', meterType: 'prepaid', meterNumber: '1111111111111', contactPhone: '08011111111', amountNgn: '100' })
+assert.deepEqual(JSON.parse(electricityCalls[0].init.body), { billersCode: '1111111111111', serviceID: 'ikeja-electric', type: 'prepaid' })
+assert.deepEqual(JSON.parse(electricityCalls[1].init.body), {
+  request_id: '202607191105fixed123', serviceID: 'ikeja-electric', billersCode: '1111111111111', variation_code: 'prepaid', amount: 100, phone: '08011111111',
+})
+
+const invalidCustomerClient = queuedClient([jsonResponse({ response_description: '011', content: { WrongBillersCode: true } })])
+await assert.rejects(
+  () => invalidCustomerClient.verifyCustomer({ category: 'tv', serviceId: 'dstv', billersCode: '1212121212' }),
+  error => error instanceof VtpassClientError && error.code === 'VTPASS_CUSTOMER_NOT_VERIFIED',
+)
+
 const pending = normalizeVtpassTransaction({ code: '000', content: { transactions: { status: 'pending' } } }, '202607191105pending')
 assert.equal(pending.status, 'pending')
 assert.equal(pending.requeryRequired, true)

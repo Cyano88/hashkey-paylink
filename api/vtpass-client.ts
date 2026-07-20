@@ -40,6 +40,16 @@ export type VtpassVariation = {
   fixedPrice: boolean
 }
 
+export type VtpassCustomerVerification = {
+  valid: boolean
+  customerName: string
+  customerAddress: string
+  currentBouquet: string
+  renewalAmount: number | null
+  minimumAmount: number | null
+  maximumAmount: number | null
+}
+
 export class VtpassClientError extends Error {
   readonly code: string
   readonly status: number
@@ -76,7 +86,7 @@ type VtpassClientOptions = {
 }
 
 const AIRTIME_SERVICE_IDS = new Set(['mtn', 'airtel', 'glo', 'etisalat', '9mobile'])
-const DATA_SERVICE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,39}$/
+const CATALOG_SERVICE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,39}$/
 const FAILURE_CODES = new Set([
   '010', '011', '012', '013', '014', '015', '016', '017', '018', '019',
   '021', '022', '023', '024', '025', '026', '027', '028', '030', '031',
@@ -187,10 +197,34 @@ function normalizeAirtimeServiceId(value: unknown) {
 
 function normalizeDataServiceId(value: unknown) {
   const serviceId = text(value).toLowerCase()
-  if (!DATA_SERVICE_ID_PATTERN.test(serviceId)) {
+  if (!CATALOG_SERVICE_ID_PATTERN.test(serviceId)) {
     throw new VtpassClientError({ code: 'VTPASS_INVALID_SERVICE', message: 'Unsupported Data network.', status: 400 })
   }
   return serviceId
+}
+
+function normalizeCatalogServiceId(value: unknown, label = 'service') {
+  const serviceId = text(value).toLowerCase()
+  if (!CATALOG_SERVICE_ID_PATTERN.test(serviceId)) {
+    throw new VtpassClientError({ code: 'VTPASS_INVALID_SERVICE', message: `Unsupported ${label}.`, status: 400 })
+  }
+  return serviceId
+}
+
+function normalizeBillerCode(value: unknown, label: string) {
+  const billersCode = text(value).replace(/\D/g, '')
+  if (!/^\d{8,15}$/.test(billersCode)) {
+    throw new VtpassClientError({ code: 'VTPASS_INVALID_ACCOUNT', message: `Enter a valid ${label}.`, status: 400 })
+  }
+  return billersCode
+}
+
+function normalizeMeterType(value: unknown) {
+  const type = text(value).toLowerCase()
+  if (type !== 'prepaid' && type !== 'postpaid') {
+    throw new VtpassClientError({ code: 'VTPASS_INVALID_VARIATION', message: 'Select prepaid or postpaid.', status: 400 })
+  }
+  return type as 'prepaid' | 'postpaid'
 }
 
 function normalizeVariationCode(value: unknown) {
@@ -406,7 +440,30 @@ export function createVtpassClient(options: VtpassClientOptions) {
       const value = record(item)
       const serviceId = text(value.serviceID).toLowerCase()
       const name = text(value.name)
-      if (!DATA_SERVICE_ID_PATTERN.test(serviceId) || !name) return []
+      if (!CATALOG_SERVICE_ID_PATTERN.test(serviceId) || !name) return []
+      const imageUrl = text(value.image)
+      return [{
+        serviceId,
+        name,
+        minimumAmount: finiteNumber(value.minimium_amount ?? value.minimum_amount),
+        maximumAmount: finiteNumber(value.maximum_amount),
+        convenienceFee: text(value.convinience_fee ?? value.convenience_fee),
+        productType: text(value.product_type),
+        imageUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
+      }]
+    })
+  }
+
+  async function listServices(identifierInput: 'tv-subscription' | 'electricity-bill'): Promise<VtpassService[]> {
+    const identifier = identifierInput === 'tv-subscription' ? 'tv-subscription' : 'electricity-bill'
+    const { body } = await requestJson(`/api/services?identifier=${encodeURIComponent(identifier)}`, 'GET')
+    const content = record(body).content
+    if (!Array.isArray(content)) throw new VtpassClientError({ code: 'VTPASS_INVALID_RESPONSE', message: 'VTpass service catalog response was invalid.', status: 503, retryable: true })
+    return content.flatMap((item): VtpassService[] => {
+      const value = record(item)
+      const serviceId = text(value.serviceID).toLowerCase()
+      const name = text(value.name)
+      if (!CATALOG_SERVICE_ID_PATTERN.test(serviceId) || !name) return []
       const imageUrl = text(value.image)
       return [{
         serviceId,
@@ -421,13 +478,13 @@ export function createVtpassClient(options: VtpassClientOptions) {
   }
 
   async function listServiceVariations(serviceIdInput: string): Promise<VtpassVariation[]> {
-    const serviceId = normalizeDataServiceId(serviceIdInput)
+    const serviceId = normalizeCatalogServiceId(serviceIdInput)
     const { body } = await requestJson(`/api/service-variations?serviceID=${encodeURIComponent(serviceId)}`, 'GET')
     const content = record(record(body).content)
     const variations = Array.isArray(content.variations)
       ? content.variations
       : Array.isArray(content.varations) ? content.varations : null
-    if (!variations) throw new VtpassClientError({ code: 'VTPASS_INVALID_RESPONSE', message: 'VTpass Data plans response was invalid.', status: 503, retryable: true })
+    if (!variations) throw new VtpassClientError({ code: 'VTPASS_INVALID_RESPONSE', message: 'VTpass plans response was invalid.', status: 503, retryable: true })
     const parsed = variations.flatMap((item): VtpassVariation[] => {
       const value = record(item)
       const variationCode = text(value.variation_code)
@@ -437,6 +494,37 @@ export function createVtpassClient(options: VtpassClientOptions) {
       return [{ variationCode, name, amount, fixedPrice: text(value.fixedPrice).toLowerCase() === 'yes' }]
     })
     return [...new Map(parsed.map(variation => [variation.variationCode, variation])).values()]
+  }
+
+  async function verifyCustomer(input: { category: 'tv' | 'electricity'; serviceId: string; billersCode: string; variationCode?: string }): Promise<VtpassCustomerVerification> {
+    const serviceID = normalizeCatalogServiceId(input.serviceId, input.category === 'tv' ? 'TV provider' : 'electricity provider')
+    const billersCode = normalizeBillerCode(input.billersCode, input.category === 'tv' ? 'smartcard number' : 'meter number')
+    const payload: Record<string, unknown> = { billersCode, serviceID }
+    if (input.category === 'electricity') payload.type = normalizeMeterType(input.variationCode)
+    const { body } = await requestJson('/api/merchant-verify', 'POST', payload)
+    const root = record(body)
+    const content = record(root.content)
+    const code = text(root.code || root.response_description)
+    const wrongBiller = content.WrongBillersCode === true || text(content.WrongBillersCode).toLowerCase() === 'true'
+    const canVendValue = content.Can_Vend
+    const canVend = canVendValue === undefined || canVendValue === null || canVendValue === '' || canVendValue === true || ['true', 'yes', '1'].includes(text(canVendValue).toLowerCase())
+    if (!['000', '020'].includes(code) || wrongBiller || !canVend) {
+      throw new VtpassClientError({
+        code: 'VTPASS_CUSTOMER_NOT_VERIFIED',
+        message: text(root.response_description || content.error || content.message) || `VTpass could not verify this ${input.category === 'tv' ? 'smartcard' : 'meter'}.`,
+        status: 400,
+        providerCode: code,
+      })
+    }
+    return {
+      valid: true,
+      customerName: text(content.Customer_Name || content.customer_name || content.CustomerName).slice(0, 140),
+      customerAddress: text(content.Address || content.address).slice(0, 220),
+      currentBouquet: text(content.Current_Bouquet || content.current_bouquet).slice(0, 140),
+      renewalAmount: finiteNumber(content.Renewal_Amount || content.renewal_amount),
+      minimumAmount: finiteNumber(content.Min_Purchase_Amount || content.minimum_amount),
+      maximumAmount: finiteNumber(content.MAX_Purchase_Amount || content.maximum_amount),
+    }
   }
 
   async function purchaseAirtime(input: { serviceId: string; phone: string; amountNgn: string | number; requestId?: string }) {
@@ -477,6 +565,37 @@ export function createVtpassClient(options: VtpassClientOptions) {
     return normalizeVtpassTransaction(body, requestId)
   }
 
+  async function purchaseTv(input: { serviceId: string; variationCode: string; smartcard: string; contactPhone: string; amountNgn: string | number; requestId?: string }) {
+    assertPurchaseAllowed(config)
+    const currentTime = now()
+    const requestId = input.requestId ? normalizeRequestId(input.requestId) : createVtpassRequestId(currentTime, requestSuffix())
+    assertPurchaseRequestIdDate(requestId, currentTime)
+    const serviceID = normalizeCatalogServiceId(input.serviceId, 'TV provider')
+    const billersCode = normalizeBillerCode(input.smartcard, 'smartcard number')
+    const variation_code = normalizeVariationCode(input.variationCode)
+    const phone = normalizePhone(input.contactPhone, config.environment)
+    const amount = normalizeAmount(input.amountNgn, config, false)
+    const { body } = await requestJson('/api/pay', 'POST', {
+      request_id: requestId, serviceID, billersCode, variation_code, amount, phone,
+      ...(serviceID === 'dstv' || serviceID === 'gotv' ? { subscription_type: 'change', quantity: 1 } : {}),
+    }, true)
+    return normalizeVtpassTransaction(body, requestId)
+  }
+
+  async function purchaseElectricity(input: { serviceId: string; meterType: string; meterNumber: string; contactPhone: string; amountNgn: string | number; requestId?: string }) {
+    assertPurchaseAllowed(config)
+    const currentTime = now()
+    const requestId = input.requestId ? normalizeRequestId(input.requestId) : createVtpassRequestId(currentTime, requestSuffix())
+    assertPurchaseRequestIdDate(requestId, currentTime)
+    const serviceID = normalizeCatalogServiceId(input.serviceId, 'electricity provider')
+    const billersCode = normalizeBillerCode(input.meterNumber, 'meter number')
+    const variation_code = normalizeMeterType(input.meterType)
+    const phone = normalizePhone(input.contactPhone, config.environment)
+    const amount = normalizeAmount(input.amountNgn, config)
+    const { body } = await requestJson('/api/pay', 'POST', { request_id: requestId, serviceID, billersCode, variation_code, amount, phone }, true)
+    return normalizeVtpassTransaction(body, requestId)
+  }
+
   async function requeryTransaction(requestIdInput: string) {
     const requestId = normalizeRequestId(requestIdInput)
     const { body } = await requestJson('/api/requery', 'POST', { request_id: requestId })
@@ -488,9 +607,14 @@ export function createVtpassClient(options: VtpassClientOptions) {
     listServiceCategories,
     listAirtimeServices,
     listDataServices,
+    listTvServices: () => listServices('tv-subscription'),
+    listElectricityServices: () => listServices('electricity-bill'),
     listServiceVariations,
+    verifyCustomer,
     purchaseAirtime,
     purchaseData,
+    purchaseTv,
+    purchaseElectricity,
     requeryTransaction,
   }
 }

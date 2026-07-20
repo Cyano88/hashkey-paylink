@@ -7,12 +7,16 @@ import {
   preparePocketAirtime,
   quotePocketData,
   quotePocketAirtime,
+  quotePocketTv,
+  quotePocketElectricity,
   readPocketDataCatalog,
   readPocketBillsAvailability,
+  verifyPocketBillCustomer,
   refreshPocketAirtime,
   type PocketDataService,
   type PocketDataVariation,
   type PocketBillIntent,
+  type PocketBillVerification,
 } from '../api/pocketBillsClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 
@@ -22,6 +26,14 @@ const VTPASS_SANDBOX_SUCCESS_PHONE = '08011111111'
 
 function sandboxDataRecipient(serviceId: string) {
   return serviceId === 'spectranet' ? '1212121212' : VTPASS_SANDBOX_SUCCESS_PHONE
+}
+
+function sandboxBillAccount(category: 'tv' | 'electricity', variationCode = 'prepaid') {
+  return category === 'tv' ? '1212121212' : variationCode === 'postpaid' ? '1010101010101' : '1111111111111'
+}
+
+function billLabel(category: 'airtime' | 'data' | 'tv' | 'electricity') {
+  return category === 'tv' ? 'TV' : category === 'electricity' ? 'Electricity' : category === 'data' ? 'Data' : 'Airtime'
 }
 
 function sleep(ms: number) {
@@ -64,16 +76,21 @@ export default function usePocketBillsController({
   getEvmSession: (walletAddress: string) => Promise<CircleEvmEmailSession>
   refreshBalances: () => Promise<void>
 }) {
-  const category = view === 'data' ? 'data' as const : 'airtime' as const
+  const category = view
   const activeBillKey = `pocket:bills:active:${category}`
   const [availability, setAvailability] = useState<'loading' | 'enabled' | 'disabled'>('loading')
   const [environment, setEnvironment] = useState<'sandbox' | 'live'>('sandbox')
   const [limits, setLimits] = useState({ minNgn: 100, maxNgn: 1000 })
   const [dataEnabled, setDataEnabled] = useState(false)
+  const [tvEnabled, setTvEnabled] = useState(false)
+  const [electricityEnabled, setElectricityEnabled] = useState(false)
   const [serviceId, setServiceIdState] = useState('mtn')
   const [phone, setPhoneState] = useState('')
   const [amountNgn, setAmountNgnState] = useState('')
   const [variationCode, setVariationCodeState] = useState('')
+  const [contactPhone, setContactPhoneState] = useState('')
+  const [verification, setVerification] = useState<PocketBillVerification | null>(null)
+  const [verifyBusy, setVerifyBusy] = useState(false)
   const [dataServices, setDataServices] = useState<PocketDataService[]>([])
   const [dataVariations, setDataVariations] = useState<PocketDataVariation[]>([])
   const [catalogBusy, setCatalogBusy] = useState(false)
@@ -96,6 +113,7 @@ export default function usePocketBillsController({
     setNotice('')
     setVariationCodeState('')
     setAmountNgnState('')
+    setVerification(null)
   }, [category])
 
   useEffect(() => {
@@ -112,12 +130,18 @@ export default function usePocketBillsController({
         setEnvironment(result.environment)
         setLimits({ minNgn: result.minNgn, maxNgn: result.maxNgn })
         setDataEnabled(result.dataEnabled)
-        if (result.environment === 'sandbox') setPhoneState(VTPASS_SANDBOX_SUCCESS_PHONE)
+        setTvEnabled(result.tvEnabled)
+        setElectricityEnabled(result.electricityEnabled)
+        if (result.environment === 'sandbox') {
+          setPhoneState(view === 'tv' ? sandboxBillAccount('tv') : view === 'electricity' ? sandboxBillAccount('electricity') : VTPASS_SANDBOX_SUCCESS_PHONE)
+          setContactPhoneState(VTPASS_SANDBOX_SUCCESS_PHONE)
+          if (view === 'electricity') setVariationCodeState('prepaid')
+        }
         setAvailability(result.enabled ? 'enabled' : 'disabled')
       })
       .catch(() => { if (!cancelled) setAvailability('disabled') })
     return () => { cancelled = true }
-  }, [])
+  }, [view])
 
   const resetResult = useCallback(() => {
     if (['paying', 'confirming', 'processing'].includes(status)) return
@@ -131,12 +155,15 @@ export default function usePocketBillsController({
   const setServiceId = useCallback((value: string) => {
     setServiceIdState(value)
     if (category === 'data' && environment === 'sandbox') setPhoneState(sandboxDataRecipient(value))
+    if ((category === 'tv' || category === 'electricity') && environment === 'sandbox') setPhoneState(sandboxBillAccount(category, variationCode))
     setVariationCodeState('')
     setAmountNgnState('')
     setDataVariations([])
+    setVerification(null)
     resetResult()
   }, [category, environment, resetResult])
-  const setPhone = useCallback((value: string) => { setPhoneState(value.replace(/[^\d+]/g, '').slice(0, 14)); resetResult() }, [resetResult])
+  const setPhone = useCallback((value: string) => { setPhoneState(value.replace(/[^\d+]/g, '').slice(0, 15)); setVerification(null); resetResult() }, [resetResult])
+  const setContactPhone = useCallback((value: string) => { setContactPhoneState(value.replace(/[^\d+]/g, '').slice(0, 14)); resetResult() }, [resetResult])
   const setAmountNgn = useCallback((value: string) => {
     if (/^\d*(?:\.\d{0,2})?$/.test(value)) setAmountNgnState(value)
     resetResult()
@@ -144,10 +171,13 @@ export default function usePocketBillsController({
 
   const setVariationCode = useCallback((value: string) => {
     const plan = dataVariations.find(item => item.variationCode === value)
-    setVariationCodeState(plan?.variationCode ?? '')
-    setAmountNgnState(plan?.amountNgn ?? '')
+    const nextCode = category === 'electricity' && (value === 'prepaid' || value === 'postpaid') ? value : plan?.variationCode ?? ''
+    setVariationCodeState(nextCode)
+    if (category !== 'electricity') setAmountNgnState(plan?.amountNgn ?? '')
+    if (category === 'electricity' && environment === 'sandbox') setPhoneState(sandboxBillAccount('electricity', nextCode))
+    if (category === 'electricity') setVerification(null)
     resetResult()
-  }, [dataVariations, resetResult])
+  }, [category, dataVariations, environment, resetResult])
 
   const token = useCallback(async () => {
     const accessToken = await getAccessToken()
@@ -166,14 +196,14 @@ export default function usePocketBillsController({
       void refreshBalances().catch(() => undefined)
     } else if (next.state === 'refunded') {
       setStatus('error')
-      setError(`The ${category === 'data' ? 'Data' : 'Airtime'} payment was refunded. No retry is needed.`)
+      setError(`The ${billLabel(category)} payment was refunded. No retry is needed.`)
       window.localStorage.removeItem(activeBillKey)
     } else if (next.state === 'provider_failed_unverified') {
       setStatus('processing')
-      setNotice(`Verifying the final ${category === 'data' ? 'Data' : 'Airtime'} delivery status. Do not retry.`)
+      setNotice(`Verifying the final ${billLabel(category)} delivery status. Do not retry.`)
     } else if (next.state === 'refund_eligible') {
       setStatus('error')
-      setError(`VTpass confirmed the ${category === 'data' ? 'Data' : 'Airtime'} purchase failed. Claim your refund from Bills activity.`)
+      setError(`VTpass confirmed the ${billLabel(category)} purchase failed. Claim your refund from Bills activity.`)
     } else if (next.state === 'refund_pending') {
       setStatus('error')
       setError('This earlier refund requires manual review; do not retry.')
@@ -182,14 +212,14 @@ export default function usePocketBillsController({
       setError('Your USDC refund is processing. Check Bills activity for confirmation.')
     } else if (next.state === 'failed') {
       setStatus('error')
-      setError(next.failureReason || `${category === 'data' ? 'Data' : 'Airtime'} was not delivered. No payment was completed.`)
+      setError(next.failureReason || `${billLabel(category)} was not delivered. No payment was completed.`)
       window.localStorage.removeItem(activeBillKey)
     } else if (next.state === 'needs_review') {
       setStatus('error')
       setError('This payment needs review. Check Bills activity before retrying.')
     } else {
       setStatus('processing')
-      setNotice(`Payment received. ${category === 'data' ? 'Data' : 'Airtime'} delivery is processing.`)
+      setNotice(`Payment received. ${billLabel(category)} delivery is processing.`)
     }
   }, [activeBillKey, category, environment, refreshBalances])
 
@@ -214,7 +244,7 @@ export default function usePocketBillsController({
     for (let attempt = 0; !finalState(next) && attempt < 12; attempt += 1) {
       if (mounted.current) {
         setStatus('processing')
-        setNotice(`Payment received. ${category === 'data' ? 'Data' : 'Airtime'} delivery is processing.`)
+        setNotice(`Payment received. ${billLabel(category)} delivery is processing.`)
       }
       await sleep(attempt < 5 ? 2_000 : 5_000)
       next = await refreshPocketAirtime({ accessToken, intentId, refresh: true })
@@ -235,7 +265,7 @@ export default function usePocketBillsController({
       .catch(reason => {
         if (!mounted.current) return
         setStatus('error')
-        setError(reason instanceof Error ? reason.message : `Could not restore the ${category === 'data' ? 'Data' : 'Airtime'} payment.`)
+        setError(reason instanceof Error ? reason.message : `Could not restore the ${billLabel(category)} payment.`)
       })
   }, [activeBillKey, authenticated, availability, category, reconcile, token])
 
@@ -244,51 +274,69 @@ export default function usePocketBillsController({
     const remaining = intent.quoteExpiresAt - Date.now()
     if (remaining <= 0) {
       setStatus('error')
-      setError(`The ${category === 'data' ? 'Data' : 'Airtime'} quote expired. Review the payment again.`)
+      setError(`The ${billLabel(category)} quote expired. Review the payment again.`)
       return
     }
     const timeout = window.setTimeout(() => {
       setStatus('error')
-      setError(`The ${category === 'data' ? 'Data' : 'Airtime'} quote expired. Review the payment again.`)
+      setError(`The ${billLabel(category)} quote expired. Review the payment again.`)
     }, remaining)
     return () => window.clearTimeout(timeout)
   }, [category, intent, status])
 
   useEffect(() => {
-    if (!authenticated || availability !== 'enabled' || view !== 'data' || !dataEnabled) return
+    const enabled = view === 'data' ? dataEnabled : view === 'tv' ? tvEnabled : view === 'electricity' ? electricityEnabled : false
+    if (!authenticated || availability !== 'enabled' || view === 'airtime' || !enabled) return
     let cancelled = false
     setCatalogBusy(true)
     void token()
-      .then(accessToken => readPocketDataCatalog({ accessToken }))
+      .then(accessToken => readPocketDataCatalog({ accessToken, category: view }))
       .then(result => {
         if (cancelled) return
         setDataServices(result.services)
         const preferred = result.services.some(item => item.serviceId === serviceId) ? serviceId : result.services[0]?.serviceId ?? ''
         setServiceIdState(preferred)
-        if (environment === 'sandbox' && preferred) setPhoneState(sandboxDataRecipient(preferred))
+        if (environment === 'sandbox' && preferred) setPhoneState(view === 'data' ? sandboxDataRecipient(preferred) : sandboxBillAccount(view, variationCode))
       })
-      .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Data networks are temporarily unavailable.') })
+      .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : `${billLabel(view)} providers are temporarily unavailable.`) })
       .finally(() => { if (!cancelled) setCatalogBusy(false) })
     return () => { cancelled = true }
-  }, [authenticated, availability, dataEnabled, environment, token, view])
+  }, [authenticated, availability, dataEnabled, electricityEnabled, environment, token, tvEnabled, view])
 
   useEffect(() => {
-    if (!authenticated || availability !== 'enabled' || view !== 'data' || !dataEnabled || !serviceId || !dataServices.some(item => item.serviceId === serviceId)) return
+    const enabled = view === 'data' ? dataEnabled : view === 'tv' ? tvEnabled : false
+    if (!authenticated || availability !== 'enabled' || (view !== 'data' && view !== 'tv') || !enabled || !serviceId || !dataServices.some(item => item.serviceId === serviceId)) return
     let cancelled = false
     setCatalogBusy(true)
     setDataVariations([])
     setVariationCodeState('')
     setAmountNgnState('')
     void token()
-      .then(accessToken => readPocketDataCatalog({ accessToken, serviceId }))
+      .then(accessToken => readPocketDataCatalog({ accessToken, serviceId, category: view }))
       .then(result => {
         if (cancelled) return
         setDataVariations(result.variations)
       })
-      .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Data plans are temporarily unavailable.') })
+      .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : `${billLabel(view)} plans are temporarily unavailable.`) })
       .finally(() => { if (!cancelled) setCatalogBusy(false) })
     return () => { cancelled = true }
-  }, [authenticated, availability, dataEnabled, dataServices, serviceId, token, view])
+  }, [authenticated, availability, dataEnabled, dataServices, serviceId, token, tvEnabled, view])
+
+  const verifyCustomer = useCallback(async () => {
+    if (category !== 'tv' && category !== 'electricity') return
+    setVerifyBusy(true)
+    setError('')
+    try {
+      const accessToken = await token()
+      const result = await verifyPocketBillCustomer({ accessToken, category, serviceId, billersCode: phone, variationCode })
+      setVerification(result)
+    } catch (reason) {
+      setVerification(null)
+      setError(reason instanceof Error ? reason.message : `Could not verify this ${category === 'tv' ? 'smartcard' : 'meter'}.`)
+    } finally {
+      setVerifyBusy(false)
+    }
+  }, [category, phone, serviceId, token, variationCode])
 
   const review = useCallback(async () => {
     if (availability !== 'enabled' || !authenticated || status === 'quoting') return
@@ -299,17 +347,18 @@ export default function usePocketBillsController({
       const wallet = baseWallet ?? await ensureBaseWallet()
       if (!wallet) throw new Error('Base wallet setup was cancelled.')
       const accessToken = await token()
-      const result = category === 'data'
-        ? await quotePocketData({ accessToken, serviceId, variationCode, phone, payerWallet: wallet.address })
-        : await quotePocketAirtime({ accessToken, serviceId, phone, amountNgn, payerWallet: wallet.address })
-      if (result.intent.quoteExpiresAt <= Date.now()) throw new Error(`The ${category === 'data' ? 'Data' : 'Airtime'} quote expired. Review it again.`)
+      const result = category === 'data' ? await quotePocketData({ accessToken, serviceId, variationCode, phone, payerWallet: wallet.address })
+        : category === 'tv' ? await quotePocketTv({ accessToken, serviceId, variationCode, smartcard: phone, contactPhone, payerWallet: wallet.address })
+          : category === 'electricity' ? await quotePocketElectricity({ accessToken, serviceId, meterType: variationCode as 'prepaid' | 'postpaid', meterNumber: phone, contactPhone, amountNgn, payerWallet: wallet.address })
+            : await quotePocketAirtime({ accessToken, serviceId, phone, amountNgn, payerWallet: wallet.address })
+      if (result.intent.quoteExpiresAt <= Date.now()) throw new Error(`The ${billLabel(category)} quote expired. Review it again.`)
       setIntent(result.intent)
       setStatus('ready')
     } catch (reason) {
       setStatus('error')
-      setError(reason instanceof Error ? reason.message : `Could not prepare the ${category === 'data' ? 'Data' : 'Airtime'} payment.`)
+      setError(reason instanceof Error ? reason.message : `Could not prepare the ${billLabel(category)} payment.`)
     }
-  }, [amountNgn, authenticated, availability, baseWallet, category, ensureBaseWallet, phone, serviceId, status, token, variationCode])
+  }, [amountNgn, authenticated, availability, baseWallet, category, contactPhone, ensureBaseWallet, phone, serviceId, status, token, variationCode])
 
   const pay = useCallback(async () => {
     if (!intent || status !== 'ready') return
@@ -337,7 +386,7 @@ export default function usePocketBillsController({
     } catch (reason) {
       if (!mounted.current) return
       setStatus('error')
-      setError(reason instanceof Error ? reason.message : `${category === 'data' ? 'Data' : 'Airtime'} payment did not complete.`)
+      setError(reason instanceof Error ? reason.message : `${billLabel(category)} payment did not complete.`)
     }
   }, [activeBillKey, baseWallet, category, ensureBaseWallet, getEvmSession, intent, reconcile, status, token])
 
@@ -348,27 +397,34 @@ export default function usePocketBillsController({
       await reconcile(intent.id, intent.txHash, accessToken)
     } catch (reason) {
       if (!mounted.current) return
-      setError(reason instanceof Error ? reason.message : `Could not refresh the ${category === 'data' ? 'Data' : 'Airtime'} payment.`)
+      setError(reason instanceof Error ? reason.message : `Could not refresh the ${billLabel(category)} payment.`)
     }
   }, [authenticated, category, intent, reconcile, token])
 
   const processing = ['quoting', 'paying', 'confirming', 'processing'].includes(status)
-  const expectedSandboxRecipient = category === 'data' ? sandboxDataRecipient(serviceId) : VTPASS_SANDBOX_SUCCESS_PHONE
-  const formReady = (category === 'data' ? /^\d{10,12}$/.test(phone) : /^0\d{10}$/.test(phone))
+  const expectedSandboxRecipient = category === 'data' ? sandboxDataRecipient(serviceId) : category === 'tv' || category === 'electricity' ? sandboxBillAccount(category, variationCode) : VTPASS_SANDBOX_SUCCESS_PHONE
+  const recipientReady = category === 'airtime' ? /^0\d{10}$/.test(phone) : category === 'data' ? /^\d{10,12}$/.test(phone) : /^\d{8,15}$/.test(phone)
+  const formReady = recipientReady
     && (environment !== 'sandbox' || phone === expectedSandboxRecipient)
     && Number(amountNgn) >= limits.minNgn
-    && (category === 'data' || Number(amountNgn) <= limits.maxNgn)
-    && (category !== 'data' || Boolean(variationCode))
+    && (category === 'data' || category === 'tv' || Number(amountNgn) <= limits.maxNgn)
+    && (category === 'airtime' || Boolean(variationCode))
+    && ((category !== 'tv' && category !== 'electricity') || (Boolean(verification) && /^0\d{10}$/.test(contactPhone)))
 
   return {
     availability,
     environment,
     limits,
     dataEnabled,
+    tvEnabled,
+    electricityEnabled,
     serviceId,
     phone,
     amountNgn,
     variationCode,
+    contactPhone,
+    verification,
+    verifyBusy,
     dataServices,
     dataVariations,
     catalogBusy,
@@ -380,8 +436,11 @@ export default function usePocketBillsController({
     formReady,
     setServiceId,
     setPhone,
+    setContactPhone,
     setAmountNgn,
     setVariationCode,
+    verifyCustomer,
+    edit: resetResult,
     review,
     pay,
     refresh,

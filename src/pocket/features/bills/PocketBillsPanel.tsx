@@ -1,7 +1,8 @@
-import { ArrowRight, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
+import { ArrowRight, Check, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import PocketSlideAction from '../../components/PocketSlideAction'
+import PocketSelect from '../../components/PocketSelect'
 import type { PocketBillsController } from '../../controllers/usePocketBillsController'
 import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
 import PocketDataBundlePicker from './PocketDataBundlePicker'
@@ -72,9 +73,12 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
         ? 'pending'
         : 'idle'
   const isData = view === 'data'
-  const networks = isData
+  const isVerifiedBill = view === 'tv' || view === 'electricity'
+  const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
+  const networks = view !== 'airtime'
     ? bills.dataServices.map(service => ({ value: service.serviceId, label: dataServiceLabel(service.name) }))
     : [...NETWORKS]
+  const categoryEnabled = view === 'data' ? bills.dataEnabled : view === 'tv' ? bills.tvEnabled : view === 'electricity' ? bills.electricityEnabled : true
 
   return (
     <div className="space-y-4">
@@ -97,18 +101,18 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
           <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">Bills pilot is not open</h3>
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">Bill payments remain hidden until the protected provider and refund controls are enabled.</p>
         </div>
-      ) : !authenticated ? <SignInCard /> : (view === 'data' && !bills.dataEnabled) || (view !== 'airtime' && view !== 'data') ? (
+      ) : !authenticated ? <SignInCard /> : !categoryEnabled ? (
         <div className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
-          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">{view === 'data' ? 'Data pilot unavailable' : 'Coming after Airtime'}</h3>
-          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{view === 'data' ? 'Data bundles remain sandbox-only until the live product is separately approved.' : 'TV and Electricity follow after the protected mobile Bills pilot.'}</p>
+          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">{billName} pilot unavailable</h3>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{billName} remains sandbox-only until the live product is separately approved.</p>
         </div>
       ) : (
         <>
           {bills.environment === 'sandbox' && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
               <span className="font-black">Sandbox test</span>
-              <span className="block">VTpass simulates {isData ? 'Data' : 'Airtime'} delivery to {bills.phone}. Your Base USDC payment is real; no {isData ? 'Data bundle' : 'Airtime'} is delivered.</span>
+              <span className="block">VTpass simulates {billName} delivery using its official test account. Your Base USDC payment is real; no live service is delivered.</span>
             </div>
           )}
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
@@ -127,17 +131,28 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
 
           <div className="space-y-4 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
             <div>
-              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">{isData ? 'Data provider' : 'Mobile network'}</p>
-              <div className="flex gap-1.5 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1.5 [scrollbar-width:none] dark:border-white/10 dark:bg-[#17181d] [&::-webkit-scrollbar]:hidden">
-                {networks.map(network => (
-                  <button key={network.value} type="button" disabled={locked} onClick={() => bills.setServiceId(network.value)} className={cn('min-h-10 min-w-[72px] shrink-0 rounded-xl border px-2.5 text-[11px] font-black transition-all', bills.serviceId === network.value ? 'border-blue-500/30 bg-blue-500/10 text-blue-700 shadow-sm dark:text-blue-300' : 'border-transparent text-gray-500 hover:bg-blue-500/[0.06] hover:text-blue-700 dark:text-gray-400 dark:hover:text-blue-300', locked && 'cursor-not-allowed opacity-60')}>{network.label}</button>
-                ))}
-              </div>
-              {isData && bills.catalogBusy && !networks.length && <span className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-gray-400"><Loader2 className="h-3 w-3 animate-spin" />Loading networks</span>}
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">{view === 'tv' ? 'TV provider' : view === 'electricity' ? 'Electricity provider' : isData ? 'Data provider' : 'Mobile network'}</p>
+              {isVerifiedBill ? (
+                <PocketSelect value={bills.serviceId} options={networks} onChange={bills.setServiceId} disabled={locked || bills.catalogBusy} placeholder="Select provider" ariaLabel={`Select ${billName} provider`} />
+              ) : (
+                <div className="flex gap-1.5 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1.5 [scrollbar-width:none] dark:border-white/10 dark:bg-[#17181d] [&::-webkit-scrollbar]:hidden">
+                  {networks.map(network => (
+                    <button key={network.value} type="button" disabled={locked} onClick={() => bills.setServiceId(network.value)} className={cn('min-h-10 min-w-[72px] shrink-0 rounded-xl border px-2.5 text-[11px] font-black transition-all', bills.serviceId === network.value ? 'border-blue-500/30 bg-blue-500/10 text-blue-700 shadow-sm dark:text-blue-300' : 'border-transparent text-gray-500 hover:bg-blue-500/[0.06] hover:text-blue-700 dark:text-gray-400 dark:hover:text-blue-300', locked && 'cursor-not-allowed opacity-60')}>{network.label}</button>
+                  ))}
+                </div>
+              )}
+              {view !== 'airtime' && bills.catalogBusy && !networks.length && <span className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-gray-400"><Loader2 className="h-3 w-3 animate-spin" />Loading providers</span>}
             </div>
 
+            {view === 'electricity' && (
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Meter type</span>
+                <div className="mt-1"><PocketSelect value={bills.variationCode} options={[{ value: 'prepaid', label: 'Prepaid' }, { value: 'postpaid', label: 'Postpaid' }]} onChange={bills.setVariationCode} disabled={locked} placeholder="Select meter type" ariaLabel="Select electricity meter type" /></div>
+              </div>
+            )}
+
             <label className="block">
-              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? 'VTpass test account' : isData ? 'Account or phone number' : 'Phone number'}</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{view === 'tv' ? 'Smartcard number' : view === 'electricity' ? 'Meter number' : bills.environment === 'sandbox' ? 'VTpass test account' : isData ? 'Account or phone number' : 'Phone number'}</span>
               <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked || bills.environment === 'sandbox'} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
             </label>
             {isData ? (
@@ -157,13 +172,45 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
                   </div>
                 )}
               </div>
-            ) : (
+            ) : view === 'tv' ? (
+              <div>
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">TV package</span>
+                <div className="mt-1"><PocketSelect value={bills.variationCode} options={bills.dataVariations.filter(item => item.available).map(item => ({ value: item.variationCode, label: `${item.name} · ${money(item.amountNgn)}` }))} onChange={bills.setVariationCode} disabled={locked || bills.catalogBusy} placeholder={bills.catalogBusy ? 'Loading packages' : 'Select package'} ariaLabel="Select TV package" /></div>
+              </div>
+            ) : view !== 'electricity' ? (
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Airtime amount</span>
                 <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]">
                   <span className="text-sm font-black text-gray-400">₦</span>
                   <input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" />
                 </span>
+                <span className="mt-1.5 block text-[10px] font-medium text-gray-400">{money(String(bills.limits.minNgn))}–{money(String(bills.limits.maxNgn))} during the pilot</span>
+              </label>
+            ) : null}
+
+            {isVerifiedBill && (
+              <>
+                {!bills.verification ? (
+                  <button type="button" onClick={() => void bills.verifyCustomer()} disabled={locked || bills.verifyBusy || !bills.serviceId || !bills.phone || (view === 'electricity' && !bills.variationCode)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-blue-500/10 dark:hover:text-blue-300">
+                    {bills.verifyBusy ? <><Loader2 className="h-4 w-4 animate-spin" />Verifying</> : `Verify ${view === 'tv' ? 'smartcard' : 'meter'}`}
+                  </button>
+                ) : (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+                    <span className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-3.5 w-3.5" />{bills.verification.customerName}</span>
+                    {bills.verification.customerAddress && <span className="mt-1 block text-[10px] leading-4 text-emerald-700/70 dark:text-emerald-200/70">{bills.verification.customerAddress}</span>}
+                  </div>
+                )}
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Contact phone</span>
+                  <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked} value={bills.contactPhone} onChange={event => bills.setContactPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
+                </label>
+              </>
+            )}
+
+            {view === 'electricity' && (
+              <label className="block">
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Electricity amount</span>
+                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]"><span className="text-sm font-black text-gray-400">₦</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
                 <span className="mt-1.5 block text-[10px] font-medium text-gray-400">{money(String(bills.limits.minNgn))}–{money(String(bills.limits.maxNgn))} during the pilot</span>
               </label>
             )}
@@ -178,16 +225,21 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
 
             {showPayment && bills.intent && (
               <>
+                {bills.status === 'ready' && (
+                  <div className="flex justify-end">
+                    <button type="button" onClick={bills.edit} className="rounded-full px-2 py-1 text-[11px] font-bold text-blue-600 transition hover:bg-blue-50 hover:text-blue-700 dark:text-blue-300 dark:hover:bg-blue-400/10">Edit details</button>
+                  </div>
+                )}
                 <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-white/10 dark:bg-white/[0.04]">
-                  <div className="flex justify-between gap-3"><span className="text-gray-500">{isData ? bills.intent.variationName : 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
-                  <div className="flex justify-between gap-3"><span className="text-gray-500">{isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-gray-500">{bills.intent.variationName || 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-gray-500">{view === 'tv' ? 'Smartcard' : view === 'electricity' ? 'Meter' : isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
                   <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10"><span className="text-gray-500">Pay from Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.amountUsdc))} USDC</span></div>
                 </div>
                 <PocketSlideAction
                   status={slideStatus}
                   disabled={bills.status !== 'ready' || Number(bills.intent.amountUsdc) > baseBalance}
                   onConfirm={() => void bills.pay()}
-                  labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? `Running ${isData ? 'Data' : 'Airtime'} test` : `Delivering ${isData ? 'Data' : 'Airtime'}`, successful: bills.environment === 'sandbox' ? 'Test complete' : `${isData ? 'Data' : 'Airtime'} sent` }}
+                  labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`, successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent` }}
                 />
               </>
             )}

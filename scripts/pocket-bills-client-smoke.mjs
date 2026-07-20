@@ -20,8 +20,8 @@ const intent = {
   txHash: '', providerStatus: '', providerDescription: '', failureReason: '', createdAt: Date.now(), updatedAt: Date.now(),
 }
 
-assert.deepEqual(parsePocketBillsAvailability({ bills: { enabled: true, environment: 'sandbox', categories: ['airtime', 'data'], minNgn: 50, maxNgn: 5000 } }), { enabled: true, environment: 'sandbox', minNgn: 50, maxNgn: 5000, dataEnabled: true })
-assert.deepEqual(parsePocketBillsAvailability({}), { enabled: false, environment: 'sandbox', minNgn: 100, maxNgn: 1000, dataEnabled: false })
+assert.deepEqual(parsePocketBillsAvailability({ bills: { enabled: true, environment: 'sandbox', categories: ['airtime', 'data'], minNgn: 50, maxNgn: 5000 } }), { enabled: true, environment: 'sandbox', minNgn: 50, maxNgn: 5000, dataEnabled: true, tvEnabled: false, electricityEnabled: false })
+assert.deepEqual(parsePocketBillsAvailability({}), { enabled: false, environment: 'sandbox', minNgn: 100, maxNgn: 1000, dataEnabled: false, tvEnabled: false, electricityEnabled: false })
 assert.equal(parsePocketBillIntent(intent).amountUsdc, '0.071429')
 assert.throws(() => parsePocketBillIntent({ ...intent, state: 'invented' }), PocketBillsApiError)
 
@@ -48,7 +48,7 @@ const catalogFetcher = async (url, options) => {
 const catalog = await readPocketDataCatalog({ accessToken: 'privy-token', serviceId: 'mtn-data', fetcher: catalogFetcher })
 assert.equal(catalog.variations[0].variationCode, 'mtn-100mb-100')
 assert.equal(catalog.variations[0].available, true)
-assert.equal(catalogRequest.url, '/api/pocket/bills/catalog?service_id=mtn-data')
+assert.equal(catalogRequest.url, '/api/pocket/bills/catalog?category=data&service_id=mtn-data')
 assert.equal(catalogRequest.options.headers.authorization, 'Bearer privy-token')
 
 let dataQuoteBody

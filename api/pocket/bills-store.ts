@@ -31,12 +31,15 @@ export type PocketBillsIntent = {
   requestFingerprint: string
   requestId: string
   state: PocketBillsIntentState
-  category: 'airtime' | 'data'
+  category: 'airtime' | 'data' | 'tv' | 'electricity'
   serviceId: string
   serviceName: string
   variationCode: string
   variationName: string
   phone: string
+  contactPhone: string
+  customerName: string
+  customerAddress: string
   amountNgn: string
   amountNgnMinor: string
   amountUsdc: string
@@ -149,9 +152,12 @@ function normalizeStore(value: unknown): BillsStoreData {
           const intent = stored as PocketBillsIntent
           return [id, {
             ...intent,
-            category: intent.category === 'data' ? 'data' : 'airtime',
+            category: ['airtime', 'data', 'tv', 'electricity'].includes(intent.category) ? intent.category : 'airtime',
             variationCode: cleanText(intent.variationCode, 100),
             variationName: cleanText(intent.variationName, 140),
+            contactPhone: cleanText(intent.contactPhone, 20).replace(/\D/g, ''),
+            customerName: cleanText(intent.customerName, 140),
+            customerAddress: cleanText(intent.customerAddress, 220),
           }]
         }))
       : {},
@@ -309,12 +315,15 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   async function createQuote(input: {
     ownerId: string
     idempotencyKey: string
-    category?: 'airtime' | 'data'
+    category?: 'airtime' | 'data' | 'tv' | 'electricity'
     serviceId: string
     serviceName: string
     variationCode?: string
     variationName?: string
     phone: string
+    contactPhone?: string
+    customerName?: string
+    customerAddress?: string
     amountNgn: string | number
     amountUsdc: string | number
     fxRateNgnPerUsdc: string | number
@@ -323,12 +332,15 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   }) {
     const ownerId = cleanText(input.ownerId, 200)
     const idempotencyKey = cleanText(input.idempotencyKey, 128)
-    const category = input.category === 'data' ? 'data' : 'airtime'
+    const category = ['data', 'tv', 'electricity'].includes(String(input.category)) ? input.category as 'data' | 'tv' | 'electricity' : 'airtime'
     const serviceId = cleanText(input.serviceId, 40).toLowerCase()
     const serviceName = cleanText(input.serviceName, 100)
     const variationCode = cleanText(input.variationCode, 100)
     const variationName = cleanText(input.variationName, 140)
     const phone = cleanText(input.phone, 20).replace(/\D/g, '')
+    const contactPhone = cleanText(input.contactPhone, 20).replace(/\D/g, '')
+    const customerName = cleanText(input.customerName, 140)
+    const customerAddress = cleanText(input.customerAddress, 220)
     const amountNgn = canonicalDecimal(input.amountNgn, 2, 'Naira amount')
     const amountNgnMinor = decimalToMinor(amountNgn, 2)
     const amountUsdc = canonicalDecimal(input.amountUsdc, 6, 'USDC amount')
@@ -342,13 +354,17 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     if (!IDEMPOTENCY_PATTERN.test(idempotencyKey)) throw new PocketBillsStoreError('BILLS_INVALID_IDEMPOTENCY_KEY', 'A valid idempotency key is required.')
     // Data IDs are accepted only after the authenticated request handler has
     // matched them against VTpass's current provider catalog.
-    const supportedService = category === 'data' ? DATA_SERVICE_ID_PATTERN.test(serviceId) : AIRTIME_SERVICE_IDS.has(serviceId)
-    if (!supportedService || !serviceName) throw new PocketBillsStoreError('BILLS_INVALID_SERVICE', `A supported ${category === 'data' ? 'Data' : 'Airtime'} network is required.`)
-    if (category === 'data' && (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode) || !variationName)) {
-      throw new PocketBillsStoreError('BILLS_INVALID_VARIATION', 'A valid Data plan is required.')
+    const supportedService = category === 'airtime' ? AIRTIME_SERVICE_IDS.has(serviceId) : DATA_SERVICE_ID_PATTERN.test(serviceId)
+    if (!supportedService || !serviceName) throw new PocketBillsStoreError('BILLS_INVALID_SERVICE', `A supported ${category} provider is required.`)
+    if (category !== 'airtime' && (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode) || !variationName)) {
+      throw new PocketBillsStoreError('BILLS_INVALID_VARIATION', `A valid ${category === 'electricity' ? 'meter type' : 'plan'} is required.`)
     }
-    if (category === 'data' ? !/^\d{10,12}$/.test(phone) : !/^0\d{10}$/.test(phone)) {
-      throw new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'data' ? 'Enter a valid Data recipient.' : 'Enter a valid Nigerian phone number.')
+    const validRecipient = category === 'airtime' ? /^0\d{10}$/.test(phone) : category === 'data' ? /^\d{10,12}$/.test(phone) : /^\d{8,15}$/.test(phone)
+    if (!validRecipient) {
+      throw new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'tv' ? 'Enter a valid smartcard number.' : category === 'electricity' ? 'Enter a valid meter number.' : category === 'data' ? 'Enter a valid Data recipient.' : 'Enter a valid Nigerian phone number.')
+    }
+    if ((category === 'tv' || category === 'electricity') && (!/^0\d{10}$/.test(contactPhone) || !customerName)) {
+      throw new PocketBillsStoreError('BILLS_CUSTOMER_NOT_VERIFIED', 'Verify the customer account before payment.')
     }
     if (!isAddress(payerWallet)) throw new PocketBillsStoreError('BILLS_INVALID_WALLET', 'Open a valid Base Circle wallet first.')
     if (!isAddress(treasuryAddress)) throw new PocketBillsStoreError('BILLS_POLICY_NOT_READY', 'Bills treasury is not configured.', 503)
@@ -361,12 +377,12 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const maximumMinor = policyMinor(config.maxNgn, 'Maximum bill amount')
     const dailyLimitMinor = policyMinor(config.dailyLimitNgn, 'Daily bill limit')
     if (amountMinor < minimumMinor) throw new PocketBillsStoreError('BILLS_AMOUNT_BELOW_LIMIT', `Minimum bill amount is NGN ${config.minNgn}.`)
-    if (category !== 'data' && amountMinor > maximumMinor) throw new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_LIMIT', `Maximum bill amount is NGN ${config.maxNgn}.`)
+    if (category !== 'data' && category !== 'tv' && amountMinor > maximumMinor) throw new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_LIMIT', `Maximum bill amount is NGN ${config.maxNgn}.`)
 
     // Idempotency follows the user's semantic request. Server-generated quote
     // values and expiry may drift between retries, but the original stored quote
     // must be replayed instead of producing a conflict or a second intent.
-    const fingerprint = JSON.stringify({ category, serviceId, variationCode, phone, amountNgn, payerWallet: payerWallet.toLowerCase() })
+    const fingerprint = JSON.stringify({ category, serviceId, variationCode, phone, contactPhone, amountNgn, payerWallet: payerWallet.toLowerCase() })
     return mutate(store => {
       const index = idempotencyIndex(ownerId, idempotencyKey)
       const existingId = store.idempotency[index]
@@ -404,6 +420,9 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         variationCode,
         variationName,
         phone,
+        contactPhone,
+        customerName,
+        customerAddress,
         amountNgn,
         amountNgnMinor,
         amountUsdc,

@@ -65,7 +65,7 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
     settlementType: 'bill_payment',
     amountNgn: intent.amountNgn,
     paycrestStatus: status,
-    activityLabel: sandboxTest ? `${intent.category === 'data' ? 'Data' : 'Airtime'} sandbox test` : 'Bill payment',
+    activityLabel: sandboxTest ? `${intent.category === 'tv' ? 'TV' : intent.category === 'electricity' ? 'Electricity' : intent.category === 'data' ? 'Data' : 'Airtime'} sandbox test` : 'Bill payment',
     ...(intent.providerTransactionId ? { providerReference: intent.providerTransactionId } : {}),
     ...(refundAction ? { refundAction } : {}),
     ...(intent.refundTxHash ? { refundTxHash: intent.refundTxHash } : {}),
