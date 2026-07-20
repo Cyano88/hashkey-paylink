@@ -36,14 +36,32 @@ if (!TX_PATTERN.test(txHash)) {
     if (intents.length !== 1) stop(intents.length ? 'Payment hash is connected to multiple Bills records.' : 'Payment hash was not found in the durable Bills store.')
     else {
       const intent = intents[0]
-      const eligible = intent.providerEnvironment === 'sandbox'
-        && intent.phone === '08011111111'
-        && intent.state === 'delivered'
-        && intent.network === 'base'
-        && intent.treasuryAddress.toLowerCase() === config.treasuryAddress.toLowerCase()
-        && Boolean(intent.paymentAmountUsdc)
+      const checks = {
+        sandboxReceipt: intent.providerEnvironment === 'sandbox',
+        officialTestNumber: intent.phone === '08011111111',
+        delivered: intent.state === 'delivered',
+        basePayment: intent.network === 'base',
+        configuredTreasury: intent.treasuryAddress.toLowerCase() === config.treasuryAddress.toLowerCase(),
+        exactPaymentAmount: Boolean(intent.paymentAmountUsdc),
+      }
+      const eligible = Object.values(checks).every(Boolean)
 
-      if (!eligible) stop('Payment is not an eligible delivered VTpass sandbox receipt on the configured Circle treasury.')
+      if (!eligible) {
+        console.error(JSON.stringify({
+          eligible: false,
+          checks,
+          receipt: {
+            state: intent.state,
+            providerEnvironment: intent.providerEnvironment,
+            phone: intent.phone,
+            network: intent.network,
+            treasuryAddress: intent.treasuryAddress,
+            configuredTreasuryAddress: config.treasuryAddress,
+            paymentAmountUsdc: intent.paymentAmountUsdc || '',
+          },
+        }, null, 2))
+        stop('Payment is not an eligible delivered VTpass sandbox receipt on the configured Circle treasury.')
+      }
       else if (!apply) {
         console.log(JSON.stringify({
           ready: true,
