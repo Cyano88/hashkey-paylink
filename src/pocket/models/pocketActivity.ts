@@ -14,6 +14,7 @@ export type PocketActivityRow = {
   paycrestStatus?: string
   activityLabel?: string
   providerReference?: string
+  supportReference?: string
   refundAction?: 'claim' | 'check'
   refundTxHash?: string
 }

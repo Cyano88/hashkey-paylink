@@ -167,6 +167,12 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                                 <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.providerReference}</span>
                               </div>
                             )}
+                            {row.supportReference && (
+                              <div className="flex items-start justify-between gap-3">
+                                <span className="font-semibold text-gray-400">Support reference</span>
+                                <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.supportReference}</span>
+                              </div>
+                            )}
                             {row.refundTxHash && (
                               <div className="flex items-start justify-between gap-3">
                                 <span className="font-semibold text-gray-400">Refund transaction</span>

@@ -51,6 +51,9 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
           : intent.state === 'pending' || intent.state === 'vending'
             ? 'processing'
             : 'paid'
+  const supportReference = [intent.providerCode ? `VTpass ${intent.providerCode}` : '', intent.requestId]
+    .filter(Boolean)
+    .join(' · ')
   return {
     eventId: `pocket-bill:${intent.id}`,
     txHash: intent.txHash,
@@ -67,6 +70,7 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
     paycrestStatus: status,
     activityLabel: sandboxTest ? `${intent.category === 'tv' ? 'TV' : intent.category === 'electricity' ? 'Electricity' : intent.category === 'data' ? 'Data' : 'Airtime'} sandbox test` : 'Bill payment',
     ...(intent.providerTransactionId ? { providerReference: intent.providerTransactionId } : {}),
+    ...(supportReference ? { supportReference } : {}),
     ...(refundAction ? { refundAction } : {}),
     ...(intent.refundTxHash ? { refundTxHash: intent.refundTxHash } : {}),
   }
@@ -150,6 +154,7 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     ...(value.paycrestStatus !== undefined ? { paycrestStatus: value.paycrestStatus } : {}),
     ...(value.activityLabel !== undefined ? { activityLabel: value.activityLabel } : {}),
     ...(value.providerReference !== undefined ? { providerReference: value.providerReference } : {}),
+    ...(value.supportReference !== undefined ? { supportReference: value.supportReference } : {}),
     ...(value.refundAction !== undefined ? { refundAction: value.refundAction } : {}),
     ...(value.refundTxHash !== undefined ? { refundTxHash: value.refundTxHash } : {}),
   }

@@ -165,6 +165,7 @@ export type PocketActivityRow = {
   paycrestStatus?: string
   activityLabel?: string
   providerReference?: string
+  supportReference?: string
   refundAction?: 'claim' | 'check'
   refundTxHash?: string
 }
@@ -534,6 +535,7 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.paycrestStatus, 80)
     && isOptionalBoundedString(value.activityLabel, 80)
     && isOptionalBoundedString(value.providerReference, 160)
+    && isOptionalBoundedString(value.supportReference, 160)
     && (value.refundAction === undefined || value.refundAction === 'claim' || value.refundAction === 'check')
     && (value.refundTxHash === undefined || (typeof value.refundTxHash === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value.refundTxHash)))
 }
