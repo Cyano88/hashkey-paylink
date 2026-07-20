@@ -119,8 +119,8 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
       ) : !authenticated ? <SignInCard /> : !categoryEnabled ? (
         <div className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
-          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">{billName} pilot unavailable</h3>
-          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{billName} remains sandbox-only until the live product is separately approved.</p>
+          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">{billName} unavailable</h3>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? `${billName} testing is not enabled yet.` : `${billName} payments are not available yet.`}</p>
         </div>
       ) : (
         <>
@@ -210,8 +210,8 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
                   </button>
                 ) : (
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-                    <span className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-3.5 w-3.5" />{bills.verification.customerName}</span>
-                    {bills.verification.customerAddress && <span className="mt-1 block text-[10px] leading-4 text-emerald-700/70 dark:text-emerald-200/70">{bills.verification.customerAddress}</span>}
+                    <span className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-3.5 w-3.5" />{bills.environment === 'sandbox' ? `${view === 'tv' ? 'Test smartcard' : 'Test meter'} verified` : bills.verification.customerName}</span>
+                    {bills.environment !== 'sandbox' && bills.verification.customerAddress && <span className="mt-1 block text-[10px] leading-4 text-emerald-700/70 dark:text-emerald-200/70">{bills.verification.customerAddress}</span>}
                   </div>
                 )}
                 <label className="block">
