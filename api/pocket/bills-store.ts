@@ -361,7 +361,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const maximumMinor = policyMinor(config.maxNgn, 'Maximum bill amount')
     const dailyLimitMinor = policyMinor(config.dailyLimitNgn, 'Daily bill limit')
     if (amountMinor < minimumMinor) throw new PocketBillsStoreError('BILLS_AMOUNT_BELOW_LIMIT', `Minimum bill amount is NGN ${config.minNgn}.`)
-    if (amountMinor > maximumMinor) throw new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_LIMIT', `Maximum bill amount is NGN ${config.maxNgn}.`)
+    if (category !== 'data' && amountMinor > maximumMinor) throw new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_LIMIT', `Maximum bill amount is NGN ${config.maxNgn}.`)
 
     // Idempotency follows the user's semantic request. Server-generated quote
     // values and expiry may drift between retries, but the original stored quote

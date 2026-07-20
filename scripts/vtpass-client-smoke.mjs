@@ -132,14 +132,14 @@ const dataPurchaseClient = queuedClient([jsonResponse({
   requestId: '202607191105fixed123',
   amount: 100,
 })], dataPurchaseCalls)
-const dataDelivered = await dataPurchaseClient.purchaseData({ serviceId: 'mtn-data', variationCode: 'mtn-100mb-100', phone: '08011111111', amountNgn: '100' })
+const dataDelivered = await dataPurchaseClient.purchaseData({ serviceId: 'mtn-data', variationCode: 'mtn-2gb-1500', phone: '08011111111', amountNgn: '1500' })
 assert.equal(dataDelivered.status, 'delivered')
 assert.deepEqual(JSON.parse(dataPurchaseCalls[0].init.body), {
   request_id: '202607191105fixed123',
   serviceID: 'mtn-data',
   billersCode: '08011111111',
-  variation_code: 'mtn-100mb-100',
-  amount: 100,
+  variation_code: 'mtn-2gb-1500',
+  amount: 1500,
   phone: '08011111111',
 })
 

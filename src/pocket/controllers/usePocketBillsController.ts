@@ -357,7 +357,7 @@ export default function usePocketBillsController({
   const formReady = (category === 'data' ? /^\d{10,12}$/.test(phone) : /^0\d{10}$/.test(phone))
     && (environment !== 'sandbox' || phone === expectedSandboxRecipient)
     && Number(amountNgn) >= limits.minNgn
-    && Number(amountNgn) <= limits.maxNgn
+    && (category === 'data' || Number(amountNgn) <= limits.maxNgn)
     && (category !== 'data' || Boolean(variationCode))
 
   return {

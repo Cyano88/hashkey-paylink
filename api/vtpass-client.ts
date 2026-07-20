@@ -159,7 +159,7 @@ function normalizeDataRecipient(value: unknown, serviceId: string, environment: 
   return normalizePhone(recipient, environment)
 }
 
-function normalizeAmount(value: unknown, config: VtpassPhase0Config) {
+function normalizeAmount(value: unknown, config: VtpassPhase0Config, enforceConfiguredMaximum = true) {
   const raw = text(value)
   if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) {
     throw new VtpassClientError({ code: 'VTPASS_INVALID_AMOUNT', message: 'Enter a valid Naira amount.', status: 400 })
@@ -171,7 +171,7 @@ function normalizeAmount(value: unknown, config: VtpassPhase0Config) {
   if (config.minNgn !== null && amount < config.minNgn) {
     throw new VtpassClientError({ code: 'VTPASS_AMOUNT_BELOW_LIMIT', message: `Minimum bill amount is NGN ${config.minNgn}.`, status: 400 })
   }
-  if (config.maxNgn !== null && amount > config.maxNgn) {
+  if (enforceConfiguredMaximum && config.maxNgn !== null && amount > config.maxNgn) {
     throw new VtpassClientError({ code: 'VTPASS_AMOUNT_ABOVE_LIMIT', message: `Maximum bill amount is NGN ${config.maxNgn}.`, status: 400 })
   }
   return amount
@@ -464,7 +464,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
     const serviceID = normalizeDataServiceId(input.serviceId)
     const variation_code = normalizeVariationCode(input.variationCode)
     const phone = normalizeDataRecipient(input.phone, serviceID, config.environment)
-    const amount = normalizeAmount(input.amountNgn, config)
+    const amount = normalizeAmount(input.amountNgn, config, false)
     const { body } = await requestJson('/api/pay', 'POST', {
       request_id: requestId,
       serviceID,

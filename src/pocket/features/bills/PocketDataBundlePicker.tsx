@@ -77,7 +77,7 @@ export default function PocketDataBundlePicker({
         })}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="listbox" aria-label="Data plans">
+      <div className="grid grid-cols-4 gap-1.5" role="listbox" aria-label="Data plans">
         {visible.map(bundle => {
           const selected = bundle.variationCode === value
           return (
@@ -90,17 +90,17 @@ export default function PocketDataBundlePicker({
               onClick={() => onChange(bundle.variationCode)}
               title={!bundle.available ? 'Outside the current Bills payment limit' : bundle.name}
               className={cn(
-                'relative min-h-[104px] rounded-2xl border p-3 text-left transition-all duration-200',
+                'relative min-h-[82px] rounded-xl border p-2 text-left transition-all duration-200',
                 selected
                   ? 'border-blue-500 bg-blue-50/80 shadow-[0_8px_22px_rgba(59,130,246,0.12)] dark:border-blue-400/50 dark:bg-blue-400/10'
                   : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-sm dark:border-white/10 dark:bg-white/[0.035] dark:hover:border-blue-400/40',
                 (disabled || !bundle.available) && 'cursor-not-allowed opacity-40 hover:translate-y-0 hover:border-gray-200 hover:shadow-none dark:hover:border-white/10',
               )}
             >
-              {selected && <span className="absolute right-2.5 top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white"><Check className="h-3 w-3 stroke-[3]" /></span>}
-              <span className="block pr-5 text-base font-black tracking-[-0.03em] text-gray-950 dark:text-white">{bundle.dataAmount}</span>
-              <span className="mt-0.5 block text-[10px] font-semibold text-gray-400">{bundle.validity}</span>
-              <span className="mt-3 block text-xs font-black tabular-nums text-gray-800 dark:text-gray-100">{formatNaira(bundle.price)}</span>
+              {selected && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white"><Check className="h-2.5 w-2.5 stroke-[3]" /></span>}
+              <span className="block pr-3 text-[13px] font-black leading-tight tracking-[-0.03em] text-gray-950 dark:text-white">{bundle.dataAmount}</span>
+              <span className="mt-0.5 block truncate text-[9px] font-semibold text-gray-400">{bundle.validity}</span>
+              <span className="mt-2 block text-[10px] font-black tabular-nums text-gray-800 dark:text-gray-100">{formatNaira(bundle.price)}</span>
             </button>
           )
         })}

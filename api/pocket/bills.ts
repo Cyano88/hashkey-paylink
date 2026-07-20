@@ -417,13 +417,12 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
       const service = services.find(item => item.serviceId === serviceId)
       if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', 'Select a supported Data network.'), 'serviceId')
       const min = dependencies.config.minNgn ?? Number.NEGATIVE_INFINITY
-      const max = dependencies.config.maxNgn ?? Number.POSITIVE_INFINITY
       const variations = (await dependencies.provider.listServiceVariations(serviceId))
         .map(item => ({
           variationCode: item.variationCode,
           name: item.name,
           amountNgn: canonicalNgn(String(item.amount)),
-          available: item.amount >= min && item.amount <= max,
+          available: item.amount >= min,
         }))
       if (!variations.length) throw new PocketBillsStoreError('BILLS_DATA_PLANS_UNAVAILABLE', 'No Data plans are currently available from this provider.', 503)
       return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations })

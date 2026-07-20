@@ -183,7 +183,7 @@ assert.deepEqual(dataServices.body.data.services, [{ serviceId: 'mtn-data', name
 const dataPlans = await request(catalogHandler, {}, { method: 'GET', query: { service_id: 'mtn-data' } })
 assert.deepEqual(dataPlans.body.data.variations, [
   { variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amountNgn: '100.00', available: true },
-  { variationCode: 'mtn-2gb-1500', name: 'N1500 2GB - 30 days', amountNgn: '1500.00', available: false },
+  { variationCode: 'mtn-2gb-1500', name: 'N1500 2GB - 30 days', amountNgn: '1500.00', available: true },
 ])
 
 const badDataPlan = await createDataQuote('bill:handler:data:bad-plan', 'invented-plan')
@@ -195,6 +195,9 @@ assert.equal(dataQuote.statusCode, 200)
 assert.equal(dataQuote.body.data.intent.category, 'data')
 assert.equal(dataQuote.body.data.intent.amountNgn, '100')
 assert.equal(dataQuote.body.data.intent.variationCode, 'mtn-100mb-100')
+const largerDataQuote = await createDataQuote('bill:handler:data:quote:larger', 'mtn-2gb-1500')
+assert.equal(largerDataQuote.statusCode, 200)
+assert.equal(largerDataQuote.body.data.intent.amountNgn, '1500')
 await request(payHandler, { action: 'prepare', intent_id: dataQuote.body.data.intent.id })
 const dataConfirmed = await request(payHandler, { action: 'confirm', intent_id: dataQuote.body.data.intent.id, tx_hash: `0x${'9'.repeat(64)}` })
 assert.equal(dataConfirmed.body.data.intent.state, 'delivered')
