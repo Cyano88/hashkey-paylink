@@ -86,6 +86,8 @@ type BillsStoreData = {
   idempotency: Record<string, string>
   transactionHashes: Record<string, string>
   providerTransactions: Record<string, string>
+  providerRequests: Record<string, string>
+  providerRequeryClaims: Record<string, { claimedAt: number }>
   mutationLimits: Record<string, { count: number; resetAt: number }>
 }
 
@@ -122,7 +124,16 @@ const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}
 const MAX_QUOTE_LIFETIME_MS = 15 * 60_000
 
 function emptyStore(): BillsStoreData {
-  return { version: 1, intents: {}, idempotency: {}, transactionHashes: {}, providerTransactions: {}, mutationLimits: {} }
+  return {
+    version: 1,
+    intents: {},
+    idempotency: {},
+    transactionHashes: {},
+    providerTransactions: {},
+    providerRequests: {},
+    providerRequeryClaims: {},
+    mutationLimits: {},
+  }
 }
 
 function normalizeStore(value: unknown): BillsStoreData {
@@ -134,6 +145,8 @@ function normalizeStore(value: unknown): BillsStoreData {
     idempotency: current.idempotency && typeof current.idempotency === 'object' ? current.idempotency : {},
     transactionHashes: current.transactionHashes && typeof current.transactionHashes === 'object' ? current.transactionHashes : {},
     providerTransactions: current.providerTransactions && typeof current.providerTransactions === 'object' ? current.providerTransactions : {},
+    providerRequests: current.providerRequests && typeof current.providerRequests === 'object' ? current.providerRequests : {},
+    providerRequeryClaims: current.providerRequeryClaims && typeof current.providerRequeryClaims === 'object' ? current.providerRequeryClaims : {},
     mutationLimits: current.mutationLimits && typeof current.mutationLimits === 'object' ? current.mutationLimits : {},
   }
 }
@@ -394,7 +407,44 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       }
       store.intents[id] = intent
       store.idempotency[index] = id
+      store.providerRequests[requestId] = id
       return { intent, created: true }
+    })
+  }
+
+  async function claimProviderRequeryByRequestId(input: { requestId: string; cooldownMs?: number; leaseMs?: number }) {
+    const requestId = cleanText(input.requestId, 60)
+    const cooldownMs = Math.max(5_000, Math.min(Number(input.cooldownMs) || 15_000, 5 * 60_000))
+    const leaseMs = Math.max(15_000, Math.min(Number(input.leaseMs) || 60_000, 5 * 60_000))
+    return mutate(store => {
+      let intentId = store.providerRequests[requestId]
+      let intent = intentId ? store.intents[intentId] : undefined
+      if (!intent) {
+        intent = Object.values(store.intents).find(item => item.requestId === requestId)
+        intentId = intent?.id
+        if (intentId) store.providerRequests[requestId] = intentId
+      }
+      if (!intent) return { intent: undefined, claimed: false, reason: 'not_found' as const }
+      if (!['vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_eligible', 'needs_review'].includes(intent.state)) {
+        return { intent, claimed: false, reason: 'ineligible' as const }
+      }
+      const timestamp = now()
+      const currentClaim = store.providerRequeryClaims[requestId]
+      if (currentClaim && timestamp - currentClaim.claimedAt < leaseMs) {
+        return { intent, claimed: false, reason: 'in_progress' as const }
+      }
+      if (intent.lastRequeryAt > 0 && timestamp - intent.lastRequeryAt < cooldownMs) {
+        return { intent, claimed: false, reason: 'cooldown' as const }
+      }
+      store.providerRequeryClaims[requestId] = { claimedAt: timestamp }
+      return { intent, claimed: true, reason: 'claimed' as const }
+    })
+  }
+
+  async function releaseProviderRequeryClaim(requestIdInput: string) {
+    const requestId = cleanText(requestIdInput, 60)
+    return mutate(store => {
+      delete store.providerRequeryClaims[requestId]
     })
   }
 
@@ -716,6 +766,8 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   return {
     createQuote,
     consumeMutationLimit,
+    claimProviderRequeryByRequestId,
+    releaseProviderRequeryClaim,
     getOwnedIntent,
     listOwnedIntents,
     getIntentById,

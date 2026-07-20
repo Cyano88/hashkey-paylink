@@ -119,6 +119,7 @@ import developerProjectsHandler from './api/developer-projects.js'
 import hostedCheckoutsHandler from './api/hosted-checkouts.js'
 import { pocketBillsPayHandler, pocketBillsQuoteHandler } from './api/pocket/bills.js'
 import { pocketBillsRefundHandler, pocketBillsUserRefundHandler } from './api/pocket/bills-refunds.js'
+import vtpassBillsWebhookHandler from './api/pocket/bills-webhook.js'
 import { rateLimit } from './api/rate-limit.js'
 
 loadEnv({ path: '.env.local', override: false })
@@ -183,7 +184,10 @@ app.use((_req, res, next) => {
   next()
 })
 
+const vtpassWebhookLimiter = rateLimit({ name: 'vtpass-webhook', windowMs: 60_000, max: 60 })
+
 app.post('/api/paycrest-webhook', express.raw({ type: 'application/json', limit: '128kb' }), paycrestWebhookHandler)
+app.post('/api/vtpass-webhook', vtpassWebhookLimiter, express.json({ type: 'application/json', limit: '32kb' }), vtpassBillsWebhookHandler)
 
 // Parse JSON bodies before any route handler sees req.body. Creator Studio
 // publish payloads can include sanitized article HTML plus a compressed cover.

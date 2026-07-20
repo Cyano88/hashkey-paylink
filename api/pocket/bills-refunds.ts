@@ -111,10 +111,13 @@ async function processPocketBillsRefund(dependencies: RefundDependencies, intent
     try {
       const providerResult = await dependencies.provider.requeryTransaction(intent.requestId)
       intent = await dependencies.store.recordProviderResult(intent.ownerId, intent.id, providerResult, { requery: true })
-      if (providerResult.status !== 'failed' && providerResult.status !== 'reversed') {
+      const failureConfirmed = (providerResult.status === 'failed' || providerResult.status === 'reversed')
+        && intent.state === 'refunding'
+      if (!failureConfirmed) {
+        const delivered = providerResult.status === 'delivered' || intent.state === 'delivered'
         throw new PocketBillsStoreError(
-          providerResult.status === 'delivered' ? 'BILLS_REFUND_PROVIDER_DELIVERED' : 'BILLS_REFUND_PROVIDER_PENDING',
-          providerResult.status === 'delivered'
+          delivered ? 'BILLS_REFUND_PROVIDER_DELIVERED' : 'BILLS_REFUND_PROVIDER_PENDING',
+          delivered
             ? 'VTpass confirms this bill was delivered. Refund is not available.'
             : 'VTpass has not confirmed a final failed transaction. Refund remains unavailable.',
           409,

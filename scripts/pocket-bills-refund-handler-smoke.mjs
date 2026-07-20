@@ -101,12 +101,21 @@ let providerMode = 'failed'
 const provider = {
   async requeryTransaction(requestId) {
     calls.providerRequeries += 1
-    const intent = await store.getIntentById(requestId === quote.intent.requestId ? quote.intent.id : guardedQuote.intent.id)
+    const intent = (await store.listOwnedIntents('privy:refund-owner', 100)).find(item => item.requestId === requestId)
+    assert.ok(intent)
+    if (providerMode === 'conflict') {
+      await store.recordProviderResult(intent.ownerId, intent.id, {
+        status: 'delivered', providerCode: '000', providerStatus: 'delivered', responseDescription: 'DELIVERED',
+        requestId: intent.requestId, transactionId: intent.providerTransactionId, productName: intent.serviceName,
+        recipient: intent.phone, amountNgn: Number(intent.amountNgn), purchasedCode: '', retryable: false, requeryRequired: false,
+      }, { requery: true })
+    }
+    const returnedStatus = providerMode === 'conflict' ? 'failed' : providerMode
     return {
-      status: providerMode,
-      providerCode: providerMode === 'delivered' ? '000' : '016',
-      providerStatus: providerMode,
-      responseDescription: providerMode.toUpperCase(),
+      status: returnedStatus,
+      providerCode: returnedStatus === 'delivered' ? '000' : '016',
+      providerStatus: returnedStatus,
+      responseDescription: returnedStatus.toUpperCase(),
       requestId: intent.requestId,
       transactionId: intent.providerTransactionId,
       productName: intent.serviceName,
@@ -213,6 +222,28 @@ assert.equal(providerRecovered.statusCode, 409)
 assert.equal(providerRecovered.body.error.code, 'BILLS_REFUND_PROVIDER_DELIVERED')
 assert.equal((await store.getIntentById(guardedQuote.intent.id)).state, 'delivered')
 assert.equal(calls.created, 1)
+
+const conflictingQuote = await store.createQuote({
+  ownerId: 'privy:refund-owner', idempotencyKey: 'bill:refund:handler:0003', serviceId: 'mtn', serviceName: 'MTN Airtime VTU',
+  phone: '08033333333', amountNgn: '100', amountUsdc: '0.071', fxRateNgnPerUsdc: '1408.45', payerWallet,
+  quoteExpiresAt: Date.parse('2026-07-20T02:05:00Z'),
+})
+await store.recordVerifiedPayment({ ownerId: 'privy:refund-owner', intentId: conflictingQuote.intent.id, txHash: `0x${'d'.repeat(64)}`, paymentAmountUsdc: '0.072' })
+await store.claimVending('privy:refund-owner', conflictingQuote.intent.id)
+const conflictingFailure = {
+  status: 'failed', providerCode: '016', providerStatus: 'failed', responseDescription: 'FAILED', requestId: conflictingQuote.intent.requestId,
+  transactionId: 'vtpass-refund-conflict', productName: 'MTN Airtime VTU', recipient: '08033333333', amountNgn: 100,
+  purchasedCode: '', retryable: false, requeryRequired: false,
+}
+await store.recordProviderResult('privy:refund-owner', conflictingQuote.intent.id, conflictingFailure)
+await store.recordProviderResult('privy:refund-owner', conflictingQuote.intent.id, conflictingFailure, { requery: true })
+providerMode = 'conflict'
+const providerConflict = response()
+await userHandler({ method: 'POST', headers: {}, body: { intent_id: conflictingQuote.intent.id } }, providerConflict)
+assert.equal(providerConflict.statusCode, 409)
+assert.equal(providerConflict.body.error.code, 'BILLS_REFUND_PROVIDER_DELIVERED')
+assert.equal((await store.getIntentById(conflictingQuote.intent.id)).state, 'delivered')
+assert.equal(calls.created, 1, 'a persisted delivered state must win over a conflicting failed requery result')
 providerMode = 'failed'
 
 const forbiddenHandler = createPocketBillsUserRefundHandler({
