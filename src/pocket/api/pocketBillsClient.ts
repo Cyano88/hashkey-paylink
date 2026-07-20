@@ -8,7 +8,9 @@ export type PocketBillIntentState =
   | 'pending'
   | 'delivered'
   | 'failed'
+  | 'provider_failed_unverified'
   | 'refund_pending'
+  | 'refund_eligible'
   | 'refunding'
   | 'refund_submitted'
   | 'refunded'
@@ -62,7 +64,7 @@ function text(value: unknown) {
 }
 
 function isIntentState(value: unknown): value is PocketBillIntentState {
-  return ['quoted', 'awaiting_payment', 'payment_confirmed', 'vending', 'pending', 'delivered', 'failed', 'refund_pending', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(String(value))
+  return ['quoted', 'awaiting_payment', 'payment_confirmed', 'vending', 'pending', 'delivered', 'failed', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(String(value))
 }
 
 export function parsePocketBillIntent(value: unknown): PocketBillIntent {

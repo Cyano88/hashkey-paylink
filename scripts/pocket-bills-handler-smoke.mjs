@@ -218,7 +218,12 @@ const failedQuote = await createQuote('bill:handler:quote:0004')
 const failedId = failedQuote.body.data.intent.id
 await request(payHandler, { action: 'prepare', intent_id: failedId })
 const failed = await request(payHandler, { action: 'confirm', intent_id: failedId, tx_hash: `0x${'d'.repeat(64)}` })
-assert.equal(failed.body.data.intent.state, 'refund_pending')
+assert.equal(failed.body.data.intent.state, 'provider_failed_unverified')
+requeryMode = 'failed'
+const failedVerified = await request(payHandler, { action: 'status', intent_id: failedId, refresh: true })
+assert.equal(failedVerified.statusCode, 200)
+assert.equal(failedVerified.body.data.intent.state, 'refund_eligible')
+requeryMode = 'delivered'
 providerMode = 'delivered'
 
 // Chain uncertainty is retryable and never invokes the provider.

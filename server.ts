@@ -9,7 +9,7 @@
  */
 
 import express from 'express'
-import type { Response } from 'express'
+import type { NextFunction, Request, Response } from 'express'
 import { config as loadEnv } from 'dotenv'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
@@ -190,11 +190,32 @@ app.post('/api/paycrest-webhook', express.raw({ type: 'application/json', limit:
 app.use(express.json({ limit: '256kb' }))
 
 const strictLimiter = rateLimit({ name: 'strict', windowMs: 60_000, max: 20 })
+const billsQuoteLimiter = rateLimit({ name: 'bills-quote', windowMs: 60_000, max: 12 })
+const billsPayLimiter = rateLimit({ name: 'bills-pay', windowMs: 60_000, max: 40 })
+const billsRefundLimiter = rateLimit({ name: 'bills-refund', windowMs: 10 * 60_000, max: 8 })
 const relayLimiter = rateLimit({ name: 'relay', windowMs: 60_000, max: 30 })
 const readLimiter = rateLimit({ name: 'read', windowMs: 60_000, max: 120 })
 // Arena: 4s polling + question fetches + actions, often multiple players sharing a NAT IP.
 // Auth-gated per-room, so a generous bucket is fine.
 const arenaLimiter = rateLimit({ name: 'arena', windowMs: 60_000, max: 240 })
+
+function billsBrowserBoundary(req: Request, res: Response, next: NextFunction) {
+  const fetchSite = String(req.headers['sec-fetch-site'] ?? '').trim().toLowerCase()
+  if (fetchSite === 'cross-site') {
+    return res.status(403).json({ ok: false, error: { code: 'CROSS_SITE_REQUEST_BLOCKED', message: 'Cross-site Bills requests are not allowed.', retryable: false } })
+  }
+  const origin = String(req.headers.origin ?? '').trim()
+  if (origin) {
+    try {
+      if (new URL(origin).host.toLowerCase() !== String(req.headers.host ?? '').trim().toLowerCase()) {
+        return res.status(403).json({ ok: false, error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Bills request origin is not allowed.', retryable: false } })
+      }
+    } catch {
+      return res.status(403).json({ ok: false, error: { code: 'ORIGIN_NOT_ALLOWED', message: 'Bills request origin is invalid.', retryable: false } })
+    }
+  }
+  return next()
+}
 
 // ── API routes ────────────────────────────────────────────────────────────────
 app.post('/api/relay-v2',              relayLimiter, relayV2Handler)
@@ -301,9 +322,9 @@ app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
 app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
 app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)
-app.all('/api/pocket/bills/quote',     strictLimiter, pocketBillsQuoteHandler)
-app.all('/api/pocket/bills/pay',       strictLimiter, pocketBillsPayHandler)
-app.post('/api/pocket/bills/refund',   strictLimiter, pocketBillsUserRefundHandler)
+app.all('/api/pocket/bills/quote',     billsQuoteLimiter, billsBrowserBoundary, pocketBillsQuoteHandler)
+app.all('/api/pocket/bills/pay',       billsPayLimiter, billsBrowserBoundary, pocketBillsPayHandler)
+app.post('/api/pocket/bills/refund',   billsRefundLimiter, billsBrowserBoundary, pocketBillsUserRefundHandler)
 app.post('/api/admin/pocket/bills/refunds/process', strictLimiter, pocketBillsRefundHandler)
 app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
 // OG tag injection — must be before the SPA catch-all

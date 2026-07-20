@@ -133,7 +133,7 @@ const refundActivityHandler = createPocketActivityHandler({
   readBillsRefundPolicy: () => ({ enabled: true, treasuryAddress: '0x1111111111111111111111111111111111111111' }),
   readBills: async ownerId => [
     {
-      id: 'claimable-refund', ownerId, state: 'refund_pending', category: 'airtime', serviceName: 'MTN Airtime', phone: '08011111111',
+      id: 'claimable-refund', ownerId, state: 'refund_eligible', category: 'airtime', serviceName: 'MTN Airtime', phone: '08011111111',
       amountNgn: '100', amountUsdc: '0.072', network: 'base', treasuryAddress: '0x1111111111111111111111111111111111111111',
       txHash: '0xclaimable', providerEnvironment: 'sandbox', updatedAt: 1_740_000_000_000, providerTransactionId: '', refundTxHash: '',
     },
@@ -142,11 +142,17 @@ const refundActivityHandler = createPocketActivityHandler({
       amountNgn: '100', amountUsdc: '0.072', network: 'base', treasuryAddress: '0x3333333333333333333333333333333333333333',
       txHash: '0xlegacy', providerEnvironment: 'sandbox', updatedAt: 1_739_000_000_000, providerTransactionId: '', refundTxHash: '',
     },
+    {
+      id: 'unverified-legacy-refund', ownerId, state: 'refund_pending', category: 'airtime', serviceName: 'MTN Airtime', phone: '08011111111',
+      amountNgn: '100', amountUsdc: '0.072', network: 'base', treasuryAddress: '0x1111111111111111111111111111111111111111',
+      txHash: '0xunverifiedlegacy', providerEnvironment: 'sandbox', updatedAt: 1_738_000_000_000, providerTransactionId: '', refundTxHash: '',
+    },
   ],
 })
 const refundActivity = await request(refundActivityHandler)
 assert.equal(refundActivity.body.payments.find(row => row.merchantId === 'claimable-refund').refundAction, 'claim')
 assert.equal(refundActivity.body.payments.find(row => row.merchantId === 'legacy-refund').refundAction, undefined)
+assert.equal(refundActivity.body.payments.find(row => row.merchantId === 'unverified-legacy-refund').refundAction, undefined)
 
 const unauthorizedHandler = createPocketActivityHandler({
   verifyUser: async () => { throw Object.assign(new Error('Missing Privy access token.'), { status: 401 }) },

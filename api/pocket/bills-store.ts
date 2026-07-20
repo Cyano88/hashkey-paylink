@@ -16,7 +16,9 @@ export type PocketBillsIntentState =
   | 'pending'
   | 'delivered'
   | 'failed'
+  | 'provider_failed_unverified'
   | 'refund_pending'
+  | 'refund_eligible'
   | 'refunding'
   | 'refund_submitted'
   | 'refunded'
@@ -84,6 +86,7 @@ type BillsStoreData = {
   idempotency: Record<string, string>
   transactionHashes: Record<string, string>
   providerTransactions: Record<string, string>
+  mutationLimits: Record<string, { count: number; resetAt: number }>
 }
 
 type BillsStorage = {
@@ -119,7 +122,7 @@ const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}
 const MAX_QUOTE_LIFETIME_MS = 15 * 60_000
 
 function emptyStore(): BillsStoreData {
-  return { version: 1, intents: {}, idempotency: {}, transactionHashes: {}, providerTransactions: {} }
+  return { version: 1, intents: {}, idempotency: {}, transactionHashes: {}, providerTransactions: {}, mutationLimits: {} }
 }
 
 function normalizeStore(value: unknown): BillsStoreData {
@@ -131,6 +134,7 @@ function normalizeStore(value: unknown): BillsStoreData {
     idempotency: current.idempotency && typeof current.idempotency === 'object' ? current.idempotency : {},
     transactionHashes: current.transactionHashes && typeof current.transactionHashes === 'object' ? current.transactionHashes : {},
     providerTransactions: current.providerTransactions && typeof current.providerTransactions === 'object' ? current.providerTransactions : {},
+    mutationLimits: current.mutationLimits && typeof current.mutationLimits === 'object' ? current.mutationLimits : {},
   }
 }
 
@@ -246,6 +250,34 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   async function read() {
     requireStorage()
     return normalizeStore(await storage.read<BillsStoreData>(storeKey))
+  }
+
+  async function consumeMutationLimit(input: { ownerId: string; action: string; windowMs: number; max: number }) {
+    const ownerId = cleanText(input.ownerId, 200)
+    const action = cleanText(input.action, 40).toLowerCase()
+    const windowMs = Math.max(10_000, Math.min(Math.floor(input.windowMs), 60 * 60_000))
+    const max = Math.max(1, Math.min(Math.floor(input.max), 500))
+    if (!ownerId) throw new PocketBillsStoreError('BILLS_AUTH_REQUIRED', 'Pocket authentication is required.', 401)
+    if (!/^[a-z0-9:_-]{2,40}$/.test(action)) throw new PocketBillsStoreError('BILLS_RATE_LIMIT_INVALID', 'Bills rate-limit action is invalid.', 500)
+    return mutate(store => {
+      const timestamp = now()
+      const key = `${ownerId}:${action}`
+      const current = store.mutationLimits[key]
+      if (!current || current.resetAt <= timestamp) {
+        store.mutationLimits[key] = { count: 1, resetAt: timestamp + windowMs }
+        return { remaining: max - 1, resetAt: timestamp + windowMs }
+      }
+      if (current.count >= max) {
+        throw new PocketBillsStoreError('BILLS_RATE_LIMITED', 'Too many Bills requests. Try again shortly.', 429)
+      }
+      current.count += 1
+      if (Object.keys(store.mutationLimits).length > 2_000) {
+        for (const [limitKey, value] of Object.entries(store.mutationLimits)) {
+          if (value.resetAt <= timestamp) delete store.mutationLimits[limitKey]
+        }
+      }
+      return { remaining: max - current.count, resetAt: current.resetAt }
+    })
   }
 
   async function createQuote(input: {
@@ -425,7 +457,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       throw new PocketBillsStoreError('BILLS_INVALID_CONFIRMATION_TIME', 'Payment confirmation time is invalid.')
     }
     return updateOwned(input.ownerId, input.intentId, (intent, store, timestamp) => {
-      if (intent.txHash === txHash && ['payment_confirmed', 'vending', 'pending', 'delivered', 'refund_pending', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)) return
+      if (intent.txHash === txHash && ['payment_confirmed', 'vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)) return
       assertState(intent, ['quoted', 'awaiting_payment'], 'Payment confirmation')
       // A delayed callback/retry is valid when the chain proves that the transfer
       // itself confirmed inside the quote window. Direct callers without that
@@ -456,7 +488,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     if (!EVM_TX_PATTERN.test(txHash)) throw new PocketBillsStoreError('BILLS_INVALID_TX_HASH', 'A valid Base transaction hash is required.')
     const paymentAmountUsdc = canonicalDecimal(input.paymentAmountUsdc, 6, 'Verified USDC amount')
     return updateOwned(input.ownerId, input.intentId, (intent, store) => {
-      assertState(intent, ['payment_confirmed', 'vending', 'pending', 'delivered', 'refund_pending', 'needs_review'], 'Payment evidence backfill')
+      assertState(intent, ['payment_confirmed', 'vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'needs_review'], 'Payment evidence backfill')
       if (intent.txHash !== txHash) throw new PocketBillsStoreError('BILLS_TX_HASH_MISMATCH', 'Payment evidence does not match this bill payment.', 409)
       if (BigInt(decimalToMinor(paymentAmountUsdc, 6)) < BigInt(decimalToMinor(intent.amountUsdc, 6))) {
         throw new PocketBillsStoreError('BILLS_PAYMENT_AMOUNT_MISMATCH', 'Verified USDC amount is below the bill quote.', 409)
@@ -476,7 +508,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const cleanIntentId = cleanText(intentId, 100)
     return mutate(store => {
       const intent = assertOwner(store.intents[cleanIntentId], cleanOwnerId)
-      if (['vending', 'pending', 'delivered', 'refund_pending', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)) {
+      if (['vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)) {
         return { intent, claimed: false }
       }
       assertState(intent, ['payment_confirmed'], 'Bill vending')
@@ -491,7 +523,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
 
   async function recordProviderResult(ownerId: string, intentId: string, result: VtpassTransactionResult, options: { requery?: boolean } = {}) {
     return updateOwned(ownerId, intentId, (intent, store, timestamp) => {
-      assertState(intent, ['vending', 'pending', 'delivered', 'needs_review'], 'Provider reconciliation')
+      assertState(intent, ['vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_eligible', 'refunding', 'needs_review'], 'Provider reconciliation')
       if (result.requestId && result.requestId !== intent.requestId) {
         throw new PocketBillsStoreError('BILLS_PROVIDER_MISMATCH', 'Provider result does not match this bill request.', 409)
       }
@@ -522,13 +554,17 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       if (providerTransactionId) store.providerTransactions[providerTransactionId] = intent.id
       if (result.status === 'delivered') intent.state = 'delivered'
       else if (result.status === 'pending') intent.state = 'pending'
-      else if (result.status === 'failed' || result.status === 'reversed') intent.state = 'refund_pending'
+      else if (result.status === 'failed' || result.status === 'reversed') {
+        intent.state = options.requery
+          ? intent.state === 'refunding' ? 'refunding' : 'refund_eligible'
+          : 'provider_failed_unverified'
+      }
     })
   }
 
   async function recordRequeryFailure(ownerId: string, intentId: string, reason: string) {
     return updateOwned(ownerId, intentId, (intent, _store, timestamp) => {
-      assertState(intent, ['vending', 'pending', 'delivered', 'needs_review'], 'Provider reconciliation')
+      assertState(intent, ['vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_eligible', 'needs_review'], 'Provider reconciliation')
       intent.requeryAttempts += 1
       intent.lastRequeryAt = timestamp
       intent.failureReason = cleanText(reason, 240) || 'Provider status could not be refreshed.'
@@ -538,7 +574,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
 
   async function markNeedsReview(ownerId: string, intentId: string, reason: string) {
     return updateOwned(ownerId, intentId, intent => {
-      assertState(intent, ['payment_confirmed', 'vending', 'pending', 'refund_pending', 'refunding', 'refund_submitted'], 'Manual review')
+      assertState(intent, ['payment_confirmed', 'vending', 'pending', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted'], 'Manual review')
       intent.failureReason = cleanText(reason, 240) || 'Bill payment needs reconciliation.'
       intent.state = 'needs_review'
     })
@@ -556,7 +592,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const refundTxHash = cleanText(input.refundTxHash, 80).toLowerCase()
     if (!EVM_TX_PATTERN.test(refundTxHash)) throw new PocketBillsStoreError('BILLS_INVALID_REFUND_TX_HASH', 'A valid refund transaction hash is required.')
     return updateOwned(input.ownerId, input.intentId, (intent, store) => {
-      assertState(intent, ['refund_pending', 'refunding', 'refund_submitted', 'needs_review'], 'Refund submission')
+      assertState(intent, ['refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'needs_review'], 'Refund submission')
       if (refundTxHash === intent.txHash) throw new PocketBillsStoreError('BILLS_TX_HASH_REUSED', 'Refund transaction must differ from the original payment.', 409)
       const claimedBy = store.transactionHashes[refundTxHash]
       if (claimedBy && claimedBy !== intent.id) throw new PocketBillsStoreError('BILLS_TX_HASH_REUSED', 'This transaction is already connected to another bill payment.', 409)
@@ -592,7 +628,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         const claimedAt = Number(intent.refundClaimedAt) || 0
         if (claimedAt > 0 && timestamp - claimedAt < leaseMs) return { intent, claimed: false }
       } else {
-        assertState(intent, ['refund_pending'], 'Refund claim')
+        assertState(intent, ['refund_eligible'], 'Refund claim')
       }
       const idempotencyKey = cleanText(intent.refundIdempotencyKey, 80) || uuid()
       if (!UUID_V4_PATTERN.test(idempotencyKey)) {
@@ -626,6 +662,18 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       intent.state = 'refund_submitted'
       intent.updatedAt = timestamp
       return intent
+    })
+  }
+
+  async function releaseRefundClaim(input: { ownerId: string; intentId: string; reason: string }) {
+    return updateOwned(input.ownerId, input.intentId, intent => {
+      assertState(intent, ['refunding'], 'Refund verification release')
+      if (intent.refundCircleTransactionId) {
+        throw new PocketBillsStoreError('BILLS_REFUND_ALREADY_SUBMITTED', 'Refund submission already exists.', 409)
+      }
+      intent.state = 'refund_eligible'
+      intent.refundClaimedAt = 0
+      intent.failureReason = cleanText(input.reason, 240) || 'VTpass refund eligibility could not be refreshed.'
     })
   }
 
@@ -667,6 +715,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
 
   return {
     createQuote,
+    consumeMutationLimit,
     getOwnedIntent,
     listOwnedIntents,
     getIntentById,
@@ -680,6 +729,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     failBeforePayment,
     markRefundSubmitted,
     claimRefund,
+    releaseRefundClaim,
     recordCircleRefundSubmission,
     recordCircleRefundStatus,
     markRefunded,

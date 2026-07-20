@@ -213,7 +213,13 @@ const reversed = await store.recordProviderResult('privy:owner-1', first.intent.
   requestId: first.intent.requestId, transactionId: 'vtpass-tx-1', productName: '', recipient: '', amountNgn: 100,
   purchasedCode: '', retryable: false, requeryRequired: false,
 })
-assert.equal(reversed.state, 'refund_pending')
+assert.equal(reversed.state, 'provider_failed_unverified')
+const verifiedReversal = await store.recordProviderResult('privy:owner-1', first.intent.id, {
+  status: 'reversed', providerCode: '040', providerStatus: 'reversed', responseDescription: 'TRANSACTION REVERSAL TO WALLET',
+  requestId: first.intent.requestId, transactionId: 'vtpass-tx-1', productName: '', recipient: '', amountNgn: 100,
+  purchasedCode: '', retryable: false, requeryRequired: false,
+}, { requery: true })
+assert.equal(verifiedReversal.state, 'refund_eligible')
 
 await assert.rejects(
   () => store.markRefundSubmitted({ ownerId: 'privy:owner-1', intentId: first.intent.id, refundTxHash: paymentHash }),
@@ -320,6 +326,13 @@ const duplicateResults = await Promise.all([
 ])
 assert.equal(duplicateResults.filter(result => result.created).length, 1)
 assert.equal(duplicateResults[0].intent.id, duplicateResults[1].intent.id)
+
+await store.consumeMutationLimit({ ownerId: 'privy:rate-limit-owner', action: 'refund', windowMs: 60_000, max: 2 })
+await store.consumeMutationLimit({ ownerId: 'privy:rate-limit-owner', action: 'refund', windowMs: 60_000, max: 2 })
+await assert.rejects(
+  () => store.consumeMutationLimit({ ownerId: 'privy:rate-limit-owner', action: 'refund', windowMs: 60_000, max: 2 }),
+  error => error instanceof PocketBillsStoreError && error.code === 'BILLS_RATE_LIMITED' && error.status === 429,
+)
 
 const unavailableStore = createPocketBillsStore({
   config,

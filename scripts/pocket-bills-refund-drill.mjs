@@ -120,7 +120,7 @@ if (!TX_PATTERN.test(txHash)) {
           state: updated.state,
           paymentAmountUsdc: updated.paymentAmountUsdc,
           txHash: updated.txHash,
-          message: 'Sandbox receipt is refund pending. The owner can now claim it from Bills activity.',
+          message: 'Sandbox receipt has verified refund eligibility. The owner can now claim it from Bills activity.',
         }, null, 2))
       }
     }

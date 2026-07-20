@@ -29,7 +29,7 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
   const refundEligible = refundPolicy.enabled
     && Boolean(refundPolicy.treasuryAddress)
     && intent.treasuryAddress.toLowerCase() === refundPolicy.treasuryAddress.toLowerCase()
-  const refundAction = refundEligible && intent.state === 'refund_pending'
+  const refundAction = refundEligible && intent.state === 'refund_eligible'
     ? 'claim' as const
     : refundEligible && (intent.state === 'refunding' || intent.state === 'refund_submitted')
       ? 'check' as const
@@ -38,8 +38,12 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
     ? sandboxTest ? 'test complete' : 'delivered'
     : intent.state === 'refunded'
       ? 'refunded'
-      : intent.state === 'refund_pending'
-        ? 'refund pending'
+      : intent.state === 'refund_eligible'
+        ? 'refund available'
+        : intent.state === 'provider_failed_unverified'
+          ? 'verification pending'
+          : intent.state === 'refund_pending'
+            ? 'refund pending'
         : intent.state === 'refunding' || intent.state === 'refund_submitted'
           ? 'refunding'
         : intent.state === 'needs_review'

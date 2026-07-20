@@ -9,6 +9,7 @@ import {
 } from '../circle-developer-treasury.js'
 import { usdcAmountUnits, verifyEvmUsdcTransfer } from '../usdc-transfer-verify.js'
 import { readVtpassPhase0Config } from '../vtpass-config.js'
+import { createVtpassClient } from '../vtpass-client.js'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
 import {
   PocketBillsStoreError,
@@ -28,6 +29,7 @@ type RefundDependencies = {
   circleConfig: ReturnType<typeof readCircleTreasuryConfig>
   store: BillsStore
   circle: CircleClient
+  provider: Pick<ReturnType<typeof createVtpassClient>, 'requeryTransaction'>
   verifyTransfer: typeof verifyEvmUsdcTransfer
 }
 
@@ -103,6 +105,37 @@ async function processPocketBillsRefund(dependencies: RefundDependencies, intent
   }
   if (!claim.claimed && !intent.refundCircleTransactionId) {
     return { status: 202, state: 'refunding', intent: publicPocketBillsIntent(intent), message: 'Refund submission is already in progress.' }
+  }
+
+  if (claim.claimed) {
+    try {
+      const providerResult = await dependencies.provider.requeryTransaction(intent.requestId)
+      intent = await dependencies.store.recordProviderResult(intent.ownerId, intent.id, providerResult, { requery: true })
+      if (providerResult.status !== 'failed' && providerResult.status !== 'reversed') {
+        throw new PocketBillsStoreError(
+          providerResult.status === 'delivered' ? 'BILLS_REFUND_PROVIDER_DELIVERED' : 'BILLS_REFUND_PROVIDER_PENDING',
+          providerResult.status === 'delivered'
+            ? 'VTpass confirms this bill was delivered. Refund is not available.'
+            : 'VTpass has not confirmed a final failed transaction. Refund remains unavailable.',
+          409,
+        )
+      }
+    } catch (error) {
+      const latest = await dependencies.store.getIntentById(intent.id)
+      if (latest.state === 'refunding' && !latest.refundCircleTransactionId) {
+        if (error instanceof PocketBillsStoreError && error.code === 'BILLS_PROVIDER_MISMATCH') {
+          await dependencies.store.markNeedsReview(latest.ownerId, latest.id, error.message)
+        } else {
+          await dependencies.store.releaseRefundClaim({
+            ownerId: latest.ownerId,
+            intentId: latest.id,
+            reason: error instanceof Error ? error.message : 'VTpass refund eligibility could not be refreshed.',
+          })
+        }
+      }
+      if (error instanceof PocketBillsStoreError) throw error
+      throw new PocketBillsStoreError('BILLS_REFUND_PROVIDER_REQUERY_FAILED', 'VTpass refund eligibility could not be verified. Try again later.', 503)
+    }
   }
 
   const refId = `pocket-bills-refund:${intent.id}`
@@ -219,6 +252,7 @@ export function createPocketBillsUserRefundHandler(dependencies: UserRefundDepen
     try {
       const identity = await dependencies.verifyUser(req)
       if (!intentId) return res.status(400).json({ ok: false, error: { code: 'BILLS_REFUND_INTENT_REQUIRED', message: 'Bill payment ID is required.', retryable: false } })
+      await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'refund', windowMs: 10 * 60_000, max: 4 })
       const result = await processPocketBillsRefund(dependencies, intentId, identity.userId)
       return res.status(result.status).json({
         ok: true,
@@ -250,6 +284,7 @@ function defaultDependencies(): RefundDependencies {
     circleConfig,
     store: createPocketBillsStore({ config: billsConfig }),
     circle: createCircleDeveloperTreasuryClient({ config: circleConfig }),
+    provider: createVtpassClient({ config: billsConfig }),
     verifyTransfer: verifyEvmUsdcTransfer,
   }
 }

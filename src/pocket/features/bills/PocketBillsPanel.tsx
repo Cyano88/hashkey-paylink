@@ -55,7 +55,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
   const showPayment = Boolean(bills.intent) && ['ready', 'paying', 'confirming', 'processing', 'successful'].includes(bills.status)
-  const reviewBlocked = Boolean(bills.intent && ['refund_pending', 'needs_review'].includes(bills.intent.state))
+  const reviewBlocked = Boolean(bills.intent && ['provider_failed_unverified', 'refund_pending', 'refund_eligible', 'needs_review'].includes(bills.intent.state))
   const slideStatus = bills.status === 'successful'
     ? 'successful'
     : bills.status === 'processing'

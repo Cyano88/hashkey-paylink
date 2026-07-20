@@ -196,6 +196,7 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
 
     try {
       const identity = await dependencies.verifyUser(req)
+      await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'quote', windowMs: 60_000, max: 12 })
       const serviceId = cleanText(req.body?.service_id, 40).toLowerCase()
       const phone = normalizeNigerianPhone(req.body?.phone)
       const amountNgn = canonicalNgn(req.body?.amount_ngn)
@@ -250,6 +251,10 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
     try {
       const identity = await dependencies.verifyUser(req)
       const action = cleanText(req.body?.action, 30)
+      const limit = action === 'status' || action === 'list'
+        ? { windowMs: 60_000, max: 30 }
+        : { windowMs: 60_000, max: 8 }
+      await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: `pay:${action || 'unknown'}`, ...limit })
       if (action === 'list') {
         const intents = await dependencies.store.listOwnedIntents(identity.userId, Number(req.body?.limit ?? 50))
         return respond.success({ intents: intents.map(publicPocketBillsIntent) })
@@ -332,7 +337,7 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
         let refreshed = false
         let refreshError = ''
         const refresh = req.body?.refresh !== false
-        const canRequery = Boolean(intent.providerAttemptedAt) && ['vending', 'pending', 'delivered', 'needs_review'].includes(intent.state)
+        const canRequery = Boolean(intent.providerAttemptedAt) && ['vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_eligible', 'needs_review'].includes(intent.state)
         if (refresh && canRequery) {
           try {
             const result = await dependencies.provider.requeryTransaction(intent.requestId)

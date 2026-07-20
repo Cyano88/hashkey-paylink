@@ -22,7 +22,7 @@ function sleep(ms: number) {
 }
 
 function finalState(intent: PocketBillIntent) {
-  return ['delivered', 'failed', 'refund_pending', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)
+  return ['delivered', 'failed', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)
 }
 
 function persistActive(intentId: string, txHash = '') {
@@ -119,9 +119,15 @@ export default function usePocketBillsController({
       setStatus('error')
       setError('The Airtime payment was refunded. No retry is needed.')
       window.localStorage.removeItem(ACTIVE_BILL_KEY)
+    } else if (next.state === 'provider_failed_unverified') {
+      setStatus('processing')
+      setNotice('Verifying the final Airtime delivery status. Do not retry.')
+    } else if (next.state === 'refund_eligible') {
+      setStatus('error')
+      setError('VTpass confirmed the Airtime purchase failed. Claim your refund from Bills activity.')
     } else if (next.state === 'refund_pending') {
       setStatus('error')
-      setError('Airtime was not delivered. Your payment is awaiting refund review; do not retry.')
+      setError('This earlier refund requires manual review; do not retry.')
     } else if (next.state === 'refunding' || next.state === 'refund_submitted') {
       setStatus('error')
       setError('Your USDC refund is processing. Check Bills activity for confirmation.')
