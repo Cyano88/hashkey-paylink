@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createPocketBillsRefundHandler } from '../api/pocket/bills-refunds.ts'
+import { createPocketBillsRefundHandler, createPocketBillsUserRefundHandler } from '../api/pocket/bills-refunds.ts'
 import { createPocketBillsStore } from '../api/pocket/bills-store.ts'
 import { readCircleTreasuryConfig } from '../api/circle-developer-treasury.ts'
 import { readVtpassPhase0Config, } from '../api/vtpass-config.ts'
@@ -144,6 +144,46 @@ const replay = response()
 await handler({ method: 'POST', headers: { authorization: `Bearer ${adminSecret}` }, body: { intentId: quote.intent.id } }, replay)
 assert.equal(replay.statusCode, 200)
 assert.equal(calls.created, 1)
+
+const userHandler = createPocketBillsUserRefundHandler({
+  billsConfig,
+  circleConfig,
+  store,
+  circle,
+  verifyTransfer: async () => { throw new Error('already refunded') },
+  verifyUser: async () => ({ userId: 'privy:refund-owner' }),
+})
+const userReplay = response()
+await userHandler({ method: 'POST', headers: {}, body: { intent_id: quote.intent.id } }, userReplay)
+assert.equal(userReplay.statusCode, 200)
+assert.equal(userReplay.body.data.intent.state, 'refunded')
+assert.equal(calls.created, 1)
+
+const forbiddenHandler = createPocketBillsUserRefundHandler({
+  billsConfig,
+  circleConfig,
+  store,
+  circle,
+  verifyTransfer: async () => { throw new Error('not called') },
+  verifyUser: async () => ({ userId: 'privy:other-owner' }),
+})
+const forbidden = response()
+await forbiddenHandler({ method: 'POST', headers: {}, body: { intent_id: quote.intent.id } }, forbidden)
+assert.equal(forbidden.statusCode, 403)
+assert.equal(forbidden.body.error.code, 'BILLS_FORBIDDEN')
+
+const unauthenticatedHandler = createPocketBillsUserRefundHandler({
+  billsConfig,
+  circleConfig,
+  store,
+  circle,
+  verifyTransfer: async () => { throw new Error('not called') },
+  verifyUser: async () => { throw Object.assign(new Error('Missing Privy access token.'), { status: 401 }) },
+})
+const unauthenticated = response()
+await unauthenticatedHandler({ method: 'POST', headers: {}, body: { intent_id: quote.intent.id } }, unauthenticated)
+assert.equal(unauthenticated.statusCode, 401)
+assert.equal(unauthenticated.body.error.code, 'AUTH_REQUIRED')
 
 const disabled = response()
 const disabledHandler = createPocketBillsRefundHandler({ ...{ billsConfig: { ...billsConfig, refundsReady: false }, circleConfig, store, circle }, verifyTransfer: async () => { throw new Error('not called') } })

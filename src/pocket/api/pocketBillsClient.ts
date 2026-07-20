@@ -9,6 +9,8 @@ export type PocketBillIntentState =
   | 'delivered'
   | 'failed'
   | 'refund_pending'
+  | 'refunding'
+  | 'refund_submitted'
   | 'refunded'
   | 'needs_review'
 
@@ -28,6 +30,8 @@ export type PocketBillIntent = {
   payerWallet: string
   quoteExpiresAt: number
   txHash: string
+  paymentAmountUsdc: string
+  refundTxHash: string
   providerStatus: string
   providerDescription: string
   failureReason: string
@@ -58,7 +62,7 @@ function text(value: unknown) {
 }
 
 function isIntentState(value: unknown): value is PocketBillIntentState {
-  return ['quoted', 'awaiting_payment', 'payment_confirmed', 'vending', 'pending', 'delivered', 'failed', 'refund_pending', 'refunded', 'needs_review'].includes(String(value))
+  return ['quoted', 'awaiting_payment', 'payment_confirmed', 'vending', 'pending', 'delivered', 'failed', 'refund_pending', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(String(value))
 }
 
 export function parsePocketBillIntent(value: unknown): PocketBillIntent {
@@ -88,6 +92,8 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
     payerWallet: text(intent.payerWallet),
     quoteExpiresAt,
     txHash: text(intent.txHash),
+    paymentAmountUsdc: text(intent.paymentAmountUsdc),
+    refundTxHash: text(intent.refundTxHash),
     providerStatus: text(intent.providerStatus),
     providerDescription: text(intent.providerDescription),
     failureReason: text(intent.failureReason),
@@ -198,3 +204,28 @@ async function mutatePocketBill(input: {
 export const preparePocketAirtime = (input: Omit<Parameters<typeof mutatePocketBill>[0], 'action'>) => mutatePocketBill({ ...input, action: 'prepare' })
 export const confirmPocketAirtime = (input: Omit<Parameters<typeof mutatePocketBill>[0], 'action'>) => mutatePocketBill({ ...input, action: 'confirm' })
 export const refreshPocketAirtime = (input: Omit<Parameters<typeof mutatePocketBill>[0], 'action'>) => mutatePocketBill({ ...input, action: 'status' })
+
+export async function processPocketBillRefund(input: {
+  accessToken: string
+  intentId: string
+  fetcher?: typeof fetch
+}) {
+  const response = await (input.fetcher ?? fetch)(POCKET_API.billsRefund, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${input.accessToken}`,
+      'idempotency-key': createPocketIdempotencyKey('bill-refund'),
+    },
+    body: JSON.stringify({ intent_id: input.intentId }),
+  })
+  const body = await response.json().catch(() => undefined)
+  if (!response.ok) throw apiError(body, response.status, 'Refund status could not be checked.')
+  const root = record(body)
+  const data = record(root.data)
+  if (root.ok !== true || !text(data.state)) throw new PocketBillsApiError('Refund response was invalid.')
+  return {
+    state: text(data.state),
+    intent: parsePocketBillIntent(data.intent),
+  }
+}

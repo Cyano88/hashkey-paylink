@@ -4,6 +4,7 @@ import {
   confirmPocketAirtime,
   parsePocketBillIntent,
   parsePocketBillsAvailability,
+  processPocketBillRefund,
   quotePocketAirtime,
 } from '../src/pocket/api/pocketBillsClient.ts'
 
@@ -51,5 +52,19 @@ await assert.rejects(
   () => confirmPocketAirtime({ accessToken: 'privy-token', intentId: intent.id, txHash: `0x${'b'.repeat(64)}`, fetcher: pendingFetcher }),
   error => error instanceof PocketBillsApiError && error.code === 'CONFIRMATION_REQUIRED' && error.retryable && error.status === 409,
 )
+
+let refundRequest
+const refundFetcher = async (url, options) => {
+  refundRequest = { url, options, body: JSON.parse(options.body) }
+  return new Response(JSON.stringify({
+    ok: true,
+    data: { state: 'refund_submitted', intent: { ...intent, state: 'refund_submitted' } },
+  }), { status: 202, headers: { 'content-type': 'application/json' } })
+}
+const refund = await processPocketBillRefund({ accessToken: 'privy-token', intentId: intent.id, fetcher: refundFetcher })
+assert.equal(refund.intent.state, 'refund_submitted')
+assert.equal(refundRequest.url, '/api/pocket/bills/refund')
+assert.equal(refundRequest.options.headers.authorization, 'Bearer privy-token')
+assert.deepEqual(refundRequest.body, { intent_id: intent.id })
 
 console.log('Pocket Bills client smoke test passed: availability, response validation, auth, idempotency, exact payloads, and retryable confirmation errors are deterministic.')

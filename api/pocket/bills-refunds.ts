@@ -9,6 +9,7 @@ import {
 } from '../circle-developer-treasury.js'
 import { usdcAmountUnits, verifyEvmUsdcTransfer } from '../usdc-transfer-verify.js'
 import { readVtpassPhase0Config } from '../vtpass-config.js'
+import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
 import {
   PocketBillsStoreError,
   createPocketBillsStore,
@@ -28,6 +29,10 @@ type RefundDependencies = {
   store: BillsStore
   circle: CircleClient
   verifyTransfer: typeof verifyEvmUsdcTransfer
+}
+
+type UserRefundDependencies = RefundDependencies & {
+  verifyUser(req: Request): Promise<VerifiedLinkUser>
 }
 
 function clean(value: unknown, max = 180) {
@@ -68,6 +73,112 @@ function safeFailureReason(transaction: CircleDeveloperTransaction) {
     || 'Circle refund transaction requires manual review.'
 }
 
+async function processPocketBillsRefund(dependencies: RefundDependencies, intentId: string, ownerId = '') {
+  if (!dependencies.billsConfig.refundsReady) {
+    throw new PocketBillsStoreError('BILLS_REFUNDS_DISABLED', 'Bills refunds are not available yet.', 503)
+  }
+  if (!dependencies.circleConfig.verificationReady) {
+    throw new PocketBillsStoreError('BILLS_REFUND_TREASURY_NOT_READY', 'Circle Bills treasury is not ready.', 503)
+  }
+  let intent = await dependencies.store.getIntentById(intentId)
+  if (ownerId && intent.ownerId !== ownerId) {
+    throw new PocketBillsStoreError('BILLS_FORBIDDEN', 'Bill payment does not belong to this Pocket account.', 403)
+  }
+  if (!isAddress(intent.payerWallet) || intent.network !== 'base') {
+    throw new PocketBillsStoreError('BILLS_REFUND_DESTINATION_INVALID', 'Bill refund destination is invalid.', 409)
+  }
+  if (intent.treasuryAddress.toLowerCase() !== dependencies.circleConfig.treasuryAddress.toLowerCase()) {
+    throw new PocketBillsStoreError('BILLS_REFUND_TREASURY_MISMATCH', 'Legacy or unrelated treasury payments cannot be automated.', 409)
+  }
+
+  await dependencies.circle.verifyConfiguredWallet()
+  const claim = await dependencies.store.claimRefund({
+    intentId,
+    treasuryAddress: dependencies.circleConfig.treasuryAddress,
+  })
+  intent = claim.intent
+
+  if (intent.state === 'refunded') {
+    return { status: 200, state: 'refunded', intent: publicPocketBillsIntent(intent) }
+  }
+  if (!claim.claimed && !intent.refundCircleTransactionId) {
+    return { status: 202, state: 'refunding', intent: publicPocketBillsIntent(intent), message: 'Refund submission is already in progress.' }
+  }
+
+  const refId = `pocket-bills-refund:${intent.id}`
+  const refundAmount = intent.paymentAmountUsdc || intent.amountUsdc
+  if (!intent.refundCircleTransactionId) {
+    const created = await dependencies.circle.createUsdcTransfer({
+      idempotencyKey: intent.refundIdempotencyKey,
+      destinationAddress: intent.payerWallet,
+      amount: refundAmount,
+      refId,
+      tokenAddress: BASE_USDC_ADDRESS,
+    })
+    intent = await dependencies.store.recordCircleRefundSubmission({
+      intentId,
+      circleTransactionId: created.id,
+    })
+  }
+
+  const transaction = await dependencies.circle.getTransaction(intent.refundCircleTransactionId)
+  assertCircleTransactionMatches(transaction, {
+    walletId: dependencies.circleConfig.walletId,
+    treasuryAddress: dependencies.circleConfig.treasuryAddress,
+    destinationAddress: intent.payerWallet,
+    amount: refundAmount,
+    refId,
+  })
+  intent = await dependencies.store.recordCircleRefundStatus({
+    intentId,
+    circleState: transaction.state,
+    refundTxHash: transaction.txHash || undefined,
+  })
+
+  if (TERMINAL_FAILURES.has(transaction.state)) {
+    intent = await dependencies.store.markNeedsReview(intent.ownerId, intent.id, safeFailureReason(transaction))
+    throw new PocketBillsStoreError('BILLS_REFUND_NEEDS_REVIEW', 'Refund needs manual review.', 409)
+  }
+  if (transaction.state !== 'COMPLETE') {
+    if (!PROCESSING_STATES.has(transaction.state)) {
+      throw new PocketBillsStoreError('BILLS_REFUND_CIRCLE_STATE_INVALID', 'Circle returned an unknown refund state.', 502)
+    }
+    return { status: 202, state: 'refund_submitted', intent: publicPocketBillsIntent(intent) }
+  }
+  if (!intent.refundTxHash) {
+    throw new PocketBillsStoreError('BILLS_REFUND_TX_HASH_MISSING', 'Circle completed the refund without a transaction hash.', 502)
+  }
+
+  const verified = await dependencies.verifyTransfer({
+    chain: 'base',
+    txHash: intent.refundTxHash,
+    payer: dependencies.circleConfig.treasuryAddress,
+    recipient: intent.payerWallet,
+    minAmount: refundAmount,
+  })
+  if (BigInt(verified.amountUnits) !== usdcAmountUnits(refundAmount)) {
+    throw new PocketBillsStoreError('BILLS_REFUND_AMOUNT_MISMATCH', 'On-chain refund amount does not exactly match the bill payment.', 409)
+  }
+  intent = await dependencies.store.markRefunded(intent.ownerId, intent.id)
+  return { status: 200, state: 'refunded', intent: publicPocketBillsIntent(intent) }
+}
+
+function refundFailure(res: Response, error: unknown, intentId: string) {
+  if (error instanceof PocketBillsStoreError || error instanceof CircleTreasuryError) {
+    return res.status(error.status).json({ ok: false, code: error.code, error: error.message })
+  }
+  console.error('[pocket-bills-refund] reconciliation failed', {
+    intentId,
+    name: error instanceof Error ? error.name : 'Error',
+    message: error instanceof Error ? clean(error.message, 240) : 'Unknown failure',
+  })
+  return res.status(502).json({
+    ok: false,
+    code: 'BILLS_REFUND_RECONCILIATION_FAILED',
+    error: 'Refund status could not be reconciled. Do not submit a second refund.',
+  })
+}
+
 export function createPocketBillsRefundHandler(dependencies: RefundDependencies) {
   return async function pocketBillsRefundHandler(req: Request, res: Response) {
     if (req.method !== 'POST') {
@@ -81,109 +192,47 @@ export function createPocketBillsRefundHandler(dependencies: RefundDependencies)
         error: process.env.ADMIN_SECRET || process.env.CRON_SECRET ? 'Unauthorized.' : 'Admin authorization is not configured.',
       })
     }
-    if (!dependencies.billsConfig.refundsReady) {
-      return res.status(503).json({ ok: false, code: 'BILLS_REFUNDS_DISABLED', error: 'Automated Bills refunds are disabled.' })
-    }
-    if (!dependencies.circleConfig.verificationReady) {
-      return res.status(503).json({ ok: false, code: 'BILLS_REFUND_TREASURY_NOT_READY', error: 'Circle Bills treasury is not ready.' })
-    }
-
     const intentId = clean(req.body?.intentId, 100)
     if (!intentId) return res.status(400).json({ ok: false, code: 'BILLS_REFUND_INTENT_REQUIRED', error: 'Bill payment ID is required.' })
-
     try {
-      let intent = await dependencies.store.getIntentById(intentId)
-      if (!isAddress(intent.payerWallet) || intent.network !== 'base') {
-        throw new PocketBillsStoreError('BILLS_REFUND_DESTINATION_INVALID', 'Bill refund destination is invalid.', 409)
-      }
-      if (intent.treasuryAddress.toLowerCase() !== dependencies.circleConfig.treasuryAddress.toLowerCase()) {
-        throw new PocketBillsStoreError('BILLS_REFUND_TREASURY_MISMATCH', 'Legacy or unrelated treasury payments cannot be automated.', 409)
-      }
+      const result = await processPocketBillsRefund(dependencies, intentId)
+      return res.status(result.status).json({ ok: true, state: result.state, intent: result.intent, ...(result.message ? { message: result.message } : {}) })
+    } catch (error) {
+      return refundFailure(res, error, intentId)
+    }
+  }
+}
 
-      await dependencies.circle.verifyConfiguredWallet()
-      const claim = await dependencies.store.claimRefund({
-        intentId,
-        treasuryAddress: dependencies.circleConfig.treasuryAddress,
+export function createPocketBillsUserRefundHandler(dependencies: UserRefundDependencies) {
+  return async function pocketBillsUserRefundHandler(req: Request, res: Response) {
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.method !== 'POST') {
+      res.setHeader('Allow', 'POST')
+      return res.status(405).json({ ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.', retryable: false } })
+    }
+    const intentId = clean(req.body?.intent_id, 100)
+    try {
+      const identity = await dependencies.verifyUser(req)
+      if (!intentId) return res.status(400).json({ ok: false, error: { code: 'BILLS_REFUND_INTENT_REQUIRED', message: 'Bill payment ID is required.', retryable: false } })
+      const result = await processPocketBillsRefund(dependencies, intentId, identity.userId)
+      return res.status(result.status).json({
+        ok: true,
+        data: { state: result.state, intent: result.intent, ...(result.message ? { message: result.message } : {}) },
       })
-      intent = claim.intent
-
-      if (intent.state === 'refunded') {
-        return res.status(200).json({ ok: true, state: 'refunded', intent: publicPocketBillsIntent(intent) })
-      }
-      if (!claim.claimed && !intent.refundCircleTransactionId) {
-        return res.status(202).json({ ok: true, state: 'refunding', message: 'Refund submission is already in progress.' })
-      }
-
-      const refId = `pocket-bills-refund:${intent.id}`
-      const refundAmount = intent.paymentAmountUsdc || intent.amountUsdc
-      if (!intent.refundCircleTransactionId) {
-        const created = await dependencies.circle.createUsdcTransfer({
-          idempotencyKey: intent.refundIdempotencyKey,
-          destinationAddress: intent.payerWallet,
-          amount: refundAmount,
-          refId,
-          tokenAddress: BASE_USDC_ADDRESS,
-        })
-        intent = await dependencies.store.recordCircleRefundSubmission({
-          intentId,
-          circleTransactionId: created.id,
-        })
-      }
-
-      const transaction = await dependencies.circle.getTransaction(intent.refundCircleTransactionId)
-      assertCircleTransactionMatches(transaction, {
-        walletId: dependencies.circleConfig.walletId,
-        treasuryAddress: dependencies.circleConfig.treasuryAddress,
-        destinationAddress: intent.payerWallet,
-        amount: refundAmount,
-        refId,
-      })
-      intent = await dependencies.store.recordCircleRefundStatus({
-        intentId,
-        circleState: transaction.state,
-        refundTxHash: transaction.txHash || undefined,
-      })
-
-      if (TERMINAL_FAILURES.has(transaction.state)) {
-        intent = await dependencies.store.markNeedsReview(intent.ownerId, intent.id, safeFailureReason(transaction))
-        return res.status(409).json({ ok: false, code: 'BILLS_REFUND_NEEDS_REVIEW', error: 'Refund needs manual review.', intent: publicPocketBillsIntent(intent) })
-      }
-      if (transaction.state !== 'COMPLETE') {
-        if (!PROCESSING_STATES.has(transaction.state)) {
-          throw new PocketBillsStoreError('BILLS_REFUND_CIRCLE_STATE_INVALID', 'Circle returned an unknown refund state.', 502)
-        }
-        return res.status(202).json({ ok: true, state: 'refund_submitted', intent: publicPocketBillsIntent(intent) })
-      }
-      if (!intent.refundTxHash) {
-        throw new PocketBillsStoreError('BILLS_REFUND_TX_HASH_MISSING', 'Circle completed the refund without a transaction hash.', 502)
-      }
-
-      const verified = await dependencies.verifyTransfer({
-        chain: 'base',
-        txHash: intent.refundTxHash,
-        payer: dependencies.circleConfig.treasuryAddress,
-        recipient: intent.payerWallet,
-        minAmount: refundAmount,
-      })
-      if (BigInt(verified.amountUnits) !== usdcAmountUnits(refundAmount)) {
-        throw new PocketBillsStoreError('BILLS_REFUND_AMOUNT_MISMATCH', 'On-chain refund amount does not exactly match the bill payment.', 409)
-      }
-      intent = await dependencies.store.markRefunded(intent.ownerId, intent.id)
-      return res.status(200).json({ ok: true, state: 'refunded', intent: publicPocketBillsIntent(intent) })
     } catch (error) {
       if (error instanceof PocketBillsStoreError || error instanceof CircleTreasuryError) {
-        return res.status(error.status).json({ ok: false, code: error.code, error: error.message })
+        return res.status(error.status).json({ ok: false, error: { code: error.code, message: error.message, retryable: error.status >= 500 } })
       }
-      console.error('[pocket-bills-refund] reconciliation failed', {
+      const status = Number((error as { status?: unknown })?.status)
+      if (status === 401 || status === 403) {
+        return res.status(status).json({ ok: false, error: { code: status === 401 ? 'AUTH_REQUIRED' : 'FORBIDDEN', message: error instanceof Error ? error.message : 'Authentication failed.', retryable: false } })
+      }
+      console.error('[pocket-bills-refund] user reconciliation failed', {
         intentId,
         name: error instanceof Error ? error.name : 'Error',
         message: error instanceof Error ? clean(error.message, 240) : 'Unknown failure',
       })
-      return res.status(502).json({
-        ok: false,
-        code: 'BILLS_REFUND_RECONCILIATION_FAILED',
-        error: 'Refund status could not be reconciled. Do not submit a second refund.',
-      })
+      return res.status(502).json({ ok: false, error: { code: 'BILLS_REFUND_RECONCILIATION_FAILED', message: 'Refund status could not be reconciled. Do not submit a second refund.', retryable: true } })
     }
   }
 }
@@ -202,4 +251,8 @@ function defaultDependencies(): RefundDependencies {
 
 export async function pocketBillsRefundHandler(req: Request, res: Response) {
   return createPocketBillsRefundHandler(defaultDependencies())(req, res)
+}
+
+export async function pocketBillsUserRefundHandler(req: Request, res: Response) {
+  return createPocketBillsUserRefundHandler({ ...defaultDependencies(), verifyUser: verifiedPrivyUser })(req, res)
 }

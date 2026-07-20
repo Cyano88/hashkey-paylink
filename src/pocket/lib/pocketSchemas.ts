@@ -165,6 +165,8 @@ export type PocketActivityRow = {
   paycrestStatus?: string
   activityLabel?: string
   providerReference?: string
+  refundAction?: 'claim' | 'check'
+  refundTxHash?: string
 }
 
 export type PocketActivityReadData = {
@@ -363,6 +365,7 @@ export const POCKET_API = {
   pos: '/api/pocket/pos',
   billsQuote: '/api/pocket/bills/quote',
   billsPay: '/api/pocket/bills/pay',
+  billsRefund: '/api/pocket/bills/refund',
   activity: '/api/pocket/activity',
   bridge: '/api/pocket/bridge',
   solanaRpc: '/api/pocket/solana-rpc',
@@ -529,6 +532,8 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.paycrestStatus, 80)
     && isOptionalBoundedString(value.activityLabel, 80)
     && isOptionalBoundedString(value.providerReference, 160)
+    && (value.refundAction === undefined || value.refundAction === 'claim' || value.refundAction === 'check')
+    && (value.refundTxHash === undefined || (typeof value.refundTxHash === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value.refundTxHash)))
 }
 
 export function isPocketActivityReadData(value: unknown): value is PocketActivityReadData {

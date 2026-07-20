@@ -18,6 +18,7 @@ type PocketActivityPanelProps = {
   busy: boolean
   error: string
   onRefresh: () => void
+  onRefund: (intentId: string) => Promise<string>
 }
 
 function activityKind(row: PocketActivityRow): ActivityKind {
@@ -59,8 +60,10 @@ function supportedRows(rows: PocketActivityRow[]) {
   })
 }
 
-export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefresh }: PocketActivityPanelProps) {
+export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefresh, onRefund }: PocketActivityPanelProps) {
   const [expandedReceipt, setExpandedReceipt] = useState('')
+  const [refundBusy, setRefundBusy] = useState('')
+  const [refundMessage, setRefundMessage] = useState<Record<string, string>>({})
   const supported = supportedRows(rows)
   const visibleRows = view === 'all' ? supported : supported.filter(row => activityKind(row) === view)
 
@@ -104,6 +107,8 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const amountNgn = formatNgnAmount(row.amountNgn ?? '')
                 const amountUsdc = Number.parseFloat(row.amount || '')
                 const timestamp = row.ts ? new Date(row.ts) : null
+                const refundIntentId = kind === 'bills' ? row.merchantId || '' : ''
+                const claimingRefund = refundBusy === refundIntentId
                 return (
                   <div key={`${row.txHash || row.eventId}-${row.ts}-${index}`} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
                     <div className="flex items-start justify-between gap-3">
@@ -161,6 +166,43 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                                 <span className="font-semibold text-gray-400">VTpass reference</span>
                                 <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.providerReference}</span>
                               </div>
+                            )}
+                            {row.refundTxHash && (
+                              <div className="flex items-start justify-between gap-3">
+                                <span className="font-semibold text-gray-400">Refund transaction</span>
+                                <a href={`https://base.blockscout.com/tx/${row.refundTxHash}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-mono font-semibold text-blue-600 hover:underline dark:text-blue-300">
+                                  {row.refundTxHash.slice(0, 8)}...{row.refundTxHash.slice(-6)}
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              </div>
+                            )}
+                            {row.refundAction && refundIntentId && (
+                              <div className="flex items-center justify-between gap-3 border-t border-gray-100 pt-2 dark:border-white/10">
+                                <span className="font-semibold text-gray-400">USDC refund</span>
+                                <button
+                                  type="button"
+                                  disabled={claimingRefund}
+                                  onClick={async () => {
+                                    setRefundBusy(refundIntentId)
+                                    setRefundMessage(current => ({ ...current, [refundIntentId]: '' }))
+                                    try {
+                                      const state = await onRefund(refundIntentId)
+                                      setRefundMessage(current => ({ ...current, [refundIntentId]: state === 'refunded' ? 'Refunded' : 'Refund submitted' }))
+                                    } catch (reason) {
+                                      setRefundMessage(current => ({ ...current, [refundIntentId]: reason instanceof Error ? reason.message : 'Refund status is unavailable.' }))
+                                    } finally {
+                                      setRefundBusy('')
+                                    }
+                                  }}
+                                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-gray-950 px-3 text-[10px] font-bold text-white transition hover:bg-black active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+                                >
+                                  {claimingRefund && <RefreshCw className="h-3 w-3 animate-spin" />}
+                                  {claimingRefund ? 'Refunding' : row.refundAction === 'claim' ? 'Claim refund' : 'Check refund'}
+                                </button>
+                              </div>
+                            )}
+                            {refundIntentId && refundMessage[refundIntentId] && (
+                              <p className="text-right text-[10px] font-semibold text-gray-500 dark:text-gray-300">{refundMessage[refundIntentId]}</p>
                             )}
                           </div>
                         )}

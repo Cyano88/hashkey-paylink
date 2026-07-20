@@ -22,7 +22,7 @@ function sleep(ms: number) {
 }
 
 function finalState(intent: PocketBillIntent) {
-  return ['delivered', 'failed', 'refund_pending', 'refunded', 'needs_review'].includes(intent.state)
+  return ['delivered', 'failed', 'refund_pending', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)
 }
 
 function persistActive(intentId: string, txHash = '') {
@@ -122,6 +122,9 @@ export default function usePocketBillsController({
     } else if (next.state === 'refund_pending') {
       setStatus('error')
       setError('Airtime was not delivered. Your payment is awaiting refund review; do not retry.')
+    } else if (next.state === 'refunding' || next.state === 'refund_submitted') {
+      setStatus('error')
+      setError('Your USDC refund is processing. Check Bills activity for confirmation.')
     } else if (next.state === 'failed') {
       setStatus('error')
       setError(next.failureReason || 'Airtime was not delivered. No payment was completed.')

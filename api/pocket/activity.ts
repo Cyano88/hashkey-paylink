@@ -20,11 +20,20 @@ type PocketActivityHandlerDependencies = {
   readActions(ownerId: string, limit?: number): ReturnType<typeof listCirclePocketActions>
   readWalletHistory?(ownerId: string): Promise<unknown[]>
   readBills?(ownerId: string): Promise<PocketBillsIntent[]>
+  readBillsRefundPolicy?(): { enabled: boolean; treasuryAddress: string }
 }
 
-function billActivityRow(intent: PocketBillsIntent): PocketActivityRow | undefined {
+function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boolean; treasuryAddress: string }): PocketActivityRow | undefined {
   if (!intent.txHash) return undefined
   const sandboxTest = intent.providerEnvironment === 'sandbox'
+  const refundEligible = refundPolicy.enabled
+    && Boolean(refundPolicy.treasuryAddress)
+    && intent.treasuryAddress.toLowerCase() === refundPolicy.treasuryAddress.toLowerCase()
+  const refundAction = refundEligible && intent.state === 'refund_pending'
+    ? 'claim' as const
+    : refundEligible && (intent.state === 'refunding' || intent.state === 'refund_submitted')
+      ? 'check' as const
+      : undefined
   const status = intent.state === 'delivered'
     ? sandboxTest ? 'test complete' : 'delivered'
     : intent.state === 'refunded'
@@ -54,6 +63,8 @@ function billActivityRow(intent: PocketBillsIntent): PocketActivityRow | undefin
     paycrestStatus: status,
     activityLabel: sandboxTest ? 'Airtime sandbox test' : 'Bill payment',
     ...(intent.providerTransactionId ? { providerReference: intent.providerTransactionId } : {}),
+    ...(refundAction ? { refundAction } : {}),
+    ...(intent.refundTxHash ? { refundTxHash: intent.refundTxHash } : {}),
   }
 }
 
@@ -135,6 +146,8 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     ...(value.paycrestStatus !== undefined ? { paycrestStatus: value.paycrestStatus } : {}),
     ...(value.activityLabel !== undefined ? { activityLabel: value.activityLabel } : {}),
     ...(value.providerReference !== undefined ? { providerReference: value.providerReference } : {}),
+    ...(value.refundAction !== undefined ? { refundAction: value.refundAction } : {}),
+    ...(value.refundTxHash !== undefined ? { refundTxHash: value.refundTxHash } : {}),
   }
 }
 
@@ -150,8 +163,9 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
       const identity = await dependencies.verifyUser(req)
       const history = await dependencies.readHistory(identity.userId)
       const walletHistory = await dependencies.readWalletHistory?.(identity.userId) ?? []
+      const refundPolicy = dependencies.readBillsRefundPolicy?.() ?? { enabled: false, treasuryAddress: '' }
       const bills = (await dependencies.readBills?.(identity.userId) ?? []).flatMap(intent => {
-        const row = billActivityRow(intent)
+        const row = billActivityRow(intent, refundPolicy)
         return row ? [row] : []
       })
       const appPay = (await dependencies.readActions(identity.userId, 100)).flatMap(item => {
@@ -190,6 +204,13 @@ export default createPocketActivityHandler({
       // because the isolated Bills store is unavailable.
       if (error instanceof PocketBillsStoreError && error.code === 'BILLS_STORAGE_NOT_CONFIGURED') return []
       throw error
+    }
+  },
+  readBillsRefundPolicy: () => {
+    const config = readVtpassPhase0Config()
+    return {
+      enabled: config.refundsReady && config.circleTreasuryReady,
+      treasuryAddress: config.treasuryAddress,
     }
   },
 })
