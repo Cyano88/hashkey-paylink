@@ -201,6 +201,12 @@ assert.equal(userReplay.statusCode, 200)
 assert.equal(userReplay.body.data.intent.state, 'refunded')
 assert.equal(calls.created, 1)
 
+for (let attempt = 0; attempt < 7; attempt += 1) {
+  const statusCheck = response()
+  await userHandler({ method: 'POST', headers: {}, body: { intent_id: quote.intent.id } }, statusCheck)
+  assert.equal(statusCheck.statusCode, 200, 'automatic refund reconciliation must not exhaust the claim limiter')
+}
+
 guardedQuote = await store.createQuote({
   ownerId: 'privy:refund-owner', idempotencyKey: 'bill:refund:handler:0002', serviceId: 'mtn', serviceName: 'MTN Airtime VTU',
   phone: '08022222222', amountNgn: '100', amountUsdc: '0.071', fxRateNgnPerUsdc: '1408.45', payerWallet,

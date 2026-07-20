@@ -255,7 +255,19 @@ export function createPocketBillsUserRefundHandler(dependencies: UserRefundDepen
     try {
       const identity = await dependencies.verifyUser(req)
       if (!intentId) return res.status(400).json({ ok: false, error: { code: 'BILLS_REFUND_INTENT_REQUIRED', message: 'Bill payment ID is required.', retryable: false } })
-      await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'refund', windowMs: 10 * 60_000, max: 4 })
+      const existing = await dependencies.store.getIntentById(intentId)
+      if (existing.ownerId !== identity.userId) {
+        throw new PocketBillsStoreError('BILLS_FORBIDDEN', 'Bill payment does not belong to this Pocket account.', 403)
+      }
+      const checkingStatus = existing.state === 'refunding'
+        || existing.state === 'refunded'
+        || Boolean(existing.refundCircleTransactionId)
+      await dependencies.store.consumeMutationLimit({
+        ownerId: identity.userId,
+        action: checkingStatus ? 'refund-status' : 'refund-claim',
+        windowMs: 10 * 60_000,
+        max: checkingStatus ? 12 : 4,
+      })
       const result = await processPocketBillsRefund(dependencies, intentId, identity.userId)
       return res.status(result.status).json({
         ok: true,
