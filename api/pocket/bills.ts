@@ -205,12 +205,13 @@ function createResponder(req: Request, res: Response, requestId: string) {
     },
     fail(error: unknown, field?: string) {
       const mapped = mapError(error)
+      const reason = error instanceof PocketBillsStoreError ? error.code : undefined
       return res.status(mapped.status).json({
         ok: false,
         requestId,
         idempotencyKey: isPocketIdempotencyKey(rawIdempotencyKey) ? rawIdempotencyKey : 'pocket:bills:invalid-request',
         status: 'failed',
-        error: { code: mapped.code, message: mapped.message.slice(0, 220), retryable: mapped.retryable, ...(field ? { field } : {}) },
+        error: { code: mapped.code, message: mapped.message.slice(0, 220), retryable: mapped.retryable, ...(reason ? { reason } : {}), ...(field ? { field } : {}) },
       })
     },
   }
@@ -230,8 +231,8 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       const identity = await dependencies.verifyUser(req)
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'quote', windowMs: 60_000, max: 12 })
       const category = normalizeCategory(req.body?.category)
-      if (category !== 'airtime' && dependencies.config.environment !== 'sandbox') {
-        return respond.fail(new PocketBillsStoreError('BILLS_CATEGORY_LIVE_DISABLED', `${categoryLabel(category)} remains sandbox-only during this pilot.`, 503))
+      if (dependencies.config.environment === 'live' && !dependencies.config.liveCategories.includes(category)) {
+        return respond.fail(new PocketBillsStoreError('BILLS_CATEGORY_LIVE_DISABLED', `${categoryLabel(category)} is not enabled for live payments.`, 503))
       }
       const serviceId = cleanText(req.body?.service_id, 40).toLowerCase()
       const phone = category === 'data' ? normalizeDataRecipient(req.body?.phone, serviceId, dependencies.config.environment)
@@ -454,11 +455,11 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
     const respond = createResponder(req, res, requestId)
     if (req.method !== 'GET') return respond.fail(new PocketBillsStoreError('BILLS_METHOD_NOT_ALLOWED', 'Method not allowed.', 405))
     if (!dependencies.config.canVend) return respond.fail(new PocketBillsStoreError('BILLS_DISABLED', 'Bill payments are not enabled on this server.', 503))
-    if (dependencies.config.environment !== 'sandbox') return respond.fail(new PocketBillsStoreError('BILLS_CATALOG_LIVE_DISABLED', 'This Bills catalog remains sandbox-only during the pilot.', 503))
     try {
       const identity = await dependencies.verifyUser(req)
       const category = normalizeCategory(req.query?.category || 'data')
       if (category === 'airtime') return respond.fail(new PocketBillsStoreError('BILLS_INVALID_CATEGORY', 'Select Data, TV, or Electricity.'))
+      if (dependencies.config.environment === 'live' && !dependencies.config.liveCategories.includes(category)) return respond.fail(new PocketBillsStoreError('BILLS_CATEGORY_LIVE_DISABLED', `${categoryLabel(category)} is not enabled for live payments.`, 503))
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: `catalog:${category}`, windowMs: 60_000, max: 20 })
       const serviceId = cleanText(req.query?.service_id, 40).toLowerCase()
       const services = await servicesForCategory(dependencies.provider, category)
@@ -489,12 +490,13 @@ export function createPocketBillsVerifyHandler(dependencies: BillsDependencies) 
     res.setHeader('Cache-Control', 'private, no-store')
     const respond = createResponder(req, res, dependencies.requestId())
     if (req.method !== 'POST') return respond.fail(new PocketBillsStoreError('BILLS_METHOD_NOT_ALLOWED', 'Method not allowed.', 405))
-    if (!dependencies.config.canVend || dependencies.config.environment !== 'sandbox') return respond.fail(new PocketBillsStoreError('BILLS_VERIFY_DISABLED', 'Customer verification is not enabled for this pilot.', 503))
+    if (!dependencies.config.canVend) return respond.fail(new PocketBillsStoreError('BILLS_VERIFY_DISABLED', 'Customer verification is not enabled.', 503))
     try {
       const identity = await dependencies.verifyUser(req)
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'verify', windowMs: 60_000, max: 12 })
       const category = normalizeCategory(req.body?.category)
       if (category !== 'tv' && category !== 'electricity') return respond.fail(new PocketBillsStoreError('BILLS_INVALID_CATEGORY', 'Select TV or Electricity.'))
+      if (dependencies.config.environment === 'live' && !dependencies.config.liveCategories.includes(category)) return respond.fail(new PocketBillsStoreError('BILLS_CATEGORY_LIVE_DISABLED', `${categoryLabel(category)} is not enabled for live payments.`, 503))
       const serviceId = cleanText(req.body?.service_id, 40).toLowerCase()
       const services = await servicesForCategory(dependencies.provider, category)
       if (!services.some(service => service.serviceId === serviceId)) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${categoryLabel(category)} provider.`), 'serviceId')

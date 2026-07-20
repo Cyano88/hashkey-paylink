@@ -119,12 +119,13 @@ export function parsePocketBillsAvailability(value: unknown) {
   const bills = record(record(value).bills)
   const minNgn = Number(bills.minNgn)
   const maxNgn = Number(bills.maxNgn)
-  const categories = Array.isArray(bills.categories) ? bills.categories.map(String) : ['airtime']
+  const categories = Array.isArray(bills.categories) ? bills.categories.map(String) : []
   return {
     enabled: bills.enabled === true,
     environment: bills.environment === 'live' ? 'live' as const : 'sandbox' as const,
     minNgn: Number.isFinite(minNgn) && minNgn > 0 ? minNgn : 100,
     maxNgn: Number.isFinite(maxNgn) && maxNgn > 0 ? maxNgn : 1000,
+    airtimeEnabled: categories.includes('airtime'),
     dataEnabled: categories.includes('data'),
     tvEnabled: categories.includes('tv'),
     electricityEnabled: categories.includes('electricity'),
@@ -134,7 +135,7 @@ export function parsePocketBillsAvailability(value: unknown) {
 function apiError(body: unknown, status: number, fallback: string) {
   const error = record(record(body).error)
   return new PocketBillsApiError(text(error.message) || fallback, {
-    code: text(error.code),
+    code: text(error.reason) || text(error.code),
     retryable: error.retryable === true,
     status,
   })

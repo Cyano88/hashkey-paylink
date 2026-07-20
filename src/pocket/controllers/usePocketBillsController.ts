@@ -81,6 +81,7 @@ export default function usePocketBillsController({
   const [availability, setAvailability] = useState<'loading' | 'enabled' | 'disabled'>('loading')
   const [environment, setEnvironment] = useState<'sandbox' | 'live'>('sandbox')
   const [limits, setLimits] = useState({ minNgn: 100, maxNgn: 1000 })
+  const [airtimeEnabled, setAirtimeEnabled] = useState(false)
   const [dataEnabled, setDataEnabled] = useState(false)
   const [tvEnabled, setTvEnabled] = useState(false)
   const [electricityEnabled, setElectricityEnabled] = useState(false)
@@ -97,6 +98,7 @@ export default function usePocketBillsController({
   const [intent, setIntent] = useState<PocketBillIntent | null>(null)
   const [status, setStatus] = useState<FlowStatus>('idle')
   const [error, setError] = useState('')
+  const [errorCode, setErrorCode] = useState('')
   const [notice, setNotice] = useState('')
   const restoreStarted = useRef('')
   const visibleCategory = useRef(category)
@@ -110,6 +112,7 @@ export default function usePocketBillsController({
     setIntent(null)
     setStatus('idle')
     setError('')
+    setErrorCode('')
     setNotice('')
     setVariationCodeState('')
     setAmountNgnState('')
@@ -129,6 +132,7 @@ export default function usePocketBillsController({
         if (cancelled) return
         setEnvironment(result.environment)
         setLimits({ minNgn: result.minNgn, maxNgn: result.maxNgn })
+        setAirtimeEnabled(result.airtimeEnabled)
         setDataEnabled(result.dataEnabled)
         setTvEnabled(result.tvEnabled)
         setElectricityEnabled(result.electricityEnabled)
@@ -148,6 +152,7 @@ export default function usePocketBillsController({
     setIntent(null)
     setStatus('idle')
     setError('')
+    setErrorCode('')
     setNotice('')
     window.localStorage.removeItem(activeBillKey)
   }, [activeBillKey, status])
@@ -326,12 +331,14 @@ export default function usePocketBillsController({
     if (category !== 'tv' && category !== 'electricity') return
     setVerifyBusy(true)
     setError('')
+    setErrorCode('')
     try {
       const accessToken = await token()
       const result = await verifyPocketBillCustomer({ accessToken, category, serviceId, billersCode: phone, variationCode })
       setVerification(result)
     } catch (reason) {
       setVerification(null)
+      setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
       setError(reason instanceof Error ? reason.message : `Could not verify this ${category === 'tv' ? 'smartcard' : 'meter'}.`)
     } finally {
       setVerifyBusy(false)
@@ -342,6 +349,7 @@ export default function usePocketBillsController({
     if (availability !== 'enabled' || !authenticated || status === 'quoting') return
     setStatus('quoting')
     setError('')
+    setErrorCode('')
     setNotice('')
     try {
       const wallet = baseWallet ?? await ensureBaseWallet()
@@ -356,6 +364,7 @@ export default function usePocketBillsController({
       setStatus('ready')
     } catch (reason) {
       setStatus('error')
+      setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
       setError(reason instanceof Error ? reason.message : `Could not prepare the ${billLabel(category)} payment.`)
     }
   }, [amountNgn, authenticated, availability, baseWallet, category, contactPhone, ensureBaseWallet, phone, serviceId, status, token, variationCode])
@@ -364,6 +373,7 @@ export default function usePocketBillsController({
     if (!intent || status !== 'ready') return
     setStatus('paying')
     setError('')
+    setErrorCode('')
     setNotice('')
     try {
       const wallet = baseWallet ?? await ensureBaseWallet()
@@ -386,6 +396,7 @@ export default function usePocketBillsController({
     } catch (reason) {
       if (!mounted.current) return
       setStatus('error')
+      setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
       setError(reason instanceof Error ? reason.message : `${billLabel(category)} payment did not complete.`)
     }
   }, [activeBillKey, baseWallet, category, ensureBaseWallet, getEvmSession, intent, reconcile, status, token])
@@ -415,6 +426,7 @@ export default function usePocketBillsController({
     availability,
     environment,
     limits,
+    airtimeEnabled,
     dataEnabled,
     tvEnabled,
     electricityEnabled,
@@ -431,6 +443,7 @@ export default function usePocketBillsController({
     intent,
     status,
     error,
+    errorCode,
     notice,
     processing,
     formReady,

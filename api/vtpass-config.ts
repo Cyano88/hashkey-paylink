@@ -2,6 +2,7 @@ import { isAddress } from 'viem'
 import { readCircleTreasuryConfig } from './circle-developer-treasury.js'
 
 export type VtpassEnvironment = 'sandbox' | 'live'
+export type VtpassBillsCategory = 'airtime' | 'data' | 'tv' | 'electricity'
 
 export type VtpassPhase0Config = {
   environment: VtpassEnvironment
@@ -13,6 +14,7 @@ export type VtpassPhase0Config = {
   sandboxVendingEnabled: boolean
   liveVendingEnabled: boolean
   airtimeWhitelistConfirmed: boolean
+  liveCategories: VtpassBillsCategory[]
   refundsReady: boolean
   circleTreasuryReady: boolean
   treasuryAddress: string
@@ -73,6 +75,12 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   const sandboxVendingEnabled = enabled(env.VTPASS_SANDBOX_VENDING_ENABLED)
   const liveVendingEnabled = enabled(env.VTPASS_LIVE_VENDING_ENABLED)
   const airtimeWhitelistConfirmed = enabled(env.VTPASS_AIRTIME_WHITELIST_CONFIRMED)
+  const liveCategories: VtpassBillsCategory[] = [
+    ...(airtimeWhitelistConfirmed ? ['airtime' as const] : []),
+    ...(enabled(env.VTPASS_DATA_WHITELIST_CONFIRMED) ? ['data' as const] : []),
+    ...(enabled(env.VTPASS_TV_WHITELIST_CONFIRMED) ? ['tv' as const] : []),
+    ...(enabled(env.VTPASS_ELECTRICITY_WHITELIST_CONFIRMED) ? ['electricity' as const] : []),
+  ]
   const refundsReady = enabled(env.POCKET_BILLS_REFUNDS_READY)
   const circleTreasury = readCircleTreasuryConfig(env)
   const treasuryAddress = env.POCKET_BILLS_TREASURY_ADDRESS?.trim() || ''
@@ -115,7 +123,7 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   const canReadProvider = credentialsReady
   const canSandboxVend = environment === 'sandbox'
     && sandboxVendingEnabled
-    && airtimeWhitelistConfirmed
+    && liveCategories.length > 0
     && credentialsReady
     && policyReady
   const canLiveVend = billsEnabled
@@ -138,6 +146,7 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
     sandboxVendingEnabled,
     liveVendingEnabled,
     airtimeWhitelistConfirmed,
+    liveCategories,
     refundsReady,
     circleTreasuryReady: circleTreasury.verificationReady,
     treasuryAddress,
@@ -163,6 +172,7 @@ export function publicVtpassPhase0Status(config: VtpassPhase0Config) {
     sandboxVendingEnabled: config.sandboxVendingEnabled,
     liveVendingEnabled: config.liveVendingEnabled,
     airtimeWhitelistConfirmed: config.airtimeWhitelistConfirmed,
+    liveCategories: config.liveCategories,
     refundsReady: config.refundsReady,
     circleTreasuryReady: config.circleTreasuryReady,
     credentialsReady: config.credentialsReady,

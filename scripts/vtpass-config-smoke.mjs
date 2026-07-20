@@ -11,6 +11,9 @@ const base = {
   VTPASS_SANDBOX_VENDING_ENABLED: 'false',
   VTPASS_LIVE_VENDING_ENABLED: 'false',
   VTPASS_AIRTIME_WHITELIST_CONFIRMED: 'false',
+  VTPASS_DATA_WHITELIST_CONFIRMED: 'false',
+  VTPASS_TV_WHITELIST_CONFIRMED: 'false',
+  VTPASS_ELECTRICITY_WHITELIST_CONFIRMED: 'false',
   POCKET_BILLS_REFUNDS_READY: 'false',
   CIRCLE_API_KEY: 'circle-api-key',
   CIRCLE_ENTITY_SECRET: 'ab'.repeat(32),
@@ -67,6 +70,22 @@ const liveEnabled = readVtpassPhase0Config({
 assert.equal(liveEnabled.canVend, true)
 assert.equal(liveEnabled.canLiveVend, true)
 assert.equal(liveEnabled.circleTreasuryReady, true)
+assert.deepEqual(liveEnabled.liveCategories, ['airtime'])
+
+const liveAllCategories = readVtpassPhase0Config({
+  ...base,
+  VTPASS_ENVIRONMENT: 'live',
+  VTPASS_API_BASE: 'https://vtpass.com',
+  POCKET_BILLS_ENABLED: 'true',
+  VTPASS_LIVE_VENDING_ENABLED: 'true',
+  VTPASS_AIRTIME_WHITELIST_CONFIRMED: 'true',
+  VTPASS_DATA_WHITELIST_CONFIRMED: 'true',
+  VTPASS_TV_WHITELIST_CONFIRMED: 'true',
+  VTPASS_ELECTRICITY_WHITELIST_CONFIRMED: 'true',
+  POCKET_BILLS_REFUNDS_READY: 'true',
+})
+assert.equal(liveAllCategories.canLiveVend, true)
+assert.deepEqual(liveAllCategories.liveCategories, ['airtime', 'data', 'tv', 'electricity'])
 
 const liveWithoutCircleTreasury = readVtpassPhase0Config({
   ...base,

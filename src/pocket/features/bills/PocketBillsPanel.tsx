@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
+import { ArrowRight, Check, Clock3, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import PocketSlideAction from '../../components/PocketSlideAction'
@@ -78,7 +78,8 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
   const networks = view !== 'airtime'
     ? bills.dataServices.map(service => ({ value: service.serviceId, label: dataServiceLabel(service.name) }))
     : [...NETWORKS]
-  const categoryEnabled = view === 'data' ? bills.dataEnabled : view === 'tv' ? bills.tvEnabled : view === 'electricity' ? bills.electricityEnabled : true
+  const categoryEnabled = view === 'data' ? bills.dataEnabled : view === 'tv' ? bills.tvEnabled : view === 'electricity' ? bills.electricityEnabled : bills.airtimeEnabled
+  const dailyLimitReached = bills.errorCode === 'BILLS_DAILY_LIMIT_EXCEEDED'
 
   return (
     <div className="space-y-4">
@@ -245,7 +246,23 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
             )}
 
             {bills.notice && <p className={cn('text-center text-xs font-semibold', bills.status === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bills.notice}</p>}
-            {bills.error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{bills.error}</p>}
+            {bills.error && (dailyLimitReached ? (
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3.5 dark:border-blue-400/15 dark:bg-blue-400/[0.08]">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-blue-600 shadow-sm dark:bg-white/[0.08] dark:text-blue-300"><Clock3 className="h-4 w-4" /></span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-black text-gray-950 dark:text-white">Today’s Bills limit reached</span>
+                    <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">This payment is above your remaining daily allowance. Choose a lower-value option or try again after midnight WAT.</span>
+                  </span>
+                </div>
+                <button type="button" onClick={bills.edit} className="mt-3 min-h-9 w-full rounded-full border border-blue-200 bg-white text-[11px] font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-50 active:scale-[0.99] dark:border-blue-400/20 dark:bg-white/[0.05] dark:text-blue-300 dark:hover:bg-blue-400/10">Choose another option</button>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+                <span className="block text-xs font-black text-gray-900 dark:text-gray-100">Payment needs attention</span>
+                <span className="mt-1 block text-[11px] leading-4 text-gray-500 dark:text-gray-400">{bills.error}</span>
+              </div>
+            ))}
           </div>
         </>
       )}
