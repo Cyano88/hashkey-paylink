@@ -139,28 +139,33 @@ async function processPocketBillsRefund(dependencies: RefundDependencies, intent
     intent = await dependencies.store.markNeedsReview(intent.ownerId, intent.id, safeFailureReason(transaction))
     throw new PocketBillsStoreError('BILLS_REFUND_NEEDS_REVIEW', 'Refund needs manual review.', 409)
   }
-  if (transaction.state !== 'COMPLETE') {
-    if (!PROCESSING_STATES.has(transaction.state)) {
-      throw new PocketBillsStoreError('BILLS_REFUND_CIRCLE_STATE_INVALID', 'Circle returned an unknown refund state.', 502)
+
+  if (intent.refundTxHash) {
+    try {
+      const verified = await dependencies.verifyTransfer({
+        chain: 'base',
+        txHash: intent.refundTxHash,
+        payer: dependencies.circleConfig.treasuryAddress,
+        recipient: intent.payerWallet,
+        minAmount: refundAmount,
+      })
+      if (BigInt(verified.amountUnits) !== usdcAmountUnits(refundAmount)) {
+        throw new PocketBillsStoreError('BILLS_REFUND_AMOUNT_MISMATCH', 'On-chain refund amount does not exactly match the bill payment.', 409)
+      }
+      intent = await dependencies.store.markRefunded(intent.ownerId, intent.id)
+      return { status: 200, state: 'refunded', intent: publicPocketBillsIntent(intent) }
+    } catch (error) {
+      if (transaction.state === 'COMPLETE' || error instanceof PocketBillsStoreError) throw error
     }
-    return { status: 202, state: 'refund_submitted', intent: publicPocketBillsIntent(intent) }
-  }
-  if (!intent.refundTxHash) {
-    throw new PocketBillsStoreError('BILLS_REFUND_TX_HASH_MISSING', 'Circle completed the refund without a transaction hash.', 502)
   }
 
-  const verified = await dependencies.verifyTransfer({
-    chain: 'base',
-    txHash: intent.refundTxHash,
-    payer: dependencies.circleConfig.treasuryAddress,
-    recipient: intent.payerWallet,
-    minAmount: refundAmount,
-  })
-  if (BigInt(verified.amountUnits) !== usdcAmountUnits(refundAmount)) {
-    throw new PocketBillsStoreError('BILLS_REFUND_AMOUNT_MISMATCH', 'On-chain refund amount does not exactly match the bill payment.', 409)
+  if (transaction.state === 'COMPLETE') {
+    throw new PocketBillsStoreError('BILLS_REFUND_TX_HASH_MISSING', 'Circle completed the refund without a transaction hash.', 502)
   }
-  intent = await dependencies.store.markRefunded(intent.ownerId, intent.id)
-  return { status: 200, state: 'refunded', intent: publicPocketBillsIntent(intent) }
+  if (!PROCESSING_STATES.has(transaction.state)) {
+    throw new PocketBillsStoreError('BILLS_REFUND_CIRCLE_STATE_INVALID', 'Circle returned an unknown refund state.', 502)
+  }
+  return { status: 202, state: 'refund_submitted', intent: publicPocketBillsIntent(intent) }
 }
 
 function refundFailure(res: Response, error: unknown, intentId: string) {

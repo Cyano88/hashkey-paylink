@@ -100,7 +100,7 @@ const circle = {
   },
   async getTransaction() {
     return {
-      id: circleTransactionId, blockchain: 'BASE', state: 'COMPLETE', transactionType: 'OUTBOUND',
+      id: circleTransactionId, blockchain: 'BASE', state: 'CONFIRMED', transactionType: 'OUTBOUND',
       walletId, sourceAddress: treasuryAddress, destinationAddress: payerWallet, amounts: ['0.072'], tokenId: '',
       txHash: refundTxHash, refId: `pocket-bills-refund:${quote.intent.id}`, errorReason: '', errorDetails: '',
     }
