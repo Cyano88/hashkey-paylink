@@ -197,26 +197,44 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
     try {
       const identity = await dependencies.verifyUser(req)
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'quote', windowMs: 60_000, max: 12 })
+      const category = cleanText(req.body?.category, 20).toLowerCase() === 'data' ? 'data' as const : 'airtime' as const
+      if (category === 'data' && dependencies.config.environment !== 'sandbox') {
+        return respond.fail(new PocketBillsStoreError('BILLS_DATA_LIVE_DISABLED', 'Data bundles remain sandbox-only during this pilot.', 503))
+      }
       const serviceId = cleanText(req.body?.service_id, 40).toLowerCase()
       const phone = normalizeNigerianPhone(req.body?.phone)
-      const amountNgn = canonicalNgn(req.body?.amount_ngn)
+      let amountNgn = canonicalNgn(req.body?.amount_ngn)
       const payerWallet = cleanText(req.body?.payer_wallet, 80)
       if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', 'Enter a valid Nigerian phone number.'), 'phone')
       if (dependencies.config.environment === 'sandbox' && phone !== '08011111111') {
         return respond.fail(new PocketBillsStoreError(
           'BILLS_SANDBOX_PHONE_REQUIRED',
-          'VTpass sandbox Airtime uses the test number 08011111111. No real Airtime is delivered.',
+          category === 'data'
+            ? 'VTpass sandbox Data uses the test number 08011111111. No real Data bundle is delivered.'
+            : 'VTpass sandbox Airtime uses the test number 08011111111. No real Airtime is delivered.',
         ), 'phone')
       }
-      if (!amountNgn) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_AMOUNT', 'Enter a valid Naira amount.'), 'amountNgn')
       const linkedPayerWallet = await dependencies.readPayerWallet(identity.userId)
       if (!linkedPayerWallet || linkedPayerWallet.toLowerCase() !== payerWallet.toLowerCase()) {
         return respond.fail(new PocketBillsStoreError('BILLS_WALLET_NOT_LINKED', 'Open your linked Base Circle wallet first.', 409), 'payerWallet')
       }
 
-      const services = await dependencies.provider.listAirtimeServices()
+      const services = category === 'data'
+        ? await dependencies.provider.listDataServices()
+        : await dependencies.provider.listAirtimeServices()
       const service = services.find(item => item.serviceId === serviceId)
-      if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', 'Select a supported Airtime network.'), 'serviceId')
+      if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${category === 'data' ? 'Data' : 'Airtime'} network.`), 'serviceId')
+      let variationCode = ''
+      let variationName = ''
+      if (category === 'data') {
+        variationCode = cleanText(req.body?.variation_code, 100)
+        const variations = await dependencies.provider.listServiceVariations(serviceId)
+        const variation = variations.find(item => item.variationCode === variationCode)
+        if (!variation) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_VARIATION', 'Select an available Data plan.'), 'variationCode')
+        amountNgn = canonicalNgn(String(variation.amount))
+        variationName = variation.name
+      }
+      if (!amountNgn) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_AMOUNT', 'Enter a valid Naira amount.'), 'amountNgn')
       const amount = Number(amountNgn)
       if (service.minimumAmount !== null && amount < service.minimumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_BELOW_PROVIDER_LIMIT', `Minimum ${service.name} Airtime amount is NGN ${service.minimumAmount}.`), 'amountNgn')
       if (service.maximumAmount !== null && amount > service.maximumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_PROVIDER_LIMIT', `Maximum ${service.name} Airtime amount is NGN ${service.maximumAmount}.`), 'amountNgn')
@@ -226,8 +244,11 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       const created = await dependencies.store.createQuote({
         ownerId: identity.userId,
         idempotencyKey,
+        category,
         serviceId: service.serviceId,
         serviceName: service.name,
+        variationCode,
+        variationName,
         phone,
         amountNgn,
         amountUsdc: usdcForNgn(amountNgn, fx.rate),
@@ -310,12 +331,20 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
         const claim = await dependencies.store.claimVending(identity.userId, intentId)
         if (!claim.claimed) return respond.success({ intent: publicPocketBillsIntent(claim.intent) }, claim.intent.state === 'delivered' ? 'completed' : 'processing')
         try {
-          const result = await dependencies.provider.purchaseAirtime({
-            serviceId: claim.intent.serviceId,
-            phone: claim.intent.phone,
-            amountNgn: claim.intent.amountNgn,
-            requestId: claim.intent.requestId,
-          })
+          const result = claim.intent.category === 'data'
+            ? await dependencies.provider.purchaseData({
+                serviceId: claim.intent.serviceId,
+                variationCode: claim.intent.variationCode,
+                phone: claim.intent.phone,
+                amountNgn: claim.intent.amountNgn,
+                requestId: claim.intent.requestId,
+              })
+            : await dependencies.provider.purchaseAirtime({
+                serviceId: claim.intent.serviceId,
+                phone: claim.intent.phone,
+                amountNgn: claim.intent.amountNgn,
+                requestId: claim.intent.requestId,
+              })
           const settled = await dependencies.store.recordProviderResult(identity.userId, intentId, result)
           return respond.success({ intent: publicPocketBillsIntent(settled) }, settled.state === 'delivered' ? 'completed' : 'processing')
         } catch (error) {
@@ -358,7 +387,39 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
   }
 }
 
+export function createPocketBillsCatalogHandler(dependencies: BillsDependencies) {
+  return async function pocketBillsCatalogHandler(req: Request, res: Response) {
+    res.setHeader('Cache-Control', 'private, no-store')
+    const requestId = dependencies.requestId()
+    const respond = createResponder(req, res, requestId)
+    if (req.method !== 'GET') return respond.fail(new PocketBillsStoreError('BILLS_METHOD_NOT_ALLOWED', 'Method not allowed.', 405))
+    if (!dependencies.config.canVend) return respond.fail(new PocketBillsStoreError('BILLS_DISABLED', 'Bill payments are not enabled on this server.', 503))
+    if (dependencies.config.environment !== 'sandbox') return respond.fail(new PocketBillsStoreError('BILLS_DATA_LIVE_DISABLED', 'Data bundles remain sandbox-only during this pilot.', 503))
+    try {
+      const identity = await dependencies.verifyUser(req)
+      await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'catalog:data', windowMs: 60_000, max: 20 })
+      const serviceId = cleanText(req.query?.service_id, 40).toLowerCase()
+      const services = await dependencies.provider.listDataServices()
+      if (!serviceId) {
+        return respond.success({ services: services.map(service => ({ serviceId: service.serviceId, name: service.name })) })
+      }
+      const service = services.find(item => item.serviceId === serviceId)
+      if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', 'Select a supported Data network.'), 'serviceId')
+      const min = dependencies.config.minNgn ?? 0
+      const max = dependencies.config.maxNgn ?? 0
+      const variations = (await dependencies.provider.listServiceVariations(serviceId))
+        .filter(item => item.amount >= min && item.amount <= max)
+        .map(item => ({ variationCode: item.variationCode, name: item.name, amountNgn: canonicalNgn(String(item.amount)) }))
+      if (!variations.length) throw new PocketBillsStoreError('BILLS_DATA_PLANS_UNAVAILABLE', 'No Data plans are available within the current Bills limit.', 503)
+      return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations })
+    } catch (error) {
+      return respond.fail(error)
+    }
+  }
+}
+
 let defaultHandlers: {
+  catalog: ReturnType<typeof createPocketBillsCatalogHandler>
   quote: ReturnType<typeof createPocketBillsQuoteHandler>
   pay: ReturnType<typeof createPocketBillsPayHandler>
 } | null = null
@@ -380,10 +441,15 @@ function getDefaultHandlers() {
     requestId: randomUUID,
   }
   defaultHandlers = {
+    catalog: createPocketBillsCatalogHandler(dependencies),
     quote: createPocketBillsQuoteHandler(dependencies),
     pay: createPocketBillsPayHandler(dependencies),
   }
   return defaultHandlers
+}
+
+export async function pocketBillsCatalogHandler(req: Request, res: Response) {
+  return getDefaultHandlers().catalog(req, res)
 }
 
 export async function pocketBillsQuoteHandler(req: Request, res: Response) {

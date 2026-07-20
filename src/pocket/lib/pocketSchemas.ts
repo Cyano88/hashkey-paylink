@@ -364,6 +364,7 @@ export const POCKET_API = {
   evmTransferStatus: '/api/pocket/transfers/evm-status',
   pos: '/api/pocket/pos',
   billsQuote: '/api/pocket/bills/quote',
+  billsCatalog: '/api/pocket/bills/catalog',
   billsPay: '/api/pocket/bills/pay',
   billsRefund: '/api/pocket/bills/refund',
   activity: '/api/pocket/activity',

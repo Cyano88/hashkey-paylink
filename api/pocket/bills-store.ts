@@ -31,9 +31,11 @@ export type PocketBillsIntent = {
   requestFingerprint: string
   requestId: string
   state: PocketBillsIntentState
-  category: 'airtime'
+  category: 'airtime' | 'data'
   serviceId: string
   serviceName: string
+  variationCode: string
+  variationName: string
   phone: string
   amountNgn: string
   amountNgnMinor: string
@@ -116,7 +118,8 @@ export class PocketBillsStoreError extends Error {
   }
 }
 
-const SERVICE_IDS = new Set(['mtn', 'airtel', 'glo', 'etisalat', '9mobile'])
+const AIRTIME_SERVICE_IDS = new Set(['mtn', 'airtel', 'glo', 'etisalat', '9mobile'])
+const DATA_SERVICE_IDS = new Set(['mtn-data', 'airtel-data', 'glo-data', 'etisalat-data'])
 const IDEMPOTENCY_PATTERN = /^[a-zA-Z0-9:_-]{16,128}$/
 const EVM_TX_PATTERN = /^0x[a-fA-F0-9]{64}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -141,7 +144,17 @@ function normalizeStore(value: unknown): BillsStoreData {
   const current = value as Partial<BillsStoreData>
   return {
     version: 1,
-    intents: current.intents && typeof current.intents === 'object' ? current.intents : {},
+    intents: current.intents && typeof current.intents === 'object'
+      ? Object.fromEntries(Object.entries(current.intents).map(([id, stored]) => {
+          const intent = stored as PocketBillsIntent
+          return [id, {
+            ...intent,
+            category: intent.category === 'data' ? 'data' : 'airtime',
+            variationCode: cleanText(intent.variationCode, 100),
+            variationName: cleanText(intent.variationName, 140),
+          }]
+        }))
+      : {},
     idempotency: current.idempotency && typeof current.idempotency === 'object' ? current.idempotency : {},
     transactionHashes: current.transactionHashes && typeof current.transactionHashes === 'object' ? current.transactionHashes : {},
     providerTransactions: current.providerTransactions && typeof current.providerTransactions === 'object' ? current.providerTransactions : {},
@@ -296,8 +309,11 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   async function createQuote(input: {
     ownerId: string
     idempotencyKey: string
+    category?: 'airtime' | 'data'
     serviceId: string
     serviceName: string
+    variationCode?: string
+    variationName?: string
     phone: string
     amountNgn: string | number
     amountUsdc: string | number
@@ -307,8 +323,11 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   }) {
     const ownerId = cleanText(input.ownerId, 200)
     const idempotencyKey = cleanText(input.idempotencyKey, 128)
+    const category = input.category === 'data' ? 'data' : 'airtime'
     const serviceId = cleanText(input.serviceId, 40).toLowerCase()
     const serviceName = cleanText(input.serviceName, 100)
+    const variationCode = cleanText(input.variationCode, 100)
+    const variationName = cleanText(input.variationName, 140)
     const phone = cleanText(input.phone, 20).replace(/\D/g, '')
     const amountNgn = canonicalDecimal(input.amountNgn, 2, 'Naira amount')
     const amountNgnMinor = decimalToMinor(amountNgn, 2)
@@ -321,7 +340,11 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
 
     if (!ownerId) throw new PocketBillsStoreError('BILLS_AUTH_REQUIRED', 'Pocket authentication is required.', 401)
     if (!IDEMPOTENCY_PATTERN.test(idempotencyKey)) throw new PocketBillsStoreError('BILLS_INVALID_IDEMPOTENCY_KEY', 'A valid idempotency key is required.')
-    if (!SERVICE_IDS.has(serviceId) || !serviceName) throw new PocketBillsStoreError('BILLS_INVALID_SERVICE', 'A supported Airtime network is required.')
+    const supportedService = category === 'data' ? DATA_SERVICE_IDS.has(serviceId) : AIRTIME_SERVICE_IDS.has(serviceId)
+    if (!supportedService || !serviceName) throw new PocketBillsStoreError('BILLS_INVALID_SERVICE', `A supported ${category === 'data' ? 'Data' : 'Airtime'} network is required.`)
+    if (category === 'data' && (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode) || !variationName)) {
+      throw new PocketBillsStoreError('BILLS_INVALID_VARIATION', 'A valid Data plan is required.')
+    }
     if (!/^0\d{10}$/.test(phone)) throw new PocketBillsStoreError('BILLS_INVALID_PHONE', 'Enter a valid Nigerian phone number.')
     if (!isAddress(payerWallet)) throw new PocketBillsStoreError('BILLS_INVALID_WALLET', 'Open a valid Base Circle wallet first.')
     if (!isAddress(treasuryAddress)) throw new PocketBillsStoreError('BILLS_POLICY_NOT_READY', 'Bills treasury is not configured.', 503)
@@ -339,7 +362,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     // Idempotency follows the user's semantic request. Server-generated quote
     // values and expiry may drift between retries, but the original stored quote
     // must be replayed instead of producing a conflict or a second intent.
-    const fingerprint = JSON.stringify({ serviceId, phone, amountNgn, payerWallet: payerWallet.toLowerCase() })
+    const fingerprint = JSON.stringify({ category, serviceId, variationCode, phone, amountNgn, payerWallet: payerWallet.toLowerCase() })
     return mutate(store => {
       const index = idempotencyIndex(ownerId, idempotencyKey)
       const existingId = store.idempotency[index]
@@ -371,9 +394,11 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         requestFingerprint: fingerprint,
         requestId,
         state: 'quoted',
-        category: 'airtime',
+        category,
         serviceId,
         serviceName,
+        variationCode,
+        variationName,
         phone,
         amountNgn,
         amountNgnMinor,

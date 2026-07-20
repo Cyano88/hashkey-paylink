@@ -83,6 +83,20 @@ for (const call of readCalls) {
   assert.equal(call.init.headers['secret-key'], undefined)
 }
 
+const dataReadCalls = []
+const dataReadClient = queuedClient([
+  jsonResponse({ response_description: '000', content: [
+    { serviceID: 'mtn-data', name: 'MTN Data', minimium_amount: '1', maximum_amount: '1000000', convinience_fee: '0 %', product_type: 'fix', image: 'https://sandbox.vtpass.com/mtn-data.png' },
+    { serviceID: 'smile-direct', name: 'Smile Payment' },
+  ] }),
+  jsonResponse({ response_description: '000', content: { serviceID: 'mtn-data', variations: [
+    { variation_code: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', variation_amount: '100.00', fixedPrice: 'Yes' },
+    { variation_code: 'invalid plan', name: 'Ignored', variation_amount: '200.00', fixedPrice: 'Yes' },
+  ] } }),
+], dataReadCalls)
+assert.deepEqual(await dataReadClient.listDataServices(), [{ serviceId: 'mtn-data', name: 'MTN Data', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0 %', productType: 'fix', imageUrl: 'https://sandbox.vtpass.com/mtn-data.png' }])
+assert.deepEqual(await dataReadClient.listServiceVariations('mtn-data'), [{ variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amount: 100, fixedPrice: true }])
+
 const deliveredCalls = []
 const deliveredClient = queuedClient([jsonResponse({
   code: '000',
@@ -103,6 +117,25 @@ assert.equal(deliveredCalls[0].init.headers['public-key'], undefined)
 assert.deepEqual(JSON.parse(deliveredCalls[0].init.body), {
   request_id: '202607191105fixed123',
   serviceID: 'mtn',
+  amount: 100,
+  phone: '08011111111',
+})
+
+const dataPurchaseCalls = []
+const dataPurchaseClient = queuedClient([jsonResponse({
+  code: '000',
+  content: { transactions: { status: 'delivered', transactionId: 'data-tx-1', product_name: 'MTN Data', unique_element: '08011111111', amount: '100' } },
+  response_description: 'TRANSACTION SUCCESSFUL',
+  requestId: '202607191105fixed123',
+  amount: 100,
+})], dataPurchaseCalls)
+const dataDelivered = await dataPurchaseClient.purchaseData({ serviceId: 'mtn-data', variationCode: 'mtn-100mb-100', phone: '08011111111', amountNgn: '100' })
+assert.equal(dataDelivered.status, 'delivered')
+assert.deepEqual(JSON.parse(dataPurchaseCalls[0].init.body), {
+  request_id: '202607191105fixed123',
+  serviceID: 'mtn-data',
+  billersCode: '08011111111',
+  variation_code: 'mtn-100mb-100',
   amount: 100,
   phone: '08011111111',
 })
@@ -187,6 +220,10 @@ await assert.rejects(
 await assert.rejects(
   () => deliveredClient.purchaseAirtime({ serviceId: 'mtn', phone: '08011111111', amountNgn: 100, requestId: '202607181105older' }),
   error => error instanceof VtpassClientError && error.code === 'VTPASS_INVALID_REQUEST_ID_DATE',
+)
+await assert.rejects(
+  () => dataPurchaseClient.purchaseData({ serviceId: 'mtn-data', variationCode: 'invalid plan', phone: '08011111111', amountNgn: 100 }),
+  error => error instanceof VtpassClientError && error.code === 'VTPASS_INVALID_VARIATION',
 )
 
 console.log('VTpass client adapter smoke tests passed.')

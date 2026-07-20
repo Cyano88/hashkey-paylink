@@ -22,6 +22,7 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
   const ensureBaseWallet = useCallback(async () => walletController.ensureWallet('base'), [walletController])
   const bills = usePocketBillsController({
+    view,
     authenticated,
     baseWallet: wallets.wallets.base,
     getAccessToken,

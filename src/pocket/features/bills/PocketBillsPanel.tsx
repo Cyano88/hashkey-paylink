@@ -63,6 +63,10 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
       : bills.status === 'paying' || bills.status === 'confirming'
         ? 'pending'
         : 'idle'
+  const isData = view === 'data'
+  const networks = isData
+    ? bills.dataServices.map(service => ({ value: service.serviceId, label: service.name.replace(/\s+Data$/i, '') }))
+    : [...NETWORKS]
 
   return (
     <div className="space-y-4">
@@ -83,20 +87,20 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
         <div className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
           <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">Bills pilot is not open</h3>
-          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">Airtime payment remains hidden until the protected provider and refund controls are enabled.</p>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">Bill payments remain hidden until the protected provider and refund controls are enabled.</p>
         </div>
-      ) : !authenticated ? <SignInCard /> : view !== 'airtime' ? (
+      ) : !authenticated ? <SignInCard /> : (view === 'data' && !bills.dataEnabled) || (view !== 'airtime' && view !== 'data') ? (
         <div className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
-          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">Coming after Airtime</h3>
-          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">The first Bills pilot supports Nigerian Airtime only.</p>
+          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">{view === 'data' ? 'Data pilot unavailable' : 'Coming after Airtime'}</h3>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{view === 'data' ? 'Data bundles remain sandbox-only until the live product is separately approved.' : 'TV and Electricity follow after the protected mobile Bills pilot.'}</p>
         </div>
       ) : (
         <>
           {bills.environment === 'sandbox' && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
               <span className="font-black">Sandbox test</span>
-              <span className="block">VTpass simulates delivery to 08011111111. Your Base USDC payment is real; no Airtime is sent to a phone.</span>
+              <span className="block">VTpass simulates {isData ? 'Data' : 'Airtime'} delivery to 08011111111. Your Base USDC payment is real; no {isData ? 'Data bundle' : 'Airtime'} is sent to a phone.</span>
             </div>
           )}
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
@@ -117,24 +121,35 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
             <div>
               <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Mobile network</p>
               <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-gray-200 bg-white p-1.5 dark:border-white/10 dark:bg-[#17181d]">
-                {NETWORKS.map(network => (
+                {networks.map(network => (
                   <button key={network.value} type="button" disabled={locked} onClick={() => bills.setServiceId(network.value)} className={cn('min-h-10 rounded-xl border px-1 text-[11px] font-black transition-all', bills.serviceId === network.value ? 'border-blue-500/30 bg-blue-500/10 text-blue-700 shadow-sm dark:text-blue-300' : 'border-transparent text-gray-500 hover:bg-blue-500/[0.06] hover:text-blue-700 dark:text-gray-400 dark:hover:text-blue-300', locked && 'cursor-not-allowed opacity-60')}>{network.label}</button>
                 ))}
               </div>
+              {isData && bills.catalogBusy && !networks.length && <span className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-gray-400"><Loader2 className="h-3 w-3 animate-spin" />Loading networks</span>}
             </div>
 
             <label className="block">
               <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? 'VTpass test number' : 'Phone number'}</span>
               <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked || bills.environment === 'sandbox'} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
             </label>
-            <label className="block">
-              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Airtime amount</span>
-              <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]">
-                <span className="text-sm font-black text-gray-400">₦</span>
-                <input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" />
-              </span>
-              <span className="mt-1.5 block text-[10px] font-medium text-gray-400">{money(String(bills.limits.minNgn))}–{money(String(bills.limits.maxNgn))} during the pilot</span>
-            </label>
+            {isData ? (
+              <label className="block">
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Data plan</span>
+                <select disabled={locked || bills.catalogBusy || !bills.dataVariations.length} value={bills.variationCode} onChange={event => bills.setVariationCode(event.target.value)} className="mt-1 min-h-12 w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900 outline-none transition hover:border-blue-300 focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-[#17181d] dark:text-white">
+                  <option value="">{bills.catalogBusy ? 'Loading plans…' : 'Choose a plan'}</option>
+                  {bills.dataVariations.map(plan => <option key={plan.variationCode} value={plan.variationCode}>{plan.name}</option>)}
+                </select>
+              </label>
+            ) : (
+              <label className="block">
+                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Airtime amount</span>
+                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]">
+                  <span className="text-sm font-black text-gray-400">₦</span>
+                  <input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" />
+                </span>
+                <span className="mt-1.5 block text-[10px] font-medium text-gray-400">{money(String(bills.limits.minNgn))}–{money(String(bills.limits.maxNgn))} during the pilot</span>
+              </label>
+            )}
 
             {!showPayment && !reviewBlocked && (
               <button type="button" onClick={() => void bills.review()} disabled={!bills.formReady || !baseAddress || bills.processing} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-4 text-sm font-bold text-white shadow-sm transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-white dark:text-gray-950">
@@ -147,7 +162,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
             {showPayment && bills.intent && (
               <>
                 <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-white/10 dark:bg-white/[0.04]">
-                  <div className="flex justify-between gap-3"><span className="text-gray-500">Airtime</span><span className="font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-gray-500">{isData ? bills.intent.variationName : 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
                   <div className="flex justify-between gap-3"><span className="text-gray-500">Mobile number</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
                   <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10"><span className="text-gray-500">Pay from Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.amountUsdc))} USDC</span></div>
                 </div>
@@ -155,7 +170,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
                   status={slideStatus}
                   disabled={bills.status !== 'ready' || Number(bills.intent.amountUsdc) > baseBalance}
                   onConfirm={() => void bills.pay()}
-                  labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? 'Running Airtime test' : 'Delivering Airtime', successful: bills.environment === 'sandbox' ? 'Test complete' : 'Airtime sent' }}
+                  labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? `Running ${isData ? 'Data' : 'Airtime'} test` : `Delivering ${isData ? 'Data' : 'Airtime'}`, successful: bills.environment === 'sandbox' ? 'Test complete' : `${isData ? 'Data' : 'Airtime'} sent` }}
                 />
               </>
             )}

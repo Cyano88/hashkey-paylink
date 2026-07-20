@@ -5,16 +5,19 @@ import {
   PocketBillsApiError,
   confirmPocketAirtime,
   preparePocketAirtime,
+  quotePocketData,
   quotePocketAirtime,
+  readPocketDataCatalog,
   readPocketBillsAvailability,
   refreshPocketAirtime,
+  type PocketDataService,
+  type PocketDataVariation,
   type PocketBillIntent,
 } from '../api/pocketBillsClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 
 type AccessTokenReader = () => Promise<string | null>
 type FlowStatus = 'idle' | 'quoting' | 'ready' | 'paying' | 'confirming' | 'processing' | 'successful' | 'error'
-const ACTIVE_BILL_KEY = 'pocket:bills:active'
 const VTPASS_SANDBOX_SUCCESS_PHONE = '08011111111'
 
 function sleep(ms: number) {
@@ -25,13 +28,13 @@ function finalState(intent: PocketBillIntent) {
   return ['delivered', 'failed', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)
 }
 
-function persistActive(intentId: string, txHash = '') {
-  window.localStorage.setItem(ACTIVE_BILL_KEY, JSON.stringify({ intentId, txHash }))
+function persistActive(key: string, intentId: string, txHash = '') {
+  window.localStorage.setItem(key, JSON.stringify({ intentId, txHash }))
 }
 
-function readActive(): { intentId: string; txHash: string } | null {
+function readActive(key: string): { intentId: string; txHash: string } | null {
   try {
-    const value = JSON.parse(window.localStorage.getItem(ACTIVE_BILL_KEY) || '{}')
+    const value = JSON.parse(window.localStorage.getItem(key) || '{}')
     return typeof value.intentId === 'string' && value.intentId
       ? { intentId: value.intentId, txHash: typeof value.txHash === 'string' ? value.txHash : '' }
       : null
@@ -41,6 +44,7 @@ function readActive(): { intentId: string; txHash: string } | null {
 }
 
 export default function usePocketBillsController({
+  view,
   authenticated,
   baseWallet,
   getAccessToken,
@@ -48,6 +52,7 @@ export default function usePocketBillsController({
   getEvmSession,
   refreshBalances,
 }: {
+  view: 'airtime' | 'data' | 'tv' | 'electricity'
   authenticated: boolean
   baseWallet?: CirclePocketWallet
   getAccessToken: AccessTokenReader
@@ -55,20 +60,45 @@ export default function usePocketBillsController({
   getEvmSession: (walletAddress: string) => Promise<CircleEvmEmailSession>
   refreshBalances: () => Promise<void>
 }) {
+  const category = view === 'data' ? 'data' as const : 'airtime' as const
+  const activeBillKey = `pocket:bills:active:${category}`
   const [availability, setAvailability] = useState<'loading' | 'enabled' | 'disabled'>('loading')
   const [environment, setEnvironment] = useState<'sandbox' | 'live'>('sandbox')
   const [limits, setLimits] = useState({ minNgn: 100, maxNgn: 1000 })
+  const [dataEnabled, setDataEnabled] = useState(false)
   const [serviceId, setServiceIdState] = useState('mtn')
   const [phone, setPhoneState] = useState('')
   const [amountNgn, setAmountNgnState] = useState('')
+  const [variationCode, setVariationCodeState] = useState('')
+  const [dataServices, setDataServices] = useState<PocketDataService[]>([])
+  const [dataVariations, setDataVariations] = useState<PocketDataVariation[]>([])
+  const [catalogBusy, setCatalogBusy] = useState(false)
   const [intent, setIntent] = useState<PocketBillIntent | null>(null)
   const [status, setStatus] = useState<FlowStatus>('idle')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const restoreStarted = useRef(false)
+  const restoreStarted = useRef('')
+  const visibleCategory = useRef(category)
   const mounted = useRef(true)
 
   useEffect(() => () => { mounted.current = false }, [])
+
+  useEffect(() => {
+    if (visibleCategory.current === category) return
+    visibleCategory.current = category
+    setIntent(null)
+    setStatus('idle')
+    setError('')
+    setNotice('')
+    setVariationCodeState('')
+    setAmountNgnState('')
+  }, [category])
+
+  useEffect(() => {
+    if (view === 'airtime' && !['mtn', 'airtel', 'glo', 'etisalat'].includes(serviceId)) {
+      setServiceIdState('mtn')
+    }
+  }, [serviceId, view])
 
   useEffect(() => {
     let cancelled = false
@@ -77,6 +107,7 @@ export default function usePocketBillsController({
         if (cancelled) return
         setEnvironment(result.environment)
         setLimits({ minNgn: result.minNgn, maxNgn: result.maxNgn })
+        setDataEnabled(result.dataEnabled)
         if (result.environment === 'sandbox') setPhoneState(VTPASS_SANDBOX_SUCCESS_PHONE)
         setAvailability(result.enabled ? 'enabled' : 'disabled')
       })
@@ -90,15 +121,28 @@ export default function usePocketBillsController({
     setStatus('idle')
     setError('')
     setNotice('')
-    window.localStorage.removeItem(ACTIVE_BILL_KEY)
-  }, [status])
+    window.localStorage.removeItem(activeBillKey)
+  }, [activeBillKey, status])
 
-  const setServiceId = useCallback((value: string) => { setServiceIdState(value); resetResult() }, [resetResult])
+  const setServiceId = useCallback((value: string) => {
+    setServiceIdState(value)
+    setVariationCodeState('')
+    setAmountNgnState('')
+    setDataVariations([])
+    resetResult()
+  }, [resetResult])
   const setPhone = useCallback((value: string) => { setPhoneState(value.replace(/[^\d+]/g, '').slice(0, 14)); resetResult() }, [resetResult])
   const setAmountNgn = useCallback((value: string) => {
     if (/^\d*(?:\.\d{0,2})?$/.test(value)) setAmountNgnState(value)
     resetResult()
   }, [resetResult])
+
+  const setVariationCode = useCallback((value: string) => {
+    const plan = dataVariations.find(item => item.variationCode === value)
+    setVariationCodeState(plan?.variationCode ?? '')
+    setAmountNgnState(plan?.amountNgn ?? '')
+    resetResult()
+  }, [dataVariations, resetResult])
 
   const token = useCallback(async () => {
     const accessToken = await getAccessToken()
@@ -112,19 +156,19 @@ export default function usePocketBillsController({
     if (next.state === 'delivered') {
       setStatus('successful')
       setNotice(environment === 'sandbox' ? 'VTpass sandbox test completed.' : `${next.serviceName} sent to ${next.phone}`)
-      window.localStorage.removeItem(ACTIVE_BILL_KEY)
+      window.localStorage.removeItem(activeBillKey)
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       void refreshBalances().catch(() => undefined)
     } else if (next.state === 'refunded') {
       setStatus('error')
-      setError('The Airtime payment was refunded. No retry is needed.')
-      window.localStorage.removeItem(ACTIVE_BILL_KEY)
+      setError(`The ${category === 'data' ? 'Data' : 'Airtime'} payment was refunded. No retry is needed.`)
+      window.localStorage.removeItem(activeBillKey)
     } else if (next.state === 'provider_failed_unverified') {
       setStatus('processing')
-      setNotice('Verifying the final Airtime delivery status. Do not retry.')
+      setNotice(`Verifying the final ${category === 'data' ? 'Data' : 'Airtime'} delivery status. Do not retry.`)
     } else if (next.state === 'refund_eligible') {
       setStatus('error')
-      setError('VTpass confirmed the Airtime purchase failed. Claim your refund from Bills activity.')
+      setError(`VTpass confirmed the ${category === 'data' ? 'Data' : 'Airtime'} purchase failed. Claim your refund from Bills activity.`)
     } else if (next.state === 'refund_pending') {
       setStatus('error')
       setError('This earlier refund requires manual review; do not retry.')
@@ -133,16 +177,16 @@ export default function usePocketBillsController({
       setError('Your USDC refund is processing. Check Bills activity for confirmation.')
     } else if (next.state === 'failed') {
       setStatus('error')
-      setError(next.failureReason || 'Airtime was not delivered. No payment was completed.')
-      window.localStorage.removeItem(ACTIVE_BILL_KEY)
+      setError(next.failureReason || `${category === 'data' ? 'Data' : 'Airtime'} was not delivered. No payment was completed.`)
+      window.localStorage.removeItem(activeBillKey)
     } else if (next.state === 'needs_review') {
       setStatus('error')
       setError('This payment needs review. Check Bills activity before retrying.')
     } else {
       setStatus('processing')
-      setNotice('Payment received. Airtime delivery is processing.')
+      setNotice(`Payment received. ${category === 'data' ? 'Data' : 'Airtime'} delivery is processing.`)
     }
-  }, [environment, refreshBalances])
+  }, [activeBillKey, category, environment, refreshBalances])
 
   const reconcile = useCallback(async (intentId: string, txHash: string, accessToken: string) => {
     let next: PocketBillIntent | null = null
@@ -165,7 +209,7 @@ export default function usePocketBillsController({
     for (let attempt = 0; !finalState(next) && attempt < 12; attempt += 1) {
       if (mounted.current) {
         setStatus('processing')
-        setNotice('Payment received. Airtime delivery is processing.')
+        setNotice(`Payment received. ${category === 'data' ? 'Data' : 'Airtime'} delivery is processing.`)
       }
       await sleep(attempt < 5 ? 2_000 : 5_000)
       next = await refreshPocketAirtime({ accessToken, intentId, refresh: true })
@@ -173,37 +217,72 @@ export default function usePocketBillsController({
     }
     settleResult(next)
     return next
-  }, [settleResult])
+  }, [category, settleResult])
 
   useEffect(() => {
-    if (!authenticated || availability !== 'enabled' || restoreStarted.current) return
-    const active = readActive()
+    if (!authenticated || availability !== 'enabled' || restoreStarted.current === activeBillKey) return
+    const active = readActive(activeBillKey)
     if (!active) return
-    restoreStarted.current = true
+    restoreStarted.current = activeBillKey
     setStatus(active.txHash ? 'confirming' : 'processing')
     void token()
       .then(accessToken => reconcile(active.intentId, active.txHash, accessToken))
       .catch(reason => {
         if (!mounted.current) return
         setStatus('error')
-        setError(reason instanceof Error ? reason.message : 'Could not restore the Airtime payment.')
+        setError(reason instanceof Error ? reason.message : `Could not restore the ${category === 'data' ? 'Data' : 'Airtime'} payment.`)
       })
-  }, [authenticated, availability, reconcile, token])
+  }, [activeBillKey, authenticated, availability, category, reconcile, token])
 
   useEffect(() => {
     if (!intent || status !== 'ready') return
     const remaining = intent.quoteExpiresAt - Date.now()
     if (remaining <= 0) {
       setStatus('error')
-      setError('The Airtime quote expired. Review the payment again.')
+      setError(`The ${category === 'data' ? 'Data' : 'Airtime'} quote expired. Review the payment again.`)
       return
     }
     const timeout = window.setTimeout(() => {
       setStatus('error')
-      setError('The Airtime quote expired. Review the payment again.')
+      setError(`The ${category === 'data' ? 'Data' : 'Airtime'} quote expired. Review the payment again.`)
     }, remaining)
     return () => window.clearTimeout(timeout)
-  }, [intent, status])
+  }, [category, intent, status])
+
+  useEffect(() => {
+    if (!authenticated || availability !== 'enabled' || view !== 'data' || !dataEnabled) return
+    let cancelled = false
+    setCatalogBusy(true)
+    void token()
+      .then(accessToken => readPocketDataCatalog({ accessToken }))
+      .then(result => {
+        if (cancelled) return
+        setDataServices(result.services)
+        const preferred = result.services.some(item => item.serviceId === serviceId) ? serviceId : result.services[0]?.serviceId ?? ''
+        setServiceIdState(preferred)
+      })
+      .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Data networks are temporarily unavailable.') })
+      .finally(() => { if (!cancelled) setCatalogBusy(false) })
+    return () => { cancelled = true }
+  }, [authenticated, availability, dataEnabled, token, view])
+
+  useEffect(() => {
+    if (!authenticated || availability !== 'enabled' || view !== 'data' || !dataEnabled || !serviceId || !dataServices.some(item => item.serviceId === serviceId)) return
+    let cancelled = false
+    setCatalogBusy(true)
+    setDataVariations([])
+    setVariationCodeState('')
+    setAmountNgnState('')
+    void token()
+      .then(accessToken => readPocketDataCatalog({ accessToken, serviceId }))
+      .then(result => {
+        if (cancelled) return
+        setDataVariations(result.variations)
+      })
+      .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Data plans are temporarily unavailable.') })
+      .finally(() => { if (!cancelled) setCatalogBusy(false) })
+    return () => { cancelled = true }
+  }, [authenticated, availability, dataEnabled, dataServices, serviceId, token, view])
 
   const review = useCallback(async () => {
     if (availability !== 'enabled' || !authenticated || status === 'quoting') return
@@ -214,15 +293,17 @@ export default function usePocketBillsController({
       const wallet = baseWallet ?? await ensureBaseWallet()
       if (!wallet) throw new Error('Base wallet setup was cancelled.')
       const accessToken = await token()
-      const result = await quotePocketAirtime({ accessToken, serviceId, phone, amountNgn, payerWallet: wallet.address })
-      if (result.intent.quoteExpiresAt <= Date.now()) throw new Error('The Airtime quote expired. Review it again.')
+      const result = category === 'data'
+        ? await quotePocketData({ accessToken, serviceId, variationCode, phone, payerWallet: wallet.address })
+        : await quotePocketAirtime({ accessToken, serviceId, phone, amountNgn, payerWallet: wallet.address })
+      if (result.intent.quoteExpiresAt <= Date.now()) throw new Error(`The ${category === 'data' ? 'Data' : 'Airtime'} quote expired. Review it again.`)
       setIntent(result.intent)
       setStatus('ready')
     } catch (reason) {
       setStatus('error')
-      setError(reason instanceof Error ? reason.message : 'Could not prepare the Airtime payment.')
+      setError(reason instanceof Error ? reason.message : `Could not prepare the ${category === 'data' ? 'Data' : 'Airtime'} payment.`)
     }
-  }, [amountNgn, authenticated, availability, baseWallet, ensureBaseWallet, phone, serviceId, status, token])
+  }, [amountNgn, authenticated, availability, baseWallet, category, ensureBaseWallet, phone, serviceId, status, token, variationCode])
 
   const pay = useCallback(async () => {
     if (!intent || status !== 'ready') return
@@ -244,15 +325,15 @@ export default function usePocketBillsController({
         confirm: false,
       })
       if (!transfer.txHash) throw new Error('Circle did not return a Base transaction hash. Check Activity before retrying.')
-      persistActive(prepared.id, transfer.txHash)
+      persistActive(activeBillKey, prepared.id, transfer.txHash)
       setStatus('confirming')
       await reconcile(prepared.id, transfer.txHash, accessToken)
     } catch (reason) {
       if (!mounted.current) return
       setStatus('error')
-      setError(reason instanceof Error ? reason.message : 'Airtime payment did not complete.')
+      setError(reason instanceof Error ? reason.message : `${category === 'data' ? 'Data' : 'Airtime'} payment did not complete.`)
     }
-  }, [baseWallet, ensureBaseWallet, getEvmSession, intent, reconcile, status, token])
+  }, [activeBillKey, baseWallet, category, ensureBaseWallet, getEvmSession, intent, reconcile, status, token])
 
   const refresh = useCallback(async () => {
     if (!intent || !authenticated) return
@@ -261,23 +342,29 @@ export default function usePocketBillsController({
       await reconcile(intent.id, intent.txHash, accessToken)
     } catch (reason) {
       if (!mounted.current) return
-      setError(reason instanceof Error ? reason.message : 'Could not refresh the Airtime payment.')
+      setError(reason instanceof Error ? reason.message : `Could not refresh the ${category === 'data' ? 'Data' : 'Airtime'} payment.`)
     }
-  }, [authenticated, intent, reconcile, token])
+  }, [authenticated, category, intent, reconcile, token])
 
   const processing = ['quoting', 'paying', 'confirming', 'processing'].includes(status)
   const formReady = /^0\d{10}$/.test(phone)
     && (environment !== 'sandbox' || phone === VTPASS_SANDBOX_SUCCESS_PHONE)
     && Number(amountNgn) >= limits.minNgn
     && Number(amountNgn) <= limits.maxNgn
+    && (category !== 'data' || Boolean(variationCode))
 
   return {
     availability,
     environment,
     limits,
+    dataEnabled,
     serviceId,
     phone,
     amountNgn,
+    variationCode,
+    dataServices,
+    dataVariations,
+    catalogBusy,
     intent,
     status,
     error,
@@ -287,6 +374,7 @@ export default function usePocketBillsController({
     setServiceId,
     setPhone,
     setAmountNgn,
+    setVariationCode,
     review,
     pay,
     refresh,

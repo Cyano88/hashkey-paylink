@@ -33,6 +33,13 @@ export type VtpassServiceCategory = {
   name: string
 }
 
+export type VtpassVariation = {
+  variationCode: string
+  name: string
+  amount: number
+  fixedPrice: boolean
+}
+
 export class VtpassClientError extends Error {
   readonly code: string
   readonly status: number
@@ -69,6 +76,7 @@ type VtpassClientOptions = {
 }
 
 const AIRTIME_SERVICE_IDS = new Set(['mtn', 'airtel', 'glo', 'etisalat', '9mobile'])
+const DATA_SERVICE_IDS = new Set(['mtn-data', 'airtel-data', 'glo-data', 'etisalat-data'])
 const FAILURE_CODES = new Set([
   '010', '011', '012', '013', '014', '015', '016', '017', '018', '019',
   '021', '022', '023', '024', '025', '026', '027', '028', '030', '031',
@@ -155,12 +163,28 @@ function normalizeAmount(value: unknown, config: VtpassPhase0Config) {
   return amount
 }
 
-function normalizeServiceId(value: unknown) {
+function normalizeAirtimeServiceId(value: unknown) {
   const serviceId = text(value).toLowerCase()
   if (!AIRTIME_SERVICE_IDS.has(serviceId)) {
     throw new VtpassClientError({ code: 'VTPASS_INVALID_SERVICE', message: 'Unsupported Airtime network.', status: 400 })
   }
   return serviceId
+}
+
+function normalizeDataServiceId(value: unknown) {
+  const serviceId = text(value).toLowerCase()
+  if (!DATA_SERVICE_IDS.has(serviceId)) {
+    throw new VtpassClientError({ code: 'VTPASS_INVALID_SERVICE', message: 'Unsupported Data network.', status: 400 })
+  }
+  return serviceId
+}
+
+function normalizeVariationCode(value: unknown) {
+  const variationCode = text(value)
+  if (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode)) {
+    throw new VtpassClientError({ code: 'VTPASS_INVALID_VARIATION', message: 'Select a valid Data plan.', status: 400 })
+  }
+  return variationCode
 }
 
 function lagosTimePrefix(date: Date) {
@@ -360,6 +384,46 @@ export function createVtpassClient(options: VtpassClientOptions) {
     })
   }
 
+  async function listDataServices(): Promise<VtpassService[]> {
+    const { body } = await requestJson('/api/services?identifier=data', 'GET')
+    const content = record(body).content
+    if (!Array.isArray(content)) throw new VtpassClientError({ code: 'VTPASS_INVALID_RESPONSE', message: 'VTpass Data catalog response was invalid.', status: 503, retryable: true })
+    return content.flatMap((item): VtpassService[] => {
+      const value = record(item)
+      const serviceId = text(value.serviceID).toLowerCase()
+      const name = text(value.name)
+      if (!DATA_SERVICE_IDS.has(serviceId) || !name) return []
+      const imageUrl = text(value.image)
+      return [{
+        serviceId,
+        name,
+        minimumAmount: finiteNumber(value.minimium_amount ?? value.minimum_amount),
+        maximumAmount: finiteNumber(value.maximum_amount),
+        convenienceFee: text(value.convinience_fee ?? value.convenience_fee),
+        productType: text(value.product_type),
+        imageUrl: /^https:\/\//i.test(imageUrl) ? imageUrl : '',
+      }]
+    })
+  }
+
+  async function listServiceVariations(serviceIdInput: string): Promise<VtpassVariation[]> {
+    const serviceId = normalizeDataServiceId(serviceIdInput)
+    const { body } = await requestJson(`/api/service-variations?serviceID=${encodeURIComponent(serviceId)}`, 'GET')
+    const content = record(record(body).content)
+    const variations = Array.isArray(content.variations)
+      ? content.variations
+      : Array.isArray(content.varations) ? content.varations : null
+    if (!variations) throw new VtpassClientError({ code: 'VTPASS_INVALID_RESPONSE', message: 'VTpass Data plans response was invalid.', status: 503, retryable: true })
+    return variations.flatMap((item): VtpassVariation[] => {
+      const value = record(item)
+      const variationCode = text(value.variation_code)
+      const name = text(value.name).slice(0, 140)
+      const amount = finiteNumber(value.variation_amount)
+      if (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode) || !name || amount === null || amount <= 0) return []
+      return [{ variationCode, name, amount, fixedPrice: text(value.fixedPrice).toLowerCase() === 'yes' }]
+    })
+  }
+
   async function purchaseAirtime(input: { serviceId: string; phone: string; amountNgn: string | number; requestId?: string }) {
     assertPurchaseAllowed(config)
     const currentTime = now()
@@ -367,10 +431,33 @@ export function createVtpassClient(options: VtpassClientOptions) {
       ? normalizeRequestId(input.requestId)
       : createVtpassRequestId(currentTime, requestSuffix())
     assertPurchaseRequestIdDate(requestId, currentTime)
-    const serviceID = normalizeServiceId(input.serviceId)
+    const serviceID = normalizeAirtimeServiceId(input.serviceId)
     const phone = normalizePhone(input.phone, config.environment)
     const amount = normalizeAmount(input.amountNgn, config)
     const { body } = await requestJson('/api/pay', 'POST', { request_id: requestId, serviceID, amount, phone }, true)
+    return normalizeVtpassTransaction(body, requestId)
+  }
+
+
+  async function purchaseData(input: { serviceId: string; variationCode: string; phone: string; amountNgn: string | number; requestId?: string }) {
+    assertPurchaseAllowed(config)
+    const currentTime = now()
+    const requestId = input.requestId
+      ? normalizeRequestId(input.requestId)
+      : createVtpassRequestId(currentTime, requestSuffix())
+    assertPurchaseRequestIdDate(requestId, currentTime)
+    const serviceID = normalizeDataServiceId(input.serviceId)
+    const variation_code = normalizeVariationCode(input.variationCode)
+    const phone = normalizePhone(input.phone, config.environment)
+    const amount = normalizeAmount(input.amountNgn, config)
+    const { body } = await requestJson('/api/pay', 'POST', {
+      request_id: requestId,
+      serviceID,
+      billersCode: phone,
+      variation_code,
+      amount,
+      phone,
+    }, true)
     return normalizeVtpassTransaction(body, requestId)
   }
 
@@ -384,7 +471,10 @@ export function createVtpassClient(options: VtpassClientOptions) {
     getWalletBalance,
     listServiceCategories,
     listAirtimeServices,
+    listDataServices,
+    listServiceVariations,
     purchaseAirtime,
+    purchaseData,
     requeryTransaction,
   }
 }
