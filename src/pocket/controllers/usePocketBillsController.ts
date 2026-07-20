@@ -20,6 +20,10 @@ type AccessTokenReader = () => Promise<string | null>
 type FlowStatus = 'idle' | 'quoting' | 'ready' | 'paying' | 'confirming' | 'processing' | 'successful' | 'error'
 const VTPASS_SANDBOX_SUCCESS_PHONE = '08011111111'
 
+function sandboxDataRecipient(serviceId: string) {
+  return serviceId === 'spectranet' ? '1212121212' : VTPASS_SANDBOX_SUCCESS_PHONE
+}
+
 function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
@@ -126,11 +130,12 @@ export default function usePocketBillsController({
 
   const setServiceId = useCallback((value: string) => {
     setServiceIdState(value)
+    if (category === 'data' && environment === 'sandbox') setPhoneState(sandboxDataRecipient(value))
     setVariationCodeState('')
     setAmountNgnState('')
     setDataVariations([])
     resetResult()
-  }, [resetResult])
+  }, [category, environment, resetResult])
   const setPhone = useCallback((value: string) => { setPhoneState(value.replace(/[^\d+]/g, '').slice(0, 14)); resetResult() }, [resetResult])
   const setAmountNgn = useCallback((value: string) => {
     if (/^\d*(?:\.\d{0,2})?$/.test(value)) setAmountNgnState(value)
@@ -260,11 +265,12 @@ export default function usePocketBillsController({
         setDataServices(result.services)
         const preferred = result.services.some(item => item.serviceId === serviceId) ? serviceId : result.services[0]?.serviceId ?? ''
         setServiceIdState(preferred)
+        if (environment === 'sandbox' && preferred) setPhoneState(sandboxDataRecipient(preferred))
       })
       .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Data networks are temporarily unavailable.') })
       .finally(() => { if (!cancelled) setCatalogBusy(false) })
     return () => { cancelled = true }
-  }, [authenticated, availability, dataEnabled, token, view])
+  }, [authenticated, availability, dataEnabled, environment, token, view])
 
   useEffect(() => {
     if (!authenticated || availability !== 'enabled' || view !== 'data' || !dataEnabled || !serviceId || !dataServices.some(item => item.serviceId === serviceId)) return
@@ -347,8 +353,9 @@ export default function usePocketBillsController({
   }, [authenticated, category, intent, reconcile, token])
 
   const processing = ['quoting', 'paying', 'confirming', 'processing'].includes(status)
-  const formReady = /^0\d{10}$/.test(phone)
-    && (environment !== 'sandbox' || phone === VTPASS_SANDBOX_SUCCESS_PHONE)
+  const expectedSandboxRecipient = category === 'data' ? sandboxDataRecipient(serviceId) : VTPASS_SANDBOX_SUCCESS_PHONE
+  const formReady = (category === 'data' ? /^\d{10,12}$/.test(phone) : /^0\d{10}$/.test(phone))
+    && (environment !== 'sandbox' || phone === expectedSandboxRecipient)
     && Number(amountNgn) >= limits.minNgn
     && Number(amountNgn) <= limits.maxNgn
     && (category !== 'data' || Boolean(variationCode))

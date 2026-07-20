@@ -119,7 +119,7 @@ export class PocketBillsStoreError extends Error {
 }
 
 const AIRTIME_SERVICE_IDS = new Set(['mtn', 'airtel', 'glo', 'etisalat', '9mobile'])
-const DATA_SERVICE_IDS = new Set(['mtn-data', 'airtel-data', 'glo-data', 'etisalat-data'])
+const DATA_SERVICE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,39}$/
 const IDEMPOTENCY_PATTERN = /^[a-zA-Z0-9:_-]{16,128}$/
 const EVM_TX_PATTERN = /^0x[a-fA-F0-9]{64}$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -340,12 +340,16 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
 
     if (!ownerId) throw new PocketBillsStoreError('BILLS_AUTH_REQUIRED', 'Pocket authentication is required.', 401)
     if (!IDEMPOTENCY_PATTERN.test(idempotencyKey)) throw new PocketBillsStoreError('BILLS_INVALID_IDEMPOTENCY_KEY', 'A valid idempotency key is required.')
-    const supportedService = category === 'data' ? DATA_SERVICE_IDS.has(serviceId) : AIRTIME_SERVICE_IDS.has(serviceId)
+    // Data IDs are accepted only after the authenticated request handler has
+    // matched them against VTpass's current provider catalog.
+    const supportedService = category === 'data' ? DATA_SERVICE_ID_PATTERN.test(serviceId) : AIRTIME_SERVICE_IDS.has(serviceId)
     if (!supportedService || !serviceName) throw new PocketBillsStoreError('BILLS_INVALID_SERVICE', `A supported ${category === 'data' ? 'Data' : 'Airtime'} network is required.`)
     if (category === 'data' && (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode) || !variationName)) {
       throw new PocketBillsStoreError('BILLS_INVALID_VARIATION', 'A valid Data plan is required.')
     }
-    if (!/^0\d{10}$/.test(phone)) throw new PocketBillsStoreError('BILLS_INVALID_PHONE', 'Enter a valid Nigerian phone number.')
+    if (category === 'data' ? !/^\d{10,12}$/.test(phone) : !/^0\d{10}$/.test(phone)) {
+      throw new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'data' ? 'Enter a valid Data recipient.' : 'Enter a valid Nigerian phone number.')
+    }
     if (!isAddress(payerWallet)) throw new PocketBillsStoreError('BILLS_INVALID_WALLET', 'Open a valid Base Circle wallet first.')
     if (!isAddress(treasuryAddress)) throw new PocketBillsStoreError('BILLS_POLICY_NOT_READY', 'Bills treasury is not configured.', 503)
     if (!Number.isFinite(quoteExpiresAt) || quoteExpiresAt <= createdAt || quoteExpiresAt - createdAt > MAX_QUOTE_LIFETIME_MS) {

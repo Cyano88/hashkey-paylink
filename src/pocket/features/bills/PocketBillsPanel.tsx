@@ -4,6 +4,7 @@ import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import PocketSlideAction from '../../components/PocketSlideAction'
 import type { PocketBillsController } from '../../controllers/usePocketBillsController'
 import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
+import PocketDataBundlePicker from './PocketDataBundlePicker'
 import { Link } from 'react-router-dom'
 
 export type PocketBillView = 'airtime' | 'data' | 'tv' | 'electricity'
@@ -20,7 +21,7 @@ type PocketBillsPanelProps = {
 
 const billMeta = {
   airtime: { title: 'Airtime', body: 'Top up a Nigerian mobile number from Circle Pocket.', icon: Phone },
-  data: { title: 'Mobile data', body: 'Choose a network and data bundle for a Nigerian mobile number.', icon: Wifi },
+  data: { title: 'Data', body: 'Choose a provider and bundle.', icon: Wifi },
   tv: { title: 'TV', body: 'Renew a supported decoder or smartcard subscription.', icon: Tv },
   electricity: { title: 'Electricity', body: 'Validate a meter and pay a supported electricity provider.', icon: Lightbulb },
 } as const
@@ -31,6 +32,13 @@ const NETWORKS = [
   { value: 'glo', label: 'Glo' },
   { value: 'etisalat', label: '9mobile' },
 ] as const
+
+function dataServiceLabel(name: string) {
+  return name
+    .replace(/\s+Internet\s+Data$/i, '')
+    .replace(/\s+Payment$/i, '')
+    .replace(/\s+Data$/i, '')
+}
 
 function money(value: string) {
   const amount = Number(value)
@@ -65,7 +73,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
         : 'idle'
   const isData = view === 'data'
   const networks = isData
-    ? bills.dataServices.map(service => ({ value: service.serviceId, label: service.name.replace(/\s+Data$/i, '') }))
+    ? bills.dataServices.map(service => ({ value: service.serviceId, label: dataServiceLabel(service.name) }))
     : [...NETWORKS]
 
   return (
@@ -100,7 +108,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
           {bills.environment === 'sandbox' && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
               <span className="font-black">Sandbox test</span>
-              <span className="block">VTpass simulates {isData ? 'Data' : 'Airtime'} delivery to 08011111111. Your Base USDC payment is real; no {isData ? 'Data bundle' : 'Airtime'} is sent to a phone.</span>
+              <span className="block">VTpass simulates {isData ? 'Data' : 'Airtime'} delivery to {bills.phone}. Your Base USDC payment is real; no {isData ? 'Data bundle' : 'Airtime'} is delivered.</span>
             </div>
           )}
           <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
@@ -119,27 +127,36 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
 
           <div className="space-y-4 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
             <div>
-              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Mobile network</p>
-              <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-gray-200 bg-white p-1.5 dark:border-white/10 dark:bg-[#17181d]">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">{isData ? 'Data provider' : 'Mobile network'}</p>
+              <div className="flex gap-1.5 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1.5 [scrollbar-width:none] dark:border-white/10 dark:bg-[#17181d] [&::-webkit-scrollbar]:hidden">
                 {networks.map(network => (
-                  <button key={network.value} type="button" disabled={locked} onClick={() => bills.setServiceId(network.value)} className={cn('min-h-10 rounded-xl border px-1 text-[11px] font-black transition-all', bills.serviceId === network.value ? 'border-blue-500/30 bg-blue-500/10 text-blue-700 shadow-sm dark:text-blue-300' : 'border-transparent text-gray-500 hover:bg-blue-500/[0.06] hover:text-blue-700 dark:text-gray-400 dark:hover:text-blue-300', locked && 'cursor-not-allowed opacity-60')}>{network.label}</button>
+                  <button key={network.value} type="button" disabled={locked} onClick={() => bills.setServiceId(network.value)} className={cn('min-h-10 min-w-[72px] shrink-0 rounded-xl border px-2.5 text-[11px] font-black transition-all', bills.serviceId === network.value ? 'border-blue-500/30 bg-blue-500/10 text-blue-700 shadow-sm dark:text-blue-300' : 'border-transparent text-gray-500 hover:bg-blue-500/[0.06] hover:text-blue-700 dark:text-gray-400 dark:hover:text-blue-300', locked && 'cursor-not-allowed opacity-60')}>{network.label}</button>
                 ))}
               </div>
               {isData && bills.catalogBusy && !networks.length && <span className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-gray-400"><Loader2 className="h-3 w-3 animate-spin" />Loading networks</span>}
             </div>
 
             <label className="block">
-              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? 'VTpass test number' : 'Phone number'}</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? 'VTpass test account' : isData ? 'Account or phone number' : 'Phone number'}</span>
               <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked || bills.environment === 'sandbox'} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
             </label>
             {isData ? (
-              <label className="block">
+              <div>
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Data plan</span>
-                <select disabled={locked || bills.catalogBusy || !bills.dataVariations.length} value={bills.variationCode} onChange={event => bills.setVariationCode(event.target.value)} className="mt-1 min-h-12 w-full appearance-none rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900 outline-none transition hover:border-blue-300 focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-[#17181d] dark:text-white">
-                  <option value="">{bills.catalogBusy ? 'Loading plans…' : 'Choose a plan'}</option>
-                  {bills.dataVariations.map(plan => <option key={plan.variationCode} value={plan.variationCode}>{plan.name}</option>)}
-                </select>
-              </label>
+                {bills.catalogBusy ? (
+                  <span className="mt-2 flex min-h-24 items-center justify-center gap-2 rounded-2xl border border-gray-100 bg-white text-xs font-semibold text-gray-400 dark:border-white/10 dark:bg-white/[0.035]"><Loader2 className="h-4 w-4 animate-spin" />Loading plans</span>
+                ) : (
+                  <div className="mt-2">
+                    <PocketDataBundlePicker
+                      serviceId={bills.serviceId}
+                      variations={bills.dataVariations}
+                      value={bills.variationCode}
+                      disabled={locked}
+                      onChange={bills.setVariationCode}
+                    />
+                  </div>
+                )}
+              </div>
             ) : (
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Airtime amount</span>
@@ -163,7 +180,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
               <>
                 <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-white/10 dark:bg-white/[0.04]">
                   <div className="flex justify-between gap-3"><span className="text-gray-500">{isData ? bills.intent.variationName : 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
-                  <div className="flex justify-between gap-3"><span className="text-gray-500">Mobile number</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-gray-500">{isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
                   <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10"><span className="text-gray-500">Pay from Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.amountUsdc))} USDC</span></div>
                 </div>
                 <PocketSlideAction

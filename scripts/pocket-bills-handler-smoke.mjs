@@ -181,7 +181,10 @@ async function createDataQuote(idempotencyKey, variationCode = 'mtn-100mb-100') 
 const dataServices = await request(catalogHandler, {}, { method: 'GET' })
 assert.deepEqual(dataServices.body.data.services, [{ serviceId: 'mtn-data', name: 'MTN Data' }])
 const dataPlans = await request(catalogHandler, {}, { method: 'GET', query: { service_id: 'mtn-data' } })
-assert.deepEqual(dataPlans.body.data.variations, [{ variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amountNgn: '100.00' }])
+assert.deepEqual(dataPlans.body.data.variations, [
+  { variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amountNgn: '100.00', available: true },
+  { variationCode: 'mtn-2gb-1500', name: 'N1500 2GB - 30 days', amountNgn: '1500.00', available: false },
+])
 
 const badDataPlan = await createDataQuote('bill:handler:data:bad-plan', 'invented-plan')
 assert.equal(badDataPlan.statusCode, 400)

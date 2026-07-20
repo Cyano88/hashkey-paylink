@@ -43,10 +43,11 @@ assert.deepEqual(quoteRequest.body, { service_id: 'mtn', phone: '08011111111', a
 let catalogRequest
 const catalogFetcher = async (url, options) => {
   catalogRequest = { url, options }
-  return new Response(JSON.stringify({ ok: true, data: { variations: [{ variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amountNgn: '100.00' }] } }), { status: 200, headers: { 'content-type': 'application/json' } })
+  return new Response(JSON.stringify({ ok: true, data: { variations: [{ variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amountNgn: '100.00', available: true }] } }), { status: 200, headers: { 'content-type': 'application/json' } })
 }
 const catalog = await readPocketDataCatalog({ accessToken: 'privy-token', serviceId: 'mtn-data', fetcher: catalogFetcher })
 assert.equal(catalog.variations[0].variationCode, 'mtn-100mb-100')
+assert.equal(catalog.variations[0].available, true)
 assert.equal(catalogRequest.url, '/api/pocket/bills/catalog?service_id=mtn-data')
 assert.equal(catalogRequest.options.headers.authorization, 'Bearer privy-token')
 

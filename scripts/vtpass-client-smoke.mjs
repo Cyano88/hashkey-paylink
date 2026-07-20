@@ -94,7 +94,10 @@ const dataReadClient = queuedClient([
     { variation_code: 'invalid plan', name: 'Ignored', variation_amount: '200.00', fixedPrice: 'Yes' },
   ] } }),
 ], dataReadCalls)
-assert.deepEqual(await dataReadClient.listDataServices(), [{ serviceId: 'mtn-data', name: 'MTN Data', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0 %', productType: 'fix', imageUrl: 'https://sandbox.vtpass.com/mtn-data.png' }])
+assert.deepEqual(await dataReadClient.listDataServices(), [
+  { serviceId: 'mtn-data', name: 'MTN Data', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0 %', productType: 'fix', imageUrl: 'https://sandbox.vtpass.com/mtn-data.png' },
+  { serviceId: 'smile-direct', name: 'Smile Payment', minimumAmount: null, maximumAmount: null, convenienceFee: '', productType: '', imageUrl: '' },
+])
 assert.deepEqual(await dataReadClient.listServiceVariations('mtn-data'), [{ variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amount: 100, fixedPrice: true }])
 
 const deliveredCalls = []
@@ -138,6 +141,25 @@ assert.deepEqual(JSON.parse(dataPurchaseCalls[0].init.body), {
   variation_code: 'mtn-100mb-100',
   amount: 100,
   phone: '08011111111',
+})
+
+const spectranetCalls = []
+const spectranetClient = queuedClient([jsonResponse({
+  code: '000',
+  content: { transactions: { status: 'delivered', transactionId: 'spectranet-tx-1', product_name: 'Spectranet Internet Data', unique_element: '1212121212', amount: '1000' } },
+  response_description: 'TRANSACTION SUCCESSFUL',
+  requestId: '202607191105fixed123',
+  amount: 1000,
+})], spectranetCalls)
+await spectranetClient.purchaseData({ serviceId: 'spectranet', variationCode: 'vt-1000', phone: '1212121212', amountNgn: '1000' })
+assert.deepEqual(JSON.parse(spectranetCalls[0].init.body), {
+  request_id: '202607191105fixed123',
+  serviceID: 'spectranet',
+  billersCode: '1212121212',
+  variation_code: 'vt-1000',
+  amount: 1000,
+  phone: '1212121212',
+  quantity: 1,
 })
 
 const pending = normalizeVtpassTransaction({ code: '000', content: { transactions: { status: 'pending' } } }, '202607191105pending')

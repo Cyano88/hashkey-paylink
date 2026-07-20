@@ -188,7 +188,7 @@ export async function quotePocketAirtime(input: {
 }
 
 export type PocketDataService = { serviceId: string; name: string }
-export type PocketDataVariation = { variationCode: string; name: string; amountNgn: string }
+export type PocketDataVariation = { variationCode: string; name: string; amountNgn: string; available: boolean }
 
 export async function readPocketDataCatalog(input: {
   accessToken: string
@@ -210,7 +210,7 @@ export async function readPocketDataCatalog(input: {
   const variations = Array.isArray(data.variations) ? data.variations.flatMap(value => {
     const item = record(value)
     return text(item.variationCode) && text(item.name) && text(item.amountNgn)
-      ? [{ variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn) }]
+      ? [{ variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false }]
       : []
   }) : []
   if (input.serviceId ? !variations.length : !services.length) {

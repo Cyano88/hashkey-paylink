@@ -76,7 +76,7 @@ type VtpassClientOptions = {
 }
 
 const AIRTIME_SERVICE_IDS = new Set(['mtn', 'airtel', 'glo', 'etisalat', '9mobile'])
-const DATA_SERVICE_IDS = new Set(['mtn-data', 'airtel-data', 'glo-data', 'etisalat-data'])
+const DATA_SERVICE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,39}$/
 const FAILURE_CODES = new Set([
   '010', '011', '012', '013', '014', '015', '016', '017', '018', '019',
   '021', '022', '023', '024', '025', '026', '027', '028', '030', '031',
@@ -95,7 +95,9 @@ function text(value: unknown) {
 }
 
 function finiteNumber(value: unknown) {
-  const parsed = typeof value === 'number' ? value : Number(text(value))
+  const normalized = typeof value === 'number' ? value : text(value)
+  if (normalized === '') return null
+  const parsed = typeof normalized === 'number' ? normalized : Number(normalized)
   return Number.isFinite(parsed) ? parsed : null
 }
 
@@ -145,6 +147,18 @@ function normalizePhone(value: unknown, environment: VtpassPhase0Config['environ
   return phone
 }
 
+function normalizeDataRecipient(value: unknown, serviceId: string, environment: VtpassPhase0Config['environment']) {
+  const recipient = text(value).replace(/[\s()-]/g, '')
+  if (environment === 'sandbox') {
+    const expected = serviceId === 'spectranet' ? '1212121212' : '08011111111'
+    if (recipient !== expected) {
+      throw new VtpassClientError({ code: 'VTPASS_INVALID_PHONE', message: `Use VTpass sandbox test account ${expected}.`, status: 400 })
+    }
+    return recipient
+  }
+  return normalizePhone(recipient, environment)
+}
+
 function normalizeAmount(value: unknown, config: VtpassPhase0Config) {
   const raw = text(value)
   if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) {
@@ -173,7 +187,7 @@ function normalizeAirtimeServiceId(value: unknown) {
 
 function normalizeDataServiceId(value: unknown) {
   const serviceId = text(value).toLowerCase()
-  if (!DATA_SERVICE_IDS.has(serviceId)) {
+  if (!DATA_SERVICE_ID_PATTERN.test(serviceId)) {
     throw new VtpassClientError({ code: 'VTPASS_INVALID_SERVICE', message: 'Unsupported Data network.', status: 400 })
   }
   return serviceId
@@ -392,7 +406,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
       const value = record(item)
       const serviceId = text(value.serviceID).toLowerCase()
       const name = text(value.name)
-      if (!DATA_SERVICE_IDS.has(serviceId) || !name) return []
+      if (!DATA_SERVICE_ID_PATTERN.test(serviceId) || !name) return []
       const imageUrl = text(value.image)
       return [{
         serviceId,
@@ -414,7 +428,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
       ? content.variations
       : Array.isArray(content.varations) ? content.varations : null
     if (!variations) throw new VtpassClientError({ code: 'VTPASS_INVALID_RESPONSE', message: 'VTpass Data plans response was invalid.', status: 503, retryable: true })
-    return variations.flatMap((item): VtpassVariation[] => {
+    const parsed = variations.flatMap((item): VtpassVariation[] => {
       const value = record(item)
       const variationCode = text(value.variation_code)
       const name = text(value.name).slice(0, 140)
@@ -422,6 +436,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
       if (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode) || !name || amount === null || amount <= 0) return []
       return [{ variationCode, name, amount, fixedPrice: text(value.fixedPrice).toLowerCase() === 'yes' }]
     })
+    return [...new Map(parsed.map(variation => [variation.variationCode, variation])).values()]
   }
 
   async function purchaseAirtime(input: { serviceId: string; phone: string; amountNgn: string | number; requestId?: string }) {
@@ -448,7 +463,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
     assertPurchaseRequestIdDate(requestId, currentTime)
     const serviceID = normalizeDataServiceId(input.serviceId)
     const variation_code = normalizeVariationCode(input.variationCode)
-    const phone = normalizePhone(input.phone, config.environment)
+    const phone = normalizeDataRecipient(input.phone, serviceID, config.environment)
     const amount = normalizeAmount(input.amountNgn, config)
     const { body } = await requestJson('/api/pay', 'POST', {
       request_id: requestId,
@@ -457,6 +472,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
       variation_code,
       amount,
       phone,
+      ...(serviceID === 'spectranet' ? { quantity: 1 } : {}),
     }, true)
     return normalizeVtpassTransaction(body, requestId)
   }

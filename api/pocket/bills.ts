@@ -43,6 +43,15 @@ function normalizeNigerianPhone(value: unknown) {
   return /^0\d{10}$/.test(phone) ? phone : ''
 }
 
+function normalizeDataRecipient(value: unknown, serviceId: string, environment: VtpassPhase0Config['environment']) {
+  const recipient = cleanText(value, 30).replace(/\D/g, '')
+  if (environment === 'sandbox') {
+    const expected = serviceId === 'spectranet' ? '1212121212' : '08011111111'
+    return recipient === expected ? recipient : ''
+  }
+  return /^0\d{10}$/.test(recipient) ? recipient : ''
+}
+
 function canonicalNgn(value: unknown) {
   const raw = cleanText(value, 30)
   if (!/^\d+(?:\.\d{1,2})?$/.test(raw) || Number(raw) <= 0) return ''
@@ -202,11 +211,13 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
         return respond.fail(new PocketBillsStoreError('BILLS_DATA_LIVE_DISABLED', 'Data bundles remain sandbox-only during this pilot.', 503))
       }
       const serviceId = cleanText(req.body?.service_id, 40).toLowerCase()
-      const phone = normalizeNigerianPhone(req.body?.phone)
+      const phone = category === 'data'
+        ? normalizeDataRecipient(req.body?.phone, serviceId, dependencies.config.environment)
+        : normalizeNigerianPhone(req.body?.phone)
       let amountNgn = canonicalNgn(req.body?.amount_ngn)
       const payerWallet = cleanText(req.body?.payer_wallet, 80)
-      if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', 'Enter a valid Nigerian phone number.'), 'phone')
-      if (dependencies.config.environment === 'sandbox' && phone !== '08011111111') {
+      if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'data' ? 'Use the VTpass sandbox test account for this provider.' : 'Enter a valid Nigerian phone number.'), 'phone')
+      if (dependencies.config.environment === 'sandbox' && category === 'airtime' && phone !== '08011111111') {
         return respond.fail(new PocketBillsStoreError(
           'BILLS_SANDBOX_PHONE_REQUIRED',
           category === 'data'
@@ -236,8 +247,8 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       }
       if (!amountNgn) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_AMOUNT', 'Enter a valid Naira amount.'), 'amountNgn')
       const amount = Number(amountNgn)
-      if (service.minimumAmount !== null && amount < service.minimumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_BELOW_PROVIDER_LIMIT', `Minimum ${service.name} Airtime amount is NGN ${service.minimumAmount}.`), 'amountNgn')
-      if (service.maximumAmount !== null && amount > service.maximumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_PROVIDER_LIMIT', `Maximum ${service.name} Airtime amount is NGN ${service.maximumAmount}.`), 'amountNgn')
+      if (service.minimumAmount !== null && amount < service.minimumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_BELOW_PROVIDER_LIMIT', `Minimum ${service.name} amount is NGN ${service.minimumAmount}.`), 'amountNgn')
+      if (service.maximumAmount !== null && amount > service.maximumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_PROVIDER_LIMIT', `Maximum ${service.name} amount is NGN ${service.maximumAmount}.`), 'amountNgn')
       await assertProviderReserve(dependencies, amountNgn)
 
       const fx = await dependencies.readFxQuote('1')
@@ -405,12 +416,16 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
       }
       const service = services.find(item => item.serviceId === serviceId)
       if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', 'Select a supported Data network.'), 'serviceId')
-      const min = dependencies.config.minNgn ?? 0
-      const max = dependencies.config.maxNgn ?? 0
+      const min = dependencies.config.minNgn ?? Number.NEGATIVE_INFINITY
+      const max = dependencies.config.maxNgn ?? Number.POSITIVE_INFINITY
       const variations = (await dependencies.provider.listServiceVariations(serviceId))
-        .filter(item => item.amount >= min && item.amount <= max)
-        .map(item => ({ variationCode: item.variationCode, name: item.name, amountNgn: canonicalNgn(String(item.amount)) }))
-      if (!variations.length) throw new PocketBillsStoreError('BILLS_DATA_PLANS_UNAVAILABLE', 'No Data plans are available within the current Bills limit.', 503)
+        .map(item => ({
+          variationCode: item.variationCode,
+          name: item.name,
+          amountNgn: canonicalNgn(String(item.amount)),
+          available: item.amount >= min && item.amount <= max,
+        }))
+      if (!variations.length) throw new PocketBillsStoreError('BILLS_DATA_PLANS_UNAVAILABLE', 'No Data plans are currently available from this provider.', 503)
       return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations })
     } catch (error) {
       return respond.fail(error)
