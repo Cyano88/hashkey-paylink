@@ -55,6 +55,7 @@ export type PocketBillsIntent = {
   providerEnvironment: 'sandbox' | 'live'
   providerTransactionId: string
   providerDescription: string
+  purchasedCode: string
   providerAttemptedAt: number
   requeryAttempts: number
   lastRequeryAt: number
@@ -158,6 +159,7 @@ function normalizeStore(value: unknown): BillsStoreData {
             contactPhone: cleanText(intent.contactPhone, 20).replace(/\D/g, ''),
             customerName: cleanText(intent.customerName, 140),
             customerAddress: cleanText(intent.customerAddress, 220),
+            purchasedCode: cleanText(intent.purchasedCode, 4000),
           }]
         }))
       : {},
@@ -405,6 +407,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         providerEnvironment: config.environment,
         providerTransactionId: '',
         providerDescription: '',
+        purchasedCode: '',
         providerAttemptedAt: 0,
         requeryAttempts: 0,
         lastRequeryAt: 0,
@@ -599,13 +602,20 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         throw new PocketBillsStoreError('BILLS_PROVIDER_MISMATCH', 'Provider result amount does not match this bill request.', 409)
       }
       const providerTransactionId = cleanText(result.transactionId, 120)
+      const purchasedCode = cleanText(result.purchasedCode, 4000)
       const existingIntentId = providerTransactionId ? store.providerTransactions[providerTransactionId] : ''
       if (existingIntentId && existingIntentId !== intent.id) {
         throw new PocketBillsStoreError('BILLS_PROVIDER_TX_REUSED', 'Provider transaction is already connected to another bill payment.', 409)
       }
       if (intent.state === 'delivered' && result.status !== 'reversed') {
         // Never downgrade a delivered bill or overwrite its confirmed provider
-        // metadata on a later inconclusive or failed read.
+        // metadata on a later inconclusive or failed read. A later authoritative
+        // requery may enrich a delivered prepaid receipt with its missing token.
+        if (!intent.purchasedCode && purchasedCode) intent.purchasedCode = purchasedCode
+        if (options.requery) {
+          intent.requeryAttempts += 1
+          intent.lastRequeryAt = timestamp
+        }
         return
       }
       intent.providerCode = cleanText(result.providerCode, 40)
@@ -617,7 +627,10 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         intent.lastRequeryAt = timestamp
       }
       if (providerTransactionId) store.providerTransactions[providerTransactionId] = intent.id
-      if (result.status === 'delivered') intent.state = 'delivered'
+      if (result.status === 'delivered') {
+        intent.state = 'delivered'
+        if (purchasedCode) intent.purchasedCode = purchasedCode
+      }
       else if (result.status === 'pending') intent.state = 'pending'
       else if (result.status === 'failed' || result.status === 'reversed') {
         intent.state = options.requery

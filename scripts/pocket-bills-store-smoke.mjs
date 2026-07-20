@@ -152,6 +152,15 @@ const delivered = await store.recordProviderResult('privy:owner-1', first.intent
 })
 assert.equal(delivered.state, 'delivered')
 
+const enrichedDelivered = await store.recordProviderResult('privy:owner-1', first.intent.id, {
+  status: 'delivered', providerCode: '000', providerStatus: 'delivered', responseDescription: 'TRANSACTION SUCCESSFUL',
+  requestId: first.intent.requestId, transactionId: 'vtpass-tx-1', productName: 'MTN Airtime', recipient: '08011111111', amountNgn: 100,
+  purchasedCode: 'Token : 26362054405982757802', retryable: false, requeryRequired: false,
+}, { requery: true })
+assert.equal(enrichedDelivered.state, 'delivered')
+assert.equal(enrichedDelivered.purchasedCode, 'Token : 26362054405982757802')
+assert.equal(publicPocketBillsIntent(enrichedDelivered).purchasedCode, 'Token : 26362054405982757802')
+
 storage.unsafeUpdate(data => {
   data.intents[first.intent.id].paymentAmountUsdc = ''
   return data

@@ -179,12 +179,13 @@ assert.deepEqual(JSON.parse(tvCalls[1].init.body), {
 const electricityCalls = []
 const electricityClient = queuedClient([
   jsonResponse({ response_description: '000', content: { Customer_Name: 'METER CUSTOMER', Address: '1 Test Street', Min_Purchase_Amount: '100', MAX_Purchase_Amount: '100000' } }),
-  jsonResponse({ code: '000', response_description: 'TRANSACTION SUCCESSFUL', content: { transactions: { status: 'delivered', transactionId: 'power-tx-1' } } }),
+  jsonResponse({ code: '000', response_description: 'TRANSACTION SUCCESSFUL', purchased_code: 'Token : 26362054405982757802', content: { transactions: { status: 'delivered', transactionId: 'power-tx-1' } } }),
 ], electricityCalls)
 const meterCustomer = await electricityClient.verifyCustomer({ category: 'electricity', serviceId: 'ikeja-electric', billersCode: '1111111111111', variationCode: 'prepaid' })
 assert.equal(meterCustomer.customerName, 'METER CUSTOMER')
 assert.equal(meterCustomer.minimumAmount, 100)
-await electricityClient.purchaseElectricity({ serviceId: 'ikeja-electric', meterType: 'prepaid', meterNumber: '1111111111111', contactPhone: '08011111111', amountNgn: '100' })
+const electricityDelivered = await electricityClient.purchaseElectricity({ serviceId: 'ikeja-electric', meterType: 'prepaid', meterNumber: '1111111111111', contactPhone: '08011111111', amountNgn: '100' })
+assert.equal(electricityDelivered.purchasedCode, 'Token : 26362054405982757802')
 assert.deepEqual(JSON.parse(electricityCalls[0].init.body), { billersCode: '1111111111111', serviceID: 'ikeja-electric', type: 'prepaid' })
 assert.deepEqual(JSON.parse(electricityCalls[1].init.body), {
   request_id: '202607191105fixed123', serviceID: 'ikeja-electric', billersCode: '1111111111111', variation_code: 'prepaid', amount: 100, phone: '08011111111',
@@ -199,6 +200,9 @@ await assert.rejects(
 const pending = normalizeVtpassTransaction({ code: '000', content: { transactions: { status: 'pending' } } }, '202607191105pending')
 assert.equal(pending.status, 'pending')
 assert.equal(pending.requeryRequired, true)
+
+const tokenFromRequeryExtras = normalizeVtpassTransaction({ code: '000', content: { transactions: { status: 'delivered', extras: 'Token : 2821 4114 9170 6793 0943' } } }, '202607191105token')
+assert.equal(tokenFromRequeryExtras.purchasedCode, 'Token : 2821 4114 9170 6793 0943')
 
 const processing = normalizeVtpassTransaction({ code: '099', response_description: 'TRANSACTION IS PROCESSING' }, '202607191105processing')
 assert.equal(processing.status, 'pending')

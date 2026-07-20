@@ -15,6 +15,7 @@ export type PocketActivityRow = {
   activityLabel?: string
   providerReference?: string
   supportReference?: string
+  billToken?: string
   refundAction?: 'claim' | 'check'
   refundTxHash?: string
 }

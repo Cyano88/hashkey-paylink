@@ -157,7 +157,7 @@ const provider = {
   async purchaseElectricity(input) {
     electricityPurchaseCalls += 1
     assert.equal(input.meterNumber, '1111111111111')
-    return { ...providerResult({ ...input, phone: input.meterNumber }, providerMode), productName: 'Ikeja Electric' }
+    return { ...providerResult({ ...input, phone: input.meterNumber }, providerMode), productName: 'Ikeja Electric', purchasedCode: providerMode === 'delivered' ? 'Token : 26362054405982757802' : '' }
   },
   async requeryTransaction(requestId) {
     if (requeryMode === 'error') throw new VtpassClientError({ code: 'VTPASS_UNAVAILABLE', message: 'Provider status unavailable.', status: 503, retryable: true })
@@ -275,6 +275,7 @@ assert.equal(electricityQuote.body.data.intent.category, 'electricity')
 await request(payHandler, { action: 'prepare', intent_id: electricityQuote.body.data.intent.id })
 const electricityConfirmed = await request(payHandler, { action: 'confirm', intent_id: electricityQuote.body.data.intent.id, tx_hash: `0x${'7'.repeat(64)}` })
 assert.equal(electricityConfirmed.body.data.intent.state, 'delivered')
+assert.equal(electricityConfirmed.body.data.intent.purchasedCode, 'Token : 26362054405982757802')
 assert.equal(electricityPurchaseCalls, 1)
 now += 61_000
 

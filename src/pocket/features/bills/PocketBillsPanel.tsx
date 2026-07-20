@@ -1,4 +1,5 @@
-import { AlertCircle, ArrowRight, Check, Clock3, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlertCircle, ArrowRight, Check, Clock3, Copy, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import PocketSlideAction from '../../components/PocketSlideAction'
@@ -48,6 +49,10 @@ function money(value: string) {
     : '₦0'
 }
 
+function rechargeToken(value: string) {
+  return value.replace(/^token\s*:\s*/i, '').trim()
+}
+
 function SignInCard() {
   return (
     <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
@@ -62,6 +67,8 @@ function SignInCard() {
 }
 
 export default function PocketBillsPanel({ view, authenticated, bills, baseAddress, baseBalance, walletBusy, onOpenWallet }: PocketBillsPanelProps) {
+  const [copiedToken, setCopiedToken] = useState('')
+  useEffect(() => setCopiedToken(''), [bills.intent?.id])
   const meta = billMeta[view]
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
@@ -77,6 +84,9 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
   const isData = view === 'data'
   const isVerifiedBill = view === 'tv' || view === 'electricity'
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
+  const prepaidToken = view === 'electricity' && bills.intent?.variationCode === 'prepaid' && bills.intent.state === 'delivered'
+    ? rechargeToken(bills.intent.purchasedCode)
+    : ''
   const networks = view !== 'airtime'
     ? bills.dataServices.map(service => ({ value: service.serviceId, label: dataServiceLabel(service.name) }))
     : [...NETWORKS]
@@ -254,6 +264,18 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
                   onConfirm={() => void bills.pay()}
                   labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`, successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent` }}
                 />
+                {prepaidToken && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700/70 dark:text-emerald-200/70">Recharge token</span>
+                        <span className="mt-1.5 block select-all break-all font-mono text-sm font-black tracking-[0.08em] text-emerald-950 dark:text-emerald-100">{prepaidToken}</span>
+                      </span>
+                      <button type="button" onClick={() => void navigator.clipboard.writeText(prepaidToken).then(() => setCopiedToken(prepaidToken)).catch(() => undefined)} className="flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-2.5 text-[10px] font-bold text-emerald-700 transition active:scale-[0.98] dark:border-emerald-400/20 dark:bg-white/[0.07] dark:text-emerald-200"><Copy className="h-3 w-3" />{copiedToken === prepaidToken ? 'Copied' : 'Copy'}</button>
+                    </div>
+                    <p className="mt-2 text-[10px] leading-4 text-emerald-700/70 dark:text-emerald-200/70">Enter this token on the prepaid meter. It remains available in Bills activity.</p>
+                  </div>
+                )}
               </>
             )}
 

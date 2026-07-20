@@ -278,6 +278,7 @@ export function normalizeVtpassTransaction(body: unknown, fallbackRequestId = ''
   const providerCode = text(root.code)
   const providerStatus = text(transaction.status).toLowerCase()
   const requestId = text(root.requestId || root.request_id || fallbackRequestId)
+  const purchasedCode = text(root.purchased_code || root.token || transaction.extras).slice(0, 4000)
   const common = {
     providerCode,
     providerStatus,
@@ -287,7 +288,7 @@ export function normalizeVtpassTransaction(body: unknown, fallbackRequestId = ''
     productName: text(transaction.product_name),
     recipient: text(transaction.unique_element),
     amountNgn: finiteNumber(root.amount ?? transaction.amount),
-    purchasedCode: text(root.purchased_code).slice(0, 4000),
+    purchasedCode,
   }
 
   if (providerCode === '040' || providerStatus === 'reversed') {

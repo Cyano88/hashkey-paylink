@@ -71,6 +71,9 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
     activityLabel: sandboxTest ? `${intent.category === 'tv' ? 'TV' : intent.category === 'electricity' ? 'Electricity' : intent.category === 'data' ? 'Data' : 'Airtime'} sandbox test` : 'Bill payment',
     ...(intent.providerTransactionId ? { providerReference: intent.providerTransactionId } : {}),
     ...(supportReference ? { supportReference } : {}),
+    ...(intent.category === 'electricity' && intent.variationCode === 'prepaid' && intent.state === 'delivered' && intent.purchasedCode
+      ? { billToken: intent.purchasedCode }
+      : {}),
     ...(refundAction ? { refundAction } : {}),
     ...(intent.refundTxHash ? { refundTxHash: intent.refundTxHash } : {}),
   }

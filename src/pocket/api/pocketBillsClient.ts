@@ -41,6 +41,7 @@ export type PocketBillIntent = {
   refundTxHash: string
   providerStatus: string
   providerDescription: string
+  purchasedCode: string
   failureReason: string
   createdAt: number
   updatedAt: number
@@ -109,6 +110,7 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
     refundTxHash: text(intent.refundTxHash),
     providerStatus: text(intent.providerStatus),
     providerDescription: text(intent.providerDescription),
+    purchasedCode: text(intent.purchasedCode),
     failureReason: text(intent.failureReason),
     createdAt,
     updatedAt,

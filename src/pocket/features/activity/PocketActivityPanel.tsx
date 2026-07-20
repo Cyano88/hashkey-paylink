@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Cpu, ExternalLink, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
+import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Copy, Cpu, ExternalLink, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
@@ -62,6 +62,7 @@ function supportedRows(rows: PocketActivityRow[]) {
 
 export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefresh, onRefund }: PocketActivityPanelProps) {
   const [expandedReceipt, setExpandedReceipt] = useState('')
+  const [copiedBillToken, setCopiedBillToken] = useState('')
   const [refundBusy, setRefundBusy] = useState('')
   const [refundMessage, setRefundMessage] = useState<Record<string, string>>({})
   const supported = supportedRows(rows)
@@ -152,6 +153,18 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                         </button>
                         {expandedReceipt === row.eventId && (
                           <div className="mt-2 space-y-2 rounded-xl border border-gray-100 px-3 py-2.5 text-[10px] dark:border-white/10">
+                            {row.billToken && (() => {
+                              const token = row.billToken.replace(/^token\s*:\s*/i, '').trim()
+                              return (
+                                <div className="rounded-xl bg-emerald-50 px-3 py-2.5 dark:bg-emerald-400/10">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="font-semibold text-emerald-700 dark:text-emerald-300">Recharge token</span>
+                                    <button type="button" onClick={() => void navigator.clipboard.writeText(token).then(() => setCopiedBillToken(row.eventId)).catch(() => undefined)} className="flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-200"><Copy className="h-3 w-3" />{copiedBillToken === row.eventId ? 'Copied' : 'Copy'}</button>
+                                  </div>
+                                  <span className="mt-1.5 block select-all break-all font-mono text-xs font-black tracking-[0.08em] text-emerald-950 dark:text-emerald-100">{token}</span>
+                                </div>
+                              )
+                            })()}
                             <div className="flex items-start justify-between gap-3">
                               <span className="font-semibold text-gray-400">Base transaction</span>
                               {/^(0x)?[a-fA-F0-9]{64}$/.test(row.txHash) ? (
