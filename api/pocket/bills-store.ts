@@ -719,7 +719,10 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         const claimedAt = Number(intent.refundClaimedAt) || 0
         if (claimedAt > 0 && timestamp - claimedAt < leaseMs) return { intent, claimed: false }
       } else {
-        assertState(intent, ['refund_eligible'], 'Refund claim')
+        // A needs-review receipt is not refunded on trust. The refund handler
+        // first leases it here, then performs a fresh VTpass requery and only
+        // submits Circle USDC when that result is authoritatively failed.
+        assertState(intent, ['refund_eligible', 'needs_review'], 'Refund claim')
       }
       const idempotencyKey = cleanText(intent.refundIdempotencyKey, 80) || uuid()
       if (!UUID_V4_PATTERN.test(idempotencyKey)) {

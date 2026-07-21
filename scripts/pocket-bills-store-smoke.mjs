@@ -312,6 +312,16 @@ const failedIntent = await store.createQuote(quoteInput({ idempotencyKey: 'bill:
 const failedBeforePayment = await store.failBeforePayment('privy:owner-1', failedIntent.intent.id, 'Customer cancelled')
 assert.equal(failedBeforePayment.state, 'failed')
 
+const reviewIntent = await store.createQuote(quoteInput({ idempotencyKey: 'bill:idempotency:review-refund', phone: '08055555557' }))
+await store.recordVerifiedPayment({
+  ownerId: 'privy:owner-1', intentId: reviewIntent.intent.id, txHash: `0x${'1'.repeat(64)}`,
+})
+await store.claimVending('privy:owner-1', reviewIntent.intent.id)
+await store.markNeedsReview('privy:owner-1', reviewIntent.intent.id, 'Provider outcome requires requery.')
+const reviewClaim = await store.claimRefund({ intentId: reviewIntent.intent.id, treasuryAddress: config.treasuryAddress })
+assert.equal(reviewClaim.claimed, true)
+assert.equal(reviewClaim.intent.state, 'refunding')
+
 currentTime = Date.parse('2026-07-20T23:59:30+01:00')
 const midnightIntent = await store.createQuote(quoteInput({
   idempotencyKey: 'bill:idempotency:midnight',
