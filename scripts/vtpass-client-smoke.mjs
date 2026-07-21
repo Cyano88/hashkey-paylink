@@ -176,6 +176,16 @@ assert.deepEqual(JSON.parse(tvCalls[1].init.body), {
   phone: '08011111111', subscription_type: 'change', quantity: 1,
 })
 
+const showmaxCalls = []
+const showmaxClient = queuedClient([
+  jsonResponse({ code: '000', response_description: 'TRANSACTION SUCCESSFUL', content: { transactions: { status: 'delivered', transactionId: 'showmax-tx-1' } } }),
+], showmaxCalls)
+await showmaxClient.purchaseTv({ serviceId: 'showmax', variationCode: 'sports-only-1', smartcard: '08011111111', contactPhone: '08011111111', amountNgn: '3200' })
+assert.deepEqual(JSON.parse(showmaxCalls[0].init.body), {
+  request_id: '202607191105fixed123', serviceID: 'showmax', billersCode: '08011111111', variation_code: 'sports-only-1', amount: 3200,
+  phone: '08011111111',
+})
+
 const electricityCalls = []
 const electricityClient = queuedClient([
   jsonResponse({ response_description: '000', content: { Customer_Name: 'METER CUSTOMER', Address: '1 Test Street', Min_Purchase_Amount: '100', MAX_Purchase_Amount: '100000' } }),
@@ -190,6 +200,17 @@ assert.deepEqual(JSON.parse(electricityCalls[0].init.body), { billersCode: '1111
 assert.deepEqual(JSON.parse(electricityCalls[1].init.body), {
   request_id: '202607191105fixed123', serviceID: 'ikeja-electric', billersCode: '1111111111111', variation_code: 'prepaid', amount: 100, phone: '08011111111',
 })
+
+const providerSpecificMeterClient = queuedClient([
+  jsonResponse({ response_description: '000', content: { Customer_Name: '', Address: '', Min_Purchase_Amount: '' } }),
+  jsonResponse({ response_description: '000', content: { Customer_Name: 'Eko Electric Customer', Minimum_Amount: 12041.38 } }),
+])
+const jedCustomer = await providerSpecificMeterClient.verifyCustomer({ category: 'electricity', serviceId: 'jos-electric', billersCode: '1111111111111', variationCode: 'prepaid' })
+assert.equal(jedCustomer.valid, true)
+assert.equal(jedCustomer.customerName, '')
+assert.equal(jedCustomer.minimumAmount, null)
+const ekoCustomer = await providerSpecificMeterClient.verifyCustomer({ category: 'electricity', serviceId: 'eko-electric', billersCode: '1111111111111', variationCode: 'prepaid' })
+assert.equal(ekoCustomer.minimumAmount, 12041.38)
 
 const invalidCustomerClient = queuedClient([jsonResponse({ response_description: '011', content: { WrongBillersCode: true } })])
 await assert.rejects(

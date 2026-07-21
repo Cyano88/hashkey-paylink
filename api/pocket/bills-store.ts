@@ -348,7 +348,8 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     if (!validRecipient) {
       throw new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'tv' ? 'Enter a valid smartcard number.' : category === 'electricity' ? 'Enter a valid meter number.' : category === 'data' ? 'Enter a valid Data recipient.' : 'Enter a valid Nigerian phone number.')
     }
-    if ((category === 'tv' || category === 'electricity') && (!/^0\d{10}$/.test(contactPhone) || !customerName)) {
+    const customerNameRequired = category === 'tv' && serviceId !== 'showmax'
+    if ((category === 'tv' || category === 'electricity') && (!/^0\d{10}$/.test(contactPhone) || (customerNameRequired && !customerName))) {
       throw new PocketBillsStoreError('BILLS_CUSTOMER_NOT_VERIFIED', 'Verify the customer account before payment.')
     }
     if (!isAddress(payerWallet)) throw new PocketBillsStoreError('BILLS_INVALID_WALLET', 'Open a valid Base Circle wallet first.')

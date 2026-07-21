@@ -125,13 +125,17 @@ const provider = {
     ]
   },
   async listTvServices() {
-    return [{ serviceId: 'dstv', name: 'DStv', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' }]
+    return [
+      { serviceId: 'dstv', name: 'DStv', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' },
+      { serviceId: 'showmax', name: 'ShowMax', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' },
+    ]
   },
   async listElectricityServices() {
     return [{ serviceId: 'ikeja-electric', name: 'Ikeja Electric', minimumAmount: 100, maximumAmount: 1000, convenienceFee: '0', productType: 'flexible', imageUrl: '' }]
   },
   async listServiceVariations(serviceId) {
     if (serviceId === 'dstv') return [{ variationCode: 'dstv-yanga', name: 'DStv Yanga', amount: 1500, fixedPrice: true }]
+    if (serviceId === 'showmax') return [{ variationCode: 'sports-only-1', name: 'Sports Only - N3,200', amount: 3200, fixedPrice: true }]
     assert.equal(serviceId, 'mtn-data')
     return [
       { variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amount: 100, fixedPrice: true },
@@ -222,6 +226,10 @@ async function createTvQuote(idempotencyKey) {
   return request(quoteHandler, { category: 'tv', service_id: 'dstv', variation_code: 'dstv-yanga', phone: '1212121212', contact_phone: '08011111111', payer_wallet: '0x2222222222222222222222222222222222222222' }, { idempotencyKey })
 }
 
+async function createShowmaxQuote(idempotencyKey) {
+  return request(quoteHandler, { category: 'tv', service_id: 'showmax', variation_code: 'sports-only-1', phone: '08011111111', contact_phone: '08011111111', payer_wallet: '0x2222222222222222222222222222222222222222' }, { idempotencyKey })
+}
+
 async function createElectricityQuote(idempotencyKey) {
   return request(quoteHandler, { category: 'electricity', service_id: 'ikeja-electric', variation_code: 'prepaid', phone: '1111111111111', contact_phone: '08011111111', amount_ngn: '100', payer_wallet: '0x2222222222222222222222222222222222222222' }, { idempotencyKey })
 }
@@ -249,13 +257,16 @@ assert.deepEqual(dataPlans.body.data.variations, [
 ])
 
 const tvServices = await request(catalogHandler, {}, { method: 'GET', query: { category: 'tv' } })
-assert.deepEqual(tvServices.body.data.services, [{ serviceId: 'dstv', name: 'DStv' }])
+assert.deepEqual(tvServices.body.data.services, [{ serviceId: 'dstv', name: 'DStv' }, { serviceId: 'showmax', name: 'ShowMax' }])
 const tvPlans = await request(catalogHandler, {}, { method: 'GET', query: { category: 'tv', service_id: 'dstv' } })
 assert.equal(tvPlans.body.data.variations[0].variationCode, 'dstv-yanga')
 const electricityServices = await request(catalogHandler, {}, { method: 'GET', query: { category: 'electricity' } })
 assert.deepEqual(electricityServices.body.data.services, [{ serviceId: 'ikeja-electric', name: 'Ikeja Electric' }])
 const verifiedTv = await request(verifyHandler, { category: 'tv', service_id: 'dstv', billers_code: '1212121212' })
 assert.equal(verifiedTv.body.data.verification.customerName, 'TEST CUSTOMER')
+const showmaxVerify = await request(verifyHandler, { category: 'tv', service_id: 'showmax', billers_code: '08011111111' })
+assert.equal(showmaxVerify.statusCode, 409)
+assert.equal(showmaxVerify.body.error.reason, 'BILLS_VERIFY_NOT_REQUIRED')
 const verifiedMeter = await request(verifyHandler, { category: 'electricity', service_id: 'ikeja-electric', billers_code: '1111111111111', variation_code: 'prepaid' })
 assert.equal(verifiedMeter.body.data.verification.customerName, 'TEST CUSTOMER')
 
@@ -284,6 +295,10 @@ await request(payHandler, { action: 'prepare', intent_id: tvQuote.body.data.inte
 const tvConfirmed = await request(payHandler, { action: 'confirm', intent_id: tvQuote.body.data.intent.id, tx_hash: `0x${'8'.repeat(64)}` })
 assert.equal(tvConfirmed.body.data.intent.state, 'delivered')
 assert.equal(tvPurchaseCalls, 1)
+const showmaxQuote = await createShowmaxQuote('bill:handler:showmax:quote:0001')
+assert.equal(showmaxQuote.statusCode, 200)
+assert.equal(showmaxQuote.body.data.intent.phone, '08011111111')
+assert.equal(showmaxQuote.body.data.intent.customerName, 'ShowMax subscriber')
 const electricityQuote = await createElectricityQuote('bill:handler:electricity:quote:0001')
 assert.equal(electricityQuote.statusCode, 200)
 assert.equal(electricityQuote.body.data.intent.category, 'electricity')

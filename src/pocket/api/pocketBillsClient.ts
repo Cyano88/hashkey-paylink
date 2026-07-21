@@ -260,7 +260,7 @@ export async function verifyPocketBillCustomer(input: {
     body: { category: input.category, service_id: input.serviceId, billers_code: input.billersCode, variation_code: input.variationCode },
   })
   const value = record(data.verification)
-  if (value.valid !== true || !text(value.serviceId) || !text(value.billersCode) || !text(value.customerName)) throw new PocketBillsApiError('Customer verification response was invalid.', { status: 502, retryable: true })
+  if (value.valid !== true || !text(value.serviceId) || !text(value.billersCode)) throw new PocketBillsApiError('Customer verification response was invalid.', { status: 502, retryable: true })
   const nullableNumber = (candidate: unknown) => candidate === null || candidate === undefined ? null : Number.isFinite(Number(candidate)) ? Number(candidate) : null
   return {
     valid: true as const,

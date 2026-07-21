@@ -57,6 +57,11 @@ function normalizeDataRecipient(value: unknown, serviceId: string, environment: 
 
 type BillsCategory = 'airtime' | 'data' | 'tv' | 'electricity'
 const SUPPORTED_DATA_SERVICE_IDS = new Set(['mtn-data', 'airtel-data', 'glo-data', 'etisalat-data'])
+const DIRECT_TV_SERVICE_IDS = new Set(['showmax'])
+
+function tvRequiresCustomerVerification(serviceId: string) {
+  return !DIRECT_TV_SERVICE_IDS.has(serviceId.toLowerCase())
+}
 
 function normalizeCategory(value: unknown): BillsCategory {
   const category = cleanText(value, 20).toLowerCase()
@@ -283,14 +288,16 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
         if (variationCode !== 'prepaid' && variationCode !== 'postpaid') return respond.fail(new PocketBillsStoreError('BILLS_INVALID_VARIATION', 'Select prepaid or postpaid.'), 'variationCode')
         variationName = variationCode === 'prepaid' ? 'Prepaid meter' : 'Postpaid meter'
       }
-      if (category === 'tv' || category === 'electricity') {
+      if (category === 'electricity' || (category === 'tv' && tvRequiresCustomerVerification(serviceId))) {
         const verified = await dependencies.provider.verifyCustomer({ category, serviceId, billersCode: phone, variationCode })
         customerName = verified.customerName
         customerAddress = verified.customerAddress
-        if (!customerName) return respond.fail(new PocketBillsStoreError('BILLS_CUSTOMER_NOT_VERIFIED', `VTpass did not confirm this ${category === 'tv' ? 'smartcard' : 'meter'}.`), 'phone')
+        if (category === 'tv' && !customerName) return respond.fail(new PocketBillsStoreError('BILLS_CUSTOMER_NOT_VERIFIED', 'VTpass did not confirm this smartcard.'), 'phone')
         const amount = Number(amountNgn)
-        if (category === 'electricity' && verified.minimumAmount !== null && amount < verified.minimumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_BELOW_PROVIDER_LIMIT', `Minimum electricity amount is NGN ${verified.minimumAmount}.`), 'amountNgn')
-        if (category === 'electricity' && verified.maximumAmount !== null && amount > verified.maximumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_PROVIDER_LIMIT', `Maximum electricity amount is NGN ${verified.maximumAmount}.`), 'amountNgn')
+        if (category === 'electricity' && verified.minimumAmount !== null && amount < verified.minimumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_BELOW_PROVIDER_LIMIT', `Enter at least ${new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 2 }).format(verified.minimumAmount)} for this meter.`), 'amountNgn')
+        if (category === 'electricity' && verified.maximumAmount !== null && amount > verified.maximumAmount) return respond.fail(new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_PROVIDER_LIMIT', `Enter no more than ${new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 2 }).format(verified.maximumAmount)} for this meter.`), 'amountNgn')
+      } else if (category === 'tv') {
+        customerName = 'ShowMax subscriber'
       }
       if (!amountNgn) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_AMOUNT', 'Enter a valid Naira amount.'), 'amountNgn')
       const amount = Number(amountNgn)
@@ -512,6 +519,9 @@ export function createPocketBillsVerifyHandler(dependencies: BillsDependencies) 
       const billersCode = normalizeBillerCode(req.body?.billers_code, category)
       if (!billersCode) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_ACCOUNT', `Enter a valid ${category === 'tv' ? 'smartcard' : 'meter'} number.`), 'billersCode')
       const variationCode = category === 'electricity' ? cleanText(req.body?.variation_code, 20).toLowerCase() : ''
+      if (category === 'tv' && !tvRequiresCustomerVerification(serviceId)) {
+        return respond.fail(new PocketBillsStoreError('BILLS_VERIFY_NOT_REQUIRED', 'This provider uses the subscriber phone number and does not require account verification.', 409))
+      }
       const verification = await dependencies.provider.verifyCustomer({ category, serviceId, billersCode, variationCode })
       return respond.success({ verification: { ...verification, serviceId, billersCode, variationCode } })
     } catch (error) {

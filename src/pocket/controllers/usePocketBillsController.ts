@@ -28,8 +28,13 @@ function sandboxDataRecipient(serviceId: string) {
   return serviceId === 'spectranet' ? '1212121212' : VTPASS_SANDBOX_SUCCESS_PHONE
 }
 
-function sandboxBillAccount(category: 'tv' | 'electricity', variationCode = 'prepaid') {
-  return category === 'tv' ? '1212121212' : variationCode === 'postpaid' ? '1010101010101' : '1111111111111'
+function tvRequiresCustomerVerification(serviceId: string) {
+  return serviceId !== 'showmax'
+}
+
+function sandboxBillAccount(category: 'tv' | 'electricity', variationCode = 'prepaid', serviceId = '') {
+  if (category === 'tv') return tvRequiresCustomerVerification(serviceId) ? '1212121212' : VTPASS_SANDBOX_SUCCESS_PHONE
+  return variationCode === 'postpaid' ? '1010101010101' : '1111111111111'
 }
 
 function billLabel(category: 'airtime' | 'data' | 'tv' | 'electricity') {
@@ -171,7 +176,7 @@ export default function usePocketBillsController({
   const setServiceId = useCallback((value: string) => {
     setServiceIdState(value)
     if (category === 'data' && environment === 'sandbox') setPhoneState(sandboxDataRecipient(value))
-    if ((category === 'tv' || category === 'electricity') && environment === 'sandbox') setPhoneState(sandboxBillAccount(category, variationCode))
+    if ((category === 'tv' || category === 'electricity') && environment === 'sandbox') setPhoneState(sandboxBillAccount(category, variationCode, value))
     setVariationCodeState('')
     setAmountNgnState('')
     setDataVariations([])
@@ -334,7 +339,7 @@ export default function usePocketBillsController({
         setDataServices(result.services)
         const preferred = result.services.some(item => item.serviceId === serviceId) ? serviceId : result.services[0]?.serviceId ?? ''
         setServiceIdState(preferred)
-        if (environment === 'sandbox' && preferred) setPhoneState(view === 'data' ? sandboxDataRecipient(preferred) : sandboxBillAccount(view, variationCode))
+        if (environment === 'sandbox' && preferred) setPhoneState(view === 'data' ? sandboxDataRecipient(preferred) : sandboxBillAccount(view, variationCode, preferred))
       })
       .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : `${billLabel(view)} providers are temporarily unavailable.`) })
       .finally(() => { if (!cancelled) setCatalogBusy(false) })
@@ -389,7 +394,7 @@ export default function usePocketBillsController({
       if (!wallet) throw new Error('Base wallet setup was cancelled.')
       const accessToken = await token()
       const result = category === 'data' ? await quotePocketData({ accessToken, serviceId, variationCode, phone, payerWallet: wallet.address })
-        : category === 'tv' ? await quotePocketTv({ accessToken, serviceId, variationCode, smartcard: phone, contactPhone, payerWallet: wallet.address })
+        : category === 'tv' ? await quotePocketTv({ accessToken, serviceId, variationCode, smartcard: phone, contactPhone: tvRequiresCustomerVerification(serviceId) ? contactPhone : phone, payerWallet: wallet.address })
           : category === 'electricity' ? await quotePocketElectricity({ accessToken, serviceId, meterType: variationCode as 'prepaid' | 'postpaid', meterNumber: phone, contactPhone, amountNgn, payerWallet: wallet.address })
             : await quotePocketAirtime({ accessToken, serviceId, phone, amountNgn, payerWallet: wallet.address })
       if (result.intent.quoteExpiresAt <= Date.now()) throw new PocketBillsApiError(`The ${billLabel(category)} quote expired. Review it again.`, { code: 'BILLS_QUOTE_EXPIRED', status: 409 })
@@ -446,13 +451,20 @@ export default function usePocketBillsController({
   }, [authenticated, category, intent, reconcile, token])
 
   const processing = ['quoting', 'paying', 'confirming', 'processing'].includes(status)
-  const expectedSandboxRecipient = category === 'data' ? sandboxDataRecipient(serviceId) : category === 'tv' || category === 'electricity' ? sandboxBillAccount(category, variationCode) : VTPASS_SANDBOX_SUCCESS_PHONE
+  const expectedSandboxRecipient = category === 'data' ? sandboxDataRecipient(serviceId) : category === 'tv' || category === 'electricity' ? sandboxBillAccount(category, variationCode, serviceId) : VTPASS_SANDBOX_SUCCESS_PHONE
   const recipientReady = category === 'airtime' ? /^0\d{10}$/.test(phone) : category === 'data' ? /^\d{10,12}$/.test(phone) : /^\d{8,15}$/.test(phone)
+  const electricityAmountWithinLimits = category !== 'electricity' || !verification || (
+    (verification.minimumAmount === null || Number(amountNgn) >= verification.minimumAmount)
+    && (verification.maximumAmount === null || Number(amountNgn) <= verification.maximumAmount)
+  )
   const formReady = recipientReady
     && (environment !== 'sandbox' || phone === expectedSandboxRecipient)
     && Number(amountNgn) > 0
     && (category === 'airtime' || Boolean(variationCode))
-    && ((category !== 'tv' && category !== 'electricity') || (Boolean(verification) && /^0\d{10}$/.test(contactPhone)))
+    && electricityAmountWithinLimits
+    && (category === 'tv' && !tvRequiresCustomerVerification(serviceId)
+      ? /^0\d{10}$/.test(phone)
+      : ((category !== 'tv' && category !== 'electricity') || (Boolean(verification) && /^0\d{10}$/.test(contactPhone))))
 
   return {
     availability,
@@ -467,6 +479,7 @@ export default function usePocketBillsController({
     variationCode,
     contactPhone,
     verification,
+    tvVerificationRequired: category !== 'tv' || tvRequiresCustomerVerification(serviceId),
     verifyBusy,
     dataServices,
     dataVariations,

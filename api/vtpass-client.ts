@@ -517,8 +517,8 @@ export function createVtpassClient(options: VtpassClientOptions) {
       customerAddress: text(content.Address || content.address).slice(0, 220),
       currentBouquet: text(content.Current_Bouquet || content.current_bouquet).slice(0, 140),
       renewalAmount: finiteNumber(content.Renewal_Amount || content.renewal_amount),
-      minimumAmount: finiteNumber(content.Min_Purchase_Amount || content.minimum_amount),
-      maximumAmount: finiteNumber(content.MAX_Purchase_Amount || content.maximum_amount),
+      minimumAmount: finiteNumber(content.Min_Purchase_Amount ?? content.Minimum_Amount ?? content.minimum_amount),
+      maximumAmount: finiteNumber(content.MAX_Purchase_Amount ?? content.Maximum_Amount ?? content.maximum_amount),
     }
   }
 

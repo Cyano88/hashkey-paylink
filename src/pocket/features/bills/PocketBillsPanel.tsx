@@ -82,7 +82,8 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
         ? 'pending'
         : 'idle'
   const isData = view === 'data'
-  const isVerifiedBill = view === 'tv' || view === 'electricity'
+  const isVerifiedBill = view === 'electricity' || (view === 'tv' && bills.tvVerificationRequired)
+  const isDirectTv = view === 'tv' && !bills.tvVerificationRequired
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
   const prepaidToken = view === 'electricity' && bills.intent?.variationCode === 'prepaid' && bills.intent.state === 'delivered'
     ? rechargeToken(bills.intent.purchasedCode)
@@ -177,7 +178,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
             )}
 
             <label className="block">
-              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{view === 'tv' ? 'Smartcard number' : view === 'electricity' ? 'Meter number' : bills.environment === 'sandbox' ? 'VTpass test account' : isData ? 'Account or phone number' : 'Phone number'}</span>
+              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard number') : view === 'electricity' ? 'Meter number' : bills.environment === 'sandbox' ? 'VTpass test account' : isData ? 'Account or phone number' : 'Phone number'}</span>
               <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked || bills.environment === 'sandbox'} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
             </label>
             {isData ? (
@@ -220,7 +221,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
                   </button>
                 ) : (
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-                    <span className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-3.5 w-3.5" />{bills.environment === 'sandbox' ? `${view === 'tv' ? 'Test smartcard' : 'Test meter'} verified` : bills.verification.customerName}</span>
+                    <span className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-3.5 w-3.5" />{bills.environment === 'sandbox' ? `${view === 'tv' ? 'Test smartcard' : 'Test meter'} verified` : bills.verification.customerName || `${view === 'tv' ? 'Smartcard' : 'Meter'} verified`}</span>
                     {bills.environment !== 'sandbox' && bills.verification.customerAddress && <span className="mt-1 block text-[10px] leading-4 text-emerald-700/70 dark:text-emerald-200/70">{bills.verification.customerAddress}</span>}
                   </div>
                 )}
@@ -235,6 +236,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Electricity amount</span>
                 <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]"><span className="text-sm font-black text-gray-400">₦</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
+                {bills.verification?.minimumAmount !== null && bills.verification?.minimumAmount !== undefined && <span className="mt-1.5 block text-[10px] font-semibold text-gray-400">Minimum for this meter: {money(String(bills.verification.minimumAmount))}</span>}
               </label>
             )}
 
@@ -255,7 +257,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
                 )}
                 <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-white/10 dark:bg-white/[0.04]">
                   <div className="flex justify-between gap-3"><span className="text-gray-500">{bills.intent.variationName || 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
-                  <div className="flex justify-between gap-3"><span className="text-gray-500">{view === 'tv' ? 'Smartcard' : view === 'electricity' ? 'Meter' : isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-gray-500">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard') : view === 'electricity' ? 'Meter' : isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
                   <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10"><span className="text-gray-500">Pay from Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.amountUsdc))} USDC</span></div>
                 </div>
                 <PocketSlideAction
