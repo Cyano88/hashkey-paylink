@@ -56,6 +56,7 @@ function normalizeDataRecipient(value: unknown, serviceId: string, environment: 
 }
 
 type BillsCategory = 'airtime' | 'data' | 'tv' | 'electricity'
+const SUPPORTED_DATA_SERVICE_IDS = new Set(['mtn-data', 'airtel-data', 'glo-data', 'etisalat-data'])
 
 function normalizeCategory(value: unknown): BillsCategory {
   const category = cleanText(value, 20).toLowerCase()
@@ -72,7 +73,10 @@ function normalizeBillerCode(value: unknown, category: 'tv' | 'electricity') {
 }
 
 async function servicesForCategory(provider: VtpassClient, category: BillsCategory) {
-  if (category === 'data') return provider.listDataServices()
+  if (category === 'data') {
+    const services = await provider.listDataServices()
+    return services.filter(service => SUPPORTED_DATA_SERVICE_IDS.has(service.serviceId.toLowerCase()))
+  }
   if (category === 'tv') return provider.listTvServices()
   if (category === 'electricity') return provider.listElectricityServices()
   return provider.listAirtimeServices()

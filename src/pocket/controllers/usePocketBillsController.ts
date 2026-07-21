@@ -110,11 +110,13 @@ export default function usePocketBillsController({
   const [error, setError] = useState('')
   const [errorCode, setErrorCode] = useState('')
   const [notice, setNotice] = useState('')
-  const restoreStarted = useRef('')
   const visibleCategory = useRef(category)
   const mounted = useRef(true)
 
-  useEffect(() => () => { mounted.current = false }, [])
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   useEffect(() => {
     if (visibleCategory.current === category) return
@@ -270,18 +272,37 @@ export default function usePocketBillsController({
   }, [category, settleResult])
 
   useEffect(() => {
-    if (!authenticated || availability !== 'enabled' || restoreStarted.current === activeBillKey) return
-    const active = readActive(activeBillKey)
-    if (!active) return
-    restoreStarted.current = activeBillKey
-    setStatus(active.txHash ? 'confirming' : 'processing')
-    void token()
-      .then(accessToken => reconcile(active.intentId, active.txHash, accessToken))
-      .catch(reason => {
-        if (!mounted.current) return
-        setStatus('error')
-        setError(reason instanceof Error ? reason.message : `Could not restore the ${billLabel(category)} payment.`)
-      })
+    if (!authenticated || availability !== 'enabled') return
+    let cancelled = false
+    let restoring = false
+    const resume = () => {
+      if (cancelled || restoring || document.visibilityState === 'hidden') return
+      const active = readActive(activeBillKey)
+      if (!active) return
+      restoring = true
+      setStatus(active.txHash ? 'confirming' : 'processing')
+      setError('')
+      setErrorCode('')
+      void token()
+        .then(accessToken => reconcile(active.intentId, active.txHash, accessToken))
+        .catch(reason => {
+          if (!mounted.current || cancelled) return
+          setStatus('error')
+          setError(reason instanceof Error ? reason.message : `Could not restore the ${billLabel(category)} payment.`)
+        })
+        .finally(() => { restoring = false })
+    }
+    const resumeWhenVisible = () => { if (document.visibilityState === 'visible') resume() }
+    resume()
+    window.addEventListener('focus', resume)
+    window.addEventListener('online', resume)
+    document.addEventListener('visibilitychange', resumeWhenVisible)
+    return () => {
+      cancelled = true
+      window.removeEventListener('focus', resume)
+      window.removeEventListener('online', resume)
+      document.removeEventListener('visibilitychange', resumeWhenVisible)
+    }
   }, [activeBillKey, authenticated, availability, category, reconcile, token])
 
   useEffect(() => {

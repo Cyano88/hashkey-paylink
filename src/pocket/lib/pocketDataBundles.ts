@@ -9,7 +9,7 @@ export type PocketDataBundle = PocketDataVariation & {
   category: PocketDataBundleCategory
 }
 
-const MOBILE_DATA_SERVICE_IDS = new Set(['mtn-data', 'airtel-data', 'glo-data', 'glo-sme-data', 'etisalat-data'])
+const MOBILE_DATA_SERVICE_IDS = new Set(['mtn-data', 'airtel-data', 'glo-data', 'etisalat-data'])
 
 function titleCaseUnit(value: string, singular: string, plural: string) {
   const amount = Number(value)
@@ -18,7 +18,12 @@ function titleCaseUnit(value: string, singular: string, plural: string) {
 
 function normalizeValidity(name: string) {
   const match = name.match(/(\d+)\s*[- ]?(hrs?|hours?|days?|months?|years?)/i)
-  if (!match) return 'Flexible'
+  if (!match) {
+    if (/\bdaily\b/i.test(name)) return '1 Day'
+    if (/\bweekly\b/i.test(name)) return '7 Days'
+    if (/\bmonthly\b/i.test(name)) return '30 Days'
+    return 'Flexible'
+  }
   const amount = Number(match[1])
   const unit = match[2].toLowerCase()
   if (unit.startsWith('hr') || unit.startsWith('hour')) {
@@ -45,6 +50,7 @@ function normalizeDataAmount(name: string) {
   if (!matches.length) {
     if (/unlimited/i.test(name)) return 'Unlimited'
     if (/smilevoice/i.test(name)) return 'Voice'
+    if (/xtratalk/i.test(name)) return 'XtraTalk'
     return 'Data'
   }
   return matches
@@ -75,7 +81,12 @@ export function parsePocketDataBundle(variation: PocketDataVariation, serviceId:
   const validity = normalizeValidity(variation.name)
   const days = validityDays(validity)
   const volumeGb = dataAmountInGb(dataAmount)
-  const category: PocketDataBundleCategory = isPocketBroadbandService(serviceId)
+  const mobileBroadbandPlan = MOBILE_DATA_SERVICE_IDS.has(serviceId.toLowerCase()) && (
+    /\b(?:broadband|router|mifi|sme mobile data)\b/i.test(variation.name)
+    || volumeGb >= 100
+    || (days !== null && days > 45)
+  )
+  const category: PocketDataBundleCategory = isPocketBroadbandService(serviceId) || mobileBroadbandPlan
     ? 'broadband'
     : volumeGb >= 50 || (days !== null && days > 45)
       ? 'mega'
@@ -98,6 +109,7 @@ export function parsePocketDataBundle(variation: PocketDataVariation, serviceId:
 
 export function parsePocketDataBundles(variations: PocketDataVariation[], serviceId: string) {
   return variations
+    .filter(variation => !/\bvoice\b/i.test(variation.name))
     .map(variation => parsePocketDataBundle(variation, serviceId))
     .filter(bundle => Number.isFinite(bundle.price) && bundle.price > 0)
 }

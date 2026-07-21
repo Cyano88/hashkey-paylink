@@ -611,7 +611,16 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       if (result.recipient && result.recipient.replace(/\D/g, '') !== intent.phone) {
         throw new PocketBillsStoreError('BILLS_PROVIDER_MISMATCH', 'Provider result recipient does not match this bill request.', 409)
       }
-      if (result.amountNgn !== null && BigInt(Math.round(result.amountNgn * 100)) !== BigInt(intent.amountNgnMinor)) {
+      // Fixed Data and TV products are identified by their provider variation
+      // code. VTpass can return the retail face value in a transaction result
+      // while its catalog variation_amount contains the discounted merchant
+      // price (for example, a N100 bundle catalogued at N99). Keep exact amount
+      // matching for variable-value Airtime and Electricity payments only.
+      if (
+        result.amountNgn !== null
+        && (intent.category === 'airtime' || intent.category === 'electricity')
+        && BigInt(Math.round(result.amountNgn * 100)) !== BigInt(intent.amountNgnMinor)
+      ) {
         throw new PocketBillsStoreError('BILLS_PROVIDER_MISMATCH', 'Provider result amount does not match this bill request.', 409)
       }
       const providerTransactionId = cleanText(result.transactionId, 120)
@@ -659,7 +668,9 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       intent.requeryAttempts += 1
       intent.lastRequeryAt = timestamp
       intent.failureReason = cleanText(reason, 240) || 'Provider status could not be refreshed.'
-      if (intent.state !== 'delivered' && intent.requeryAttempts >= 8) intent.state = 'needs_review'
+      // A provider timeout or a backgrounded browser is not evidence that the
+      // bill failed. Preserve the reconcilable state until an authenticated
+      // VTpass response establishes a terminal result.
     })
   }
 

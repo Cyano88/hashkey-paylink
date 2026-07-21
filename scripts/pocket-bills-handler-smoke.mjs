@@ -114,7 +114,15 @@ const provider = {
     return [{ serviceId: 'mtn', name: 'MTN Airtime', minimumAmount: 50, maximumAmount: 5000, convenienceFee: '0', productType: 'fix', imageUrl: '' }]
   },
   async listDataServices() {
-    return [{ serviceId: 'mtn-data', name: 'MTN Data', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' }]
+    return [
+      { serviceId: 'mtn-data', name: 'MTN Data', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' },
+      { serviceId: 'airtel-data', name: 'Airtel Data', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' },
+      { serviceId: 'glo-data', name: 'GLO Data', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' },
+      { serviceId: 'etisalat-data', name: '9mobile Data', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' },
+      { serviceId: 'smile-direct-data', name: 'Smile', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' },
+      { serviceId: 'spectranet', name: 'Spectranet', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' },
+      { serviceId: 'glo-sme-data', name: 'GLO Data SME', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' },
+    ]
   },
   async listTvServices() {
     return [{ serviceId: 'dstv', name: 'DStv', minimumAmount: 1, maximumAmount: 1000000, convenienceFee: '0', productType: 'fix', imageUrl: '' }]
@@ -148,7 +156,7 @@ const provider = {
     dataPurchaseCalls += 1
     assert.equal(input.serviceId, 'mtn-data')
     assert.equal(input.variationCode, 'mtn-100mb-100')
-    return { ...providerResult(input, providerMode), productName: 'MTN Data' }
+    return { ...providerResult(input, providerMode), productName: 'MTN Data', amountNgn: Number(input.amountNgn) + 1 }
   },
   async purchaseTv(input) {
     tvPurchaseCalls += 1
@@ -228,7 +236,12 @@ assert.equal(disabledTvQuote.body.error.code, 'PROVIDER_UNAVAILABLE')
 assert.equal(disabledTvQuote.body.error.reason, 'BILLS_CATEGORY_DISABLED')
 
 const dataServices = await request(catalogHandler, {}, { method: 'GET' })
-assert.deepEqual(dataServices.body.data.services, [{ serviceId: 'mtn-data', name: 'MTN Data' }])
+assert.deepEqual(dataServices.body.data.services, [
+  { serviceId: 'mtn-data', name: 'MTN Data' },
+  { serviceId: 'airtel-data', name: 'Airtel Data' },
+  { serviceId: 'glo-data', name: 'GLO Data' },
+  { serviceId: 'etisalat-data', name: '9mobile Data' },
+])
 const dataPlans = await request(catalogHandler, {}, { method: 'GET', query: { service_id: 'mtn-data' } })
 assert.deepEqual(dataPlans.body.data.variations, [
   { variationCode: 'mtn-100mb-100', name: 'N100 100MB - 24 hrs', amountNgn: '100.00', available: true },
@@ -341,6 +354,24 @@ requeryMode = 'delivered'
 const reconciled = await request(payHandler, { action: 'status', intent_id: pendingId, refresh: true })
 assert.equal(reconciled.body.data.refreshed, true)
 assert.equal(reconciled.body.data.intent.state, 'delivered')
+
+// Temporary provider read failures must never manufacture a terminal review
+// state. The paid intent remains reconcilable when the browser returns online.
+providerMode = 'unknown'
+const offlineQuote = await createQuote('bill:handler:quote:offline-resume')
+const offlineId = offlineQuote.body.data.intent.id
+await request(payHandler, { action: 'prepare', intent_id: offlineId })
+const offlineConfirm = await request(payHandler, { action: 'confirm', intent_id: offlineId, tx_hash: `0x${'f'.repeat(64)}` })
+assert.equal(offlineConfirm.body.data.intent.state, 'pending')
+requeryMode = 'error'
+for (let attempt = 0; attempt < 10; attempt += 1) {
+  const offlineRefresh = await request(payHandler, { action: 'status', intent_id: offlineId, refresh: true })
+  assert.equal(offlineRefresh.body.data.intent.state, 'pending')
+}
+providerMode = 'delivered'
+requeryMode = 'delivered'
+const resumed = await request(payHandler, { action: 'status', intent_id: offlineId, refresh: true })
+assert.equal(resumed.body.data.intent.state, 'delivered')
 
 // A final provider failure after a verified payment must route to refund review.
 providerMode = 'denied'
