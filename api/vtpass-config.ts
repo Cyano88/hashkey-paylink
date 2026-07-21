@@ -83,6 +83,7 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   const treasuryAddress = env.POCKET_BILLS_TREASURY_ADDRESS?.trim() || ''
   const minimumProviderBalanceNgn = positiveNumber(env.VTPASS_MINIMUM_WALLET_BALANCE_NGN)
   const storeKey = env.POCKET_BILLS_STORE_KEY?.trim() || 'hashpaylink:pocket-bills:v1'
+  const liveStoreIsolated = environment !== 'live' || /(?:^|[:/_-])live(?:$|[:/_-])/i.test(storeKey)
   const issues: string[] = []
 
   if (!apiBase.valid) issues.push('VTPASS_API_BASE must be the official HTTPS host for the selected environment.')
@@ -92,6 +93,7 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   if (!treasuryAddress || !isAddress(treasuryAddress)) issues.push('POCKET_BILLS_TREASURY_ADDRESS must be an explicit valid EVM address.')
   if (minimumProviderBalanceNgn === null) issues.push('VTPASS_MINIMUM_WALLET_BALANCE_NGN must be a positive number.')
   if (!storeKey) issues.push('POCKET_BILLS_STORE_KEY is missing.')
+  if (!liveStoreIsolated) issues.push('POCKET_BILLS_STORE_KEY must use an explicit live namespace in the live environment.')
   if (environment === 'sandbox' && liveVendingEnabled) issues.push('VTPASS_LIVE_VENDING_ENABLED cannot be enabled in sandbox mode.')
   if (refundsReady && !circleTreasury.verificationReady) {
     issues.push('POCKET_BILLS_REFUNDS_READY requires a fully configured Circle developer-controlled treasury.')
@@ -102,7 +104,8 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
     treasuryAddress
     && isAddress(treasuryAddress)
     && minimumProviderBalanceNgn !== null
-    && storeKey,
+    && storeKey
+    && liveStoreIsolated
   )
   const canReadProvider = credentialsReady
   const canSandboxVend = environment === 'sandbox'

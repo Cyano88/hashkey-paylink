@@ -104,6 +104,12 @@ services:
         value: "false"
       - key: VTPASS_AIRTIME_WHITELIST_CONFIRMED
         sync: false                   # explicit operator acknowledgement
+      - key: VTPASS_DATA_WHITELIST_CONFIRMED
+        sync: false                   # keep false until Data is separately approved
+      - key: VTPASS_TV_WHITELIST_CONFIRMED
+        sync: false                   # keep false until TV is separately approved
+      - key: VTPASS_ELECTRICITY_WHITELIST_CONFIRMED
+        sync: false                   # keep false until Electricity is separately approved
       - key: POCKET_BILLS_REFUNDS_READY
         value: "false"
       - key: CIRCLE_ENTITY_SECRET

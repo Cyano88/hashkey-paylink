@@ -55,6 +55,7 @@ const liveDisabled = readVtpassPhase0Config({
   VTPASS_ENVIRONMENT: 'live',
   VTPASS_API_BASE: 'https://vtpass.com',
   POCKET_BILLS_ENABLED: 'true',
+  POCKET_BILLS_STORE_KEY: 'hashpaylink:pocket-bills:live:test',
 })
 assert.equal(liveDisabled.canVend, false)
 
@@ -66,6 +67,7 @@ const liveEnabled = readVtpassPhase0Config({
   VTPASS_LIVE_VENDING_ENABLED: 'true',
   VTPASS_AIRTIME_WHITELIST_CONFIRMED: 'true',
   POCKET_BILLS_REFUNDS_READY: 'true',
+  POCKET_BILLS_STORE_KEY: 'hashpaylink:pocket-bills:live:test',
 })
 assert.equal(liveEnabled.canVend, true)
 assert.equal(liveEnabled.canLiveVend, true)
@@ -83,6 +85,7 @@ const liveAllCategories = readVtpassPhase0Config({
   VTPASS_TV_WHITELIST_CONFIRMED: 'true',
   VTPASS_ELECTRICITY_WHITELIST_CONFIRMED: 'true',
   POCKET_BILLS_REFUNDS_READY: 'true',
+  POCKET_BILLS_STORE_KEY: 'hashpaylink:pocket-bills:live:test',
 })
 assert.equal(liveAllCategories.canLiveVend, true)
 assert.deepEqual(liveAllCategories.liveCategories, ['airtime', 'data', 'tv', 'electricity'])
@@ -95,6 +98,7 @@ const liveWithoutCircleTreasury = readVtpassPhase0Config({
   VTPASS_LIVE_VENDING_ENABLED: 'true',
   VTPASS_AIRTIME_WHITELIST_CONFIRMED: 'true',
   POCKET_BILLS_REFUNDS_READY: 'true',
+  POCKET_BILLS_STORE_KEY: 'hashpaylink:pocket-bills:live:test',
   CIRCLE_ENTITY_SECRET: '',
   POCKET_BILLS_TREASURY_WALLET_ID: '',
 })
@@ -108,8 +112,21 @@ const noRefunds = readVtpassPhase0Config({
   POCKET_BILLS_ENABLED: 'true',
   VTPASS_LIVE_VENDING_ENABLED: 'true',
   VTPASS_AIRTIME_WHITELIST_CONFIRMED: 'true',
+  POCKET_BILLS_STORE_KEY: 'hashpaylink:pocket-bills:live:test',
 })
 assert.equal(noRefunds.canVend, false)
+
+const liveSharedSandboxStore = readVtpassPhase0Config({
+  ...base,
+  VTPASS_ENVIRONMENT: 'live',
+  VTPASS_API_BASE: 'https://vtpass.com',
+  POCKET_BILLS_ENABLED: 'true',
+  VTPASS_LIVE_VENDING_ENABLED: 'true',
+  VTPASS_AIRTIME_WHITELIST_CONFIRMED: 'true',
+  POCKET_BILLS_REFUNDS_READY: 'true',
+})
+assert.equal(liveSharedSandboxStore.canVend, false)
+assert.match(liveSharedSandboxStore.issues.join(' '), /live namespace/i)
 
 const wrongHost = readVtpassPhase0Config({ ...base, VTPASS_API_BASE: 'https://example.com' })
 assert.equal(wrongHost.credentialsReady, false)
