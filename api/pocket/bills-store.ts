@@ -506,10 +506,19 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   }
 
   async function markAwaitingPayment(ownerId: string, intentId: string) {
-    return updateOwned(ownerId, intentId, (intent, _store, timestamp) => {
+    return updateOwned(ownerId, intentId, (intent, store, timestamp) => {
       if (intent.state === 'awaiting_payment') return
       assertState(intent, ['quoted'], 'Payment authorization')
       if (intent.quoteExpiresAt <= timestamp) throw new PocketBillsStoreError('BILLS_QUOTE_EXPIRED', 'Bill quote expired. Request a new quote.', 409)
+      // VTpass requires the request ID date to match the Lagos purchase date.
+      // Refresh it immediately before wallet authorization so a checkout that
+      // crosses midnight cannot collect USDC and then fail locally before vend.
+      const purchaseRequestId = createVtpassRequestId(new Date(timestamp), intent.id)
+      if (purchaseRequestId.slice(0, 8) !== intent.requestId.slice(0, 8)) {
+        delete store.providerRequests[intent.requestId]
+        intent.requestId = purchaseRequestId
+        store.providerRequests[purchaseRequestId] = intent.id
+      }
       intent.state = 'awaiting_payment'
     })
   }

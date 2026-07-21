@@ -312,6 +312,18 @@ const failedIntent = await store.createQuote(quoteInput({ idempotencyKey: 'bill:
 const failedBeforePayment = await store.failBeforePayment('privy:owner-1', failedIntent.intent.id, 'Customer cancelled')
 assert.equal(failedBeforePayment.state, 'failed')
 
+currentTime = Date.parse('2026-07-20T23:59:30+01:00')
+const midnightIntent = await store.createQuote(quoteInput({
+  idempotencyKey: 'bill:idempotency:midnight',
+  phone: '08055555556',
+  quoteExpiresAt: currentTime + 5 * 60_000,
+}))
+const originalRequestId = midnightIntent.intent.requestId
+currentTime = Date.parse('2026-07-21T00:00:10+01:00')
+const midnightPrepared = await store.markAwaitingPayment('privy:owner-1', midnightIntent.intent.id)
+assert.notEqual(midnightPrepared.requestId, originalRequestId)
+assert.equal(midnightPrepared.requestId.slice(0, 8), '20260721')
+
 const concurrencyConfig = readVtpassPhase0Config({
   ...env,
   POCKET_BILLS_MAX_NGN: '200',
