@@ -149,12 +149,18 @@ const refundActivityHandler = createPocketActivityHandler({
       amountNgn: '100', amountUsdc: '0.072', network: 'base', treasuryAddress: '0x1111111111111111111111111111111111111111',
       txHash: '0xunverifiedlegacy', providerEnvironment: 'sandbox', updatedAt: 1_738_000_000_000, providerTransactionId: '', refundTxHash: '',
     },
+    {
+      id: 'review-refund', ownerId, state: 'needs_review', category: 'electricity', serviceName: 'Ikeja Electric', phone: '1111111111111',
+      amountNgn: '500', amountUsdc: '0.363154', network: 'base', treasuryAddress: '0x1111111111111111111111111111111111111111',
+      txHash: '0xreview', providerEnvironment: 'sandbox', updatedAt: 1_737_000_000_000, providerTransactionId: '', refundTxHash: '',
+    },
   ],
 })
 const refundActivity = await request(refundActivityHandler)
 assert.equal(refundActivity.body.payments.find(row => row.merchantId === 'claimable-refund').refundAction, 'claim')
 assert.equal(refundActivity.body.payments.find(row => row.merchantId === 'legacy-refund').refundAction, undefined)
 assert.equal(refundActivity.body.payments.find(row => row.merchantId === 'unverified-legacy-refund').refundAction, undefined)
+assert.equal(refundActivity.body.payments.find(row => row.merchantId === 'review-refund').refundAction, 'check')
 
 const unauthorizedHandler = createPocketActivityHandler({
   verifyUser: async () => { throw Object.assign(new Error('Missing Privy access token.'), { status: 401 }) },

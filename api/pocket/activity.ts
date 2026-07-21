@@ -31,7 +31,7 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
     && intent.treasuryAddress.toLowerCase() === refundPolicy.treasuryAddress.toLowerCase()
   const refundAction = refundEligible && intent.state === 'refund_eligible'
     ? 'claim' as const
-    : refundEligible && (intent.state === 'refunding' || intent.state === 'refund_submitted')
+    : refundEligible && (intent.state === 'needs_review' || intent.state === 'refunding' || intent.state === 'refund_submitted')
       ? 'check' as const
       : undefined
   const status = intent.state === 'delivered'
