@@ -11,7 +11,7 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { isAddress } from 'viem'
 import {
   CheckCircle2, ExternalLink, Loader2, Link2,
-  RefreshCw, TrendingUp, Wallet, Info, AlertCircle, ChevronDown, ChevronUp, X, Printer, Mail,
+  RefreshCw, TrendingUp, Wallet, Info, AlertCircle, ChevronDown, ChevronUp, Printer, Mail,
 } from 'lucide-react'
 import { usePrivy } from '@privy-io/react-auth'
 import { CHAIN_META } from '../lib/chains'
@@ -280,10 +280,7 @@ export default function Dashboard() {
   const [customDate,    setCustomDate]    = useState(() => new Date().toISOString().slice(0, 10))
   const [posNetworks,   setPosNetworks]   = useState<PosNetwork[]>([])
   const [posMerchantName, setPosMerchantName] = useState('')
-  const [activeReceipt, setActiveReceipt] = useState<PaymentRow | null>(null)
-  const [activePaylinkReceipt, setActivePaylinkReceipt] = useState<PaylinkReceipt | null>(null)
   const [posReceiptBusy, setPosReceiptBusy] = useState(false)
-  const [posReceiptError, setPosReceiptError] = useState('')
   const [visibleReceiptCount, setVisibleReceiptCount] = useState(POS_RECEIPT_PAGE_SIZE)
   const [localProfile, setLocalProfile] = useState<LocalCurrencyProfile | null>(null)
   const lastReceiptCount = useRef<number | null>(null)
@@ -802,21 +799,8 @@ export default function Dashboard() {
     }
     return data.receipt
   }
-  useEffect(() => {
-    let cancelled = false
-    setActivePaylinkReceipt(null)
-    setPosReceiptError('')
-    if (!activeReceipt || !rowReceiptId(activeReceipt)) return () => { cancelled = true }
-    setPosReceiptBusy(true)
-    void loadPosReceipt(activeReceipt)
-      .then(receipt => { if (!cancelled) setActivePaylinkReceipt(receipt) })
-      .catch(error => { if (!cancelled) setPosReceiptError(error instanceof Error ? error.message : 'Receipt is not ready yet.') })
-      .finally(() => { if (!cancelled) setPosReceiptBusy(false) })
-    return () => { cancelled = true }
-  }, [activeReceipt])
   async function handlePrintPosReceipt(row: PaymentRow) {
     setPosReceiptBusy(true)
-    setPosReceiptError('')
     const printWindow = window.open('', '_blank', 'width=420,height=720')
     if (printWindow) {
       printWindow.document.write('<!doctype html><title>Loading receipt</title><body style="font-family:Arial,sans-serif;padding:24px;color:#111827">Preparing receipt...</body>')
@@ -880,7 +864,6 @@ export default function Dashboard() {
       printWindow.document.close()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not print receipt.'
-      setPosReceiptError(message)
       if (printWindow) {
         printWindow.document.open()
         printWindow.document.write(`<!doctype html><title>Receipt unavailable</title><body style="font-family:Arial,sans-serif;padding:24px;color:#111827">${message}</body>`)
@@ -1331,25 +1314,8 @@ export default function Dashboard() {
                 return (
                   <div
                     key={row.id}
-                    role={isNgPosDashboard ? 'button' : undefined}
-                    tabIndex={isNgPosDashboard ? 0 : undefined}
-                    onClick={() => {
-                      if (isNgPosDashboard) {
-                        setPosReceiptError('')
-                        setActiveReceipt(row)
-                      }
-                    }}
-                    onKeyDown={event => {
-                      if (!isNgPosDashboard) return
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        setPosReceiptError('')
-                        setActiveReceipt(row)
-                      }
-                    }}
                     className={cn(
                       'grid gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 shadow-sm transition-all hover:border-gray-200 hover:bg-gray-50/50 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.05] sm:grid-cols-[1.15fr_1fr_1fr_auto] sm:items-center',
-                      isNgPosDashboard && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-950',
                     )}
                   >
                     <div className="min-w-0">
@@ -1376,6 +1342,7 @@ export default function Dashboard() {
                     </div>
 
                     <div className="flex items-center gap-2 sm:justify-end">
+                      {rowReceiptId(row) && <UnifiedReceipt receiptId={rowReceiptId(row)} compact />}
                       {rowReceiptId(row) && (
                         <button
                           type="button"
@@ -1549,32 +1516,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {isNgPosDashboard && activeReceipt && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-3 py-4 backdrop-blur-sm sm:items-center"
-          onClick={() => {
-            setPosReceiptError('')
-            setActiveReceipt(null)
-          }}
-        >
-          <div
-            className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-[1.75rem] border border-gray-100 bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-gray-950"
-            onClick={event => event.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between px-1">
-              <span className="text-[11px] font-black uppercase tracking-[0.14em] text-gray-400">Retail receipt</span>
-              <button type="button" onClick={() => setActiveReceipt(null)} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-400 transition hover:bg-gray-50 hover:text-gray-700 dark:border-white/10 dark:hover:bg-white/10" aria-label="Close receipt"><X className="h-4 w-4" /></button>
-            </div>
-            {activePaylinkReceipt ? (
-              <UnifiedReceipt receipt={{ ...activePaylinkReceipt, recipient: activePaylinkReceipt.merchantId || posMerchantName || 'Retail merchant' }} />
-            ) : posReceiptBusy ? (
-              <div className="flex min-h-64 items-center justify-center gap-2 rounded-[1.75rem] bg-black text-sm font-bold text-white/60"><Loader2 className="h-4 w-4 animate-spin" /> Preparing receipt</div>
-            ) : (
-              <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-5 text-center text-xs font-semibold text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">{posReceiptError || 'Receipt is not ready yet.'}</div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

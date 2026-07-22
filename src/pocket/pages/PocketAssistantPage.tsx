@@ -72,7 +72,7 @@ export default function PocketAssistantPage() {
                 <p className="px-1 pb-2 text-[13px] leading-[1.45] text-gray-900 dark:text-gray-100">Sign in to Circle Pocket so I can verify your session.</p>
                 <PrivyConnectButton
                   debugLabel="pocket-assistant-email"
-                  loginOptions={{ loginMethods: ['email', 'wallet'] }}
+                  loginOptions={{ loginMethods: ['email'] }}
                   logoutOnAuthenticated={false}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950"
                 >

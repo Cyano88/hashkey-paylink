@@ -353,10 +353,6 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
   sdk.setResources({
     dAppIcon: '/hash-logo.png',
     transactionTokenIcon: '/brand/circle-logo.jpeg',
-    fontFamily: {
-      name: 'Inter',
-      url: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
-    },
   })
 
   sdk.setCustomLinks({

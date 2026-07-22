@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Copy, Cpu, ExternalLink, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
+import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, Copy, Cpu, ExternalLink, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
@@ -63,7 +63,6 @@ function supportedRows(rows: PocketActivityRow[]) {
 }
 
 export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefresh, onRefund }: PocketActivityPanelProps) {
-  const [expandedReceipt, setExpandedReceipt] = useState('')
   const [copiedBillToken, setCopiedBillToken] = useState('')
   const [refundBusy, setRefundBusy] = useState('')
   const [refundMessage, setRefundMessage] = useState<Record<string, string>>({})
@@ -144,19 +143,8 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                       </p>
                     )}
                     {receipt && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setExpandedReceipt(current => current === row.eventId ? '' : row.eventId)}
-                          className="mt-2 flex w-full items-center justify-between rounded-xl bg-gray-50 px-3 py-2 text-[11px] font-bold text-gray-500 transition hover:text-gray-900 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:text-white"
-                          aria-expanded={expandedReceipt === row.eventId}
-                        >
-                          <span>Receipt details</span>
-                          <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', expandedReceipt === row.eventId && 'rotate-180')} />
-                        </button>
-                        {expandedReceipt === row.eventId && (
-                          <div className="mt-2 space-y-3">
-                            <UnifiedReceipt receipt={receipt} />
+                      <div className="mt-2 space-y-3">
+                        <UnifiedReceipt receipt={receipt} />
                             {row.billToken && (() => {
                               const token = row.billToken.replace(/^token\s*:\s*/i, '').trim()
                               return (
@@ -212,9 +200,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                             {refundIntentId && refundMessage[refundIntentId] && (
                               <p className="text-right text-[10px] font-semibold text-gray-500 dark:text-gray-300">{refundMessage[refundIntentId]}</p>
                             )}
-                          </div>
-                        )}
-                      </>
+                      </div>
                     )}
                   </div>
                 )

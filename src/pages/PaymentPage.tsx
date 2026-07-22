@@ -3953,9 +3953,7 @@ export default function PaymentPage() {
                 {polymarketBridgeComplete && (
                   <div className="grid gap-2 sm:grid-cols-2">
                     {paymentReceiptId ? (
-                      <a href={`/receipt/${encodeURIComponent(paymentReceiptId)}`} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
-                        <ExternalLink className="h-3.5 w-3.5" /> Share receipt
-                      </a>
+                      <UnifiedReceipt receipt={paymentReceipt ?? undefined} receiptId={paymentReceiptId} />
                     ) : (
                       <span className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium text-gray-400">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing receipt
@@ -3976,9 +3974,7 @@ export default function PaymentPage() {
                 {polymarketBridgeComplete && (
                   <div className="grid gap-2 sm:grid-cols-2">
                     {paymentReceiptId ? (
-                      <a href={`/receipt/${encodeURIComponent(paymentReceiptId)}`} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
-                        <ExternalLink className="h-3.5 w-3.5" /> Share receipt
-                      </a>
+                      <UnifiedReceipt receipt={paymentReceipt ?? undefined} receiptId={paymentReceiptId} />
                     ) : (
                       <span className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium text-gray-400">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing receipt
@@ -4645,13 +4641,7 @@ export default function PaymentPage() {
                     </p>
                   )}
                   {bankSendStatus === 'settled' && paymentReceiptId && (
-                    <Link
-                      to={`/receipt/${encodeURIComponent(paymentReceiptId)}`}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-emerald-700 shadow-sm ring-1 ring-emerald-200 transition hover:bg-emerald-50 dark:bg-white/[0.08] dark:text-emerald-200 dark:ring-emerald-400/20 dark:hover:bg-white/[0.12]"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      View receipt
-                    </Link>
+                    <UnifiedReceipt receipt={paymentReceipt ?? undefined} receiptId={paymentReceiptId} />
                   )}
                 </div>
               )}

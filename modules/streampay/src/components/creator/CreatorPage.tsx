@@ -12,6 +12,7 @@ import {
 } from '../../../../../src/lib/circleEvmEmailWallet'
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
+import UnifiedReceipt from '../../../../../src/components/UnifiedReceipt'
 
 type ViewerRow = { viewer: string; amountRaw: string; ts: number }
 type CreatorFixedUnlockRow = {
@@ -1539,11 +1540,7 @@ function CreatorAccountEarnings({
                     <StreamMiniStat label="Rail" value={fixed.kind === 'checkpoint' ? 'Arc' : 'x402'} />
                     <StreamMiniStat label="Status" value={fixed.kind === 'checkpoint' ? 'Released' : 'Paid'} />
                   </div>
-                  {fixed.receiptActivityId && (
-                    <a href={`/receipt/${fixed.receiptActivityId}`} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white py-2 text-[12px] font-bold text-gray-600 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-[#111216] dark:text-gray-300 dark:hover:bg-white/[0.06]">
-                      View receipt
-                    </a>
-                  )}
+                  {fixed.receiptActivityId && <UnifiedReceipt receiptId={fixed.receiptActivityId} className="mt-3" />}
                 </div>
               )
             }

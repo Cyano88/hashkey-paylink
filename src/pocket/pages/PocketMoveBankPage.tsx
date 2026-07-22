@@ -38,7 +38,6 @@ export default function PocketMoveBankPage() {
     const saved = window.sessionStorage.getItem('pocket:bank:mode')
     return saved === 'request' || saved === 'withdraw' ? saved : 'idle'
   })
-  const [bankReceiptOpen, setBankReceiptOpen] = useState(false)
   const setMode = useCallback((next: 'idle' | 'request' | 'withdraw') => {
     window.sessionStorage.setItem('pocket:bank:mode', next)
     setModeState(next)
@@ -295,20 +294,7 @@ export default function PocketMoveBankPage() {
 
           </fieldset>}
 
-          {mode === 'withdraw' && bankReceipt && (
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setBankReceiptOpen(open => !open)}
-                className="flex min-h-11 w-full items-center justify-between rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-700 transition hover:border-gray-300 hover:text-gray-950 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.07] dark:hover:text-white"
-                aria-expanded={bankReceiptOpen}
-              >
-                <span>View receipt</span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${bankReceiptOpen ? 'rotate-180' : ''}`} />
-              </button>
-              {bankReceiptOpen && <UnifiedReceipt receipt={bankReceipt} />}
-            </div>
-          )}
+          {mode === 'withdraw' && bankReceipt && <UnifiedReceipt receipt={bankReceipt} />}
         </div>}
       </div>
 

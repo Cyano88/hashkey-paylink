@@ -114,7 +114,7 @@ export default function PocketX402Page() {
           <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95">
             <PrivyConnectButton
               debugLabel="x402-wallet-email"
-              loginOptions={{ loginMethods: ['email', 'wallet'] }}
+              loginOptions={{ loginMethods: ['email'] }}
               logoutOnAuthenticated={false}
               className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >

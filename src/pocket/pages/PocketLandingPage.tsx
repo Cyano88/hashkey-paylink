@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Lock, Mail, Moon, RotateCw, Sun } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Lock, Mail, RotateCw } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
-import { useTheme } from '../../lib/ThemeContext'
 import { CPurseIcon } from '../components/CPurseIcon'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
@@ -10,7 +9,6 @@ import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 
 export default function PocketLandingPage() {
   const navigate = useNavigate()
-  const { theme, toggle: toggleTheme } = useTheme()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const [enterAfterLogin, setEnterAfterLogin] = useState(false)
@@ -62,15 +60,6 @@ export default function PocketLandingPage() {
                 Guest Login
               </button>
             )}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition-colors hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.13]"
-            >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
           </div>
         </div>
       </nav>

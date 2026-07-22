@@ -44,23 +44,12 @@ const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; d
   { key: 'solana', label: 'Solana', note: 'Soon', disabled: true },
 ]
 
-function linkedEvmWallet(user: unknown) {
-  const accounts = (user as { linkedAccounts?: unknown } | undefined)?.linkedAccounts
-  if (!Array.isArray(accounts)) return ''
-  for (const item of accounts) {
-    const account = item as { type?: unknown; address?: unknown }
-    if ((account.type === 'wallet' || account.type === 'smart_wallet') && typeof account.address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(account.address)) return account.address
-  }
-  return ''
-}
-
 function fieldClass() {
   return 'h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:focus:border-blue-400/50 dark:focus:bg-white/[0.07]'
 }
 
 export default function DeveloperPortalPage() {
-  const { ready, authenticated, user, getAccessToken, logout, linkWallet } = usePrivy()
-  const wallet = useMemo(() => linkedEvmWallet(user), [user])
+  const { ready, authenticated, getAccessToken, logout } = usePrivy()
   const [projects, setProjects] = useState<Project[]>([])
   const [authWaitExpired, setAuthWaitExpired] = useState(false)
   const [activeId, setActiveId] = useState('')
@@ -258,7 +247,7 @@ export default function DeveloperPortalPage() {
         </aside>
 
         <section className="min-w-0 flex-1 rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-7">
-          {active && draft && tab === 'setup' && <SetupPanel draft={draft} setDraft={setDraft} wallet={wallet} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onLinkWallet={linkWallet} onSave={saveProject} />}
+          {active && draft && tab === 'setup' && <SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={saveProject} />}
           {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
           {active && draft && tab === 'webhooks' && <WebhookPanel draft={draft} setDraft={setDraft} newSecret={newWebhookSecret} busy={busy} onSave={saveProject} onRotate={rotateWebhookSecret} />}
           {active && tab === 'quickstart' && <QuickstartPanel project={active} />}
@@ -291,7 +280,7 @@ function CapabilityPicker({ value, onChange }: { value: Capability[]; onChange: 
   </div>
 }
 
-function SetupPanel({ draft, setDraft, wallet, institutions, institutionsLoading, busy, onLinkWallet, onSave }: { draft: Project; setDraft: (project: Project) => void; wallet: string; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onLinkWallet: () => void; onSave: () => void }) {
+function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, onSave }: { draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void }) {
   const bankAccountNumber = draft.bankAccountNumber ?? ''
   function toggleNetwork(network: Network) {
     const selected = draft.networks.includes(network)
@@ -351,9 +340,9 @@ function SetupPanel({ draft, setDraft, wallet, institutions, institutionsLoading
 
     <div className="mt-5 space-y-3">
       {draft.settlementMode === 'usdc' && draft.networks.map(network => <Field key={network} label={`${network === 'arc' ? 'Arc Test' : network[0].toUpperCase() + network.slice(1)} receiving address`}>
-        <div className="flex gap-2"><input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder="0x..." />{wallet && <button type="button" onClick={() => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: wallet } })} className="shrink-0 rounded-xl border border-gray-200 px-3 text-[10px] font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.05]">Use linked</button>}</div>
+        <input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder="0x..." />
       </Field>)}
-      {!wallet && <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-400/20 dark:bg-amber-400/10 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs leading-5 text-amber-800 dark:text-amber-200">Link an EVM wallet to your Privy identity before live API activation.</p><button type="button" onClick={onLinkWallet} className="h-9 shrink-0 rounded-full bg-gray-950 px-4 text-[10px] font-semibold text-white dark:bg-white dark:text-gray-950">Link wallet</button></div>}
+      {draft.settlementMode === 'usdc' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">Enter the treasury or Circle wallet address that should receive payments on each enabled network.</p>}
     </div>
 
     {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect value={draft.defaultNetwork} options={draft.networks.map(network => ({ value: network, label: network === 'arc' ? 'Arc Test' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
@@ -363,7 +352,7 @@ function SetupPanel({ draft, setDraft, wallet, institutions, institutionsLoading
       <Field label="Bank" className="sm:col-span-2"><PocketSelect value={draft.bankCode} options={institutions.map(bank => ({ value: bank.code, label: bank.name }))} onChange={value => { const bank = institutions.find(item => item.code === value); setDraft({ ...draft, bankCode: value, bankName: bank?.name ?? '', bankAccountNumber: '', bankVerifiedAt: undefined }) }} disabled={institutionsLoading} placeholder={institutionsLoading ? 'Loading banks…' : 'Select bank'} ariaLabel="Naira settlement bank" /></Field>
       <Field label="Account number"><input className={fieldClass()} inputMode="numeric" value={bankAccountNumber} onChange={event => setDraft({ ...draft, bankAccountNumber: event.target.value, bankVerifiedAt: undefined })} placeholder={draft.bankAccountLast4 ? `••••••${draft.bankAccountLast4}` : '10-digit account'} /></Field>
       <Field label="Account name"><input className={fieldClass()} value={draft.bankAccountName} readOnly={Boolean(draft.bankVerifiedAt && !bankAccountNumber)} onChange={event => setDraft({ ...draft, bankAccountName: event.target.value, bankVerifiedAt: undefined })} placeholder="Verified after save" /></Field>
-      <Field label="USDC refund address" className="sm:col-span-2"><div className="flex gap-2"><input className={fieldClass()} value={draft.refundAddress} onChange={event => setDraft({ ...draft, refundAddress: event.target.value })} placeholder="0x..." />{wallet && <button type="button" onClick={() => setDraft({ ...draft, refundAddress: wallet })} className="shrink-0 rounded-xl border border-gray-200 px-3 text-[10px] font-semibold text-gray-600 dark:border-white/10 dark:text-gray-300">Use linked</button>}</div></Field>
+      <Field label="USDC refund address" className="sm:col-span-2"><input className={fieldClass()} value={draft.refundAddress} onChange={event => setDraft({ ...draft, refundAddress: event.target.value })} placeholder="0x..." /></Field>
       {draft.bankVerifiedAt && <p className="sm:col-span-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-300"><ShieldCheck className="h-4 w-4" /> Bank account verified</p>}
     </div>}
     <button type="button" disabled={busy} onClick={onSave} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Save configuration</button>

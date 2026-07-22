@@ -21,6 +21,7 @@ import { resolvePrivyCircleLink, savePrivyCircleLink } from '../lib/privyCircleL
 import { PrivyConnectButton }           from '../lib/PrivyConnectButton'
 import { circlePocketAgentHeaders }     from '../lib/circlePocketAgentIdentity'
 import ZeroScoutPowerBadge              from '../components/ZeroScoutPowerBadge'
+import UnifiedReceipt                   from '../components/UnifiedReceipt'
 import {
   CheckCircle2, AlertCircle, Loader2, Send,
   ExternalLink, ArrowLeft, ArrowRight, ShieldCheck, Zap,
@@ -1810,14 +1811,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                         This is research for a human LP. Hash PayLink does not place, cancel, or manage Polymarket orders for you.
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
-                        {latestX402Spend?.proof?.proofHash && (
-                          <Link
-                            to={`/receipt/${encodeURIComponent(latestX402Spend.id)}`}
-                            className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200"
-                          >
-                            View x402 receipt
-                          </Link>
-                        )}
+                        {latestX402Spend?.proof?.proofHash && <UnifiedReceipt receiptId={latestX402Spend.id} compact />}
                         {latestX402Spend?.og?.ogExplorer && (
                           <a
                             href={latestX402Spend.og.ogExplorer}
@@ -2008,7 +2002,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                 <>
                   <PrivyConnectButton
                     debugLabel="x402-wallet-email"
-                    loginOptions={{ loginMethods: ['email', 'wallet'] }}
+                    loginOptions={{ loginMethods: ['email'] }}
                     logoutOnAuthenticated={false}
                     onBeforeLogin={() => {
                       try { window.sessionStorage.setItem(AGENT_WALLET_LOGIN_INTENT_KEY, 'login') } catch {}
@@ -2022,7 +2016,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                     )}
                   >
                     {embeddedWalletManager ? <Mail className="absolute left-5 h-4 w-4" /> : <Mail className="h-4 w-4" />}
-                    <span>{embeddedWalletManager ? 'Sign in to x402' : 'Sign in or connect wallet'}</span>
+                    <span>{embeddedWalletManager ? 'Sign in to x402' : 'Sign in with email'}</span>
                     {embeddedWalletManager && (
                       <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5 dark:bg-white/10">
                         <ArrowRight className="h-4 w-4" />
@@ -2449,14 +2443,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                                 0G archived
                               </a>
                             )}
-                            {item.proof?.proofHash && (
-                              <Link
-                                to={`/receipt/${encodeURIComponent(item.id)}`}
-                                className="shrink-0 text-[10px] font-semibold text-blue-600 transition-colors hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-100"
-                              >
-                                Receipt
-                              </Link>
-                            )}
+                            {item.proof?.proofHash && <UnifiedReceipt receiptId={item.id} compact />}
                           </div>
                         )}
                       </div>

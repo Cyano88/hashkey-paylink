@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useConnectWallet, usePrivy } from '@privy-io/react-auth'
+import { usePrivy } from '@privy-io/react-auth'
 import {
   useSignTransaction as usePrivySolanaSignTransaction,
   useWallets as usePrivySolanaWallets,
@@ -96,7 +96,6 @@ function LegacySolanaProvider({ children }: { children: ReactNode }) {
 
 function PrivySolanaProvider({ children }: { children: ReactNode }) {
   const { authenticated, login, logout } = usePrivy()
-  const { connectWallet } = useConnectWallet()
   const { ready, wallets } = usePrivySolanaWallets()
   const { signTransaction: signPrivyTransaction } = usePrivySolanaSignTransaction()
   const [isConnecting, setIsConnecting] = useState(false)
@@ -111,16 +110,8 @@ function PrivySolanaProvider({ children }: { children: ReactNode }) {
     setIsConnecting(true)
     try {
       if (!authenticated) {
-        login({
-          loginMethods: opts?.includeEmail ? ['email', 'wallet'] : ['wallet'],
-          walletChainType: 'solana-only',
-        })
-        return
+        login({ loginMethods: ['email'] })
       }
-      connectWallet({
-        walletChainType: 'solana-only',
-        walletList: ['detected_solana_wallets', 'phantom', 'solflare', 'backpack', 'wallet_connect_qr_solana'],
-      })
     } finally {
       setIsConnecting(false)
     }

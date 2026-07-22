@@ -17,6 +17,7 @@ import {
   type CircleEvmEmailSession,
 } from '../../../../../src/lib/circleEvmEmailWallet'
 import type { X402ReceiptLike } from '../../../../../src/lib/paymentReceiptPdf'
+import UnifiedReceipt from '../../../../../src/components/UnifiedReceipt'
 
 // ── Arc standalone client ─────────────────────────────────────────────────────
 const arcClient = createPublicClient({
@@ -968,11 +969,6 @@ export function StreamGate() {
       if (timer) window.clearTimeout(timer)
     }
   }, [gatewayReceiptId])
-
-  function openGatewayReceipt() {
-    if (!gatewayReceiptId) return
-    window.open(`/receipt/${encodeURIComponent(gatewayReceiptId)}`, '_blank', 'noopener,noreferrer')
-  }
 
   async function unlockWithAgentX402(agentSlugOverride?: string) {
     if (gatewayPaying) return
@@ -2782,19 +2778,7 @@ export function StreamGate() {
                   This receipt updates from the checkpoint vault state as USDC releases.
                 </p>
               )}
-              {gatewayReceiptId && (
-                <button
-                  type="button"
-                  onClick={openGatewayReceipt}
-                  className={[
-                    'flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all active:scale-[0.98]',
-                    'bg-gray-900 text-white hover:bg-gray-800',
-                  ].join(' ')}
-                >
-                  <ReceiptIcon />
-                  View receipt
-                </button>
-              )}
+              {gatewayReceiptId && <UnifiedReceipt receiptId={gatewayReceiptId} />}
               {(gatewayOgReady || gatewayTxIsExplorerHash) && (
               <div className={gatewayTxIsExplorerHash && gatewayOgReady ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
                 {gatewayOgReady && (
@@ -3741,15 +3725,6 @@ function CheckIcon() {
   return (
     <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-    </svg>
-  )
-}
-
-function ReceiptIcon() {
-  return (
-    <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7 3.75h10A1.25 1.25 0 0118.25 5v15.25l-2.5-1.25-2.5 1.25-2.5-1.25-2.5 1.25V5A1.25 1.25 0 017 3.75z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 8h6M9 11.5h6M9 15h3.5" />
     </svg>
   )
 }

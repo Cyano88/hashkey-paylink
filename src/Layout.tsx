@@ -414,6 +414,9 @@ export default function Layout() {
   }
 
   const { theme, toggle: toggleTheme } = useTheme()
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isPocketAppPage ? false : theme === 'dark')
+  }, [isPocketAppPage, theme])
   const openPaymentHistory = useCallback(() => {
     navigate('/dashboard?src=ngpos')
   }, [navigate])
@@ -441,15 +444,6 @@ export default function Layout() {
                   <span className="text-sm font-black tracking-[-0.025em]">Pocket</span>
                 </Link>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={toggleTheme}
-                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                    aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                    className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 shadow-sm transition-colors hover:bg-gray-100 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-300 dark:hover:bg-white/[0.13]"
-                  >
-                    {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                  </button>
                   <PocketAccountMenu />
                 </div>
               </div>
