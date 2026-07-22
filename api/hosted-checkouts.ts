@@ -81,6 +81,7 @@ export type CheckoutRecord = {
   partnerId: string
   kind: 'usdc_request' | 'service'
   merchantName: string
+  brandImageUrl?: string
   title: string
   description: string
   amount: string
@@ -305,6 +306,7 @@ function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
       record.providerFunding.depositAddress,
     ])
   }
+  if (record.brandImageUrl !== undefined) fields.push(record.brandImageUrl)
   return JSON.stringify(fields)
 }
 
@@ -701,6 +703,7 @@ function checkoutRequestHash(input: {
   partnerId: string
   kind: string
   merchantName: string
+  brandImageUrl?: string
   title: string
   description: string
   amount: string
@@ -733,6 +736,7 @@ function checkoutRequestHash(input: {
   if (input.paymentOptions !== undefined) {
     fields.push(input.paymentOptions.map(option => [option.network, option.recipient]))
   }
+  if (input.brandImageUrl !== undefined) fields.push(input.brandImageUrl)
   return createHash('sha256').update(JSON.stringify(fields)).digest('hex')
 }
 
@@ -797,6 +801,7 @@ function checkoutPaymentUrl(record: CheckoutRecord) {
   }
   if (record.kind === 'service') {
     params.set('merchantName', record.merchantName)
+    if (record.brandImageUrl) params.set('merchantLogo', record.brandImageUrl)
     params.set('checkoutTitle', record.title)
     if (record.description) params.set('checkoutDescription', record.description)
   }
@@ -880,6 +885,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
             agenticType: record.agenticType,
           kind: record.kind,
           merchantName: record.merchantName,
+          brandImageUrl: record.brandImageUrl,
           title: record.title,
           description: record.description,
           amount: record.amount,
@@ -923,6 +929,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     const requestedAgenticType = clean(req.body?.agenticType, 40).toLowerCase()
     const agenticType = requestedAgenticType as HostedCheckoutAgenticType
     const merchantName = 'projectManaged' in policy ? policy.merchantName : clean(req.body?.merchantName, 80)
+    const brandImageUrl = 'projectManaged' in policy ? policy.brandImageUrl : undefined
     const title = clean(req.body?.title, 100) || (kind === 'service' ? 'Service checkout' : 'Payment request')
     const description = clean(req.body?.description, 240)
     const amount = req.body?.flexible === true ? '' : normalizePositiveUsdc(req.body?.amount)
@@ -979,6 +986,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       partnerId: policy.partnerId,
       kind,
       merchantName,
+      ...(brandImageUrl ? { brandImageUrl } : {}),
       title,
       description,
       amount: flexible ? '' : amount,
@@ -1036,6 +1044,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         partnerId: policy.partnerId,
         kind: kind as CheckoutRecord['kind'],
         merchantName,
+        ...(brandImageUrl ? { brandImageUrl } : {}),
         title,
         description,
         amount: flexible ? '' : nairaOrder?.payableUsdc ?? amount,

@@ -13,6 +13,7 @@ type Project = {
   name: string
   ownerEmail: string
   website: string
+  brandImageUrl: string
   useCase: string
   capabilities: Capability[]
   settlementMode: 'usdc' | 'ngn'
@@ -150,7 +151,7 @@ export default function DeveloperPortalPage() {
     setBusy(true); setError(''); setNotice('')
     try {
       const data = await api('PUT', {
-        action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, useCase: draft.useCase,
+        action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, brandImageUrl: draft.brandImageUrl, useCase: draft.useCase,
         capabilities: draft.capabilities,
         settlementMode: draft.settlementMode, networks: draft.networks, defaultNetwork: draft.defaultNetwork,
         recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins,
@@ -307,6 +308,28 @@ function SetupPanel({ draft, setDraft, wallet, institutions, institutionsLoading
     </div>
     <Field label="What customers pay for" className="mt-4"><textarea className={cn(fieldClass(), 'h-24 resize-none py-3')} value={draft.useCase} onChange={event => setDraft({ ...draft, useCase: event.target.value })} /></Field>
     <CapabilityPicker value={draft.capabilities} onChange={capabilities => setDraft({ ...draft, capabilities })} />
+
+    <div className="mt-7 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+      <div className="flex items-start gap-3">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/10">
+          <img
+            src={draft.brandImageUrl || '/hash-logo-transparent.png'}
+            alt="Checkout brand mark preview"
+            className={cn('h-8 w-8 object-contain', !draft.brandImageUrl && 'invert dark:invert-0')}
+            onError={event => {
+              event.currentTarget.onerror = null
+              event.currentTarget.src = '/hash-logo-transparent.png'
+              event.currentTarget.className = 'h-8 w-8 object-contain invert dark:invert-0'
+            }}
+          />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-gray-900 dark:text-white">Checkout brand mark</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">A square PNG, WebP, or JPG shown beside your platform name on checkout. Host it on the same origin as your website.</p>
+        </div>
+      </div>
+      <Field label="Brand mark URL" className="mt-3"><input className={fieldClass()} value={draft.brandImageUrl} onChange={event => setDraft({ ...draft, brandImageUrl: event.target.value })} placeholder="https://yourplatform.com/brand/mark.png" /></Field>
+    </div>
 
     <div className="mt-7">
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Settlement</p>

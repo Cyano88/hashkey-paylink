@@ -274,6 +274,7 @@ const managedDependencies = {
   mutate: async (_key, update) => { managedStore = update(managedStore); return managedStore },
   policy: () => ({
     partnerId: 'dev_managedproject', merchantName: 'Managed Platform', allowedOrigins: ['https://managed.example'],
+    brandImageUrl: 'https://managed.example/brand/mark.webp',
     defaultNetwork: 'base', projectManaged: true,
     settlementMode: 'usdc',
     paymentOptions: [
@@ -295,6 +296,8 @@ const managedCreated = await request(managedHandler, 'POST', { body: managedBody
 assert.equal(managedCreated.statusCode, 201)
 const managedLookup = await request(managedHandler, 'GET', { query: { id: managedCreated.body.checkoutId } })
 assert.equal(managedLookup.body.checkout.merchantName, 'Managed Platform')
+assert.equal(managedLookup.body.checkout.brandImageUrl, 'https://managed.example/brand/mark.webp')
+assert.equal(new URL(managedLookup.body.paymentUrl, 'https://app.hashpaylink.com').searchParams.get('merchantLogo'), 'https://managed.example/brand/mark.webp')
 assert.deepEqual(managedLookup.body.checkout.availableNetworks, ['base', 'arbitrum'])
 assert.equal(managedLookup.body.checkout.paymentAttempt.network, undefined)
 assert.deepEqual(managedNotifications.map(item => item.event), ['checkout.created'])

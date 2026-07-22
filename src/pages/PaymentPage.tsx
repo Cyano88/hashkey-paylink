@@ -112,25 +112,6 @@ function isSupportedEvmPayChain(value: ChainKey): value is SupportedEvmPayChain 
   return value === 'base' || value === 'arc' || value === 'arbitrum'
 }
 
-function PolyDeskVectorIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
-      <path
-        d="M5.75 4.75h12.5v12.5H5.75z"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinejoin="round"
-      />
-      <path
-        d="m5.75 17.25 12.5-12.5M8.9 4.75v12.5M15.1 4.75v12.5"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
 function CheckoutTrustLine() {
   return (
     <div className="mt-3 space-y-3 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
@@ -530,6 +511,7 @@ export default function PaymentPage() {
   const [hostedReturnUrl, setHostedReturnUrl] = useState('')
   const resolvedPolymarketReturnUrl = isHostedService && hostedReturnUrl ? hostedReturnUrl : polymarketBridgeReturnUrl
   const hostedMerchantName = getPaylinkParam(initParams, 'merchantName', 'merchantName').slice(0, 80)
+  const hostedMerchantLogo = getPaylinkParam(initParams, 'merchantLogo', 'merchantLogo').slice(0, 400)
   const polymarketReturnLabel = isHostedService ? (hostedMerchantName || 'the platform') : 'PolyDesk'
   const hostedCheckoutTitle = getPaylinkParam(initParams, 'checkoutTitle', 'checkoutTitle').slice(0, 100)
   const autoAccessRedirect = getPaylinkParam(initParams, 'ad', 'autoRedirect') === '1'
@@ -584,7 +566,6 @@ export default function PaymentPage() {
   const eventRegistered  = useRef(false)
   const ordinaryReceiptRegistered = useRef(false)
   const accessRedirected = useRef(false)
-  const polymarketReturnRedirected = useRef(false)
   const polymarketBridgeWaitStartedAtRef = useRef(0)
   const polymarketFundingMarkRef = useRef('')
   const polymarketFundingMarkInFlightRef = useRef('')
@@ -3165,7 +3146,7 @@ export default function PaymentPage() {
   const polymarketBridgePending = isPolymarketBridge && !polymarketBridgeComplete
   const polymarketBridgeAwaitingTx = isPolymarketBridge && isConfirmed && !txHash
   const polymarketBridgeProgressText = polymarketBridgeComplete
-    ? 'Funded. Redirecting in 7 seconds...'
+    ? 'Polymarket funding complete.'
     : polymarketBridgeAwaitingTx
       ? 'Confirming payment...'
       : polymarketBridgeStatusText || 'Confirming Polymarket bridge...'
@@ -3611,28 +3592,6 @@ export default function PaymentPage() {
     return () => window.clearTimeout(timer)
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
-  useEffect(() => {
-    const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
-    if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge || !polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
-    if (polymarketBridgeStatus !== 'complete') return
-    polymarketReturnRedirected.current = true
-    const timer = window.setTimeout(() => {
-      window.location.assign(polymarketAgentHashUrl)
-    }, 7000)
-    return () => window.clearTimeout(timer)
-  }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketAgentHashUrl])
-
-  useEffect(() => {
-    const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
-    if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge || polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
-    if (polymarketBridgeStatus !== 'complete') return
-    polymarketReturnRedirected.current = true
-    const timer = window.setTimeout(() => {
-      window.location.assign(resolvedPolymarketReturnUrl)
-    }, 7000)
-    return () => window.clearTimeout(timer)
-  }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, resolvedPolymarketReturnUrl])
-
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS
   // ────────────────────────────────────────────────────────────────────────────
@@ -3877,7 +3836,7 @@ export default function PaymentPage() {
               )}
             </div>
 
-            {receiptReady && (!isPolymarketBridge || polymarketBridgeComplete) && !polymarketReturnToAgentHash && (
+            {receiptReady && !isPolymarketBridge && !polymarketReturnToAgentHash && (
               <div className="grid gap-2">
                 <UnifiedReceipt receipt={paymentReceipt!} />
                 {!ogProofValue && (
@@ -3885,18 +3844,9 @@ export default function PaymentPage() {
                     Receipt is ready. 0G archive continues in background and will attach when confirmed.
                   </p>
                 )}
-                {isPolymarketBridge && (
-                  <a
-                    href={resolvedPolymarketReturnUrl}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
-                  >
-                    {!isHostedService && <PolyDeskVectorIcon className="h-4 w-4" />}
-                    {isHostedService ? `Continue to ${polymarketReturnLabel}` : 'Trade on PolyDesk'}
-                  </a>
-                )}
               </div>
             )}
-            {paymentReceiptId && !paymentReceipt && (
+            {paymentReceiptId && !paymentReceipt && !isPolymarketBridge && (
               <p className="text-center text-[11px] font-medium text-gray-400">
                 Preparing receipt...
               </p>
@@ -3997,25 +3947,47 @@ export default function PaymentPage() {
             ) : isPolymarketBridge && polymarketReturnToAgentHash ? (
               <div className="space-y-2">
                 <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                  {polymarketBridgeComplete ? 'Funded. Redirecting back to Agent Hash in 7 seconds...' : polymarketBridgeProgressText}
+                  {polymarketBridgeComplete ? 'Polymarket funding complete.' : polymarketBridgeProgressText}
                   {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
                 </p>
                 {polymarketBridgeComplete && (
-                  <a href={polymarketAgentHashUrl} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
-                    Return to Agent Hash now
-                  </a>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {paymentReceiptId ? (
+                      <a href={`/receipt/${encodeURIComponent(paymentReceiptId)}`} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
+                        <ExternalLink className="h-3.5 w-3.5" /> Share receipt
+                      </a>
+                    ) : (
+                      <span className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium text-gray-400">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing receipt
+                      </span>
+                    )}
+                    <a href={polymarketAgentHashUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]">
+                      Return to Agent Hash
+                    </a>
+                  </div>
                 )}
               </div>
             ) : isPolymarketBridge ? (
               <div className="space-y-2">
                 <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                  {polymarketBridgeComplete ? `Funded. Redirecting to ${polymarketReturnLabel} in 7 seconds...` : polymarketBridgeProgressText}
+                  {polymarketBridgeComplete ? 'Polymarket funding complete.' : polymarketBridgeProgressText}
                   {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
                 </p>
                 {polymarketBridgeComplete && (
-                  <a href={resolvedPolymarketReturnUrl} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
-                    {isHostedService ? `Continue to ${polymarketReturnLabel}` : 'Return to PolyDesk now'}
-                  </a>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {paymentReceiptId ? (
+                      <a href={`/receipt/${encodeURIComponent(paymentReceiptId)}`} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
+                        <ExternalLink className="h-3.5 w-3.5" /> Share receipt
+                      </a>
+                    ) : (
+                      <span className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-5 py-2.5 text-sm font-medium text-gray-400">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing receipt
+                      </span>
+                    )}
+                    <a href={resolvedPolymarketReturnUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]">
+                      {isHostedService ? `Return to ${polymarketReturnLabel}` : 'Return to PolyDesk'}
+                    </a>
+                  </div>
                 )}
               </div>
             ) : isPolymarketFunding ? (
@@ -4216,7 +4188,16 @@ export default function PaymentPage() {
           ) : isHostedService ? (
             <div className="mb-2 flex items-center justify-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-white/[0.06]">
-                <img src="/hash-logo-transparent.png" alt="" className="h-4 w-4 object-contain invert dark:invert-0" />
+                <img
+                  src={hostedMerchantLogo || '/hash-logo-transparent.png'}
+                  alt=""
+                  className={cn('h-4 w-4 object-contain', !hostedMerchantLogo && 'invert dark:invert-0')}
+                  onError={event => {
+                    event.currentTarget.onerror = null
+                    event.currentTarget.src = '/hash-logo-transparent.png'
+                    event.currentTarget.className = 'h-4 w-4 object-contain invert dark:invert-0'
+                  }}
+                />
               </span>
               <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">{hostedMerchantName || 'Verified service'}</p>
             </div>

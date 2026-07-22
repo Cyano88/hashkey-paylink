@@ -32,6 +32,7 @@ type DeveloperProject = {
   ownerEmail: string
   name: string
   website: string
+  brandImageUrl?: string
   useCase: string
   capabilities?: DeveloperCapability[]
   settlementMode: SettlementMode
@@ -60,6 +61,7 @@ type DeveloperStore = { projects: Record<string, DeveloperProject> }
 export type DeveloperCheckoutPolicy = {
   partnerId: string
   merchantName: string
+  brandImageUrl?: string
   allowedOrigins: string[]
   defaultNetwork: DeveloperNetwork
   paymentOptions: Array<{ network: DeveloperNetwork; recipient: string }>
@@ -232,6 +234,20 @@ function normalizedHttpsUrl(value: unknown, allowEmpty = true) {
   }
 }
 
+function normalizedBrandImageUrl(value: unknown, website: string) {
+  const text = clean(value, 400)
+  if (!text) return ''
+  try {
+    const url = new URL(text)
+    const websiteUrl = new URL(website)
+    const localDevelopment = url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname)
+    if ((url.protocol !== 'https:' && !localDevelopment) || url.username || url.password || url.origin !== websiteUrl.origin) return ''
+    return /\.(?:png|webp|jpe?g)$/i.test(url.pathname) ? url.toString() : ''
+  } catch {
+    return ''
+  }
+}
+
 function normalizedWebhookUrl(value: unknown) {
   const text = clean(value, 300)
   if (!text) return ''
@@ -282,6 +298,7 @@ function projectPublic(project: DeveloperProject) {
     name: project.name,
     ownerEmail: project.ownerEmail,
     website: project.website,
+    brandImageUrl: project.brandImageUrl ?? '',
     useCase: project.useCase,
     capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
     settlementMode: project.settlementMode,
@@ -360,7 +377,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const now = dependencies.now().toISOString()
         const project: DeveloperProject = {
           id: dependencies.createProjectId(), ownerId: identity.userId, ownerEmail: identity.email,
-          name, website, useCase, capabilities: requestedCapabilities(req.body?.capabilities), settlementMode: 'usdc', settlementStatus: 'review_required',
+          name, website, brandImageUrl: '', useCase, capabilities: requestedCapabilities(req.body?.capabilities), settlementMode: 'usdc', settlementStatus: 'review_required',
           networks: ['base'], defaultNetwork: 'base', recipients: {}, refundAddress: '',
           allowedOrigins: [new URL(website).origin], webhookUrl: '', webhookSecretCipher: '',
           bankCode: '', bankName: '', bankAccountName: '', bankAccountLast4: '', bankAccountCipher: '', bankVerifiedAt: undefined,
@@ -378,6 +395,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       if (req.method === 'PUT' && action === 'configure') {
         const name = clean(req.body?.name, 100)
         const website = normalizedHttpsUrl(req.body?.website, false)
+        const requestedBrandImageUrl = clean(req.body?.brandImageUrl, 400)
+        const brandImageUrl = website ? normalizedBrandImageUrl(requestedBrandImageUrl, website) : ''
         const useCase = clean(req.body?.useCase, 800)
         const capabilities = req.body?.capabilities === undefined
           ? (currentProject.capabilities?.length ? currentProject.capabilities : ['hosted_checkout'])
@@ -400,6 +419,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const bankAccountName = settlementMode === 'ngn' ? clean(req.body?.bankAccountName, 120) : ''
         const bankAccountNumber = settlementMode === 'ngn' ? clean(req.body?.bankAccountNumber, 20).replace(/\D/g, '') : ''
         if (name.length < 2 || !website || useCase.length < 20) return res.status(400).json({ ok: false, error: 'Complete the platform details.' })
+        if (requestedBrandImageUrl && !brandImageUrl) return res.status(400).json({ ok: false, error: 'Checkout brand marks must be PNG, WebP, or JPG files hosted on the project website origin.' })
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         if (settlementMode !== 'usdc' && settlementMode !== 'ngn') return res.status(400).json({ ok: false, error: 'Choose USDC or Naira settlement.' })
         if (!networks.length || !networks.includes(defaultNetwork)) return res.status(400).json({ ok: false, error: 'Choose a valid default payment network.' })
@@ -434,7 +454,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           const next: DeveloperProject = {
-            ...latest, name, website, useCase, capabilities, settlementMode,
+            ...latest, name, website, brandImageUrl, useCase, capabilities, settlementMode,
             settlementStatus: settlementMode === 'usdc' ? (recipientsVerified ? 'ready' : 'review_required') : (refundVerified && bankVerifiedAt ? 'ready' : 'review_required'),
             networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
             bankCode, bankName, bankAccountName: verifiedBankName, bankVerifiedAt: settlementMode === 'ngn' ? bankVerifiedAt : undefined,
@@ -539,6 +559,7 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
       return {
         partnerId: project.id,
         merchantName: project.name,
+        brandImageUrl: project.brandImageUrl,
         allowedOrigins: project.allowedOrigins,
         defaultNetwork: 'base',
         paymentOptions,
@@ -555,7 +576,7 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
       }
     }
     const defaultNetwork = paymentOptions.some(option => option.network === project.defaultNetwork) ? project.defaultNetwork : paymentOptions[0].network
-    return { partnerId: project.id, merchantName: project.name, allowedOrigins: project.allowedOrigins, defaultNetwork, paymentOptions, settlementMode: 'usdc', capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'], projectManaged: true }
+    return { partnerId: project.id, merchantName: project.name, brandImageUrl: project.brandImageUrl, allowedOrigins: project.allowedOrigins, defaultNetwork, paymentOptions, settlementMode: 'usdc', capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'], projectManaged: true }
   }
   return null
 }
