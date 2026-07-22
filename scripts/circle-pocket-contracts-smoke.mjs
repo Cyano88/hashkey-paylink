@@ -14,6 +14,8 @@ import {
   isPocketWalletLinkMutationData,
   isPocketWalletLinkMutationRequest,
   isPocketWalletsReadData,
+  isPocketHostname,
+  pocketBasePathForHostname,
   pocketLegacyEntryUrl,
   pocketPathFor,
   resolvePocketRoute,
@@ -149,6 +151,10 @@ await assert.rejects(readFxQuote('1.309814'), /Rate unavailable/)
 assert.equal(paycrestRateCalls, 2)
 
 assert.equal(resolvePocketRoute('/unknown'), null)
+assert.equal(isPocketHostname('pocket.hashpaylink.com'), true)
+assert.equal(isPocketHostname('app.hashpaylink.com'), false)
+assert.equal(pocketBasePathForHostname('pocket.hashpaylink.com'), '')
+assert.equal(pocketBasePathForHostname('localhost'), '/pocket')
 assert.equal(pocketLegacyEntryUrl({ section: 'move', view: 'bank' }), '/?product=circle-pocket&pocket=move%3Abank')
 assert.equal(pocketLegacyEntryUrl({ section: 'assistant', view: 'circle-pocket' }), '/?product=circle-pocket&agent=hash')
 
@@ -474,6 +480,15 @@ assert.equal(pocketX402FundUrl.searchParams.get('e'), '0x11111111111111111111111
 assert.equal(pocketX402FundUrl.searchParams.get('walletManager'), 'service')
 assert.equal(pocketX402FundUrl.searchParams.get('g'), 'https://hashpaylink.com/pocket/home/x402')
 assert.equal(pocketX402FundUrl.searchParams.has('agentSlug'), false)
+const canonicalPocketX402FundUrl = new URL(buildPocketX402FundUrl({
+  origin: 'https://pocket.hashpaylink.com',
+  network: 'base',
+  walletAddress: '0x1111111111111111111111111111111111111111',
+  now: 1_800_000_000_001,
+}))
+assert.equal(canonicalPocketX402FundUrl.origin, 'https://app.hashpaylink.com')
+assert.equal(canonicalPocketX402FundUrl.pathname, '/pay')
+assert.equal(canonicalPocketX402FundUrl.searchParams.get('g'), 'https://pocket.hashpaylink.com/home/x402')
 const pocketBaseX402FundUrl = new URL(buildPocketX402FundUrl({
   origin: 'https://hashpaylink.com',
   network: 'base',
@@ -792,8 +807,9 @@ const createLinkSource = await readFile(new URL('../src/pages/CreateLink.tsx', i
 assert.match(createLinkSource, /usePocketIdentity\(\)/)
 assert.match(createLinkSource, /usePocketProfile\(\{ authenticated: privyAuthenticated, email: privyEmail, getAccessToken \}\)/)
 assert.doesNotMatch(createLinkSource, /initialPocketRoute|pocketBasePath|startsInStandalonePocket|startsInPocketUsdc|navigatePocket/)
-assert.match(createLinkSource, /const POCKET_ENTRY_PATH = '\/pocket'/)
+assert.match(createLinkSource, /import \{ POCKET_ORIGIN \} from '..\/pocket\/lib\/pocketRoutes'/)
 assert.match(createLinkSource, /function openStandaloneCirclePocket\(replace = false\)/)
+assert.match(createLinkSource, /window\.location\.assign\(POCKET_ORIGIN\)/)
 assert.match(createLinkSource, /if \(product === 'circle-pocket'\) \{\s*openStandaloneCirclePocket\(true\)/)
 assert.match(createLinkSource, /title: 'Circle Pocket Wallet'.*action: openStandaloneCirclePocket/)
 assert.doesNotMatch(createLinkSource, /openCirclePocketMode|pushProductHistory\('circle-pocket'\)|agent-hash-mode/)
@@ -878,14 +894,19 @@ assert.match(pocketWithdrawalControllerSource, /setPending\(false\)/)
 assert.match(pocketWithdrawalControllerSource, /USDC sent on \$\{networkLabel\}/)
 assert.doesNotMatch(pocketWithdrawalControllerSource, /fetch\(|['"]\/api\/|\/api\/solana-build-tx|\/api\/solana-relay/)
 const layoutSource = await readFile(new URL('../src/Layout.tsx', import.meta.url), 'utf8')
-assert.match(layoutSource, /resolvePocketRoute\(pathname\.slice\('\/pocket'\.length\) \|\| '\/'\)/)
+const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+assert.match(layoutSource, /resolvePocketRoute\(isPocketHost \? pathname : pathname\.slice\('\/pocket'\.length\) \|\| '\/'\)/)
 assert.doesNotMatch(layoutSource, /embeddedCirclePocket|circlePocketSurface|hashpaylink-circle-pocket-(?:surface|wallet-view|wallet-select|move-select|bills-select|activity-select)/)
 assert.doesNotMatch(layoutSource, /AgentHashMode|agentHashSurfaceMode|agentHashMode|showAgentHashWidget|agent-hash-mode|TelegramHelperPanel/)
 assert.match(layoutSource, /onWalletChange=\{\(view\) => navigatePocketHeader\(\{ section: 'home'/)
 assert.match(layoutSource, /onMoveChange=\{\(view\) => navigatePocketHeader\(\{ section: 'move'/)
 assert.match(layoutSource, /onBillChange=\{\(view\) => navigatePocketHeader\(\{ section: 'bills'/)
 assert.match(layoutSource, /onActivityChange=\{\(view\) => navigatePocketHeader\(\{ section: 'activity'/)
-assert.match(layoutSource, /navigate\(`\/pocket\$\{pocketPathFor\(state\)\}`\)/)
+assert.match(layoutSource, /navigate\(`\$\{POCKET_BASE_PATH\}\$\{pocketPathFor\(state\)\}`\)/)
+assert.match(appSource, /const IS_POCKET_HOST = isPocketHostname\(hostname\)/)
+assert.match(appSource, /<Route path="\*" element=\{<CirclePocketApp \/>\} \/>/)
+assert.match(appSource, /window\.location\.replace\(destination\)/)
+assert.ok(appSource.indexOf('if (IS_POCKET_HOST)') < appSource.indexOf('if (IS_STREAMPAY)'))
 assert.match(layoutSource, /<CPurseIcon size=\{32\}/)
 assert.match(layoutSource, /aria-label=\{theme === 'dark' \? 'Switch to light mode' : 'Switch to dark mode'\}/)
 assert.match(layoutSource, /<PocketAccountMenu \/>/)
@@ -1137,7 +1158,7 @@ assert.match(pocketMarketplacePanelSource, /<Check className="h-5 w-5 stroke-\[2
 assert.match(pocketMarketplacePanelSource, /text-\[#0071E3\]/)
 assert.match(pocketMarketplacePanelSource, /aria-pressed=\{selected\?\.resource === item\.resource\}/)
 assert.match(pocketMarketplacePanelSource, /purchase\.status === 'completed' && purchase\.receiptActivityId/)
-assert.match(pocketMarketplacePanelSource, /to="\/pocket\/activity\/app-pay"/)
+assert.match(pocketMarketplacePanelSource, /to=\{`\$\{POCKET_BASE_PATH\}\/activity\/app-pay`\}/)
 assert.doesNotMatch(pocketMarketplacePanelSource, /!snapshot && !loading/)
 assert.match(pocketRouteShellSource, /querySelector<HTMLElement>\('\[data-hashpaylink-top-nav\]'\)/)
 assert.match(pocketRouteShellSource, /new ResizeObserver\(updateHeaderHeight\)/)
@@ -1196,6 +1217,8 @@ const pocketBankSendHandlerSource = await readFile(new URL('../api/pocket/bank-s
 assert.doesNotMatch(pocketBankSendHandlerSource, /allowServiceRequest|polydesk-service|HASH_PAYLINK_POLYDESK_SERVICE_TOKEN/)
 const ngPosSource = await readFile(new URL('../api/ng-pos.ts', import.meta.url), 'utf8')
 assert.match(ngPosSource, /createNgPosBankSend\(req, body, \{ allowServiceRequest: true \}\)/)
+assert.match(ngPosSource, /hostname\.toLowerCase\(\) === 'pocket\.hashpaylink\.com'/)
+assert.match(ngPosSource, /return paymentSurfaceOrigin\(`\$\{proto\}:\/\/\$\{host\}`\)/)
 const pocketSolanaTransferClientSource = await readFile(new URL('../src/pocket/api/pocketSolanaTransferClient.ts', import.meta.url), 'utf8')
 assert.match(pocketSolanaTransferClientSource, /POCKET_API\.transferPrepare/)
 assert.match(pocketSolanaTransferClientSource, /POCKET_API\.transferSubmit/)
@@ -1244,6 +1267,10 @@ assert.match(paymentPageSource, /receiptReady && !isPolymarketBridge && !polymar
 assert.match(paymentPageSource, /Share receipt/)
 assert.match(paymentPageSource, /hostedMerchantLogo.*merchantLogo/)
 assert.match(developerPortalSource, /Checkout brand mark/)
+assert.match(developerPortalSource, /environmentSection\('test', 'Test keys', 'Arc Testnet only\./)
+assert.match(developerPortalSource, /environmentSection\('live', 'Live keys', 'Base and Arbitrum mainnet only\./)
+assert.match(developerPortalSource, /onCreate\(environment\)/)
+assert.doesNotMatch(developerPortalSource, /ariaLabel="API key environment"/)
 assert.match(paymentPageSource, /Return to \$\{polymarketReturnLabel\}/)
 assert.doesNotMatch(paymentPageSource, /polymarketReturnRedirected|Redirecting.*7 seconds|window\.location\.assign\(resolvedPolymarketReturnUrl\)|window\.location\.assign\(polymarketAgentHashUrl\)/)
 assert.match(agentCheckoutPageSource, /<UnifiedReceipt receipt=\{canonicalReceipt \|\| agentReceipt\}/)
@@ -1317,7 +1344,7 @@ assert.match(pocketX402ControllerSource, /refresh\(\{ silent: true \}\)/)
 const telegramPaymentLinksSource = await readFile(new URL('../src/pages/TelegramPaymentLinks.tsx', import.meta.url), 'utf8')
 assert.match(telegramPaymentLinksSource, /readPocketWallet\(\{/)
 assert.doesNotMatch(telegramPaymentLinksSource, /resolvePrivyCircleLink/)
-assert.match(telegramPaymentLinksSource, /actionLink: \{ label: 'Open Circle Pocket', url: '\/pocket\/home\/smart-wallet' \}/)
+assert.match(telegramPaymentLinksSource, /actionLink: \{ label: 'Open Circle Pocket', url: 'https:\/\/pocket\.hashpaylink\.com\/home\/smart-wallet' \}/)
 assert.doesNotMatch(telegramPaymentLinksSource, /actionLink: \{ label: 'Open Circle Pocket', url: '\/\?product=circle-pocket' \}/)
 const agentWorkspaceSource = await readFile(new URL('../src/pages/AgentWorkspace.tsx', import.meta.url), 'utf8')
 assert.match(agentWorkspaceSource, /savePrivyCircleLink\(\{/)

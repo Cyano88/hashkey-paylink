@@ -16,10 +16,8 @@ import PocketSelect from '../components/PocketSelect'
 import usePocketX402Controller from '../controllers/usePocketX402Controller'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { buildPocketX402FundUrl } from '../lib/pocketX402FundUrl'
-import { pocketPathFor } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
-
-const POCKET_BASE_PATH = '/pocket'
 
 function balanceText(value: string | undefined, checked: boolean, error?: string) {
   if (value !== undefined) return `${formatPocketDisplayAmount(value)} USDC`

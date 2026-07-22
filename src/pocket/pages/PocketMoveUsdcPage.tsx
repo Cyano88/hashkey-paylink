@@ -26,9 +26,8 @@ import { PocketEmailWalletDetails, PocketReceiveMethodPanel } from '../features/
 import { PocketRecipientAddressFields } from '../features/move/PocketRecipientAddressFields'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketRecipient from '../hooks/usePocketRecipient'
-import { pocketPathFor } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
 
-const POCKET_BASE_PATH = '/pocket'
 const POCKET_NETWORKS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
 type ReceiveMode = 'idle' | 'paste' | 'email' | 'bank'
 

@@ -14,7 +14,7 @@ import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
 import PocketAccountMenu from './pocket/components/PocketAccountMenu'
 import { CPurseIcon } from './pocket/components/CPurseIcon'
 import PocketTopSwitch from './pocket/components/PocketTopSwitch'
-import { pocketPathFor, resolvePocketRoute, type PocketRouteState } from './pocket/lib/pocketRoutes'
+import { isPocketHostname, POCKET_BASE_PATH, pocketPathFor, resolvePocketRoute, type PocketRouteState } from './pocket/lib/pocketRoutes'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
 const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
@@ -192,9 +192,10 @@ export default function Layout() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const isPocketHost = isPocketHostname()
   const isPolyDeskSurface = pathname === '/polydesk' || window.location.hostname.toLowerCase().includes('polydesk') || searchParams.get('app') === 'polydesk'
-  const isPocketAppPage = pathname === '/pocket' || pathname.startsWith('/pocket/')
-  const isPocketLandingPage = pathname === '/pocket' || pathname === '/pocket/'
+  const isPocketAppPage = isPocketHost || pathname === '/pocket' || pathname.startsWith('/pocket/')
+  const isPocketLandingPage = isPocketHost ? pathname === '/' : pathname === '/pocket' || pathname === '/pocket/'
   const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/create' || pathname === '/polymarket' || isPocketAppPage
   const isPayPage  = pathname === '/pay'
   const isNgPosPage = pathname === '/pos/ng'
@@ -213,7 +214,7 @@ export default function Layout() {
   const [agentHashComposerFocused, setAgentHashComposerFocused] = useState(false)
   const [agentHashViewportTop, setAgentHashViewportTop] = useState(0)
   const pocketRoute = isPocketAppPage
-    ? resolvePocketRoute(pathname.slice('/pocket'.length) || '/')
+    ? resolvePocketRoute(isPocketHost ? pathname : pathname.slice('/pocket'.length) || '/')
     : null
   const circlePocketHeaderMode = pocketRoute?.section === 'move'
     ? 'move'
@@ -232,7 +233,7 @@ export default function Layout() {
   const circlePocketActivityView = pocketRoute?.section === 'activity' ? pocketRoute.view : 'all'
 
   const navigatePocketHeader = (state: PocketRouteState) => {
-    navigate(`/pocket${pocketPathFor(state)}`)
+    navigate(`${POCKET_BASE_PATH}${pocketPathFor(state)}`)
   }
 
   useEffect(() => {
@@ -435,7 +436,7 @@ export default function Layout() {
           {isPocketAppPage ? (
             <>
               <div className="pointer-events-auto flex h-10 w-full items-center justify-between">
-                <Link to="/pocket/home/smart-wallet" className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
+                <Link to={`${POCKET_BASE_PATH}/home/smart-wallet`} className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
                   <CPurseIcon size={32} title="" className="shrink-0" />
                   <span className="text-sm font-black tracking-[-0.025em]">Pocket</span>
                 </Link>

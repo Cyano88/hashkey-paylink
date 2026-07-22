@@ -5,6 +5,7 @@ import DynamicSendButton from '../../components/DynamicSendButton'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import usePocketAssistantController from '../controllers/usePocketAssistantController'
 import usePocketIdentity from '../hooks/usePocketIdentity'
+import { POCKET_ORIGIN } from '../lib/pocketRoutes'
 
 const WELCOME_TEXT = 'Circle Pocket is ready. Ask me to receive USDC, settle to bank, create a POS terminal, manage wallets, fund x402, pay bills, or find a receipt.'
 
@@ -38,6 +39,14 @@ export default function PocketAssistantPage() {
     } catch {
       setCopiedAction('')
     }
+  }
+
+  function openAction(href: string) {
+    const url = new URL(href, window.location.origin)
+    const allowedOrigins = new Set([window.location.origin, POCKET_ORIGIN])
+    if (!['http:', 'https:'].includes(url.protocol) || !allowedOrigins.has(url.origin)) return
+    if (url.origin === window.location.origin) navigate(`${url.pathname}${url.search}${url.hash}`)
+    else window.location.assign(url.toString())
   }
 
   return (
@@ -87,7 +96,7 @@ export default function PocketAssistantPage() {
                         <span key={action.id} className="inline-flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => navigate(action.href!)}
+                            onClick={() => openAction(action.href!)}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-800 transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-100 dark:hover:bg-white/[0.12]"
                           >
                             <ArrowRight className="h-3 w-3" /> {action.label}

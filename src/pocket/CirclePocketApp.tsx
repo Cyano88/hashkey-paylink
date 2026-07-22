@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { POCKET_ROUTES, resolvePocketRoute } from './lib/pocketRoutes'
+import { POCKET_BASE_PATH, POCKET_ROUTES, resolvePocketRoute } from './lib/pocketRoutes'
 import PocketActivityPage from './pages/PocketActivityPage'
 import PocketAssistantPage from './pages/PocketAssistantPage'
 import PocketBillsPage from './pages/PocketBillsPage'
@@ -14,10 +14,8 @@ import { CPurseIcon } from './components/CPurseIcon'
 import usePocketIdentity from './hooks/usePocketIdentity'
 import { prefetchPocketWalletSnapshot } from './hooks/usePocketWallets'
 
-const POCKET_BASE_PATH = '/pocket'
-
 function pocketRelativePath(pathname: string) {
-  if (!pathname.startsWith(POCKET_BASE_PATH)) return pathname
+  if (!POCKET_BASE_PATH || !pathname.startsWith(POCKET_BASE_PATH)) return pathname
   return pathname.slice(POCKET_BASE_PATH.length) || '/'
 }
 

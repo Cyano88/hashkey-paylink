@@ -10,6 +10,28 @@ export type PocketBillView = typeof POCKET_BILL_VIEWS[number]
 export const POCKET_ACTIVITY_VIEWS = ['all', 'bank', 'pos', 'bills', 'app-pay'] as const
 export type PocketActivityView = typeof POCKET_ACTIVITY_VIEWS[number]
 
+export const POCKET_HOSTNAME = 'pocket.hashpaylink.com'
+export const POCKET_ORIGIN = `https://${POCKET_HOSTNAME}`
+export const HASH_PAYLINK_APP_ORIGIN = 'https://app.hashpaylink.com'
+
+export function isPocketHostname(hostname = typeof window === 'undefined' ? '' : window.location.hostname) {
+  return hostname.toLowerCase() === POCKET_HOSTNAME
+}
+
+export function pocketBasePathForHostname(hostname: string) {
+  return isPocketHostname(hostname) ? '' : '/pocket'
+}
+
+export function hashPayLinkAppOriginForOrigin(origin: string) {
+  const url = new URL(origin)
+  return isPocketHostname(url.hostname) ? HASH_PAYLINK_APP_ORIGIN : url.origin
+}
+
+// Pocket owns root-level routes on its production hostname. The legacy
+// /pocket prefix remains available on localhost so the full monolith can still
+// be tested without custom DNS.
+export const POCKET_BASE_PATH = pocketBasePathForHostname(typeof window === 'undefined' ? '' : window.location.hostname)
+
 export type PocketRouteState =
   | { section: 'home'; view: PocketHomeView }
   | { section: 'move'; view: PocketMoveView }
@@ -75,6 +97,11 @@ export function pocketPathFor(state: PocketRouteState) {
       : state.view === 'bills'
         ? POCKET_ROUTES.billsActivity
         : POCKET_ROUTES.appPayActivity
+}
+
+export function pocketUrl(path: string) {
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return `${POCKET_ORIGIN}${normalized}`
 }
 
 export function pocketLegacyEntryUrl(state: PocketRouteState) {

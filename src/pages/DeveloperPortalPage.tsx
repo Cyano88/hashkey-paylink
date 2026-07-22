@@ -69,10 +69,9 @@ export default function DeveloperPortalPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [tab, setTab] = useState<'setup' | 'keys' | 'webhooks' | 'quickstart'>('setup')
-  const [newKey, setNewKey] = useState('')
+  const [newKey, setNewKey] = useState<{ value: string; environment: 'test' | 'live' } | null>(null)
   const [newWebhookSecret, setNewWebhookSecret] = useState('')
-  const [keyName, setKeyName] = useState('Production backend')
-  const [keyEnvironment, setKeyEnvironment] = useState<'test' | 'live'>('test')
+  const [keyNames, setKeyNames] = useState({ test: 'Arc sandbox', live: 'Production backend' })
   const [createForm, setCreateForm] = useState<{ name: string; website: string; useCase: string; capabilities: Capability[] }>({ name: '', website: '', useCase: '', capabilities: ['hosted_checkout'] })
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [institutionsLoading, setInstitutionsLoading] = useState(false)
@@ -118,7 +117,7 @@ export default function DeveloperPortalPage() {
   }, [ready, authenticated]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setDraft(active ? { ...active, recipients: { ...active.recipients }, networks: [...active.networks], allowedOrigins: [...active.allowedOrigins] } : null) }, [active?.id, active?.updatedAt])
-  useEffect(() => { setNewKey(''); setNewWebhookSecret(''); setError(''); setNotice('') }, [activeId])
+  useEffect(() => { setNewKey(null); setNewWebhookSecret(''); setError(''); setNotice('') }, [activeId])
   useEffect(() => {
     if (!authenticated || draft?.settlementMode !== 'ngn' || institutions.length || institutionsLoading) return
     let cancelled = false
@@ -165,12 +164,12 @@ export default function DeveloperPortalPage() {
     finally { setBusy(false) }
   }
 
-  async function createKey() {
+  async function createKey(environment: 'test' | 'live') {
     if (!active) return
-    setBusy(true); setError(''); setNewKey('')
+    setBusy(true); setError(''); setNewKey(null)
     try {
-      const data = await api('POST', { action: 'create-key', projectId: active.id, name: keyName, environment: keyEnvironment })
-      setNewKey(data.apiKey ?? '')
+      const data = await api('POST', { action: 'create-key', projectId: active.id, name: keyNames[environment], environment })
+      setNewKey(data.apiKey ? { value: data.apiKey, environment } : null)
       await loadProjects()
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'API key could not be created.') }
     finally { setBusy(false) }
@@ -260,7 +259,7 @@ export default function DeveloperPortalPage() {
 
         <section className="min-w-0 flex-1 rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-7">
           {active && draft && tab === 'setup' && <SetupPanel draft={draft} setDraft={setDraft} wallet={wallet} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onLinkWallet={linkWallet} onSave={saveProject} />}
-          {active && tab === 'keys' && <KeysPanel project={active} keyName={keyName} setKeyName={setKeyName} keyEnvironment={keyEnvironment} setKeyEnvironment={setKeyEnvironment} newKey={newKey} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
+          {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
           {active && draft && tab === 'webhooks' && <WebhookPanel draft={draft} setDraft={setDraft} newSecret={newWebhookSecret} busy={busy} onSave={saveProject} onRotate={rotateWebhookSecret} />}
           {active && tab === 'quickstart' && <QuickstartPanel project={active} />}
           {error && <Message tone="error">{error}</Message>}
@@ -371,13 +370,31 @@ function SetupPanel({ draft, setDraft, wallet, institutions, institutionsLoading
   </div>
 }
 
-function KeysPanel({ project, keyName, setKeyName, keyEnvironment, setKeyEnvironment, newKey, busy, onCreate, onRevoke }: { project: Project; keyName: string; setKeyName: (value: string) => void; keyEnvironment: 'test' | 'live'; setKeyEnvironment: (value: 'test' | 'live') => void; newKey: string; busy: boolean; onCreate: () => void; onRevoke: (id: string) => void }) {
-  return <div><PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend and inherit this project’s trusted checkout routing." />
-    {newKey && <SecretReveal label="Copy this key now" value={newKey} />}
-    <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_160px_auto]"><input className={fieldClass()} value={keyName} onChange={event => setKeyName(event.target.value)} placeholder="Key name" /><PocketSelect value={keyEnvironment} options={[{ value: 'test', label: 'Test key' }, { value: 'live', label: 'Live key' }]} onChange={value => setKeyEnvironment(value as 'test' | 'live')} ariaLabel="API key environment" /><button type="button" disabled={busy || project.settlementStatus !== 'ready'} onClick={onCreate} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create key</button></div>
-    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Test keys route only to Arc Testnet. Live keys route only to Base or Arbitrum mainnet.</p>
-    {project.settlementStatus !== 'ready' && <p className="mt-2 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
-    <div className="mt-6 space-y-2">{project.keys.length ? project.keys.map(key => <div key={key.id} className="flex items-center gap-3 rounded-2xl border border-gray-200 px-4 py-3 dark:border-white/10"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300"><KeyRound className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{key.name}</p><p className="mt-0.5 font-mono text-[10px] text-gray-400">{key.prefix}••••</p></div>{key.revokedAt ? <span className="text-[10px] font-semibold text-gray-400">Revoked</span> : <button type="button" onClick={() => onRevoke(key.id)} className="text-[10px] font-semibold text-red-500">Revoke</button>}</div>) : <EmptyState icon={KeyRound} text="No API keys yet." />}</div>
+function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onRevoke }: { project: Project; keyNames: Record<'test' | 'live', string>; setKeyNames: (value: Record<'test' | 'live', string>) => void; newKey: { value: string; environment: 'test' | 'live' } | null; busy: boolean; onCreate: (environment: 'test' | 'live') => void; onRevoke: (id: string) => void }) {
+  function keyEnvironment(key: Project['keys'][number]): 'test' | 'live' {
+    return key.environment ?? (key.prefix.startsWith('hpl_live_') ? 'live' : 'test')
+  }
+
+  function environmentSection(environment: 'test' | 'live', title: string, scope: string) {
+    const keys = project.keys.filter(key => keyEnvironment(key) === environment)
+    return <section className="rounded-2xl border border-gray-200 p-4 dark:border-white/10 sm:p-5">
+      <h3 className="text-sm font-semibold text-gray-950 dark:text-white">{title}</h3>
+      <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{scope}</p>
+      {newKey?.environment === environment && <SecretReveal label="Copy this key now" value={newKey.value} />}
+      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+        <input className={fieldClass()} value={keyNames[environment]} onChange={event => setKeyNames({ ...keyNames, [environment]: event.target.value })} placeholder="Key name" />
+        <button type="button" disabled={busy || project.settlementStatus !== 'ready' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create key</button>
+      </div>
+      <div className="mt-4 space-y-2">{keys.length ? keys.map(key => <div key={key.id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm dark:bg-white/[0.06] dark:text-gray-300"><KeyRound className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{key.name}</p><p className="mt-0.5 font-mono text-[10px] text-gray-400">{key.prefix}••••</p></div>{key.revokedAt ? <span className="text-[10px] font-semibold text-gray-400">Revoked</span> : <button type="button" onClick={() => onRevoke(key.id)} className="text-[10px] font-semibold text-red-500">Revoke</button>}</div>) : <EmptyState icon={KeyRound} text={`No ${environment} keys yet.`} />}</div>
+    </section>
+  }
+
+  return <div><PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend and inherit this project's trusted checkout routing." />
+    {project.settlementStatus !== 'ready' && <p className="mt-5 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
+    <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      {environmentSection('test', 'Test keys', 'Arc Testnet only. Uses test USDC and cannot route a mainnet payment.')}
+      {environmentSection('live', 'Live keys', 'Base and Arbitrum mainnet only. Use these credentials in your production backend.')}
+    </div>
   </div>
 }
 

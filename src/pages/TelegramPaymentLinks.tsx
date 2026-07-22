@@ -2370,7 +2370,7 @@ export function TelegramHelperPanel({
     if (!wallet) {
       finishHelperMessage(text, {
         answer: `No ${requestNetworkLabels[network]} Circle smart wallet is connected to this signed-in account yet. Open Circle Pocket to create or connect it.`,
-        actionLink: { label: 'Open Circle Pocket', url: '/pocket/home/smart-wallet' },
+        actionLink: { label: 'Open Circle Pocket', url: 'https://pocket.hashpaylink.com/home/smart-wallet' },
       })
       return true
     }
@@ -2648,7 +2648,7 @@ export function TelegramHelperPanel({
     if (!hasOpenPaymentFlow && isOutboundTransferIntent(nextQuestion)) {
       finishHelperMessage(nextQuestion, {
         answer: 'Are you trying to send money from your wallet, or request that person to pay you? I will not create a receive PayLink until you confirm.',
-        actionLink: { label: 'Open Circle Pocket', url: '/pocket/home/smart-wallet' },
+        actionLink: { label: 'Open Circle Pocket', url: 'https://pocket.hashpaylink.com/home/smart-wallet' },
       })
       return true
     }

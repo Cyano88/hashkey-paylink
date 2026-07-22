@@ -7,9 +7,7 @@ import usePocketWalletController from '../controllers/usePocketWalletController'
 import PocketBillsPanel from '../features/bills/PocketBillsPanel'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketWallets from '../hooks/usePocketWallets'
-import { pocketPathFor, type PocketBillView } from '../lib/pocketRoutes'
-
-const POCKET_BASE_PATH = '/pocket'
+import { POCKET_BASE_PATH, pocketPathFor, type PocketBillView } from '../lib/pocketRoutes'
 
 export default function PocketBillsPage({ view }: { view: PocketBillView }) {
   const navigate = useNavigate()

@@ -53,13 +53,13 @@ assert.match(mutation.payload.error.message, /read-only/i)
 assert.equal(verified, 0)
 
 const cases = [
-  ['show my wallet balance', 'circle-pocket-wallet-overview', '/pocket/home/smart-wallet'],
-  ['create a USDC payment link', 'circle-pocket-receive-usdc', '/pocket/move/usdc'],
-  ['receive into my bank account', 'circle-pocket-bank-payout', '/pocket/move/bank'],
-  ['open a POS terminal', 'circle-pocket-retail-pos', '/pocket/move/pos'],
-  ['buy airtime', 'circle-pocket-bills', '/pocket/bills/airtime'],
-  ['fund my x402 wallet', 'circle-pocket-x402-wallet', '/pocket/home/x402'],
-  ['find my receipt', 'circle-pocket-receipts', '/pocket/activity'],
+  ['show my wallet balance', 'circle-pocket-wallet-overview', 'https://pocket.hashpaylink.com/home/smart-wallet'],
+  ['create a USDC payment link', 'circle-pocket-receive-usdc', 'https://pocket.hashpaylink.com/move/usdc'],
+  ['receive into my bank account', 'circle-pocket-bank-payout', 'https://pocket.hashpaylink.com/move/bank'],
+  ['open a POS terminal', 'circle-pocket-retail-pos', 'https://pocket.hashpaylink.com/move/pos'],
+  ['buy airtime', 'circle-pocket-bills', 'https://pocket.hashpaylink.com/bills/airtime'],
+  ['fund my x402 wallet', 'circle-pocket-x402-wallet', 'https://pocket.hashpaylink.com/home/x402'],
+  ['find my receipt', 'circle-pocket-receipts', 'https://pocket.hashpaylink.com/activity'],
 ]
 
 for (const [message, intent, href] of cases) {
@@ -80,7 +80,7 @@ assert.equal(fallback.payload.intent, 'circle-pocket-closest-assistance')
 assert.equal(fallback.payload.proof.supported, false)
 
 const legacyRoute = routeCirclePocketQuestion('find my receipt', 'circle-pocket')
-assert.equal(legacyRoute?.action.url, '/pocket/activity')
+assert.equal(legacyRoute?.action.url, 'https://pocket.hashpaylink.com/activity')
 assert.equal(routeCirclePocketQuestion('find my receipt', 'support'), undefined)
 
 const clientPayload = {
@@ -115,6 +115,8 @@ assert.match(pocketAppSource, /route\.section === 'assistant'.*PocketAssistantPa
 assert.doesNotMatch(pocketAppSource, /CreateLink/)
 assert.match(assistantPageSource, /Circle Pocket is ready\. Ask me to receive USDC/)
 assert.match(assistantPageSource, /Ask about Circle Pocket\.\.\./)
+assert.match(assistantPageSource, /allowedOrigins = new Set\(\[window\.location\.origin, POCKET_ORIGIN\]\)/)
+assert.match(assistantPageSource, /!\['http:', 'https:'\]\.includes\(url\.protocol\) \|\| !allowedOrigins\.has\(url\.origin\)/)
 assert.doesNotMatch(assistantPageSource, /TelegramHelperPanel|ZeroScout|PolyDesk|PayLinkCard/)
 assert.match(assistantControllerSource, /askPocketAgent/)
 assert.doesNotMatch(assistantControllerSource, /api\/agent-ask|telegram-request|ng-pos/)

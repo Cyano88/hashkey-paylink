@@ -13,9 +13,8 @@ import {
 } from '../features/move/PocketPosPanels'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
-import { pocketPathFor } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
 
-const POCKET_BASE_PATH = '/pocket'
 const POS_COUNTRIES = [
   { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live' as const, copy: 'Payers use Base USDC. You receive Naira to a verified bank account.' },
   { key: 'KE', name: 'Kenya', label: 'Coming soon', status: 'soon' as const, copy: 'Pending a verified local wallet or payout partner.' },

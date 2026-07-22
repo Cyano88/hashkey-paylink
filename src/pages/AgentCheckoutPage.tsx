@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AlertCircle, ArrowRight, ArrowUpFromLine, Bot, Check, ChevronDown, Copy, Download, ExternalLink, Loader2, RefreshCw, ShieldCheck, Wallet } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
+import { pocketUrl } from '../pocket/lib/pocketRoutes'
 import { copyToClipboard } from '../lib/utils'
 import UnifiedReceipt from '../components/UnifiedReceipt'
 import type { PaylinkReceipt, ReceiptLookupResponse } from '../lib/paymentReceiptPdf'
@@ -107,7 +108,7 @@ export default function AgentCheckoutPage() {
   const walletNetwork = encodeURIComponent(checkout.network)
   const gatewayWalletUrl = checkout.network === 'arbitrum'
     ? `/agent?walletManager=service&n=arbitrum&returnTo=${encodeURIComponent(window.location.pathname)}`
-    : `/pocket/home/x402?n=${walletNetwork}`
+    : pocketUrl(`/home/x402?n=${walletNetwork}`)
 
   const agentReceipt: PaylinkReceipt = {
       type: 'hashpaylink_agent_checkout_receipt',
@@ -168,9 +169,9 @@ export default function AgentCheckoutPage() {
           <ChevronDown className="h-3.5 w-3.5 text-gray-400 transition-transform group-open:rotate-180" />
         </summary>
         <div className="border-t border-gray-100 px-2 py-2 dark:border-white/[0.07]">
-          <Link to={`/pocket/home/smart-wallet?action=fund&n=${walletNetwork}`} className="flex min-h-11 items-center gap-3 rounded-xl px-3 transition hover:bg-gray-50 dark:hover:bg-white/[0.05]"><Download className="h-4 w-4 text-gray-400" /><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-gray-800 dark:text-gray-200">Deposit USDC</span><span className="block text-[10px] text-gray-400">Copy the wallet address and fund it</span></span><ArrowRight className="h-3.5 w-3.5 text-gray-300" /></Link>
-          <Link to={gatewayWalletUrl} className="flex min-h-11 items-center gap-3 rounded-xl px-3 transition hover:bg-gray-50 dark:hover:bg-white/[0.05]"><ArrowRight className="h-4 w-4 text-gray-400" /><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-gray-800 dark:text-gray-200">Add Gateway balance</span><span className="block text-[10px] text-gray-400">Move wallet USDC into App Pay</span></span><ArrowRight className="h-3.5 w-3.5 text-gray-300" /></Link>
-          <Link to={`/pocket/home/smart-wallet?action=withdraw&n=${walletNetwork}`} className="flex min-h-11 items-center gap-3 rounded-xl px-3 transition hover:bg-gray-50 dark:hover:bg-white/[0.05]"><ArrowUpFromLine className="h-4 w-4 text-gray-400" /><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-gray-800 dark:text-gray-200">Withdraw USDC</span><span className="block text-[10px] text-gray-400">Open the authenticated wallet flow</span></span><ArrowRight className="h-3.5 w-3.5 text-gray-300" /></Link>
+          <a href={pocketUrl(`/home/smart-wallet?action=fund&n=${walletNetwork}`)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 transition hover:bg-gray-50 dark:hover:bg-white/[0.05]"><Download className="h-4 w-4 text-gray-400" /><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-gray-800 dark:text-gray-200">Deposit USDC</span><span className="block text-[10px] text-gray-400">Copy the wallet address and fund it</span></span><ArrowRight className="h-3.5 w-3.5 text-gray-300" /></a>
+          <a href={gatewayWalletUrl} className="flex min-h-11 items-center gap-3 rounded-xl px-3 transition hover:bg-gray-50 dark:hover:bg-white/[0.05]"><ArrowRight className="h-4 w-4 text-gray-400" /><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-gray-800 dark:text-gray-200">Add Gateway balance</span><span className="block text-[10px] text-gray-400">Move wallet USDC into App Pay</span></span><ArrowRight className="h-3.5 w-3.5 text-gray-300" /></a>
+          <a href={pocketUrl(`/home/smart-wallet?action=withdraw&n=${walletNetwork}`)} className="flex min-h-11 items-center gap-3 rounded-xl px-3 transition hover:bg-gray-50 dark:hover:bg-white/[0.05]"><ArrowUpFromLine className="h-4 w-4 text-gray-400" /><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-gray-800 dark:text-gray-200">Withdraw USDC</span><span className="block text-[10px] text-gray-400">Open the authenticated wallet flow</span></span><ArrowRight className="h-3.5 w-3.5 text-gray-300" /></a>
         </div>
       </details>
       <p className="mt-2 text-center text-[10px] leading-4 text-gray-400">Compatible agents handle the x402 challenge and payment signature. Status updates automatically.</p>

@@ -11,6 +11,7 @@ import {
   type PocketMarketplaceSnapshot,
 } from '../api/pocketMarketplaceClient'
 import { createPocketIdempotencyKey } from '../lib/pocketSchemas'
+import { POCKET_BASE_PATH } from '../lib/pocketRoutes'
 
 type Props = {
   connected: boolean
@@ -183,7 +184,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
               {purchase.status === 'completed' && resultPreview(purchase.result) && <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white/70 p-2 text-[10px] leading-4 text-gray-600 dark:bg-black/20 dark:text-gray-300">{resultPreview(purchase.result)}</pre>}
               {purchase.status === 'completed' && purchase.receiptActivityId
                 ? <Link to={`/receipt/${encodeURIComponent(purchase.receiptActivityId)}`} className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-200">View receipt <ArrowRight className="h-3 w-3" /></Link>
-                : <Link to="/pocket/activity/app-pay" className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-200">View App Pay activity <ArrowRight className="h-3 w-3" /></Link>}
+                : <Link to={`${POCKET_BASE_PATH}/activity/app-pay`} className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-200">View App Pay activity <ArrowRight className="h-3 w-3" /></Link>}
             </div>
           )}
 

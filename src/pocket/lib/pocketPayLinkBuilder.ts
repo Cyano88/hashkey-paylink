@@ -1,5 +1,6 @@
 import { setPaylinkParam } from '../../lib/paylinkParams'
 import type { PocketNetwork } from './pocketSchemas'
+import { hashPayLinkAppOriginForOrigin } from './pocketRoutes'
 
 type PocketPayLinkFx = {
   shown: boolean
@@ -66,5 +67,5 @@ export function buildPocketPayLink({
   }
   setPaylinkParam(params, 'g', agentUrl)
 
-  return `${origin}/pay?${params.toString()}`
+  return `${hashPayLinkAppOriginForOrigin(origin)}/pay?${params.toString()}`
 }

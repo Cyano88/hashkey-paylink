@@ -20,35 +20,35 @@ export type CirclePocketRoute = {
 const ROUTES: Record<CirclePocketCapability, Omit<CirclePocketRoute, 'source' | 'capability' | 'supported' | 'confidence'>> = {
   'wallet-overview': {
     answer: 'Circle Pocket brings your smart-wallet balance, funding addresses, wallet activity, transfers, and supported networks into one place.',
-    action: { label: 'Open Circle Pocket', url: '/pocket/home/smart-wallet' },
+    action: { label: 'Open Circle Pocket', url: 'https://pocket.hashpaylink.com/home/smart-wallet' },
   },
   'receive-usdc': {
     answer: 'I can prepare that PayLink after you confirm the payer, amount, purpose, network, and whether to use your connected Circle Pocket wallet or another wallet.',
-    action: { label: 'Receive USDC', url: '/pocket/move/usdc' },
+    action: { label: 'Receive USDC', url: 'https://pocket.hashpaylink.com/move/usdc' },
   },
   'bank-payout': {
     answer: 'Receive to Bank creates a Naira request: confirm the payer, NGN amount, purpose, and signed-in verified payout account. The payer pays Base USDC and the bank account receives settlement.',
-    action: { label: 'Receive to Bank', url: '/pocket/move/bank' },
+    action: { label: 'Receive to Bank', url: 'https://pocket.hashpaylink.com/move/bank' },
   },
   'retail-pos': {
     answer: 'Retail POS creates a reusable contactless terminal QR. Confirm the merchant name, settlement choice, and receiving wallet or verified bank account before creation.',
-    action: { label: 'Open Retail POS', url: '/pocket/move/pos' },
+    action: { label: 'Open Retail POS', url: 'https://pocket.hashpaylink.com/move/pos' },
   },
   bills: {
     answer: 'Bills starts with Nigerian Airtime. Sign in, choose a mobile network, review the live Naira-to-USDC quote, and pay from your Base Circle Pocket wallet when the protected pilot is enabled.',
-    action: { label: 'Open Bills', url: '/pocket/bills/airtime' },
+    action: { label: 'Open Bills', url: 'https://pocket.hashpaylink.com/bills/airtime' },
   },
   'x402-wallet': {
     answer: 'The x402 wallet moves available USDC into a paid-service balance for supported agent and API access.',
-    action: { label: 'Open x402 Wallet', url: '/pocket/home/x402' },
+    action: { label: 'Open x402 Wallet', url: 'https://pocket.hashpaylink.com/home/x402' },
   },
   receipts: {
     answer: 'Receipts and wallet activity show payment status, transaction proof, and the history available for your signed-in account.',
-    action: { label: 'View Receipts', url: '/pocket/activity' },
+    action: { label: 'View Receipts', url: 'https://pocket.hashpaylink.com/activity' },
   },
   'profile-support': {
     answer: 'Open Circle Pocket to sign in, review your verified account, edit available profile details, and manage wallet services.',
-    action: { label: 'Open Circle Pocket', url: '/pocket/home/smart-wallet' },
+    action: { label: 'Open Circle Pocket', url: 'https://pocket.hashpaylink.com/home/smart-wallet' },
   },
 }
 

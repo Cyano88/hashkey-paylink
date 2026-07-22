@@ -5,10 +5,8 @@ import PocketRouteShell from '../components/PocketRouteShell'
 import PocketActivityPanel from '../features/activity/PocketActivityPanel'
 import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import { pocketPathFor, type PocketActivityView } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, pocketPathFor, type PocketActivityView } from '../lib/pocketRoutes'
 import { processPocketBillRefund } from '../api/pocketBillsClient'
-
-const POCKET_BASE_PATH = '/pocket'
 
 export default function PocketActivityPage({ view }: { view: PocketActivityView }) {
   const navigate = useNavigate()

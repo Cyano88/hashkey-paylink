@@ -6,6 +6,7 @@ import PocketSlideAction from '../../components/PocketSlideAction'
 import PocketSelect from '../../components/PocketSelect'
 import type { PocketBillsController } from '../../controllers/usePocketBillsController'
 import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
+import { POCKET_BASE_PATH } from '../../lib/pocketRoutes'
 import PocketDataBundlePicker from './PocketDataBundlePicker'
 import { Link } from 'react-router-dom'
 import UnifiedReceipt from '../../../components/UnifiedReceipt'
@@ -271,7 +272,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
               </button>
             )}
 
-            {reviewBlocked && <Link to="/pocket/activity/bills" className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">View Bills activity</Link>}
+            {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200">View Bills activity</Link>}
 
             {showPayment && bills.intent && (
               <>

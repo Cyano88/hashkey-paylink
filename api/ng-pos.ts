@@ -219,12 +219,22 @@ function requestedNetwork(value: unknown, merchant: MerchantProfile): PosNetwork
   return supported.includes(raw) ? raw : supported[0] ?? 'base'
 }
 
+function paymentSurfaceOrigin(origin: string) {
+  try {
+    return new URL(origin).hostname.toLowerCase() === 'pocket.hashpaylink.com'
+      ? 'https://app.hashpaylink.com'
+      : origin
+  } catch {
+    return origin
+  }
+}
+
 function originFromRequest(req: Request, explicitOrigin?: unknown) {
   const browserOrigin = cleanOrigin(explicitOrigin) || cleanOrigin(req.headers.origin)
-  if (browserOrigin) return browserOrigin
+  if (browserOrigin) return paymentSurfaceOrigin(browserOrigin)
 
   const refererOrigin = cleanOrigin(req.headers.referer)
-  if (refererOrigin) return refererOrigin
+  if (refererOrigin) return paymentSurfaceOrigin(refererOrigin)
 
   const configured = process.env.PUBLIC_PAYLINK_ORIGIN ?? process.env.HASH_PAYLINK_BASE_URL
   const configuredOrigin = cleanOrigin(configured)
@@ -232,7 +242,7 @@ function originFromRequest(req: Request, explicitOrigin?: unknown) {
 
   const proto = String(req.headers['x-forwarded-proto'] ?? req.protocol ?? 'https').split(',')[0].trim()
   const host = req.headers['x-forwarded-host'] ?? req.headers.host
-  return `${proto}://${host}`
+  return paymentSurfaceOrigin(`${proto}://${host}`)
 }
 
 async function readStore(): Promise<Store> {

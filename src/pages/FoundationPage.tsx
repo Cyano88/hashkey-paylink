@@ -8,6 +8,7 @@ import type { CSSProperties } from 'react'
 import { CPurseIcon } from '../pocket/components/CPurseIcon'
 
 const APP_URL = 'https://app.hashpaylink.com'
+const POCKET_URL = 'https://pocket.hashpaylink.com'
 
 const products = [
   {
@@ -32,7 +33,7 @@ const products = [
     meta: 'Wallet and bills',
     copy: 'Receive, manage, and move USDC. Settle to bank, pay bills, and fund App Pay.',
     action: 'Open Pocket',
-    href: `${APP_URL}/pocket`,
+    href: POCKET_URL,
   },
   {
     index: '04',
@@ -48,7 +49,7 @@ const products = [
     meta: 'Bills pilot',
     copy: 'Pilot airtime, data, TV, and electricity from Circle Pocket with connected receipts and refunds.',
     action: 'Open Bills',
-    href: `${APP_URL}/pocket/bills/airtime`,
+    href: `${POCKET_URL}/bills/airtime`,
   },
   {
     index: '06',
@@ -56,7 +57,7 @@ const products = [
     meta: 'Agentic payments',
     copy: 'Fund Circle App Pay and use compatible AI tools and pay-per-use services.',
     action: 'Open App Pay',
-    href: `${APP_URL}/pocket/home/x402`,
+    href: `${POCKET_URL}/home/x402`,
   },
   {
     index: '07',
@@ -121,7 +122,7 @@ const proofStats = [
     label: 'Wallet coverage',
     value: 'Base · Arbitrum · Solana',
     copy: 'Arc remains available as a testnet wallet.',
-    href: `${APP_URL}/pocket`,
+    href: POCKET_URL,
   },
   {
     index: '02',
@@ -1449,7 +1450,7 @@ export default function FoundationPage() {
             </div>
 
             <a
-              href={`${APP_URL}/pocket`}
+              href={POCKET_URL}
               className="foundation-primary-cta section-detail-reveal group mt-7 inline-flex min-h-14 min-w-[210px] items-center justify-between gap-5 py-1.5 pl-6 pr-1.5 text-sm font-semibold shadow-[0_18px_50px_rgba(15,23,42,.18)] transition hover:bg-black active:scale-[0.985] max-sm:mt-4 max-sm:min-h-12 max-sm:w-full"
               style={{ '--section-reveal-delay': '475ms' } as CSSProperties}
             >

@@ -6,9 +6,7 @@ import { useTheme } from '../../lib/ThemeContext'
 import { CPurseIcon } from '../components/CPurseIcon'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
-import { POCKET_ROUTES } from '../lib/pocketRoutes'
-
-const POCKET_BASE_PATH = '/pocket'
+import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 
 export default function PocketLandingPage() {
   const navigate = useNavigate()

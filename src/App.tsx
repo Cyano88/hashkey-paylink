@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom'
 import Layout from './Layout'
 import FoundationPage from './pages/FoundationPage'
 import CreateLink from './pages/CreateLink'
@@ -32,6 +33,7 @@ import EnvironmentDocs  from './pages/docs/EnvironmentDocs'
 import TermsDocs        from './pages/docs/TermsDocs'
 import PrivacyDocs      from './pages/docs/PrivacyDocs'
 import CirclePocketApp from './pocket/CirclePocketApp'
+import { isPocketHostname, POCKET_ORIGIN } from './pocket/lib/pocketRoutes'
 
 // ── Hostname-based app routing ────────────────────────────────────────────────
 // The same Render service hosts both apps. The active hostname determines
@@ -40,6 +42,7 @@ import CirclePocketApp from './pocket/CirclePocketApp'
 const { hostname, pathname, search } = window.location
 const searchParams = new URLSearchParams(search)
 const IS_APP_HOST = hostname === 'app.hashpaylink.com'
+const IS_POCKET_HOST = isPocketHostname(hostname)
 const IS_POLYDESK_HOST = hostname.includes('polydesk') || searchParams.get('app') === 'polydesk'
 const isStreamPayRoute =
   pathname === '/stream' ||
@@ -57,6 +60,22 @@ const IS_STREAMPAY =
   searchParams.get('app') === 'streampay'                      // localhost dev toggle
 
 export default function App() {
+  // Pocket owns clean root-level routes on its dedicated production hostname.
+  if (IS_POCKET_HOST) {
+    return (
+      <SolanaProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route path="receipt/:activityId" element={<X402Receipt />} />
+              <Route path="*" element={<CirclePocketApp />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </SolanaProvider>
+    )
+  }
+
   // HashpayStream domain -> mount the stream sub-app (full separate router)
   if (IS_STREAMPAY) return <StreamPayApp />
 
@@ -65,7 +84,7 @@ export default function App() {
       {IS_APP_HOST && <Route index element={<CreateLink />} />}
       <Route path="app" element={<CreateLink />} />
       <Route path="create" element={<CreateLink />} />
-      <Route path="pocket/*" element={<CirclePocketApp />} />
+      <Route path="pocket/*" element={<PocketLegacyEntry />} />
       <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
       <Route path="pay" element={<PaymentPage />} />
       <Route path="pay/c/:checkoutId" element={<HostedCheckoutEntry />} />
@@ -123,6 +142,20 @@ export default function App() {
     </BrowserRouter>
     </SolanaProvider>
   )
+}
+
+function PocketLegacyEntry() {
+  const location = useLocation()
+  const local = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+  const relativePath = location.pathname.slice('/pocket'.length) || '/'
+  const destination = `${POCKET_ORIGIN}${relativePath}${location.search}${location.hash}`
+
+  useEffect(() => {
+    if (!local) window.location.replace(destination)
+  }, [destination, local])
+
+  if (local) return <CirclePocketApp />
+  return <main className="grid min-h-screen place-items-center bg-[#F5F5F7] text-xs font-semibold text-gray-500 dark:bg-[#0A0A0A] dark:text-gray-400">Opening Pocket…</main>
 }
 
 function ShortPayRedirect() {

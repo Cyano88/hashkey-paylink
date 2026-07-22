@@ -73,6 +73,7 @@ import {
   usePocketUsdcPayLinkController,
   type PocketBankReceiveActions,
 } from '../pocket/controllers/usePocketMoveControllers'
+import { POCKET_ORIGIN } from '../pocket/lib/pocketRoutes'
 
 // ─── Solana address: base58, 32–44 characters ────────────────────────────────
 const isValidSolanaAddr = isValidSolanaAddress
@@ -81,7 +82,6 @@ const VISIBLE_CREATE_CHAINS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
 const TELEGRAM_AGENT_URL = import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot'
 const HASHPAYSTREAM_APP_URL = import.meta.env.VITE_HASHPAYSTREAM_APP_URL || 'https://hashpaystream.app'
 const POLYDESK_APP_URL = import.meta.env.VITE_POLYDESK_APP_URL || 'https://polydesk-i96m.onrender.com'
-const POCKET_ENTRY_PATH = '/pocket'
 const AGENT_HASH_HEADER_PROMPTS = [
   { text: 'I can help with payments and Hash PayLink services.', delayMs: 9500 },
   { text: 'I am Agent Hash.', delayMs: 7000 },
@@ -871,7 +871,8 @@ export default function CreateLink({
   }
 
   function openStandaloneCirclePocket(replace = false) {
-    navigate(POCKET_ENTRY_PATH, { replace })
+    if (replace) window.location.replace(POCKET_ORIGIN)
+    else window.location.assign(POCKET_ORIGIN)
   }
 
   function openPaymentMenu(push = true) {

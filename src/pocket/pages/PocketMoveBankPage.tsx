@@ -26,9 +26,7 @@ import usePocketProfile from '../hooks/usePocketProfile'
 import usePocketWallets from '../hooks/usePocketWallets'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 import { pocketActivityReceipt } from '../lib/pocketReceipt'
-import { pocketPathFor } from '../lib/pocketRoutes'
-
-const POCKET_BASE_PATH = '/pocket'
+import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
 
 export default function PocketMoveBankPage() {
   const navigate = useNavigate()

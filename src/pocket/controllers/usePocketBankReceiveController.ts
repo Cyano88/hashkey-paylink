@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { copyToClipboard, formatAmount } from '../../lib/utils'
 import { readPocketBankInstitutions, verifyPocketBankAccount } from '../api/pocketBankClient'
 import { createPocketBankReceive } from '../api/pocketBankReceiveClient'
+import { hashPayLinkAppOriginForOrigin } from '../lib/pocketRoutes'
 import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 import { readablePocketBankPayoutError } from './pocketBankErrors'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
@@ -165,7 +166,7 @@ export default function usePocketBankReceiveController({
       })
       idempotencyKey.current = ''
       const paymentUrl = data.link.payment_url
-      const nextDashboardUrl = data.link.dashboard_url || `${window.location.origin}/dashboard?n=base`
+      const nextDashboardUrl = data.link.dashboard_url || `${hashPayLinkAppOriginForOrigin(window.location.origin)}/dashboard?n=base`
       setGeneratedLink(paymentUrl)
       setDashboardUrl(nextDashboardUrl)
       localStorage.setItem('hp_last_event', JSON.stringify({

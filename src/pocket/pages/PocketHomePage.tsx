@@ -14,9 +14,8 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
 import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketWallets from '../hooks/usePocketWallets'
-import { pocketPathFor } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
 
-const POCKET_BASE_PATH = '/pocket'
 const POCKET_HOME_NETWORK_KEY = 'pocket:home:network'
 
 function restoredHomeNetwork(): PocketHomeNetworkKey {
