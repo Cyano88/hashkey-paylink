@@ -54,6 +54,28 @@ export default function ApiReference() {
         </SubSection>
       </Section>
 
+      <Section title="Polymarket Funding API">
+        <p>
+          Enable <code>Polymarket funding</code> on an ordinary USDC developer project. Your server supplies the customer's Polymarket wallet, amount and eligible project networks. Hash PayLink independently requests and verifies the provider deposit route; integrations cannot supply or override that destination.
+        </p>
+        <SubSection title="POST /api/v2/funding/polymarket/checkouts">
+          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/funding/polymarket/checkouts \
+  -H "X-API-Key: YOUR_SERVER_KEY" \
+  -H "Idempotency-Key: funding:your-unique-request-id" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "polymarketWallet": "0xCUSTOMER_WALLET",
+    "amount": "25",
+    "networks": ["base", "arbitrum"],
+    "returnUrl": "https://your-allowlisted-domain.example/funding/complete"
+  }'`}</CodeBlock>
+          <p>The response includes a hosted <code>checkoutUrl</code>, stable <code>fundingRequestId</code>, and authenticated <code>statusUrl</code>. The payer can select from the requested networks that are also enabled on the developer project. Base and Arbitrum are supported in this provider flow.</p>
+        </SubSection>
+        <SubSection title="GET /api/v2/funding/polymarket/checkouts?id=pmf_...">
+          <p>Poll this endpoint from your server with the same API key. <code>awaiting_payment</code> means no accepted checkout payment, <code>bridging</code> means payment was received but provider delivery is not final, and <code>funded</code> means the provider reports completed delivery. Only <code>funded</code> returns the receipt and allowlisted return URL. Never grant access or credit a customer from the generic <code>payment.confirmed</code> webhook alone for a provider-funded checkout.</p>
+        </SubSection>
+      </Section>
+
       <Section title="0G verification">
         <SubSection title="GET /api/agent-verify">
           <p>Verifies archived payment proofs against the 0G proof layer.</p>

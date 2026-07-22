@@ -7,12 +7,14 @@ import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
 
 type Network = 'base' | 'arbitrum' | 'arc'
+type Capability = 'hosted_checkout' | 'polymarket_funding'
 type Project = {
   id: string
   name: string
   ownerEmail: string
   website: string
   useCase: string
+  capabilities: Capability[]
   settlementMode: 'usdc' | 'ngn'
   settlementStatus: 'ready' | 'review_required'
   networks: Network[]
@@ -70,7 +72,7 @@ export default function DeveloperPortalPage() {
   const [newWebhookSecret, setNewWebhookSecret] = useState('')
   const [keyName, setKeyName] = useState('Production backend')
   const [keyEnvironment, setKeyEnvironment] = useState<'test' | 'live'>('test')
-  const [createForm, setCreateForm] = useState({ name: '', website: '', useCase: '' })
+  const [createForm, setCreateForm] = useState<{ name: string; website: string; useCase: string; capabilities: Capability[] }>({ name: '', website: '', useCase: '', capabilities: ['hosted_checkout'] })
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [institutionsLoading, setInstitutionsLoading] = useState(false)
   const active = projects.find(project => project.id === activeId) ?? projects[0]
@@ -149,6 +151,7 @@ export default function DeveloperPortalPage() {
     try {
       const data = await api('PUT', {
         action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, useCase: draft.useCase,
+        capabilities: draft.capabilities,
         settlementMode: draft.settlementMode, networks: draft.networks, defaultNetwork: draft.defaultNetwork,
         recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins,
         webhookUrl: draft.webhookUrl, bankCode: draft.bankCode, bankName: draft.bankName,
@@ -230,6 +233,7 @@ export default function DeveloperPortalPage() {
             <Field label="Platform name"><input className={fieldClass()} value={createForm.name} onChange={event => setCreateForm(current => ({ ...current, name: event.target.value }))} placeholder="Your platform" /></Field>
             <Field label="Website"><input className={fieldClass()} value={createForm.website} onChange={event => setCreateForm(current => ({ ...current, website: event.target.value }))} placeholder="https://yourplatform.com" /></Field>
             <Field label="What will customers pay for?"><textarea className={cn(fieldClass(), 'h-28 resize-none py-3 leading-5')} value={createForm.useCase} onChange={event => setCreateForm(current => ({ ...current, useCase: event.target.value }))} placeholder="Describe the product and checkout flow." /></Field>
+            <CapabilityPicker value={createForm.capabilities} onChange={capabilities => setCreateForm(current => ({ ...current, capabilities }))} />
           </div>
           {error && <Message tone="error">{error}</Message>}
           <button type="button" disabled={busy} onClick={createProject} className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">
@@ -266,6 +270,27 @@ export default function DeveloperPortalPage() {
   )
 }
 
+function CapabilityPicker({ value, onChange }: { value: Capability[]; onChange: (value: Capability[]) => void }) {
+  const options: Array<{ key: Capability; title: string; copy: string }> = [
+    { key: 'hosted_checkout', title: 'Hosted checkout', copy: 'Accept human or agentic service payments into your configured treasury.' },
+    { key: 'polymarket_funding', title: 'Polymarket funding', copy: 'Create verified bridge-backed checkouts for a customer Polymarket wallet.' },
+  ]
+  function toggle(key: Capability) {
+    const next = value.includes(key) ? value.filter(item => item !== key) : [...value, key]
+    if (next.length) onChange(next)
+  }
+  return <div className="mt-6">
+    <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">API products</p>
+    <div className="mt-2 grid gap-2 sm:grid-cols-2">{options.map(option => {
+      const active = value.includes(option.key)
+      return <button key={option.key} type="button" onClick={() => toggle(option.key)} className={cn('rounded-2xl border p-4 text-left transition', active ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/10 dark:bg-blue-400/10' : 'border-gray-200 dark:border-white/10')}>
+        <span className="flex items-center gap-2 text-xs font-semibold text-gray-950 dark:text-white"><span className={cn('grid h-4 w-4 place-items-center rounded-full border', active ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300')}>{active ? <Check className="h-2.5 w-2.5" /> : null}</span>{option.title}</span>
+        <span className="mt-2 block text-[11px] leading-5 text-gray-500 dark:text-gray-400">{option.copy}</span>
+      </button>
+    })}</div>
+  </div>
+}
+
 function SetupPanel({ draft, setDraft, wallet, institutions, institutionsLoading, busy, onLinkWallet, onSave }: { draft: Project; setDraft: (project: Project) => void; wallet: string; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onLinkWallet: () => void; onSave: () => void }) {
   const bankAccountNumber = draft.bankAccountNumber ?? ''
   function toggleNetwork(network: Network) {
@@ -281,6 +306,7 @@ function SetupPanel({ draft, setDraft, wallet, institutions, institutionsLoading
       <Field label="Website"><input className={fieldClass()} value={draft.website} onChange={event => setDraft({ ...draft, website: event.target.value })} /></Field>
     </div>
     <Field label="What customers pay for" className="mt-4"><textarea className={cn(fieldClass(), 'h-24 resize-none py-3')} value={draft.useCase} onChange={event => setDraft({ ...draft, useCase: event.target.value })} /></Field>
+    <CapabilityPicker value={draft.capabilities} onChange={capabilities => setDraft({ ...draft, capabilities })} />
 
     <div className="mt-7">
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Settlement</p>

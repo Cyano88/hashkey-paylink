@@ -20,6 +20,18 @@ export type HostedCheckoutPaymentOption = { network: HostedCheckoutNetwork; reci
 export type HostedCheckoutMode = 'human' | 'agentic'
 export type HostedCheckoutAgenticType = 'creator_earnings' | 'agent_treasury'
 type PartnerPolicy = { partnerId: string; allowedOrigins: string[] } | DeveloperCheckoutPolicy
+type VerifiedProviderRouting = {
+  capability: 'polymarket_funding'
+  defaultNetwork: HostedCheckoutNetwork
+  paymentOptions: HostedCheckoutPaymentOption[]
+  funding: {
+    provider: 'polymarket'
+    requestId: string
+    targetWallet: string
+    depositAddress: string
+  }
+}
+const verifiedProviderRouting = new WeakMap<Request, VerifiedProviderRouting>()
 type HostedCheckoutPayment = {
   status: 'processing' | 'paid' | 'failed'
   referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer'
@@ -83,6 +95,7 @@ export type CheckoutRecord = {
   requestHash: string
   checkoutMode?: HostedCheckoutMode
   agenticType?: HostedCheckoutAgenticType
+  providerFunding?: VerifiedProviderRouting['funding']
   settlement?: HostedCheckoutSettlement
   payout?: { status: string; deliveredAt?: string }
   integrity: string
@@ -283,6 +296,14 @@ function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
   }
   if (record.checkoutMode !== undefined) {
     fields.push(record.checkoutMode, record.agenticType ?? '')
+  }
+  if (record.providerFunding !== undefined) {
+    fields.push([
+      record.providerFunding.provider,
+      record.providerFunding.requestId,
+      record.providerFunding.targetWallet,
+      record.providerFunding.depositAddress,
+    ])
   }
   return JSON.stringify(fields)
 }
@@ -779,6 +800,14 @@ function checkoutPaymentUrl(record: CheckoutRecord) {
     params.set('checkoutTitle', record.title)
     if (record.description) params.set('checkoutDescription', record.description)
   }
+  if (record.providerFunding?.provider === 'polymarket') {
+    params.set('brand', 'polymarket')
+    params.set('pm', '1')
+    params.set('bridge', 'polymarket')
+    params.set('pmw', record.providerFunding.targetWallet)
+    params.set('pmr', record.providerFunding.requestId)
+    params.set('funding', record.merchantName)
+  }
   if (record.flexible) params.set('f', '1')
   else params.set('a', record.amount)
   params.set('e', selectedOption?.recipient ?? record.recipient)
@@ -884,6 +913,10 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     }
     const policy = await dependencies.policy(req)
     if (!policy) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
+    const providerRouting = verifiedProviderRouting.get(req)
+    if (providerRouting && (!('projectManaged' in policy) || !policy.capabilities.includes(providerRouting.capability))) {
+      return res.status(403).json({ ok: false, error: 'This API key is not enabled for the requested funding product.' })
+    }
 
     const kind = clean(req.body?.kind, 40)
     const checkoutMode = (clean(req.body?.checkoutMode, 20).toLowerCase() || 'human') as HostedCheckoutMode
@@ -894,13 +927,15 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     const description = clean(req.body?.description, 240)
     const amount = req.body?.flexible === true ? '' : normalizePositiveUsdc(req.body?.amount)
     const flexible = req.body?.flexible === true
-    const isNairaProject = 'projectManaged' in policy && policy.settlementMode === 'ngn'
+    const isNairaProject = !providerRouting && 'projectManaged' in policy && policy.settlementMode === 'ngn'
     const requestedNetwork = clean(req.body?.network, 20).toLowerCase()
     const requestedRecipient = clean(req.body?.recipient, 80)
     if ('projectManaged' in policy && (req.body?.recipient !== undefined || req.body?.paymentOptions !== undefined || (checkoutMode === 'human' && req.body?.network !== undefined))) {
       return res.status(400).json({ ok: false, error: 'Payment routing is managed in the developer dashboard.' })
     }
-    const normalizedOptions = 'projectManaged' in policy
+    const normalizedOptions = providerRouting
+      ? { options: providerRouting.paymentOptions, error: '' }
+      : 'projectManaged' in policy
       ? { options: policy.paymentOptions, error: '' }
       : normalizeRequestedPaymentOptions(req.body?.paymentOptions)
     if (normalizedOptions.error) return res.status(400).json({ ok: false, error: normalizedOptions.error })
@@ -908,7 +943,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if (checkoutMode === 'agentic' && routingOptions && routingOptions.length > 1 && !requestedNetwork && !('projectManaged' in policy)) {
       return res.status(400).json({ ok: false, error: 'Agentic checkout must select exactly one payment network.' })
     }
-    const defaultNetwork = (checkoutMode === 'agentic' ? requestedNetwork : '') || clean(req.body?.defaultNetwork, 20).toLowerCase() || ('projectManaged' in policy ? policy.defaultNetwork : '') || requestedNetwork || routingOptions?.[0]?.network || ''
+    const defaultNetwork = (checkoutMode === 'agentic' ? requestedNetwork : '') || clean(req.body?.defaultNetwork, 20).toLowerCase() || providerRouting?.defaultNetwork || ('projectManaged' in policy ? policy.defaultNetwork : '') || requestedNetwork || routingOptions?.[0]?.network || ''
     const defaultOption = routingOptions?.find(option => option.network === defaultNetwork)
     const network = routingOptions ? defaultOption?.network ?? '' : defaultNetwork
     const legacyRecipient = isAddress(requestedRecipient) ? getAddress(requestedRecipient) : requestedRecipient
@@ -1014,6 +1049,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         requestHash,
         checkoutMode,
         ...(checkoutMode === 'agentic' ? { agenticType } : {}),
+        ...(providerRouting ? { providerFunding: providerRouting.funding } : {}),
         ...(checkoutMode === 'human' && routingOptions && !nairaOrder ? { paymentOptions: routingOptions } : {}),
         ...(nairaOrder ? { settlement: {
           mode: 'ngn' as const,
@@ -1068,4 +1104,19 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
   }
 }
 
-export default createHostedCheckoutsHandler()
+const hostedCheckoutsHandler = createHostedCheckoutsHandler()
+
+export async function createProviderRoutedHostedCheckout(
+  req: Request,
+  res: Response,
+  routing: VerifiedProviderRouting,
+) {
+  verifiedProviderRouting.set(req, routing)
+  try {
+    return await hostedCheckoutsHandler(req, res)
+  } finally {
+    verifiedProviderRouting.delete(req)
+  }
+}
+
+export default hostedCheckoutsHandler

@@ -65,6 +65,7 @@ assert.deepEqual(created.body.project.allowedOrigins, ['https://polydesk.trade']
 const unlinked = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',
   useCase: 'Sell individual market data and analysis requests through hosted checkout.', settlementMode: 'usdc',
+  capabilities: ['hosted_checkout', 'polymarket_funding'],
   networks: ['base'], defaultNetwork: 'base', recipients: { base: '0x2222222222222222222222222222222222222222' },
   allowedOrigins: ['https://polydesk.trade'], webhookUrl: '',
 })
@@ -75,6 +76,7 @@ assert.equal((await request(handler, 'POST', { action: 'create-key', projectId: 
 const ready = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',
   useCase: 'Sell individual market data and analysis requests through hosted checkout.', settlementMode: 'usdc',
+  capabilities: ['hosted_checkout', 'polymarket_funding'],
   networks: ['base', 'arbitrum', 'arc'], defaultNetwork: 'base', recipients: { base: linkedWallet, arbitrum: linkedWallet, arc: linkedWallet },
   allowedOrigins: ['https://polydesk.trade', 'javascript:alert(1)'], webhookUrl: 'https://polydesk.trade/webhooks/hashpaylink',
 })
@@ -88,6 +90,7 @@ assert.equal(JSON.stringify(generated.body).includes('digest'), false)
 const policy = developerPolicyFromStore(store, generated.body.apiKey, portalSecret)
 assert.equal(policy.partnerId, created.body.project.id)
 assert.equal(policy.merchantName, 'PolyDesk API')
+assert.deepEqual(policy.capabilities, ['hosted_checkout', 'polymarket_funding'])
 assert.deepEqual(policy.paymentOptions.map(option => option.network), ['base', 'arbitrum'])
 assert.equal(developerPolicyFromStore(store, `${generated.body.apiKey}tampered`, portalSecret), null)
 const testKey = await request(handler, 'POST', { action: 'create-key', projectId: created.body.project.id, name: 'Arc sandbox', environment: 'test' })

@@ -528,7 +528,9 @@ export default function PaymentPage() {
   const [hostedConfirmationStatus, setHostedConfirmationStatus] = useState<'idle' | 'checking' | 'processing' | 'verified' | 'error'>('idle')
   const [hostedConfirmationError, setHostedConfirmationError] = useState('')
   const [hostedReturnUrl, setHostedReturnUrl] = useState('')
+  const resolvedPolymarketReturnUrl = isHostedService && hostedReturnUrl ? hostedReturnUrl : polymarketBridgeReturnUrl
   const hostedMerchantName = getPaylinkParam(initParams, 'merchantName', 'merchantName').slice(0, 80)
+  const polymarketReturnLabel = isHostedService ? (hostedMerchantName || 'the platform') : 'PolyDesk'
   const hostedCheckoutTitle = getPaylinkParam(initParams, 'checkoutTitle', 'checkoutTitle').slice(0, 100)
   const autoAccessRedirect = getPaylinkParam(initParams, 'ad', 'autoRedirect') === '1'
   const isHelperAccess   = getPaylinkParam(initParams, 'src', 'src') === 'telegram-helper' && !!agentUrl
@@ -3626,10 +3628,10 @@ export default function PaymentPage() {
     if (polymarketBridgeStatus !== 'complete') return
     polymarketReturnRedirected.current = true
     const timer = window.setTimeout(() => {
-      window.location.assign(polymarketBridgeReturnUrl)
+      window.location.assign(resolvedPolymarketReturnUrl)
     }, 7000)
     return () => window.clearTimeout(timer)
-  }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, polymarketBridgeReturnUrl])
+  }, [bankSendStatus, isBankSendPayment, isConfirmed, isPolymarketBridge, polymarketReturnToAgentHash, polymarketBridgeStatus, resolvedPolymarketReturnUrl])
 
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS
@@ -3875,7 +3877,7 @@ export default function PaymentPage() {
               )}
             </div>
 
-            {receiptReady && (!isPolymarketBridge || !polymarketReturnToAgentHash) && (
+            {receiptReady && (!isPolymarketBridge || polymarketBridgeComplete) && !polymarketReturnToAgentHash && (
               <div className="grid gap-2">
                 <UnifiedReceipt receipt={paymentReceipt!} />
                 {!ogProofValue && (
@@ -3885,11 +3887,11 @@ export default function PaymentPage() {
                 )}
                 {isPolymarketBridge && (
                   <a
-                    href={polymarketBridgeReturnUrl}
+                    href={resolvedPolymarketReturnUrl}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
                   >
-                    <PolyDeskVectorIcon className="h-4 w-4" />
-                    Trade on PolyDesk
+                    {!isHostedService && <PolyDeskVectorIcon className="h-4 w-4" />}
+                    {isHostedService ? `Continue to ${polymarketReturnLabel}` : 'Trade on PolyDesk'}
                   </a>
                 )}
               </div>
@@ -3933,7 +3935,7 @@ export default function PaymentPage() {
               </div>
             )}
 
-            {isHostedCheckout ? (
+            {isHostedCheckout && !isPolymarketBridge ? (
               <div className="space-y-2">
                 {hostedConfirmationStatus === 'verified' ? (
                   <p className="text-center text-[11px] font-medium text-gray-400">
@@ -4007,12 +4009,12 @@ export default function PaymentPage() {
             ) : isPolymarketBridge ? (
               <div className="space-y-2">
                 <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-medium text-gray-400">
-                  {polymarketBridgeComplete ? 'Funded. Redirecting back to PolyDesk in 7 seconds...' : polymarketBridgeProgressText}
+                  {polymarketBridgeComplete ? `Funded. Redirecting to ${polymarketReturnLabel} in 7 seconds...` : polymarketBridgeProgressText}
                   {!polymarketBridgeComplete && <Loader2 className="h-3 w-3 animate-spin" />}
                 </p>
                 {polymarketBridgeComplete && (
-                  <a href={polymarketBridgeReturnUrl} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
-                    Return to PolyDesk now
+                  <a href={resolvedPolymarketReturnUrl} className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]">
+                    {isHostedService ? `Continue to ${polymarketReturnLabel}` : 'Return to PolyDesk now'}
                   </a>
                 )}
               </div>
@@ -5349,7 +5351,7 @@ export default function PaymentPage() {
           ] : isPolymarketFunding ? [
             { n: '1', title: 'Review wallet' },
             { n: '2', title: 'Fund with USDC' },
-            { n: '3', title: 'Return to PolyDesk' },
+            { n: '3', title: isHostedService ? `Continue to ${polymarketReturnLabel}` : 'Return to PolyDesk' },
           ] : isWalletManagerFunding ? [
             { n: '1', title: 'Fund Pocket Wallet' },
             { n: '2', title: 'Activate x402' },

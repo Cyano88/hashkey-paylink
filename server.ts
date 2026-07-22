@@ -118,6 +118,7 @@ import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
 import agenticCheckoutsHandler from './api/agentic-checkouts.js'
+import polymarketFundingCheckoutsHandler from './api/polymarket-funding-checkouts.js'
 import { pocketBillsCatalogHandler, pocketBillsPayHandler, pocketBillsQuoteHandler, pocketBillsVerifyHandler } from './api/pocket/bills.js'
 import { pocketBillsRefundHandler, pocketBillsUserRefundHandler } from './api/pocket/bills-refunds.js'
 import vtpassBillsWebhookHandler from './api/pocket/bills-webhook.js'
@@ -337,6 +338,7 @@ app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
 app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
 app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)
+app.all('/api/v2/funding/polymarket/checkouts', strictLimiter, polymarketFundingCheckoutsHandler)
 app.all('/api/pocket/bills/quote',     billsQuoteLimiter, billsBrowserBoundary, pocketBillsQuoteHandler)
 app.get('/api/pocket/bills/catalog',   billsQuoteLimiter, billsBrowserBoundary, pocketBillsCatalogHandler)
 app.post('/api/pocket/bills/verify',   billsQuoteLimiter, billsBrowserBoundary, pocketBillsVerifyHandler)

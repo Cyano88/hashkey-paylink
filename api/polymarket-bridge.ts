@@ -11,7 +11,7 @@ const POLYMARKET_RPC_URL = (process.env.POLYMARKET_RPC_URL ?? process.env.POLYGO
 const POLYMARKET_PUSD = '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB' as const
 const PUSD_DECIMALS = 6
 
-type BridgeNetwork = 'base' | 'arbitrum' | 'solana'
+export type BridgeNetwork = 'base' | 'arbitrum' | 'solana'
 type BridgeAddressType = 'evm' | 'svm'
 
 const WITHDRAW_DESTINATIONS: Record<BridgeNetwork, { chainId: string; tokenAddress: string; addressType: BridgeAddressType }> = {
@@ -57,7 +57,7 @@ function cleanText(value: unknown, max = 128) {
   return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
 }
 
-function cleanNetwork(value: unknown): BridgeNetwork {
+export function cleanNetwork(value: unknown): BridgeNetwork {
   if (value === 'arbitrum' || value === 'solana') return value
   return 'base'
 }
@@ -66,7 +66,7 @@ function addressTypeFor(network: BridgeNetwork): BridgeAddressType {
   return network === 'solana' ? 'svm' : 'evm'
 }
 
-function minimumUsdcFor(network: BridgeNetwork) {
+export function minimumUsdcFor(network: BridgeNetwork) {
   // Polymarket's live deposit UI currently shows a $3 minimum for USDC deposits.
   return network === 'base' || network === 'arbitrum' || network === 'solana' ? 3 : 3
 }
@@ -116,7 +116,7 @@ async function bridgeFetch<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-async function createDepositAddress(polymarketWallet: string, network: BridgeNetwork) {
+export async function createDepositAddress(polymarketWallet: string, network: BridgeNetwork) {
   const data = await bridgeFetch<DepositResponse>('/deposit', {
     method: 'POST',
     body: JSON.stringify({ address: polymarketWallet }),
@@ -161,7 +161,7 @@ async function createWithdrawalAddress(polymarketWallet: string, network: Bridge
   }
 }
 
-async function getDepositStatus(depositAddress: string) {
+export async function getDepositStatus(depositAddress: string) {
   const data = await bridgeFetch<{ transactions?: BridgeTransaction[] }>(`/status/${encodeURIComponent(depositAddress)}`, {
     method: 'GET',
   })
