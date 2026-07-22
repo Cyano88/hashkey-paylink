@@ -1533,9 +1533,8 @@ export default function FoundationPage() {
                   </div>
 
                   <div className="section-detail-reveal mt-4 flex justify-center max-sm:mt-2" style={{ '--section-reveal-delay': '340ms' } as CSSProperties}>
-                    <div className="grid w-full grid-cols-2 rounded-full border p-1 text-[10px] font-black shadow-[0_10px_30px_rgba(0,0,0,.28)] max-sm:p-0.5 max-sm:text-[7px]" style={{ borderColor: '#4b4b55', background: '#202027' }}>
-                      <span className="flex min-h-9 items-center justify-center rounded-full px-3 text-gray-950 shadow-sm max-sm:min-h-6 max-sm:px-2" style={{ background: '#ffffff', color: '#0a0a0b' }}><Wallet className="mr-1 h-3 w-3 max-sm:h-2 max-sm:w-2" />Smart Wallet</span>
-                      <span className="flex min-h-9 items-center justify-center px-3 max-sm:min-h-6 max-sm:px-2" style={{ color: '#f5f5f7' }}>Pay another way</span>
+                    <div className="flex w-full rounded-full border p-1 text-[10px] font-black shadow-[0_10px_30px_rgba(0,0,0,.28)] max-sm:p-0.5 max-sm:text-[7px]" style={{ borderColor: '#4b4b55', background: '#202027' }}>
+                      <span className="flex min-h-9 w-full items-center justify-center rounded-full px-3 text-gray-950 shadow-sm max-sm:min-h-6 max-sm:px-2" style={{ background: '#ffffff', color: '#0a0a0b' }}><Wallet className="mr-1 h-3 w-3 max-sm:h-2 max-sm:w-2" />Circle Smart Wallet</span>
                     </div>
                   </div>
                   <div className="section-detail-reveal mt-4 rounded-[26px] border p-5 text-center shadow-[0_18px_50px_rgba(0,0,0,.24)] max-sm:mt-3 max-sm:rounded-[18px] max-sm:p-3" style={{ borderColor: '#51515d', background: 'linear-gradient(135deg,#202027 0%,#1a2944 100%)', '--section-reveal-delay': '395ms' } as CSSProperties}>

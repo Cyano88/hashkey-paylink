@@ -8,6 +8,8 @@ import type { PocketBillsController } from '../../controllers/usePocketBillsCont
 import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
 import PocketDataBundlePicker from './PocketDataBundlePicker'
 import { Link } from 'react-router-dom'
+import UnifiedReceipt from '../../../components/UnifiedReceipt'
+import type { PaylinkReceipt } from '../../../lib/paymentReceiptPdf'
 
 export type PocketBillView = 'airtime' | 'data' | 'tv' | 'electricity'
 
@@ -84,6 +86,29 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
   const isData = view === 'data'
   const isVerifiedBill = view === 'electricity' || (view === 'tv' && bills.tvVerificationRequired)
   const isDirectTv = view === 'tv' && !bills.tvVerificationRequired
+  const billReceipt: PaylinkReceipt | null = bills.intent ? {
+    type: bills.intent.category,
+    receiptId: bills.intent.requestId,
+    receiptHash: bills.intent.txHash || bills.intent.requestId,
+    title: `${billMeta[bills.intent.category].title} payment confirmed`,
+    status: 'confirmed',
+    eventId: bills.intent.id,
+    txHash: bills.intent.txHash || bills.intent.requestId,
+    chain: bills.intent.network,
+    payer: bills.intent.payerWallet,
+    memo: bills.intent.variationName || bills.intent.serviceName,
+    amount: bills.intent.paymentAmountUsdc || bills.intent.amountUsdc,
+    amountNgn: bills.intent.amountNgn,
+    asset: 'USDC',
+    createdAt: bills.intent.updatedAt || bills.intent.createdAt,
+    source: 'bills',
+    settlementType: `bill_payment:${bills.intent.category}`,
+    variant: 'bills',
+    providerName: bills.intent.serviceName || dataServiceLabel(bills.intent.serviceId),
+    targetLabel: bills.intent.category === 'electricity' ? 'Meter Number' : bills.intent.category === 'tv' ? 'Smartcard Number' : 'Phone Number',
+    targetValue: bills.intent.phone,
+    referenceId: bills.intent.requestId,
+  } : null
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
   const prepaidToken = view === 'electricity' && bills.intent?.variationCode === 'prepaid' && bills.intent.state === 'delivered'
     ? rechargeToken(bills.intent.purchasedCode)
@@ -250,22 +275,28 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
 
             {showPayment && bills.intent && (
               <>
-                {bills.status === 'ready' && (
-                  <div className="flex justify-end">
-                    <button type="button" onClick={bills.edit} className="rounded-full px-2 py-1 text-[11px] font-bold text-blue-600 transition hover:bg-blue-50 hover:text-blue-700 dark:text-blue-300 dark:hover:bg-blue-400/10">Edit details</button>
-                  </div>
+                {bills.status === 'successful' && billReceipt ? (
+                  <UnifiedReceipt receipt={billReceipt} />
+                ) : (
+                  <>
+                    {bills.status === 'ready' && (
+                      <div className="flex justify-end">
+                        <button type="button" onClick={bills.edit} className="rounded-full px-2 py-1 text-[11px] font-bold text-blue-600 transition hover:bg-blue-50 hover:text-blue-700 dark:text-blue-300 dark:hover:bg-blue-400/10">Edit details</button>
+                      </div>
+                    )}
+                    <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-white/10 dark:bg-white/[0.04]">
+                      <div className="flex justify-between gap-3"><span className="text-gray-500">{bills.intent.variationName || 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
+                      <div className="flex justify-between gap-3"><span className="text-gray-500">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard') : view === 'electricity' ? 'Meter' : isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
+                      <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10"><span className="text-gray-500">Pay from Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.amountUsdc))} USDC</span></div>
+                    </div>
+                    <PocketSlideAction
+                      status={slideStatus}
+                      disabled={bills.status !== 'ready' || Number(bills.intent.amountUsdc) > baseBalance}
+                      onConfirm={() => void bills.pay()}
+                      labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`, successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent` }}
+                    />
+                  </>
                 )}
-                <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-white/10 dark:bg-white/[0.04]">
-                  <div className="flex justify-between gap-3"><span className="text-gray-500">{bills.intent.variationName || 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
-                  <div className="flex justify-between gap-3"><span className="text-gray-500">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard') : view === 'electricity' ? 'Meter' : isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
-                  <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10"><span className="text-gray-500">Pay from Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.amountUsdc))} USDC</span></div>
-                </div>
-                <PocketSlideAction
-                  status={slideStatus}
-                  disabled={bills.status !== 'ready' || Number(bills.intent.amountUsdc) > baseBalance}
-                  onConfirm={() => void bills.pay()}
-                  labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`, successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent` }}
-                />
                 {prepaidToken && (
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
                     <div className="flex items-start justify-between gap-3">

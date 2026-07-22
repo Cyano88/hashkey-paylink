@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { createAgenticCheckoutsHandler, reconcileGatewayPayment } from '../api/agentic-checkouts.ts'
 
+const paymentAttemptId = 'pat_agentattempt1234567890'
+
 function responseRecorder() {
   return {
     statusCode: 200,
@@ -31,12 +33,25 @@ function checkout(overrides = {}) {
     createdAt: '2026-07-22T10:00:00.000Z',
     expiresAt: '2026-07-22T11:00:00.000Z',
     requestHash: 'a'.repeat(64),
+    checkoutMode: 'agentic',
+    agenticType: 'agent_treasury',
+    paymentAttempts: [{
+      id: paymentAttemptId,
+      mode: 'agentic',
+      status: 'pending',
+      network: 'base',
+      recipient: '0x1111111111111111111111111111111111111111',
+      returnUrl: 'https://agent.example/complete',
+      amount: '0.25',
+      createdAt: '2026-07-22T10:00:00.000Z',
+      updatedAt: '2026-07-22T10:00:00.000Z',
+    }],
     integrity: 'b'.repeat(64),
     ...overrides,
   }
 }
 
-async function request(handler, { method = 'GET', query = { id: 'chk_agentcheckout1234' }, headers = {} } = {}) {
+async function request(handler, { method = 'GET', query = { id: 'chk_agentcheckout1234', attempt: paymentAttemptId }, headers = {} } = {}) {
   const req = { method, query, headers, url: `/api/v2/checkouts/agent?id=${query.id ?? ''}` }
   const res = responseRecorder()
   await handler(req, res)
@@ -61,7 +76,8 @@ const challengeHandler = createAgenticCheckoutsHandler({
 })
 
 assert.equal((await request(challengeHandler, { method: 'POST' })).res.statusCode, 405)
-assert.equal((await request(challengeHandler, { query: { id: 'invalid' } })).res.statusCode, 400)
+assert.equal((await request(challengeHandler, { query: { id: 'invalid', attempt: paymentAttemptId } })).res.statusCode, 400)
+assert.equal((await request(challengeHandler, { query: { id: 'chk_agentcheckout1234', attempt: 'pat_wrong' } })).res.statusCode, 409)
 const challenged = await request(challengeHandler)
 assert.equal(challenged.res.statusCode, 402)
 assert.equal(challenged.res.headers['payment-required'], 'challenge')
@@ -98,6 +114,7 @@ const paidHandler = createAgenticCheckoutsHandler({
 const paid = await request(paidHandler)
 assert.equal(paid.res.statusCode, 200)
 assert.equal(paid.res.body.paymentPath, 'agentic')
+assert.equal(paid.res.body.paymentAttemptId, paymentAttemptId)
 assert.equal(paid.res.body.status, 'paid')
 assert.equal(marked.amount, '0.25')
 assert.equal(marked.network, 'base')
@@ -148,6 +165,8 @@ assert.match(reconciliationUrl, /nonce=0x/)
 assert.equal(marked.referenceType, 'circle_gateway_transfer')
 
 active = checkout({ kind: 'usdc_request' })
+assert.equal((await request(paidHandler)).res.statusCode, 409)
+active = checkout({ checkoutMode: 'human', agenticType: undefined })
 assert.equal((await request(paidHandler)).res.statusCode, 409)
 active = paidRecord
 const replayed = await request(challengeHandler)

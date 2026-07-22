@@ -4,6 +4,8 @@ import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
 import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
+import UnifiedReceipt from '../../../components/UnifiedReceipt'
+import { pocketActivityReceipt, pocketActivityStatus } from '../../lib/pocketReceipt'
 
 export type { PocketActivityRow } from '../../models/pocketActivity'
 
@@ -110,6 +112,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const timestamp = row.ts ? new Date(row.ts) : null
                 const refundIntentId = kind === 'bills' ? row.merchantId || '' : ''
                 const claimingRefund = refundBusy === refundIntentId
+                const receipt = pocketActivityReceipt(row)
                 return (
                   <div key={`${row.txHash || row.eventId}-${row.ts}-${index}`} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
                     <div className="flex items-start justify-between gap-3">
@@ -132,7 +135,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                         <span className="block text-xs font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-gray-100">
                           {amountNgn ? `NGN ${amountNgn}` : Number.isFinite(amountUsdc) ? `${formatPocketDisplayAmount(amountUsdc)} USDC` : 'Receipt'}
                         </span>
-                        <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{row.paycrestStatus || 'settled'}</span>
+                        <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{pocketActivityStatus(row)}</span>
                       </span>
                     </div>
                     {timestamp && (
@@ -140,7 +143,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                         {timestamp.toLocaleDateString()} at {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     )}
-                    {kind === 'bills' && (
+                    {receipt && (
                       <>
                         <button
                           type="button"
@@ -152,7 +155,8 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                           <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', expandedReceipt === row.eventId && 'rotate-180')} />
                         </button>
                         {expandedReceipt === row.eventId && (
-                          <div className="mt-2 space-y-2 rounded-xl border border-gray-100 px-3 py-2.5 text-[10px] dark:border-white/10">
+                          <div className="mt-2 space-y-3">
+                            <UnifiedReceipt receipt={receipt} />
                             {row.billToken && (() => {
                               const token = row.billToken.replace(/^token\s*:\s*/i, '').trim()
                               return (
@@ -165,23 +169,8 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                                 </div>
                               )
                             })()}
-                            <div className="flex items-start justify-between gap-3">
-                              <span className="font-semibold text-gray-400">Base transaction</span>
-                              {/^(0x)?[a-fA-F0-9]{64}$/.test(row.txHash) ? (
-                                <a href={`https://base.blockscout.com/tx/${row.txHash}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-mono font-semibold text-blue-600 hover:underline dark:text-blue-300">
-                                  {row.txHash.slice(0, 8)}...{row.txHash.slice(-6)}
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
-                              ) : <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.txHash}</span>}
-                            </div>
-                            {row.providerReference && (
-                              <div className="flex items-start justify-between gap-3">
-                                <span className="font-semibold text-gray-400">VTpass reference</span>
-                                <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.providerReference}</span>
-                              </div>
-                            )}
                             {row.supportReference && (
-                              <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 text-[10px] dark:border-white/10">
                                 <span className="font-semibold text-gray-400">Support reference</span>
                                 <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.supportReference}</span>
                               </div>

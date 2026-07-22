@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHostedCheckoutsHandler, drainHostedCheckoutWebhookOutbox, markHostedCheckoutNairaPayout, markHostedCheckoutPaid, resolveHostedCheckoutPartnerPolicy } from '../api/hosted-checkouts.ts'
+import { attachHostedCheckoutReceipt, createHostedCheckoutsHandler, drainHostedCheckoutWebhookOutbox, markHostedCheckoutNairaPayout, markHostedCheckoutPaid, resolveHostedCheckoutPartnerPolicy } from '../api/hosted-checkouts.ts'
 
 function responseRecorder() {
   return {
@@ -69,6 +69,9 @@ assert.equal((await request(handler, 'POST', { body: { ...valid, returnUrl: '' }
 assert.equal((await request(handler, 'POST', { body: { ...valid, amount: '0' }, headers: { ...headers, 'idempotency-key': 'partner:order:zero-amount' } })).statusCode, 400)
 assert.equal((await request(handler, 'POST', { body: { ...valid, recipient: '0x0000000000000000000000000000000000000000' }, headers: { ...headers, 'idempotency-key': 'partner:order:zero-address' } })).statusCode, 400)
 assert.equal((await request(handler, 'POST', { body: { ...valid, expiresInMinutes: 5.5 }, headers: { ...headers, 'idempotency-key': 'partner:order:fractional-expiry' } })).statusCode, 400)
+assert.equal((await request(handler, 'POST', { body: { ...valid, checkoutMode: 'mixed' }, headers: { ...headers, 'idempotency-key': 'partner:order:mixed-mode' } })).statusCode, 400)
+assert.equal((await request(handler, 'POST', { body: { ...valid, checkoutMode: 'agentic' }, headers: { ...headers, 'idempotency-key': 'partner:agentic:no-type' } })).statusCode, 400)
+assert.equal((await request(handler, 'POST', { body: { ...valid, agenticType: 'creator_earnings' }, headers: { ...headers, 'idempotency-key': 'partner:human:agent-type' } })).statusCode, 400)
 
 store = {
   checkouts: {
@@ -85,9 +88,11 @@ const created = await request(handler, 'POST', { body: valid, headers })
 assert.equal(created.statusCode, 201)
 assert.equal(created.headers['cache-control'], 'no-store')
 assert.equal(created.body.checkoutId, 'chk_testcheckout1234')
-assert.equal(created.body.checkoutUrl, '/pay/c/chk_testcheckout1234')
-assert.equal(created.body.agentPaymentUrl, '/api/v2/checkouts/agent?id=chk_testcheckout1234')
-assert.equal(created.body.agentCheckoutUrl, '/pay/a/chk_testcheckout1234')
+assert.match(created.body.checkoutUrl, /^\/pay\/c\/chk_testcheckout1234\?attempt=pat_[a-f0-9]{24}$/)
+assert.equal(created.body.checkoutMode, 'human')
+assert.match(created.body.paymentAttemptId, /^pat_[a-f0-9]{24}$/)
+assert.equal(created.body.agentPaymentUrl, undefined)
+assert.equal(created.body.agentCheckoutUrl, undefined)
 assert.equal(created.body.replayed, false)
 assert.equal(store.checkouts.chk_stalecheckout123, undefined)
 assert.equal(store.idempotency['polydesk:stale-key'], undefined)
@@ -103,13 +108,17 @@ assert.match(conflict.body.error, /different checkout request/)
 const lookup = await request(handler, 'GET', { query: { id: created.body.checkoutId } })
 assert.equal(lookup.statusCode, 200)
 assert.equal(lookup.body.checkout.kind, 'service')
-assert.equal(lookup.body.agentPaymentUrl, '/api/v2/checkouts/agent?id=chk_testcheckout1234')
-assert.equal(lookup.body.agentCheckoutUrl, '/pay/a/chk_testcheckout1234')
+assert.equal(lookup.body.checkout.checkoutMode, 'human')
+assert.equal(lookup.body.checkout.paymentAttempt.id, created.body.paymentAttemptId)
+assert.equal(lookup.body.checkout.paymentAttempt.status, 'pending')
+assert.equal(lookup.body.agentPaymentUrl, undefined)
 assert.match(lookup.body.paymentUrl, /^\/pay\?/)
 assert.match(lookup.body.paymentUrl, /src=service/)
 assert.match(lookup.body.paymentUrl, /a=0\.024(?:&|$)/)
 assert.match(lookup.body.paymentUrl, /id=0x[a-f0-9]{64}/)
+assert.match(lookup.body.paymentUrl, new RegExp(`attempt=${created.body.paymentAttemptId}`))
 assert.equal(JSON.stringify(lookup.body).includes('https://polydesk.trade'), false)
+assert.equal((await request(handler, 'GET', { query: { id: created.body.checkoutId, attempt: 'pat_wrong' } })).statusCode, 409)
 
 const solanaHeaders = { ...headers, 'idempotency-key': 'partner:order:solana-0001' }
 const solanaCreated = await request(handler, 'POST', {
@@ -142,33 +151,51 @@ const multiCreated = await request(handler, 'POST', { body: multi, headers: mult
 assert.equal(multiCreated.statusCode, 201)
 const multiLookup = await request(handler, 'GET', { query: { id: multiCreated.body.checkoutId } })
 assert.deepEqual(multiLookup.body.checkout.availableNetworks, ['base', 'arbitrum', 'arc'])
+assert.equal(multiLookup.body.checkout.paymentAttempt.network, undefined)
 assert.match(multiLookup.body.paymentUrl, /multi=1/)
-assert.match(multiLookup.body.paymentUrl, /e_base=0x1111111111111111111111111111111111111111/i)
-assert.match(multiLookup.body.paymentUrl, /e_arbitrum=0x3333333333333333333333333333333333333333/i)
-assert.match(multiLookup.body.paymentUrl, /e_arc=0x4444444444444444444444444444444444444444/i)
+assert.match(multiLookup.body.paymentUrl, /e_base=0x1111111111111111111111111111111111111111/)
+assert.match(multiLookup.body.paymentUrl, /e_arbitrum=0x3333333333333333333333333333333333333333/)
 await assert.rejects(markHostedCheckoutPaid({
   id: multiCreated.body.checkoutId,
   txHash: `0x${'d'.repeat(64)}`,
   payer: '0x2222222222222222222222222222222222222222',
   amount: '0.024',
   confirmedAt: '2026-07-19T12:30:00.000Z',
-}, dependencies), /payment network is invalid/)
-await markHostedCheckoutPaid({
-  id: multiCreated.body.checkoutId,
-  txHash: `0x${'d'.repeat(64)}`,
-  payer: '0x2222222222222222222222222222222222222222',
-  amount: '0.024',
-  confirmedAt: '2026-07-19T12:30:00.000Z',
   network: 'arbitrum',
-}, dependencies)
-const multiStatus = await request(handler, 'GET', { headers: { 'x-api-key': 'partner-secret' }, query: { id: multiCreated.body.checkoutId, purpose: 'status' } })
-assert.equal(multiStatus.body.status, 'paid')
-assert.equal(multiStatus.body.network, 'arbitrum')
-assert.equal(multiStatus.body.payment.network, 'arbitrum')
-const originalArbitrumRecipient = store.checkouts[multiCreated.body.checkoutId].paymentOptions[1].recipient
-store.checkouts[multiCreated.body.checkoutId].paymentOptions[1].recipient = '0x5555555555555555555555555555555555555555'
-assert.equal((await request(handler, 'GET', { query: { id: multiCreated.body.checkoutId } })).statusCode, 409)
-store.checkouts[multiCreated.body.checkoutId].paymentOptions[1].recipient = originalArbitrumRecipient
+}, dependencies), /not locked/)
+const selectedMulti = await request(handler, 'POST', {
+  query: { id: multiCreated.body.checkoutId, attempt: multiCreated.body.paymentAttemptId, action: 'select-network' },
+  body: { network: 'arbitrum' },
+})
+assert.equal(selectedMulti.statusCode, 200)
+assert.equal(selectedMulti.body.paymentAttempt.network, 'arbitrum')
+assert.equal(selectedMulti.body.paymentAttempt.recipient, undefined)
+const selectedMultiLookup = await request(handler, 'GET', { query: { id: multiCreated.body.checkoutId, attempt: multiCreated.body.paymentAttemptId } })
+assert.equal(selectedMultiLookup.body.checkout.network, 'arbitrum')
+assert.match(selectedMultiLookup.body.paymentUrl, /n=arbitrum/)
+assert.match(selectedMultiLookup.body.paymentUrl, /e=0x3333333333333333333333333333333333333333/)
+assert.equal((await request(handler, 'POST', {
+  query: { id: multiCreated.body.checkoutId, attempt: multiCreated.body.paymentAttemptId, action: 'select-network' },
+  body: { network: 'base' },
+})).statusCode, 409)
+
+const agenticCreated = await request(handler, 'POST', {
+  body: { ...valid, checkoutMode: 'agentic', agenticType: 'creator_earnings' },
+  headers: { ...headers, 'idempotency-key': 'partner:agentic:00000001' },
+})
+assert.equal(agenticCreated.statusCode, 201)
+assert.equal(agenticCreated.body.checkoutMode, 'agentic')
+assert.equal(agenticCreated.body.agenticType, 'creator_earnings')
+assert.match(agenticCreated.body.checkoutUrl, /^\/pay\/a\/chk_[a-zA-Z0-9]+\?attempt=pat_[a-f0-9]{24}$/)
+assert.match(agenticCreated.body.agentPaymentUrl, /\/api\/v2\/checkouts\/agent\?id=.*&attempt=pat_/)
+const agenticLookup = await request(handler, 'GET', { query: { id: agenticCreated.body.checkoutId } })
+assert.equal(agenticLookup.body.checkout.checkoutMode, 'agentic')
+assert.equal(agenticLookup.body.paymentUrl, undefined)
+assert.match(agenticLookup.body.agentPaymentUrl, /\/api\/v2\/checkouts\/agent\?id=.*&attempt=pat_/)
+assert.equal((await request(handler, 'POST', {
+  body: { ...multi, checkoutMode: 'agentic', agenticType: 'agent_treasury' },
+  headers: { ...headers, 'idempotency-key': 'partner:agentic:multi-no-network' },
+})).statusCode, 400)
 
 const returnLookup = await request(handler, 'GET', { query: { id: created.body.checkoutId, purpose: 'return' } })
 assert.equal(returnLookup.statusCode, 200)
@@ -201,6 +228,22 @@ await markHostedCheckoutPaid({
 const paidStatus = await request(handler, 'GET', { headers: { 'x-api-key': 'partner-secret' }, query: { id: created.body.checkoutId, purpose: 'status' } })
 assert.equal(paidStatus.body.status, 'paid')
 assert.equal(paidStatus.body.payment.amount, '0.024')
+assert.equal(paidStatus.body.paymentAttempt.status, 'paid')
+assert.equal(paidStatus.body.paymentAttempt.transaction, `0x${'a'.repeat(64)}`)
+assert.equal(paidStatus.body.paymentAttempt.returnUrl, valid.returnUrl)
+assert.equal(paidStatus.body.paymentAttempt.recipient, valid.recipient)
+await attachHostedCheckoutReceipt({
+  id: created.body.checkoutId,
+  txHash: `0x${'a'.repeat(64)}`,
+  receiptId: 'receipt_hosted_0001',
+  receiptUrl: '/receipt/receipt_hosted_0001',
+}, dependencies)
+const receiptStatus = await request(handler, 'GET', { headers: { 'x-api-key': 'partner-secret' }, query: { id: created.body.checkoutId, purpose: 'status' } })
+assert.equal(receiptStatus.body.paymentAttempt.receiptId, 'receipt_hosted_0001')
+assert.equal(receiptStatus.body.paymentAttempt.receiptUrl, '/receipt/receipt_hosted_0001')
+const paidReturnLookup = await request(handler, 'GET', { query: { id: created.body.checkoutId, attempt: created.body.paymentAttemptId, purpose: 'return' } })
+assert.equal(paidReturnLookup.body.checkout.paymentAttempt.transaction, `0x${'a'.repeat(64)}`)
+assert.equal(paidReturnLookup.body.checkout.paymentAttempt.payer, '0x2222222222222222222222222222222222222222')
 
 const secondCheckout = await request(handler, 'POST', {
   body: { ...valid, title: 'Another market data request' },
@@ -223,6 +266,7 @@ assert.equal(storageFailure.statusCode, 503)
 assert.match(storageFailure.body.error, /temporarily unavailable/)
 
 let managedStore
+let managedCreatedCount = 0
 const managedNotifications = []
 const managedDependencies = {
   ...dependencies,
@@ -238,7 +282,7 @@ const managedDependencies = {
     ],
   }),
   notify: async (partnerId, event, data) => { managedNotifications.push({ partnerId, event, data }) },
-  createId: () => 'chk_managedproject123',
+  createId: () => managedCreatedCount++ === 0 ? 'chk_managedproject123' : `chk_managedproject${managedCreatedCount}`,
 }
 const managedHandler = createHostedCheckoutsHandler(managedDependencies)
 const managedBody = {
@@ -252,7 +296,13 @@ assert.equal(managedCreated.statusCode, 201)
 const managedLookup = await request(managedHandler, 'GET', { query: { id: managedCreated.body.checkoutId } })
 assert.equal(managedLookup.body.checkout.merchantName, 'Managed Platform')
 assert.deepEqual(managedLookup.body.checkout.availableNetworks, ['base', 'arbitrum'])
+assert.equal(managedLookup.body.checkout.paymentAttempt.network, undefined)
 assert.deepEqual(managedNotifications.map(item => item.event), ['checkout.created'])
+const managedSelected = await request(managedHandler, 'POST', {
+  query: { id: managedCreated.body.checkoutId, attempt: managedCreated.body.paymentAttemptId, action: 'select-network' },
+  body: { network: 'base' },
+})
+assert.equal(managedSelected.statusCode, 200)
 await markHostedCheckoutPaid({
   id: managedCreated.body.checkoutId,
   txHash: `0x${'b'.repeat(64)}`,
@@ -271,6 +321,15 @@ await markHostedCheckoutPaid({
   network: 'base',
 }, managedDependencies)
 assert.equal(managedNotifications.length, 2)
+const managedAgentic = await request(managedHandler, 'POST', {
+  body: { ...managedBody, checkoutMode: 'agentic', agenticType: 'agent_treasury', network: 'arbitrum' },
+  headers: { ...managedHeaders, 'idempotency-key': 'managed:agentic:00000001' },
+})
+assert.equal(managedAgentic.statusCode, 201)
+const managedAgenticLookup = await request(managedHandler, 'GET', { query: { id: managedAgentic.body.checkoutId } })
+assert.equal(managedAgenticLookup.body.checkout.network, 'arbitrum')
+assert.deepEqual(managedAgenticLookup.body.checkout.availableNetworks, ['arbitrum'])
+assert.equal(managedAgenticLookup.body.paymentUrl, undefined)
 
 let nairaStore
 let nairaPrepareCalls = 0
@@ -322,12 +381,14 @@ await markHostedCheckoutPaid({
   confirmedAt: '2026-07-19T12:20:00.000Z', network: 'base',
 }, nairaDependencies)
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'processing')
+assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].paymentAttempts[0].status, 'processing')
 assert.deepEqual(nairaNotifications.map(item => item.event), ['checkout.created', 'payment.processing'])
 assert.equal((await request(nairaHandler, 'GET', { query: { id: nairaCreated.body.checkoutId } })).body.checkout.status, 'processing')
 await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'pending' }, nairaDependencies)
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'processing')
 await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'validated' }, nairaDependencies)
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'paid')
+assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].paymentAttempts[0].status, 'paid')
 assert.deepEqual(nairaNotifications.map(item => item.event), ['checkout.created', 'payment.processing', 'payment.confirmed'])
 assert.equal((await request(nairaHandler, 'GET', { query: { id: nairaCreated.body.checkoutId } })).body.checkout.status, 'paid')
 await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'settled' }, nairaDependencies)

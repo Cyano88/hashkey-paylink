@@ -19,13 +19,10 @@ import {
 import { PRIVY_AUTH_ENABLED } from '../../../../src/lib/authMode'
 import { resolvePrivyCircleLink, savePrivyCircleLink } from '../../../../src/lib/privyCircleLink'
 import {
-  compactReceiptAmount,
-  createPaymentReceiptPdf,
-  paymentReceiptFileName,
   type PaylinkReceipt,
   type ReceiptLookupResponse,
 } from '../../../../src/lib/paymentReceiptPdf'
-import { ReceiptIcon } from '../../../../src/components/ReceiptIcon'
+import UnifiedReceipt from '../../../../src/components/UnifiedReceipt'
 
 const ARC_CHAIN_ID = 5042002
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
@@ -281,7 +278,6 @@ export function CreateStreamForm() {
   const [streamReceipt, setStreamReceipt] = useState<PaylinkReceipt | null>(null)
   const [deployTxHash, setDeployTxHash] = useState<string | null>(null)
   const [copied,       setCopied]       = useState(false)
-  const [receiptCopied, setReceiptCopied] = useState(false)
   const [circleEmail,      setCircleEmail]      = useState('')
   const [circleSession,    setCircleSession]    = useState<CircleEvmEmailSession | null>(null)
   const [circleBalance,    setCircleBalance]    = useState<bigint | null>(null)
@@ -768,61 +764,6 @@ export function CreateStreamForm() {
     setTimeout(() => setCopied(false), 3000)
   }
 
-  async function streamReceiptPdfBlob() {
-    if (!streamReceipt) return new Blob([], { type: 'application/pdf' })
-    return createPaymentReceiptPdf(streamReceipt)
-  }
-
-  async function handleOpenReceipt() {
-    if (!streamReceipt) return
-    const blob = await streamReceiptPdfBlob()
-    const url = URL.createObjectURL(blob)
-    const win = window.open(url, '_blank', 'noopener,noreferrer')
-    if (!win) {
-      const link = document.createElement('a')
-      link.href = url
-      link.download = paymentReceiptFileName(streamReceipt)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-    }
-    window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-  }
-
-  async function handleDownloadReceipt() {
-    if (!streamReceipt) return
-    const blob = await streamReceiptPdfBlob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = paymentReceiptFileName(streamReceipt)
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  async function handleShareReceipt() {
-    if (!streamReceipt) return
-    const pdf = await streamReceiptPdfBlob()
-    const file = new File([pdf], paymentReceiptFileName(streamReceipt), { type: 'application/pdf' })
-    const nav = navigator as Navigator & {
-      canShare?: (data: ShareData) => boolean
-      share?: (data: ShareData) => Promise<void>
-    }
-    if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-      await nav.share({
-        title: 'HashpayStream receipt',
-        text: `${compactReceiptAmount(streamReceipt.amount)} USDC stream created on Arc`,
-        files: [file],
-      })
-      return
-    }
-    await handleDownloadReceipt()
-    setReceiptCopied(true)
-    setTimeout(() => setReceiptCopied(false), 1800)
-  }
-
   async function handleCopyCircleWallet() {
     const walletAddress = circleFundingAddress
     if (!walletAddress) return
@@ -1143,25 +1084,7 @@ export function CreateStreamForm() {
                       ? 'Receipt is ready. 0G archive continues in background and will attach when confirmed.'
                       : 'Creating the receipt record before opening actions unlock.'}
                 </p>
-                {streamReceipt && (
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={handleOpenReceipt}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-emerald-700"
-                  >
-                    <ReceiptIcon className="h-4 w-4" />
-                    View receipt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleShareReceipt}
-                    className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-800 dark:bg-[#15151a] dark:text-emerald-200 dark:hover:bg-emerald-950/30"
-                  >
-                    {receiptCopied ? 'Downloaded' : 'Share receipt'}
-                  </button>
-                </div>
-                )}
+                {streamReceipt && <UnifiedReceipt receipt={streamReceipt} className="mt-3" />}
               </div>
             )}
 

@@ -513,8 +513,18 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
         settlementType: isBankSendOrder ? 'PAYCREST_ONRAMP' : 'INSTANT_FIAT',
         amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
         paycrestStatus: order.status,
+        direction: isBankWithdrawOrder ? 'out' : 'in',
+        recipient: isBankSendOrder
+          ? (order.destination_address || link?.destination_address || '')
+          : (order.bank_account_name || merchant?.display_name || ''),
+        destination: isBankSendOrder
+          ? `${order.destination_network || link?.destination_network || 'base'} USDC wallet`
+          : order.bank_name
+            ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim()
+            : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
         bankName: isBankSendOrder ? order.provider_institution : order.bank_name,
         bankLast4: isBankSendOrder ? (order.provider_account_identifier || '').slice(-4) : order.bank_last4,
+        accountName: order.bank_account_name,
       }
     })
   return {

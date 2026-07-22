@@ -19,6 +19,14 @@ function receiptTitle(source?: string) {
   return 'Hash PayLink receipt'
 }
 
+export function publicReceiptPayer(value?: string) {
+  const payer = String(value || '').trim()
+  const email = payer.match(/^([^@\s]+)@([^@\s]+)$/)
+  if (!email) return payer
+  const local = email[1]
+  return `${local.slice(0, 1)}***@${email[2]}`
+}
+
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' })
 
@@ -40,7 +48,7 @@ export default async function handler(req: Request, res: Response) {
         eventId: receipt.eventId,
         txHash: receipt.txHash,
         chain: receipt.chain,
-        payer: receipt.payer,
+        payer: publicReceiptPayer(receipt.payer),
         memo: receipt.memo,
         amount: receipt.amount,
         requestedAmount: receipt.requestedAmount,

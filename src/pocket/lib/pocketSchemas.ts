@@ -164,9 +164,19 @@ export type PocketActivityRow = {
   amountNgn?: string
   paycrestStatus?: string
   activityLabel?: string
+  direction?: 'in' | 'out'
+  recipient?: string
+  destination?: string
+  bankName?: string
+  bankLast4?: string
+  accountName?: string
   providerReference?: string
   supportReference?: string
   billToken?: string
+  billCategory?: 'airtime' | 'data' | 'tv' | 'electricity'
+  billProvider?: string
+  billTarget?: string
+  billReference?: string
   refundAction?: 'claim' | 'check'
   refundTxHash?: string
 }
@@ -535,9 +545,19 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.amountNgn, 80)
     && isOptionalBoundedString(value.paycrestStatus, 80)
     && isOptionalBoundedString(value.activityLabel, 80)
+    && (value.direction === undefined || value.direction === 'in' || value.direction === 'out')
+    && isOptionalBoundedString(value.recipient, 320)
+    && isOptionalBoundedString(value.destination, 500)
+    && isOptionalBoundedString(value.bankName, 160)
+    && isOptionalBoundedString(value.bankLast4, 16)
+    && isOptionalBoundedString(value.accountName, 200)
     && isOptionalBoundedString(value.providerReference, 160)
     && isOptionalBoundedString(value.supportReference, 160)
     && isOptionalBoundedString(value.billToken, 4000)
+    && (value.billCategory === undefined || value.billCategory === 'airtime' || value.billCategory === 'data' || value.billCategory === 'tv' || value.billCategory === 'electricity')
+    && isOptionalBoundedString(value.billProvider, 160)
+    && isOptionalBoundedString(value.billTarget, 160)
+    && isOptionalBoundedString(value.billReference, 160)
     && (value.refundAction === undefined || value.refundAction === 'claim' || value.refundAction === 'check')
     && (value.refundTxHash === undefined || (typeof value.refundTxHash === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value.refundTxHash)))
 }

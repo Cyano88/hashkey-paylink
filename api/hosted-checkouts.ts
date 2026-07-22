@@ -17,6 +17,8 @@ const WEBHOOK_RETRY_DELAYS_MS = [10_000, 30_000, 2 * 60_000, 10 * 60_000, 60 * 6
 
 export type HostedCheckoutNetwork = 'base' | 'arbitrum' | 'arc'
 export type HostedCheckoutPaymentOption = { network: HostedCheckoutNetwork; recipient: string }
+export type HostedCheckoutMode = 'human' | 'agentic'
+export type HostedCheckoutAgenticType = 'creator_earnings' | 'agent_treasury'
 type PartnerPolicy = { partnerId: string; allowedOrigins: string[] } | DeveloperCheckoutPolicy
 type HostedCheckoutPayment = {
   status: 'processing' | 'paid' | 'failed'
@@ -33,6 +35,23 @@ export type HostedCheckoutAgenticAttempt = {
   payer: string
   network: HostedCheckoutNetwork
   startedAt: string
+}
+export type HostedCheckoutPaymentAttempt = {
+  id: string
+  mode: HostedCheckoutMode
+  status: 'pending' | 'processing' | 'paid' | 'failed'
+  network?: HostedCheckoutNetwork
+  recipient?: string
+  returnUrl: string
+  amount: string
+  createdAt: string
+  updatedAt: string
+  referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer'
+  transaction?: string
+  payer?: string
+  confirmedAt?: string
+  receiptId?: string
+  receiptUrl?: string
 }
 type HostedCheckoutSettlement = {
   mode: 'ngn'
@@ -62,12 +81,16 @@ export type CheckoutRecord = {
   createdAt: string
   expiresAt: string
   requestHash: string
+  checkoutMode?: HostedCheckoutMode
+  agenticType?: HostedCheckoutAgenticType
   settlement?: HostedCheckoutSettlement
   payout?: { status: string; deliveredAt?: string }
   integrity: string
   payment?: HostedCheckoutPayment
+  paymentAttempts?: HostedCheckoutPaymentAttempt[]
   agenticAttempts?: HostedCheckoutAgenticAttempt[]
 }
+type HostedCheckoutAttemptRecord = Pick<CheckoutRecord, 'id' | 'createdAt' | 'checkoutMode' | 'network' | 'recipient' | 'paymentOptions' | 'returnUrl' | 'amount' | 'paymentAttempts'>
 export type HostedCheckoutWebhookEvent = {
   id: string
   partnerId: string
@@ -258,6 +281,9 @@ function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
       record.settlement.accountName,
     ])
   }
+  if (record.checkoutMode !== undefined) {
+    fields.push(record.checkoutMode, record.agenticType ?? '')
+  }
   return JSON.stringify(fields)
 }
 
@@ -273,6 +299,90 @@ function integrityValid(record: CheckoutRecord, secret: string) {
   const actualBuffer = Buffer.from(integrity)
   const expectedBuffer = Buffer.from(expected)
   return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
+}
+
+export function hostedCheckoutMode(record: Pick<CheckoutRecord, 'checkoutMode'>): HostedCheckoutMode {
+  // Records created before the forward-only contract were human-first. Keep
+  // them readable without ever issuing a new mixed-mode checkout.
+  return record.checkoutMode === 'agentic' ? 'agentic' : 'human'
+}
+
+function paymentAttemptId(record: Pick<CheckoutRecord, 'id' | 'createdAt'>) {
+  return `pat_${createHash('sha256').update(`${record.id}:${record.createdAt}`).digest('hex').slice(0, 24)}`
+}
+
+function initialPaymentAttempt(record: Pick<CheckoutRecord, 'id' | 'createdAt' | 'checkoutMode' | 'network' | 'recipient' | 'paymentOptions' | 'returnUrl' | 'amount'>): HostedCheckoutPaymentAttempt {
+  const mode = hostedCheckoutMode(record)
+  const routeIsSelected = mode === 'agentic' || hostedCheckoutPaymentOptions(record).length === 1
+  return {
+    id: paymentAttemptId(record),
+    mode,
+    status: 'pending',
+    ...(routeIsSelected ? { network: record.network, recipient: record.recipient } : {}),
+    returnUrl: record.returnUrl,
+    amount: record.amount,
+    createdAt: record.createdAt,
+    updatedAt: record.createdAt,
+  }
+}
+
+export function hostedCheckoutPaymentAttempt(record: HostedCheckoutAttemptRecord) {
+  return record.paymentAttempts?.[record.paymentAttempts.length - 1] ?? initialPaymentAttempt(record)
+}
+
+export async function selectHostedCheckoutPaymentNetwork(input: {
+  id: string
+  attemptId: string
+  network: string
+}, dependencies: Dependencies = defaults) {
+  const id = clean(input.id, 80)
+  const attemptId = clean(input.attemptId, 80)
+  const network = clean(input.network, 20).toLowerCase()
+  if (!/^chk_[a-zA-Z0-9]{8,40}$/.test(id) || !/^pat_[a-f0-9]{24}$/.test(attemptId)) throw new Error('Invalid hosted checkout attempt.')
+  if (!NETWORKS.has(network)) throw new Error('Hosted checkout payment network is invalid.')
+  const secret = dependencies.signingSecret()
+  if (!dependencies.hasStore() || secret.length < 32) throw new Error('Hosted checkout storage is unavailable.')
+  let selected: HostedCheckoutPaymentAttempt | null = null
+  await dependencies.mutate(STORE_KEY, current => {
+    const safe = current ?? { checkouts: {}, idempotency: {} }
+    const record = safe.checkouts[id]
+    if (!record || !integrityValid(record, secret) || hostedCheckoutMode(record) !== 'human') throw new Error('Hosted checkout is invalid.')
+    if (dependencies.now().getTime() >= Date.parse(record.expiresAt)) throw new Error('Hosted checkout expired.')
+    const currentAttempt = hostedCheckoutPaymentAttempt(record)
+    if (currentAttempt.id !== attemptId) throw new Error('Payment attempt does not match this checkout.')
+    if (currentAttempt.status !== 'pending') throw new Error('Payment attempt has already started.')
+    const option = hostedCheckoutPaymentOption(record, network)
+    if (!option) throw new Error('Hosted checkout payment network is not available.')
+    if (currentAttempt.network && currentAttempt.network !== option.network) throw new Error('Payment attempt is already locked to another network.')
+    const paymentAttempts = updateCurrentPaymentAttempt(record, attempt => ({
+      ...attempt,
+      network: option.network,
+      recipient: option.recipient,
+      updatedAt: dependencies.now().toISOString(),
+    }))
+    selected = paymentAttempts[paymentAttempts.length - 1]
+    return { ...safe, checkouts: { ...safe.checkouts, [id]: { ...record, paymentAttempts } } }
+  })
+  if (!selected) throw new Error('Hosted checkout payment network could not be selected.')
+  return { ...(selected as HostedCheckoutPaymentAttempt) }
+}
+
+function publicPaymentAttempt(record: CheckoutRecord, includeTransaction = false) {
+  return publicPaymentAttemptValue(hostedCheckoutPaymentAttempt(record), includeTransaction)
+}
+
+function publicPaymentAttemptValue(value: HostedCheckoutPaymentAttempt, includeTransaction = false) {
+  const { returnUrl: _returnUrl, recipient: _recipient, payer: _payer, transaction, ...attempt } = value
+  return includeTransaction ? { ...attempt, ...(transaction ? { transaction } : {}), ...(_payer ? { payer: _payer } : {}) } : attempt
+}
+
+function updateCurrentPaymentAttempt(
+  record: CheckoutRecord,
+  update: (attempt: HostedCheckoutPaymentAttempt) => HostedCheckoutPaymentAttempt,
+) {
+  const attempts = record.paymentAttempts?.length ? [...record.paymentAttempts] : [initialPaymentAttempt(record)]
+  attempts[attempts.length - 1] = update(attempts[attempts.length - 1])
+  return attempts
 }
 
 export async function readVerifiedHostedCheckoutRecord(id: string, options: { allowExpiredForReconciliation?: boolean } = {}) {
@@ -331,6 +441,10 @@ export async function markHostedCheckoutPaid(input: {
     const paymentOptions = hostedCheckoutPaymentOptions(record)
     const selectedNetwork = requestedNetwork || (paymentOptions.length === 1 ? paymentOptions[0].network : '')
     if (!hostedCheckoutPaymentOption(record, selectedNetwork)) throw new Error('Hosted checkout payment network is invalid.')
+    const currentAttempt = hostedCheckoutPaymentAttempt(record)
+    if (hostedCheckoutMode(record) === 'human' && paymentOptions.length > 1 && currentAttempt.network !== selectedNetwork) {
+      throw new Error('Hosted checkout payment attempt is not locked to this network.')
+    }
     const createdAtMs = Date.parse(record.createdAt)
     const expiresAtMs = Date.parse(record.expiresAt)
     if (!Number.isFinite(createdAtMs) || !Number.isFinite(expiresAtMs)) throw new Error('Hosted checkout has an invalid payment window.')
@@ -357,7 +471,23 @@ export async function markHostedCheckoutPaid(input: {
       confirmedAt: new Date(confirmedAtMs).toISOString(),
       network: selectedNetwork as HostedCheckoutNetwork,
     }
-    result = { ...record, payment }
+    const paymentAttempts = updateCurrentPaymentAttempt(record, attempt => ({
+      ...attempt,
+      status: payment.status,
+      network: payment.network ?? record.network,
+      recipient: hostedCheckoutPaymentOption(record, payment.network ?? record.network)?.recipient ?? record.recipient,
+      amount: payment.amount,
+      referenceType: payment.referenceType,
+      transaction: payment.txHash,
+      payer: payment.payer,
+      confirmedAt: payment.confirmedAt,
+      ...(hostedCheckoutMode(record) === 'agentic' ? {
+        receiptId: attempt.receiptId ?? `hpl_${attempt.id}`,
+        receiptUrl: attempt.receiptUrl ?? `/pay/a/${encodeURIComponent(record.id)}?attempt=${encodeURIComponent(attempt.id)}`,
+      } : {}),
+      updatedAt: dependencies.now().toISOString(),
+    }))
+    result = { ...record, payment, paymentAttempts }
     let updated: CheckoutStore = { ...safe, checkouts: { ...safe.checkouts, [id]: result } }
     if (newlyPaid) updated = enqueueWebhook(updated, record.partnerId, payment.status === 'paid' ? 'payment.confirmed' : 'payment.processing', {
       checkoutId: record.id,
@@ -374,6 +504,35 @@ export async function markHostedCheckoutPaid(input: {
   })
   if (!result) throw new Error('Hosted checkout could not be updated.')
   if (newlyPaid) startWebhookDrain(dependencies)
+  return { ...(result as CheckoutRecord) }
+}
+
+export async function attachHostedCheckoutReceipt(input: {
+  id: string
+  txHash: string
+  receiptId: string
+  receiptUrl: string
+}, dependencies: Dependencies = defaults) {
+  const id = clean(input.id, 80)
+  const txHash = clean(input.txHash, 80).toLowerCase()
+  const receiptId = clean(input.receiptId, 180)
+  const receiptUrl = clean(input.receiptUrl, 240)
+  if (!/^chk_[a-zA-Z0-9]{8,40}$/.test(id)) throw new Error('Invalid hosted checkout id.')
+  if (!txHash || !receiptId || !receiptUrl.startsWith('/receipt/')) throw new Error('Invalid hosted checkout receipt.')
+  let result: CheckoutRecord | null = null
+  await dependencies.mutate(STORE_KEY, current => {
+    const safe = current ?? { checkouts: {}, idempotency: {} }
+    const record = safe.checkouts[id]
+    if (!record || !integrityValid(record, dependencies.signingSecret())) throw new Error('Hosted checkout is invalid.')
+    if (!record.payment || record.payment.txHash.toLowerCase() !== txHash) throw new Error('Hosted checkout payment does not match this receipt.')
+    const paymentAttempts = updateCurrentPaymentAttempt(record, attempt => {
+      if (attempt.transaction?.toLowerCase() !== txHash) throw new Error('Hosted checkout attempt does not match this receipt.')
+      return { ...attempt, receiptId, receiptUrl, updatedAt: dependencies.now().toISOString() }
+    })
+    result = { ...record, paymentAttempts }
+    return { ...safe, checkouts: { ...safe.checkouts, [id]: result } }
+  })
+  if (!result) throw new Error('Hosted checkout receipt could not be attached.')
   return { ...(result as CheckoutRecord) }
 }
 
@@ -404,7 +563,7 @@ export async function beginHostedCheckoutAgenticAttempt(input: {
     const safe = current ?? { checkouts: {}, idempotency: {} }
     const record = safe.checkouts[id]
     if (!record || !integrityValid(record, secret)) throw new Error('Hosted checkout is invalid.')
-    if (record.kind !== 'service' || record.flexible || record.settlement) throw new Error('Hosted checkout is not eligible for agentic payment.')
+    if (hostedCheckoutMode(record) !== 'agentic' || record.kind !== 'service' || record.flexible || record.settlement) throw new Error('Hosted checkout is not eligible for agentic payment.')
     if (!hostedCheckoutPaymentOption(record, network)) throw new Error('Agent payment network is invalid.')
     if (startedAtMs < Date.parse(record.createdAt) || startedAtMs > Date.parse(record.expiresAt)) throw new Error('Agent payment started outside the checkout window.')
     const attempt: HostedCheckoutAgenticAttempt = {
@@ -418,7 +577,8 @@ export async function beginHostedCheckoutAgenticAttempt(input: {
     // bounded journal to tolerate delayed Circle transfer indexing without
     // allowing unbounded attacker-controlled growth in the durable record.
     const attempts = [...(record.agenticAttempts ?? []).filter(item => item.signatureHash !== signatureHash), attempt].slice(-20)
-    result = { ...record, agenticAttempts: attempts }
+    const paymentAttempts = updateCurrentPaymentAttempt(record, item => ({ ...item, updatedAt: dependencies.now().toISOString() }))
+    result = { ...record, paymentAttempts, agenticAttempts: attempts }
     return { ...safe, checkouts: { ...safe.checkouts, [id]: result } }
   })
   if (!result) throw new Error('Agent payment attempt could not be recorded.')
@@ -449,6 +609,11 @@ export async function markHostedCheckoutNairaPayout(input: { intentId: string; s
         ...(record.payout?.deliveredAt ? { deliveredAt: record.payout.deliveredAt } : delivered ? { deliveredAt: dependencies.now().toISOString() } : {}),
       },
       ...(record.payment ? { payment: { ...record.payment, status: nextPaymentStatus } } : {}),
+      paymentAttempts: updateCurrentPaymentAttempt(record, attempt => ({
+        ...attempt,
+        status: nextPaymentStatus,
+        updatedAt: dependencies.now().toISOString(),
+      })),
     }
     let updated: CheckoutStore = { ...safe, checkouts: { ...safe.checkouts, [record.id]: result } }
     if (newlyDelivered) updated = enqueueWebhook(updated, record.partnerId, 'payment.confirmed', {
@@ -525,6 +690,8 @@ function checkoutRequestHash(input: {
   memo: string
   returnUrl: string
   expiresInMinutes: number
+  checkoutMode: HostedCheckoutMode
+  agenticType?: HostedCheckoutAgenticType
 }) {
   const fields: unknown[] = [
     input.partnerId,
@@ -539,6 +706,8 @@ function checkoutRequestHash(input: {
     input.memo,
     input.returnUrl,
     input.expiresInMinutes,
+    input.checkoutMode,
+    input.agenticType ?? '',
   ]
   if (input.paymentOptions !== undefined) {
     fields.push(input.paymentOptions.map(option => [option.network, option.recipient]))
@@ -583,11 +752,14 @@ function normalizeRequestedPaymentOptions(value: unknown) {
 
 function checkoutPaymentUrl(record: CheckoutRecord) {
   const stableDirectId = createHash('sha256').update(`hosted-checkout:${record.id}`).digest('hex')
+  const attempt = hostedCheckoutPaymentAttempt(record)
+  const selectedOption = attempt.network ? hostedCheckoutPaymentOption(record, attempt.network) : null
   const params = new URLSearchParams({
     src: record.settlement?.mode === 'ngn' ? 'bank-receive' : record.kind === 'service' ? 'service' : 'partner',
-    n: record.network,
+    n: selectedOption?.network ?? record.network,
     m: record.memo,
     checkout: record.id,
+    attempt: hostedCheckoutPaymentAttempt(record).id,
     id: `0x${stableDirectId}`,
   })
   if (record.settlement?.mode === 'ngn') {
@@ -609,20 +781,26 @@ function checkoutPaymentUrl(record: CheckoutRecord) {
   }
   if (record.flexible) params.set('f', '1')
   else params.set('a', record.amount)
-  params.set('e', record.recipient)
+  params.set('e', selectedOption?.recipient ?? record.recipient)
   const paymentOptions = hostedCheckoutPaymentOptions(record)
   if (paymentOptions.length > 1) params.set('multi', '1')
   for (const option of paymentOptions) params.set(`e_${option.network}`, option.recipient)
   return `/pay?${params.toString()}`
 }
 
-export function hostedCheckoutAgentPaymentUrl(record: Pick<CheckoutRecord, 'id' | 'kind' | 'flexible' | 'settlement'>) {
-  if (record.kind !== 'service' || record.flexible || record.settlement) return ''
-  return `/api/v2/checkouts/agent?id=${encodeURIComponent(record.id)}`
+export function hostedCheckoutAgentPaymentUrl(record: HostedCheckoutAttemptRecord & Pick<CheckoutRecord, 'kind' | 'flexible' | 'settlement'>) {
+  if (hostedCheckoutMode(record) !== 'agentic' || record.kind !== 'service' || record.flexible || record.settlement) return ''
+  return `/api/v2/checkouts/agent?id=${encodeURIComponent(record.id)}&attempt=${encodeURIComponent(hostedCheckoutPaymentAttempt(record).id)}`
 }
 
-export function hostedCheckoutAgentUiUrl(record: Pick<CheckoutRecord, 'id' | 'kind' | 'flexible' | 'settlement'>) {
-  return hostedCheckoutAgentPaymentUrl(record) ? `/pay/a/${encodeURIComponent(record.id)}` : ''
+export function hostedCheckoutAgentUiUrl(record: HostedCheckoutAttemptRecord & Pick<CheckoutRecord, 'kind' | 'flexible' | 'settlement'>) {
+  return hostedCheckoutAgentPaymentUrl(record) ? `/pay/a/${encodeURIComponent(record.id)}?attempt=${encodeURIComponent(hostedCheckoutPaymentAttempt(record).id)}` : ''
+}
+
+function hostedCheckoutUiUrl(record: CheckoutRecord) {
+  return hostedCheckoutMode(record) === 'agentic'
+    ? hostedCheckoutAgentUiUrl(record)
+    : `/pay/c/${encodeURIComponent(record.id)}?attempt=${encodeURIComponent(hostedCheckoutPaymentAttempt(record).id)}`
 }
 
 export function createHostedCheckoutsHandler(dependencies: Dependencies = defaults) {
@@ -640,6 +818,10 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       const record = store?.checkouts?.[id]
       if (!record) return res.status(404).json({ ok: false, error: 'Checkout not found.' })
       if (!integrityValid(record, secret)) return res.status(409).json({ ok: false, error: 'Checkout integrity verification failed.' })
+      const requestedAttemptId = clean(req.query?.attempt, 80)
+      if (requestedAttemptId && requestedAttemptId !== hostedCheckoutPaymentAttempt(record).id) {
+        return res.status(409).json({ ok: false, error: 'Payment attempt does not match this checkout.' })
+      }
       if (req.query?.purpose === 'status') {
         const policy = await dependencies.policy(req)
         if (!policy || policy.partnerId !== record.partnerId) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
@@ -647,10 +829,13 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         return res.json({
           ok: true,
           checkoutId: record.id,
+          checkoutMode: hostedCheckoutMode(record),
+          agenticType: record.agenticType,
+          paymentAttempt: hostedCheckoutPaymentAttempt(record),
           status: record.payment?.status ?? (expired ? 'expired' : 'pending'),
           paymentStatus: record.payment?.status,
           settlementStatus: record.payout?.status,
-          network: record.payment?.network ?? record.network,
+          network: record.payment?.network ?? hostedCheckoutPaymentAttempt(record).network ?? record.network,
           availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
           expiresAt: record.expiresAt,
           settlementMode: record.settlement?.mode ?? 'usdc',
@@ -660,33 +845,50 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       if (dependencies.now().getTime() >= Date.parse(record.expiresAt)) return res.status(410).json({ ok: false, error: 'Checkout expired.' })
       return res.json({
         ok: true,
-        checkout: {
-          id: record.id,
+          checkout: {
+            id: record.id,
+            checkoutMode: hostedCheckoutMode(record),
+            agenticType: record.agenticType,
           kind: record.kind,
           merchantName: record.merchantName,
           title: record.title,
           description: record.description,
           amount: record.amount,
           flexible: record.flexible,
-          network: record.network,
-          availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
+          network: hostedCheckoutPaymentAttempt(record).network ?? record.network,
+            availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
           settlementMode: record.settlement?.mode ?? 'usdc',
           status: record.payment?.status ?? 'pending',
           settlementStatus: record.payout?.status,
-          expiresAt: record.expiresAt,
-        },
-        paymentUrl: checkoutPaymentUrl(record),
-        ...(hostedCheckoutAgentPaymentUrl(record) ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(record) } : {}),
-        ...(hostedCheckoutAgentUiUrl(record) ? { agentCheckoutUrl: hostedCheckoutAgentUiUrl(record) } : {}),
+            expiresAt: record.expiresAt,
+            paymentAttempt: publicPaymentAttempt(record, req.query?.purpose === 'return'),
+          },
+          ...(hostedCheckoutMode(record) === 'human' ? { paymentUrl: checkoutPaymentUrl(record) } : {}),
+          ...(hostedCheckoutAgentPaymentUrl(record) ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(record) } : {}),
         ...(req.query?.purpose === 'return' && record.returnUrl ? { returnUrl: record.returnUrl } : {}),
       })
     }
 
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
+    if (req.query?.action === 'select-network') {
+      try {
+        const paymentAttempt = await selectHostedCheckoutPaymentNetwork({
+          id: clean(req.query?.id, 80),
+          attemptId: clean(req.query?.attempt, 80),
+          network: clean(req.body?.network, 20),
+        }, dependencies)
+        return res.json({ ok: true, paymentAttempt: publicPaymentAttemptValue(paymentAttempt) })
+      } catch (error) {
+        return res.status(409).json({ ok: false, error: error instanceof Error ? error.message : 'Payment network could not be selected.' })
+      }
+    }
     const policy = await dependencies.policy(req)
     if (!policy) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
 
     const kind = clean(req.body?.kind, 40)
+    const checkoutMode = (clean(req.body?.checkoutMode, 20).toLowerCase() || 'human') as HostedCheckoutMode
+    const requestedAgenticType = clean(req.body?.agenticType, 40).toLowerCase()
+    const agenticType = requestedAgenticType as HostedCheckoutAgenticType
     const merchantName = 'projectManaged' in policy ? policy.merchantName : clean(req.body?.merchantName, 80)
     const title = clean(req.body?.title, 100) || (kind === 'service' ? 'Service checkout' : 'Payment request')
     const description = clean(req.body?.description, 240)
@@ -695,29 +897,37 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     const isNairaProject = 'projectManaged' in policy && policy.settlementMode === 'ngn'
     const requestedNetwork = clean(req.body?.network, 20).toLowerCase()
     const requestedRecipient = clean(req.body?.recipient, 80)
-    if ('projectManaged' in policy && (req.body?.recipient !== undefined || req.body?.paymentOptions !== undefined || req.body?.network !== undefined)) {
+    if ('projectManaged' in policy && (req.body?.recipient !== undefined || req.body?.paymentOptions !== undefined || (checkoutMode === 'human' && req.body?.network !== undefined))) {
       return res.status(400).json({ ok: false, error: 'Payment routing is managed in the developer dashboard.' })
     }
     const normalizedOptions = 'projectManaged' in policy
       ? { options: policy.paymentOptions, error: '' }
       : normalizeRequestedPaymentOptions(req.body?.paymentOptions)
     if (normalizedOptions.error) return res.status(400).json({ ok: false, error: normalizedOptions.error })
-    const paymentOptions = normalizedOptions.options
-    const defaultNetwork = clean(req.body?.defaultNetwork, 20).toLowerCase() || ('projectManaged' in policy ? policy.defaultNetwork : '') || requestedNetwork || paymentOptions?.[0]?.network || ''
-    const defaultOption = paymentOptions?.find(option => option.network === defaultNetwork)
-    const network = paymentOptions ? defaultOption?.network ?? '' : defaultNetwork
+    const routingOptions = normalizedOptions.options
+    if (checkoutMode === 'agentic' && routingOptions && routingOptions.length > 1 && !requestedNetwork && !('projectManaged' in policy)) {
+      return res.status(400).json({ ok: false, error: 'Agentic checkout must select exactly one payment network.' })
+    }
+    const defaultNetwork = (checkoutMode === 'agentic' ? requestedNetwork : '') || clean(req.body?.defaultNetwork, 20).toLowerCase() || ('projectManaged' in policy ? policy.defaultNetwork : '') || requestedNetwork || routingOptions?.[0]?.network || ''
+    const defaultOption = routingOptions?.find(option => option.network === defaultNetwork)
+    const network = routingOptions ? defaultOption?.network ?? '' : defaultNetwork
     const legacyRecipient = isAddress(requestedRecipient) ? getAddress(requestedRecipient) : requestedRecipient
-    const recipient = paymentOptions ? defaultOption?.recipient ?? '' : legacyRecipient
+    const recipient = routingOptions ? defaultOption?.recipient ?? '' : legacyRecipient
     const memo = clean(req.body?.memo, 90) || title
     const returnUrl = clean(req.body?.returnUrl, 300)
     const expiresInMinutes = Number(req.body?.expiresInMinutes ?? 60)
 
     if (!KINDS.has(kind)) return res.status(400).json({ ok: false, error: 'Private beta supports usdc_request and service checkouts.' })
+    if (checkoutMode !== 'human' && checkoutMode !== 'agentic') return res.status(400).json({ ok: false, error: 'checkoutMode must be human or agentic.' })
+    if (checkoutMode === 'agentic' && agenticType !== 'creator_earnings' && agenticType !== 'agent_treasury') return res.status(400).json({ ok: false, error: 'Agentic checkout requires agenticType creator_earnings or agent_treasury.' })
+    if (checkoutMode === 'human' && requestedAgenticType) return res.status(400).json({ ok: false, error: 'agenticType is only valid for agentic checkout.' })
+    if (checkoutMode === 'agentic' && (kind !== 'service' || flexible || isNairaProject)) return res.status(400).json({ ok: false, error: 'Agentic checkout requires a fixed USDC service payment.' })
+    if (checkoutMode === 'agentic' && routingOptions && !routingOptions.some(option => option.network === network)) return res.status(400).json({ ok: false, error: 'Agentic checkout network is not enabled for this project.' })
     if (merchantName.length < 2) return res.status(400).json({ ok: false, error: 'merchantName is required.' })
-    if (!NETWORKS.has(network)) return res.status(400).json({ ok: false, error: paymentOptions ? 'defaultNetwork must match a payment option.' : 'Unsupported network.' })
+    if (!NETWORKS.has(network)) return res.status(400).json({ ok: false, error: routingOptions ? 'defaultNetwork must match a payment option.' : 'Unsupported network.' })
     if (!validRecipient(network, recipient)) return res.status(400).json({ ok: false, error: 'Invalid recipient for the selected network.' })
-    if (paymentOptions && requestedNetwork && requestedNetwork !== network) return res.status(400).json({ ok: false, error: 'network must match defaultNetwork when paymentOptions are supplied.' })
-    if (paymentOptions && requestedRecipient && legacyRecipient !== recipient) return res.status(400).json({ ok: false, error: 'recipient must match the default payment option.' })
+    if (checkoutMode === 'human' && routingOptions && requestedNetwork && requestedNetwork !== network) return res.status(400).json({ ok: false, error: 'network must match defaultNetwork when paymentOptions are supplied.' })
+    if (routingOptions && requestedRecipient && legacyRecipient !== recipient) return res.status(400).json({ ok: false, error: 'recipient must match the default payment option.' })
     if (!flexible && !amount) return res.status(400).json({ ok: false, error: 'Enter a positive USDC amount or set flexible to true.' })
     if (isNairaProject && flexible) return res.status(400).json({ ok: false, error: 'Naira settlement currently requires a fixed USDC amount.' })
     if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > 1_440) return res.status(400).json({ ok: false, error: 'expiresInMinutes must be a whole number between 5 and 1440.' })
@@ -740,10 +950,12 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       flexible,
       network,
       recipient,
-      paymentOptions,
       memo,
       returnUrl,
       expiresInMinutes,
+      checkoutMode,
+      ...(checkoutMode === 'agentic' ? { agenticType } : {}),
+      ...(checkoutMode === 'human' && routingOptions ? { paymentOptions: routingOptions } : {}),
     })
     const existingStore = await dependencies.read(STORE_KEY)
     const existingId = existingStore?.idempotency?.[`${policy.partnerId}:${idempotencyKey}`]
@@ -755,9 +967,11 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         ok: true,
         replayed: true,
         checkoutId: existingRecord.id,
-        checkoutUrl: `/pay/c/${encodeURIComponent(existingRecord.id)}`,
-        ...(hostedCheckoutAgentPaymentUrl(existingRecord) ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(existingRecord) } : {}),
-        ...(hostedCheckoutAgentUiUrl(existingRecord) ? { agentCheckoutUrl: hostedCheckoutAgentUiUrl(existingRecord) } : {}),
+        checkoutMode: hostedCheckoutMode(existingRecord),
+        agenticType: existingRecord.agenticType,
+        paymentAttemptId: hostedCheckoutPaymentAttempt(existingRecord).id,
+        checkoutUrl: hostedCheckoutUiUrl(existingRecord),
+        ...(hostedCheckoutMode(existingRecord) === 'agentic' ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(existingRecord) } : {}),
         expiresAt: existingRecord.expiresAt,
       })
     }
@@ -780,7 +994,6 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       if (!createdId) createdId = dependencies.createId()
       const routedNetwork = nairaOrder ? 'base' : network
       const routedRecipient = nairaOrder?.receiveAddress ?? recipient
-      const routedOptions = nairaOrder ? [{ network: 'base' as const, recipient: nairaOrder.receiveAddress }] : paymentOptions
       const hostedExpiry = new Date(now.getTime() + expiresInMinutes * 60_000).getTime()
       const providerExpiry = nairaOrder?.validUntil ? Date.parse(nairaOrder.validUntil) : Number.POSITIVE_INFINITY
       const unsigned: Omit<CheckoutRecord, 'integrity'> = {
@@ -794,12 +1007,14 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         flexible,
         network: routedNetwork as CheckoutRecord['network'],
         recipient: routedRecipient,
-        ...(routedOptions ? { paymentOptions: routedOptions } : {}),
         memo,
         returnUrl,
         createdAt: now.toISOString(),
         expiresAt: new Date(Math.min(hostedExpiry, Number.isFinite(providerExpiry) ? providerExpiry : hostedExpiry)).toISOString(),
         requestHash,
+        checkoutMode,
+        ...(checkoutMode === 'agentic' ? { agenticType } : {}),
+        ...(checkoutMode === 'human' && routingOptions && !nairaOrder ? { paymentOptions: routingOptions } : {}),
         ...(nairaOrder ? { settlement: {
           mode: 'ngn' as const,
           provider: 'paycrest' as const,
@@ -812,6 +1027,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           accountName: nairaOrder.accountName,
         } } : {}),
       }
+      unsigned.paymentAttempts = [initialPaymentAttempt(unsigned)]
       const record: CheckoutRecord = { ...unsigned, integrity: sign(unsigned, secret) }
       const updated: CheckoutStore = {
         ...safe,
@@ -821,10 +1037,13 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       return enqueueWebhook(updated, record.partnerId, 'checkout.created', {
         checkoutId: record.id,
         status: 'pending',
+        checkoutMode: hostedCheckoutMode(record),
+        agenticType: record.agenticType,
+        paymentAttemptId: hostedCheckoutPaymentAttempt(record).id,
         amount: record.amount,
         flexible: record.flexible,
-        availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
-        paymentPaths: hostedCheckoutAgentPaymentUrl(record) ? ['hosted', 'agentic'] : ['hosted'],
+        network: record.network,
+        paymentPath: hostedCheckoutMode(record),
         expiresAt: record.expiresAt,
       }, now)
     })
@@ -835,9 +1054,11 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       ok: true,
       replayed,
       checkoutId: record.id,
-      checkoutUrl: `/pay/c/${encodeURIComponent(record.id)}`,
-      ...(hostedCheckoutAgentPaymentUrl(record) ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(record) } : {}),
-      ...(hostedCheckoutAgentUiUrl(record) ? { agentCheckoutUrl: hostedCheckoutAgentUiUrl(record) } : {}),
+      checkoutMode: hostedCheckoutMode(record),
+      agenticType: record.agenticType,
+      paymentAttemptId: hostedCheckoutPaymentAttempt(record).id,
+      checkoutUrl: hostedCheckoutUiUrl(record),
+      ...(hostedCheckoutMode(record) === 'agentic' ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(record) } : {}),
       expiresAt: record.expiresAt,
     })
     } catch (error) {

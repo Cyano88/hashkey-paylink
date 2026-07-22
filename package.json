@@ -23,6 +23,7 @@
     "test:pocket-balances-adapter": "node --import tsx scripts/pocket-balances-adapter-smoke.mjs",
     "test:pocket-recipient-balance-adapter": "node --import tsx scripts/pocket-recipient-balance-adapter-smoke.mjs",
     "test:pocket-activity-adapter": "node --import tsx scripts/pocket-activity-adapter-smoke.mjs",
+    "test:pocket-receipts": "node --import tsx scripts/pocket-receipt-policy-smoke.mjs",
     "test:pocket-bridge-adapter": "node --import tsx scripts/pocket-bridge-adapter-smoke.mjs",
     "test:pocket-solana-rpc-adapter": "node --import tsx scripts/pocket-solana-rpc-adapter-smoke.mjs",
     "test:pocket-pos-adapter": "node --import tsx scripts/pocket-pos-adapter-smoke.mjs",
@@ -55,13 +56,14 @@
     "test:developer-projects": "node --import tsx scripts/developer-projects-adapter-smoke.mjs",
     "test:hosted-checkouts": "node --import tsx scripts/hosted-checkouts-adapter-smoke.mjs",
     "test:agentic-checkouts": "node --import tsx scripts/agentic-checkouts-adapter-smoke.mjs",
-    "test:checkout": "npm run test:hosted-checkouts && npm run test:agentic-checkouts && npm run test:partner-access && npm run test:developer-projects && npm run test:usdc-transfer-verify && npm run test:payment-tx-lookup && npm run test:pocket-contracts",
+    "test:receipt-security": "node --import tsx scripts/receipt-capability-security-smoke.mjs",
+    "test:checkout": "npm run test:hosted-checkouts && npm run test:agentic-checkouts && npm run test:partner-access && npm run test:developer-projects && npm run test:usdc-transfer-verify && npm run test:payment-tx-lookup && npm run test:receipt-security && npm run test:pocket-contracts",
     "test:pocket-x402-adapter": "node --import tsx scripts/pocket-x402-adapter-smoke.mjs",
     "test:pocket-x402-connect-adapter": "node --import tsx scripts/pocket-x402-connect-adapter-smoke.mjs",
     "test:pocket-x402-activate-adapter": "node --import tsx scripts/pocket-x402-activate-adapter-smoke.mjs",
     "test:pocket-marketplace-adapter": "node --import tsx scripts/pocket-marketplace-adapter-smoke.mjs",
     "test:pocket-agent-ask-adapter": "node --import tsx scripts/pocket-agent-ask-adapter-smoke.mjs",
-    "test:pocket": "npm run test:pocket-contracts && npm run test:pocket-profile && npm run test:pocket-profile-adapter && npm run test:circle-link && npm run test:pocket-wallet-link-adapter && npm run test:pocket-wallets-read-adapter && npm run test:pocket-balances-adapter && npm run test:pocket-recipient-balance-adapter && npm run test:pocket-activity-adapter && npm run test:pocket-bridge-adapter && npm run test:pocket-solana-rpc-adapter && npm run test:pocket-pos-adapter && npm run test:pocket-bank-receive-adapter && npm run test:pocket-bank-adapter && npm run test:pocket-bank-send-adapter && npm run test:pocket-bank-fund-adapter && npm run test:pocket-bank-withdraw-adapter && npm run test:pocket-solana-transfer-adapter && npm run test:pocket-evm-transfer-client && npm run test:payment-tx-lookup && npm run test:pocket-x402-adapter && npm run test:pocket-x402-connect-adapter && npm run test:pocket-x402-activate-adapter && npm run test:pocket-marketplace-adapter && npm run test:pocket-agent-ask-adapter && node --import tsx scripts/circle-pocket-agent-security-smoke.mjs && node --import tsx scripts/agent-hash-payments-parser-smoke.mjs",
+    "test:pocket": "npm run test:pocket-contracts && npm run test:pocket-profile && npm run test:pocket-profile-adapter && npm run test:circle-link && npm run test:pocket-wallet-link-adapter && npm run test:pocket-wallets-read-adapter && npm run test:pocket-balances-adapter && npm run test:pocket-recipient-balance-adapter && npm run test:pocket-activity-adapter && npm run test:pocket-receipts && npm run test:pocket-bridge-adapter && npm run test:pocket-solana-rpc-adapter && npm run test:pocket-pos-adapter && npm run test:pocket-bank-receive-adapter && npm run test:pocket-bank-adapter && npm run test:pocket-bank-send-adapter && npm run test:pocket-bank-fund-adapter && npm run test:pocket-bank-withdraw-adapter && npm run test:pocket-solana-transfer-adapter && npm run test:pocket-evm-transfer-client && npm run test:payment-tx-lookup && npm run test:pocket-x402-adapter && npm run test:pocket-x402-connect-adapter && npm run test:pocket-x402-activate-adapter && npm run test:pocket-marketplace-adapter && npm run test:pocket-agent-ask-adapter && node --import tsx scripts/circle-pocket-agent-security-smoke.mjs && node --import tsx scripts/agent-hash-payments-parser-smoke.mjs",
     "preview": "vite preview",
     "start": "tsx server-entry.ts"
   },
@@ -106,6 +108,7 @@
     "wagmi": "^2.12.11"
   },
   "overrides": {
+    "body-parser": "1.20.6",
     "axios": "^1.18.0",
     "hono": "^4.12.25",
     "undici": "^6.27.0",

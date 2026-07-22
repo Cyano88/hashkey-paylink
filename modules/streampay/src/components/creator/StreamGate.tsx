@@ -16,12 +16,7 @@ import {
   sendCircleArcCheckpointVault,
   type CircleEvmEmailSession,
 } from '../../../../../src/lib/circleEvmEmailWallet'
-import {
-  createPaymentReceiptPdf,
-  createX402PaylinkReceipt,
-  paymentReceiptFileName,
-  type X402ReceiptLike,
-} from '../../../../../src/lib/paymentReceiptPdf'
+import type { X402ReceiptLike } from '../../../../../src/lib/paymentReceiptPdf'
 
 // ── Arc standalone client ─────────────────────────────────────────────────────
 const arcClient = createPublicClient({
@@ -870,7 +865,6 @@ export function StreamGate() {
   const [gatewayReceiptPollAttempts, setGatewayReceiptPollAttempts] = useState(0)
   const [gatewayArchiveTimedOut, setGatewayArchiveTimedOut] = useState(false)
   const [gatewayReferenceCopied, setGatewayReferenceCopied] = useState(false)
-  const [gatewayReceiptOpening, setGatewayReceiptOpening] = useState(false)
   const [gatewayRestored, setGatewayRestored] = useState(false)
   const [receiptOpen, setReceiptOpen] = useState(false)
   const gatewayReference = gatewayTx || gatewayReceiptId || ''
@@ -975,37 +969,9 @@ export function StreamGate() {
     }
   }, [gatewayReceiptId])
 
-  async function openGatewayReceiptPdf() {
-    if (!gatewayReceiptId || gatewayReceiptOpening) return
-    setGatewayReceiptOpening(true)
-    try {
-      let sourceReceipt = gatewayReceipt
-      if (!sourceReceipt) {
-        const res = await fetch(`/api/x402/receipt?id=${encodeURIComponent(gatewayReceiptId)}`)
-        const data = await res.json().catch(() => ({})) as { ok?: boolean; receipt?: X402ReceiptLike }
-        if (!res.ok || !data.ok || !data.receipt) throw new Error('Receipt unavailable')
-        sourceReceipt = data.receipt
-      }
-      const receipt = sourceReceipt.receiptId
-        ? sourceReceipt as unknown as Parameters<typeof createPaymentReceiptPdf>[0]
-        : createX402PaylinkReceipt(sourceReceipt, gatewayReceiptId)
-      const blob = await createPaymentReceiptPdf(receipt)
-      const url = URL.createObjectURL(blob)
-      const win = window.open(url, '_blank', 'noopener,noreferrer')
-      if (!win) {
-        const link = document.createElement('a')
-        link.href = url
-        link.download = paymentReceiptFileName(receipt)
-        document.body.appendChild(link)
-        link.click()
-        link.remove()
-      }
-      window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-    } catch {
-      window.open(`/receipt/${gatewayReceiptId}`, '_blank', 'noopener,noreferrer')
-    } finally {
-      setGatewayReceiptOpening(false)
-    }
+  function openGatewayReceipt() {
+    if (!gatewayReceiptId) return
+    window.open(`/receipt/${encodeURIComponent(gatewayReceiptId)}`, '_blank', 'noopener,noreferrer')
   }
 
   async function unlockWithAgentX402(agentSlugOverride?: string) {
@@ -2819,15 +2785,14 @@ export function StreamGate() {
               {gatewayReceiptId && (
                 <button
                   type="button"
-                  onClick={openGatewayReceiptPdf}
-                  disabled={gatewayReceiptOpening}
+                  onClick={openGatewayReceipt}
                   className={[
                     'flex w-full items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all active:scale-[0.98]',
                     'bg-gray-900 text-white hover:bg-gray-800',
                   ].join(' ')}
                 >
                   <ReceiptIcon />
-                  {gatewayReceiptOpening ? 'Opening receipt...' : 'View receipt'}
+                  View receipt
                 </button>
               )}
               {(gatewayOgReady || gatewayTxIsExplorerHash) && (

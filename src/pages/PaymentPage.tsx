@@ -31,7 +31,7 @@ const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | u
 import {
   ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   RefreshCw, Copy, CheckCheck, Wallet, ChevronDown,
-  AlertTriangle, Radio, Bot, Share2, Banknote, Lock,
+  AlertTriangle, Radio, Bot, Banknote, Lock,
 } from 'lucide-react'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, type ChainKey,
@@ -57,18 +57,12 @@ import { hostedCheckoutPresentation, resolveHostedCheckoutKind } from '../lib/ho
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
-import { ReceiptIcon } from '../components/ReceiptIcon'
+import UnifiedReceipt from '../components/UnifiedReceipt'
 import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { linkPocketWallet, readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
-import {
-  compactReceiptAmount,
-  createPaymentReceiptPdf,
-  paymentReceiptFileName,
-  type PaylinkReceipt,
-  type ReceiptLookupResponse,
-} from '../lib/paymentReceiptPdf'
+import { type PaylinkReceipt, type ReceiptLookupResponse } from '../lib/paymentReceiptPdf'
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
@@ -360,7 +354,6 @@ export default function PaymentPage() {
   const memo        = getPaylinkParam(searchParams, 'memo', 'm')
   const legacyChain = searchParams.get('chain')  as ChainKey | null
   const netParam    = (getPaylinkParam(searchParams, 'net', 'n') || null) as ChainKey | null
-  const modeParam   = searchParams.get('mode')
   const isTelegramSource = isTelegramSourceParam(searchParams)
   const isNgPosSource = searchParams.get('src') === 'ngpos' || searchParams.get('src') === 'bank-receive' || searchParams.get('src') === 'bank-send'
   const ngPosBackMerchantId = searchParams.get('merchant') ?? ''
@@ -466,10 +459,11 @@ export default function PaymentPage() {
     if (isValidSolanaAddress(resolvedSolana) && !hasEvmRecipient) return 'solana'
     return 'base'
   })
+  const [hostedLockedNetwork, setHostedLockedNetwork] = useState<ChainKey | null>(null)
 
   // Normal multi-chain links can switch chains; Telegram links are intentionally
   // locked to the bot-selected network so a Base request stays Base-only.
-  const netLocked = isWalletManagerFundingLink || (!!netParam && (!isMultiChain || isTelegramSource))
+  const netLocked = isWalletManagerFundingLink || !!hostedLockedNetwork || (!!netParam && (!isMultiChain || isTelegramSource))
   const availableChains = isWalletManagerFundingLink
     ? [walletManagerFundingChain]
     : netLocked
@@ -499,7 +493,6 @@ export default function PaymentPage() {
   // ── UI state ──────────────────────────────────────────────────────────────
   const [addrCopied,        setAddrCopied]        = useState(false)
   const [agentLinkCopied,   setAgentLinkCopied]   = useState(false)
-  const [receiptShared,     setReceiptShared]     = useState(false)
   const [paymentReceiptId,  setPaymentReceiptId]  = useState('')
   const [paymentReceipt,    setPaymentReceipt]    = useState<PaylinkReceipt | null>(null)
   const [receiptPollAttempts, setReceiptPollAttempts] = useState(0)
@@ -524,6 +517,7 @@ export default function PaymentPage() {
   const eventId          = initParams.get('id') ?? ''
   const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
   const hostedCheckoutId = getPaylinkParam(initParams, 'checkout', 'checkout')
+  const hostedAttemptId  = getPaylinkParam(initParams, 'attempt', 'attempt')
   const isHostedCheckout = /^chk_[a-zA-Z0-9]{8,40}$/.test(hostedCheckoutId)
   const hostedKind = getPaylinkParam(initParams, 'hostedKind', 'hostedKind')
   const hostedSettlementMode = getPaylinkParam(initParams, 'settlementMode', 'settlementMode')
@@ -588,7 +582,6 @@ export default function PaymentPage() {
   const eventRegistered  = useRef(false)
   const ordinaryReceiptRegistered = useRef(false)
   const accessRedirected = useRef(false)
-  const hostedServiceRedirected = useRef(false)
   const polymarketReturnRedirected = useRef(false)
   const polymarketBridgeWaitStartedAtRef = useRef(0)
   const polymarketFundingMarkRef = useRef('')
@@ -620,11 +613,20 @@ export default function PaymentPage() {
     let cancelled = false
     setHostedIntentStatus('checking')
     setHostedIntentError('')
-    void fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}&purpose=return`, { cache: 'no-store' })
+    void fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}&attempt=${encodeURIComponent(hostedAttemptId)}&purpose=return`, { cache: 'no-store' })
       .then(async response => {
-        const body = await response.json().catch(() => undefined) as { ok?: boolean; paymentUrl?: string; returnUrl?: string; error?: string } | undefined
+        const body = await response.json().catch(() => undefined) as {
+          ok?: boolean
+          paymentUrl?: string
+          returnUrl?: string
+          checkout?: { checkoutMode?: string; paymentAttempt?: { id?: string; status?: string; network?: string; transaction?: string; receiptId?: string } }
+          error?: string
+        } | undefined
         if (!response.ok || !body?.ok || !body.paymentUrl?.startsWith('/pay?')) {
           throw new Error(body?.error || 'This hosted checkout could not be verified.')
+        }
+        if (body.checkout?.checkoutMode && body.checkout.checkoutMode !== 'human') {
+          throw new Error('This checkout only accepts agentic payment.')
         }
         if (isHostedService && !body.returnUrl) throw new Error('This service checkout has no verified return destination.')
         const expected = new URL(body.paymentUrl, window.location.origin)
@@ -636,6 +638,20 @@ export default function PaymentPage() {
         if (!cancelled) {
           setHostedReturnUrl(body.returnUrl || '')
           setHostedIntentStatus('verified')
+          const attempt = body.checkout?.paymentAttempt
+          if (attempt?.network === 'base' || attempt?.network === 'arbitrum' || attempt?.network === 'arc') {
+            setHostedLockedNetwork(attempt.network)
+          }
+          if (attempt?.receiptId) setPaymentReceiptId(attempt.receiptId)
+          if (attempt?.transaction && /^0x[a-fA-F0-9]{64}$/.test(attempt.transaction)) {
+            setManualTxHash(attempt.transaction as `0x${string}`)
+          }
+          if (attempt?.status === 'paid') {
+            setManualPayDetected(true)
+            setHostedConfirmationStatus('verified')
+          } else if (attempt?.status === 'processing') {
+            setHostedConfirmationStatus('processing')
+          }
         }
       })
       .catch(error => {
@@ -644,7 +660,7 @@ export default function PaymentPage() {
         setHostedIntentError(error instanceof Error ? error.message : 'This hosted checkout could not be verified.')
       })
     return () => { cancelled = true }
-  }, [hostedCheckoutId, isHostedCheckout, isHostedService])
+  }, [hostedAttemptId, hostedCheckoutId, isHostedCheckout, isHostedService])
 
   useEffect(() => {
     if (isFlex && isBankReceivePayment && isNgPosPaycrestOfframp) setFxInputMode('local')
@@ -715,7 +731,9 @@ export default function PaymentPage() {
   const paymentAmountBlocked = flexPayDisabled || (isHostedCheckout && hostedIntentStatus !== 'verified')
 
   // ── Direct Send state (shared across Base, Arc, and Arbitrum) ─────────────
-  const [payMode,          setPayMode]          = useState<'wallet' | 'direct'>(modeParam === 'direct' && isMainHashPaylinkPayment ? 'direct' : 'wallet')
+  // Circle Smart Wallet is the only public checkout rail. Keep the legacy
+  // direct-send implementation isolated for now, but never expose or select it.
+  const [payMode] = useState<'wallet' | 'direct'>('wallet')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
   const [directVault,      setDirectVault]      = useState<`0x${string}` | null>(null)
@@ -1262,15 +1280,6 @@ export default function PaymentPage() {
     }
   }, [bankSendLinkId, bankSendRequestedNgn, isBankSendPayment, paycrestOrder])
 
-  // Whether the secondary direct-pay option should be shown for normal Hash PayLink payments.
-  const canDirectSend =
-    isMainHashPaylinkPayment &&
-    !isHostedCheckout &&
-    (
-      ((chain === 'base' || chain === 'arc' || chain === 'arbitrum') && isAddress(resolvedEvm)) ||
-      (chain === 'solana' && !!resolvedSolana)
-    )
-
   useEffect(() => {
     const previous = previousPrivySessionRef.current
     const sessionChanged = previous.authenticated !== privyAuthenticated || previous.email !== privyEmail
@@ -1478,11 +1487,6 @@ export default function PaymentPage() {
   ])
 
   // ── Auto-sweep keeper ─────────────────────────────────────────────────────
-  // ── Reset payMode on chain switch: Smart Wallet is primary; direct is explicit ─
-  useEffect(() => {
-    setPayMode(modeParam === 'direct' && isSupportedEvmPayChain(chain) && isMainHashPaylinkPayment ? 'direct' : 'wallet')
-  }, [chain, modeParam, isMainHashPaylinkPayment])
-
   useEffect(() => {
     setPaymentAttemptStarted(false)
     paymentVerificationStartBlockRef.current = null
@@ -2056,7 +2060,7 @@ export default function PaymentPage() {
     setCircleSolanaPending(false); setCircleSolanaError(null); setCircleSolanaBalance(null); setCircleSolanaBalanceError(false)
     setCircleSolanaSession(null); setCircleSolanaAddress(''); setCircleSolanaCopied(false)
     setManualPayDetected(false); setManualTxHash(null); setReceivedAmount(null)
-    setPaymentReceiptId(''); setPaymentReceipt(null); setReceiptShared(false)
+    setPaymentReceiptId(''); setPaymentReceipt(null)
     ordinaryReceiptRegistered.current = false
     setCirclePaymasterPending(false); setCirclePaymasterTxHash(null); setCirclePaymasterError(null)
     setCirclePasskeyPending(false); setCirclePasskeyError(null); setCircleSmartAccount(null); setCircleEvmEmailSession(null); setCircleEvmPaymentProcessing(false); setCircleEvmAcceptedPending(false); setCircleWalletCopied(false)
@@ -2088,61 +2092,6 @@ export default function PaymentPage() {
     await copyToClipboard(circleSmartAccount)
     setCircleWalletCopied(true)
     setTimeout(() => setCircleWalletCopied(false), 2200)
-  }
-
-  async function receiptPdfBlob() {
-    if (!paymentReceipt) return new Blob([], { type: 'application/pdf' })
-    return createPaymentReceiptPdf(paymentReceipt)
-  }
-
-  async function openPaymentReceiptPdf() {
-    if (!paymentReceipt) return
-    const blob = await receiptPdfBlob()
-    const url = URL.createObjectURL(blob)
-    const win = window.open(url, '_blank', 'noopener,noreferrer')
-    if (!win) {
-      const link = document.createElement('a')
-      link.href = url
-      link.download = paymentReceiptFileName(paymentReceipt)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-    }
-    window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
-  }
-
-  async function downloadPaymentReceiptPdf() {
-    if (!paymentReceipt) return
-    const blob = await receiptPdfBlob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = paymentReceiptFileName(paymentReceipt)
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  async function sharePaymentReceiptPdf() {
-    if (!paymentReceipt) return
-    const pdf = await receiptPdfBlob()
-    const file = new File([pdf], paymentReceiptFileName(paymentReceipt), { type: 'application/pdf' })
-    const nav = navigator as Navigator & {
-      canShare?: (data: ShareData) => boolean
-      share?: (data: ShareData) => Promise<void>
-    }
-    if (nav.share && (!nav.canShare || nav.canShare({ files: [file] }))) {
-      await nav.share({
-        title: 'Hash PayLink receipt',
-        text: `${compactReceiptAmount(paymentReceipt.amount)} ${paymentReceipt.asset} confirmed`,
-        files: [file],
-      })
-      return
-    }
-    await downloadPaymentReceiptPdf()
-    setReceiptShared(true)
-    setTimeout(() => setReceiptShared(false), 1800)
   }
 
   async function handleCopyCircleSolanaWallet() {
@@ -2236,8 +2185,30 @@ export default function PaymentPage() {
     return SMART_WALLET_AMOUNT_ERROR
   }
 
+  async function lockHostedCheckoutNetwork() {
+    if (!isHostedCheckout) return true
+    try {
+      const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}&attempt=${encodeURIComponent(hostedAttemptId)}&action=select-network`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: chain }),
+      })
+      const body = await response.json().catch(() => undefined) as { ok?: boolean; paymentAttempt?: { network?: string }; error?: string } | undefined
+      if (!response.ok || !body?.ok || body.paymentAttempt?.network !== chain) {
+        throw new Error(body?.error || 'The selected payment network could not be secured.')
+      }
+      setHostedLockedNetwork(chain)
+      return true
+    } catch (error) {
+      setHostedIntentStatus('error')
+      setHostedIntentError(error instanceof Error ? error.message : 'The selected payment network could not be secured.')
+      return false
+    }
+  }
+
   async function handlePay() {
     if (!activeRecipient) return
+    if (!await lockHostedCheckoutNetwork()) return
     setPaymentAttemptStarted(true)
     await beginPaymentVerificationWindow()
     if (chain === 'arbitrum') await handleArbitrumPay()
@@ -2293,6 +2264,7 @@ export default function PaymentPage() {
       return
     }
 
+    if (!await lockHostedCheckoutNetwork()) return
     setPaymentAttemptStarted(true)
     setCircleSolanaPending(true)
     setCircleSolanaError(null)
@@ -2714,6 +2686,7 @@ export default function PaymentPage() {
       return
     }
 
+    if (!await lockHostedCheckoutNetwork()) return
     setPaymentAttemptStarted(true)
     setCirclePasskeyPending(true)
     setCirclePasskeyError(null)
@@ -2848,7 +2821,7 @@ export default function PaymentPage() {
         setCircleSmartAccount(null)
       }
       setCirclePasskeyError(message === 'Circle email wallet request failed.'
-        ? 'Smart wallet setup failed. Try again, or use Pay another way.'
+        ? 'Smart wallet setup failed. Try again.'
         : message)
     } finally {
       setCirclePasskeyPending(false)
@@ -3637,13 +3610,6 @@ export default function PaymentPage() {
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
   useEffect(() => {
-    if (!isConfirmed || !isHostedService || !hostedReturnUrl || hostedConfirmationStatus !== 'verified' || hostedServiceRedirected.current) return
-    hostedServiceRedirected.current = true
-    const timer = window.setTimeout(() => window.location.assign(hostedReturnUrl), 6_000)
-    return () => window.clearTimeout(timer)
-  }, [hostedConfirmationStatus, hostedReturnUrl, isConfirmed, isHostedService])
-
-  useEffect(() => {
     const bankSendSettled = isBankSendPayment && bankSendStatus === 'settled'
     if ((!isConfirmed && !bankSendSettled) || !isPolymarketBridge || !polymarketReturnToAgentHash || polymarketReturnRedirected.current) return
     if (polymarketBridgeStatus !== 'complete') return
@@ -3911,22 +3877,7 @@ export default function PaymentPage() {
 
             {receiptReady && (!isPolymarketBridge || !polymarketReturnToAgentHash) && (
               <div className="grid gap-2">
-                <button
-                  type="button"
-                  onClick={openPaymentReceiptPdf}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98]"
-                >
-                  <ReceiptIcon className="h-4 w-4" />
-                  View receipt
-                </button>
-                <button
-                  type="button"
-                  onClick={sharePaymentReceiptPdf}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98]"
-                >
-                  <Share2 className="h-4 w-4" />
-                  {receiptShared ? 'Downloaded' : 'Share receipt'}
-                </button>
+                <UnifiedReceipt receipt={paymentReceipt!} />
                 {!ogProofValue && (
                   <p className="text-center text-[11px] font-medium text-gray-400">
                     Receipt is ready. 0G archive continues in background and will attach when confirmed.
@@ -3987,7 +3938,7 @@ export default function PaymentPage() {
                 {hostedConfirmationStatus === 'verified' ? (
                   <p className="text-center text-[11px] font-medium text-gray-400">
                     {isHostedService
-                      ? `Checkout verified. Returning to ${hostedMerchantName || 'the service'} in 6 seconds.`
+                      ? `Checkout verified. Continue to ${hostedMerchantName || 'the platform'} when you are ready.`
                       : 'Checkout verified and receipt recorded.'}
                   </p>
                 ) : hostedConfirmationStatus === 'processing' ? (
@@ -4011,7 +3962,7 @@ export default function PaymentPage() {
                     href={hostedReturnUrl}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
-                    Return to service now
+                    Continue to {hostedMerchantName || 'platform'}
                   </a>
                 )}
                 {hostedConfirmationStatus === 'error' && (
@@ -4160,36 +4111,6 @@ export default function PaymentPage() {
             })}
           </div>
         </div>}
-
-        {/* ── Pay mode toggle (Base, Arc, and Arbitrum USDC) ────────────── */}
-        {canDirectSend && !isNgPosPaycrestOfframp && (
-          <div className="flex justify-center px-4 pt-3">
-            <div className="flex rounded-xl border border-gray-200 bg-gray-100/80 p-0.5 text-xs font-semibold">
-              <button
-                onClick={() => setPayMode('wallet')}
-                className={cn(
-                  'rounded-lg px-4 py-1.5 transition-all duration-150',
-                  payMode === 'wallet'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700',
-                )}
-              >
-                Smart Wallet
-              </button>
-              <button
-                onClick={() => setPayMode('direct')}
-                className={cn(
-                  'rounded-lg px-4 py-1.5 transition-all duration-150',
-                  payMode === 'direct'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700',
-                )}
-              >
-                Pay another way
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
         <div className={cn('mt-3 border-b border-gray-100 bg-gradient-to-br p-5 text-center dark:border-white/10', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
@@ -5305,7 +5226,7 @@ export default function PaymentPage() {
                 >
                   {isSolanaConnecting
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Signing in...</>
-                    : <><Wallet className="h-4 w-4" /> {showCircleSolanaEmailBridgePay && !manualPayDetected ? 'Pay another way' : 'Sign in with Solana'}</>}
+                    : <><Wallet className="h-4 w-4" /> {showCircleSolanaEmailBridgePay && !manualPayDetected ? 'Continue with Circle' : 'Sign in with Solana'}</>}
                 </button>
                 <CheckoutTrustLine />
                 <p className="text-center text-xs text-gray-400">

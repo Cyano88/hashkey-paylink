@@ -27,21 +27,22 @@ export default function ApiReference() {
   -H "Content-Type: application/json" \\
   -d '{
     "kind": "service",
+    "checkoutMode": "human",
     "title": "Data request",
     "amount": "0.024",
     "memo": "Order 1042",
     "returnUrl": "https://your-allowlisted-domain.example/complete"
   }'`}</CodeBlock>
-          <p>The response contains an expiring <code>checkoutUrl</code> such as <code>/pay/c/chk_...</code>. Fixed service checkouts also return <code>agentCheckoutUrl</code> for the branded observer and success UI, plus <code>agentPaymentUrl</code>, the Circle Gateway x402 endpoint for compatible agent wallets. Platform identity and payment routing come from the API key's project. Test keys route only to Arc Testnet; live keys route only to Base or Arbitrum mainnet. Recipient overrides are rejected. API keys stay server-side.</p>
+          <p>Every checkout has one immutable <code>checkoutMode</code>. A human checkout can offer every network enabled in the project; the payer selects one and that payment attempt is then locked to the matching network and recipient. Agentic checkout selects one exact network when it is created and returns an agentic <code>checkoutUrl</code> plus its Circle Gateway x402 <code>agentPaymentUrl</code>; it never returns a human fallback. The response also includes a durable <code>paymentAttemptId</code>. Platform identity and routing come from the API key's project. Test keys route to Arc Testnet; live keys use the configured Base and Arbitrum routes. Recipient overrides are rejected. API keys stay server-side.</p>
         </SubSection>
         <SubSection title="Agent wallet path">
-          <p>Send a GET request to the returned <code>agentPaymentUrl</code>. The first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. A Circle Gateway x402-compatible wallet signs the payment and retries with <code>PAYMENT-SIGNATURE</code>. After Gateway verification and settlement, the endpoint returns the same checkout id and authoritative paid state used by hosted checkout and signed webhooks.</p>
-          <CodeBlock lang="text">{`Create service checkout
-  -> checkoutUrl       (person opens hosted UI)
-  -> agentCheckoutUrl  (agent observer and success UI)
+          <p>Create the checkout with <code>checkoutMode: "agentic"</code> and either <code>agenticType: "creator_earnings"</code> or <code>agenticType: "agent_treasury"</code>. Send a GET request to its <code>agentPaymentUrl</code>. The first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. A Circle Gateway x402-compatible wallet signs the payment and retries with <code>PAYMENT-SIGNATURE</code>. After Gateway verification and settlement, the endpoint returns the checkout id, payment-attempt id, and authoritative paid state used by signed webhooks.</p>
+          <CodeBlock lang="text">{`Create agentic service checkout
+  -> checkoutUrl       (agentic observer and durable success UI)
   -> agentPaymentUrl   (agent handles x402 challenge)
+  -> paymentAttemptId  (immutable payment session)
   -> status + signed webhook confirm fulfillment`}</CodeBlock>
-          <p>Agentic payment is available only for fixed-price USDC service checkouts. Flexible requests and local-bank settlement remain on the hosted path.</p>
+          <p>Agentic payment is available only for fixed-price USDC service checkouts. Flexible requests and local-bank settlement require a separate human checkout.</p>
         </SubSection>
         <SubSection title="GET /api/v2/checkouts?purpose=status&amp;id=chk_...">
           <p>Returns the authoritative <code>pending</code>, <code>processing</code>, <code>paid</code>, or <code>expired</code> state, including the network paid. For Naira settlement, <code>processing</code> means the USDC deposit is confirmed but bank delivery is not final. Verify <code>paid</code> from your server before fulfillment.</p>

@@ -4,6 +4,8 @@ import { formatUnits, isAddress, parseUnits } from 'viem'
 import {
   beginHostedCheckoutAgenticAttempt,
   hostedCheckoutPaymentOption,
+  hostedCheckoutPaymentAttempt,
+  hostedCheckoutMode,
   markHostedCheckoutPaid,
   readVerifiedHostedCheckoutRecord,
   type CheckoutRecord,
@@ -179,7 +181,11 @@ export function createAgenticCheckoutsHandler(dependencies: Dependencies = defau
       if (!id) return res.status(400).json({ ok: false, error: 'Invalid checkout id.' })
       const record = await dependencies.read(id)
       if (!record) return res.status(404).json({ ok: false, error: 'Checkout not found or expired.' })
-      if (record.kind !== 'service' || record.flexible || record.settlement) {
+      const attemptId = clean(req.query?.attempt, 80)
+      if (!attemptId || attemptId !== hostedCheckoutPaymentAttempt(record).id) {
+        return res.status(409).json({ ok: false, error: 'Payment attempt does not match this checkout.' })
+      }
+      if (hostedCheckoutMode(record) !== 'agentic' || record.kind !== 'service' || record.flexible || record.settlement) {
         return res.status(409).json({ ok: false, error: 'This checkout is not eligible for agentic payment.' })
       }
       let current = record
@@ -190,6 +196,7 @@ export function createAgenticCheckoutsHandler(dependencies: Dependencies = defau
         return res.json({
           ok: true,
           checkoutId: record.id,
+          paymentAttemptId: attemptId,
           status: 'paid',
           paymentPath: 'agentic',
           network: current.payment.network ?? current.network,
@@ -239,6 +246,7 @@ export function createAgenticCheckoutsHandler(dependencies: Dependencies = defau
       return res.json({
         ok: true,
         checkoutId: paid.id,
+        paymentAttemptId: attemptId,
         status: paid.payment?.status ?? 'paid',
         paymentPath: 'agentic',
         network: paid.payment?.network ?? network,

@@ -19,12 +19,31 @@ export type PaylinkReceipt = {
   merchantId?: string
   settlementType?: string
   amountNgn?: string
+  variant?: 'general' | 'bills'
+  providerName?: string
+  recipient?: string
+  destination?: string
+  targetLabel?: string
+  targetValue?: string
+  narration?: string
+  referenceId?: string
   proof?: {
     receiptHash?: string
     ogRootHash?: string
     ogTxHash?: string
     ogExplorer?: string
   }
+}
+
+export type UnifiedReceiptRow = { label: string; value: string; mono?: boolean }
+
+export type UnifiedReceiptView = {
+  variant: 'general' | 'bills'
+  badge: string
+  amount: string
+  timestamp: string
+  rows: UnifiedReceiptRow[]
+  reference: string
 }
 
 export type ReceiptLookupResponse = {
@@ -34,6 +53,7 @@ export type ReceiptLookupResponse = {
 }
 
 export type X402ReceiptLike = {
+  type?: string
   activityId?: string
   receiptId?: string
   receiptHash?: string
@@ -119,7 +139,7 @@ function parseHumanUsdcAmount(value?: string) {
 }
 
 export function receiptChainKey(value?: string): ChainKey {
-  return value === 'solana' || value === 'arc' || value === 'arbitrum' || value === 'hashkey'
+  return value === 'solana' || value === 'arc' || value === 'arbitrum'
     ? value
     : 'base'
 }
@@ -132,6 +152,7 @@ export function compactReceiptAmount(value?: string) {
 
 export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
   const prefix = receipt?.source === 'streampay' ? 'hashpaystream'
+    : receipt?.source === 'agentic-checkout' ? 'agent-checkout'
     : receipt?.source === 'bank-receive' ? 'bank-receive'
     : receipt?.source === 'bank-send' ? 'bank-send'
     : receipt?.source === 'ngpos' ? 'pos'
@@ -155,40 +176,69 @@ function fmtTime(value?: number) {
 function formatNgn(value?: string) {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return ''
-  return `NGN ${numeric.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+  return `\u20A6${numeric.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-function receiptLabels(receipt: PaylinkReceipt) {
-  const isStream = receipt.source === 'streampay' || receipt.settlementType === 'stream-created'
-  const isCheckpoint = receipt.settlementType === 'checkpoint-escrow'
-  const isPos = receipt.source === 'ngpos'
-  const isBank = receipt.source === 'bank-receive'
-  const isBankSend = receipt.source === 'bank-send'
-  const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
-  const isX402 = receipt.source === 'x402' || receipt.settlementType === 'circle-gateway-x402'
-  const heading = isStream ? 'HashpayStream receipt' : isBankSend ? 'Bank send receipt' : isBank ? 'Bank receive receipt' : isPos ? 'Retail POS receipt' : isPolymarket ? 'Polymarket funding receipt' : isX402 ? 'HashpayStream receipt' : 'Request payment receipt'
-  const title = isCheckpoint ? 'Checkpoint release confirmed' : isStream ? 'Stream created' : isBankSend ? 'USDC funding confirmed' : isBank ? 'Bank payout confirmed' : isPos ? 'Retail payment confirmed' : isPolymarket ? 'Polymarket funded' : isX402 ? 'Creator content unlocked' : 'Payment confirmed'
-  const amountLabel = isCheckpoint ? 'Released amount' : isStream ? 'Stream amount' : isBankSend ? 'USDC settled' : isBank ? 'Amount paid' : isPolymarket ? 'Amount funded' : isX402 ? 'Access price' : 'Amount paid'
-  const payer = isCheckpoint ? 'Reader wallet' : isStream ? 'Sender' : isBankSend ? 'Bank payer' : isBank ? 'Payer wallet' : isPos ? 'Payer wallet' : isPolymarket ? 'Funder' : isX402 ? 'Reader wallet' : 'Payer'
-  const context = isCheckpoint ? 'Content' : isStream ? 'Stream memo' : isBankSend ? 'Funding memo' : isBank ? 'Payer' : isPos ? 'Payer' : isPolymarket ? 'For' : isX402 ? 'Access' : 'Memo'
-  const contextValue = isCheckpoint
-    ? (receipt.memo || receipt.eventId || 'Creator content')
-    : isStream
-    ? (receipt.memo || receipt.merchantId || receipt.eventId || '-')
-    : isBankSend
-    ? (receipt.memo || receipt.eventId || '-')
-    : isBank
-    ? (receipt.memo || receipt.eventId || '-')
-    : isPos
-    ? (receipt.memo || receipt.eventId || '-')
-    : isPolymarket
-    ? 'Polymarket funding'
-    : isX402
-    ? (receipt.memo || receipt.eventId || 'Creator content')
-    : (receipt.memo || receipt.merchantId || receipt.eventId || '-')
-  const merchantLabel = isCheckpoint ? 'Creator' : isStream ? 'Stream vault' : isBankSend ? 'USDC destination' : isBank ? 'Bank receive link' : isPos ? 'Merchant' : isPolymarket ? 'Polymarket profile' : isX402 ? 'Creator' : 'Recipient'
-  const merchantValue = receipt.merchantId || ''
-  return { heading, title, amountLabel, payer, context, contextValue, merchantLabel, merchantValue }
+function titleCase(value: string) {
+  return value.replace(/[-_]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
+}
+
+function receiptType(receipt: PaylinkReceipt) {
+  const settlement = String(receipt.settlementType || '').toLowerCase()
+  if (receipt.variant === 'bills' || receipt.source === 'bills' || settlement === 'bill_payment') {
+    const category = settlement.replace(/^bill_payment:?/, '') || receipt.type
+    return titleCase(category || 'Bill payment')
+  }
+  if (receipt.source === 'bank-send' || settlement === 'paycrest_onramp') return 'USDC Settlement'
+  if (receipt.source === 'bank-receive' || settlement === 'instant_fiat') return 'Bank Transfer'
+  if (receipt.source === 'ngpos') return 'POS Funding'
+  if (receipt.source === 'polymarket-funding' || settlement === 'polymarket_bridge') return 'External Funding'
+  if (receipt.source === 'agentic-checkout' || receipt.source === 'x402' || settlement.includes('x402')) return 'Agent Payment'
+  if (receipt.source === 'streampay') return settlement === 'checkpoint-escrow' ? 'Checkpoint Release' : 'Creator Payment'
+  return titleCase(receipt.settlementType || receipt.source || 'USDC Payment')
+}
+
+export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView {
+  const variant = receipt.variant === 'bills' || receipt.source === 'bills' || String(receipt.settlementType || '').startsWith('bill_payment') ? 'bills' : 'general'
+  const network = CHAIN_META[receiptChainKey(receipt.chain)]?.label || titleCase(receipt.chain || 'Base')
+  const localAmount = formatNgn(receipt.amountNgn)
+  const amount = localAmount || `${compactReceiptAmount(receipt.amount)} ${receipt.asset}`
+  const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
+  const type = receiptType(receipt)
+  if (variant === 'bills') {
+    const targetLabel = receipt.targetLabel || (type.toLowerCase().includes('electric') ? 'Meter Number' : type.toLowerCase().includes('tv') ? 'Smartcard Number' : 'Phone Number')
+    return {
+      variant,
+      badge: receipt.providerName || 'Utility payment',
+      amount,
+      timestamp: fmtTime(receipt.createdAt),
+      rows: [
+        { label: 'Type', value: type },
+        { label: targetLabel, value: receipt.targetValue || receipt.recipient || '-' },
+        { label: 'Amount', value: amount },
+      ],
+      reference,
+    }
+  }
+  const settlement = String(receipt.settlementType || '').toLowerCase()
+  const isBank = receipt.source === 'bank-receive' || receipt.source === 'bank-send' || settlement === 'instant_fiat' || settlement === 'paycrest_onramp'
+  const recipient = receipt.recipient || receipt.merchantId || receipt.eventId || '-'
+  const destination = receipt.destination || (isBank ? `Bank settlement · ${network}` : `${network} · ${receipt.asset}`)
+  const narration = receipt.narration || receipt.memo || receipt.title || '-'
+  return {
+    variant,
+    badge: isBank ? 'Bank Transfer' : 'On-Chain',
+    amount,
+    timestamp: fmtTime(receipt.createdAt),
+    rows: [
+      { label: 'Type', value: type },
+      { label: 'Sent by', value: receipt.payer || '-', mono: true },
+      { label: 'Sent to', value: recipient, mono: /^0x/.test(recipient) },
+      { label: isBank ? 'Receiver account' : 'Destination', value: destination, mono: /^0x/.test(destination) },
+      { label: 'Amount & narration', value: `${amount} · ${narration}` },
+    ],
+    reference,
+  }
 }
 
 export async function createPaymentReceiptImage(receipt: PaylinkReceipt) {
@@ -202,11 +252,8 @@ export async function createPaymentReceiptImage(receipt: PaylinkReceipt) {
   if (!ctx) return ''
   ctx.scale(scale, scale)
 
-  const [logo, ogLogo] = await Promise.all([
-    loadImage('/hash-logo-transparent.png'),
-    loadImage('/brand/0g-logo.jpeg'),
-  ])
-  drawReceiptCanvas(ctx, receipt, width, height, logo, ogLogo)
+  const logo = await loadImage('/hash-logo-transparent.png')
+  drawReceiptCanvas(ctx, receipt, width, height, logo)
   return new Promise<string>((resolve) => canvas.toBlob(blob => {
     if (!blob) return resolve('')
     const reader = new FileReader()
@@ -237,122 +284,81 @@ function drawReceiptCanvas(
   width: number,
   height: number,
   logo: HTMLImageElement | null,
-  ogLogo: HTMLImageElement | null,
 ) {
-  const labels = receiptLabels(receipt)
-  const meta = CHAIN_META[receiptChainKey(receipt.chain)]
-  const networkLabel = String(receipt.chain || '').toLowerCase() === 'polygon' ? 'Polygon' : meta.label
-  const archived = Boolean(receipt.proof?.ogExplorer || receipt.proof?.ogTxHash)
-  const amount = compactReceiptAmount(receipt.amount)
-  const isPos = receipt.source === 'ngpos'
-  const settlement = String(receipt.settlementType || '').toLowerCase()
-  const isLocalCurrency = isPos || receipt.source === 'bank-receive' || receipt.source === 'bank-send' || receipt.source === 'bills' || settlement === 'instant_fiat' || settlement === 'paycrest_onramp' || settlement === 'bill_payment'
-  const amountNgn = isLocalCurrency ? formatNgn(receipt.amountNgn) : ''
-
-  ctx.fillStyle = '#f4f7fb'
+  const view = paymentReceiptView(receipt)
+  ctx.fillStyle = '#111111'
   ctx.fillRect(0, 0, width, height)
-  roundRect(ctx, 34, 32, width - 68, height - 64, 26, '#ffffff')
+  roundRect(ctx, 34, 32, width - 68, height - 64, 28, '#000000')
 
   if (logo) {
-    ctx.drawImage(logo, 62, 58, 48, 48)
+    ctx.drawImage(logo, 62, 58, 34, 34)
   } else {
-    roundRect(ctx, 64, 60, 44, 44, 13, '#111827')
+    roundRect(ctx, 62, 58, 34, 34, 10, '#ffffff')
+    ctx.fillStyle = '#000000'
+    ctx.font = '800 11px Arial'
+    ctx.fillText('HP', 72, 80)
+  }
+
+  ctx.fillStyle = '#ffffff'
+  ctx.font = '800 17px Arial'
+  ctx.fillText('Hash_PayLink', 108, 80)
+  drawBadge(ctx, view.badge.toUpperCase(), '#171717', '#f5f5f5', 418, 62)
+
+  ctx.fillStyle = '#ffffff'
+  ctx.font = '800 36px Arial'
+  drawText(ctx, view.amount, 62, 158, 488, 42)
+  ctx.fillStyle = '#8c8c8c'
+  ctx.font = '600 12px Arial'
+  ctx.fillText(view.timestamp, 62, 184)
+
+  ctx.strokeStyle = '#2f2f2f'
+  ctx.setLineDash([2, 6])
+  ctx.beginPath()
+  ctx.moveTo(62, 218)
+  ctx.lineTo(550, 218)
+  ctx.stroke()
+
+  let y = 254
+  for (const row of view.rows) {
+    ctx.fillStyle = '#8c8c8c'
+    ctx.font = '600 11px Arial'
+    ctx.fillText(row.label.toUpperCase(), 62, y)
     ctx.fillStyle = '#ffffff'
-    ctx.font = '800 15px Arial'
-    ctx.fillText('HP', 78, 88)
-  }
-
-  ctx.fillStyle = '#111827'
-  ctx.font = '800 22px Arial'
-  ctx.fillText('Hash', 126, 78)
-  ctx.fillStyle = '#2563eb'
-  ctx.fillText(' PayLink', 176, 78)
-  ctx.fillStyle = '#667085'
-  ctx.font = '700 10px Arial'
-  ctx.fillText(labels.heading.toUpperCase(), 128, 100)
-  drawBadge(ctx, 'CONFIRMED', '#ecfdf3', '#027a48', 438, 64)
-
-  ctx.fillStyle = '#111827'
-  ctx.font = '800 25px Arial'
-  drawText(ctx, labels.title, 64, 152, 470, 30)
-  ctx.fillStyle = '#475467'
-  ctx.font = '600 14px Arial'
-  drawText(ctx, `${amount} ${receipt.asset} confirmed on ${networkLabel}`, 64, 184, 470, 20)
-
-  roundRect(ctx, 64, 216, width - 128, 88, 18, '#f8fafc')
-  ctx.fillStyle = '#667085'
-  ctx.font = '700 10px Arial'
-  ctx.fillText(labels.amountLabel.toUpperCase(), 84, 244)
-  ctx.fillStyle = '#101828'
-  ctx.font = '800 30px Arial'
-  ctx.fillText(`${amount} ${receipt.asset}`, 84, 274)
-  if (amountNgn) {
-    ctx.fillStyle = '#667085'
-    ctx.font = '700 13px Arial'
-    ctx.fillText(amountNgn, 84, 294)
-  }
-
-  const typeLabel = receipt.source === 'bank-send' || settlement === 'paycrest_onramp'
-    ? 'Naira to USDC'
-    : settlement === 'instant_fiat'
-    ? 'Base USDC to Naira'
-    : receipt.source === 'bills' || settlement === 'bill_payment'
-    ? 'Local bill payment'
-    : receipt.settlementType?.replace(/[-_]/g, ' ') || receipt.source || 'payment'
-  const rows: Array<[string, string]> = [
-    ['Network', networkLabel],
-    [labels.payer, receipt.payer],
-    [labels.context, labels.contextValue],
-    ...(labels.merchantValue ? [[labels.merchantLabel, labels.merchantValue] as [string, string]] : []),
-    ['Type', typeLabel],
-    ['Time', fmtTime(receipt.createdAt)],
-    ['Tx hash', receipt.txHash],
-    ['Receipt hash', receipt.receiptHash],
-  ]
-  let y = 342
-  for (const [label, value] of rows.slice(0, 8)) {
-    roundRect(ctx, 64, y - 22, width - 128, 37, 11, '#fbfcfe')
-    ctx.fillStyle = '#667085'
-    ctx.font = '700 11px Arial'
-    ctx.fillText(label, 84, y + 3)
-    ctx.fillStyle = '#101828'
-    ctx.font = '700 11px Courier New'
-    drawRightText(ctx, shortPdfValue(value || '-'), 526, y + 3, 300)
-    y += 39
-  }
-
-  const proofLabel = '0G proof'
-  const proofValue = archived
-    ? `Archived for support - ${shortPdfValue(receipt.proof?.ogTxHash || receipt.proof?.ogRootHash || '')}`
-    : 'Archiving after payment'
-  roundRect(ctx, 64, 660, width - 128, 50, 16, archived ? '#faf5ff' : '#f8fafc')
-  if (ogLogo && archived) {
-    ctx.save()
+    ctx.font = row.mono ? '700 12px Courier New' : '700 13px Arial'
+    drawRightText(ctx, shortPdfValue(row.value || '-'), 550, y, 320)
+    ctx.strokeStyle = '#2f2f2f'
+    ctx.setLineDash([2, 6])
     ctx.beginPath()
-    ctx.arc(88, 685, 13, 0, Math.PI * 2)
-    ctx.clip()
-    ctx.drawImage(ogLogo, 75, 672, 26, 26)
-    ctx.restore()
-  } else {
-    ctx.fillStyle = '#98a2b3'
-    ctx.beginPath()
-    ctx.arc(88, 685, 13, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.moveTo(62, y + 24)
+    ctx.lineTo(550, y + 24)
+    ctx.stroke()
+    y += 57
   }
-  ctx.fillStyle = archived ? '#7e22ce' : '#667085'
-  ctx.font = '800 13px Arial'
-  ctx.fillText(proofLabel, 112, 681)
-  ctx.font = archived ? '700 10px Courier New' : '700 10px Arial'
-  ctx.fillText(proofValue, 112, 696)
 
-  ctx.fillStyle = '#667085'
+  ctx.fillStyle = '#8c8c8c'
   ctx.font = '600 11px Arial'
-  const isPolymarket = receipt.source === 'polymarket-funding' || receipt.settlementType === 'polymarket_bridge'
-  drawText(ctx, isPos ? 'Keep this receipt for store verification.' : isPolymarket ? 'Keep this receipt for Polymarket funding verification.' : 'Keep this receipt for payment verification.', 64, 734, width - 128, 16)
-  ctx.fillStyle = '#667085'
-  ctx.font = '800 11px Arial'
-  const poweredBy = 'Powered by Circle USDC'
-  ctx.fillText(poweredBy, (width - ctx.measureText(poweredBy).width) / 2, 760)
+  ctx.fillText('REFERENCE ID', 62, y + 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.font = '700 12px Courier New'
+  drawRightText(ctx, shortPdfValue(view.reference), 550, y + 2, 320)
+
+  if (view.variant === 'bills') {
+    ctx.fillStyle = '#111111'
+    for (let x = 34; x < width - 34; x += 18) {
+      ctx.beginPath()
+      ctx.moveTo(x, height - 32)
+      ctx.lineTo(x + 9, height - 43)
+      ctx.lineTo(x + 18, height - 32)
+      ctx.closePath()
+      ctx.fill()
+    }
+  }
+
+  ctx.setLineDash([])
+  ctx.fillStyle = '#707070'
+  ctx.font = '700 10px Arial'
+  const footer = 'VERIFIED PAYMENT RECORD · HASH PAYLINK'
+  ctx.fillText(footer, (width - ctx.measureText(footer).width) / 2, 746)
 }
 
 function shortPdfValue(value: string) {
@@ -382,7 +388,7 @@ function drawBadge(ctx: CanvasRenderingContext2D, text: string, bg: string, fg: 
   roundRect(ctx, x, y, 108, 26, 13, bg)
   ctx.fillStyle = fg
   ctx.font = '800 9px Arial'
-  ctx.fillText(text, x + 18, y + 17)
+  ctx.fillText(clipCanvasText(ctx, text, 88), x + 10, y + 17)
 }
 
 function drawRightText(ctx: CanvasRenderingContext2D, text: string, right: number, y: number, maxWidth: number) {

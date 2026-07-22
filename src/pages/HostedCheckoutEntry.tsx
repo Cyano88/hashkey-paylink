@@ -10,13 +10,14 @@ type HostedCheckoutLookup = {
 
 export default function HostedCheckoutEntry() {
   const { checkoutId = '' } = useParams()
+  const attemptId = new URLSearchParams(window.location.search).get('attempt') ?? ''
   const [error, setError] = useState('')
 
   useEffect(() => {
     let cancelled = false
     async function openCheckout() {
       try {
-        const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}`, { cache: 'no-store' })
+        const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&attempt=${encodeURIComponent(attemptId)}`, { cache: 'no-store' })
         const body = await response.json().catch(() => undefined) as HostedCheckoutLookup | undefined
         if (!response.ok || !body?.ok || !body.paymentUrl?.startsWith('/pay?')) {
           throw new Error(body?.error || 'This checkout could not be opened.')
@@ -28,7 +29,7 @@ export default function HostedCheckoutEntry() {
     }
     void openCheckout()
     return () => { cancelled = true }
-  }, [checkoutId])
+  }, [attemptId, checkoutId])
 
   return (
     <main className="flex min-h-[60vh] items-center justify-center px-4">

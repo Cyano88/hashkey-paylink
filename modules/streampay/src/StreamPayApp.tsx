@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { StreamPayLayout } from './components/StreamPayLayout'
 import { CreatorAdminPage, CreatorPage } from './components/creator/CreatorPage'
 import { StreamGate } from './components/creator/StreamGate'
+import X402Receipt from '../../../src/pages/X402Receipt'
 
 export default function StreamPayApp() {
   return (
@@ -18,6 +19,7 @@ export default function StreamPayApp() {
           <Route path="creator" element={<CreatorPage />} />
           <Route path="creator-admin" element={<CreatorAdminPage />} />
           <Route path="gate" element={<StreamGate />} />
+          <Route path="receipt/:activityId" element={<X402Receipt />} />
           <Route path="*" element={<Navigate to="/creator" replace />} />
         </Route>
       </Routes>

@@ -13,6 +13,7 @@ const EVM = {
 
 type EvmNetwork = keyof typeof EVM
 type RpcLog = { transactionHash?: string; blockNumber?: string; logIndex?: string; topics?: string[]; data?: string }
+type SolanaTokenBalance = { mint?: string; owner?: string; uiTokenAmount?: { uiAmountString?: string | null } }
 
 async function rpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
   const response = await fetch(url, {
@@ -76,8 +77,35 @@ async function evmActivity(network: EvmNetwork, wallet: string): Promise<PocketA
       contextLabel: outgoingTransfer ? `To ${shortAddress(recipient)}` : `From ${shortAddress(sender)}`,
       settlementType: 'wallet_transfer',
       paycrestStatus: 'confirmed',
+      direction: outgoingTransfer ? 'out' : 'in',
+      recipient,
+      destination: `${network} USDC wallet`,
     } satisfies PocketActivityRow]
   })
+}
+
+export function solanaUsdcTransferParties(
+  owner: string,
+  preBalances: readonly SolanaTokenBalance[] | null | undefined,
+  postBalances: readonly SolanaTokenBalance[] | null | undefined,
+) {
+  const totals = (rows: readonly SolanaTokenBalance[] | null | undefined) => {
+    const result = new Map<string, number>()
+    for (const row of rows ?? []) {
+      if (row.mint !== SOLANA_USDC_MINT.toBase58() || !row.owner) continue
+      result.set(row.owner, (result.get(row.owner) || 0) + Number(row.uiTokenAmount?.uiAmountString || 0))
+    }
+    return result
+  }
+  const before = totals(preBalances)
+  const after = totals(postBalances)
+  const owners = new Set([...before.keys(), ...after.keys()])
+  const deltas = [...owners].map(address => ({ address, delta: (after.get(address) || 0) - (before.get(address) || 0) }))
+  const ownerDelta = deltas.find(row => row.address === owner)?.delta || 0
+  const counterparty = deltas
+    .filter(row => row.address !== owner && Math.abs(row.delta) >= 0.000001 && Math.sign(row.delta) === -Math.sign(ownerDelta))
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0]?.address || ''
+  return { ownerDelta, counterparty }
 }
 
 async function solanaActivity(wallet: string): Promise<PocketActivityRow[]> {
@@ -90,26 +118,30 @@ async function solanaActivity(wallet: string): Promise<PocketActivityRow[]> {
   return transactions.flatMap((transaction, index) => {
     if (!transaction || transaction.meta?.err) return []
     const ownerText = owner.toBase58()
-    const balances = (rows: readonly any[] | null | undefined) => (rows ?? [])
-      .filter(row => row.mint === SOLANA_USDC_MINT.toBase58() && row.owner === ownerText)
-      .reduce((sum, row) => sum + Number(row.uiTokenAmount?.uiAmountString || 0), 0)
-    const before = balances(transaction.meta?.preTokenBalances)
-    const after = balances(transaction.meta?.postTokenBalances)
-    const delta = after - before
+    const { ownerDelta: delta, counterparty } = solanaUsdcTransferParties(
+      ownerText,
+      transaction.meta?.preTokenBalances,
+      transaction.meta?.postTokenBalances,
+    )
     if (Math.abs(delta) < 0.000001) return []
     const signature = signatures[index]?.signature || transaction.transaction.signatures[0]
     return [{
       eventId: `solana:${signature}`,
       txHash: signature,
       chain: 'solana',
-      payer: delta > 0 ? 'Solana wallet' : ownerText,
+      payer: delta > 0 ? counterparty || 'Solana wallet' : ownerText,
       memo: delta > 0 ? 'USDC deposit' : 'USDC sent',
       amount: Math.abs(delta).toFixed(6).replace(/\.?0+$/, ''),
       ts: (transaction.blockTime || signatures[index]?.blockTime || Math.floor(Date.now() / 1000)) * 1000,
       source: delta > 0 ? 'wallet-deposit' : 'wallet-withdrawal',
-      contextLabel: delta > 0 ? 'Received on Solana' : 'Sent on Solana',
+      contextLabel: counterparty
+        ? `${delta > 0 ? 'From' : 'To'} ${shortAddress(counterparty)}`
+        : delta > 0 ? 'Received on Solana' : 'Sent on Solana',
       settlementType: 'wallet_transfer',
       paycrestStatus: 'confirmed',
+      direction: delta > 0 ? 'in' : 'out',
+      recipient: delta > 0 ? ownerText : counterparty || undefined,
+      destination: 'Solana USDC wallet',
     } satisfies PocketActivityRow]
   })
 }

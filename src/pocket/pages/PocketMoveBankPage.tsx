@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { ArrowRight, ChevronDown, Landmark, Mail, Send } from 'lucide-react'
 import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
+import UnifiedReceipt from '../../components/UnifiedReceipt'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import { formatNgnAmount } from '../../lib/utils'
 import { LocalCurrencyProfileCard } from '../components/LocalCurrencyProfileCard'
@@ -24,6 +25,7 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
 import usePocketWallets from '../hooks/usePocketWallets'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
+import { pocketActivityReceipt } from '../lib/pocketReceipt'
 import { pocketPathFor } from '../lib/pocketRoutes'
 
 const POCKET_BASE_PATH = '/pocket'
@@ -38,6 +40,7 @@ export default function PocketMoveBankPage() {
     const saved = window.sessionStorage.getItem('pocket:bank:mode')
     return saved === 'request' || saved === 'withdraw' ? saved : 'idle'
   })
+  const [bankReceiptOpen, setBankReceiptOpen] = useState(false)
   const setMode = useCallback((next: 'idle' | 'request' | 'withdraw') => {
     window.sessionStorage.setItem('pocket:bank:mode', next)
     setModeState(next)
@@ -80,6 +83,28 @@ export default function PocketMoveBankPage() {
         ? 'pending'
         : 'idle'
   const directLocked = direct.status === 'preparing' || direct.status === 'authorizing' || direct.status === 'processing'
+  const bankReceipt = useMemo(() => direct.status === 'sent' && direct.result ? pocketActivityReceipt({
+    eventId: `bank-withdraw:${direct.result.intentId}`,
+    txHash: direct.result.txHash,
+    chain: 'base',
+    payer: wallets.wallets.base?.address || email || 'Circle Pocket',
+    memo: 'Direct bank payout',
+    amount: direct.result.amountUsdc,
+    amountNgn: direct.result.amountNgn,
+    ts: Date.now(),
+    source: 'bank-withdraw',
+    merchantId: direct.result.merchantId,
+    contextLabel: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
+    settlementType: 'INSTANT_FIAT',
+    paycrestStatus: direct.result.providerStatus,
+    direction: 'out',
+    recipient: direct.result.accountName,
+    destination: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
+    bankName: direct.result.bankName,
+    bankLast4: direct.result.bankLast4,
+    accountName: direct.result.accountName,
+    providerReference: direct.result.orderId,
+  }) : null, [direct.result, direct.status, email, wallets.wallets.base?.address])
 
   useEffect(() => {
     if (selectedNet !== 'base') onNetworkSelect('base')
@@ -264,13 +289,28 @@ export default function PocketMoveBankPage() {
                 />
                 {direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
                 {direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.txHash ? 'USDC is confirmed. Your bank payout is processing.' : 'Circle is reconciling the submitted transfer. Do not retry this payout.'}</p>}
-                {direct.status === 'sent' && direct.result?.amountUsdc && <p className="px-2 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPocketDisplayAmount(direct.result.amountUsdc)} USDC sent · Bank delivery processing</p>}
+                {direct.status === 'sent' && direct.result?.amountUsdc && <p className="px-2 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPocketDisplayAmount(direct.result.amountUsdc)} USDC · {bankReceipt ? 'Bank payout completed' : 'Bank delivery processing'}</p>}
                 {direct.error && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
                 {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Save your profile, verify the bank account, and enter a Naira amount.</p>}
               </div>
             </>}
 
           </fieldset>}
+
+          {mode === 'withdraw' && bankReceipt && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setBankReceiptOpen(open => !open)}
+                className="flex min-h-11 w-full items-center justify-between rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-700 transition hover:border-gray-300 hover:text-gray-950 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-white/[0.07] dark:hover:text-white"
+                aria-expanded={bankReceiptOpen}
+              >
+                <span>View receipt</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${bankReceiptOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {bankReceiptOpen && <UnifiedReceipt receipt={bankReceipt} />}
+            </div>
+          )}
         </div>}
       </div>
 

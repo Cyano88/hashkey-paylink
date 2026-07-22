@@ -54,7 +54,10 @@ const handler = createPocketActivityHandler({
           settlementType: 'INSTANT_FIAT',
           amountNgn: '6000',
           paycrestStatus: 'settled',
-          bankName: 'Must not leak separately',
+          bankName: 'Example Bank',
+          bankLast4: '1234',
+          accountName: 'Ada Lovelace',
+          internalBankSecret: 'must-not-leak-bank-secret',
         },
       ],
     }
@@ -125,7 +128,10 @@ const serialized = JSON.stringify(loaded.body)
 assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)
 assert.equal(serialized.includes('must-not-leak'), false)
-assert.equal(serialized.includes('Must not leak separately'), false)
+assert.equal(loaded.body.payments[3].bankName, 'Example Bank')
+assert.equal(loaded.body.payments[3].bankLast4, '1234')
+assert.equal(loaded.body.payments[3].accountName, 'Ada Lovelace')
+assert.equal(serialized.includes('must-not-leak-bank-secret'), false)
 assert.equal(serialized.includes('must-not-leak-wallet'), false)
 
 const refundActivityHandler = createPocketActivityHandler({

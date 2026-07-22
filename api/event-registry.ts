@@ -7,7 +7,7 @@ import crypto from 'crypto'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson, writeDurableJson } from './render-durable-store.js'
 import { getPaycrestPosOrder } from './paycrest-pos.js'
 import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from './usdc-transfer-verify.js'
-import { hostedCheckoutPaymentOption, markHostedCheckoutPaid, readVerifiedHostedCheckoutRecord } from './hosted-checkouts.js'
+import { attachHostedCheckoutReceipt, hostedCheckoutMode, hostedCheckoutPaymentOption, markHostedCheckoutPaid, readVerifiedHostedCheckoutRecord } from './hosted-checkouts.js'
 
 type PaymentEntry = {
   eventId:     string
@@ -164,20 +164,49 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+const RECEIPT_ID_VERSION = 'r1'
+const LOCAL_RECEIPT_SIGNING_SECRET = 'hashpaylink-local-receipt-signing-secret-v1'
+
+function receiptSigningSecret() {
+  const configured = (process.env.RECEIPT_SIGNING_SECRET || process.env.HOSTED_CHECKOUT_SIGNING_SECRET || '').trim()
+  if (configured.length >= 32) return configured
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Receipt signing is unavailable. Configure RECEIPT_SIGNING_SECRET with at least 32 characters.')
+  }
+  return LOCAL_RECEIPT_SIGNING_SECRET
+}
+
+function receiptSignature(payload: string) {
+  return crypto
+    .createHmac('sha256', receiptSigningSecret())
+    .update(`hashpaylink:payment-receipt:${RECEIPT_ID_VERSION}:${payload}`)
+    .digest('base64url')
+}
+
 function encodeReceiptId(eventId: string, txHash: string) {
-  return Buffer.from(JSON.stringify({ eventId, txHash }), 'utf8')
-    .toString('base64url')
+  const payload = Buffer.from(JSON.stringify({ eventId, txHash }), 'utf8').toString('base64url')
+  return `${RECEIPT_ID_VERSION}.${payload}.${receiptSignature(payload)}`
 }
 
 function decodeReceiptId(receiptId: string) {
   try {
-    const parsed = JSON.parse(Buffer.from(receiptId, 'base64url').toString('utf8')) as {
+    if (receiptId.length > 1_024) return null
+    const [version, payload, suppliedSignature, ...extra] = receiptId.split('.')
+    if (version !== RECEIPT_ID_VERSION || !payload || !suppliedSignature || extra.length) return null
+    if (!/^[A-Za-z0-9_-]+$/.test(payload) || !/^[A-Za-z0-9_-]{43}$/.test(suppliedSignature)) return null
+    const expectedSignature = receiptSignature(payload)
+    const supplied = Buffer.from(suppliedSignature, 'base64url')
+    const expected = Buffer.from(expectedSignature, 'base64url')
+    if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as {
       eventId?: unknown
       txHash?: unknown
     }
     const eventId = typeof parsed.eventId === 'string' ? parsed.eventId.trim() : ''
     const txHash = typeof parsed.txHash === 'string' ? parsed.txHash.trim() : ''
-    return eventId && txHash ? { eventId, txHash } : null
+    return eventId && eventId.length <= MAX_EVENT_ID_LENGTH && txHash && txHash.length <= MAX_TEXT_LENGTH
+      ? { eventId, txHash }
+      : null
   } catch {
     return null
   }
@@ -245,6 +274,10 @@ async function expectedNgPosRecipient(input: {
 
 export function paymentReceiptId(eventId: string, txHash: string) {
   return encodeReceiptId(eventId, txHash)
+}
+
+export function isPaymentReceiptIdAuthentic(receiptId: string) {
+  return Boolean(decodeReceiptId(String(receiptId ?? '').trim()))
 }
 
 function archiveKey(entry: PaymentEntry) {
@@ -384,6 +417,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   let settlementType = ''
   let amountNgn = ''
   let intentId = ''
+  let hostedCheckoutIdForReceipt = ''
 
   try {
     eventId = cleanString(input?.eventId, 'eventId', MAX_EVENT_ID_LENGTH)
@@ -412,6 +446,10 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     if (!checkout) {
       throw paymentError('Hosted checkout is invalid or has expired.', 409)
     }
+    if (hostedCheckoutMode(checkout) !== 'human') {
+      throw paymentError('This checkout only accepts agentic payment.', 409)
+    }
+    hostedCheckoutIdForReceipt = checkout.id
     if (eventId !== `hosted-${checkout.id}`) {
       throw paymentError('Hosted checkout reference does not match.', 400)
     }
@@ -515,8 +553,9 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         ok: true,
         upgraded: true,
         receiptId: paymentReceiptId(eventId, txHash),
-        receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
+        receiptUrl: `/receipt/${paymentReceiptId(eventId, txHash)}`,
       }
+      if (hostedCheckoutIdForReceipt) await attachHostedCheckoutReceipt({ id: hostedCheckoutIdForReceipt, txHash, receiptId: result.receiptId, receiptUrl: result.receiptUrl })
       scheduleArchivePayment(entries[manualIndex], payer)
       return result
     }
@@ -533,8 +572,9 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
       ok: true,
       duplicate: true,
       receiptId: paymentReceiptId(eventId, txHash),
-      receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
+      receiptUrl: `/receipt/${paymentReceiptId(eventId, txHash)}`,
     }
+    if (hostedCheckoutIdForReceipt) await attachHostedCheckoutReceipt({ id: hostedCheckoutIdForReceipt, txHash, receiptId: result.receiptId, receiptUrl: result.receiptUrl })
     if (duplicate) scheduleArchivePayment(duplicate, payer)
     return result
   }
@@ -551,8 +591,9 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   const result = {
     ok: true,
     receiptId: paymentReceiptId(eventId, txHash),
-    receiptUrl: `/r/${paymentReceiptId(eventId, txHash)}`,
+    receiptUrl: `/receipt/${paymentReceiptId(eventId, txHash)}`,
   }
+  if (hostedCheckoutIdForReceipt) await attachHostedCheckoutReceipt({ id: hostedCheckoutIdForReceipt, txHash, receiptId: result.receiptId, receiptUrl: result.receiptUrl })
   if (agentSlug) {
     void appendAgentActivity({
       agentSlug,

@@ -69,6 +69,13 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
     amountNgn: intent.amountNgn,
     paycrestStatus: status,
     activityLabel: sandboxTest ? `${intent.category === 'tv' ? 'TV' : intent.category === 'electricity' ? 'Electricity' : intent.category === 'data' ? 'Data' : 'Airtime'} sandbox test` : 'Bill payment',
+    direction: 'out',
+    recipient: intent.serviceName,
+    destination: intent.phone,
+    billCategory: intent.category,
+    billProvider: intent.serviceName,
+    billTarget: intent.phone,
+    billReference: intent.requestId,
     ...(intent.providerTransactionId ? { providerReference: intent.providerTransactionId } : {}),
     ...(supportReference ? { supportReference } : {}),
     ...(intent.category === 'electricity' && intent.variationCode === 'prepaid' && intent.state === 'delivered' && intent.purchasedCode
@@ -134,6 +141,9 @@ function appPayActivityRow(item: CirclePocketActionRecord): PocketActivityRow | 
             : 'Circle Marketplace service purchase',
     settlementType: 'app_pay',
     paycrestStatus: status,
+    direction: 'out',
+    recipient: item.metadata?.provider || 'Marketplace service',
+    destination: item.metadata?.provider || 'Circle Marketplace',
   }
 }
 
@@ -156,8 +166,19 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     ...(value.amountNgn !== undefined ? { amountNgn: value.amountNgn } : {}),
     ...(value.paycrestStatus !== undefined ? { paycrestStatus: value.paycrestStatus } : {}),
     ...(value.activityLabel !== undefined ? { activityLabel: value.activityLabel } : {}),
+    ...(value.direction !== undefined ? { direction: value.direction } : {}),
+    ...(value.recipient !== undefined ? { recipient: value.recipient } : {}),
+    ...(value.destination !== undefined ? { destination: value.destination } : {}),
+    ...(value.bankName !== undefined ? { bankName: value.bankName } : {}),
+    ...(value.bankLast4 !== undefined ? { bankLast4: value.bankLast4 } : {}),
+    ...(value.accountName !== undefined ? { accountName: value.accountName } : {}),
     ...(value.providerReference !== undefined ? { providerReference: value.providerReference } : {}),
     ...(value.supportReference !== undefined ? { supportReference: value.supportReference } : {}),
+    ...(value.billToken !== undefined ? { billToken: value.billToken } : {}),
+    ...(value.billCategory !== undefined ? { billCategory: value.billCategory } : {}),
+    ...(value.billProvider !== undefined ? { billProvider: value.billProvider } : {}),
+    ...(value.billTarget !== undefined ? { billTarget: value.billTarget } : {}),
+    ...(value.billReference !== undefined ? { billReference: value.billReference } : {}),
     ...(value.refundAction !== undefined ? { refundAction: value.refundAction } : {}),
     ...(value.refundTxHash !== undefined ? { refundTxHash: value.refundTxHash } : {}),
   }

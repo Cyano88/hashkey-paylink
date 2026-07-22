@@ -3,14 +3,15 @@ import { AlertCircle, ArrowRight, ArrowUpFromLine, Bot, Check, ChevronDown, Copy
 import { Link, useParams } from 'react-router-dom'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 import { copyToClipboard } from '../lib/utils'
+import UnifiedReceipt from '../components/UnifiedReceipt'
+import type { PaylinkReceipt, ReceiptLookupResponse } from '../lib/paymentReceiptPdf'
 
 type CheckoutStatus = 'pending' | 'processing' | 'paid' | 'failed'
 type AgentCheckoutLookup = {
   ok?: boolean
-  checkout?: { id: string; kind: string; merchantName: string; title: string; description?: string; amount: string; flexible: boolean; network: string; availableNetworks: string[]; settlementMode: string; status: CheckoutStatus; settlementStatus?: string; expiresAt: string }
+  checkout?: { id: string; checkoutMode: 'human' | 'agentic'; agenticType?: 'creator_earnings' | 'agent_treasury'; kind: string; merchantName: string; title: string; description?: string; amount: string; flexible: boolean; network: string; availableNetworks: string[]; settlementMode: string; status: CheckoutStatus; settlementStatus?: string; expiresAt: string; paymentAttempt?: { id: string; status: CheckoutStatus; transaction?: string; payer?: string; confirmedAt?: string; receiptId?: string; receiptUrl?: string } }
   paymentUrl?: string
   agentPaymentUrl?: string
-  agentCheckoutUrl?: string
   returnUrl?: string
   error?: string
 }
@@ -32,19 +33,22 @@ function CheckoutShell({ children }: { children: ReactNode }) {
 
 export default function AgentCheckoutPage() {
   const { checkoutId = '' } = useParams()
+  const attemptId = new URLSearchParams(window.location.search).get('attempt') ?? ''
   const [lookup, setLookup] = useState<AgentCheckoutLookup>()
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [canonicalReceipt, setCanonicalReceipt] = useState<PaylinkReceipt | null>(null)
 
   useEffect(() => {
     let cancelled = false
     let timer: number | undefined
     async function loadCheckout() {
       try {
-        const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&purpose=return`, { cache: 'no-store' })
+        const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&attempt=${encodeURIComponent(attemptId)}&purpose=return`, { cache: 'no-store' })
         const body = await response.json().catch(() => undefined) as AgentCheckoutLookup | undefined
         if (!response.ok || !body?.ok || !body.checkout) throw new Error(body?.error || 'This checkout could not be opened.')
+        if (body.checkout.checkoutMode !== 'agentic') throw new Error('This checkout is reserved for human payment.')
         if (!body.agentPaymentUrl) throw new Error('This checkout is not available for agent wallets.')
         if (cancelled) return
         setLookup(body)
@@ -56,7 +60,23 @@ export default function AgentCheckoutPage() {
     }
     void loadCheckout()
     return () => { cancelled = true; if (timer) window.clearTimeout(timer) }
-  }, [checkoutId, refreshKey])
+  }, [attemptId, checkoutId, refreshKey])
+
+  useEffect(() => {
+    const receiptId = lookup?.checkout?.paymentAttempt?.receiptId
+    if (lookup?.checkout?.status !== 'paid' || !receiptId) {
+      setCanonicalReceipt(null)
+      return
+    }
+    let cancelled = false
+    void fetch(`/api/receipt?id=${encodeURIComponent(receiptId)}`, { cache: 'no-store' })
+      .then(async response => ({ response, body: await response.json().catch(() => undefined) as ReceiptLookupResponse | undefined }))
+      .then(({ response, body }) => {
+        if (!cancelled && response.ok && body?.ok && body.receipt) setCanonicalReceipt(body.receipt)
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [lookup?.checkout?.paymentAttempt?.receiptId, lookup?.checkout?.status])
 
   const agentPaymentUrl = useMemo(() => lookup?.agentPaymentUrl ? new URL(lookup.agentPaymentUrl, window.location.origin).toString() : '', [lookup?.agentPaymentUrl])
   async function copyEndpoint() {
@@ -82,10 +102,34 @@ export default function AgentCheckoutPage() {
   const { checkout } = lookup
   const network = NETWORK_LABELS[checkout.network] || checkout.network
   const reference = `${checkout.id.slice(0, 12)}...${checkout.id.slice(-4)}`
+  const paymentReference = checkout.paymentAttempt?.transaction || checkout.paymentAttempt?.id || checkout.id
+  const receiptReference = checkout.paymentAttempt?.receiptId || `hpl_${checkout.paymentAttempt?.id || checkout.id}`
   const walletNetwork = encodeURIComponent(checkout.network)
   const gatewayWalletUrl = checkout.network === 'arbitrum'
     ? `/agent?walletManager=service&n=arbitrum&returnTo=${encodeURIComponent(window.location.pathname)}`
     : `/pocket/home/x402?n=${walletNetwork}`
+
+  const agentReceipt: PaylinkReceipt = {
+      type: 'hashpaylink_agent_checkout_receipt',
+      receiptId: receiptReference,
+      receiptHash: receiptReference,
+      title: 'Agent payment confirmed',
+      status: 'confirmed',
+      eventId: checkout.id,
+      txHash: paymentReference,
+      chain: checkout.network,
+      payer: checkout.paymentAttempt?.payer || 'Circle Agent Wallet',
+      memo: checkout.title,
+      amount: checkout.amount,
+      asset: 'USDC',
+      createdAt: checkout.paymentAttempt?.confirmedAt ? Date.parse(checkout.paymentAttempt.confirmedAt) : Date.now(),
+      source: 'agentic-checkout',
+      merchantId: checkout.merchantName,
+      recipient: checkout.merchantName,
+      destination: `${network} · Circle Gateway`,
+      settlementType: 'circle-gateway-checkout',
+      proof: { receiptHash: receiptReference },
+    }
 
   if (checkout.status === 'paid') return <CheckoutShell>
     <div className="bg-gradient-to-b from-gray-50 to-white px-7 pb-7 pt-8 text-center dark:from-white/[0.04] dark:to-transparent">
@@ -96,10 +140,8 @@ export default function AgentCheckoutPage() {
       <p className="mt-6 text-4xl font-bold tracking-[-0.05em] text-gray-950 dark:text-white">{checkout.amount} <span className="text-xl text-gray-400">USDC</span></p>
     </div>
     <div className="px-7 pb-7">
-      <dl className="rounded-2xl border border-gray-200 px-4 dark:border-white/10">
-        <DetailRow label="Payment path" value="Circle Agent Wallet" /><DetailRow label="Protocol" value="Circle Gateway x402" /><DetailRow label="Network" value={network} /><DetailRow label="Checkout" value={reference} mono />
-      </dl>
-      {lookup.returnUrl ? <a href={lookup.returnUrl} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-black dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100">Return to {checkout.merchantName} <ExternalLink className="h-4 w-4" /></a> : <Link to="/" className="mt-5 flex h-12 w-full items-center justify-center rounded-full bg-gray-950 px-5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Done</Link>}
+      <UnifiedReceipt receipt={canonicalReceipt || agentReceipt} />
+      {lookup.returnUrl ? <a href={lookup.returnUrl} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-black dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100">Continue to {checkout.merchantName} <ExternalLink className="h-4 w-4" /></a> : <Link to="/" className="mt-5 flex h-12 w-full items-center justify-center rounded-full bg-gray-950 px-5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Done</Link>}
       <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] font-medium text-gray-400"><ShieldCheck className="h-3.5 w-3.5" /> Verified against the status used by signed webhooks</p>
     </div>
   </CheckoutShell>
@@ -131,7 +173,6 @@ export default function AgentCheckoutPage() {
           <Link to={`/pocket/home/smart-wallet?action=withdraw&n=${walletNetwork}`} className="flex min-h-11 items-center gap-3 rounded-xl px-3 transition hover:bg-gray-50 dark:hover:bg-white/[0.05]"><ArrowUpFromLine className="h-4 w-4 text-gray-400" /><span className="min-w-0 flex-1"><span className="block text-xs font-semibold text-gray-800 dark:text-gray-200">Withdraw USDC</span><span className="block text-[10px] text-gray-400">Open the authenticated wallet flow</span></span><ArrowRight className="h-3.5 w-3.5 text-gray-300" /></Link>
         </div>
       </details>
-      <Link to={`/pay/c/${encodeURIComponent(checkout.id)}`} className="mt-2 flex h-11 w-full items-center justify-center text-xs font-semibold text-gray-500 transition hover:text-gray-950 dark:text-gray-400 dark:hover:text-white">Use hosted checkout instead</Link>
       <p className="mt-2 text-center text-[10px] leading-4 text-gray-400">Compatible agents handle the x402 challenge and payment signature. Status updates automatically.</p>
     </div>
   </CheckoutShell>
