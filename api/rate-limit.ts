@@ -6,15 +6,15 @@ type RateLimitOptions = {
   name: string
 }
 
+const MAX_BUCKETS_PER_LIMITER = 10_000
+
 type Bucket = {
   resetAt: number
   count: number
 }
 
 function clientKey(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for']
-  const ip = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0]
-  return (ip ?? req.ip ?? req.socket.remoteAddress ?? 'unknown').trim()
+  return (req.ip || req.socket.remoteAddress || 'unknown').trim()
 }
 
 export function rateLimit({ windowMs, max, name }: RateLimitOptions) {
@@ -25,12 +25,24 @@ export function rateLimit({ windowMs, max, name }: RateLimitOptions) {
     const key = `${name}:${clientKey(req)}`
     const current = buckets.get(key)
 
+    res.setHeader('RateLimit-Limit', max.toString())
+
     if (!current || current.resetAt <= now) {
+      if (buckets.size >= MAX_BUCKETS_PER_LIMITER) {
+        for (const [bucketKey, bucket] of buckets) {
+          if (bucket.resetAt <= now) buckets.delete(bucketKey)
+        }
+        if (buckets.size >= MAX_BUCKETS_PER_LIMITER) buckets.delete(buckets.keys().next().value as string)
+      }
       buckets.set(key, { count: 1, resetAt: now + windowMs })
+      res.setHeader('RateLimit-Remaining', Math.max(0, max - 1).toString())
+      res.setHeader('RateLimit-Reset', Math.ceil((now + windowMs) / 1000).toString())
       return next()
     }
 
     current.count += 1
+    res.setHeader('RateLimit-Remaining', Math.max(0, max - current.count).toString())
+    res.setHeader('RateLimit-Reset', Math.ceil(current.resetAt / 1000).toString())
     if (current.count > max) {
       res.setHeader('Retry-After', Math.ceil((current.resetAt - now) / 1000).toString())
       return res.status(429).json({ ok: false, error: 'Too many requests. Try again shortly.' })

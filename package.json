@@ -54,7 +54,8 @@
     "test:partner-access": "node --import tsx scripts/partner-access-adapter-smoke.mjs",
     "test:developer-projects": "node --import tsx scripts/developer-projects-adapter-smoke.mjs",
     "test:hosted-checkouts": "node --import tsx scripts/hosted-checkouts-adapter-smoke.mjs",
-    "test:checkout": "npm run test:hosted-checkouts && npm run test:partner-access && npm run test:developer-projects && npm run test:usdc-transfer-verify && npm run test:payment-tx-lookup && npm run test:pocket-contracts",
+    "test:agentic-checkouts": "node --import tsx scripts/agentic-checkouts-adapter-smoke.mjs",
+    "test:checkout": "npm run test:hosted-checkouts && npm run test:agentic-checkouts && npm run test:partner-access && npm run test:developer-projects && npm run test:usdc-transfer-verify && npm run test:payment-tx-lookup && npm run test:pocket-contracts",
     "test:pocket-x402-adapter": "node --import tsx scripts/pocket-x402-adapter-smoke.mjs",
     "test:pocket-x402-connect-adapter": "node --import tsx scripts/pocket-x402-connect-adapter-smoke.mjs",
     "test:pocket-x402-activate-adapter": "node --import tsx scripts/pocket-x402-activate-adapter-smoke.mjs",
@@ -91,6 +92,7 @@
     "ethers": "^6.13.1",
     "express": "^4.19.2",
     "gsap": "^3.15.0",
+    "lenis": "^1.3.25",
     "lucide-react": "^0.414.0",
     "pg": "^8.21.0",
     "qrcode.react": "^4.2.0",
@@ -104,12 +106,13 @@
     "wagmi": "^2.12.11"
   },
   "overrides": {
-    "axios": "^1.15.2",
+    "axios": "^1.18.0",
     "hono": "^4.12.25",
     "undici": "^6.27.0",
     "websocket-driver": "^0.7.5",
     "protobufjs": "^7.6.3",
-    "@grpc/grpc-js": "^1.9.16"
+    "@grpc/grpc-js": "^1.9.16",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

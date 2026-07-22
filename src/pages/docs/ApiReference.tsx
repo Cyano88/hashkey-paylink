@@ -21,7 +21,7 @@ export default function ApiReference() {
         </SubSection>
         <SubSection title="POST /api/v2/checkouts">
           <p>Creates an immutable, expiring USDC or paid-service checkout. Private-beta credentials and an idempotency key are required.</p>
-          <CodeBlock lang="bash">{`curl -X POST https://hashpaylink.com/api/v2/checkouts \\
+          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/checkouts \\
   -H "X-API-Key: YOUR_SERVER_KEY" \\
   -H "Idempotency-Key: order:your-unique-order-id" \\
   -H "Content-Type: application/json" \\
@@ -32,11 +32,20 @@ export default function ApiReference() {
     "memo": "Order 1042",
     "returnUrl": "https://your-allowlisted-domain.example/complete"
   }'`}</CodeBlock>
-          <p>The response contains an expiring <code>checkoutUrl</code> such as <code>/pay/c/chk_...</code>. Platform identity and payment routing come from the API key's project. Recipient overrides are rejected. API keys stay server-side.</p>
+          <p>The response contains an expiring <code>checkoutUrl</code> such as <code>/pay/c/chk_...</code>. Fixed service checkouts also return <code>agentCheckoutUrl</code> for the branded observer and success UI, plus <code>agentPaymentUrl</code>, the Circle Gateway x402 endpoint for compatible agent wallets. Platform identity and payment routing come from the API key's project. Test keys route only to Arc Testnet; live keys route only to Base or Arbitrum mainnet. Recipient overrides are rejected. API keys stay server-side.</p>
+        </SubSection>
+        <SubSection title="Agent wallet path">
+          <p>Send a GET request to the returned <code>agentPaymentUrl</code>. The first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. A Circle Gateway x402-compatible wallet signs the payment and retries with <code>PAYMENT-SIGNATURE</code>. After Gateway verification and settlement, the endpoint returns the same checkout id and authoritative paid state used by hosted checkout and signed webhooks.</p>
+          <CodeBlock lang="text">{`Create service checkout
+  -> checkoutUrl       (person opens hosted UI)
+  -> agentCheckoutUrl  (agent observer and success UI)
+  -> agentPaymentUrl   (agent handles x402 challenge)
+  -> status + signed webhook confirm fulfillment`}</CodeBlock>
+          <p>Agentic payment is available only for fixed-price USDC service checkouts. Flexible requests and local-bank settlement remain on the hosted path.</p>
         </SubSection>
         <SubSection title="GET /api/v2/checkouts?purpose=status&amp;id=chk_...">
           <p>Returns the authoritative <code>pending</code>, <code>processing</code>, <code>paid</code>, or <code>expired</code> state, including the network paid. For Naira settlement, <code>processing</code> means the USDC deposit is confirmed but bank delivery is not final. Verify <code>paid</code> from your server before fulfillment.</p>
-          <CodeBlock lang="bash">{`curl "https://hashpaylink.com/api/v2/checkouts?purpose=status&id=chk_..." \\
+          <CodeBlock lang="bash">{`curl "https://app.hashpaylink.com/api/v2/checkouts?purpose=status&id=chk_..." \\
   -H "X-API-Key: YOUR_SERVER_KEY"`}</CodeBlock>
         </SubSection>
         <SubSection title="Signed webhooks">

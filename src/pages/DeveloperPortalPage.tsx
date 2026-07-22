@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
-import { Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, Webhook } from 'lucide-react'
+import { Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
@@ -28,7 +28,7 @@ type Project = {
   bankAccountLast4: string
   bankAccountNumber?: string
   bankVerifiedAt?: string
-  keys: Array<{ id: string; name: string; prefix: string; createdAt: string; revokedAt?: string }>
+  keys: Array<{ id: string; name: string; prefix: string; environment?: 'test' | 'live'; createdAt: string; revokedAt?: string }>
   webhookDeliveries?: Array<{ id: string; event: string; status: 'delivered' | 'failed'; responseStatus?: number; attemptedAt: string; error?: string }>
   updatedAt: string
 }
@@ -59,6 +59,7 @@ export default function DeveloperPortalPage() {
   const { ready, authenticated, user, getAccessToken, logout, linkWallet } = usePrivy()
   const wallet = useMemo(() => linkedEvmWallet(user), [user])
   const [projects, setProjects] = useState<Project[]>([])
+  const [authWaitExpired, setAuthWaitExpired] = useState(false)
   const [activeId, setActiveId] = useState('')
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -68,11 +69,18 @@ export default function DeveloperPortalPage() {
   const [newKey, setNewKey] = useState('')
   const [newWebhookSecret, setNewWebhookSecret] = useState('')
   const [keyName, setKeyName] = useState('Production backend')
+  const [keyEnvironment, setKeyEnvironment] = useState<'test' | 'live'>('test')
   const [createForm, setCreateForm] = useState({ name: '', website: '', useCase: '' })
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [institutionsLoading, setInstitutionsLoading] = useState(false)
   const active = projects.find(project => project.id === activeId) ?? projects[0]
   const [draft, setDraft] = useState<Project | null>(null)
+
+  useEffect(() => {
+    if (ready) { setAuthWaitExpired(false); return }
+    const timer = window.setTimeout(() => setAuthWaitExpired(true), 8_000)
+    return () => window.clearTimeout(timer)
+  }, [ready])
 
   async function api(method: string, body?: Record<string, unknown>) {
     const token = await getAccessToken()
@@ -157,7 +165,7 @@ export default function DeveloperPortalPage() {
     if (!active) return
     setBusy(true); setError(''); setNewKey('')
     try {
-      const data = await api('POST', { action: 'create-key', projectId: active.id, name: keyName })
+      const data = await api('POST', { action: 'create-key', projectId: active.id, name: keyName, environment: keyEnvironment })
       setNewKey(data.apiKey ?? '')
       await loadProjects()
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'API key could not be created.') }
@@ -183,7 +191,7 @@ export default function DeveloperPortalPage() {
     finally { setBusy(false) }
   }
 
-  if (!ready) return <PortalLoading />
+  if (!ready) return <PortalLoading delayed={authWaitExpired} />
 
   if (!authenticated) {
     return (
@@ -247,7 +255,7 @@ export default function DeveloperPortalPage() {
 
         <section className="min-w-0 flex-1 rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-7">
           {active && draft && tab === 'setup' && <SetupPanel draft={draft} setDraft={setDraft} wallet={wallet} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onLinkWallet={linkWallet} onSave={saveProject} />}
-          {active && tab === 'keys' && <KeysPanel project={active} keyName={keyName} setKeyName={setKeyName} newKey={newKey} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
+          {active && tab === 'keys' && <KeysPanel project={active} keyName={keyName} setKeyName={setKeyName} keyEnvironment={keyEnvironment} setKeyEnvironment={setKeyEnvironment} newKey={newKey} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
           {active && draft && tab === 'webhooks' && <WebhookPanel draft={draft} setDraft={setDraft} newSecret={newWebhookSecret} busy={busy} onSave={saveProject} onRotate={rotateWebhookSecret} />}
           {active && tab === 'quickstart' && <QuickstartPanel project={active} />}
           {error && <Message tone="error">{error}</Message>}
@@ -314,10 +322,11 @@ function SetupPanel({ draft, setDraft, wallet, institutions, institutionsLoading
   </div>
 }
 
-function KeysPanel({ project, keyName, setKeyName, newKey, busy, onCreate, onRevoke }: { project: Project; keyName: string; setKeyName: (value: string) => void; newKey: string; busy: boolean; onCreate: () => void; onRevoke: (id: string) => void }) {
+function KeysPanel({ project, keyName, setKeyName, keyEnvironment, setKeyEnvironment, newKey, busy, onCreate, onRevoke }: { project: Project; keyName: string; setKeyName: (value: string) => void; keyEnvironment: 'test' | 'live'; setKeyEnvironment: (value: 'test' | 'live') => void; newKey: string; busy: boolean; onCreate: () => void; onRevoke: (id: string) => void }) {
   return <div><PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend and inherit this project’s trusted checkout routing." />
     {newKey && <SecretReveal label="Copy this key now" value={newKey} />}
-    <div className="mt-6 flex flex-col gap-3 sm:flex-row"><input className={fieldClass()} value={keyName} onChange={event => setKeyName(event.target.value)} placeholder="Key name" /><button type="button" disabled={busy || project.settlementStatus !== 'ready'} onClick={onCreate} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create key</button></div>
+    <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_160px_auto]"><input className={fieldClass()} value={keyName} onChange={event => setKeyName(event.target.value)} placeholder="Key name" /><PocketSelect value={keyEnvironment} options={[{ value: 'test', label: 'Test key' }, { value: 'live', label: 'Live key' }]} onChange={value => setKeyEnvironment(value as 'test' | 'live')} ariaLabel="API key environment" /><button type="button" disabled={busy || project.settlementStatus !== 'ready'} onClick={onCreate} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create key</button></div>
+    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Test keys route only to Arc Testnet. Live keys route only to Base or Arbitrum mainnet.</p>
     {project.settlementStatus !== 'ready' && <p className="mt-2 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
     <div className="mt-6 space-y-2">{project.keys.length ? project.keys.map(key => <div key={key.id} className="flex items-center gap-3 rounded-2xl border border-gray-200 px-4 py-3 dark:border-white/10"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300"><KeyRound className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{key.name}</p><p className="mt-0.5 font-mono text-[10px] text-gray-400">{key.prefix}••••</p></div>{key.revokedAt ? <span className="text-[10px] font-semibold text-gray-400">Revoked</span> : <button type="button" onClick={() => onRevoke(key.id)} className="text-[10px] font-semibold text-red-500">Revoke</button>}</div>) : <EmptyState icon={KeyRound} text="No API keys yet." />}</div>
   </div>
@@ -335,16 +344,37 @@ function WebhookPanel({ draft, setDraft, newSecret, busy, onSave, onRotate }: { 
 }
 
 function QuickstartPanel({ project }: { project: Project }) {
-  const code = `const checkout = await fetch("https://hashpaylink.com/api/v2/checkouts", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASH_PAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    kind: "service",\n    title: "Premium plan",\n    amount: "10",\n    returnUrl: "${project.allowedOrigins[0] ?? project.website}/complete"\n  })\n}).then(res => res.json());`
-  return <div><PanelHeader eyebrow="Integration" title="Create your first checkout" copy="Your platform, wallets and supported networks come from the project—not from each request." />
-    <div className="mt-7 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Server only</span><CopyButton value={code} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-[11px] leading-5 text-white/70">{code}</pre></div>
-    <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="text-xs font-semibold text-gray-900 dark:text-white">Environment</p><code className="mt-2 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_live_...</code></div>
+  const [paymentPath, setPaymentPath] = useState<'hosted' | 'agentic'>('hosted')
+  const createCode = `const checkout = await fetch("https://app.hashpaylink.com/api/v2/checkouts", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASH_PAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    kind: "service",\n    title: "Premium plan",\n    amount: "10",\n    returnUrl: "${project.allowedOrigins[0] ?? project.website}/complete"\n  })\n}).then(res => res.json());`
+  const code = paymentPath === 'hosted'
+    ? `${createCode}\n\n// Send a person to Hash PayLink's hosted checkout.\nwindow.location.assign(new URL(checkout.checkoutUrl, "https://app.hashpaylink.com"));`
+    : `${createCode}\n\n// Open this observer UI for a person supervising an agent payment.\nconst agentCheckoutUrl = new URL(\n  checkout.agentCheckoutUrl,\n  "https://app.hashpaylink.com"\n).toString();\n\n// Give this machine endpoint to a Circle Gateway x402-compatible wallet.\n// The first GET returns HTTP 402 + PAYMENT-REQUIRED.\nconst agentPaymentUrl = new URL(\n  checkout.agentPaymentUrl,\n  "https://app.hashpaylink.com"\n).toString();`
+  return <div><PanelHeader eyebrow="Integration" title="Create your first checkout" copy="One server-created checkout exposes a hosted path for people and an x402 path for compatible agent wallets." />
+    <div className="mt-7 grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.05]">
+      <button type="button" onClick={() => setPaymentPath('hosted')} className={cn('flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold transition', paymentPath === 'hosted' ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}><UserRound className="h-4 w-4" /> Hosted UI</button>
+      <button type="button" onClick={() => setPaymentPath('agentic')} className={cn('flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold transition', paymentPath === 'agentic' ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}><Bot className="h-4 w-4" /> Agent wallet</button>
+    </div>
+    <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Server only</span><CopyButton value={code} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-[11px] leading-5 text-white/70">{code}</pre></div>
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="flex items-center gap-2 text-xs font-semibold text-gray-900 dark:text-white"><UserRound className="h-4 w-4 text-blue-600" /> Hosted checkout</p><p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">Open <code>checkoutUrl</code>. Hash PayLink handles wallet execution, network selection, confirmation, and return.</p></div>
+      <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="flex items-center gap-2 text-xs font-semibold text-gray-900 dark:text-white"><Bot className="h-4 w-4 text-blue-600" /> Agentic checkout</p><p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">Open <code>agentCheckoutUrl</code> for the branded observer and success UI. The wallet calls <code>agentPaymentUrl</code>; both resolve to the same signed status.</p></div>
+    </div>
+    <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="text-xs font-semibold text-gray-900 dark:text-white">Environment</p><code className="mt-2 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_test_... # Arc Testnet</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_live_... # Base or Arbitrum</code></div>
     <Link to="/docs/api" className="mt-5 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-300">Open API reference <ChevronRight className="h-3.5 w-3.5" /></Link>
   </div>
 }
 
 function PortalTop({ onLogout }: { onLogout: () => Promise<void> }) { return <header className="flex items-center justify-between"><Link to="/" className="text-sm font-bold text-gray-950 dark:text-white">Hash PayLink <span className="font-medium text-gray-400">Developers</span></Link><button type="button" onClick={() => void onLogout()} className="flex h-9 items-center gap-1.5 rounded-full border border-gray-200 px-3 text-xs font-semibold text-gray-500 dark:border-white/10 dark:text-gray-300"><LogOut className="h-3.5 w-3.5" /> Sign out</button></header> }
-function PortalLoading() { return <main className="flex min-h-[70dvh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></main> }
+function PortalLoading({ delayed = false }: { delayed?: boolean }) {
+  return <main className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-xl items-center px-4 py-12">
+    <section className="w-full rounded-[1.75rem] border border-gray-200 bg-white p-7 text-center shadow-[0_24px_80px_rgba(15,23,42,.08)] dark:border-white/10 dark:bg-[#111216]">
+      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300"><Loader2 className="h-5 w-5 animate-spin" /></span>
+      <h1 className="mt-5 text-xl font-semibold tracking-[-0.03em] text-gray-950 dark:text-white">Securing your developer session</h1>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">Checking Privy identity before loading projects, API keys, and payment routing.</p>
+      {delayed && <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-left dark:border-amber-400/20 dark:bg-amber-400/10"><p className="text-xs leading-5 text-amber-800 dark:text-amber-200">Identity verification is taking longer than expected. Check your connection, then retry.</p><button type="button" onClick={() => window.location.reload()} className="mt-3 h-9 rounded-full bg-gray-950 px-4 text-[10px] font-semibold text-white dark:bg-white dark:text-gray-950">Retry securely</button></div>}
+    </section>
+  </main>
+}
 function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) { return <label className={cn('block space-y-1.5', className)}><span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{label}</span>{children}</label> }
 function PanelHeader({ eyebrow, title, copy, status }: { eyebrow: string; title: string; copy: string; status?: string }) { return <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">{eyebrow}</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">{title}</h1><p className="mt-2 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">{copy}</p></div>{status && <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide', status === 'Active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300')}>{status}</span>}</div> }
 function Message({ tone, children }: { tone: 'error' | 'success'; children: React.ReactNode }) { return <p className={cn('mt-5 rounded-xl border px-3 py-2 text-xs font-medium', tone === 'error' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200')}>{children}</p> }

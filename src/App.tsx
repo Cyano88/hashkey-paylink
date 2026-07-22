@@ -4,6 +4,7 @@ import FoundationPage from './pages/FoundationPage'
 import CreateLink from './pages/CreateLink'
 import PaymentPage from './pages/PaymentPage'
 import HostedCheckoutEntry from './pages/HostedCheckoutEntry'
+import AgentCheckoutPage from './pages/AgentCheckoutPage'
 import DeveloperPortalPage from './pages/DeveloperPortalPage'
 import Dashboard from './pages/Dashboard'
 import EventDashboard from './pages/EventDashboard'
@@ -68,6 +69,7 @@ export default function App() {
       <Route path="polymarket" element={<CreateLink initialProduct="polymarket" />} />
       <Route path="pay" element={<PaymentPage />} />
       <Route path="pay/c/:checkoutId" element={<HostedCheckoutEntry />} />
+      <Route path="pay/a/:checkoutId" element={<AgentCheckoutPage />} />
       <Route path="developers" element={<DeveloperPortalPage />} />
       <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />
       <Route path="dashboard" element={<Dashboard />} />

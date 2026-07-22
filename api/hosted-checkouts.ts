@@ -9,17 +9,30 @@ const NETWORKS = new Set(['base', 'arbitrum', 'arc'])
 const KINDS = new Set(['usdc_request', 'service'])
 const CHECKOUT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000
 const MAX_CHECKOUT_RECORDS = 20_000
+const WEBHOOK_EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000
+const MAX_TERMINAL_WEBHOOK_EVENTS = 10_000
+const WEBHOOK_LEASE_MS = 30_000
+const WEBHOOK_MAX_ATTEMPTS = 12
+const WEBHOOK_RETRY_DELAYS_MS = [10_000, 30_000, 2 * 60_000, 10 * 60_000, 60 * 60_000]
 
 export type HostedCheckoutNetwork = 'base' | 'arbitrum' | 'arc'
 export type HostedCheckoutPaymentOption = { network: HostedCheckoutNetwork; recipient: string }
 type PartnerPolicy = { partnerId: string; allowedOrigins: string[] } | DeveloperCheckoutPolicy
 type HostedCheckoutPayment = {
   status: 'processing' | 'paid' | 'failed'
+  referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer'
   txHash: string
   payer: string
   amount: string
   confirmedAt: string
   network?: HostedCheckoutNetwork
+}
+export type HostedCheckoutAgenticAttempt = {
+  signatureHash: string
+  nonce: string
+  payer: string
+  network: HostedCheckoutNetwork
+  startedAt: string
 }
 type HostedCheckoutSettlement = {
   mode: 'ngn'
@@ -53,15 +66,30 @@ export type CheckoutRecord = {
   payout?: { status: string; deliveredAt?: string }
   integrity: string
   payment?: HostedCheckoutPayment
+  agenticAttempts?: HostedCheckoutAgenticAttempt[]
 }
-type CheckoutStore = { checkouts: Record<string, CheckoutRecord>; idempotency: Record<string, string> }
+export type HostedCheckoutWebhookEvent = {
+  id: string
+  partnerId: string
+  event: string
+  data: Record<string, unknown>
+  createdAt: string
+  attempts: number
+  nextAttemptAt: string
+  status: 'pending' | 'delivering' | 'delivered' | 'dead'
+  leaseUntil?: string
+  deliveredAt?: string
+  deadAt?: string
+  lastError?: string
+}
+type CheckoutStore = { checkouts: Record<string, CheckoutRecord>; idempotency: Record<string, string>; outbox?: HostedCheckoutWebhookEvent[] }
 
 type Dependencies = {
   hasStore: () => boolean
   read: (key: string) => Promise<CheckoutStore | undefined>
   mutate: (key: string, update: (current: CheckoutStore | undefined) => CheckoutStore) => Promise<CheckoutStore>
   policy: (req: Request) => PartnerPolicy | null | Promise<PartnerPolicy | null>
-  notify: (partnerId: string, event: string, data: Record<string, unknown>) => Promise<void>
+  notify: (partnerId: string, event: string, data: Record<string, unknown>, delivery?: { eventId: string; createdAt: string }) => Promise<void>
   prepareNaira: typeof prepareDeveloperNairaCheckout
   signingSecret: () => string
   createId: () => string
@@ -113,6 +141,83 @@ const defaults: Dependencies = {
   signingSecret: () => (process.env.HOSTED_CHECKOUT_SIGNING_SECRET ?? '').trim(),
   createId: () => `chk_${randomUUID().replace(/-/g, '').slice(0, 20)}`,
   now: () => new Date(),
+}
+
+function enqueueWebhook(store: CheckoutStore, partnerId: string, event: string, data: Record<string, unknown>, now: Date) {
+  const createdAt = now.toISOString()
+  const item: HostedCheckoutWebhookEvent = {
+    id: `evt_${randomUUID().replace(/-/g, '').slice(0, 20)}`,
+    partnerId,
+    event,
+    data,
+    createdAt,
+    attempts: 0,
+    nextAttemptAt: createdAt,
+    status: 'pending',
+  }
+  return { ...store, outbox: [...(store.outbox ?? []), item] }
+}
+
+export async function drainHostedCheckoutWebhookOutbox(dependencies: Dependencies = defaults, maxEvents = 10) {
+  if (!dependencies.hasStore()) return 0
+  let delivered = 0
+  for (let index = 0; index < Math.max(0, Math.min(maxEvents, 100)); index += 1) {
+    let claimed: HostedCheckoutWebhookEvent | undefined
+    const claimedAt = dependencies.now()
+    await dependencies.mutate(STORE_KEY, current => {
+      const safe = current ?? { checkouts: {}, idempotency: {} }
+      const nowMs = claimedAt.getTime()
+      const candidate = (safe.outbox ?? []).find(item =>
+        (item.status === 'pending' && Date.parse(item.nextAttemptAt) <= nowMs)
+        || (item.status === 'delivering' && Date.parse(item.leaseUntil ?? '') <= nowMs)
+      )
+      if (!candidate) return safe
+      claimed = {
+        ...candidate,
+        status: 'delivering',
+        attempts: candidate.attempts + 1,
+        leaseUntil: new Date(nowMs + WEBHOOK_LEASE_MS).toISOString(),
+      }
+      return { ...safe, outbox: (safe.outbox ?? []).map(item => item.id === candidate.id ? claimed! : item) }
+    })
+    if (!claimed) break
+
+    let failure = ''
+    try {
+      await dependencies.notify(claimed.partnerId, claimed.event, claimed.data, { eventId: claimed.id, createdAt: claimed.createdAt })
+    } catch (error) {
+      failure = error instanceof Error ? error.message.slice(0, 240) : 'Webhook delivery failed.'
+    }
+    const completedAt = dependencies.now()
+    await dependencies.mutate(STORE_KEY, current => {
+      const safe = current ?? { checkouts: {}, idempotency: {} }
+      return {
+        ...safe,
+        outbox: (safe.outbox ?? []).map(item => {
+          if (item.id !== claimed!.id || item.status !== 'delivering') return item
+          if (!failure) return { ...item, status: 'delivered' as const, deliveredAt: completedAt.toISOString(), leaseUntil: undefined, lastError: undefined }
+          const dead = item.attempts >= WEBHOOK_MAX_ATTEMPTS
+          const delay = WEBHOOK_RETRY_DELAYS_MS[Math.min(item.attempts - 1, WEBHOOK_RETRY_DELAYS_MS.length - 1)]
+          return {
+            ...item,
+            status: dead ? 'dead' as const : 'pending' as const,
+            nextAttemptAt: new Date(completedAt.getTime() + delay).toISOString(),
+            leaseUntil: undefined,
+            deadAt: dead ? completedAt.toISOString() : undefined,
+            lastError: failure,
+          }
+        }),
+      }
+    })
+    if (!failure) delivered += 1
+  }
+  return delivered
+}
+
+function startWebhookDrain(dependencies: Dependencies) {
+  void drainHostedCheckoutWebhookOutbox(dependencies).catch(error => {
+    console.error('[developer-webhook] outbox drain failed:', error instanceof Error ? error.message : String(error))
+  })
 }
 
 function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
@@ -197,6 +302,7 @@ export async function markHostedCheckoutPaid(input: {
   amount: string
   confirmedAt: string
   network?: string
+  referenceType?: 'evm_tx_hash' | 'circle_gateway_transfer'
 }, dependencies: Dependencies = defaults) {
   const id = clean(input.id, 80)
   if (!/^chk_[a-zA-Z0-9]{8,40}$/.test(id)) throw new Error('Invalid hosted checkout id.')
@@ -205,8 +311,10 @@ export async function markHostedCheckoutPaid(input: {
   const amount = normalizePositiveUsdc(input.amount)
   const confirmedAt = clean(input.confirmedAt, 40)
   const requestedNetwork = clean(input.network, 20).toLowerCase()
+  const referenceType = input.referenceType ?? 'evm_tx_hash'
   const confirmedAtMs = Date.parse(confirmedAt)
-  if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) throw new Error('Invalid hosted checkout transaction hash.')
+  if (referenceType === 'evm_tx_hash' && !/^0x[a-fA-F0-9]{64}$/.test(txHash)) throw new Error('Invalid hosted checkout transaction hash.')
+  if (referenceType === 'circle_gateway_transfer' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(txHash)) throw new Error('Invalid Circle Gateway transfer id.')
   if (!isAddress(payer)) throw new Error('Invalid hosted checkout payer.')
   if (!amount) throw new Error('Invalid hosted checkout amount.')
   if (!Number.isFinite(confirmedAtMs)) throw new Error('Invalid hosted checkout confirmation time.')
@@ -227,7 +335,8 @@ export async function markHostedCheckoutPaid(input: {
     const expiresAtMs = Date.parse(record.expiresAt)
     if (!Number.isFinite(createdAtMs) || !Number.isFinite(expiresAtMs)) throw new Error('Hosted checkout has an invalid payment window.')
     if (confirmedAtMs < createdAtMs) throw new Error('Hosted checkout payment confirmed before creation.')
-    if (confirmedAtMs > expiresAtMs) throw new Error('Hosted checkout payment confirmed after expiry.')
+    const gatewaySettlementGrace = referenceType === 'circle_gateway_transfer' ? 5 * 60_000 : 0
+    if (confirmedAtMs > expiresAtMs + gatewaySettlementGrace) throw new Error('Hosted checkout payment confirmed after expiry.')
     const reusedBy = Object.values(safe.checkouts).find(item =>
       item.id !== id && item.payment?.txHash.toLowerCase() === txHash.toLowerCase()
     )
@@ -241,6 +350,7 @@ export async function markHostedCheckoutPaid(input: {
     newlyPaid = !record.payment
     const payment: HostedCheckoutPayment = record.payment ?? {
       status: record.settlement && record.payout?.status !== 'validated' && record.payout?.status !== 'settled' ? 'processing' : 'paid',
+      referenceType,
       txHash,
       payer: getAddress(payer),
       amount,
@@ -248,20 +358,71 @@ export async function markHostedCheckoutPaid(input: {
       network: selectedNetwork as HostedCheckoutNetwork,
     }
     result = { ...record, payment }
-    return { ...safe, checkouts: { ...safe.checkouts, [id]: result } }
+    let updated: CheckoutStore = { ...safe, checkouts: { ...safe.checkouts, [id]: result } }
+    if (newlyPaid) updated = enqueueWebhook(updated, record.partnerId, payment.status === 'paid' ? 'payment.confirmed' : 'payment.processing', {
+      checkoutId: record.id,
+      status: payment.status,
+      network: payment.network ?? record.network,
+      amount: payment.amount,
+      payer: payment.payer,
+      ...(payment.referenceType === 'circle_gateway_transfer'
+        ? { gatewayTransferId: payment.txHash }
+        : { transactionHash: payment.txHash }),
+      confirmedAt: payment.confirmedAt,
+    }, dependencies.now())
+    return updated
   })
   if (!result) throw new Error('Hosted checkout could not be updated.')
-  const paidRecord = result as CheckoutRecord
-  if (newlyPaid) void dependencies.notify(paidRecord.partnerId, paidRecord.payment?.status === 'paid' ? 'payment.confirmed' : 'payment.processing', {
-    checkoutId: paidRecord.id,
-    status: paidRecord.payment?.status,
-    network: paidRecord.payment?.network ?? paidRecord.network,
-    amount: paidRecord.payment?.amount,
-    payer: paidRecord.payment?.payer,
-    transactionHash: paidRecord.payment?.txHash,
-    confirmedAt: paidRecord.payment?.confirmedAt,
-  }).catch(error => console.error('[developer-webhook] payment confirmation delivery failed:', error instanceof Error ? error.message : String(error)))
-  return { ...result }
+  if (newlyPaid) startWebhookDrain(dependencies)
+  return { ...(result as CheckoutRecord) }
+}
+
+export async function beginHostedCheckoutAgenticAttempt(input: {
+  id: string
+  signatureHash: string
+  nonce: string
+  payer: string
+  network: string
+  startedAt: string
+}, dependencies: Dependencies = defaults) {
+  const id = clean(input.id, 80)
+  const signatureHash = clean(input.signatureHash, 64).toLowerCase()
+  const nonce = clean(input.nonce, 80).toLowerCase()
+  const payer = clean(input.payer, 80)
+  const network = clean(input.network, 20).toLowerCase()
+  const startedAtMs = Date.parse(input.startedAt)
+  if (!/^chk_[a-zA-Z0-9]{8,40}$/.test(id)) throw new Error('Invalid hosted checkout id.')
+  if (!/^[a-f0-9]{64}$/.test(signatureHash)) throw new Error('Invalid agent payment signature hash.')
+  if (!/^0x[a-f0-9]{64}$/.test(nonce)) throw new Error('Invalid agent payment nonce.')
+  if (!isAddress(payer)) throw new Error('Invalid agent payment payer.')
+  if (!NETWORKS.has(network)) throw new Error('Invalid agent payment network.')
+  if (!Number.isFinite(startedAtMs)) throw new Error('Invalid agent payment start time.')
+  const secret = dependencies.signingSecret()
+  if (!dependencies.hasStore() || secret.length < 32) throw new Error('Hosted checkout storage is unavailable.')
+  let result: CheckoutRecord | null = null
+  await dependencies.mutate(STORE_KEY, current => {
+    const safe = current ?? { checkouts: {}, idempotency: {} }
+    const record = safe.checkouts[id]
+    if (!record || !integrityValid(record, secret)) throw new Error('Hosted checkout is invalid.')
+    if (record.kind !== 'service' || record.flexible || record.settlement) throw new Error('Hosted checkout is not eligible for agentic payment.')
+    if (!hostedCheckoutPaymentOption(record, network)) throw new Error('Agent payment network is invalid.')
+    if (startedAtMs < Date.parse(record.createdAt) || startedAtMs > Date.parse(record.expiresAt)) throw new Error('Agent payment started outside the checkout window.')
+    const attempt: HostedCheckoutAgenticAttempt = {
+      signatureHash,
+      nonce,
+      payer: getAddress(payer),
+      network: network as HostedCheckoutNetwork,
+      startedAt: new Date(startedAtMs).toISOString(),
+    }
+    // Reconcile every saved attempt before accepting another one. Keep a wider
+    // bounded journal to tolerate delayed Circle transfer indexing without
+    // allowing unbounded attacker-controlled growth in the durable record.
+    const attempts = [...(record.agenticAttempts ?? []).filter(item => item.signatureHash !== signatureHash), attempt].slice(-20)
+    result = { ...record, agenticAttempts: attempts }
+    return { ...safe, checkouts: { ...safe.checkouts, [id]: result } }
+  })
+  if (!result) throw new Error('Agent payment attempt could not be recorded.')
+  return { ...(result as CheckoutRecord) }
 }
 
 export async function markHostedCheckoutNairaPayout(input: { intentId: string; status: string }, dependencies: Dependencies = defaults) {
@@ -289,31 +450,27 @@ export async function markHostedCheckoutNairaPayout(input: { intentId: string; s
       },
       ...(record.payment ? { payment: { ...record.payment, status: nextPaymentStatus } } : {}),
     }
-    return { ...safe, checkouts: { ...safe.checkouts, [record.id]: result } }
-  })
-  if (newlyDelivered && result) {
-    const record = result as CheckoutRecord
-    void dependencies.notify(record.partnerId, 'payment.confirmed', {
+    let updated: CheckoutStore = { ...safe, checkouts: { ...safe.checkouts, [record.id]: result } }
+    if (newlyDelivered) updated = enqueueWebhook(updated, record.partnerId, 'payment.confirmed', {
       checkoutId: record.id,
       status: 'paid',
       settlementCurrency: 'NGN',
       settlementAmount: record.settlement?.amountNgn,
       providerStatus: status,
       transactionHash: record.payment?.txHash,
-      confirmedAt: record.payout?.deliveredAt,
-    }).catch(error => console.error('[developer-webhook] Naira payout delivery failed:', error instanceof Error ? error.message : String(error)))
-  }
-  if (newlyFailed && result) {
-    const record = result as CheckoutRecord
-    void dependencies.notify(record.partnerId, 'payment.failed', {
+      confirmedAt: (result as CheckoutRecord).payout?.deliveredAt,
+    }, dependencies.now())
+    if (newlyFailed) updated = enqueueWebhook(updated, record.partnerId, 'payment.failed', {
       checkoutId: record.id,
       status: 'failed',
       settlementCurrency: 'NGN',
       settlementStatus: status,
       amount: record.payment?.amount,
       transactionHash: record.payment?.txHash,
-    }).catch(error => console.error('[developer-webhook] Naira settlement failure delivery failed:', error instanceof Error ? error.message : String(error)))
-  }
+    }, dependencies.now())
+    return updated
+  })
+  if (newlyDelivered || newlyFailed) startWebhookDrain(dependencies)
   return result
 }
 
@@ -341,9 +498,16 @@ function pruneCheckoutStore(store: CheckoutStore, nowMs: number) {
     .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))
     .slice(-MAX_CHECKOUT_RECORDS)
   const retainedIds = new Set(retained.map(record => record.id))
+  const activeWebhookEvents = (store.outbox ?? []).filter(item => item.status === 'pending' || item.status === 'delivering')
+  const terminalWebhookEvents = (store.outbox ?? [])
+    .filter(item => item.status === 'delivered' || item.status === 'dead')
+    .filter(item => Date.parse(item.deliveredAt ?? item.deadAt ?? item.createdAt) >= nowMs - WEBHOOK_EVENT_RETENTION_MS)
+    .sort((left, right) => Date.parse(left.deliveredAt ?? left.deadAt ?? left.createdAt) - Date.parse(right.deliveredAt ?? right.deadAt ?? right.createdAt))
+    .slice(-MAX_TERMINAL_WEBHOOK_EVENTS)
   return {
     checkouts: Object.fromEntries(retained.map(record => [record.id, record])),
     idempotency: Object.fromEntries(Object.entries(store.idempotency).filter(([, id]) => retainedIds.has(id))),
+    outbox: [...activeWebhookEvents, ...terminalWebhookEvents],
   }
 }
 
@@ -452,6 +616,15 @@ function checkoutPaymentUrl(record: CheckoutRecord) {
   return `/pay?${params.toString()}`
 }
 
+export function hostedCheckoutAgentPaymentUrl(record: Pick<CheckoutRecord, 'id' | 'kind' | 'flexible' | 'settlement'>) {
+  if (record.kind !== 'service' || record.flexible || record.settlement) return ''
+  return `/api/v2/checkouts/agent?id=${encodeURIComponent(record.id)}`
+}
+
+export function hostedCheckoutAgentUiUrl(record: Pick<CheckoutRecord, 'id' | 'kind' | 'flexible' | 'settlement'>) {
+  return hostedCheckoutAgentPaymentUrl(record) ? `/pay/a/${encodeURIComponent(record.id)}` : ''
+}
+
 export function createHostedCheckoutsHandler(dependencies: Dependencies = defaults) {
   return async function hostedCheckoutsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
@@ -503,6 +676,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           expiresAt: record.expiresAt,
         },
         paymentUrl: checkoutPaymentUrl(record),
+        ...(hostedCheckoutAgentPaymentUrl(record) ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(record) } : {}),
+        ...(hostedCheckoutAgentUiUrl(record) ? { agentCheckoutUrl: hostedCheckoutAgentUiUrl(record) } : {}),
         ...(req.query?.purpose === 'return' && record.returnUrl ? { returnUrl: record.returnUrl } : {}),
       })
     }
@@ -576,7 +751,15 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if (existingRecord) {
       if (!integrityValid(existingRecord, secret)) return res.status(409).json({ ok: false, error: 'Checkout integrity verification failed.' })
       if (existingRecord.requestHash !== requestHash) return res.status(409).json({ ok: false, error: 'Idempotency-Key was already used for a different checkout request.' })
-      return res.status(200).json({ ok: true, replayed: true, checkoutId: existingRecord.id, checkoutUrl: `/pay/c/${encodeURIComponent(existingRecord.id)}`, expiresAt: existingRecord.expiresAt })
+      return res.status(200).json({
+        ok: true,
+        replayed: true,
+        checkoutId: existingRecord.id,
+        checkoutUrl: `/pay/c/${encodeURIComponent(existingRecord.id)}`,
+        ...(hostedCheckoutAgentPaymentUrl(existingRecord) ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(existingRecord) } : {}),
+        ...(hostedCheckoutAgentUiUrl(existingRecord) ? { agentCheckoutUrl: hostedCheckoutAgentUiUrl(existingRecord) } : {}),
+        expiresAt: existingRecord.expiresAt,
+      })
     }
     let createdId = isNairaProject ? dependencies.createId() : ''
     let replayed = false
@@ -630,26 +813,31 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         } } : {}),
       }
       const record: CheckoutRecord = { ...unsigned, integrity: sign(unsigned, secret) }
-      return {
+      const updated: CheckoutStore = {
+        ...safe,
         checkouts: { ...safe.checkouts, [createdId]: record },
         idempotency: { ...safe.idempotency, [`${policy.partnerId}:${idempotencyKey}`]: createdId },
       }
+      return enqueueWebhook(updated, record.partnerId, 'checkout.created', {
+        checkoutId: record.id,
+        status: 'pending',
+        amount: record.amount,
+        flexible: record.flexible,
+        availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
+        paymentPaths: hostedCheckoutAgentPaymentUrl(record) ? ['hosted', 'agentic'] : ['hosted'],
+        expiresAt: record.expiresAt,
+      }, now)
     })
     if (idempotencyConflict) return res.status(409).json({ ok: false, error: 'Idempotency-Key was already used for a different checkout request.' })
     const record = store.checkouts[createdId]
-    if (!replayed) void dependencies.notify(record.partnerId, 'checkout.created', {
-      checkoutId: record.id,
-      status: 'pending',
-      amount: record.amount,
-      flexible: record.flexible,
-      availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
-      expiresAt: record.expiresAt,
-    }).catch(error => console.error('[developer-webhook] checkout delivery failed:', error instanceof Error ? error.message : String(error)))
+    if (!replayed) startWebhookDrain(dependencies)
     return res.status(replayed ? 200 : 201).json({
       ok: true,
       replayed,
       checkoutId: record.id,
       checkoutUrl: `/pay/c/${encodeURIComponent(record.id)}`,
+      ...(hostedCheckoutAgentPaymentUrl(record) ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(record) } : {}),
+      ...(hostedCheckoutAgentUiUrl(record) ? { agentCheckoutUrl: hostedCheckoutAgentUiUrl(record) } : {}),
       expiresAt: record.expiresAt,
     })
     } catch (error) {

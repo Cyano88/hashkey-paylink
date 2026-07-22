@@ -138,6 +138,14 @@ services:
         value: "true"                 # required for reader wallet login, x402 balance checks, Gateway activation, and x402 pay
       - key: DATABASE_URL
         sync: false                   # Render Postgres for durable platform storage
+      - key: HOSTED_CHECKOUT_SIGNING_SECRET
+        sync: false                   # stable 32+ character HMAC secret; never rotate without a checkout migration
+      - key: HOSTED_CHECKOUT_STORE_KEY
+        value: "hashpaylink:hosted-checkouts:v2"
+      - key: DEVELOPER_PORTAL_SECRET
+        sync: false                   # stable 32+ character encryption and API-key digest secret
+      - key: DEVELOPER_PROJECT_STORE_KEY
+        value: "hashpaylink:developer-projects:v1"
       - key: HASH_PAYLINK_BASE_URL
         value: "https://hashpaylink.com"
       - key: PUBLIC_APP_URL

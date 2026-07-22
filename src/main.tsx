@@ -74,7 +74,7 @@ function AppProviders() {
     appearance: {
       theme: theme === 'dark' ? 'dark' : 'light',
       accentColor: '#0071E3',
-      logo: `${BRAND_ORIGIN}/privy-mark-logo.png`,
+      logo: new URL('/privy-mark-logo.png', window.location.origin).toString(),
       landingHeader: '\u00A0',
       loginMessage: 'Staff will never ask for this code.',
       emailDomain: 'Hash PayLink',

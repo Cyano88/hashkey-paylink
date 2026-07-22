@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createDeveloperProjectsHandler, developerPolicyFromStore, developerWebhookSignature, validatePublicWebhookDestination } from '../api/developer-projects.ts'
+import { buildDeveloperWebhookRequest, createDeveloperProjectsHandler, developerPolicyFromStore, developerWebhookSignature, validatePublicWebhookDestination } from '../api/developer-projects.ts'
 import { createHmac } from 'node:crypto'
 
 function responseRecorder() {
@@ -26,6 +26,15 @@ assert.equal(
   developerWebhookSignature('whsec_test', '1784452800', '{"event":"payment.confirmed"}'),
   createHmac('sha256', 'whsec_test').update('1784452800.{"event":"payment.confirmed"}').digest('hex'),
 )
+const firstWebhookAttempt = buildDeveloperWebhookRequest('whsec_test', 'payment.confirmed', { checkoutId: 'chk_test' }, {
+  eventId: 'evt_stable', createdAt: '2026-07-19T12:00:00.000Z', attemptedAt: '2026-07-19T12:00:00.000Z',
+})
+const retryWebhookAttempt = buildDeveloperWebhookRequest('whsec_test', 'payment.confirmed', { checkoutId: 'chk_test' }, {
+  eventId: 'evt_stable', createdAt: '2026-07-19T12:00:00.000Z', attemptedAt: '2026-07-19T13:00:00.000Z',
+})
+assert.equal(firstWebhookAttempt.payload, retryWebhookAttempt.payload)
+assert.notEqual(firstWebhookAttempt.timestamp, retryWebhookAttempt.timestamp)
+assert.notEqual(firstWebhookAttempt.signature, retryWebhookAttempt.signature)
 const handler = createDeveloperProjectsHandler({
   hasStore: () => true,
   read: async () => store,
@@ -66,7 +75,7 @@ assert.equal((await request(handler, 'POST', { action: 'create-key', projectId: 
 const ready = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',
   useCase: 'Sell individual market data and analysis requests through hosted checkout.', settlementMode: 'usdc',
-  networks: ['base', 'arbitrum'], defaultNetwork: 'base', recipients: { base: linkedWallet, arbitrum: linkedWallet },
+  networks: ['base', 'arbitrum', 'arc'], defaultNetwork: 'base', recipients: { base: linkedWallet, arbitrum: linkedWallet, arc: linkedWallet },
   allowedOrigins: ['https://polydesk.trade', 'javascript:alert(1)'], webhookUrl: 'https://polydesk.trade/webhooks/hashpaylink',
 })
 assert.equal(ready.body.project.settlementStatus, 'ready')
@@ -81,6 +90,13 @@ assert.equal(policy.partnerId, created.body.project.id)
 assert.equal(policy.merchantName, 'PolyDesk API')
 assert.deepEqual(policy.paymentOptions.map(option => option.network), ['base', 'arbitrum'])
 assert.equal(developerPolicyFromStore(store, `${generated.body.apiKey}tampered`, portalSecret), null)
+const testKey = await request(handler, 'POST', { action: 'create-key', projectId: created.body.project.id, name: 'Arc sandbox', environment: 'test' })
+assert.equal(testKey.statusCode, 201)
+assert.match(testKey.body.apiKey, /^hpl_test_/)
+assert.equal(testKey.body.key.environment, 'test')
+const testPolicy = developerPolicyFromStore(store, testKey.body.apiKey, portalSecret)
+assert.deepEqual(testPolicy.paymentOptions.map(option => option.network), ['arc'])
+assert.equal(testPolicy.defaultNetwork, 'arc')
 
 const webhook = await request(handler, 'POST', { action: 'rotate-webhook-secret', projectId: created.body.project.id })
 assert.equal(webhook.statusCode, 201)

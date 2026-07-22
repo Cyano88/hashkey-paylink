@@ -116,7 +116,8 @@ import paymentTxLookupHandler from './api/payment-tx-lookup.js'
 import publicConfigHandler from './api/public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
-import hostedCheckoutsHandler from './api/hosted-checkouts.js'
+import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
+import agenticCheckoutsHandler from './api/agentic-checkouts.js'
 import { pocketBillsCatalogHandler, pocketBillsPayHandler, pocketBillsQuoteHandler, pocketBillsVerifyHandler } from './api/pocket/bills.js'
 import { pocketBillsRefundHandler, pocketBillsUserRefundHandler } from './api/pocket/bills-refunds.js'
 import vtpassBillsWebhookHandler from './api/pocket/bills-webhook.js'
@@ -127,6 +128,9 @@ loadEnv({ path: '.env', override: false })
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
+// Render terminates TLS behind one trusted proxy. Express derives req.ip from
+// that boundary instead of application code trusting arbitrary forwarded headers.
+app.set('trust proxy', 1)
 
 function publicEnv(...names: string[]) {
   for (const name of names) {
@@ -165,6 +169,12 @@ function sendSpaIndex(res: Response) {
 
 app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
   res.setHeader(
     'Content-Security-Policy',
     [
@@ -323,6 +333,7 @@ app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)
 app.get('/api/public-config',          readLimiter, publicConfigHandler)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
+app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
 app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
 app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)
@@ -363,4 +374,14 @@ app.get('*', (_req, res) => {
 const PORT = Number(process.env.PORT) || 3000
 app.listen(PORT, () => {
   console.log(`HashKey PayLink running on port ${PORT}`)
+})
+
+const hostedCheckoutOutboxTimer = setInterval(() => {
+  void drainHostedCheckoutWebhookOutbox().catch(error => {
+    console.error('[developer-webhook] scheduled outbox drain failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 10_000)
+hostedCheckoutOutboxTimer.unref()
+void drainHostedCheckoutWebhookOutbox().catch(error => {
+  console.error('[developer-webhook] startup outbox drain failed:', error instanceof Error ? error.message : String(error))
 })

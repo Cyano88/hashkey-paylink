@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHostedCheckoutsHandler, markHostedCheckoutNairaPayout, markHostedCheckoutPaid, resolveHostedCheckoutPartnerPolicy } from '../api/hosted-checkouts.ts'
+import { createHostedCheckoutsHandler, drainHostedCheckoutWebhookOutbox, markHostedCheckoutNairaPayout, markHostedCheckoutPaid, resolveHostedCheckoutPartnerPolicy } from '../api/hosted-checkouts.ts'
 
 function responseRecorder() {
   return {
@@ -86,6 +86,8 @@ assert.equal(created.statusCode, 201)
 assert.equal(created.headers['cache-control'], 'no-store')
 assert.equal(created.body.checkoutId, 'chk_testcheckout1234')
 assert.equal(created.body.checkoutUrl, '/pay/c/chk_testcheckout1234')
+assert.equal(created.body.agentPaymentUrl, '/api/v2/checkouts/agent?id=chk_testcheckout1234')
+assert.equal(created.body.agentCheckoutUrl, '/pay/a/chk_testcheckout1234')
 assert.equal(created.body.replayed, false)
 assert.equal(store.checkouts.chk_stalecheckout123, undefined)
 assert.equal(store.idempotency['polydesk:stale-key'], undefined)
@@ -101,6 +103,8 @@ assert.match(conflict.body.error, /different checkout request/)
 const lookup = await request(handler, 'GET', { query: { id: created.body.checkoutId } })
 assert.equal(lookup.statusCode, 200)
 assert.equal(lookup.body.checkout.kind, 'service')
+assert.equal(lookup.body.agentPaymentUrl, '/api/v2/checkouts/agent?id=chk_testcheckout1234')
+assert.equal(lookup.body.agentCheckoutUrl, '/pay/a/chk_testcheckout1234')
 assert.match(lookup.body.paymentUrl, /^\/pay\?/)
 assert.match(lookup.body.paymentUrl, /src=service/)
 assert.match(lookup.body.paymentUrl, /a=0\.024(?:&|$)/)
@@ -328,6 +332,39 @@ assert.deepEqual(nairaNotifications.map(item => item.event), ['checkout.created'
 assert.equal((await request(nairaHandler, 'GET', { query: { id: nairaCreated.body.checkoutId } })).body.checkout.status, 'paid')
 await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'settled' }, nairaDependencies)
 assert.equal(nairaNotifications.length, 3)
+
+let retryNow = new Date('2026-07-19T12:00:00.000Z')
+let retryStore = {
+  checkouts: {},
+  idempotency: {},
+  outbox: [{
+    id: 'evt_retrydelivery12345', partnerId: 'dev_retry', event: 'payment.confirmed',
+    data: { checkoutId: 'chk_retrycheckout123' }, createdAt: retryNow.toISOString(),
+    attempts: 0, nextAttemptAt: retryNow.toISOString(), status: 'pending',
+  }],
+}
+const retryDeliveries = []
+let failRetryDelivery = true
+const retryDependencies = {
+  ...dependencies,
+  read: async () => retryStore,
+  mutate: async (_key, update) => { retryStore = update(retryStore); return retryStore },
+  now: () => retryNow,
+  notify: async (partnerId, event, data, delivery) => {
+    retryDeliveries.push({ partnerId, event, data, delivery })
+    if (failRetryDelivery) throw new Error('temporary receiver failure')
+  },
+}
+assert.equal(await drainHostedCheckoutWebhookOutbox(retryDependencies), 0)
+assert.equal(retryStore.outbox[0].status, 'pending')
+assert.equal(retryStore.outbox[0].attempts, 1)
+assert.match(retryStore.outbox[0].lastError, /temporary receiver failure/)
+retryNow = new Date('2026-07-19T12:00:10.000Z')
+failRetryDelivery = false
+assert.equal(await drainHostedCheckoutWebhookOutbox(retryDependencies), 1)
+assert.equal(retryStore.outbox[0].status, 'delivered')
+assert.equal(retryStore.outbox[0].attempts, 2)
+assert.deepEqual(retryDeliveries.map(item => item.delivery.eventId), ['evt_retrydelivery12345', 'evt_retrydelivery12345'])
 await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'refunded' }, nairaDependencies)
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'paid')
 assert.equal(nairaNotifications.length, 3)

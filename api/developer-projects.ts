@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { BlockList } from 'node:net'
+import { request as httpsRequest } from 'node:https'
 import type { Request, Response } from 'express'
 import { PrivyClient, type User } from '@privy-io/server-auth'
 import { getAddress, isAddress } from 'viem'
@@ -11,13 +12,14 @@ const STORE_KEY = (process.env.DEVELOPER_PROJECT_STORE_KEY ?? 'hashpaylink:devel
 const NETWORKS = ['base', 'arbitrum', 'arc'] as const
 type DeveloperNetwork = typeof NETWORKS[number]
 type SettlementMode = 'usdc' | 'ngn'
+type DeveloperEnvironment = 'test' | 'live'
 
 type DeveloperKey = {
   id: string
   name: string
   prefix: string
   digest: string
-  environment: 'live'
+  environment: DeveloperEnvironment
   createdAt: string
   lastUsedAt?: string
   revokedAt?: string
@@ -146,6 +148,10 @@ blockedWebhookAddresses.addSubnet('fe80::', 10, 'ipv6')
 blockedWebhookAddresses.addSubnet('ff00::', 8, 'ipv6')
 
 export async function validatePublicWebhookDestination(value: string) {
+  await resolvePublicWebhookDestination(value)
+}
+
+async function resolvePublicWebhookDestination(value: string) {
   const url = new URL(value)
   if (url.protocol !== 'https:' || url.username || url.password) throw Object.assign(new Error('Webhook URLs must use public HTTPS endpoints.'), { status: 400 })
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase()
@@ -161,6 +167,26 @@ export async function validatePublicWebhookDestination(value: string) {
   if (!addresses.length || addresses.some(item => blockedWebhookAddresses.check(item.address, item.family === 6 ? 'ipv6' : 'ipv4'))) {
     throw Object.assign(new Error('Webhook URLs must use public HTTPS endpoints.'), { status: 400 })
   }
+  return { url, address: addresses[0].address, family: addresses[0].family }
+}
+
+async function postPublicWebhook(value: string, payload: string, headers: Record<string, string>) {
+  const destination = await resolvePublicWebhookDestination(value)
+  return new Promise<number>((resolve, reject) => {
+    const request = httpsRequest(destination.url, {
+      method: 'POST',
+      headers: { ...headers, 'content-length': Buffer.byteLength(payload).toString() },
+      servername: destination.url.hostname,
+      timeout: 10_000,
+      lookup: (_hostname, _options, callback) => callback(null, destination.address, destination.family),
+    }, response => {
+      response.resume()
+      response.once('end', () => resolve(response.statusCode ?? 0))
+    })
+    request.once('timeout', () => request.destroy(new Error('Webhook delivery timed out.')))
+    request.once('error', reject)
+    request.end(payload)
+  })
 }
 
 const defaults: Dependencies = {
@@ -350,8 +376,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const recipient = validRecipient(req.body?.recipients?.[network])
           return recipient ? [[network, recipient]] : []
         })) as Partial<Record<DeveloperNetwork, string>>
-        const allowedOrigins = Array.isArray(req.body?.allowedOrigins)
-          ? Array.from(new Set(req.body.allowedOrigins.map(normalizedOrigin).filter(Boolean))).slice(0, 10)
+        const allowedOrigins: string[] = Array.isArray(req.body?.allowedOrigins)
+          ? Array.from(new Set<string>(req.body.allowedOrigins.map((item: unknown) => normalizedOrigin(item)).filter((item: string) => Boolean(item)))).slice(0, 10)
           : []
         const webhookUrl = normalizedWebhookUrl(req.body?.webhookUrl)
         const refundAddress = validRecipient(req.body?.refundAddress)
@@ -413,10 +439,18 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (!currentProject.allowedOrigins.length || (currentProject.settlementMode === 'usdc' && currentProject.networks.some(network => !currentProject.recipients[network]))) {
           return res.status(409).json({ ok: false, error: 'Complete checkout routing before creating a key.' })
         }
-        const rawKey = dependencies.createSecret('hpl_live')
+        const environment: DeveloperEnvironment = clean(req.body?.environment, 10).toLowerCase() === 'test' ? 'test' : 'live'
+        const environmentNetworks: DeveloperNetwork[] = environment === 'test' ? ['arc'] : ['base', 'arbitrum']
+        if (currentProject.settlementMode === 'ngn' && environment === 'test') {
+          return res.status(409).json({ ok: false, error: 'Naira settlement requires a live key.' })
+        }
+        if (currentProject.settlementMode === 'usdc' && !currentProject.networks.some(network => environmentNetworks.includes(network))) {
+          return res.status(409).json({ ok: false, error: `Configure ${environment === 'test' ? 'Arc Testnet' : 'Base or Arbitrum'} before creating this key.` })
+        }
+        const rawKey = dependencies.createSecret(environment === 'test' ? 'hpl_test' : 'hpl_live')
         const key: DeveloperKey = {
           id: dependencies.createKeyId(), name: clean(req.body?.name, 60) || 'Backend key',
-          prefix: rawKey.slice(0, 18), digest: keyDigest(secret, rawKey), environment: 'live', createdAt: dependencies.now().toISOString(),
+          prefix: rawKey.slice(0, 18), digest: keyDigest(secret, rawKey), environment, createdAt: dependencies.now().toISOString(),
         }
         let next: DeveloperProject | undefined
         await dependencies.mutate(STORE_KEY, current => {
@@ -427,7 +461,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return { projects: { ...(current?.projects ?? {}), [projectId]: next } }
         })
         if (!next) throw new Error('API key could not be stored.')
-        return res.status(201).json({ ok: true, apiKey: rawKey, key: projectPublic(next).keys.at(-1) })
+        const publicKeys = projectPublic(next).keys
+        return res.status(201).json({ ok: true, apiKey: rawKey, key: publicKeys[publicKeys.length - 1] })
       }
 
       if (req.method === 'POST' && action === 'revoke-key') {
@@ -470,14 +505,19 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 }
 
 export function developerPolicyFromStore(store: DeveloperStore | undefined, apiKey: string, secret: string): DeveloperCheckoutPolicy | null {
-  if (!apiKey.startsWith('hpl_live_') || secret.length < 32) return null
+  const requestedEnvironment: DeveloperEnvironment | null = apiKey.startsWith('hpl_live_') ? 'live' : apiKey.startsWith('hpl_test_') ? 'test' : null
+  if (!requestedEnvironment || secret.length < 32) return null
   const digest = keyDigest(secret, apiKey)
   for (const project of Object.values(store?.projects ?? {})) {
     const key = project.keys.find(item => !item.revokedAt && safeDigestEqual(item.digest, digest))
     if (!key || project.settlementStatus !== 'ready') continue
+    const keyEnvironment: DeveloperEnvironment = key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')
+    if (keyEnvironment !== requestedEnvironment) continue
+    const allowedNetworks = keyEnvironment === 'test' ? new Set<DeveloperNetwork>(['arc']) : new Set<DeveloperNetwork>(['base', 'arbitrum'])
+    if (project.settlementMode === 'ngn' && keyEnvironment !== 'live') return null
     const paymentOptions = project.settlementMode === 'ngn'
       ? (project.refundAddress ? [{ network: 'base' as const, recipient: project.refundAddress }] : [])
-      : project.networks.flatMap(network => project.recipients[network] ? [{ network, recipient: project.recipients[network]! }] : [])
+      : project.networks.flatMap(network => allowedNetworks.has(network) && project.recipients[network] ? [{ network, recipient: project.recipients[network]! }] : [])
     if (!paymentOptions.length) return null
     if (project.settlementMode === 'ngn') {
       if (!project.bankAccountCipher || !project.bankCode || !project.bankName || !project.bankAccountName || !project.refundAddress) return null
@@ -498,13 +538,28 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
         projectManaged: true,
       }
     }
-    return { partnerId: project.id, merchantName: project.name, allowedOrigins: project.allowedOrigins, defaultNetwork: project.defaultNetwork, paymentOptions, settlementMode: 'usdc', projectManaged: true }
+    const defaultNetwork = paymentOptions.some(option => option.network === project.defaultNetwork) ? project.defaultNetwork : paymentOptions[0].network
+    return { partnerId: project.id, merchantName: project.name, allowedOrigins: project.allowedOrigins, defaultNetwork, paymentOptions, settlementMode: 'usdc', projectManaged: true }
   }
   return null
 }
 
 export function developerWebhookSignature(signingSecret: string, timestamp: string, rawBody: string) {
   return createHmac('sha256', signingSecret).update(`${timestamp}.${rawBody}`).digest('hex')
+}
+
+export function buildDeveloperWebhookRequest(
+  signingSecret: string,
+  event: string,
+  data: Record<string, unknown>,
+  input: { attemptedAt: string; eventId?: string; createdAt?: string },
+) {
+  const attemptedAtMs = Date.parse(input.attemptedAt)
+  if (!Number.isFinite(attemptedAtMs)) throw new Error('Webhook attempt time is invalid.')
+  const eventId = input.eventId ?? `evt_${randomUUID().replace(/-/g, '').slice(0, 20)}`
+  const payload = JSON.stringify({ id: eventId, event, createdAt: input.createdAt ?? input.attemptedAt, data })
+  const timestamp = Math.floor(attemptedAtMs / 1000).toString()
+  return { eventId, payload, timestamp, signature: developerWebhookSignature(signingSecret, timestamp, payload) }
 }
 
 export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPolicy, checkoutId: string, requestedUsdc: string) {
@@ -544,7 +599,7 @@ export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPol
   }
 }
 
-export async function dispatchDeveloperWebhook(partnerId: string, event: string, data: Record<string, unknown>) {
+export async function dispatchDeveloperWebhook(partnerId: string, event: string, data: Record<string, unknown>, delivery?: { eventId: string; createdAt: string }) {
   if (!partnerId.startsWith('dev_') || !defaults.hasStore()) return
   const secret = defaults.portalSecret()
   if (secret.length < 32) return
@@ -553,21 +608,16 @@ export async function dispatchDeveloperWebhook(partnerId: string, event: string,
   if (!project?.webhookUrl || !project.webhookSecretCipher) return
   const signingSecret = decryptValue(secret, project.webhookSecretCipher)
   const attemptedAt = defaults.now().toISOString()
-  const eventId = `evt_${randomUUID().replace(/-/g, '').slice(0, 20)}`
-  const payload = JSON.stringify({ id: eventId, event, createdAt: attemptedAt, data })
-  const timestamp = Math.floor(Date.parse(attemptedAt) / 1000).toString()
-  const signature = developerWebhookSignature(signingSecret, timestamp, payload)
+  const { eventId, payload, timestamp, signature } = buildDeveloperWebhookRequest(signingSecret, event, data, {
+    attemptedAt,
+    eventId: delivery?.eventId,
+    createdAt: delivery?.createdAt,
+  })
   let responseStatus: number | undefined
   let failure = ''
   try {
-    await defaults.validateWebhook(project.webhookUrl)
-    const response = await fetch(project.webhookUrl, {
-      method: 'POST', signal: AbortSignal.timeout(10_000),
-      headers: { 'content-type': 'application/json', 'user-agent': 'HashPayLink-Webhooks/1.0', 'x-hashpaylink-event': eventId, 'x-hashpaylink-signature': `t=${timestamp},v1=${signature}` },
-      body: payload,
-    })
-    responseStatus = response.status
-    if (!response.ok) failure = `Webhook returned HTTP ${response.status}.`
+    responseStatus = await postPublicWebhook(project.webhookUrl, payload, { 'content-type': 'application/json', 'user-agent': 'HashPayLink-Webhooks/1.0', 'x-hashpaylink-event': eventId, 'x-hashpaylink-signature': `t=${timestamp},v1=${signature}` })
+    if (responseStatus < 200 || responseStatus >= 300) failure = `Webhook returned HTTP ${responseStatus}.`
   } catch (error) {
     failure = error instanceof Error ? error.message.slice(0, 180) : 'Webhook delivery failed.'
   }
@@ -575,8 +625,9 @@ export async function dispatchDeveloperWebhook(partnerId: string, event: string,
     const latest = current?.projects?.[partnerId]
     if (!latest) return current ?? { projects: {} }
     const delivery = { id: eventId, event, status: failure ? 'failed' as const : 'delivered' as const, ...(responseStatus ? { responseStatus } : {}), attemptedAt, ...(failure ? { error: failure } : {}) }
-    return { projects: { ...(current?.projects ?? {}), [partnerId]: { ...latest, webhookDeliveries: [...(latest.webhookDeliveries ?? []), delivery].slice(-100) } } }
+    return { projects: { ...(current?.projects ?? {}), [partnerId]: { ...latest, webhookDeliveries: [...(latest.webhookDeliveries ?? []).filter(item => item.id !== eventId), delivery].slice(-100) } } }
   })
+  if (failure) throw new Error(failure)
 }
 
 export async function resolveDeveloperApiKeyPolicy(req: Pick<Request, 'headers'>): Promise<DeveloperCheckoutPolicy | null> {

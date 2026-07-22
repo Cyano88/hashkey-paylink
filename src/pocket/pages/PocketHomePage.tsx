@@ -20,6 +20,8 @@ const POCKET_BASE_PATH = '/pocket'
 const POCKET_HOME_NETWORK_KEY = 'pocket:home:network'
 
 function restoredHomeNetwork(): PocketHomeNetworkKey {
+  const requested = new URLSearchParams(window.location.search).get('n')
+  if (requested === 'base' || requested === 'arbitrum' || requested === 'arc' || requested === 'solana') return requested
   const saved = window.sessionStorage.getItem(POCKET_HOME_NETWORK_KEY)
   return saved === 'arbitrum' || saved === 'arc' || saved === 'solana' ? saved : 'base'
 }
@@ -35,7 +37,10 @@ export default function PocketHomePage() {
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const fx = usePocketFxQuote(wallets.total)
-  const [tab, setTabState] = useState<PocketHomeTab>('balance')
+  const [tab, setTabState] = useState<PocketHomeTab>(() => {
+    const action = new URLSearchParams(window.location.search).get('action')
+    return action === 'fund' ? 'fund' : action === 'withdraw' ? 'move' : 'balance'
+  })
   const [network, setNetworkState] = useState<PocketHomeNetworkKey>(restoredHomeNetwork)
   const [walletBusy, setWalletBusy] = useState(false)
   const [copied, setCopied] = useState(false)

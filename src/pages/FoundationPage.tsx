@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Check, Loader2, Menu, X } from 'lucide-react'
-import { gsap } from 'gsap'
-import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { Activity, ArrowLeftRight, ArrowRight, Banknote, Download, House, KeyRound, LayoutDashboard, Menu, Radio, ShieldCheck, TrendingUp, Wallet, Webhook, X } from 'lucide-react'
+import Lenis from 'lenis'
+import Snap from 'lenis/snap'
+import 'lenis/dist/lenis.css'
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties, FormEvent } from 'react'
+import type { CSSProperties } from 'react'
+import { CPurseIcon } from '../pocket/components/CPurseIcon'
 
 const APP_URL = 'https://app.hashpaylink.com'
 
@@ -11,37 +13,57 @@ const products = [
   {
     index: '01',
     title: 'Payment Links',
-    copy: 'Create a USDC link, share it anywhere, and track every payment in one place.',
+    meta: 'Hosted payments',
+    copy: 'Share a USDC request. The payer selects an available network; you track payment status.',
+    action: 'Create link',
     href: `${APP_URL}?product=payment`,
   },
   {
     index: '02',
     title: 'Retail POS',
-    copy: 'Turn any shop counter into a simple USDC checkout with one reusable QR.',
-    href: `${APP_URL}?product=pos`,
+    meta: 'Retail settlement',
+    copy: 'Accept USDC with one reusable QR. Keep USDC or use verified local settlement where available.',
+    action: 'Open POS',
+    href: `${APP_URL}?product=payment&tab=pos`,
   },
   {
     index: '03',
-    title: 'PolyDesk',
-    copy: 'Fund Polymarket, watch your positions, and get helpful alerts from Telegram.',
-    href: `${APP_URL}?product=polymarket`,
+    title: 'Circle Pocket',
+    meta: 'Wallet and bills',
+    copy: 'Receive, manage, and move USDC. Settle to bank, pay bills, and fund App Pay.',
+    action: 'Open Pocket',
+    href: `${APP_URL}/pocket`,
   },
   {
     index: '04',
-    title: 'HashpayStream',
-    copy: 'Stream USDC on Arc for work, agent access, and recoverable-risk Arena games.',
-    href: `${APP_URL}?product=streampay`,
+    title: 'Agent Hash',
+    meta: 'Assistant intelligence',
+    copy: 'Ask about checkout, Circle Pocket, Bills, App Pay, activity, and research with ZeroScout intelligence.',
+    action: 'Ask Agent Hash',
+    href: `${APP_URL}?agent=hash`,
   },
   {
     index: '05',
-    title: 'Agent Commerce',
-    copy: 'Let agents pay, receive, unlock services, and keep clear proof of every action.',
-    href: `${APP_URL}?product=agent`,
+    title: 'Bills',
+    meta: 'Bills pilot',
+    copy: 'Pilot airtime, data, TV, and electricity from Circle Pocket with connected receipts and refunds.',
+    action: 'Open Bills',
+    href: `${APP_URL}/pocket/bills/airtime`,
   },
   {
     index: '06',
-    title: 'Developer SDK',
-    copy: 'Add Hash PayLink checkout to your app with hosted links and React buttons.',
+    title: 'App Pay',
+    meta: 'Agentic payments',
+    copy: 'Fund Circle App Pay and use compatible AI tools and pay-per-use services.',
+    action: 'Open App Pay',
+    href: `${APP_URL}/pocket/home/x402`,
+  },
+  {
+    index: '07',
+    title: 'Hosted Checkout API',
+    meta: 'Partner integration',
+    copy: 'Configure human or Circle Agent Wallet checkout, settlement, webhooks, and payment verification.',
+    action: 'View API',
     href: '/developers',
   },
 ]
@@ -49,498 +71,164 @@ const products = [
 const stack = [
   {
     name: 'Circle USDC',
-    copy: 'Core payment rail for USDC checkout, gasless smart-wallet sessions, balances, and receipts.',
+    copy: 'USDC, smart-wallet sessions, App Pay, balances, and receipts.',
   },
   {
-    name: 'Arc',
-    copy: 'Core settlement rail for HashpayStream and Arena, where USDC moves over time instead of as one static transfer.',
+    name: 'Arc Testnet',
+    copy: 'Wallet and checkout testing inside Circle Pocket.',
   },
   {
     name: '0G Storage',
-    copy: 'Core proof rail for archiving payment receipts, agent activity, and durable verification records.',
+    copy: 'Durable proof for Hash PayLink receipts and Agent Hash activity.',
   },
   {
     name: 'Privy',
-    copy: 'Infrastructure partner for email-first sessions across payment, funding, and HashpayStream flows.',
+    copy: 'Email sign-in and embedded-wallet sessions.',
+  },
+  {
+    name: 'ZeroScout',
+    copy: 'Intelligence, research guidance, and proof-aware responses for Agent Hash.',
   },
   {
     name: 'Base',
-    copy: 'Infrastructure partner for low-cost EVM USDC payments, agent treasury flows, and x402 settlement.',
+    copy: 'Primary EVM network for Pocket, checkout, Bills, bank settlement, and App Pay.',
   },
   {
     name: 'Arbitrum',
-    copy: 'Infrastructure partner extending Hash PayLink checkout to another major EVM network.',
+    copy: 'Additional mainnet wallet and checkout network.',
   },
   {
     name: 'Solana',
-    copy: 'Infrastructure partner for fast USDC payment coverage across Solana wallets and exchanges.',
+    copy: 'Mainnet USDC wallet, transfers, and CCTP bridging.',
   },
   {
-    name: 'Polymarket',
-    copy: 'Product data partner for PolyDesk funding, portfolio context, World Cup markets, and LP Scout workflows.',
+    name: 'Paycrest',
+    copy: 'Local quotes, bank verification, and settlement, with Nigeria active first.',
+  },
+  {
+    name: 'VTpass',
+    copy: 'Bills provider integration for airtime, data, TV, and electricity.',
+  },
+  {
+    name: 'Telegram',
+    copy: 'Chat entry for payment requests and Agent Hash.',
   },
 ]
 
 const proofStats = [
   {
-    label: 'Fee tracking',
-    value: 'DeFiLlama',
-    href: 'https://defillama.com/protocol/hash-paylink',
+    index: '01',
+    label: 'Wallet coverage',
+    value: 'Base · Arbitrum · Solana',
+    copy: 'Arc remains available as a testnet wallet.',
+    href: `${APP_URL}/pocket`,
   },
   {
-    label: 'Live surfaces',
-    value: '6 workflows',
+    index: '02',
+    label: 'Checkout surfaces',
+    value: 'Payment links · Retail QR',
+    copy: 'Review the amount and network before payment.',
     href: APP_URL,
   },
   {
-    label: 'Proof archive',
-    value: '0G Storage',
-    href: '/docs/0g-storage',
+    index: '03',
+    label: 'Merchant settlement',
+    value: 'Pocket USDC · Local bank',
+    copy: 'Nigeria is active; more African markets are planned.',
+    href: APP_URL,
   },
   {
-    label: 'Wallet stack',
-    value: 'Circle · Arc · 0G',
-    href: '/docs/wallets',
+    index: '04',
+    label: 'Durable records',
+    value: 'Pocket Activity · 0G proof',
+    copy: 'Keep payment state and verified archive proof connected.',
+    href: '/docs/0g-storage',
   },
 ]
 
-const demoFlows = [
-  {
-    stack: 'Circle',
-    title: 'USDC checkout and wallet sessions',
-    copy: 'Email-first wallet access, USDC checkout, receipts, and agent payment flows.',
-    href: `${APP_URL}?product=payment`,
-    videoUrl: '',
-  },
-  {
-    stack: '0G',
-    title: 'Verifiable payment records',
-    copy: 'Payment receipts, agent activity, and proof records archived for durable verification.',
-    href: '/docs/0g-storage',
-    videoUrl: '',
-  },
-  {
-    stack: 'Arc',
-    title: 'HashpayStream and Arena settlement',
-    copy: 'USDC streams and recoverable-risk game rooms use Arc as the streaming settlement layer.',
-    href: `${APP_URL}?product=streampay`,
-    videoUrl: '',
-  },
-  {
-    stack: 'Polymarket',
-    title: 'PolyDesk from Telegram',
-    copy: 'Fund accounts, track positions, receive alerts, and ask LP Scout from one chat surface.',
-    href: `${APP_URL}?product=polymarket`,
-    videoUrl: '',
-  },
-  {
-    stack: 'Telegram',
-    title: 'Chat-native payment workflows',
-    copy: 'Payment links, agents, PolyDesk, and HashpayStream flows open where users already coordinate.',
-    href: 'https://t.me/HashPayLinkBot',
-    videoUrl: '',
-  },
-  {
-    stack: 'Retail POS',
-    title: 'Static QR checkout for stores',
-    copy: 'Country-aware merchant QR flows start in Africa and expand by verified local partners.',
-    href: `${APP_URL}?product=pos`,
-    videoUrl: '',
-  },
-]
-
-const partnerRail = [
+const partnerRail: Array<{ name: string; logo?: string; mark?: string }> = [
   { name: 'Circle', logo: '/brand/circle-logo.jpeg' },
   { name: 'Arc', logo: '/brand/arc-logo.jpeg' },
   { name: '0G', logo: '/brand/0g-logo.jpeg' },
+  { name: 'ZeroScout', logo: '/zeroscout-mark.png' },
   { name: 'Privy', logo: '/brand/privy-logo.jpeg' },
   { name: 'Base', logo: '/brand/base-logo.jpeg' },
   { name: 'Arbitrum', logo: '/brand/arbitrum-logo.jpeg' },
   { name: 'Solana', logo: '/brand/solana-logo.jpeg' },
-  { name: 'Polymarket', logo: '/brand/polymarket-logo.png' },
+  { name: 'Paycrest', mark: 'P' },
+  { name: 'VTpass', mark: 'VT' },
   { name: 'Telegram', logo: '/brand/telegram-logo.jpeg' },
-  { name: 'WhatsApp', logo: '/brand/whatsapp-logo.jpeg' },
-  { name: 'Meta', logo: '/brand/meta-logo.jpeg' },
 ]
 
 const faqs = [
   {
     question: 'What is Hash PayLink?',
     answer:
-      'Hash PayLink is a non-custodial USDC payment platform for payment links, retail POS, PolyDesk, HashpayStream, and agent commerce. It gives users simple checkout surfaces while keeping settlement, receipts, and proof records verifiable.',
+      'Hash PayLink is payment infrastructure for USDC. Its core products are Payment Links, Retail POS, Circle Pocket, Bills, App Pay, Agent Hash, and the Hosted Checkout API. One platform connects checkout, wallet execution, settlement, activity, refunds, and proof.',
+  },
+  {
+    question: 'How does Hash PayLink make USDC feel like everyday payments?',
+    answer:
+      'Hash PayLink gives USDC one consumer-simple payment layer: scan or open a checkout, review the amount, choose an available route, pay, and receive a connected record. The underlying wallets, networks, settlement providers, and proof systems remain coordinated behind that familiar flow.',
+  },
+  {
+    question: 'What does Hash PayLink provide to other platforms?',
+    answer:
+      'Partners use hosted checkout and server APIs instead of rebuilding wallet sessions, network selection, settlement routing, payment status, signed webhooks, and receipts. Human checkout and Circle Agent Wallet payment paths remain distinct while sharing one verification contract.',
   },
   {
     question: 'Does Hash PayLink custody user funds?',
     answer:
-      'No. The platform focuses on hosted payment workflows, wallet sessions, payment routing, receipts, and proof layers. Users pay into their selected wallet, agent wallet, merchant wallet, or configured service flow.',
+      'Circle Pocket wallets remain tied to the user\'s authenticated wallet sessions. Some instructed workflows, including Bills, App Pay activation, bank settlement, and refunds, route funds through configured Circle or provider infrastructure until that action reaches a final state.',
   },
   {
-    question: 'Why do Circle, Arc, and 0G matter?',
+    question: 'How do human and agentic payments differ?',
     answer:
-      'Circle powers the USDC and smart-wallet payment experience, Arc gives HashpayStream a programmable settlement surface, and 0G provides durable proof records for receipts and agent activity. Together they make Hash PayLink feel simple for users while keeping the payment state verifiable.',
+      'Human checkout lets a payer review the amount, choose an available network, and complete the payment in the hosted interface. Agentic checkout lets compatible services use Circle App Pay and x402 payment records, with authoritative status checked before fulfillment.',
+  },
+  {
+    question: 'What is Agent Hash?',
+    answer:
+      'Agent Hash is the intelligence layer inside Hash PayLink. It helps users understand supported payments, Circle Pocket, Bills, App Pay, checkout, and activity, while ZeroScout supplies research guidance and proof-aware responses. Money-moving actions still require the platform\'s authenticated payment controls.',
+  },
+  {
+    question: 'Which networks and settlement options are available?',
+    answer:
+      'Hosted checkout supports Base and Arbitrum mainnet, with Arc available for testnet flows and Solana planned for partner checkout. Merchants can keep USDC in Circle Pocket or use verified local bank settlement where available. Nigeria is active first, with Ghana and Kenya planned.',
+  },
+  {
+    question: 'How does the infrastructure fit together?',
+    answer:
+      'Circle powers USDC, wallet sessions, App Pay, and agentic payments. Privy provides identity sessions, ZeroScout powers Agent Hash intelligence, Paycrest handles eligible bank settlement, VTpass supplies Bills, and 0G preserves durable proof.',
   },
   {
     question: 'Where does 0G fit into the platform?',
     answer:
-      '0G is used for durable proof records. Payment receipts, agent activity, and important workflow records can be archived so ecosystem teams and users can verify what happened after the payment flow completes.',
-  },
-  {
-    question: 'Why build HashpayStream and Arena on Arc?',
-    answer:
-      'Arc is a strong fit for real-time USDC flows because HashpayStream needs fast settlement, low-friction wallet actions, and predictable payment state. Hash PayLink uses Arc for streaming access, payroll-style payouts, and recoverable-risk Arena rooms where USDC moves over time instead of as a single static transfer.',
+      '0G is the durable verification layer. Important payment receipts, settlement events, and Agent Hash activity can be archived so users and ecosystem teams can verify what happened after a workflow completes.',
   },
   {
     question: 'What traction does Hash PayLink have?',
     answer:
-      'Hash PayLink is already live with real USDC workflows, fee tracking on DeFiLlama, and retail rollout evidence across Africa. The platform has processed over $50,000 in volume within weeks of launch and onboarded more than 100 users into Circle smart-wallet USDC checkout flows.',
+      'Hash PayLink has working USDC checkout, Circle Pocket wallet and movement flows, retail settlement, bank payout, App Pay, and verified Bills testing. Protocol activity is tracked on DeFiLlama, with retail rollout focused on Nigeria before additional African markets.',
   },
   {
     question: 'Why does the chat layer matter?',
     answer:
-      'Payments often start inside conversations, not dashboards. Telegram gives Hash PayLink a distribution layer for saved alerts, payment requests, PolyDesk, agent actions, and HashpayStream flows where users already coordinate. It reduces friction without forcing every user into a complex crypto app first.',
-  },
-  {
-    question: 'What is PolyDesk?',
-    answer:
-      'PolyDesk is the Polymarket-focused surface inside Hash PayLink. It helps users fund Polymarket, track positions, receive alerts, and use LP Scout from Telegram-first workflows.',
+      'Payments often start inside conversations, not dashboards. Telegram gives Hash PayLink a direct entry for payment requests and Agent Hash where users already coordinate.',
   },
 ]
 
 function HashMark({ className = '' }: { className?: string }) {
-  return <img src="/hash-logo.png" alt="Hash PayLink" className={className} />
+  return <img src="/hash-logo.png" alt="" aria-hidden="true" className={className} />
 }
 
 export default function FoundationPage() {
-  const pageRef = useRef<HTMLElement | null>(null)
-  const modernAppSectionRef = useRef<HTMLElement | null>(null)
-  const retailSectionRef = useRef<HTMLElement | null>(null)
   const faqAnswerRefs = useRef<Array<HTMLDivElement | null>>([])
-  const [openFaq, setOpenFaq] = useState(0)
+  const snapShellRef = useRef<HTMLDivElement | null>(null)
+  const snapContentRef = useRef<HTMLDivElement | null>(null)
+  const [openFaq, setOpenFaq] = useState(-1)
   const [faqHeights, setFaqHeights] = useState<number[]>([])
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [activeRetailImage, setActiveRetailImage] = useState(0)
-  const [partnerForm, setPartnerForm] = useState({
-    name: '',
-    email: '',
-    company: '',
-    website: '',
-    product: 'hosted-checkout',
-    useCase: '',
-    fax: '',
-  })
-  const [partnerRequestState, setPartnerRequestState] = useState<'idle' | 'submitting' | 'sent' | 'error'>('idle')
-  const [partnerRequestMessage, setPartnerRequestMessage] = useState('')
-
-  async function submitPartnerRequest(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (partnerRequestState === 'submitting') return
-    setPartnerRequestState('submitting')
-    setPartnerRequestMessage('')
-    try {
-      const response = await fetch('/api/partner-access', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(partnerForm),
-      })
-      const body = await response.json().catch(() => undefined) as { ok?: boolean; requestId?: string; error?: string } | undefined
-      if (!response.ok || !body?.ok) throw new Error(body?.error || 'Could not submit your request.')
-      setPartnerRequestState('sent')
-      setPartnerRequestMessage(body.requestId && body.requestId !== 'received' ? `Request ${body.requestId} received.` : 'Request received.')
-    } catch (error) {
-      setPartnerRequestState('error')
-      setPartnerRequestMessage(error instanceof Error ? error.message : 'Could not submit your request.')
-    }
-  }
-  const retailImages = [
-    {
-      src: '/brand/africa-terminal-payment.jpeg',
-      alt: 'Customer paying with Hash PayLink USDC QR terminal',
-      title: 'Phone-to-QR checkout',
-      meta: 'Nigeria · Live',
-      imageClass: 'h-[230px] sm:h-[340px] lg:h-[360px]',
-      wrapperClass: 'retail-motion w-full sm:absolute sm:left-[1%] sm:top-[5%] sm:z-30 sm:w-[70%] lg:w-[62%]',
-      cardClass: 'retail-photo-card p-2 sm:-rotate-[2.5deg]',
-      shineDelay: '-1.2s',
-    },
-    {
-      src: '/brand/africa-terminal-units.jpeg',
-      alt: 'Hash PayLink physical QR terminal units',
-      title: 'Reusable contactless QR',
-      meta: 'Base USDC',
-      imageClass: 'h-[220px] sm:h-[330px] lg:h-[360px]',
-      wrapperClass: 'retail-motion w-full sm:absolute sm:right-0 sm:top-[30%] sm:z-20 sm:w-[43%] lg:w-[38%]',
-      cardClass: 'retail-photo-card p-2 sm:rotate-[5deg]',
-      shineDelay: '-3s',
-    },
-    {
-      src: '/brand/africa-terminal-live.jpeg',
-      alt: 'Hash PayLink QR terminal at a retail checkout',
-      title: 'USDC or Naira settlement',
-      meta: 'Circle · Paycrest · 0G',
-      imageClass: 'h-[210px] sm:h-[290px] lg:h-[310px]',
-      wrapperClass: 'retail-motion w-full sm:absolute sm:bottom-[2%] sm:left-[9%] sm:z-10 sm:w-[55%] lg:w-[48%]',
-      cardClass: 'retail-photo-card p-2 sm:rotate-[2deg]',
-      shineDelay: '-4.6s',
-    },
-  ]
-
-  useEffect(() => {
-    gsap.registerPlugin(ScrollTrigger)
-    if (window.matchMedia('(max-width: 640px)').matches) {
-      setOpenFaq(-1)
-    }
-  }, [])
-
-  useEffect(() => {
-    const page = pageRef.current
-    if (!page) return
-
-    const scroller = page.querySelector('.hpl-snap-shell')
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const compactText = window.matchMedia('(max-width: 640px)').matches
-    const textBlocks = Array.from(
-      page.querySelectorAll<HTMLElement>(
-        '.hpl-snap-section h1, .hpl-snap-section h2, .hpl-snap-section h3, .hpl-snap-section p, .hpl-snap-section li, .scroll-reveal-text',
-      ),
-    ).filter((element) => !element.closest('.phone-screen') && !element.closest('[data-no-text-reveal]'))
-
-    if (reduceMotion || compactText) {
-      textBlocks.forEach((element) => element.classList.add('scroll-reveal-text'))
-      return
-    }
-
-    const restoreTargets: Array<{ element: HTMLElement; html: string; ariaLabel: string | null }> = []
-
-    const ctx = gsap.context(() => {
-      textBlocks.forEach((element) => {
-        if (element.dataset.revealSplit === 'true') return
-
-        const originalText = element.textContent || ''
-        if (!originalText.trim()) return
-
-        restoreTargets.push({ element, html: element.innerHTML, ariaLabel: element.getAttribute('aria-label') })
-        element.classList.add('scroll-reveal-text')
-        element.dataset.revealSplit = 'true'
-        element.setAttribute('aria-label', originalText.trim())
-        const parts = originalText.match(/\S+|\s+/g) || []
-        element.innerHTML = parts
-          .map((part) => {
-            const safePart = part.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-            return part.trim()
-              ? `<span class="scroll-reveal-word" aria-hidden="true">${safePart}</span>`
-              : safePart
-          })
-          .join('')
-
-        const words = element.querySelectorAll('.scroll-reveal-word')
-        gsap.fromTo(
-          words,
-          {
-            opacity: 0,
-            y: 18,
-            force3D: true,
-          },
-          {
-            scrollTrigger: {
-              trigger: element,
-              scroller,
-              start: 'top 86%',
-              toggleActions: 'play none none none',
-              once: true,
-            },
-            opacity: 1,
-            y: 0,
-            stagger: 0.028,
-            duration: 0.62,
-            ease: 'power3.out',
-            force3D: true,
-          },
-        )
-      })
-    }, page)
-
-    ScrollTrigger.refresh()
-
-    return () => {
-      ctx.revert()
-      restoreTargets.forEach(({ element, html, ariaLabel }) => {
-        element.innerHTML = html
-        element.classList.remove('scroll-reveal-text')
-        delete element.dataset.revealSplit
-        if (ariaLabel) {
-          element.setAttribute('aria-label', ariaLabel)
-        } else {
-          element.removeAttribute('aria-label')
-        }
-      })
-    }
-  }, [])
-
-  useEffect(() => {
-    const page = pageRef.current
-    if (!page) return
-
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const isMobile = window.matchMedia('(max-width: 640px)').matches
-    if (reduceMotion || !isMobile) return
-
-    const scroller = page.querySelector('.hpl-snap-shell')
-    const targets = Array.from(
-      page.querySelectorAll<HTMLElement>(
-        '.foundation-mobile-section h2, .foundation-mobile-product-card, .retail-motion, #stack .hpl-reveal, .faq-item',
-      ),
-    ).filter((element) => !element.closest('.phone-screen'))
-
-    targets.forEach((element, index) => {
-      element.classList.add('foundation-mobile-scroll-effect')
-      element.style.setProperty('--mobile-effect-delay', `${Math.min(index % 4, 3) * 36}ms`)
-    })
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-visible')
-            observer.unobserve(entry.target)
-          }
-        })
-      },
-      {
-        root: scroller,
-        threshold: 0.18,
-        rootMargin: '0px 0px -8% 0px',
-      },
-    )
-
-    targets.forEach((element) => observer.observe(element))
-
-    return () => {
-      observer.disconnect()
-      targets.forEach((element) => {
-        element.classList.remove('foundation-mobile-scroll-effect', 'is-visible')
-        element.style.removeProperty('--mobile-effect-delay')
-      })
-    }
-  }, [])
-
-  useEffect(() => {
-    const section = modernAppSectionRef.current
-    if (!section) return
-
-    const scroller = section.closest('.hpl-snap-shell')
-
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const isMobile = window.matchMedia('(max-width: 640px)').matches
-    const isTablet = window.matchMedia('(max-width: 1023px)').matches
-
-    const finalPrimary = isMobile
-      ? 'rotate(-6deg) translate3d(42px, 0px, 56px)'
-      : isTablet
-        ? 'rotate(-7deg) translate3d(42px, 0px, 72px)'
-        : 'rotate(-8deg) translate3d(36px, 2px, 72px)'
-    const finalSecondary = isMobile
-      ? 'rotate(8deg) translate3d(-46px, 34px, 0px) scale(.86)'
-      : isTablet
-        ? 'rotate(9deg) translate3d(-70px, 42px, 0px) scale(.88)'
-        : 'rotate(10deg) translate3d(-94px, 44px, 0px) scale(.92)'
-    const hiddenPrimary = isMobile
-      ? 'rotate(-18deg) translate3d(86px, 96px, 56px) scale(.94)'
-      : 'rotate(-20deg) translate3d(110px, 132px, 72px) scale(.94)'
-    const hiddenSecondary = isMobile
-      ? 'rotate(20deg) translate3d(-94px, 104px, 0px) scale(.78)'
-      : 'rotate(24deg) translate3d(-190px, 156px, 0px) scale(.84)'
-
-    const ctx = gsap.context(() => {
-      const primary = section.querySelector('.phone-primary')
-      const secondary = section.querySelector('.phone-secondary')
-      if (!primary || !secondary) return
-
-      if (reduceMotion) {
-        gsap.set([primary, secondary], { opacity: 1 })
-        gsap.set(primary, { transform: finalPrimary })
-        gsap.set(secondary, { transform: finalSecondary })
-        return
-      }
-
-      gsap.set(primary, { opacity: 0, transform: hiddenPrimary })
-      gsap.set(secondary, { opacity: 0, transform: hiddenSecondary })
-
-      const timeline = gsap.timeline({
-        scrollTrigger: {
-          trigger: section,
-          scroller,
-          start: isMobile ? 'top 88%' : 'top 72%',
-          toggleActions: 'play none none reverse',
-        },
-      })
-
-      timeline
-        .to(primary, {
-          opacity: 1,
-          transform: finalPrimary,
-          duration: isMobile ? 1.05 : 1.55,
-          ease: 'power4.out',
-        }, 0)
-        .to(secondary, {
-          opacity: 0.86,
-          transform: finalSecondary,
-          duration: isMobile ? 1.05 : 1.55,
-          ease: 'power4.out',
-        }, isMobile ? 0.12 : 0.28)
-    }, section)
-
-    ScrollTrigger.refresh()
-    return () => ctx.revert()
-  }, [])
-
-  useEffect(() => {
-    const section = retailSectionRef.current
-    if (!section) return
-
-    const scroller = section.closest('.hpl-snap-shell')
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const isMobile = window.matchMedia('(max-width: 640px)').matches
-
-    const ctx = gsap.context(() => {
-      const items = section.querySelectorAll('.retail-motion')
-      if (!items.length) return
-
-      if (reduceMotion) {
-        gsap.set(items, { opacity: 1, y: 0, scale: 1 })
-        return
-      }
-
-      gsap.fromTo(
-        items,
-        {
-          opacity: 0,
-          y: isMobile ? 28 : 48,
-          scale: isMobile ? 0.985 : 0.975,
-          filter: 'none',
-          force3D: true,
-        },
-        {
-          scrollTrigger: {
-            trigger: section,
-            scroller,
-            start: isMobile ? 'top 88%' : 'top 72%',
-            toggleActions: 'play none none reverse',
-          },
-          opacity: 1,
-          y: 0,
-          scale: 1,
-          filter: 'none',
-          duration: isMobile ? 0.62 : 0.86,
-          stagger: isMobile ? 0.045 : 0.085,
-          ease: 'power4.out',
-          force3D: true,
-        },
-      )
-    }, section)
-
-    ScrollTrigger.refresh()
-    return () => ctx.revert()
-  }, [])
 
   useEffect(() => {
     const measureFaqs = () => {
@@ -557,25 +245,184 @@ export default function FoundationPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const wrapper = snapShellRef.current
+    const content = snapContentRef.current
+    if (!wrapper || !content || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const easeOutExpo = (progress: number) => Math.min(1, 1.001 - Math.pow(2, -10 * progress))
+    const lenis = new Lenis({
+      wrapper,
+      content,
+      eventsTarget: wrapper,
+      autoRaf: false,
+      smoothWheel: true,
+      syncTouch: false,
+      wheelMultiplier: 0.72,
+      touchMultiplier: 1,
+      overscroll: false,
+      duration: 0.82,
+      easing: easeOutExpo,
+      stopInertiaOnNavigate: true,
+    })
+
+    let animationFrame = 0
+    const raf = (time: number) => {
+      lenis.raf(time)
+      animationFrame = window.requestAnimationFrame(raf)
+    }
+    animationFrame = window.requestAnimationFrame(raf)
+
+    const sections = Array.from(content.querySelectorAll<HTMLElement>('.hpl-snap-section'))
+    const deckMedia = window.matchMedia('(min-width: 1024px) and (min-height: 700px)')
+    let activeSection: HTMLElement | undefined
+    let transitionTarget: HTMLElement | undefined
+    let sectionFrame = 0
+    let snap: Snap | undefined
+    let wheelGestureLocked = false
+    let snapInProgress = false
+    let wheelGestureTimer = 0
+    const scheduleWheelRelease = (delay = 220) => {
+      window.clearTimeout(wheelGestureTimer)
+      wheelGestureTimer = window.setTimeout(() => {
+        if (!snapInProgress) wheelGestureLocked = false
+      }, delay)
+    }
+    const guardWheelGesture = (event: WheelEvent) => {
+      if (!deckMedia.matches || !snap || event.ctrlKey || Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (wheelGestureLocked || snapInProgress) {
+        scheduleWheelRelease()
+        return
+      }
+
+      wheelGestureLocked = true
+      snapInProgress = true
+      const currentIndex = sections.reduce((closestIndex, section, index) => {
+        const currentDistance = Math.abs(sections[closestIndex].offsetTop - wrapper.scrollTop)
+        const nextDistance = Math.abs(section.offsetTop - wrapper.scrollTop)
+        return nextDistance < currentDistance ? index : closestIndex
+      }, 0)
+      const targetIndex = Math.max(0, Math.min(currentIndex + (event.deltaY > 0 ? 1 : -1), sections.length - 1))
+      if (targetIndex === currentIndex) {
+        snapInProgress = false
+        scheduleWheelRelease()
+        return
+      }
+      snap.goTo(targetIndex)
+      scheduleWheelRelease(1400)
+    }
+    wrapper.addEventListener('wheel', guardWheelGesture, { passive: false, capture: true })
+    const activateSection = (section: HTMLElement | undefined) => {
+      if (!section || section === activeSection) return
+      activeSection?.classList.remove('is-section-active')
+      section.classList.add('is-section-active')
+      activeSection = section
+    }
+    const syncActiveSection = () => {
+      sectionFrame = 0
+      if (transitionTarget) return
+      const wrapperRect = wrapper.getBoundingClientRect()
+      const viewportCenter = wrapperRect.top + wrapper.clientHeight / 2
+      const nextSection = sections.reduce<HTMLElement | undefined>((closest, section) => {
+        if (!closest) return section
+        const sectionRect = section.getBoundingClientRect()
+        const closestRect = closest.getBoundingClientRect()
+        const sectionDistance = Math.abs(sectionRect.top + sectionRect.height / 2 - viewportCenter)
+        const closestDistance = Math.abs(closestRect.top + closestRect.height / 2 - viewportCenter)
+        return sectionDistance < closestDistance ? section : closest
+      }, undefined)
+
+      activateSection(nextSection)
+    }
+    const scheduleSectionSync = () => {
+      if (sectionFrame) return
+      sectionFrame = window.requestAnimationFrame(syncActiveSection)
+    }
+
+    const handleAnchorClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href^="#"]')
+      if (!link || !wrapper.contains(link)) return
+
+      const targetId = link.getAttribute('href')
+      if (!targetId || targetId === '#') return
+      const target = content.querySelector<HTMLElement>(targetId)
+      if (!target) return
+
+      event.preventDefault()
+      transitionTarget = target.closest<HTMLElement>('.hpl-snap-section') || target
+      activateSection(transitionTarget)
+      lenis.scrollTo(target, {
+        offset: 0,
+        duration: 0.82,
+        easing: easeOutExpo,
+        lock: false,
+        onComplete: () => {
+          transitionTarget = undefined
+          syncActiveSection()
+          window.history.replaceState(null, '', targetId)
+        },
+      })
+    }
+    wrapper.addEventListener('click', handleAnchorClick)
+
+    syncActiveSection()
+    wrapper.classList.add('foundation-motion-ready')
+    wrapper.addEventListener('scroll', scheduleSectionSync, { passive: true })
+
+    const configureSnap = () => {
+      snap?.destroy()
+      snap = undefined
+      snapInProgress = false
+      wheelGestureLocked = false
+      if (!deckMedia.matches) return
+
+      snap = new Snap(lenis, {
+        type: 'lock',
+        distanceThreshold: '100%',
+        debounce: 90,
+        duration: 0.68,
+        easing: easeOutExpo,
+        onSnapStart: ({ index }) => {
+          transitionTarget = typeof index === 'number' ? sections[index] : undefined
+          activateSection(transitionTarget)
+        },
+        onSnapComplete: () => {
+          transitionTarget = undefined
+          snapInProgress = false
+          scheduleWheelRelease()
+          syncActiveSection()
+        },
+      })
+      snap.addElements(Array.from(content.querySelectorAll<HTMLElement>('.hpl-snap-section')), { align: 'start' })
+    }
+
+    configureSnap()
+    deckMedia.addEventListener('change', configureSnap)
+
+    return () => {
+      wrapper.removeEventListener('click', handleAnchorClick)
+      wrapper.removeEventListener('scroll', scheduleSectionSync)
+      wrapper.removeEventListener('wheel', guardWheelGesture, true)
+      deckMedia.removeEventListener('change', configureSnap)
+      window.clearTimeout(wheelGestureTimer)
+      window.cancelAnimationFrame(animationFrame)
+      window.cancelAnimationFrame(sectionFrame)
+      wrapper.classList.remove('foundation-motion-ready')
+      sections.forEach((section) => section.classList.remove('is-section-active'))
+      snap?.destroy()
+      lenis.destroy()
+    }
+  }, [])
+
   return (
-    <main ref={pageRef} className="min-h-[100dvh] bg-[#f7f6f2] text-[#0d1117]">
+    <main className="min-h-[100dvh] bg-[#f7f6f2] text-[#0d1117]">
       <style>{`
-        @keyframes hpl-globe-drift {
-          0%, 100% { transform: translate3d(-50%, -50%, 0) scale(1.04); }
-          50% { transform: translate3d(-50%, -50.35%, 0) scale(1.055); }
-        }
-        @keyframes hpl-globe-surface {
-          from { background-position: 0% 50%; transform: translate3d(0, 0, 0) scale(1.08); }
-          to { background-position: 200% 50%; transform: translate3d(0, 0, 0) scale(1.08); }
-        }
         @keyframes hpl-rail {
           from { transform: translate3d(0, 0, 0); }
           to { transform: translate3d(-50%, 0, 0); }
-        }
-        @keyframes hpl-usdc-wave {
-          0% { transform: translate3d(0, -0.8%, 0) scale(1.03); }
-          50% { transform: translate3d(-5%, 0.8%, 0) scale(1.035); }
-          100% { transform: translate3d(-10%, -0.8%, 0) scale(1.03); }
         }
         @keyframes hpl-float-in {
           from { opacity: 0; transform: translate3d(0, 18px, 0) scale(.985); }
@@ -585,82 +432,280 @@ export default function FoundationPage() {
           0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--rotate)); }
           50% { transform: translate3d(0, -16px, 0) rotate(var(--rotate)); }
         }
-        @keyframes hpl-orbit-coin {
-          0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--rotate)) scale(1); }
-          50% { transform: translate3d(0, -20px, 0) rotate(var(--rotate)) scale(1.035); }
-        }
-        @keyframes hpl-hero-orbit {
-          from { transform: translate(-50%, -50%) rotate(var(--start)); }
-          to { transform: translate(-50%, -50%) rotate(calc(var(--start) + 360deg)); }
-        }
-        @keyframes hpl-skyline-drift {
-          0%, 100% { transform: translate3d(0, 0, 0); opacity: .64; }
-          50% { transform: translate3d(-1.4%, -1.1%, 0); opacity: .82; }
-        }
-        @keyframes hpl-retail-sheen {
-          0% { transform: translate3d(-120%, 0, 0) rotate(10deg); opacity: 0; }
-          18% { opacity: .26; }
-          45% { opacity: .14; }
-          100% { transform: translate3d(160%, 0, 0) rotate(10deg); opacity: 0; }
-        }
-        @keyframes hpl-core-rail-swap {
-          0%, 100% { transform: translateX(-50%) translate3d(var(--x-start), 0, 0); }
-          33% { transform: translateX(-50%) translate3d(var(--x-mid), 0, 0); }
-          66% { transform: translateX(-50%) translate3d(var(--x-end), 0, 0); }
+        @keyframes hpl-retail-breathe {
+          from { transform: scale(1.012); }
+          to { transform: scale(1.045); }
         }
         .hpl-reveal {
           opacity: 0;
           transform: translate3d(0, 18px, 0) scale(.985);
           animation: hpl-float-in .78s cubic-bezier(.22, 1, .36, 1) forwards;
           animation-delay: var(--delay, 0ms);
-          will-change: transform, opacity;
-        }
-        .scroll-reveal-text {
-          font-kerning: none;
-        }
-        .scroll-reveal-word {
-          display: inline-block;
-          white-space: normal;
-          will-change: transform, opacity;
-          transform: translateZ(0);
           backface-visibility: hidden;
+        }
+        .foundation-light-section {
+          background: #f6f8fc !important;
+          color: #0f172a;
+          color-scheme: only light;
+        }
+        .foundation-deck-section {
+          isolation: isolate;
+          background:
+            radial-gradient(circle at 8% 12%, rgba(37,99,235,.12), transparent 30%),
+            radial-gradient(circle at 92% 74%, rgba(6,182,212,.11), transparent 28%),
+            linear-gradient(145deg,#fbfdff 0%,#f3f7ff 48%,#f7fafc 100%) !important;
+        }
+        .foundation-deck-section > .foundation-section-backdrop {
+          background: transparent !important;
+        }
+        .foundation-surface-card {
+          border: 1px solid #e2e8f0;
+          background: #ffffff !important;
+          color: #0f172a !important;
+          box-shadow: 0 16px 44px rgba(15, 23, 42, .065);
+        }
+        .foundation-primary-cta {
+          background: #020617 !important;
+          color: #ffffff !important;
+          border-radius: 999px;
+          box-shadow: 0 14px 36px rgba(15, 23, 42, .14);
+          transition: transform .2s ease, background-color .2s ease, box-shadow .2s ease;
+        }
+        .foundation-primary-cta:hover {
+          transform: translateY(-1px);
+          background: #1d4ed8 !important;
+          box-shadow: 0 18px 42px rgba(37, 99, 235, .18);
+        }
+        .foundation-secondary-cta {
+          border: 1px solid #e2e8f0 !important;
+          background: #ffffff !important;
+          color: #0f172a !important;
+          border-radius: 999px;
+          transition: transform .2s ease, border-color .2s ease, background-color .2s ease;
+        }
+        .foundation-secondary-cta:hover {
+          transform: translateY(-1px);
+          border-color: #bfdbfe !important;
+          background: #eff6ff !important;
+        }
+        .foundation-light-section a:focus-visible,
+        .foundation-light-section button:focus-visible,
+        header a:focus-visible,
+        header button:focus-visible {
+          outline: 2px solid #38bdf8;
+          outline-offset: 3px;
+        }
+        #products {
+          color-scheme: only light;
+        }
+        #products .product-card-index {
+          border-color: #e2e8f0 !important;
+          background: #f8fafc !important;
+          color: #64748b !important;
+        }
+        #products .product-card-meta {
+          color: #1d4ed8 !important;
+        }
+        #products .product-card-title {
+          color: #020617 !important;
+        }
+        #products .product-card-copy {
+          color: #475569 !important;
+        }
+        #products .product-card-action {
+          background: #020617 !important;
+          color: #ffffff !important;
+        }
+        #stack {
+          color-scheme: only light;
+        }
+        #stack .stack-rail-index {
+          border-color: #e2e8f0 !important;
+          background: #f8fafc !important;
+          color: #64748b !important;
+        }
+        #stack .stack-rail-title {
+          color: #020617 !important;
+        }
+        #stack .stack-rail-copy {
+          color: #475569 !important;
+        }
+        #api {
+          color-scheme: only light;
+        }
+        #api .api-portal-card {
+          background: #ffffff !important;
+          color: #0f172a !important;
+          opacity: 1 !important;
+        }
+        #api .api-card-title {
+          color: #020617 !important;
+        }
+        #api .api-card-copy {
+          color: #334155 !important;
+        }
+        #api .api-primary-action {
+          background: #020617 !important;
+          color: #ffffff !important;
         }
         .hpl-snap-shell {
           height: 100dvh;
           overflow-y: auto;
-          scroll-behavior: smooth;
-          scroll-snap-type: y mandatory;
-          scrollbar-width: none;
+          scroll-snap-type: none;
+          scroll-padding-top: 0;
+          overscroll-behavior-y: contain;
+          scrollbar-width: thin;
         }
-        .hpl-snap-shell::-webkit-scrollbar {
-          display: none;
+        .hpl-snap-content {
+          width: 100%;
         }
         .hpl-snap-section {
+          height: 100dvh;
           min-height: 100dvh;
           scroll-snap-align: start;
           scroll-snap-stop: always;
+          scroll-margin-top: 0;
+          box-sizing: border-box;
+        }
+        .foundation-motion-ready .hpl-snap-section .hpl-section-content > *,
+        .foundation-motion-ready .hpl-snap-section .foundation-mobile-hero-grid > * {
+          transition:
+            transform .52s cubic-bezier(.22, 1, .36, 1);
+          backface-visibility: hidden;
+        }
+        .foundation-motion-ready .hpl-snap-section:not(.is-section-active) .hpl-section-content > *,
+        .foundation-motion-ready .hpl-snap-section:not(.is-section-active) .foundation-mobile-hero-grid > * {
+          opacity: 1;
+          transform: translate3d(0, -4px, 0) scale(.998);
+        }
+        .foundation-motion-ready .hpl-snap-section.is-section-active .hpl-section-content > *,
+        .foundation-motion-ready .hpl-snap-section.is-section-active .foundation-mobile-hero-grid > * {
+          opacity: 1;
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        .foundation-motion-ready .hpl-snap-section.is-section-active .hpl-section-content > :nth-child(2),
+        .foundation-motion-ready .hpl-snap-section.is-section-active .foundation-mobile-hero-grid > :nth-child(2) {
+          transition-delay: 90ms;
+        }
+        .foundation-motion-ready .hpl-snap-section.is-section-active .hpl-section-content > :nth-child(n+3) {
+          transition-delay: 150ms;
+        }
+        .foundation-motion-ready .hpl-snap-section .section-detail-reveal {
+          opacity: 1;
+          translate: 0 -3px;
+          scale: .999;
+          transition:
+            translate .48s cubic-bezier(.22, 1, .36, 1),
+            scale .48s cubic-bezier(.22, 1, .36, 1);
+          transition-delay: 0ms;
+          backface-visibility: hidden;
+        }
+        .foundation-motion-ready .hpl-snap-section.is-section-active .section-detail-reveal {
+          opacity: 1;
+          translate: 0 0;
+          scale: 1;
+          transition-delay: min(var(--section-reveal-delay, 0ms), 180ms);
+        }
+        .hpl-snap-content > .hpl-snap-section:first-child {
+          display: flex;
+          flex-direction: column;
+        }
+        .hpl-snap-content > .hpl-snap-section:first-child .foundation-mobile-hero {
+          flex: 1 1 auto;
+          height: auto;
+          min-height: 0 !important;
+        }
+        .foundation-deck-section {
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+        }
+        .hpl-section-content {
+          height: 100%;
+          min-height: 0 !important;
+          box-sizing: border-box;
+          padding-top: calc(64px + clamp(14px, 2.4vh, 28px)) !important;
+          padding-bottom: clamp(14px, 2.4vh, 28px) !important;
+          overflow: hidden;
+        }
+        .hpl-section-content-footer {
+          padding-bottom: calc(60px + clamp(12px, 2vh, 24px)) !important;
+        }
+        #retail > .hpl-section-content > article,
+        #retail > .hpl-section-content > div:last-child {
+          height: 100%;
+          min-height: 0 !important;
+        }
+        #pocket .phone-stage {
+          height: min(600px, calc(100dvh - 112px));
+          min-height: 0;
+        }
+        [data-motion="stack-word"] {
+          will-change: auto !important;
+        }
+        .foundation-motion-ready .hpl-snap-section:not(.is-section-active) [data-motion="rail"],
+        .foundation-motion-ready .hpl-snap-section:not(.is-section-active) [data-motion="stack-word"] {
+          animation-play-state: paused !important;
         }
         .phone-stage {
-          min-height: 640px;
-          perspective: 1200px;
+          min-height: 600px;
+          perspective: 1100px;
+          perspective-origin: 50% 44%;
+          transform-style: preserve-3d;
+          isolation: isolate;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 258px));
+          justify-content: center;
+          align-items: center;
+          gap: 18px;
+        }
+        .phone-stage::before {
+          content: "";
+          position: absolute;
+          left: 50%;
+          bottom: 2%;
+          z-index: 0;
+          width: 82%;
+          height: 18%;
+          border-radius: 50%;
+          background: radial-gradient(ellipse at center, rgba(15,23,42,.20), rgba(37,99,235,.08) 42%, transparent 72%);
+          transform: translate3d(-50%, 0, -90px) rotateX(68deg);
+          pointer-events: none;
         }
         .phone-mockup {
           position: relative;
-          width: min(280px, 43vw);
-          height: min(560px, 86vw);
-          min-width: 188px;
-          min-height: 376px;
-          border-radius: 42px;
-          padding: 11px;
+          width: min(258px, 40vw);
+          height: min(584px, calc(100dvh - 126px));
+          min-width: 176px;
+          min-height: 352px;
+          border-radius: 40px;
+          padding: 10px;
           background:
-            linear-gradient(145deg, rgba(255,255,255,.16), rgba(255,255,255,0) 28%),
-            linear-gradient(145deg, #07090d, #171b23 42%, #030405);
+            linear-gradient(108deg, rgba(255,255,255,.38) 0%, rgba(255,255,255,.06) 9%, transparent 19%),
+            linear-gradient(132deg, #05070a 0%, #353c47 18%, #090c11 43%, #464e5a 70%, #050608 100%);
           box-shadow:
             0 38px 80px -32px rgba(15, 23, 42, .48),
             inset 0 0 0 1px rgba(255,255,255,.12),
             inset 0 -18px 28px rgba(255,255,255,.035);
           transform-style: preserve-3d;
-          will-change: transform;
+          backface-visibility: hidden;
+        }
+        .phone-primary {
+          z-index: 3;
+          opacity: 1;
+          transform: translate3d(-8px, -12px, 54px) rotateY(-12deg) rotateX(1.5deg) rotateZ(1deg);
+          box-shadow:
+            24px 42px 86px -34px rgba(15, 23, 42, .58),
+            inset 0 0 0 1px rgba(255,255,255,.12),
+            inset 0 -18px 28px rgba(255,255,255,.035);
+        }
+        .phone-secondary {
+          z-index: 2;
+          opacity: 1;
+          transform: translate3d(8px, 12px, 0) rotateY(12deg) rotateX(1.5deg) rotateZ(-1deg);
+          box-shadow:
+            -18px 34px 72px -36px rgba(15, 23, 42, .44),
+            inset 0 0 0 1px rgba(255,255,255,.12),
+            inset 0 -18px 28px rgba(255,255,255,.035);
         }
         .phone-screen {
           position: relative;
@@ -670,6 +715,42 @@ export default function FoundationPage() {
           border-radius: 32px;
           background: #fff;
           box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .08);
+        }
+        .phone-screen::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 8;
+          border-radius: inherit;
+          background: linear-gradient(118deg, rgba(255,255,255,.16), transparent 18%, transparent 78%, rgba(255,255,255,.035));
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,.09);
+          pointer-events: none;
+        }
+        .phone-hardware {
+          position: absolute;
+          inset: 0;
+          z-index: 6;
+          transform: translateZ(5px);
+          pointer-events: none;
+        }
+        .phone-hardware::before,
+        .phone-hardware::after {
+          content: "";
+          position: absolute;
+          width: 3px;
+          border-radius: 999px;
+          background: linear-gradient(180deg, #59616d, #11151b 18%, #05070a 82%, #353b44);
+          box-shadow: 0 0 0 1px rgba(255,255,255,.08);
+        }
+        .phone-hardware::before {
+          left: -2px;
+          top: 112px;
+          height: 58px;
+        }
+        .phone-hardware::after {
+          right: -2px;
+          top: 148px;
+          height: 76px;
         }
         .phone-mockup::before {
           content: "";
@@ -692,6 +773,10 @@ export default function FoundationPage() {
           border-radius: 36px;
           border: 1px solid rgba(255,255,255,.08);
         }
+        .phone-primary::before {
+          background: #050507;
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,.18), 0 2px 8px rgba(0,0,0,.42);
+        }
         .faq-answer {
           max-height: 0;
           overflow: hidden;
@@ -708,65 +793,175 @@ export default function FoundationPage() {
           transform: rotate(45deg);
           color: #2563eb;
         }
-        .foundation-mobile-scroll-effect {
-          opacity: 1;
-          transform: none;
+        #retail article.retail-motion {
+          --retail-x: 0px;
+          --retail-y: 0px;
+          --retail-hover-scale: 1;
         }
-        .phone-primary {
-          z-index: 3;
-          transform: rotate(-8deg) translate3d(36px, 2px, 72px);
+        #retail .retail-image-plane {
+          transform: scale(1.012);
+          transform-origin: center top;
+          backface-visibility: hidden;
         }
-        .phone-secondary {
-          z-index: 2;
-          opacity: .86;
-          transform: rotate(10deg) translate3d(-94px, 44px, 0) scale(.92);
+        #retail.is-section-active .retail-image-plane {
+          animation: hpl-retail-breathe 7.5s ease-in-out infinite alternate;
         }
-        .retail-skyline {
-          background:
-            linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,0) 54%) 7% 44% / 9% 72% no-repeat,
-            linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.02) 72%, transparent) 18% 38% / 6% 82% no-repeat,
-            linear-gradient(180deg, rgba(34,211,238,.12), rgba(255,255,255,.02) 70%, transparent) 30% 50% / 10% 62% no-repeat,
-            linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 62%) 44% 36% / 5% 88% no-repeat,
-            linear-gradient(180deg, rgba(96,165,250,.14), rgba(255,255,255,.02) 74%, transparent) 57% 45% / 8% 78% no-repeat,
-            linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,0) 68%) 70% 34% / 7% 92% no-repeat,
-            linear-gradient(180deg, rgba(34,211,238,.10), rgba(255,255,255,.01) 72%, transparent) 84% 48% / 10% 68% no-repeat;
-          filter: blur(.2px);
-          animation: hpl-skyline-drift 15s ease-in-out infinite;
-          will-change: transform, opacity;
+        #retail .retail-image-plane > img {
+          transform: translate3d(var(--retail-x), var(--retail-y), 0) scale(var(--retail-hover-scale));
+          transition: transform .78s cubic-bezier(.22, 1, .36, 1);
+          backface-visibility: hidden;
         }
-        .retail-photo-card {
-          position: relative;
-          overflow: hidden;
-          border-radius: 30px;
-          border: 1px solid rgba(255,255,255,.92);
-          background: rgba(255,255,255,.86);
-          box-shadow: 0 34px 100px rgba(30,64,175,.14), 0 2px 8px rgba(15,23,42,.06);
-          backdrop-filter: blur(10px);
-        }
-        .retail-photo-card::after {
-          content: "";
-          position: absolute;
-          inset: -25% auto -25% -35%;
-          width: 46%;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
-          animation: hpl-retail-sheen 8s ease-in-out infinite;
-          animation-delay: var(--shine-delay, 0s);
-          pointer-events: none;
-        }
-        .core-rail-logo {
-          transform: translateX(-50%) translate3d(var(--x-start), 0, 0);
-          animation: hpl-core-rail-swap 13s cubic-bezier(.62, 0, .38, 1) infinite;
-          will-change: transform;
+        #retail article.retail-motion:hover,
+        #retail article.retail-motion:focus-within {
+          --retail-hover-scale: 1.018;
         }
         @media (max-width: 1023px) {
+          .hpl-snap-shell {
+            scroll-snap-type: none;
+          }
+          .hpl-snap-section {
+            height: auto;
+            min-height: 100dvh;
+            scroll-snap-stop: normal;
+            overflow-x: hidden !important;
+            overflow-y: visible !important;
+          }
+          .hpl-section-content {
+            height: auto;
+            min-height: 100dvh !important;
+            overflow: visible;
+          }
           .phone-stage {
-            min-height: 560px;
+            min-height: 530px;
+            grid-template-columns: repeat(2, minmax(0, 232px));
+            gap: 18px;
           }
           .phone-primary {
-            transform: rotate(-7deg) translate3d(42px, 0, 72px);
+            transform: translate3d(-5px, -8px, 38px) rotateY(-10deg) rotateX(1deg) rotateZ(.75deg);
           }
           .phone-secondary {
-            transform: rotate(9deg) translate3d(-70px, 42px, 0) scale(.88);
+            transform: translate3d(5px, 8px, 0) rotateY(10deg) rotateX(1deg) rotateZ(-.75deg);
+          }
+        }
+        @media (min-width: 641px) and (max-width: 1023px) {
+          #retail .hpl-section-content {
+            gap: 1.5rem;
+          }
+          #retail > .hpl-section-content > article,
+          #retail > .hpl-section-content > div:last-child {
+            height: auto;
+          }
+          #retail > .hpl-section-content > div:last-child {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+            min-height: 0;
+          }
+          #retail > .hpl-section-content > div:last-child > button {
+            position: relative;
+            inset: auto;
+            width: 100%;
+          }
+        }
+        @media (min-width: 1024px) and (max-height: 850px) {
+          .foundation-mobile-hero {
+            height: 100dvh;
+            min-height: 0;
+            padding-top: 72px;
+            padding-bottom: 10px;
+          }
+          .foundation-mobile-hero-grid {
+            min-height: 0;
+            gap: 2rem;
+            padding-top: .5rem;
+            padding-bottom: .5rem;
+          }
+          .foundation-mobile-hero-art {
+            height: min(420px, calc(100dvh - 250px));
+          }
+          .foundation-partner-rail {
+            flex-shrink: 0;
+            padding-top: .65rem;
+            padding-bottom: .65rem;
+          }
+          .phone-secondary .phone-screen > div {
+            padding-top: 2.5rem !important;
+            padding-bottom: .5rem !important;
+          }
+          .phone-secondary .phone-screen > div > .mt-4,
+          .phone-secondary .phone-screen > div > .mt-3 {
+            margin-top: .5rem !important;
+          }
+          #retail article.retail-motion {
+            padding: 1.5rem !important;
+          }
+          #retail article.retail-motion h2 {
+            font-size: clamp(2.5rem, 4vw, 3.55rem);
+          }
+          #retail article.retail-motion h2 + p {
+            margin-top: .75rem;
+          }
+          #retail article.retail-motion .mt-7 {
+            margin-top: 1rem;
+          }
+          #retail article.retail-motion .mt-5 {
+            margin-top: .75rem;
+          }
+          #api .hpl-section-content {
+            gap: 1.5rem;
+          }
+          #api .hpl-section-content > div > h2 {
+            margin-top: .65rem;
+            font-size: 2.5rem;
+            line-height: 1.05;
+          }
+          #api .hpl-section-content > div > h2 + p {
+            margin-top: .75rem;
+          }
+          #api .hpl-section-content > div > .mt-7 {
+            margin-top: 1rem;
+          }
+          #api .hpl-section-content > div > .mt-4,
+          #api .hpl-section-content > div > .mt-5 {
+            margin-top: .75rem;
+          }
+        }
+        @media (min-width: 1024px) and (max-height: 740px) {
+          #retail article.retail-motion h2 {
+            font-size: clamp(2.2rem, 3.4vw, 3.05rem);
+          }
+          #retail article.retail-motion .mt-7 {
+            margin-top: .5rem;
+          }
+          #retail article.retail-motion > div > div:last-child > .mt-5 {
+            margin-top: .5rem;
+          }
+          #retail article.retail-motion a {
+            min-height: 44px;
+          }
+        }
+        @media (min-width: 1024px) and (max-height: 699px) {
+          .hpl-snap-shell {
+            scroll-snap-type: none;
+          }
+          .hpl-snap-section {
+            height: auto;
+            min-height: 100dvh;
+            overflow-x: hidden !important;
+            overflow-y: visible !important;
+          }
+          .hpl-section-content {
+            height: auto;
+            min-height: 100dvh !important;
+            overflow: visible;
+          }
+          #retail > .hpl-section-content > article,
+          #retail > .hpl-section-content > div:last-child {
+            height: auto;
+          }
+          #pocket .phone-stage {
+            height: auto;
+            min-height: 560px;
           }
         }
         @media (max-width: 640px) {
@@ -774,11 +969,11 @@ export default function FoundationPage() {
             height: 100dvh;
             min-height: 100dvh;
             overflow-y: auto;
-            scroll-snap-type: y mandatory;
+            scroll-snap-type: none;
           }
           .hpl-snap-section {
             min-height: 100dvh;
-            scroll-snap-stop: always;
+            scroll-snap-stop: normal;
           }
           .hpl-snap-section h2 {
             font-size: 1.85rem;
@@ -787,14 +982,21 @@ export default function FoundationPage() {
           }
           .foundation-mobile-section {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             min-height: 100dvh;
-            padding-top: 4.75rem;
-            padding-bottom: 1.25rem;
+            padding-top: 0;
+            padding-bottom: 0;
           }
           .foundation-mobile-section-tight {
-            padding-top: 4.25rem;
-            padding-bottom: 1rem;
+            padding-top: 0;
+            padding-bottom: 0;
+          }
+          .hpl-section-content {
+            padding-top: 4.75rem !important;
+            padding-bottom: 2rem !important;
+          }
+          .hpl-section-content-footer {
+            padding-bottom: 76px !important;
           }
           .foundation-mobile-hero {
             min-height: 100dvh;
@@ -821,87 +1023,17 @@ export default function FoundationPage() {
             will-change: auto;
             backface-visibility: visible;
           }
-          /* Drop the promoted compositing layer on mobile so iOS Safari
-             does not lose the globe and hero text when scroll-snap returns
-             the user to the hero section. */
-          [data-motion="globe-bg"] {
-            will-change: auto;
-            backface-visibility: visible;
+          [data-motion="stack-word"] {
+            display: none !important;
           }
           .foundation-mobile-hero-art {
             height: 220px;
             max-width: 340px;
             margin-top: .35rem;
           }
-          .foundation-mobile-asset-stage {
-            inset: 0 auto auto 0;
-            height: 138px;
-            width: 100%;
+          .foundation-primary-cta:hover,
+          .foundation-secondary-cta:hover {
             transform: none;
-          }
-          .foundation-mobile-asset-rings {
-            display: none;
-          }
-          .foundation-mobile-usdc-mark {
-            left: 58px;
-            top: 50%;
-            height: 104px;
-            width: 104px;
-            border: 0;
-            background: transparent;
-            box-shadow: none;
-            transform: translateY(-50%);
-          }
-          .foundation-mobile-usdc-mark > div {
-            display: none;
-          }
-          .foundation-mobile-core-rail {
-            left: 178px;
-            top: 47px;
-            height: 36px;
-            width: 96px;
-            transform: none;
-          }
-          .foundation-mobile-core-rail .core-rail-logo {
-            height: 32px;
-            width: 32px;
-            padding: 6px;
-            --x-start: 0px !important;
-            --x-mid: 32px !important;
-            --x-end: 64px !important;
-          }
-          .foundation-mobile-product-grid {
-            margin-top: 1.25rem;
-            gap: .65rem;
-          }
-          .foundation-mobile-product-card {
-            display: grid;
-            grid-template-columns: 32px 1fr auto;
-            align-items: center;
-            gap: .75rem;
-            padding: .7rem .75rem;
-            border: 1px solid rgba(15,23,42,.10);
-            border-radius: 14px;
-            background: rgba(255,255,255,.70);
-            box-shadow: 0 14px 34px rgba(15,23,42,.055);
-            backdrop-filter: blur(10px);
-          }
-          .foundation-mobile-scroll-effect {
-            opacity: 0;
-            transform: translate3d(0, 14px, 0);
-            transition:
-              opacity .54s cubic-bezier(.22, 1, .36, 1),
-              transform .54s cubic-bezier(.22, 1, .36, 1);
-            transition-delay: var(--mobile-effect-delay, 0ms);
-            will-change: transform, opacity;
-          }
-          .foundation-mobile-scroll-effect.is-visible {
-            opacity: 1;
-            transform: translate3d(0, 0, 0);
-            will-change: auto;
-          }
-          .foundation-mobile-retail-card {
-            min-height: 262px;
           }
           .foundation-mobile-command-copy {
             display: block;
@@ -910,17 +1042,17 @@ export default function FoundationPage() {
             grid-template-columns: 1fr 1fr;
             gap: .6rem;
             align-items: center;
-          }
-          .phone-stage {
             min-height: auto;
             display: grid;
             justify-items: center;
+            perspective: 760px;
+            perspective-origin: 50% 42%;
           }
           .phone-mockup {
             position: relative !important;
             inset: auto !important;
-            width: min(138px, 42vw);
-            height: min(276px, 84vw);
+            width: min(128px, 39vw);
+            height: min(258px, 78vw);
             min-width: 0;
             min-height: 0;
             border-radius: 24px;
@@ -938,99 +1070,81 @@ export default function FoundationPage() {
             inset: 5px;
             border-radius: 21px;
           }
+          .phone-hardware::before {
+            left: -1px;
+            top: 58px;
+            height: 30px;
+            width: 2px;
+          }
+          .phone-hardware::after {
+            right: -1px;
+            top: 76px;
+            height: 38px;
+            width: 2px;
+          }
           .phone-primary {
             order: 1;
+            transform: translate3d(4px, -7px, 34px) rotateY(-14deg) rotateX(1.5deg) rotateZ(1deg);
           }
           .phone-secondary {
             order: 2;
             opacity: 1;
-          }
-          .retail-photo-card {
-            border-radius: 24px;
+            transform: translate3d(-4px, 8px, 0) rotateY(14deg) rotateX(1.5deg) rotateZ(-1deg);
           }
         }
         @media (prefers-reduced-motion: reduce) {
           .hpl-snap-shell {
             scroll-behavior: auto;
+            scroll-snap-type: y proximity;
           }
           .hpl-reveal,
-          [data-motion="globe-bg"],
-          [data-motion="usdc-wave"],
+          .foundation-motion-ready .hpl-snap-section .hpl-section-content > *,
+          .foundation-motion-ready .hpl-snap-section .foundation-mobile-hero-grid > *,
+          .foundation-motion-ready .hpl-snap-section .section-detail-reveal,
           [data-motion="rail"],
           [data-motion="stack-word"],
-          [data-motion="stack-coin"],
-          [data-motion="hero-orbit"],
-          [data-motion="hero-orbit-logo"],
-          .retail-skyline,
-          .retail-photo-card::after {
+          #retail .retail-image-plane,
+          #retail .retail-image-plane > img {
             animation: none !important;
             opacity: 1 !important;
             transform: none !important;
+            translate: none !important;
+            scale: none !important;
+            transition: none !important;
           }
         }
       `}</style>
 
-      <div className="hpl-snap-shell">
-      <section className="hpl-snap-section relative overflow-hidden bg-[#050506] text-white">
-        <div className="absolute inset-0 isolate">
-          <div
-            data-motion="globe-bg"
-            className="absolute left-1/2 top-1/2 h-[760px] w-[760px] overflow-hidden rounded-full opacity-36 saturate-[.78] sm:h-[880px] sm:w-[880px] lg:h-[920px] lg:w-[920px]"
-            style={{
-              animation: 'hpl-globe-drift 18s ease-in-out infinite',
-              filter: 'blur(4px) brightness(0.62) saturate(.70)',
-              transformStyle: 'preserve-3d',
-              willChange: 'transform',
-              boxShadow: 'inset 0 0 90px rgba(0,0,0,.34), 0 0 120px rgba(148,163,184,.10)',
-            }}
-          >
-            <div
-              className="absolute inset-y-[-5%] left-[-70%] h-[110%] w-[240%]"
-              style={{
-                backgroundImage: 'url(/brand/world-globe.png)',
-                backgroundPosition: '0% 50%',
-                backgroundRepeat: 'repeat-x',
-                backgroundSize: 'auto 100%',
-                animation: 'hpl-globe-surface 34s linear infinite',
-                willChange: 'background-position, transform',
-              }}
-            />
-            <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,.10),rgba(255,255,255,.035)_34%,rgba(0,0,0,.18)_100%)]" />
-            <div className="absolute inset-[3%] rounded-full border border-white/8" />
-          </div>
-          <div className="absolute inset-0 bg-black/[.08] backdrop-blur-[8px]" />
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.018)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.014)_1px,transparent_1px)] bg-[size:96px_96px] opacity-20 blur-[.2px]" />
-          <div className="absolute inset-x-0 top-0 h-[520px] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,.08),transparent_58%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_43%,rgba(255,255,255,.035)_0,rgba(0,0,0,.20)_34%,rgba(0,0,0,.90)_100%)]" />
-        </div>
+      <div ref={snapShellRef} className="hpl-snap-shell">
+      <div ref={snapContentRef} className="hpl-snap-content">
+      <section className="foundation-light-section foundation-deck-section hpl-snap-section relative overflow-hidden text-slate-950" style={{ backgroundColor: '#f6f8fc', colorScheme: 'light' }}>
 
-        <header className="fixed inset-x-0 top-0 z-50 bg-[#050506] px-5 py-3 shadow-[0_18px_70px_rgba(0,0,0,.26)] sm:px-8 lg:px-10">
+        <header className="fixed inset-x-0 top-0 z-50 bg-[#050506] px-5 py-3 text-white shadow-[0_18px_70px_rgba(0,0,0,.26)] sm:px-8 lg:px-10">
           <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3">
             <Link to="/" className="flex min-w-max items-center gap-2.5">
               <HashMark className="h-7 w-7 object-contain invert mix-blend-screen" />
               <span className="text-sm font-semibold tracking-tight">Hash <span className="text-cyan-300">PayLink</span></span>
             </Link>
-            <nav className="hidden items-center justify-center gap-1 rounded-full border border-white/10 bg-white/[.045] p-1 text-[11px] font-medium text-white/58 md:flex">
-              <a href="#products" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Products</a>
-              <a href="#traction" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Traction</a>
-              <a href="https://defillama.com/protocol/hash-paylink" target="_blank" rel="noreferrer" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">DeFiLlama</a>
-              <a href="#api" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">API</a>
-              <Link to="/developers" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Developers</Link>
-              <a href="#about" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">About</a>
-              <a href="#contact" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/8 hover:text-white">Contact</a>
+            <nav className="hidden items-center justify-center gap-1 rounded-full border border-white/[.10] bg-white/[.045] p-1 text-[11px] font-medium text-white/[.58] md:flex">
+              <a href="#products" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">Products</a>
+              <a href="#retail" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">Retail</a>
+              <a href="#pocket" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">Pocket</a>
+              <a href="#stack" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">Infrastructure</a>
+              <a href="#api" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">API</a>
+              <Link to="/developers" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">Developers</Link>
             </nav>
             <div className="flex items-center gap-2">
               <a
                 href={APP_URL}
-                className="inline-flex h-10 min-w-max items-center justify-center rounded-lg border border-white/14 bg-white/[.07] px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white sm:px-4"
+                className="inline-flex h-10 min-w-max items-center justify-center rounded-full border border-white/[.14] bg-white/[.07] px-4 text-[11px] font-semibold text-white/[.86] transition hover:border-white/[.28] hover:bg-white/[.10] hover:text-white"
               >
-                Launch App
+                Open app
               </a>
               <button
                 type="button"
                 onClick={() => setMobileNavOpen(true)}
                 aria-label="Open menu"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/14 bg-white/[.07] text-white/86 transition hover:border-white/28 hover:bg-white/[.10] hover:text-white md:hidden"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/[.14] bg-white/[.07] text-white/[.86] transition hover:border-white/[.28] hover:bg-white/[.10] hover:text-white md:hidden"
               >
                 <Menu className="h-5 w-5" />
               </button>
@@ -1041,10 +1155,10 @@ export default function FoundationPage() {
         {mobileNavOpen && (
           <div className="fixed inset-0 z-[60] md:hidden" role="dialog" aria-modal="true">
             <div
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/[.70] backdrop-blur-sm"
               onClick={() => setMobileNavOpen(false)}
             />
-            <div className="absolute inset-x-0 top-0 max-h-[100dvh] overflow-y-auto bg-[#050506] px-5 pb-8 pt-3 shadow-[0_18px_70px_rgba(0,0,0,.46)]">
+            <div className="absolute inset-x-0 top-0 max-h-[100dvh] overflow-y-auto bg-[#050506] px-5 pb-8 pt-3 text-white shadow-[0_18px_70px_rgba(0,0,0,.46)]">
               <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3">
                 <Link to="/" onClick={() => setMobileNavOpen(false)} className="flex min-w-max items-center gap-2.5">
                   <HashMark className="h-7 w-7 object-contain invert mix-blend-screen" />
@@ -1054,19 +1168,18 @@ export default function FoundationPage() {
                   type="button"
                   onClick={() => setMobileNavOpen(false)}
                   aria-label="Close menu"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/14 bg-white/[.07] text-white/86 hover:border-white/28 hover:bg-white/[.10] hover:text-white"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/[.14] bg-white/[.07] text-white/[.86] hover:border-white/[.28] hover:bg-white/[.10] hover:text-white"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <nav className="mx-auto mt-7 grid w-full max-w-7xl gap-1.5 text-sm font-medium text-white/86">
-                <a href="#products" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Products</a>
-                <a href="#traction" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Traction</a>
-                <a href="#api" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Hosted Checkout API</a>
-                <a href="https://defillama.com/protocol/hash-paylink" target="_blank" rel="noreferrer" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">DeFiLlama</a>
-                <Link to="/developers" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Developers</Link>
-                <a href="#about" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">About</a>
-                <a href="#contact" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/8 bg-white/[.035] px-4 py-3 hover:border-white/16 hover:bg-white/[.06]">Contact</a>
+              <nav className="mx-auto mt-7 grid w-full max-w-7xl gap-1.5 text-sm font-medium text-white/[.86]">
+                <a href="#products" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Products</a>
+                <a href="#retail" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Retail</a>
+                <a href="#pocket" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Circle Pocket</a>
+                <a href="#stack" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Infrastructure</a>
+                <a href="#api" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Hosted Checkout API</a>
+                <Link to="/developers" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Developers</Link>
               </nav>
             </div>
           </div>
@@ -1075,98 +1188,57 @@ export default function FoundationPage() {
         <div className="foundation-mobile-hero relative mx-auto flex min-h-[100dvh] w-full max-w-7xl flex-col px-4 py-5 pt-24 sm:px-8 lg:px-10">
           <div className="foundation-mobile-hero-grid relative grid flex-1 items-center gap-10 pb-14 pt-12 lg:grid-cols-[minmax(0,1fr)_minmax(420px,540px)] lg:pt-16">
             <div className="hpl-reveal relative z-10 max-w-2xl text-left">
-              <p className="max-w-[18rem] text-[10px] font-semibold uppercase tracking-[0.26em] text-white/54 sm:max-w-none sm:text-[11px] sm:tracking-[0.36em]">
-                Stablecoin payment infrastructure
+              <p className="max-w-[18rem] text-[10px] font-semibold uppercase tracking-[0.26em] text-blue-700 sm:max-w-none sm:text-[11px] sm:tracking-[0.36em]">
+                Stablecoin checkout infrastructure
               </p>
               <h1 className="mt-5 max-w-[18rem] text-balance text-[40px] font-semibold leading-[1] tracking-[-0.055em] sm:max-w-none sm:text-7xl sm:leading-[0.94] lg:text-[86px]">
-                Moving USDC at product speed.
+                One USDC layer for people and agents.
               </h1>
-              <p className="mt-6 max-w-[18rem] text-sm leading-7 text-white/68 sm:max-w-xl sm:text-[15px]">
-                Hash PayLink powers payment links, retail POS, PolyDesk, HashpayStream, and agent commerce on Circle USDC, Arc settlement, and 0G proof rails.
+              <p className="mt-6 max-w-[18rem] text-sm leading-7 text-slate-600 sm:max-w-xl sm:text-[15px]">
+                Accept USDC through checkout built for people and agents. Keep digital dollars or settle locally where supported, with connected status and proof.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <a
                   href={APP_URL}
-                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg !bg-white px-5 text-sm font-semibold !text-[#08090b] shadow-[0_18px_48px_rgba(0,0,0,.26)] transition hover:!bg-zinc-100 sm:w-auto"
+                  className="foundation-primary-cta inline-flex h-12 w-full items-center justify-center gap-2 px-5 text-sm font-semibold shadow-[0_18px_48px_rgba(15,23,42,.16)] transition hover:bg-blue-700 sm:w-auto"
                 >
                   Open App <ArrowRight className="h-4 w-4" />
                 </a>
                 <a
-                  href="https://t.me/HashPayLinkBot?start=polydesk"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-12 w-full items-center justify-center rounded-lg border border-white/12 bg-white/[.045] px-3 text-xs font-semibold text-white/86 transition hover:bg-white/[.08] sm:w-auto sm:px-5 sm:text-sm"
+                  href="#api"
+                  className="foundation-secondary-cta inline-flex h-12 w-full items-center justify-center px-3 text-xs font-semibold transition hover:border-blue-200 hover:bg-blue-50 sm:w-auto sm:px-5 sm:text-sm"
                 >
-                  <span className="sm:hidden">Open Telegram</span>
-                  <span className="hidden sm:inline">Open PolyDesk in Telegram</span>
+                  Explore the API
                 </a>
               </div>
             </div>
 
             <div className="foundation-mobile-hero-art relative mx-auto h-[430px] w-full max-w-[540px] lg:h-[520px]">
-              {/* Mobile-only hero visual: plain Circle logo with three partner
-                  logos beneath. No orbit rings, no swap animation. Hidden at
-                  sm+ so the desktop orb stage below is the source of truth. */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 sm:hidden">
+              <div className="relative h-full w-full overflow-hidden rounded-[32px] border border-white bg-[#7f2818] shadow-[0_34px_100px_rgba(91,33,20,.20)] max-sm:rounded-[24px]">
                 <img
-                  src="/brand/usdc-circle-logo.png"
-                  alt="USDC"
+                  src="/brand/foundation-hero-community.jpeg"
+                  alt="A community gathered together"
                   decoding="async"
-                  className="h-[88px] w-[88px] rounded-full object-contain shadow-[0_18px_42px_rgba(0,0,0,.30)]"
+                  className="absolute inset-0 h-full w-full object-cover object-center saturate-[.92] contrast-[1.02]"
                 />
-                <div className="flex items-center gap-4">
-                  <img src="/brand/0g-logo.jpeg" alt="0G" decoding="async" className="h-11 w-11 rounded-full object-contain opacity-95" />
-                  <img src="/brand/circle-logo.jpeg" alt="Circle" decoding="async" className="h-11 w-11 rounded-full object-contain opacity-95" />
-                  <img src="/brand/arc-logo.jpeg" alt="Arc" decoding="async" className="h-11 w-11 rounded-full object-contain opacity-95" />
-                </div>
-              </div>
-
-              <div className="foundation-mobile-asset-stage pointer-events-none absolute left-1/2 top-1/2 hidden h-[min(66vw,360px)] w-[min(66vw,360px)] -translate-x-1/2 -translate-y-1/2 sm:block">
-                <div className="absolute inset-0 rounded-full bg-white/[.035] blur-3xl" />
-                <div className="absolute inset-[12%] rounded-full border border-white/10" />
-                <div className="absolute inset-[2%] rounded-full border border-white/7" />
-                <div className="foundation-mobile-asset-rings absolute inset-0 rounded-full border border-white/10 sm:inset-[12%]" />
-                <div className="foundation-mobile-usdc-mark absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/12 bg-[#090a0c] shadow-[inset_-24px_-28px_54px_rgba(0,0,0,.72),inset_14px_14px_34px_rgba(255,255,255,.08),0_0_80px_rgba(255,255,255,.08)] sm:h-56 sm:w-56">
-                  <img
-                    src="/brand/usdc-circle-logo.png"
-                    alt=""
-                    className="absolute inset-0 h-full w-full rounded-full object-cover opacity-95"
-                  />
-                  <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_32%_26%,rgba(255,255,255,.18),transparent_26%),radial-gradient(circle_at_70%_78%,rgba(255,255,255,.08),transparent_35%)]" />
-                  <div className="absolute left-[18%] right-[18%] top-[49%] h-px rotate-[-7deg] bg-white/28 shadow-[0_0_16px_rgba(255,255,255,.22)]" />
-                </div>
-                <div className="foundation-mobile-core-rail absolute left-1/2 top-[calc(50%+150px)] h-14 w-[210px] -translate-x-1/2 sm:top-[calc(50%+185px)] sm:w-[250px]">
-                  {[
-                    { name: 'Circle', logo: '/brand/circle-logo.jpeg', xStart: '-86px', xMid: '0px', xEnd: '86px', delay: '0s' },
-                    { name: 'Arc', logo: '/brand/arc-logo.jpeg', xStart: '0px', xMid: '86px', xEnd: '-86px', delay: '-4.33s' },
-                    { name: '0G', logo: '/brand/0g-logo.jpeg', xStart: '86px', xMid: '-86px', xEnd: '0px', delay: '-8.66s' },
-                  ].map((item) => (
-                    <div
-                      key={item.name}
-                      className="core-rail-logo absolute left-1/2 top-0 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-full border border-white/12 bg-white/[.075] p-2 shadow-[0_18px_42px_rgba(0,0,0,.24)] backdrop-blur-md sm:h-14 sm:w-14"
-                      style={{
-                        '--x-start': item.xStart,
-                        '--x-mid': item.xMid,
-                        '--x-end': item.xEnd,
-                        animationDelay: item.delay,
-                      } as CSSProperties}
-                    >
-                      <img src={item.logo} alt={item.name} decoding="async" className="h-full w-full rounded-full object-contain opacity-90" />
-                    </div>
-                  ))}
-                </div>
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,.02)_0%,rgba(15,23,42,.02)_56%,rgba(15,23,42,.30)_100%)]" />
+                <div className="absolute inset-0 shadow-[inset_0_0_0_1px_rgba(255,255,255,.16),inset_0_-70px_100px_rgba(56,20,13,.10)]" />
               </div>
             </div>
           </div>
 
-          <div className="relative z-10 overflow-hidden border-y border-white/10 py-4">
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-gradient-to-r from-[#050506] to-transparent" />
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-[#050506] to-transparent" />
-            <div data-motion="rail" className="flex w-max items-center gap-10 opacity-80" style={{ animation: 'hpl-rail 32s linear infinite' }}>
+          <div className="foundation-partner-rail relative z-10 shrink-0 overflow-hidden border-y border-slate-200 py-4">
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-gradient-to-r from-[#f6f8fc] to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-[#f6f8fc] to-transparent" />
+            <div data-motion="rail" className="flex w-max items-center gap-10 opacity-90" style={{ animation: 'hpl-rail 32s linear infinite' }}>
               {[...partnerRail, ...partnerRail].map((partner, index) => (
-                <div key={`${partner.name}-${index}`} className="flex min-w-max items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/50">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[.045]">
-                    <img src={partner.logo} alt="" loading="lazy" decoding="async" className="h-5 w-5 rounded-full object-contain opacity-85" />
+                <div key={`${partner.name}-${index}`} aria-hidden={index >= partnerRail.length} className="flex min-w-max items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm">
+                    {partner.logo ? (
+                      <img src={partner.logo} alt="" loading="lazy" decoding="async" className="h-5 w-5 rounded-full object-contain opacity-[.85]" />
+                    ) : (
+                      <span className="text-[8px] font-black tracking-[-0.02em] text-slate-700">{partner.mark}</span>
+                    )}
                   </span>
                   <span>{partner.name}</span>
                 </div>
@@ -1176,49 +1248,44 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <section id="products" className="foundation-mobile-section hpl-snap-section relative overflow-hidden bg-[#FAF9F6]">
-        <div className="absolute inset-0 overflow-hidden bg-[#FAF9F6]">
-          <img
-            src="/brand/usdc-css.jpeg"
-            alt=""
-            data-motion="usdc-wave"
-            decoding="async"
-            className="h-full w-[122%] max-w-none object-cover object-center opacity-95"
-            style={{ animation: 'hpl-usdc-wave 24s ease-in-out infinite alternate', filter: 'blur(1.5px) saturate(1.08) brightness(1.035)', willChange: 'transform' }}
-          />
+      <section id="products" data-no-text-reveal className="foundation-light-section foundation-deck-section foundation-mobile-section hpl-snap-section relative overflow-hidden" style={{ backgroundColor: '#f6f8fc', colorScheme: 'light' }}>
+        <div className="foundation-section-backdrop absolute inset-0 bg-[radial-gradient(circle_at_8%_14%,rgba(37,99,235,.11),transparent_29%),radial-gradient(circle_at_90%_82%,rgba(6,182,212,.09),transparent_27%),linear-gradient(145deg,#fbfdff_0%,#f3f7ff_50%,#f8fafc_100%)]">
         </div>
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(250,249,246,.96)_0%,rgba(250,249,246,.74)_30%,rgba(250,249,246,.36)_50%,rgba(250,249,246,.74)_70%,rgba(250,249,246,.96)_100%)]" />
-        <div className="relative z-10 mx-auto flex min-h-[100dvh] max-w-7xl flex-col justify-center px-5 py-20 max-sm:min-h-0 max-sm:py-0 sm:px-8 lg:px-10">
-          <div className="max-w-2xl">
+        <div className="absolute left-[48%] top-1/2 h-[620px] w-[620px] -translate-y-1/2 rounded-full bg-blue-100/[.30] blur-3xl" />
+        <div className="hpl-section-content relative z-10 mx-auto grid min-h-[100dvh] w-full max-w-7xl items-center gap-10 px-5 py-20 max-sm:min-h-0 max-sm:py-0 sm:px-8 lg:grid-cols-[.72fr_1.28fr] lg:px-10">
+          <div className="max-w-xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 max-sm:text-[10px] max-sm:tracking-[0.22em]">Product surface</p>
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-gray-950 max-sm:mt-2 sm:text-5xl">
-              One platform for USDC workflows.
+              One platform. Connected workflows.
             </h2>
             <p className="mt-4 max-w-xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-              Consumer-simple interfaces on top of verifiable settlement, agent activity, and durable payment state.
+              Payments, wallets, intelligence, and activity stay connected across the platform.
             </p>
           </div>
 
-          <div className="foundation-mobile-product-grid mt-14 grid gap-x-16 gap-y-9 md:grid-cols-2 lg:grid-cols-3">
-            {products.map(({ index, title, copy, href }) => {
+          <div className="foundation-surface-card foundation-mobile-product-grid overflow-hidden rounded-[28px] px-5 py-2 [&>:last-child>div]:border-b-0 sm:px-6">
+            {products.map(({ index, title, meta, copy, action, href }) => {
               const content = (
-                <>
-                  <span className="text-[11px] font-semibold tracking-[0.22em] text-gray-400">{index}</span>
-                  <div>
-                    <h3 className="mt-4 text-xl font-semibold tracking-[-0.025em] text-gray-950 max-sm:mt-0 max-sm:text-sm">{title}</h3>
-                    <p className="mt-3 text-sm leading-6 text-gray-600 max-sm:mt-1 max-sm:text-[11px] max-sm:leading-4">{copy}</p>
+                <div className="grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 py-3.5">
+                  <span className="product-card-index flex h-7 w-7 items-center justify-center rounded-full bg-slate-950 text-[8px] font-semibold tracking-[0.08em] text-white">{index}</span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <h3 className="product-card-title text-sm font-semibold tracking-[-0.02em] text-slate-950">{title}</h3>
+                      <p className="product-card-meta text-[8px] font-semibold uppercase tracking-[0.12em] text-blue-700">{meta}</p>
+                    </div>
+                    <p className="product-card-copy mt-1 text-[10px] leading-4 text-slate-600 sm:text-[11px]">{copy}</p>
                   </div>
-                  <div className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 opacity-80 transition group-hover:gap-2 group-hover:opacity-100 max-sm:mt-0 max-sm:justify-self-end">
-                    Open <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                  <div className="product-card-action inline-flex h-8 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-[10px] font-semibold text-slate-800 transition group-hover:border-blue-200 group-hover:bg-blue-50 group-hover:text-blue-800">
+                    <span className="hidden sm:inline">{action}</span><ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
                   </div>
-                </>
+                </div>
               )
               return href.startsWith('http') ? (
-                <a key={title} href={href} className="foundation-mobile-product-card group max-w-[330px] text-left max-sm:max-w-none">
+                <a key={title} href={href} data-no-text-reveal className="group block text-left">
                   {content}
                 </a>
               ) : (
-                <Link key={title} to={href} className="foundation-mobile-product-card group max-w-[330px] text-left max-sm:max-w-none">
+                <Link key={title} to={href} data-no-text-reveal className="group block text-left">
                   {content}
                 </Link>
               )
@@ -1227,118 +1294,154 @@ export default function FoundationPage() {
         </div>
       </section>
 
-      <section id="traction" ref={retailSectionRef} className="foundation-mobile-section hpl-snap-section relative overflow-hidden bg-[#f6f8fc] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_12%,rgba(37,99,235,.12),transparent_30%),radial-gradient(circle_at_92%_74%,rgba(6,182,212,.11),transparent_28%),linear-gradient(145deg,#fbfdff_0%,#f3f7ff_48%,#f7fafc_100%)]" />
-        <div className="absolute left-[42%] top-1/2 h-[620px] w-[620px] -translate-y-1/2 rounded-full bg-blue-100/35 blur-3xl" />
+      <section id="retail" className="foundation-light-section foundation-deck-section foundation-mobile-section hpl-snap-section relative overflow-hidden px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
+        <div className="foundation-section-backdrop absolute inset-0 bg-[radial-gradient(circle_at_8%_12%,rgba(37,99,235,.12),transparent_30%),radial-gradient(circle_at_92%_74%,rgba(6,182,212,.11),transparent_28%),linear-gradient(145deg,#fbfdff_0%,#f3f7ff_48%,#f7fafc_100%)]" />
+        <div className="absolute left-[42%] top-1/2 h-[620px] w-[620px] -translate-y-1/2 rounded-full bg-blue-100/[.35] blur-3xl" />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+          {['Scan', 'Pay', 'USDC', 'Settle', 'Receipt'].map((word, index) => (
+            <span
+              key={word}
+              data-motion="stack-word"
+              className="absolute select-none text-5xl font-semibold tracking-[-0.055em] text-slate-900/[.032] sm:text-7xl lg:text-8xl"
+              style={{
+                left: `${[5, 31, 64, 10, 53][index]}%`,
+                top: `${[10, 72, 12, 43, 78][index]}%`,
+                '--rotate': `${[-7, 5, -4, 6, -5][index]}deg`,
+                animation: `hpl-orbit-word ${[12, 14, 11, 13, 15][index]}s ease-in-out infinite`,
+                animationDelay: `${index * -1.7}s`,
+                willChange: 'transform',
+              } as CSSProperties}
+            >
+              {word}
+            </span>
+          ))}
+        </div>
 
-        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-8 max-sm:min-h-0 max-sm:gap-5 lg:grid-cols-[1.02fr_.98fr]">
-          <article className="retail-motion relative flex min-h-[680px] overflow-hidden rounded-[32px] border border-white/20 bg-[#101722] p-8 text-white shadow-[0_34px_110px_rgba(30,64,175,.18)] max-sm:min-h-[610px] max-sm:rounded-[24px] max-sm:p-5 sm:p-10">
-            <img src="/brand/africa-retail-story.jpeg" alt="West African retail culture" loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover object-center saturate-[.92]" />
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,11,20,.24)_0%,rgba(5,11,20,.34)_34%,rgba(5,10,19,.94)_100%)]" />
-            <div className="relative z-10 flex w-full flex-col justify-between gap-12">
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-cyan-100/80">Retail settlement layer</p>
-              </div>
+        <div className="hpl-section-content relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-5 max-sm:min-h-0 lg:grid-cols-[1.38fr_.62fr]">
+          <article
+            className="retail-motion relative flex min-h-[560px] w-full overflow-hidden rounded-[32px] border border-white/[.24] bg-[#101722] p-8 text-white shadow-[0_34px_110px_rgba(30,64,175,.16)] max-sm:min-h-[520px] max-sm:rounded-[24px] max-sm:p-5 sm:p-10"
+            onPointerMove={event => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              const x = ((event.clientX - rect.left) / rect.width - 0.5) * -12
+              const y = ((event.clientY - rect.top) / rect.height - 0.5) * -8
+              event.currentTarget.style.setProperty('--retail-x', `${x.toFixed(2)}px`)
+              event.currentTarget.style.setProperty('--retail-y', `${y.toFixed(2)}px`)
+              event.currentTarget.style.setProperty('--retail-hover-scale', '1.018')
+            }}
+            onPointerLeave={event => {
+              event.currentTarget.style.setProperty('--retail-x', '0px')
+              event.currentTarget.style.setProperty('--retail-y', '0px')
+              event.currentTarget.style.setProperty('--retail-hover-scale', '1')
+            }}
+            onPointerUp={event => {
+              event.currentTarget.style.setProperty('--retail-x', '0px')
+              event.currentTarget.style.setProperty('--retail-y', '0px')
+              event.currentTarget.style.setProperty('--retail-hover-scale', '1')
+            }}
+            onPointerCancel={event => {
+              event.currentTarget.style.setProperty('--retail-x', '0px')
+              event.currentTarget.style.setProperty('--retail-y', '0px')
+              event.currentTarget.style.setProperty('--retail-hover-scale', '1')
+            }}
+          >
+            <div className="retail-image-plane absolute inset-0">
+              <img src="/brand/africa-retail-story.jpeg" alt="West African retail culture" loading="lazy" decoding="async" className="h-full w-full object-cover object-top saturate-[.92]" />
+            </div>
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,10,19,.92)_0%,rgba(5,10,19,.70)_42%,rgba(5,10,19,.15)_78%),linear-gradient(180deg,rgba(5,10,19,.05)_42%,rgba(5,10,19,.72)_100%)] max-sm:bg-[linear-gradient(180deg,rgba(5,10,19,.10)_18%,rgba(5,10,19,.88)_76%)]" />
+            <div className="relative z-10 flex w-full max-w-[620px] flex-col justify-end">
 
               <div>
-                <h2 className="max-w-[620px] text-[clamp(2.65rem,4.8vw,4.6rem)] font-semibold leading-[.95] tracking-[-0.065em] text-white">
-                  Contactless QR checkout for African counters.
+                <p className="section-detail-reveal text-[10px] font-extrabold uppercase tracking-[0.14em] text-cyan-100/[.82]" style={{ '--section-reveal-delay': '70ms' } as CSSProperties}>Circle Pocket · Retail checkout</p>
+                <h2 className="section-detail-reveal mt-4 max-w-[620px] text-[clamp(2.65rem,4.8vw,4.6rem)] font-semibold leading-[.95] tracking-[-0.065em] text-white" style={{ '--section-reveal-delay': '120ms' } as CSSProperties}>
+                  One pocket for real-world checkout.
                 </h2>
-                <p className="mt-5 max-w-[540px] text-[13px] leading-6 text-white/70">
-                  One reusable QR gives customers a familiar phone payment flow while merchants receive USDC or settle directly to a verified Nigerian bank account.
+                <p className="section-detail-reveal mt-5 max-w-[500px] text-[13px] leading-6 text-white/[.74]" style={{ '--section-reveal-delay': '175ms' } as CSSProperties}>
+                  Customers scan once and pay in USDC. Merchants keep USDC or settle locally, with one connected record.
                 </p>
 
-                <div className="mt-7 grid grid-cols-2 gap-x-5 gap-y-4 rounded-[22px] border border-white/12 bg-black/25 p-5 backdrop-blur-xl max-sm:grid-cols-1 max-sm:gap-3 max-sm:p-4">
-                  {[
-                    ['01', 'Wallet networks', 'Your USDC across supported networks.'],
-                    ['02', 'Your funding address', 'Open your Circle wallet on the selected network.'],
-                    ['03', 'Send USDC · Bridge USDC', 'Native USDC via Circle CCTP.'],
-                    ['04', 'Receipts and 0G archive', '0G archive proof appears only when verified proof metadata is ready.'],
-                  ].map(([index, title, value]) => (
-                    <div key={title} className="grid grid-cols-[24px_1fr] gap-2.5 border-t border-white/12 pt-3">
-                      <p className="text-[10px] font-bold text-cyan-100/55">{index}</p>
-                      <div>
-                        <p className="text-xs font-semibold tracking-[-0.01em] text-white">{title}</p>
-                        <p className="mt-1 text-[10px] leading-4 text-white/52">{value}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-5 grid grid-cols-3 overflow-hidden rounded-xl border border-white/14 bg-black/20 text-[10px] backdrop-blur-md">
-                  {[
-                    ['Nigeria', 'Active'],
-                    ['Ghana', 'Coming soon'],
-                    ['Kenya', 'Coming soon'],
-                  ].map(([country, status], index) => (
-                    <div key={country} className={`px-3 py-3 ${index ? 'border-l border-white/12' : ''}`}>
-                      <p className="font-semibold text-white/88">{country}</p>
-                      <p className={`mt-1 ${status === 'Active' ? 'text-cyan-100/75' : 'text-white/42'}`}>{status}</p>
-                    </div>
-                  ))}
-                </div>
+                <a
+                  href={`${APP_URL}?product=payment&tab=pos`}
+                  className="section-detail-reveal mt-7 inline-flex min-h-12 w-fit items-center gap-4 rounded-full bg-white py-1.5 pl-5 pr-1.5 text-xs font-semibold text-slate-950 shadow-[0_16px_40px_rgba(0,0,0,.22)] transition hover:bg-cyan-50"
+                  style={{ '--section-reveal-delay': '230ms' } as CSSProperties}
+                >
+                  Open retail POS
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-950 text-white">
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </a>
               </div>
             </div>
           </article>
 
-          <div className="space-y-4 sm:relative sm:min-h-[620px] sm:space-y-0 lg:min-h-[680px]">
-            {retailImages.map((image, index) => (
-              <button
-                key={image.title}
-                type="button"
-                onClick={() => setActiveRetailImage((current) => (current + 1) % retailImages.length)}
-                className={`${image.wrapperClass} ${activeRetailImage === index ? 'max-sm:block' : 'max-sm:hidden'} appearance-none border-0 bg-transparent p-0 text-left`}
-                aria-label="Show next retail image"
+          <aside className="grid grid-cols-3 gap-2.5 lg:relative lg:min-h-[520px] lg:block" aria-label="Hash PayLink QR terminal views">
+            {[
+              ['/brand/africa-terminal-payment.jpeg', 'Customer paying with a Hash PayLink QR terminal', 'lg:left-[5%] lg:top-[9%] lg:w-[78%] lg:-rotate-[2deg]'],
+              ['/brand/africa-terminal-units.jpeg', 'Hash PayLink reusable QR terminal units', 'lg:right-[4%] lg:top-[37%] lg:w-[68%] lg:rotate-[2.5deg]'],
+              ['/brand/africa-terminal-live.jpeg', 'Hash PayLink QR terminal at retail checkout', 'lg:bottom-[8%] lg:left-[11%] lg:w-[72%] lg:-rotate-[.75deg]'],
+            ].map(([src, alt, position], index) => (
+              <div
+                key={src}
+                className={`${position} section-detail-reveal h-28 overflow-hidden rounded-[16px] border border-white/80 bg-white/70 p-1 opacity-[.74] shadow-[0_14px_34px_rgba(15,23,42,.09)] transition duration-500 hover:opacity-[.92] max-sm:h-24 lg:absolute lg:h-[152px] lg:rounded-[18px]`}
+                style={{ '--section-reveal-delay': `${145 + index * 70}ms` } as CSSProperties}
               >
-                <div className={`${image.cardClass} foundation-mobile-retail-card`} style={{ '--shine-delay': image.shineDelay } as CSSProperties}>
-                  <img
-                    src={image.src}
-                    alt={image.alt}
-                    loading="lazy"
-                    decoding="async"
-                    className={`${image.imageClass} w-full rounded-[22px] object-cover object-center max-sm:h-[210px]`}
-                  />
-                  <div className="flex items-center justify-between px-3 py-3 max-sm:py-2">
-                    <p className="text-xs font-semibold text-gray-900">{image.title}</p>
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-blue-600/60">{image.meta}</p>
-                  </div>
-                  <div className="hidden px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400 max-sm:block">
-                    Tap to switch {activeRetailImage + 1}/{retailImages.length}
-                  </div>
-                </div>
-              </button>
+                <img src={src} alt={alt} loading="lazy" decoding="async" className="h-full w-full rounded-[12px] object-cover object-center brightness-[.94] saturate-[.66] lg:rounded-[14px]" />
+              </div>
             ))}
-          </div>
+          </aside>
+
         </div>
       </section>
 
-      <section ref={modernAppSectionRef} className="foundation-mobile-section modern-app-section hpl-snap-section relative overflow-hidden bg-[#f7f6f2] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(59,130,246,.12),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(6,182,212,.10),transparent_28%),linear-gradient(180deg,#f9f8f4_0%,#f3f1ea_100%)]" />
-        <div className="absolute left-1/2 top-1/2 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/50 blur-3xl" />
-        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-14 max-sm:min-h-0 max-sm:gap-4 lg:grid-cols-[.82fr_1.18fr]">
+      <section id="pocket" className="foundation-light-section foundation-deck-section foundation-mobile-section hpl-snap-section relative overflow-hidden px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
+        <div className="foundation-section-backdrop absolute inset-0 bg-[radial-gradient(circle_at_8%_12%,rgba(37,99,235,.12),transparent_30%),radial-gradient(circle_at_92%_74%,rgba(6,182,212,.11),transparent_28%),linear-gradient(145deg,#fbfdff_0%,#f3f7ff_48%,#f7fafc_100%)]" />
+        <div className="absolute left-[42%] top-1/2 h-[620px] w-[620px] -translate-y-1/2 rounded-full bg-blue-100/[.35] blur-3xl" />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+          {['Pocket', 'Wallet', 'Checkout', 'Move', 'Activity'].map((word, index) => (
+            <span
+              key={word}
+              data-motion="stack-word"
+              className="absolute select-none text-5xl font-semibold tracking-[-0.055em] text-slate-900/[.032] sm:text-7xl lg:text-8xl"
+              style={{
+                left: `${[4, 32, 62, 16, 58][index]}%`,
+                top: `${[13, 76, 9, 50, 80][index]}%`,
+                '--rotate': `${[-6, 5, -3, 7, -5][index]}deg`,
+                animation: `hpl-orbit-word ${[13, 11, 15, 12, 14][index]}s ease-in-out infinite`,
+                animationDelay: `${index * -1.8}s`,
+                willChange: 'transform',
+              } as CSSProperties}
+            >
+              {word}
+            </span>
+          ))}
+        </div>
+        <div className="hpl-section-content relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-14 max-sm:min-h-0 max-sm:gap-4 lg:grid-cols-[.82fr_1.18fr]">
           <div className="max-w-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">Mobile command layer</p>
-            <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 max-sm:mt-2 sm:text-5xl">
-              Built for the screen users already trust.
+            <p className="section-detail-reveal text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]" style={{ '--section-reveal-delay': '60ms' } as CSSProperties}>Circle Pocket · Mobile checkout</p>
+            <h2 className="section-detail-reveal mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 max-sm:mt-2 sm:text-5xl" style={{ '--section-reveal-delay': '115ms' } as CSSProperties}>
+              One payment flow for digital and local value.
             </h2>
-            <p className="foundation-mobile-command-copy mt-5 text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-              Hash PayLink turns payment links, PolyDesk alerts, HashpayStream, and agent receipts into clean mobile workflows that feel simple enough for chat and strong enough for fintech teams.
+            <p className="foundation-mobile-command-copy section-detail-reveal mt-5 text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5" style={{ '--section-reveal-delay': '170ms' } as CSSProperties}>
+              Circle Pocket keeps USDC simple for customers while merchants choose USDC or supported local bank settlement from the same checkout.
             </p>
 
-            <div className="mt-9 grid max-w-lg grid-cols-2 gap-3 max-sm:hidden">
-              {proofStats.map((item) => {
+            <div className="mt-8 grid max-w-xl grid-cols-2 gap-3 max-sm:mt-4 max-sm:gap-2">
+              {proofStats.map((item, index) => {
                 const content = (
-                  <div className="rounded-2xl border border-black/10 bg-white/64 p-4 shadow-[0_18px_56px_rgba(15,23,42,.06)] backdrop-blur-sm transition hover:border-blue-200 hover:bg-white/85">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">{item.label}</p>
-                    <p className="mt-2 text-sm font-semibold tracking-[-0.01em] text-gray-950">{item.value}</p>
+                  <div className="foundation-surface-card group/card min-h-[142px] rounded-[22px] p-4 transition duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_22px_62px_rgba(37,99,235,.11)] max-sm:min-h-0 max-sm:rounded-2xl max-sm:p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500">{item.label}</p>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-[8px] font-black text-gray-500 transition group-hover/card:border-blue-200 group-hover/card:bg-blue-50 group-hover/card:text-blue-700">{item.index}</span>
+                    </div>
+                    <p className="mt-4 text-sm font-semibold tracking-[-0.015em] text-gray-950 max-sm:mt-2 max-sm:text-[10px]">{item.value}</p>
+                    <p className="mt-2 text-[11px] leading-4 text-gray-500 max-sm:mt-1 max-sm:text-[8px] max-sm:leading-3">{item.copy}</p>
                   </div>
                 )
                 return item.href.startsWith('http') ? (
-                  <a key={item.label} href={item.href} target="_blank" rel="noreferrer">
+                  <a key={item.label} href={item.href} target="_blank" rel="noreferrer" className="section-detail-reveal" style={{ '--section-reveal-delay': `${225 + index * 55}ms` } as CSSProperties}>
                     {content}
                   </a>
                 ) : (
-                  <Link key={item.label} to={item.href}>
+                  <Link key={item.label} to={item.href} className="section-detail-reveal" style={{ '--section-reveal-delay': `${225 + index * 55}ms` } as CSSProperties}>
                     {content}
                   </Link>
                 )
@@ -1346,374 +1449,262 @@ export default function FoundationPage() {
             </div>
 
             <a
-              href={APP_URL}
-              className="mt-8 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(15,23,42,.16)] transition hover:bg-gray-800 max-sm:hidden"
+              href={`${APP_URL}/pocket`}
+              className="foundation-primary-cta section-detail-reveal group mt-7 inline-flex min-h-14 min-w-[210px] items-center justify-between gap-5 py-1.5 pl-6 pr-1.5 text-sm font-semibold shadow-[0_18px_50px_rgba(15,23,42,.18)] transition hover:bg-black active:scale-[0.985] max-sm:mt-4 max-sm:min-h-12 max-sm:w-full"
+              style={{ '--section-reveal-delay': '475ms' } as CSSProperties}
             >
-              Open App <ArrowRight className="h-4 w-4" />
+              Open Pocket
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/[.12] transition-transform group-hover:translate-x-0.5">
+                <ArrowRight className="h-4 w-4" />
+              </span>
             </a>
           </div>
 
-          <div className="phone-stage relative flex items-center justify-center">
-            <div className="phone-mockup phone-secondary absolute">
-              <div className="phone-screen bg-[#eef6ff]">
-                <div className="h-full px-5 pb-5 pt-14 text-gray-950 max-sm:px-3 max-sm:pb-3 max-sm:pt-9">
-                  <div className="rounded-[28px] bg-white/86 p-4 shadow-[0_18px_44px_rgba(15,23,42,.10)] max-sm:rounded-[18px] max-sm:p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-blue-700 max-sm:text-[8px]">PolyDesk</p>
-                    <h3 className="mt-3 text-2xl font-semibold tracking-[-0.05em] max-sm:mt-1 max-sm:text-base">Portfolio alerts</h3>
-                    <p className="mt-2 text-xs leading-5 text-gray-500 max-sm:mt-1 max-sm:text-[9px] max-sm:leading-[14px]">Positions, funding, and LP Scout memory from Telegram.</p>
-                    <div className="mt-5 space-y-2 max-sm:mt-3 max-sm:space-y-1.5">
-                      {['Position risk below 12%', 'LP Scout result saved', 'Funding route ready'].map((item) => (
-                        <div key={item} className="flex items-center justify-between rounded-2xl bg-gray-950/[.035] px-3 py-2 max-sm:rounded-xl max-sm:px-2 max-sm:py-1.5">
-                          <span className="text-[11px] font-medium text-gray-700 max-sm:text-[9px]">{item}</span>
-                          <span className="h-2 w-2 rounded-full bg-blue-600 max-sm:h-1.5 max-sm:w-1.5" />
+          <div className="phone-stage relative items-center">
+            <div className="phone-mockup phone-secondary section-detail-reveal" style={{ '--section-reveal-delay': '125ms' } as CSSProperties}>
+              <span className="phone-hardware" aria-hidden="true" />
+              <div className="phone-screen" style={{ background: '#ffffff', color: '#0a0a0a', colorScheme: 'light' }}>
+                <div className="flex h-full flex-col px-4 pb-4 pt-12 text-gray-950 max-sm:px-2.5 max-sm:pb-2.5 max-sm:pt-8">
+                  <div className="section-detail-reveal flex items-center justify-between px-1" style={{ '--section-reveal-delay': '205ms' } as CSSProperties}>
+                    <div className="flex items-center gap-2">
+                      <CPurseIcon size={20} title="" className="text-gray-950 max-sm:h-3.5 max-sm:w-3.5" />
+                      <p className="text-xs font-black max-sm:text-[9px]">Pocket</p>
+                    </div>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-950 text-[10px] font-bold text-white max-sm:h-5 max-sm:w-5 max-sm:text-[7px]">EO</span>
+                  </div>
+                  <div className="section-detail-reveal mt-4 grid grid-cols-2 gap-1 rounded-full border p-1 text-[10px] font-bold max-sm:mt-2 max-sm:p-0.5 max-sm:text-[7px]" style={{ borderColor: '#dfe3e8', background: '#f2f4f7', '--section-reveal-delay': '260ms' } as CSSProperties}>
+                    <span className="flex items-center justify-center gap-1 rounded-full px-2 py-2 text-center shadow-sm max-sm:py-1" style={{ background: '#ffffff', color: '#101828' }}><Wallet className="h-3 w-3 max-sm:h-2 max-sm:w-2" />Smart Wallet</span>
+                    <span className="flex items-center justify-center gap-1 px-2 py-2 text-center max-sm:py-1" style={{ color: '#667085' }}><Radio className="h-3 w-3 max-sm:h-2 max-sm:w-2" />App Pay</span>
+                  </div>
+                  <div className="section-detail-reveal mt-3 rounded-2xl border p-4 shadow-sm max-sm:mt-2 max-sm:rounded-xl max-sm:p-2.5" style={{ borderColor: '#eaecf0', background: 'linear-gradient(135deg,#ffffff 0%,#f1f7ff 100%)', color: '#101828', '--section-reveal-delay': '315ms' } as CSSProperties}>
+                    <p className="text-[8px] font-bold uppercase tracking-[0.18em] max-sm:text-[6px]" style={{ color: '#667085' }}>Total available</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] max-sm:text-base">0 <span className="text-[10px] max-sm:text-[7px]" style={{ color: '#667085' }}>USDC</span></p>
+                    <span className="mt-2 inline-flex rounded-full border px-2 py-1 text-[8px] font-bold max-sm:mt-1 max-sm:px-1.5 max-sm:py-0.5 max-sm:text-[6px]" style={{ borderColor: '#dfe3e8', background: '#ffffff', color: '#344054' }}>USDC</span>
+                  </div>
+                  <div className="section-detail-reveal mt-3 grid grid-cols-4 gap-1 rounded-xl border p-1 text-center text-[8px] font-bold max-sm:mt-2 max-sm:text-[6px]" style={{ borderColor: '#dfe3e8', background: '#ffffff', '--section-reveal-delay': '370ms' } as CSSProperties}>
+                    {([[Activity, 'Balance'], [Download, 'Fund'], [ArrowLeftRight, 'Move'], [LayoutDashboard, 'Activity']] as const).map(([Icon, item], index) => (
+                      <span key={String(item)} className="flex flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 max-sm:gap-0.5 max-sm:py-1" style={{ background: index === 0 ? '#f2f4f7' : 'transparent', color: index === 0 ? '#101828' : '#667085' }}><Icon className="h-3 w-3 max-sm:h-2 max-sm:w-2" />{item}</span>
+                    ))}
+                  </div>
+                  <div className="section-detail-reveal mt-3 rounded-2xl border p-3 shadow-sm max-sm:mt-2 max-sm:rounded-xl max-sm:p-2" style={{ borderColor: '#eaecf0', background: '#ffffff', color: '#101828', '--section-reveal-delay': '425ms' } as CSSProperties}>
+                    <p className="text-[10px] font-black max-sm:text-[7px]">Wallet networks</p>
+                    <p className="mt-0.5 text-[8px] max-sm:text-[6px]" style={{ color: '#667085' }}>Your USDC across supported networks</p>
+                    <div className="mt-2 space-y-1 max-sm:mt-1">
+                      {[
+                        ['/brand/base-logo.jpeg', 'Base', 'light'],
+                        ['/brand/arbitrum-logo.jpeg', 'Arbitrum', 'light'],
+                        ['/brand/arc-logo.jpeg', 'Arc', 'dark'],
+                        ['/brand/solana-logo.jpeg', 'Solana', 'dark'],
+                      ].map(([logo, network, canvas]) => (
+                        <div key={network} className="flex items-center justify-between rounded-lg px-1.5 py-1.5 max-sm:py-1">
+                          <span className="flex items-center gap-2 text-[9px] font-bold max-sm:gap-1 max-sm:text-[6px]">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden bg-transparent max-sm:h-4 max-sm:w-4">
+                              <img src={logo} alt="" className={`h-6 w-6 object-cover grayscale contrast-200 mix-blend-multiply max-sm:h-3.5 max-sm:w-3.5 ${canvas === 'dark' ? 'invert' : ''}`} />
+                            </span>
+                            <span className="flex items-center gap-1">{network}{network === 'Arc' ? <span className="rounded-full border border-gray-200 bg-gray-50 px-1 py-0.5 text-[5px] font-black uppercase tracking-wide text-gray-500">Testnet</span> : null}</span>
+                          </span>
+                          <span className="text-[8px] font-semibold max-sm:text-[6px]" style={{ color: '#475467' }}>0 USDC</span>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="mt-4 rounded-[26px] bg-gray-950 p-4 text-white shadow-[0_18px_50px_rgba(15,23,42,.16)] max-sm:mt-3 max-sm:rounded-[18px] max-sm:p-3">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/45 max-sm:text-[8px]">USDC balance</p>
-                    <p className="mt-2 text-3xl font-semibold tracking-[-0.06em] max-sm:text-xl">$1,284.20</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="phone-mockup phone-primary absolute">
-              <div className="phone-screen bg-[#f9fafb]">
-                <div className="flex h-full flex-col px-5 pb-5 pt-14 text-gray-950 max-sm:px-3 max-sm:pb-3 max-sm:pt-9">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400 max-sm:text-[8px]">Hash PayLink</p>
-                      <h3 className="mt-1 text-2xl font-semibold tracking-[-0.055em] max-sm:text-base">Payment ready</h3>
-                    </div>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 shadow-[0_14px_36px_rgba(37,99,235,.32)] max-sm:h-7 max-sm:w-7">
-                      <HashMark className="h-5 w-5 object-contain max-sm:h-3.5 max-sm:w-3.5" />
-                    </div>
-                  </div>
-
-                  <div className="mt-6 rounded-[30px] bg-gray-950 p-5 text-white shadow-[0_26px_70px_rgba(15,23,42,.22)] max-sm:mt-4 max-sm:rounded-[20px] max-sm:p-3">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-white/45 max-sm:text-[8px]">Checkout</p>
-                    <p className="mt-4 text-4xl font-semibold tracking-[-0.07em] max-sm:mt-2 max-sm:text-2xl">$125.00</p>
-                    <p className="mt-2 text-xs text-white/55 max-sm:text-[10px]">USDC on Base</p>
-                    <div className="mt-6 h-11 rounded-2xl bg-white text-center text-xs font-semibold leading-[44px] text-gray-950 max-sm:mt-3 max-sm:h-8 max-sm:rounded-xl max-sm:text-[10px] max-sm:leading-8">
-                      Pay with wallet
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3 max-sm:hidden">
-                    <div className="rounded-3xl bg-white p-4 shadow-[0_14px_38px_rgba(15,23,42,.08)]">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Proof</p>
-                      <p className="mt-2 text-sm font-semibold">0G archived</p>
-                    </div>
-                    <div className="rounded-3xl bg-white p-4 shadow-[0_14px_38px_rgba(15,23,42,.08)]">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-gray-400">Agent</p>
-                      <p className="mt-2 text-sm font-semibold">x402 paid</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-auto rounded-[26px] border border-black/10 bg-white p-4 max-sm:hidden">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-700">Live workflow</p>
-                    <p className="mt-2 text-xs leading-5 text-gray-500">Receipts, balances, and payment state stay readable on mobile.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="stack" className="foundation-mobile-section foundation-mobile-section-tight hpl-snap-section relative overflow-hidden bg-[#faf9f6] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
-        <div className="absolute inset-0">
-          <img
-            src="/brand/usdc-footer.png"
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover object-center opacity-72"
-          />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(250,249,246,.98)_0%,rgba(250,249,246,.90)_44%,rgba(250,249,246,.64)_100%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_22%_74%,rgba(99,102,241,.12),transparent_34%),radial-gradient(circle_at_82%_22%,rgba(255,255,255,.78),transparent_36%)]" />
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
-            {['Request', 'Send', 'Pay', 'Crypto', 'Stablecoins'].map((word, index) => (
-              <span
-                key={word}
-                data-motion="stack-word"
-                className="absolute select-none text-5xl font-semibold tracking-[-0.055em] text-slate-900/[.035] sm:text-7xl lg:text-8xl"
-                style={{
-                  left: `${[6, 28, 58, 12, 46][index]}%`,
-                  top: `${[12, 34, 16, 68, 78][index]}%`,
-                  '--rotate': `${[-8, 5, -4, 7, -6][index]}deg`,
-                  animation: `hpl-orbit-word ${[11, 13, 10, 14, 12][index]}s ease-in-out infinite`,
-                  animationDelay: `${index * -1.6}s`,
-                  willChange: 'transform',
-                } as CSSProperties}
-              >
-                {word}
-              </span>
-            ))}
-            {[0, 1, 2, 3].map((item) => (
-              <img
-                key={item}
-                src="/brand/usdc-circle-logo.png"
-                alt=""
-                data-motion="stack-coin"
-                loading="lazy"
-                decoding="async"
-                className="absolute rounded-full object-cover opacity-[.055] blur-[1px]"
-                style={{
-                  width: `${[150, 92, 128, 72][item]}px`,
-                  height: `${[150, 92, 128, 72][item]}px`,
-                  left: `${[70, 18, 82, 39][item]}%`,
-                  top: `${[58, 22, 10, 84][item]}%`,
-                  '--rotate': `${[12, -18, 28, -10][item]}deg`,
-                  animation: `hpl-orbit-coin ${[12, 9, 14, 10][item]}s ease-in-out infinite`,
-                  animationDelay: `${item * -1.25}s`,
-                  willChange: 'transform',
-                } as CSSProperties}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="relative z-10 mx-auto w-full max-w-7xl">
-          <div className="grid gap-12 max-sm:gap-4 lg:grid-cols-[.86fr_1.14fr]">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">Infrastructure stack</p>
-              <h2 className="mt-3 max-w-xl text-4xl font-semibold tracking-[-0.04em] max-sm:mt-2 sm:text-5xl">
-                Built on rails people already trust.
-              </h2>
-              <p className="mt-5 max-w-xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-                Circle, Arc, and 0G make Hash PayLink possible: Circle powers USDC checkout and smart-wallet sessions, Arc supports programmable HashpayStream settlement, and 0G keeps payment and agent records verifiable. The rest of the stack extends distribution, networks, and product context.
-              </p>
-            </div>
-
-            <div className="grid gap-x-10 gap-y-7 max-sm:grid-cols-2 max-sm:gap-2 sm:grid-cols-2">
-              {stack.map((item, index) => (
-                <div key={item.name} className="hpl-reveal border-t border-black/10 pt-4 max-sm:rounded-xl max-sm:border max-sm:bg-white/60 max-sm:p-2.5 max-sm:shadow-[0_12px_32px_rgba(15,23,42,.055)]" style={{ '--delay': `${index * 55}ms` } as CSSProperties}>
-                  <p className="text-sm font-semibold tracking-[-0.01em] text-gray-950 max-sm:text-xs">{item.name}</p>
-                  <p className="mt-2 text-xs leading-5 text-gray-500 max-sm:mt-1 max-sm:text-[10px] max-sm:leading-4">{item.copy}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div id="about" className="mt-20 grid gap-10 border-t border-black/10 pt-12 max-sm:mt-4 max-sm:pt-4 lg:grid-cols-[1fr_.82fr]">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 max-sm:text-[10px] max-sm:tracking-[0.22em]">Developer path</p>
-              <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-[-0.035em] text-gray-950 max-sm:mt-2 max-sm:text-lg">Integrate hosted checkout first.</h2>
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-                The SDK builds Hash PayLink checkout URLs and React buttons. Wallet execution stays inside the hosted app so integrators do not duplicate relayers, smart-wallet sessions, or 0G archive logic.
-              </p>
-              <Link
-                to="/docs/sdk"
-                className="mt-7 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 max-sm:mt-3 max-sm:h-9 max-sm:text-xs"
-              >
-                Developer docs <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-
-            <div className="max-sm:hidden">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">Start here</p>
-              <h3 className="mt-3 text-2xl font-semibold tracking-[-0.035em] text-gray-950">Open the working app.</h3>
-              <p className="mt-3 text-sm leading-6 text-gray-600">
-                Create payment links, open POS, enter PolyDesk, or launch HashpayStream from the app surface.
-              </p>
-              <a
-                href={APP_URL}
-                className="mt-7 inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-black/10 bg-white/75 px-4 text-sm font-semibold text-gray-950 shadow-[0_14px_44px_rgba(15,23,42,.08)] transition hover:bg-white"
-              >
-                Open App <ArrowRight className="h-4 w-4" />
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="api" className="foundation-mobile-section hpl-snap-section relative overflow-hidden bg-[#050609] px-5 py-24 text-white sm:px-8 lg:px-10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(37,99,235,.20),transparent_32%),radial-gradient(circle_at_86%_78%,rgba(6,182,212,.12),transparent_30%)]" />
-        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 lg:grid-cols-[.82fr_1.18fr]">
-          <div className="max-w-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-300">Hosted Checkout API</p>
-            <h2 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">One checkout your users already understand.</h2>
-            <p className="mt-5 max-w-lg text-sm leading-6 text-white/58">
-              Accept USDC on Base or Arbitrum through one hosted checkout. Partners set the available networks; payers choose at checkout. Arc remains testnet.
-            </p>
-
-            <div className="mt-8 max-w-md rounded-[1.75rem] border border-white/10 bg-white/[.055] p-4 shadow-[0_28px_80px_rgba(0,0,0,.30)] backdrop-blur-xl">
-              <div className="flex items-center justify-between gap-3 px-1 pb-4">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/40">Payment request</p>
-                  <p className="mt-1 text-sm font-semibold">Your service</p>
-                </div>
-                <span className="rounded-full border border-white/10 bg-white/[.06] px-2.5 py-1 text-[10px] font-semibold text-white/64">Base · USDC</span>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-5 text-center">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35">Total</p>
-                <p className="mt-2 text-3xl font-semibold tracking-[-0.04em]">10 <span className="text-base text-white/45">USDC</span></p>
-              </div>
-              <div className="relative mt-4 h-14 overflow-hidden rounded-full bg-white p-1.5 text-gray-950">
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold">Slide to pay</span>
-                <span className="absolute bottom-1.5 left-1.5 top-1.5 flex aspect-square items-center justify-center rounded-full bg-gray-950 text-white">
-                  <ArrowRight className="h-5 w-5" />
-                </span>
-              </div>
-              <p className="mt-4 text-center text-[10px] font-medium text-white/32">Hash PayLink checkout · Secure</p>
-            </div>
-
-            <div className="mt-7 grid gap-3 text-xs text-white/48 sm:grid-cols-3">
-              {['Create checkout', 'Share hosted link', 'Verify payment status'].map((step, index) => (
-                <div key={step} className="border-t border-white/10 pt-3"><span className="mr-2 text-white/26">0{index + 1}</span>{step}</div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-[2rem] border border-white/10 bg-white/[.965] p-5 text-gray-950 shadow-[0_30px_100px_rgba(0,0,0,.38)] sm:p-7">
-            {partnerRequestState === 'sent' ? (
-              <div className="flex min-h-[480px] flex-col items-center justify-center text-center">
-                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-[0_16px_44px_rgba(5,150,105,.24)]">
-                  <Check className="h-6 w-6" strokeWidth={2.4} />
-                </span>
-                <h3 className="mt-5 text-2xl font-semibold tracking-[-0.035em]">Request received</h3>
-                <p className="mt-2 max-w-sm text-sm leading-6 text-gray-500">{partnerRequestMessage} We will review the payment flow and contact you using the email provided.</p>
-                <Link to="/docs/sdk" className="mt-7 inline-flex h-11 items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-semibold text-white">
-                  Read integration docs <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            ) : (
-              <form onSubmit={submitPartnerRequest} className="space-y-5">
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-blue-700">Developer access</p>
-                  <h3 className="mt-2 text-2xl font-semibold tracking-[-0.035em]">Start with the hosted checkout API</h3>
-                  <p className="mt-2 text-sm leading-6 text-gray-500">Sign in with Privy, pin your payment routing and create a server key. Naira settlement remains reviewed.</p>
-                  <Link to="/developers" className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800">
-                    Open developer dashboard <ArrowRight className="h-4 w-4" />
-                  </Link>
-                  <div className="flex items-center gap-3 pt-1"><span className="h-px flex-1 bg-gray-200" /><span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Reviewed access</span><span className="h-px flex-1 bg-gray-200" /></div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {([
-                    ['name', 'Your name', 'Ada Lovelace', 'text'],
-                    ['email', 'Work email', 'ada@company.com', 'email'],
-                    ['company', 'Company or project', 'Company name', 'text'],
-                    ['website', 'Website', 'https://company.com', 'url'],
-                  ] as const).map(([key, label, placeholder, type]) => (
-                    <label key={key} className="space-y-1.5">
-                      <span className="text-xs font-semibold text-gray-600">{label}</span>
-                      <input
-                        type={type}
-                        required={key !== 'website'}
-                        value={partnerForm[key]}
-                        onChange={event => setPartnerForm(current => ({ ...current, [key]: event.target.value }))}
-                        placeholder={placeholder}
-                        className="h-11 w-full rounded-xl border border-black/10 bg-gray-50 px-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                      />
-                    </label>
-                  ))}
-                </div>
-
-                <fieldset>
-                  <legend className="text-xs font-semibold text-gray-600">What do you need?</legend>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    {[
-                      ['hosted-checkout', 'Hosted checkout'],
-                      ['api-services', 'Paid API or service'],
-                      ['pos', 'Retail POS'],
-                      ['bank-requests', 'Bank requests'],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        aria-pressed={partnerForm.product === value}
-                        onClick={() => setPartnerForm(current => ({ ...current, product: value }))}
-                        className={`rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition ${partnerForm.product === value ? 'border-blue-500 bg-blue-50 text-blue-800 ring-2 ring-blue-100' : 'border-black/10 bg-white text-gray-600 hover:border-blue-300 hover:bg-blue-50/50'}`}
-                      >
-                        {label}
-                      </button>
+                  <div className="section-detail-reveal mt-2 grid grid-cols-4 gap-1 border-t pt-2 text-center text-[7px] font-bold max-sm:mt-1 max-sm:pt-1 max-sm:text-[5px]" style={{ borderColor: '#eaecf0', color: '#667085', '--section-reveal-delay': '480ms' } as CSSProperties}>
+                    {([[House, 'Home'], [ArrowLeftRight, 'Move'], [Banknote, 'Bills'], [TrendingUp, 'Activity']] as const).map(([Icon, item], index) => (
+                      <span key={String(item)} className={`flex flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 max-sm:py-1 ${index === 0 ? 'bg-gray-950 text-white' : ''}`}><Icon className="h-3 w-3 max-sm:h-2 max-sm:w-2" />{item}</span>
                     ))}
                   </div>
-                </fieldset>
+                </div>
+              </div>
+            </div>
 
-                <label className="block space-y-1.5">
-                  <span className="text-xs font-semibold text-gray-600">What will users pay for?</span>
-                  <textarea
-                    required
-                    minLength={20}
-                    rows={4}
-                    value={partnerForm.useCase}
-                    onChange={event => setPartnerForm(current => ({ ...current, useCase: event.target.value }))}
-                    placeholder="Describe the product, service, expected payer flow, and where users should return after payment."
-                    className="w-full resize-none rounded-xl border border-black/10 bg-gray-50 px-3 py-3 text-sm leading-5 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                  />
-                </label>
+            <div className="phone-mockup phone-primary section-detail-reveal" style={{ '--section-reveal-delay': '205ms' } as CSSProperties}>
+              <span className="phone-hardware" aria-hidden="true" />
+              <div className="phone-screen" style={{ background: '#0a0a0b', color: '#ffffff', colorScheme: 'dark' }}>
+                <div className="flex h-full flex-col px-5 pb-5 pt-14 text-white max-sm:px-3 max-sm:pb-3 max-sm:pt-9">
+                  <div className="section-detail-reveal flex items-center justify-between" style={{ '--section-reveal-delay': '285ms' } as CSSProperties}>
+                    <div className="flex items-center gap-2">
+                      <CPurseIcon size={22} title="" className="text-white max-sm:h-4 max-sm:w-4" />
+                      <div>
+                        <p className="text-xs font-black max-sm:text-[9px]">Pocket</p>
+                        <p className="mt-0.5 text-[8px] font-semibold max-sm:text-[6px]" style={{ color: '#c7c9d1' }}>Checkout</p>
+                      </div>
+                    </div>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[10px] font-bold text-gray-950 max-sm:h-5 max-sm:w-5 max-sm:text-[7px]">EO</span>
+                  </div>
 
-                <input
-                  tabIndex={-1}
-                  autoComplete="off"
-                  aria-hidden="true"
-                  value={partnerForm.fax}
-                  onChange={event => setPartnerForm(current => ({ ...current, fax: event.target.value }))}
-                  className="hidden"
-                />
-
-                {partnerRequestState === 'error' && (
-                  <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">{partnerRequestMessage}</p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={partnerRequestState === 'submitting'}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {partnerRequestState === 'submitting' ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending request</> : <>Request API access <ArrowRight className="h-4 w-4" /></>}
-                </button>
-                <p className="text-center text-[10px] leading-4 text-gray-400">Private beta access is reviewed manually. Never include API secrets, wallet keys, or customer financial data.</p>
-              </form>
-            )}
+                  <div className="section-detail-reveal mt-4 flex justify-center max-sm:mt-2" style={{ '--section-reveal-delay': '340ms' } as CSSProperties}>
+                    <div className="grid w-full grid-cols-2 rounded-full border p-1 text-[10px] font-black shadow-[0_10px_30px_rgba(0,0,0,.28)] max-sm:p-0.5 max-sm:text-[7px]" style={{ borderColor: '#4b4b55', background: '#202027' }}>
+                      <span className="flex min-h-9 items-center justify-center rounded-full px-3 text-gray-950 shadow-sm max-sm:min-h-6 max-sm:px-2" style={{ background: '#ffffff', color: '#0a0a0b' }}><Wallet className="mr-1 h-3 w-3 max-sm:h-2 max-sm:w-2" />Smart Wallet</span>
+                      <span className="flex min-h-9 items-center justify-center px-3 max-sm:min-h-6 max-sm:px-2" style={{ color: '#f5f5f7' }}>Pay another way</span>
+                    </div>
+                  </div>
+                  <div className="section-detail-reveal mt-4 rounded-[26px] border p-5 text-center shadow-[0_18px_50px_rgba(0,0,0,.24)] max-sm:mt-3 max-sm:rounded-[18px] max-sm:p-3" style={{ borderColor: '#51515d', background: 'linear-gradient(135deg,#202027 0%,#1a2944 100%)', '--section-reveal-delay': '395ms' } as CSSProperties}>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] max-sm:text-[6px]" style={{ color: '#e4e5ea' }}>Payment request</p>
+                    <p className="mt-4 text-4xl font-bold tracking-[-0.07em] max-sm:mt-2 max-sm:text-2xl">10 <span className="text-base max-sm:text-[10px]" style={{ color: '#c7c9d1' }}>USDC</span></p>
+                    <span className="mt-3 inline-flex rounded-full border px-3 py-1.5 text-[9px] font-black shadow-sm max-sm:mt-2 max-sm:px-2 max-sm:py-0.5 max-sm:text-[7px]" style={{ borderColor: '#686875', background: '#303038', color: '#ffffff' }}>Base</span>
+                  </div>
+                  <div className="section-detail-reveal relative mt-4 h-14 overflow-hidden rounded-full border p-1.5 shadow-[0_14px_36px_rgba(0,0,0,.34)] max-sm:mt-3 max-sm:h-10" style={{ borderColor: '#ffffff', background: '#ffffff', color: '#0a0a0b', '--section-reveal-delay': '450ms' } as CSSProperties}>
+                    <span className="absolute inset-0 flex items-center justify-center text-sm font-black max-sm:text-[8px]" style={{ color: '#0a0a0b' }}>Slide to pay</span>
+                    <span className="absolute bottom-1.5 left-1.5 top-1.5 flex aspect-square items-center justify-center rounded-full" style={{ background: '#0a0a0b', color: '#ffffff' }}>
+                      <ArrowRight className="h-4 w-4 max-sm:h-3 max-sm:w-3" />
+                    </span>
+                  </div>
+                  <div className="section-detail-reveal mt-auto rounded-2xl border p-3 max-sm:rounded-xl max-sm:p-2" style={{ borderColor: '#4b4b55', background: '#202027', '--section-reveal-delay': '505ms' } as CSSProperties}>
+                    <div className="flex items-center justify-between text-[9px] max-sm:text-[6px]"><span style={{ color: '#e4e5ea' }}>Payment network</span><span className="font-black text-white">Base</span></div>
+                    <div className="mt-2 flex items-center justify-between border-t pt-2 text-[9px] max-sm:mt-1 max-sm:pt-1 max-sm:text-[6px]" style={{ borderColor: '#36363d' }}><span style={{ color: '#c7c9d1' }}>Pay with</span><span className="font-bold">Pocket Wallet</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="foundation-mobile-section foundation-mobile-section-tight hpl-snap-section relative overflow-hidden bg-[#f7f6f2] px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_18%,rgba(37,99,235,.08),transparent_30%),radial-gradient(circle_at_86%_72%,rgba(14,165,233,.08),transparent_32%)]" />
-        <div className="relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 max-sm:min-h-0 max-sm:gap-4 lg:grid-cols-[.78fr_1.22fr]">
+      <section id="stack" data-no-text-reveal className="foundation-light-section foundation-deck-section foundation-mobile-section foundation-mobile-section-tight hpl-snap-section relative overflow-hidden px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
+        <div className="foundation-section-backdrop absolute inset-0 bg-[radial-gradient(circle_at_8%_14%,rgba(37,99,235,.11),transparent_29%),radial-gradient(circle_at_90%_82%,rgba(6,182,212,.09),transparent_27%),linear-gradient(145deg,#fbfdff_0%,#f3f7ff_50%,#f8fafc_100%)]" />
+        <div className="absolute left-[48%] top-1/2 h-[620px] w-[620px] -translate-y-1/2 rounded-full bg-blue-100/[.30] blur-3xl" />
+
+        <div className="hpl-section-content relative z-10 mx-auto flex min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center">
+          <div className="grid w-full gap-12 max-sm:gap-5 lg:grid-cols-[.78fr_1.22fr]">
+            <div id="about" key="stack-copy-v2" className="max-w-xl">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">Infrastructure stack</p>
+              <h2 className="mt-3 max-w-xl text-4xl font-semibold tracking-[-0.04em] max-sm:mt-2 sm:text-5xl">
+                Trusted rails. Defined roles.
+              </h2>
+              <p className="mt-5 max-w-xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
+                Only infrastructure integrated directly into Hash PayLink and Circle Pocket is shown here.
+              </p>
+            </div>
+
+            <div data-no-text-reveal className="foundation-surface-card grid overflow-hidden rounded-[28px] px-5 py-2 max-sm:grid-cols-2 sm:grid-cols-2 sm:px-6">
+              {stack.map((item, index) => (
+                <div key={item.name} className="stack-rail-card border-b border-slate-100 py-3 odd:pr-4 even:border-l even:pl-4 max-sm:py-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="stack-rail-index flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-950 text-[8px] font-semibold tracking-[0.08em] text-white">{String(index + 1).padStart(2, '0')}</span>
+                    <p className="stack-rail-title text-[13px] font-semibold tracking-[-0.01em] text-slate-950 max-sm:text-xs">{item.name}</p>
+                  </div>
+                  <p className="stack-rail-copy mt-2 text-[11px] leading-[1.55] text-slate-600 max-sm:text-[10px] max-sm:leading-4">{item.copy}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="api" data-no-text-reveal className="foundation-light-section foundation-deck-section foundation-mobile-section foundation-mobile-section-tight hpl-snap-section relative overflow-hidden px-5 py-24 text-slate-950 sm:px-8 lg:px-10" style={{ backgroundColor: '#f6f8fc', color: '#020617', colorScheme: 'light' }}>
+        <div className="foundation-section-backdrop absolute inset-0 bg-[radial-gradient(circle_at_8%_14%,rgba(37,99,235,.11),transparent_29%),radial-gradient(circle_at_90%_82%,rgba(6,182,212,.09),transparent_27%),linear-gradient(145deg,#fbfdff_0%,#f3f7ff_50%,#f8fafc_100%)]" />
+        <div className="absolute left-[44%] top-1/2 h-[620px] w-[620px] -translate-y-1/2 rounded-full bg-blue-100/[.30] blur-3xl" />
+        <div className="hpl-section-content relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-10 lg:grid-cols-[.72fr_1.28fr]">
+          <div className="max-w-xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">Hosted Checkout API</p>
+            <h2 className="mt-4 text-4xl font-semibold tracking-[-0.045em] text-slate-950 sm:text-5xl">One integration. Two payment paths.</h2>
+            <p className="mt-5 max-w-lg text-sm leading-6 text-slate-700">
+              Add checkout for people or Circle Agent Wallets. Hash PayLink hosts wallet execution, settlement, and verified payment status.
+            </p>
+          </div>
+
+          <aside className="foundation-surface-card api-portal-card overflow-hidden rounded-[28px] px-5 py-2 text-slate-950 sm:px-6" style={{ backgroundColor: '#ffffff', color: '#0f172a', colorScheme: 'light' }}>
+            {[
+              { icon: Wallet, title: 'Hosted checkout', copy: 'Customers review the amount, choose a network, and pay with Pocket.' },
+              { icon: Activity, title: 'Agentic payments', copy: 'Compatible services accept Circle App Pay and return an x402 payment record.' },
+              { icon: ArrowLeftRight, title: 'Settlement options', copy: 'Keep USDC or use supported local bank settlement.' },
+              { icon: ShieldCheck, title: 'Verified status', copy: 'Confirm payment before fulfillment and receive signed webhook events.' },
+            ].map(({ icon: Icon, title, copy }, index) => (
+              <div key={title} className="grid grid-cols-[32px_minmax(0,1fr)] items-center gap-3 border-b border-slate-100 py-3">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-950 text-white"><Icon className="h-3.5 w-3.5" /></span>
+                <div>
+                  <div className="flex items-baseline gap-2">
+                    <h3 className="api-card-title text-sm font-semibold tracking-[-0.02em] text-slate-950">{title}</h3>
+                    <span className="text-[8px] font-semibold tracking-[.12em] text-slate-400">0{index + 1}</span>
+                  </div>
+                  <p className="api-card-copy mt-1 text-[11px] leading-4 text-slate-600">{copy}</p>
+                </div>
+              </div>
+            ))}
+
+            <div className="border-b border-slate-100 py-3">
+              <p className="text-[9px] font-semibold uppercase tracking-[.16em] text-slate-500">Coverage</p>
+              <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-semibold text-slate-700">
+                {['USDC · Base · Arbitrum', 'Arc · Testnet', 'Nigeria active', 'Solana · Planned'].map(item => (
+                  <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">{item}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-b border-slate-100 py-3">
+              <p className="text-[9px] font-semibold uppercase tracking-[.16em] text-slate-500">Built for</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {['AI and API services', 'Marketplaces', 'Commerce and POS', 'Creator apps', 'SaaS and invoicing', 'Events and ticketing'].map(category => (
+                  <span key={category} className="rounded-full bg-blue-950 px-2.5 py-1 text-[10px] font-semibold text-white" style={{ backgroundColor: '#172554', color: '#ffffff' }}>{category}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><KeyRound className="h-4 w-4" /></span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="api-card-title text-sm font-semibold text-slate-950">Developer portal</h3>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[.1em] text-slate-500">Privy secured</span>
+                  </div>
+                  <p className="api-card-copy mt-1 max-w-md text-[11px] leading-4 text-slate-600">Configure routing, generate a server key, and connect signed payment updates.</p>
+                </div>
+              </div>
+              <div className="flex gap-2 sm:flex-col">
+                <Link to="/developers" className="api-primary-action inline-flex h-9 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-[10px] font-semibold text-white transition hover:bg-blue-700">
+                  Open portal <ArrowRight className="h-3 w-3" />
+                </Link>
+                <Link to="/docs/api" className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-[10px] font-semibold text-slate-800 transition hover:bg-blue-50">
+                  API reference <Webhook className="h-3 w-3" />
+                </Link>
+              </div>
+            </div>
+            <p className="pb-2 text-center text-[9px] leading-4 text-slate-400">API keys stay server-side. Fulfill only after payment status is paid.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="faq" key="foundation-faq-current-v4" data-no-text-reveal className="foundation-light-section foundation-deck-section foundation-mobile-section foundation-mobile-section-tight hpl-snap-section relative overflow-hidden px-5 py-24 text-gray-950 sm:px-8 lg:px-10" style={{ paddingBottom: '76px' }}>
+        <div className="foundation-section-backdrop absolute inset-0 bg-[radial-gradient(circle_at_15%_18%,rgba(37,99,235,.08),transparent_30%),radial-gradient(circle_at_86%_72%,rgba(14,165,233,.08),transparent_32%)]" />
+        <div className="hpl-section-content hpl-section-content-footer relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 max-sm:min-h-0 max-sm:gap-4 lg:grid-cols-[.78fr_1.22fr]">
           <div className="max-w-xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">FAQs</p>
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 max-sm:mt-2 sm:text-5xl">
-              Questions ecosystem teams ask first.
+              Clear answers before integration.
             </h2>
             <p className="mt-5 text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-              A concise view of how Hash PayLink turns trusted infrastructure into live payment, retail, agent, and market workflows.
+              Core products, checkout infrastructure, Circle Pocket, Agent Hash, settlement, and verification—without infrastructure guesswork.
             </p>
             <div className="mt-8 flex flex-col gap-3 max-sm:hidden sm:flex-row">
               <a
                 href={APP_URL}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(15,23,42,.12)] transition hover:bg-gray-800"
+                className="foundation-primary-cta inline-flex h-11 items-center justify-center gap-2 px-5 text-sm font-semibold shadow-[0_18px_50px_rgba(15,23,42,.12)] transition hover:bg-gray-800"
               >
-                Open App <ArrowRight className="h-4 w-4" />
+                Open platform <ArrowRight className="h-4 w-4" />
               </a>
-              <a
-                href="mailto:support@hashpaylink.com"
-                className="inline-flex h-11 items-center justify-center rounded-lg border border-black/10 bg-white/70 px-4 text-sm font-semibold text-gray-950 shadow-[0_14px_44px_rgba(15,23,42,.06)] transition hover:bg-white"
+              <Link
+                to="/developers"
+                className="foundation-secondary-cta inline-flex h-11 items-center justify-center px-5 text-sm font-semibold shadow-[0_14px_44px_rgba(15,23,42,.06)] transition hover:bg-white"
               >
-                Contact
-              </a>
+                Developer portal
+              </Link>
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-black/10 bg-white/64 px-5 py-2 shadow-[0_28px_90px_rgba(15,23,42,.08)] backdrop-blur-xl max-sm:rounded-2xl max-sm:px-3 max-sm:py-0 sm:px-7">
+          <div className="foundation-surface-card grid overflow-hidden rounded-[28px] px-4 py-2 sm:grid-cols-2 sm:px-5">
             {faqs.map((faq, index) => {
               const isOpen = openFaq === index
               return (
-                <div key={faq.question} className={`faq-item border-b border-black/10 last:border-b-0 ${isOpen ? 'active' : ''}`}>
+                <div key={faq.question} className={`faq-item self-start border-b border-slate-100 px-2 even:border-l even:pl-4 odd:pr-4 ${isOpen ? 'active' : ''}`}>
                   <button
                     type="button"
-                    className="faq-header flex w-full items-center justify-between gap-5 py-6 text-left max-sm:gap-3 max-sm:py-3"
+                    className="faq-header flex min-h-11 w-full items-center justify-between gap-3 py-2.5 text-left"
                     aria-expanded={isOpen}
                     onClick={() => setOpenFaq(isOpen ? -1 : index)}
                   >
-                    <span className="text-base font-semibold tracking-[-0.02em] text-gray-950 max-sm:text-xs sm:text-lg">{faq.question}</span>
-                    <span className="faq-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-xl font-light leading-none text-gray-500 shadow-[0_10px_28px_rgba(15,23,42,.06)] max-sm:h-6 max-sm:w-6 max-sm:text-base">
+                    <span className="text-[12px] font-semibold leading-4 tracking-[-0.01em] text-slate-950 max-sm:text-[11px]">{faq.question}</span>
+                    <span className="faq-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-sm font-light leading-none text-slate-500">
                       +
                     </span>
                   </button>
@@ -1724,30 +1715,33 @@ export default function FoundationPage() {
                     className="faq-answer"
                     style={{ maxHeight: isOpen ? `${faqHeights[index] || 0}px` : '0px' }}
                   >
-                    <p className="max-w-2xl pb-6 text-sm leading-6 text-gray-600 max-sm:pb-3 max-sm:text-xs max-sm:leading-5">{faq.answer}</p>
+                    <p className="max-w-2xl pb-3 text-[11px] leading-[1.55] text-slate-600">{faq.answer}</p>
                   </div>
                 </div>
               )
             })}
           </div>
         </div>
-      </section>
-
-      <footer id="contact" className="flex h-[60px] items-center border-t border-black/10 px-5 py-0 sm:px-8 lg:px-10" style={{ scrollSnapAlign: 'end' }}>
-        <div className="mx-auto grid w-full max-w-7xl gap-3 text-xs text-gray-500 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-          <div className="hidden sm:block" />
-          <p className="text-center text-gray-400">
-            <span className="polydesk-powered-footer">
-              <span>Powered by</span>
-              <strong>Circle USDC</strong>
-            </span>
-          </p>
-          <div className="flex justify-center gap-4 sm:justify-end">
-            <a href="mailto:support@hashpaylink.com" className="hover:text-gray-900">Support</a>
-            <a href="https://x.com/Hash_PayLink" target="_blank" rel="noreferrer" className="hover:text-gray-900">DM us</a>
+        <footer id="contact" className="absolute inset-x-0 bottom-0 flex h-[60px] items-center border-t border-slate-200 bg-[#f6f8fc] px-5 sm:px-8 lg:px-10" style={{ colorScheme: 'light' }}>
+          <div className="mx-auto grid w-full max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-2 text-[10px] text-gray-500 sm:gap-3 sm:text-xs">
+            <div className="flex gap-2 sm:gap-4">
+              <Link to="/docs/terms" className="hover:text-gray-900">Terms</Link>
+              <Link to="/docs/privacy" className="hover:text-gray-900">Privacy</Link>
+            </div>
+            <p className="text-center text-gray-400">
+              <span className="polydesk-powered-footer">
+                <span style={{ color: '#6b7280' }}>Powered by</span>
+                <strong style={{ color: '#111827' }}>Circle</strong>
+              </span>
+            </p>
+            <div className="flex justify-end gap-2 sm:gap-4">
+              <a href="mailto:support@hashpaylink.com" className="hover:text-gray-900">Support</a>
+              <a href="https://x.com/Hash_PayLink" target="_blank" rel="noreferrer" className="hover:text-gray-900">DM us</a>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </section>
+      </div>
       </div>
     </main>
   )
