@@ -186,6 +186,8 @@ const agenticCreated = await request(handler, 'POST', {
 assert.equal(agenticCreated.statusCode, 201)
 assert.equal(agenticCreated.body.checkoutMode, 'agentic')
 assert.equal(agenticCreated.body.agenticType, 'creator_earnings')
+assert.equal(agenticCreated.body.network, 'base')
+assert.deepEqual(agenticCreated.body.availableNetworks, ['base'])
 assert.match(agenticCreated.body.checkoutUrl, /^\/pay\/a\/chk_[a-zA-Z0-9]+\?attempt=pat_[a-f0-9]{24}$/)
 assert.match(agenticCreated.body.agentPaymentUrl, /\/api\/v2\/checkouts\/agent\?id=.*&attempt=pat_/)
 const agenticLookup = await request(handler, 'GET', { query: { id: agenticCreated.body.checkoutId } })
@@ -329,10 +331,16 @@ const managedAgentic = await request(managedHandler, 'POST', {
   headers: { ...managedHeaders, 'idempotency-key': 'managed:agentic:00000001' },
 })
 assert.equal(managedAgentic.statusCode, 201)
+assert.equal(managedAgentic.body.network, 'arbitrum')
+assert.deepEqual(managedAgentic.body.availableNetworks, ['arbitrum'])
 const managedAgenticLookup = await request(managedHandler, 'GET', { query: { id: managedAgentic.body.checkoutId } })
 assert.equal(managedAgenticLookup.body.checkout.network, 'arbitrum')
 assert.deepEqual(managedAgenticLookup.body.checkout.availableNetworks, ['arbitrum'])
 assert.equal(managedAgenticLookup.body.paymentUrl, undefined)
+assert.equal((await request(managedHandler, 'POST', {
+  body: { ...managedBody, checkoutMode: 'agentic', agenticType: 'agent_treasury' },
+  headers: { ...managedHeaders, 'idempotency-key': 'managed:agentic:no-network' },
+})).statusCode, 400)
 
 let nairaStore
 let nairaPrepareCalls = 0

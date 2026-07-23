@@ -37,12 +37,25 @@ export default function ApiReference() {
         </SubSection>
         <SubSection title="Agent wallet path">
           <p>Create the checkout with <code>checkoutMode: "agentic"</code> and either <code>agenticType: "creator_earnings"</code> or <code>agenticType: "agent_treasury"</code>. Send a GET request to its <code>agentPaymentUrl</code>. The first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. A Circle Gateway x402-compatible wallet signs the payment and retries with <code>PAYMENT-SIGNATURE</code>. After Gateway verification and settlement, the endpoint returns the checkout id, payment-attempt id, and authoritative paid state used by signed webhooks.</p>
+          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/checkouts \
+  -H "X-API-Key: YOUR_SERVER_KEY" \
+  -H "Idempotency-Key: agent:your-unique-request-id" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "kind": "service",
+    "checkoutMode": "agentic",
+    "agenticType": "agent_treasury",
+    "network": "base",
+    "title": "LP Scout",
+    "amount": "0.01",
+    "returnUrl": "https://your-allowlisted-domain.example/complete"
+  }'`}</CodeBlock>
           <CodeBlock lang="text">{`Create agentic service checkout
   -> checkoutUrl       (agentic observer and durable success UI)
   -> agentPaymentUrl   (agent handles x402 challenge)
   -> paymentAttemptId  (immutable payment session)
   -> status + signed webhook confirm fulfillment`}</CodeBlock>
-          <p>Agentic payment is available only for fixed-price USDC service checkouts. Flexible requests and local-bank settlement require a separate human checkout.</p>
+          <p>Agentic payment is available only for fixed-price USDC service checkouts. Every agentic checkout selects exactly one network at creation: use <code>arc</code> with a test key, or <code>base</code>/<code>arbitrum</code> with a live key. If a project key exposes more than one eligible network, omitting <code>network</code> is rejected instead of silently selecting a route. Flexible requests and local-bank settlement require a separate human checkout.</p>
         </SubSection>
         <SubSection title="GET /api/v2/checkouts?purpose=status&amp;id=chk_...">
           <p>Returns the authoritative <code>pending</code>, <code>processing</code>, <code>paid</code>, or <code>expired</code> state, including the network paid. For Naira settlement, <code>processing</code> means the USDC deposit is confirmed but bank delivery is not final. Verify <code>paid</code> from your server before fulfillment.</p>

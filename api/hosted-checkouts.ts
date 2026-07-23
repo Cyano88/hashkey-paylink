@@ -947,7 +947,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       : normalizeRequestedPaymentOptions(req.body?.paymentOptions)
     if (normalizedOptions.error) return res.status(400).json({ ok: false, error: normalizedOptions.error })
     const routingOptions = normalizedOptions.options
-    if (checkoutMode === 'agentic' && routingOptions && routingOptions.length > 1 && !requestedNetwork && !('projectManaged' in policy)) {
+    if (checkoutMode === 'agentic' && routingOptions && routingOptions.length > 1 && !requestedNetwork) {
       return res.status(400).json({ ok: false, error: 'Agentic checkout must select exactly one payment network.' })
     }
     const defaultNetwork = (checkoutMode === 'agentic' ? requestedNetwork : '') || clean(req.body?.defaultNetwork, 20).toLowerCase() || providerRouting?.defaultNetwork || ('projectManaged' in policy ? policy.defaultNetwork : '') || requestedNetwork || routingOptions?.[0]?.network || ''
@@ -1013,6 +1013,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         checkoutMode: hostedCheckoutMode(existingRecord),
         agenticType: existingRecord.agenticType,
         paymentAttemptId: hostedCheckoutPaymentAttempt(existingRecord).id,
+        network: existingRecord.network,
+        availableNetworks: hostedCheckoutPaymentOptions(existingRecord).map(option => option.network),
         checkoutUrl: hostedCheckoutUiUrl(existingRecord),
         ...(hostedCheckoutMode(existingRecord) === 'agentic' ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(existingRecord) } : {}),
         expiresAt: existingRecord.expiresAt,
@@ -1102,6 +1104,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       checkoutMode: hostedCheckoutMode(record),
       agenticType: record.agenticType,
       paymentAttemptId: hostedCheckoutPaymentAttempt(record).id,
+      network: record.network,
+      availableNetworks: hostedCheckoutPaymentOptions(record).map(option => option.network),
       checkoutUrl: hostedCheckoutUiUrl(record),
       ...(hostedCheckoutMode(record) === 'agentic' ? { agentPaymentUrl: hostedCheckoutAgentPaymentUrl(record) } : {}),
       expiresAt: record.expiresAt,
