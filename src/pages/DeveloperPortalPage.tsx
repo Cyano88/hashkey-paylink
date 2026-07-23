@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { Link } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import { Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
@@ -8,6 +8,8 @@ import { cn, copyToClipboard } from '../lib/utils'
 
 type Network = 'base' | 'arbitrum' | 'arc'
 type Capability = 'hosted_checkout' | 'polymarket_funding'
+type CheckoutMode = 'human' | 'agentic'
+type CreateProjectForm = { name: string; website: string; useCase: string; checkoutMode: CheckoutMode | ''; capabilities: Capability[] }
 type Project = {
   id: string
   name: string
@@ -15,6 +17,7 @@ type Project = {
   website: string
   brandImageUrl: string
   useCase: string
+  checkoutMode: CheckoutMode
   capabilities: Capability[]
   settlementMode: 'usdc' | 'ngn'
   settlementStatus: 'ready' | 'review_required'
@@ -58,10 +61,11 @@ export default function DeveloperPortalPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [tab, setTab] = useState<'setup' | 'keys' | 'webhooks' | 'quickstart'>('setup')
+  const [creatingNew, setCreatingNew] = useState(false)
   const [newKey, setNewKey] = useState<{ value: string; environment: 'test' | 'live' } | null>(null)
   const [newWebhookSecret, setNewWebhookSecret] = useState('')
   const [keyNames, setKeyNames] = useState({ test: 'Arc sandbox', live: 'Production backend' })
-  const [createForm, setCreateForm] = useState<{ name: string; website: string; useCase: string; capabilities: Capability[] }>({ name: '', website: '', useCase: '', capabilities: ['hosted_checkout'] })
+  const [createForm, setCreateForm] = useState<CreateProjectForm>({ name: '', website: '', useCase: '', checkoutMode: '', capabilities: ['hosted_checkout'] })
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [institutionsLoading, setInstitutionsLoading] = useState(false)
   const active = projects.find(project => project.id === activeId) ?? projects[0]
@@ -129,6 +133,8 @@ export default function DeveloperPortalPage() {
       if (!data.project) throw new Error('Project creation returned no project.')
       setProjects(current => [...current, data.project!])
       setActiveId(data.project.id)
+      setCreatingNew(false)
+      setCreateForm({ name: '', website: '', useCase: '', checkoutMode: '', capabilities: ['hosted_checkout'] })
       setNotice('Project created. Add checkout routing to activate it.')
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Project could not be created.') }
     finally { setBusy(false) }
@@ -140,7 +146,7 @@ export default function DeveloperPortalPage() {
     try {
       const data = await api('PUT', {
         action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, brandImageUrl: draft.brandImageUrl, useCase: draft.useCase,
-        capabilities: draft.capabilities,
+        checkoutMode: draft.checkoutMode, capabilities: draft.capabilities,
         settlementMode: draft.settlementMode, networks: draft.networks, defaultNetwork: draft.defaultNetwork,
         recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins,
         webhookUrl: draft.webhookUrl, bankCode: draft.bankCode, bankName: draft.bankName,
@@ -215,20 +221,7 @@ export default function DeveloperPortalPage() {
     return (
       <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-2xl px-4 py-12">
         <PortalTop onLogout={logout} />
-        <section className="mt-8 rounded-[1.75rem] border border-gray-200 bg-white p-6 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-8">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">New project</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">What are you building?</h1>
-          <div className="mt-6 space-y-4">
-            <Field label="Platform name"><input className={fieldClass()} value={createForm.name} onChange={event => setCreateForm(current => ({ ...current, name: event.target.value }))} placeholder="Your platform" /></Field>
-            <Field label="Website"><input className={fieldClass()} value={createForm.website} onChange={event => setCreateForm(current => ({ ...current, website: event.target.value }))} placeholder="https://yourplatform.com" /></Field>
-            <Field label="What will customers pay for?"><textarea className={cn(fieldClass(), 'h-28 resize-none py-3 leading-5')} value={createForm.useCase} onChange={event => setCreateForm(current => ({ ...current, useCase: event.target.value }))} placeholder="Describe the product and checkout flow." /></Field>
-            <CapabilityPicker value={createForm.capabilities} onChange={capabilities => setCreateForm(current => ({ ...current, capabilities }))} />
-          </div>
-          {error && <Message tone="error">{error}</Message>}
-          <button type="button" disabled={busy} onClick={createProject} className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950">
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Create project
-          </button>
-        </section>
+        <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} />
       </main>
     )
   }
@@ -238,20 +231,25 @@ export default function DeveloperPortalPage() {
       <PortalTop onLogout={logout} />
       <div className="mt-7 flex flex-col gap-5 lg:flex-row lg:items-start">
         <aside className="rounded-[1.5rem] border border-gray-200 bg-white p-3 shadow-card dark:border-white/10 dark:bg-[#111216] lg:sticky lg:top-24 lg:w-64">
-          <PocketSelect value={active?.id ?? ''} options={projects.map(project => ({ value: project.id, label: project.name }))} onChange={setActiveId} ariaLabel="Developer project" buttonClassName="shadow-none" />
+          <PocketSelect value={active?.id ?? ''} options={projects.map(project => ({ value: project.id, label: `${project.name} · ${project.checkoutMode === 'agentic' ? 'Agentic' : 'Human'}` }))} onChange={value => { setActiveId(value); setCreatingNew(false) }} ariaLabel="Developer project" buttonClassName="shadow-none" />
+          <button type="button" onClick={() => { setCreatingNew(true); setError(''); setNotice('') }} className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/[0.05]"><Plus className="h-3.5 w-3.5" /> New project</button>
           <div className="mt-3 grid grid-cols-2 gap-1 lg:grid-cols-1">
             {([['setup', 'Checkout'], ['keys', 'API keys'], ['webhooks', 'Webhooks'], ['quickstart', 'Quickstart']] as const).map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setTab(value)} className={cn('rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition', tab === value ? 'bg-blue-50 text-blue-700 dark:bg-blue-400/15 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/[0.05]')}>{label}</button>
+              <button key={value} type="button" onClick={() => { setTab(value); setCreatingNew(false) }} className={cn('rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition', tab === value ? 'bg-blue-50 text-blue-700 dark:bg-blue-400/15 dark:text-blue-200' : 'text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/[0.05]')}>{label}</button>
             ))}
           </div>
         </aside>
 
         <section className="min-w-0 flex-1 rounded-[1.75rem] border border-gray-200 bg-white p-5 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-7">
-          {active && draft && tab === 'setup' && <SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={saveProject} />}
-          {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
-          {active && draft && tab === 'webhooks' && <WebhookPanel draft={draft} setDraft={setDraft} newSecret={newWebhookSecret} busy={busy} onSave={saveProject} onRotate={rotateWebhookSecret} />}
-          {active && tab === 'quickstart' && <QuickstartPanel project={active} />}
-          {error && <Message tone="error">{error}</Message>}
+          {creatingNew
+            ? <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} onCancel={() => setCreatingNew(false)} embedded />
+            : <>
+              {active && draft && tab === 'setup' && <SetupPanel draft={draft} setDraft={setDraft} institutions={institutions} institutionsLoading={institutionsLoading} busy={busy} onSave={saveProject} />}
+              {active && tab === 'keys' && <KeysPanel project={active} keyNames={keyNames} setKeyNames={setKeyNames} newKey={newKey} busy={busy} onCreate={createKey} onRevoke={revokeKey} />}
+              {active && draft && tab === 'webhooks' && <WebhookPanel draft={draft} setDraft={setDraft} newSecret={newWebhookSecret} busy={busy} onSave={saveProject} onRotate={rotateWebhookSecret} />}
+              {active && tab === 'quickstart' && <QuickstartPanel project={active} />}
+            </>}
+          {!creatingNew && error && <Message tone="error">{error}</Message>}
           {notice && <Message tone="success">{notice}</Message>}
         </section>
       </div>
@@ -259,11 +257,62 @@ export default function DeveloperPortalPage() {
   )
 }
 
-function CapabilityPicker({ value, onChange }: { value: Capability[]; onChange: (value: Capability[]) => void }) {
-  const options: Array<{ key: Capability; title: string; copy: string }> = [
-    { key: 'hosted_checkout', title: 'Hosted checkout', copy: 'Accept human or agentic service payments into your configured treasury.' },
+function CreateProjectCard({ form, setForm, busy, error, onCreate, onCancel, embedded = false }: {
+  form: CreateProjectForm
+  setForm: Dispatch<SetStateAction<CreateProjectForm>>
+  busy: boolean
+  error: string
+  onCreate: () => Promise<void>
+  onCancel?: () => void
+  embedded?: boolean
+}) {
+  const content = <>
+    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">New project</p>
+    <h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">Choose one payment path.</h1>
+    <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">Human and agentic checkouts use separate projects, policies, and API keys.</p>
+    <CheckoutModePicker value={form.checkoutMode} onChange={checkoutMode => setForm(current => ({
+      ...current,
+      checkoutMode,
+      capabilities: checkoutMode === 'agentic' ? ['hosted_checkout'] : current.capabilities,
+    }))} />
+    <div className="mt-6 space-y-4">
+      <Field label="Platform name"><input className={fieldClass()} value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder={form.checkoutMode === 'agentic' ? 'Your platform agent' : 'Your platform'} /></Field>
+      <Field label="Website"><input className={fieldClass()} value={form.website} onChange={event => setForm(current => ({ ...current, website: event.target.value }))} placeholder="https://yourplatform.com" /></Field>
+      <Field label="What will customers pay for?"><textarea className={cn(fieldClass(), 'h-28 resize-none py-3 leading-5')} value={form.useCase} onChange={event => setForm(current => ({ ...current, useCase: event.target.value }))} placeholder="Describe the product and checkout flow." /></Field>
+      {form.checkoutMode && <CapabilityPicker checkoutMode={form.checkoutMode} value={form.capabilities} onChange={capabilities => setForm(current => ({ ...current, capabilities }))} />}
+    </div>
+    {error && <Message tone="error">{error}</Message>}
+    <div className={cn('mt-6 grid gap-2', onCancel && 'sm:grid-cols-[auto_1fr]')}>
+      {onCancel && <button type="button" disabled={busy} onClick={onCancel} className="h-12 rounded-full border border-gray-200 px-5 text-sm font-semibold text-gray-600 dark:border-white/10 dark:text-gray-300">Cancel</button>}
+      <button type="button" disabled={busy || !form.checkoutMode} onClick={() => void onCreate()} className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-40 dark:bg-white dark:text-gray-950">
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Create {form.checkoutMode === 'agentic' ? 'agentic' : form.checkoutMode === 'human' ? 'human' : ''} project
+      </button>
+    </div>
+  </>
+  return embedded ? <div>{content}</div> : <section className="mt-8 rounded-[1.75rem] border border-gray-200 bg-white p-6 shadow-card dark:border-white/10 dark:bg-[#111216] sm:p-8">{content}</section>
+}
+
+function CheckoutModePicker({ value, onChange }: { value: CheckoutMode | ''; onChange: (value: CheckoutMode) => void }) {
+  const options: Array<{ key: CheckoutMode; icon: typeof UserRound; title: string; copy: string }> = [
+    { key: 'human', icon: UserRound, title: 'Human checkout', copy: 'Hosted payer UI and funding flows for people. Supports human checkout products only.' },
+    { key: 'agentic', icon: Bot, title: 'Agentic x402', copy: 'Fixed-price service payments for compatible agent wallets. No human payer fallback.' },
+  ]
+  return <div className="mt-6 grid gap-3 sm:grid-cols-2">{options.map(option => {
+    const active = value === option.key
+    const Icon = option.icon
+    return <button key={option.key} type="button" onClick={() => onChange(option.key)} className={cn('rounded-2xl border p-4 text-left transition', active ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/10 dark:bg-blue-400/10' : 'border-gray-200 hover:border-blue-300 dark:border-white/10')}>
+      <span className="flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white"><Icon className="h-4 w-4 text-blue-600 dark:text-blue-300" />{option.title}</span>
+      <span className="mt-2 block text-[11px] leading-5 text-gray-500 dark:text-gray-400">{option.copy}</span>
+    </button>
+  })}</div>
+}
+
+function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: CheckoutMode; value: Capability[]; onChange: (value: Capability[]) => void }) {
+  const allOptions: Array<{ key: Capability; title: string; copy: string }> = [
+    { key: 'hosted_checkout', title: checkoutMode === 'agentic' ? 'Agentic x402 checkout' : 'Hosted checkout', copy: checkoutMode === 'agentic' ? 'Accept fixed-price service payments from compatible agent wallets.' : 'Accept payments through the hosted human payer experience.' },
     { key: 'polymarket_funding', title: 'Polymarket funding', copy: 'Create verified bridge-backed checkouts for a customer Polymarket wallet.' },
   ]
+  const options = allOptions.filter(option => checkoutMode === 'human' || option.key === 'hosted_checkout')
   function toggle(key: Capability) {
     const next = value.includes(key) ? value.filter(item => item !== key) : [...value, key]
     if (next.length) onChange(next)
@@ -295,7 +344,11 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       <Field label="Website"><input className={fieldClass()} value={draft.website} onChange={event => setDraft({ ...draft, website: event.target.value })} /></Field>
     </div>
     <Field label="What customers pay for" className="mt-4"><textarea className={cn(fieldClass(), 'h-24 resize-none py-3')} value={draft.useCase} onChange={event => setDraft({ ...draft, useCase: event.target.value })} /></Field>
-    <CapabilityPicker value={draft.capabilities} onChange={capabilities => setDraft({ ...draft, capabilities })} />
+    <div className="mt-6 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+      <p className="flex items-center gap-2 text-xs font-semibold text-gray-950 dark:text-white">{draft.checkoutMode === 'agentic' ? <Bot className="h-4 w-4 text-blue-600" /> : <UserRound className="h-4 w-4 text-blue-600" />}{draft.checkoutMode === 'agentic' ? 'Agentic x402 project' : 'Human checkout project'}</p>
+      <p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">This payment path is locked to the project and every API key it issues. Create a separate project to use the other path.</p>
+    </div>
+    <CapabilityPicker checkoutMode={draft.checkoutMode} value={draft.capabilities} onChange={capabilities => setDraft({ ...draft, capabilities })} />
 
     <div className="mt-7 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
       <div className="flex items-start gap-3">
@@ -321,9 +374,11 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
 
     <div className="mt-7">
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Settlement</p>
-      <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.05]">
-        {[['usdc', 'Receive USDC'], ['ngn', 'Receive Naira']] .map(([value, label]) => <button key={value} type="button" onClick={() => setDraft({ ...draft, settlementMode: value as 'usdc' | 'ngn', ...(value === 'ngn' ? { networks: ['base'], defaultNetwork: 'base', recipients: {} } : {}) })} className={cn('rounded-xl px-3 py-2.5 text-xs font-semibold transition', draft.settlementMode === value ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>{label}</button>)}
-      </div>
+      {draft.checkoutMode === 'agentic'
+        ? <div className="mt-2 rounded-xl bg-gray-100 px-3 py-3 text-xs font-semibold text-gray-700 dark:bg-white/[0.05] dark:text-gray-200">Receive USDC</div>
+        : <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.05]">
+          {[['usdc', 'Receive USDC'], ['ngn', 'Receive Naira']] .map(([value, label]) => <button key={value} type="button" onClick={() => setDraft({ ...draft, settlementMode: value as 'usdc' | 'ngn', ...(value === 'ngn' ? { networks: ['base'], defaultNetwork: 'base', recipients: {} } : {}) })} className={cn('rounded-xl px-3 py-2.5 text-xs font-semibold transition', draft.settlementMode === value ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>{label}</button>)}
+        </div>}
       {draft.settlementMode === 'ngn' && <p className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-200">Payers use Base USDC. Paycrest sends the Naira settlement to your verified bank account.</p>}
     </div>
 
@@ -379,10 +434,11 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
   }
 
   return <div><PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend and inherit this project's trusted checkout routing." />
+    <div className="mt-5 rounded-xl border border-gray-200 px-3 py-3 text-xs font-semibold text-gray-700 dark:border-white/10 dark:text-gray-200">{project.checkoutMode === 'agentic' ? 'Agentic x402 keys' : 'Human checkout keys'} <span className="ml-1 font-normal text-gray-400">Cannot create the other checkout mode.</span></div>
     {project.settlementStatus !== 'ready' && <p className="mt-5 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
-      {environmentSection('test', 'Test keys', 'Arc Testnet only. Uses test USDC and cannot route a mainnet payment.')}
-      {environmentSection('live', 'Live keys', 'Base and Arbitrum mainnet only. Use these credentials in your production backend.')}
+      {environmentSection('test', 'Test keys', `Arc Testnet only. Restricted to ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
+      {environmentSection('live', 'Live keys', `Base and Arbitrum mainnet only. Restricted to ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
     </div>
   </div>
 }
@@ -399,21 +455,17 @@ function WebhookPanel({ draft, setDraft, newSecret, busy, onSave, onRotate }: { 
 }
 
 function QuickstartPanel({ project }: { project: Project }) {
-  const [paymentPath, setPaymentPath] = useState<'human' | 'agentic'>('human')
+  const paymentPath = project.checkoutMode
   const modeFields = `    checkoutMode: "${paymentPath}",${paymentPath === 'agentic' ? '\n    agenticType: "agent_treasury",\n    network: process.env.HASH_PAYLINK_NETWORK,' : ''}`
   const createCode = `const checkout = await fetch("https://app.hashpaylink.com/api/v2/checkouts", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASH_PAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    kind: "service",\n${modeFields}\n    title: "Premium plan",\n    amount: "10",\n    returnUrl: "${project.allowedOrigins[0] ?? project.website}/complete"\n  })\n}).then(res => res.json());`
   const code = paymentPath === 'human'
     ? `${createCode}\n\n// Send a person to Hash PayLink's hosted checkout.\nwindow.location.assign(new URL(checkout.checkoutUrl, "https://app.hashpaylink.com"));`
     : `${createCode}\n\n// checkoutUrl is the agentic observer and durable success screen.\nconst observerUrl = new URL(checkout.checkoutUrl, "https://app.hashpaylink.com").toString();\n\n// Give this endpoint to a Circle Gateway x402-compatible wallet.\n// The first GET returns HTTP 402 + PAYMENT-REQUIRED.\nconst agentPaymentUrl = new URL(\n  checkout.agentPaymentUrl,\n  "https://app.hashpaylink.com"\n).toString();`
-  return <div><PanelHeader eyebrow="Integration" title="Create your first checkout" copy="Choose one payment path per checkout. Human and agentic payments never share the same checkout." />
-    <div className="mt-7 grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.05]">
-      <button type="button" onClick={() => setPaymentPath('human')} className={cn('flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold transition', paymentPath === 'human' ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}><UserRound className="h-4 w-4" /> Human checkout</button>
-      <button type="button" onClick={() => setPaymentPath('agentic')} className={cn('flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-xs font-semibold transition', paymentPath === 'agentic' ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}><Bot className="h-4 w-4" /> Agent wallet</button>
-    </div>
+  return <div><PanelHeader eyebrow="Integration" title="Create your first checkout" copy={`This project and its keys are restricted to ${paymentPath === 'agentic' ? 'agentic x402' : 'human checkout'}.`} />
     <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Server only</span><CopyButton value={code} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-[11px] leading-5 text-white/70">{code}</pre></div>
-    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-      <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="flex items-center gap-2 text-xs font-semibold text-gray-900 dark:text-white"><UserRound className="h-4 w-4 text-blue-600" /> Human checkout</p><p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">Create with <code>checkoutMode: "human"</code>, then open <code>checkoutUrl</code>. Payers can choose from the project's enabled networks; their payment attempt locks to the selected route.</p></div>
-      <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="flex items-center gap-2 text-xs font-semibold text-gray-900 dark:text-white"><Bot className="h-4 w-4 text-blue-600" /> Agentic checkout</p><p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">Create with <code>checkoutMode: "agentic"</code> and one enabled <code>network</code>. <code>checkoutUrl</code> is its observer UI and <code>agentPaymentUrl</code> is its x402 endpoint. No human fallback is issued.</p></div>
+    <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+      <p className="flex items-center gap-2 text-xs font-semibold text-gray-900 dark:text-white">{paymentPath === 'agentic' ? <Bot className="h-4 w-4 text-blue-600" /> : <UserRound className="h-4 w-4 text-blue-600" />}{paymentPath === 'agentic' ? 'Agentic x402' : 'Human checkout'}</p>
+      <p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{paymentPath === 'agentic' ? <>Create with <code>checkoutMode: "agentic"</code> and one enabled <code>network</code>. Use <code>agentPaymentUrl</code> as the x402 endpoint; no human fallback is issued.</> : <>Create with <code>checkoutMode: "human"</code>, then open <code>checkoutUrl</code>. The payer chooses from this project's enabled human payment routes.</>}</p>
     </div>
     <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="text-xs font-semibold text-gray-900 dark:text-white">Environment</p><code className="mt-2 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_test_... # Arc Testnet</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=arc</code><code className="mt-3 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_live_... # Base or Arbitrum</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=base</code></div>
     <Link to="/docs/api" className="mt-5 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-300">Open API reference <ChevronRight className="h-3.5 w-3.5" /></Link>

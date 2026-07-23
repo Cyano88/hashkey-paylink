@@ -10,7 +10,7 @@ export default function ApiReference() {
 
       <Section title="Hosted Checkout API">
         <p>
-          Create a project in the Privy-authenticated developer dashboard. Hash PayLink pins the platform name, supported networks, receiving wallets and allowed return origins to that project before issuing a server key. Partners remain responsible for fulfillment after checking the authoritative payment status.
+          Create a human-checkout or agentic-x402 project in the Privy-authenticated developer dashboard. The selected payment path is immutable and every key issued by that project inherits it. Hash PayLink also pins the platform name, supported networks, receiving wallets and allowed return origins before issuing a server key. Partners remain responsible for fulfillment after checking the authoritative payment status.
         </p>
         <SubSection title="Request access">
           <p>Open the <a href="/developers" className="font-semibold text-blue-600 hover:underline dark:text-blue-400">developer dashboard</a>, sign in with Privy and configure checkout routing. USDC settlement requires a Privy-linked receiving wallet. Naira settlement requires a Paycrest-verified Nigerian bank account and a Privy-linked refund wallet.</p>
@@ -33,7 +33,7 @@ export default function ApiReference() {
     "memo": "Order 1042",
     "returnUrl": "https://your-allowlisted-domain.example/complete"
   }'`}</CodeBlock>
-          <p>Every checkout has one immutable <code>checkoutMode</code>. A human checkout can offer every network enabled in the project; the payer selects one and that payment attempt is then locked to the matching network and recipient. Agentic checkout selects one exact network when it is created and returns an agentic <code>checkoutUrl</code> plus its Circle Gateway x402 <code>agentPaymentUrl</code>; it never returns a human fallback. The response also includes a durable <code>paymentAttemptId</code>. Platform identity and routing come from the API key's project. Test keys route to Arc Testnet; live keys use the configured Base and Arbitrum routes. Recipient overrides are rejected. API keys stay server-side.</p>
+          <p>The request <code>checkoutMode</code> must match the API key's immutable project mode. A human project can offer every enabled network; the payer selects one and that payment attempt is then locked to the matching network and recipient. An agentic project selects one exact network when each checkout is created and returns an agentic <code>checkoutUrl</code> plus its Circle Gateway x402 <code>agentPaymentUrl</code>; it never returns a human fallback. The response also includes a durable <code>paymentAttemptId</code>. Test keys route to Arc Testnet; live keys use the configured Base and Arbitrum routes. Recipient overrides are rejected. API keys stay server-side.</p>
         </SubSection>
         <SubSection title="Agent wallet path">
           <p>Create the checkout with <code>checkoutMode: "agentic"</code> and either <code>agenticType: "creator_earnings"</code> or <code>agenticType: "agent_treasury"</code>. Send a GET request to its <code>agentPaymentUrl</code>. The first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. A Circle Gateway x402-compatible wallet signs the payment and retries with <code>PAYMENT-SIGNATURE</code>. After Gateway verification and settlement, the endpoint returns the checkout id, payment-attempt id, and authoritative paid state used by signed webhooks.</p>
@@ -55,7 +55,7 @@ export default function ApiReference() {
   -> agentPaymentUrl   (agent handles x402 challenge)
   -> paymentAttemptId  (immutable payment session)
   -> status + signed webhook confirm fulfillment`}</CodeBlock>
-          <p>Agentic payment is available only for fixed-price USDC service checkouts. Every agentic checkout selects exactly one network at creation: use <code>arc</code> with a test key, or <code>base</code>/<code>arbitrum</code> with a live key. If a project key exposes more than one eligible network, omitting <code>network</code> is rejected instead of silently selecting a route. Flexible requests and local-bank settlement require a separate human checkout.</p>
+          <p>Agentic payment is available only from an agentic-x402 project and only for fixed-price USDC service checkouts. Every agentic checkout selects exactly one network at creation: use <code>arc</code> with a test key, or <code>base</code>/<code>arbitrum</code> with a live key. If a project key exposes more than one eligible network, omitting <code>network</code> is rejected instead of silently selecting a route. Flexible requests, Polymarket funding and local-bank settlement require a separate human-checkout project.</p>
         </SubSection>
         <SubSection title="GET /api/v2/checkouts?purpose=status&amp;id=chk_...">
           <p>Returns the authoritative <code>pending</code>, <code>processing</code>, <code>paid</code>, or <code>expired</code> state, including the network paid. For Naira settlement, <code>processing</code> means the USDC deposit is confirmed but bank delivery is not final. Verify <code>paid</code> from your server before fulfillment.</p>
@@ -69,7 +69,7 @@ export default function ApiReference() {
 
       <Section title="Polymarket Funding API">
         <p>
-          Enable <code>Polymarket funding</code> on an ordinary USDC developer project. Your server supplies the customer's Polymarket wallet, amount and eligible project networks. Hash PayLink independently requests and verifies the provider deposit route; integrations cannot supply or override that destination.
+          Enable <code>Polymarket funding</code> on a human-checkout USDC project. Your server supplies the customer's Polymarket wallet, amount and eligible project networks. Hash PayLink independently requests and verifies the provider deposit route; integrations cannot supply or override that destination.
         </p>
         <SubSection title="POST /api/v2/funding/polymarket/checkouts">
           <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/funding/polymarket/checkouts \

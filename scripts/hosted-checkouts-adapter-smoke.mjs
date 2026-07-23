@@ -278,7 +278,7 @@ const managedDependencies = {
     partnerId: 'dev_managedproject', merchantName: 'Managed Platform', allowedOrigins: ['https://managed.example'],
     brandImageUrl: 'https://managed.example/brand/mark.webp',
     defaultNetwork: 'base', projectManaged: true,
-    settlementMode: 'usdc',
+    settlementMode: 'usdc', checkoutMode: 'human',
     paymentOptions: [
       { network: 'base', recipient: '0x1111111111111111111111111111111111111111' },
       { network: 'arbitrum', recipient: '0x3333333333333333333333333333333333333333' },
@@ -330,14 +330,42 @@ const managedAgentic = await request(managedHandler, 'POST', {
   body: { ...managedBody, checkoutMode: 'agentic', agenticType: 'agent_treasury', network: 'arbitrum' },
   headers: { ...managedHeaders, 'idempotency-key': 'managed:agentic:00000001' },
 })
-assert.equal(managedAgentic.statusCode, 201)
-assert.equal(managedAgentic.body.network, 'arbitrum')
-assert.deepEqual(managedAgentic.body.availableNetworks, ['arbitrum'])
-const managedAgenticLookup = await request(managedHandler, 'GET', { query: { id: managedAgentic.body.checkoutId } })
+assert.equal(managedAgentic.statusCode, 403)
+
+let managedAgenticStore
+const managedAgenticHandler = createHostedCheckoutsHandler({
+  ...managedDependencies,
+  read: async () => managedAgenticStore,
+  mutate: async (_key, update) => { managedAgenticStore = update(managedAgenticStore); return managedAgenticStore },
+  policy: () => ({
+    partnerId: 'dev_managedagent', merchantName: 'Managed Agent', allowedOrigins: ['https://managed.example'],
+    brandImageUrl: 'https://managed.example/brand/mark.webp',
+    defaultNetwork: 'base', projectManaged: true,
+    settlementMode: 'usdc', checkoutMode: 'agentic',
+    capabilities: ['hosted_checkout'],
+    paymentOptions: [
+      { network: 'base', recipient: '0x1111111111111111111111111111111111111111' },
+      { network: 'arbitrum', recipient: '0x3333333333333333333333333333333333333333' },
+    ],
+  }),
+  createId: () => 'chk_managedagent1234',
+})
+assert.equal((await request(managedAgenticHandler, 'POST', {
+  body: managedBody,
+  headers: { ...managedHeaders, 'idempotency-key': 'managed:human:blocked0001' },
+})).statusCode, 403)
+const scopedManagedAgentic = await request(managedAgenticHandler, 'POST', {
+  body: { ...managedBody, checkoutMode: 'agentic', agenticType: 'agent_treasury', network: 'arbitrum' },
+  headers: { ...managedHeaders, 'idempotency-key': 'managed:agentic:scoped0001' },
+})
+assert.equal(scopedManagedAgentic.statusCode, 201)
+assert.equal(scopedManagedAgentic.body.network, 'arbitrum')
+assert.deepEqual(scopedManagedAgentic.body.availableNetworks, ['arbitrum'])
+const managedAgenticLookup = await request(managedAgenticHandler, 'GET', { query: { id: scopedManagedAgentic.body.checkoutId } })
 assert.equal(managedAgenticLookup.body.checkout.network, 'arbitrum')
 assert.deepEqual(managedAgenticLookup.body.checkout.availableNetworks, ['arbitrum'])
 assert.equal(managedAgenticLookup.body.paymentUrl, undefined)
-assert.equal((await request(managedHandler, 'POST', {
+assert.equal((await request(managedAgenticHandler, 'POST', {
   body: { ...managedBody, checkoutMode: 'agentic', agenticType: 'agent_treasury' },
   headers: { ...managedHeaders, 'idempotency-key': 'managed:agentic:no-network' },
 })).statusCode, 400)
@@ -351,7 +379,7 @@ const nairaDependencies = {
   mutate: async (_key, update) => { nairaStore = update(nairaStore); return nairaStore },
   policy: () => ({
     partnerId: 'dev_nairaproject', merchantName: 'Naira Platform', allowedOrigins: ['https://naira.example'],
-    defaultNetwork: 'base', projectManaged: true, settlementMode: 'ngn',
+    defaultNetwork: 'base', projectManaged: true, settlementMode: 'ngn', checkoutMode: 'human',
     paymentOptions: [{ network: 'base', recipient: '0x1111111111111111111111111111111111111111' }],
     nairaSettlement: {
       bankCode: 'OPAYNGPC', bankName: 'OPay', accountName: 'NAIRA PLATFORM',

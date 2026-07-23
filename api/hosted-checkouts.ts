@@ -937,6 +937,9 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     const isNairaProject = !providerRouting && 'projectManaged' in policy && policy.settlementMode === 'ngn'
     const requestedNetwork = clean(req.body?.network, 20).toLowerCase()
     const requestedRecipient = clean(req.body?.recipient, 80)
+    if ('projectManaged' in policy && checkoutMode !== policy.checkoutMode) {
+      return res.status(403).json({ ok: false, error: `This API key is restricted to ${policy.checkoutMode} checkout.` })
+    }
     if ('projectManaged' in policy && (req.body?.recipient !== undefined || req.body?.paymentOptions !== undefined || (checkoutMode === 'human' && req.body?.network !== undefined))) {
       return res.status(400).json({ ok: false, error: 'Payment routing is managed in the developer dashboard.' })
     }

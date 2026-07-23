@@ -19,6 +19,7 @@ async function request(handler, method, body = undefined) {
 
 let store
 let keyCount = 0
+let projectCount = 0
 const portalSecret = 'developer-portal-test-secret-longer-than-thirty-two-characters'
 const linkedWallet = '0x1111111111111111111111111111111111111111'
 await assert.rejects(validatePublicWebhookDestination('https://127.0.0.1/webhook'), /public HTTPS/)
@@ -45,7 +46,7 @@ const handler = createDeveloperProjectsHandler({
   listBanks: async () => [{ code: 'OPAYNGPC', name: 'OPay' }],
   verifyBank: async ({ institution, accountIdentifier }) => institution === 'OPAYNGPC' && accountIdentifier === '0123456789' ? 'POLYDESK LIMITED' : '',
   portalSecret: () => portalSecret,
-  createProjectId: () => 'dev_testproject1234',
+  createProjectId: () => projectCount++ === 0 ? 'dev_testproject1234' : 'dev_agentproject1234',
   createKeyId: () => `key_test${++keyCount}`,
   createSecret: prefix => `${prefix}_generated-secret-${keyCount}`,
   now: () => new Date('2026-07-19T12:00:00.000Z'),
@@ -53,15 +54,28 @@ const handler = createDeveloperProjectsHandler({
 
 assert.equal((await request(handler, 'PATCH')).statusCode, 405)
 assert.equal((await request(handler, 'POST', { action: 'create', name: 'A', website: 'javascript:alert(1)', useCase: 'short' })).statusCode, 400)
+assert.equal((await request(handler, 'POST', {
+  action: 'create', name: 'No mode', website: 'https://example.com',
+  useCase: 'Accept customer payments through a hosted checkout integration.',
+})).statusCode, 400)
 
 const created = await request(handler, 'POST', {
   action: 'create', name: 'PolyDesk API', website: 'https://polydesk.trade/app',
+  checkoutMode: 'human',
   useCase: 'Sell individual market data and analysis requests through hosted checkout.',
 })
 assert.equal(created.statusCode, 201)
 assert.equal(created.body.project.ownerEmail, 'owner@example.com')
 assert.deepEqual(created.body.project.allowedOrigins, ['https://polydesk.trade'])
 assert.equal(created.body.project.brandImageUrl, '')
+assert.equal(created.body.project.checkoutMode, 'human')
+
+const immutableMode = await request(handler, 'PUT', {
+  action: 'configure', projectId: created.body.project.id, checkoutMode: 'agentic',
+  name: 'PolyDesk API', website: 'https://polydesk.trade',
+  useCase: 'Sell individual market data and analysis requests through hosted checkout.',
+})
+assert.equal(immutableMode.statusCode, 409)
 
 const invalidBrand = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',
@@ -105,6 +119,7 @@ const policy = developerPolicyFromStore(store, generated.body.apiKey, portalSecr
 assert.equal(policy.partnerId, created.body.project.id)
 assert.equal(policy.merchantName, 'PolyDesk API')
 assert.equal(policy.brandImageUrl, 'https://polydesk.trade/brand/polydesk-mark-bw-transparent.png')
+assert.equal(policy.checkoutMode, 'human')
 assert.deepEqual(policy.capabilities, ['hosted_checkout', 'polymarket_funding'])
 assert.deepEqual(policy.paymentOptions.map(option => option.network), ['base', 'arbitrum'])
 assert.equal(developerPolicyFromStore(store, `${generated.body.apiKey}tampered`, portalSecret), null)
@@ -115,6 +130,41 @@ assert.equal(testKey.body.key.environment, 'test')
 const testPolicy = developerPolicyFromStore(store, testKey.body.apiKey, portalSecret)
 assert.deepEqual(testPolicy.paymentOptions.map(option => option.network), ['arc'])
 assert.equal(testPolicy.defaultNetwork, 'arc')
+
+const invalidAgenticProduct = await request(handler, 'POST', {
+  action: 'create', name: 'PolyDesk Agent API', website: 'https://polydesk.trade',
+  checkoutMode: 'agentic', capabilities: ['hosted_checkout', 'polymarket_funding'],
+  useCase: 'Sell fixed-price LP Scout research to compatible agent wallets.',
+})
+assert.equal(invalidAgenticProduct.statusCode, 400)
+const agenticProject = await request(handler, 'POST', {
+  action: 'create', name: 'PolyDesk Agent API', website: 'https://polydesk.trade',
+  checkoutMode: 'agentic', capabilities: ['hosted_checkout'],
+  useCase: 'Sell fixed-price LP Scout research to compatible agent wallets.',
+})
+assert.equal(agenticProject.statusCode, 201)
+assert.equal(agenticProject.body.project.checkoutMode, 'agentic')
+const agenticNaira = await request(handler, 'PUT', {
+  action: 'configure', projectId: agenticProject.body.project.id, checkoutMode: 'agentic',
+  name: 'PolyDesk Agent API', website: 'https://polydesk.trade',
+  useCase: 'Sell fixed-price LP Scout research to compatible agent wallets.',
+  capabilities: ['hosted_checkout'], settlementMode: 'ngn', networks: ['base'], defaultNetwork: 'base',
+  refundAddress: linkedWallet, allowedOrigins: ['https://polydesk.trade'],
+})
+assert.equal(agenticNaira.statusCode, 400)
+const agenticReady = await request(handler, 'PUT', {
+  action: 'configure', projectId: agenticProject.body.project.id, checkoutMode: 'agentic',
+  name: 'PolyDesk Agent API', website: 'https://polydesk.trade',
+  useCase: 'Sell fixed-price LP Scout research to compatible agent wallets.',
+  capabilities: ['hosted_checkout'], settlementMode: 'usdc', networks: ['arc'], defaultNetwork: 'arc',
+  recipients: { arc: linkedWallet }, allowedOrigins: ['https://polydesk.trade'], webhookUrl: '',
+})
+assert.equal(agenticReady.body.project.settlementStatus, 'ready')
+const agenticKey = await request(handler, 'POST', { action: 'create-key', projectId: agenticProject.body.project.id, name: 'Agent sandbox', environment: 'test' })
+assert.equal(agenticKey.statusCode, 201)
+const agenticPolicy = developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret)
+assert.equal(agenticPolicy.checkoutMode, 'agentic')
+assert.deepEqual(agenticPolicy.capabilities, ['hosted_checkout'])
 
 const webhook = await request(handler, 'POST', { action: 'rotate-webhook-secret', projectId: created.body.project.id })
 assert.equal(webhook.statusCode, 201)
