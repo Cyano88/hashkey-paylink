@@ -22,6 +22,7 @@ let keyCount = 0
 let projectCount = 0
 const portalSecret = 'developer-portal-test-secret-longer-than-thirty-two-characters'
 const linkedWallet = '0x1111111111111111111111111111111111111111'
+const externalRefundWallet = '0x4444444444444444444444444444444444444444'
 await assert.rejects(validatePublicWebhookDestination('https://127.0.0.1/webhook'), /public HTTPS/)
 assert.equal(
   developerWebhookSignature('whsec_test', '1784452800', '{"event":"payment.confirmed"}'),
@@ -40,7 +41,7 @@ const handler = createDeveloperProjectsHandler({
   hasStore: () => true,
   read: async () => store,
   mutate: async (_key, update) => { store = update(store); return store },
-  verify: async () => ({ userId: 'did:privy:test-owner', email: 'owner@example.com', wallets: [linkedWallet] }),
+  verify: async () => ({ userId: 'did:privy:test-owner', email: 'owner@example.com' }),
   validateWebhook: async url => { assert.match(url, /^https:\/\//) },
   paycrestReady: () => true,
   listBanks: async () => [{ code: 'OPAYNGPC', name: 'OPay' }],
@@ -173,11 +174,12 @@ assert.equal(JSON.stringify(webhook.body.project).includes('webhookSecretCipher'
 const naira = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',
   useCase: 'Settle customer payments into a verified Nigerian business bank account.', settlementMode: 'ngn',
-  networks: ['base'], defaultNetwork: 'base', recipients: { base: linkedWallet }, refundAddress: linkedWallet,
+  networks: ['base'], defaultNetwork: 'base', recipients: { base: linkedWallet }, refundAddress: externalRefundWallet,
   allowedOrigins: ['https://polydesk.trade'], webhookUrl: 'https://polydesk.trade/webhooks/hashpaylink',
   bankCode: 'OPAYNGPC', bankName: 'OPay', bankAccountName: 'POLYDESK LIMITED', bankAccountNumber: '0123456789',
 })
 assert.equal(naira.body.project.settlementStatus, 'ready')
+assert.equal(naira.body.project.refundAddress, externalRefundWallet)
 assert.ok(naira.body.project.bankVerifiedAt)
 assert.equal(naira.body.project.bankAccountLast4, '6789')
 assert.equal(JSON.stringify(naira.body.project).includes('0123456789'), false)
@@ -188,7 +190,7 @@ assert.equal(nairaPolicy.nairaSettlement.accountNumber, '0123456789')
 const nairaUpdate = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',
   useCase: 'Settle customer payments into a verified Nigerian business bank account.', settlementMode: 'ngn',
-  networks: ['base'], defaultNetwork: 'base', recipients: { base: linkedWallet }, refundAddress: linkedWallet,
+  networks: ['base'], defaultNetwork: 'base', recipients: { base: linkedWallet }, refundAddress: externalRefundWallet,
   allowedOrigins: ['https://polydesk.trade'], webhookUrl: 'https://polydesk.trade/webhooks/hashpaylink',
   bankCode: 'OPAYNGPC', bankName: 'OPay', bankAccountName: 'POLYDESK LIMITED',
 })
@@ -201,7 +203,7 @@ assert.ok(revoked.body.project.keys[0].revokedAt)
 
 const otherOwner = createDeveloperProjectsHandler({
   hasStore: () => true, read: async () => store, mutate: async () => store,
-  verify: async () => ({ userId: 'did:privy:other', email: 'other@example.com', wallets: [] }),
+  verify: async () => ({ userId: 'did:privy:other', email: 'other@example.com' }),
   validateWebhook: async () => undefined,
   paycrestReady: () => true, listBanks: async () => [], verifyBank: async () => '',
   portalSecret: () => portalSecret, createProjectId: () => 'unused', createKeyId: () => 'unused',

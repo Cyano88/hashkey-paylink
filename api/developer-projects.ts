@@ -80,7 +80,7 @@ export type DeveloperCheckoutPolicy = {
   projectManaged: true
 }
 
-type VerifiedDeveloper = { userId: string; email: string; wallets: string[] }
+type VerifiedDeveloper = { userId: string; email: string }
 type Dependencies = {
   hasStore: () => boolean
   read: (key: string) => Promise<DeveloperStore | undefined>
@@ -112,16 +112,6 @@ function linkedEmail(user: User) {
   return ''
 }
 
-function linkedEvmWallets(user: User) {
-  const wallets: string[] = []
-  for (const account of user.linkedAccounts ?? []) {
-    if ((account.type === 'wallet' || account.type === 'smart_wallet') && 'address' in account && typeof account.address === 'string' && isAddress(account.address)) {
-      wallets.push(getAddress(account.address))
-    }
-  }
-  return Array.from(new Set(wallets))
-}
-
 async function verifyDeveloper(req: Request): Promise<VerifiedDeveloper> {
   const appId = (process.env.PRIVY_APP_ID ?? process.env.VITE_PRIVY_APP_ID ?? '').trim()
   const secret = (process.env.PRIVY_APP_SECRET ?? '').trim()
@@ -132,7 +122,7 @@ async function verifyDeveloper(req: Request): Promise<VerifiedDeveloper> {
     const client = new PrivyClient(appId, secret)
     const claims = await client.verifyAuthToken(token)
     const user = await client.getUserById(claims.userId)
-    return { userId: claims.userId, email: linkedEmail(user), wallets: linkedEvmWallets(user) }
+    return { userId: claims.userId, email: linkedEmail(user) }
   } catch (cause) {
     throw Object.assign(new Error('Your developer session is invalid or expired.'), { status: 401, cause })
   }
@@ -456,7 +446,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (!allowedOrigins.length) return res.status(400).json({ ok: false, error: 'Add at least one allowed return origin.' })
         if (clean(req.body?.webhookUrl, 300) && !webhookUrl) return res.status(400).json({ ok: false, error: 'Enter a valid HTTPS webhook URL.' })
         if (webhookUrl) await dependencies.validateWebhook(webhookUrl)
-        if (settlementMode === 'ngn' && !refundAddress) return res.status(400).json({ ok: false, error: 'Add a valid USDC refund address for Naira settlement review.' })
+        if (settlementMode === 'ngn' && !refundAddress) return res.status(400).json({ ok: false, error: 'Add a valid Base USDC refund address for Naira settlement.' })
         if (settlementMode === 'ngn' && (!bankCode || !bankName || (!/^\d{10}$/.test(bankAccountNumber) && !currentProject.bankAccountCipher))) {
           return res.status(400).json({ ok: false, error: 'Add a Nigerian bank and 10-digit account number for Naira settlement.' })
         }
@@ -476,14 +466,12 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           if (!bankVerifiedAt) return res.status(400).json({ ok: false, error: 'Verify the bank account before activating Naira settlement.' })
         }
 
-        const linked = new Set(identity.wallets.map(wallet => wallet.toLowerCase()))
-        const refundVerified = linked.has(refundAddress.toLowerCase())
         const store = await dependencies.mutate(STORE_KEY, current => {
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           const next: DeveloperProject = {
             ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, settlementMode,
-            settlementStatus: settlementMode === 'usdc' ? 'ready' : (refundVerified && bankVerifiedAt ? 'ready' : 'review_required'),
+            settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
             bankCode, bankName, bankAccountName: verifiedBankName, bankVerifiedAt: settlementMode === 'ngn' ? bankVerifiedAt : undefined,
             bankAccountLast4: settlementMode === 'ngn' ? (bankAccountNumber.slice(-4) || latest.bankAccountLast4) : '',
