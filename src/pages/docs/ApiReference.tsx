@@ -36,7 +36,7 @@ export default function ApiReference() {
           <p>The request <code>checkoutMode</code> must match the API key's immutable project mode. A human project can offer every enabled network; the payer selects one and that payment attempt is then locked to the matching network and recipient. An agentic project selects one exact network when each checkout is created and returns an agentic <code>checkoutUrl</code> plus its Circle Gateway x402 <code>agentPaymentUrl</code>; it never returns a human fallback. The response also includes a durable <code>paymentAttemptId</code>. Test keys route to Arc Testnet; live keys use the configured Base and Arbitrum routes. Recipient overrides are rejected. API keys stay server-side.</p>
         </SubSection>
         <SubSection title="Agent wallet path">
-          <p>Create the checkout with <code>checkoutMode: "agentic"</code> and either <code>agenticType: "creator_earnings"</code> or <code>agenticType: "agent_treasury"</code>. Send a GET request to its <code>agentPaymentUrl</code>. The first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. A Circle Gateway x402-compatible wallet signs the payment and retries with <code>PAYMENT-SIGNATURE</code>. After Gateway verification and settlement, the endpoint returns the checkout id, payment-attempt id, and authoritative paid state used by signed webhooks.</p>
+          <p>Create the checkout with <code>checkoutMode: "agentic"</code> and either <code>agenticType: "creator_earnings"</code> or <code>agenticType: "agent_treasury"</code>. Open <code>checkoutUrl</code> for the hosted Circle Agent Wallet payer flow: email identity, wallet restoration or creation, USDC and App Pay balances, Gateway funding, and payment all stay inside checkout. Autonomous agents can instead send a GET request to <code>agentPaymentUrl</code>. Its first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. After Gateway verification and settlement, Hash PayLink returns the checkout id, payment-attempt id, and authoritative paid state used by signed webhooks.</p>
           <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/checkouts \
   -H "X-API-Key: YOUR_SERVER_KEY" \
   -H "Idempotency-Key: agent:your-unique-request-id" \
@@ -51,8 +51,8 @@ export default function ApiReference() {
     "returnUrl": "https://your-allowlisted-domain.example/complete"
   }'`}</CodeBlock>
           <CodeBlock lang="text">{`Create agentic service checkout
-  -> checkoutUrl       (agentic observer and durable success UI)
-  -> agentPaymentUrl   (agent handles x402 challenge)
+  -> checkoutUrl       (hosted Circle Agent Wallet checkout + durable success UI)
+  -> agentPaymentUrl   (autonomous agent handles x402 challenge)
   -> paymentAttemptId  (immutable payment session)
   -> status + signed webhook confirm fulfillment`}</CodeBlock>
           <p>Agentic payment is available only from an agentic-x402 project and only for fixed-price USDC service checkouts. Every agentic checkout selects exactly one network at creation: use <code>arc</code> with a test key, or <code>base</code>/<code>arbitrum</code> with a live key. If a project key exposes more than one eligible network, omitting <code>network</code> is rejected instead of silently selecting a route. Flexible requests, Polymarket funding and local-bank settlement require a separate human-checkout project.</p>

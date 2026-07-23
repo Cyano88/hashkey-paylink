@@ -118,6 +118,7 @@ import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
 import agenticCheckoutsHandler from './api/agentic-checkouts.js'
+import agenticCheckoutWalletPayHandler from './api/agentic-checkout-wallet-pay.js'
 import polymarketFundingCheckoutsHandler from './api/polymarket-funding-checkouts.js'
 import { pocketBillsCatalogHandler, pocketBillsPayHandler, pocketBillsQuoteHandler, pocketBillsVerifyHandler } from './api/pocket/bills.js'
 import { pocketBillsRefundHandler, pocketBillsUserRefundHandler } from './api/pocket/bills-refunds.js'
@@ -335,6 +336,7 @@ app.get('/api/public-config',          readLimiter, publicConfigHandler)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
+app.post('/api/v2/checkouts/agent/pay', strictLimiter, agenticCheckoutWalletPayHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
 app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
 app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)
