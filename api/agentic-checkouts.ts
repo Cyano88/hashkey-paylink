@@ -233,6 +233,9 @@ export function createAgenticCheckoutsHandler(dependencies: Dependencies = defau
       }
       const atomicAmount = clean(payment.amount, 40)
       if (!/^\d+$/.test(atomicAmount)) return res.status(502).json({ ok: false, error: 'Circle Gateway returned an invalid payment amount.' })
+      if (atomicAmount !== parseUnits(current.amount, 6).toString()) {
+        return res.status(409).json({ ok: false, error: 'Agent payment amount does not match this checkout.' })
+      }
 
       const paid = await dependencies.markPaid({
         id: current.id,

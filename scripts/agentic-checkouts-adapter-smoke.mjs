@@ -120,6 +120,29 @@ assert.equal(marked.amount, '0.25')
 assert.equal(marked.network, 'base')
 assert.equal(marked.referenceType, 'circle_gateway_transfer')
 
+marked = undefined
+const wrongAmountHandler = createAgenticCheckoutsHandler({
+  read: async () => active,
+  markPaid: async input => { marked = input; return paidRecord },
+  beginAttempt: async input => { attempted = input; return active },
+  protect: async () => async (req, _res, next) => {
+    req.payment = {
+      verified: true,
+      payer: '0x2222222222222222222222222222222222222222',
+      amount: '249999',
+      network: 'eip155:8453',
+      transaction: gatewayTransferId,
+    }
+    next()
+  },
+  reconcile: async () => null,
+  now: () => new Date('2026-07-22T10:15:00.000Z'),
+})
+const wrongAmount = await request(wrongAmountHandler)
+assert.equal(wrongAmount.res.statusCode, 409)
+assert.match(wrongAmount.res.body.error, /amount does not match/)
+assert.equal(marked, undefined)
+
 active = checkout()
 const paymentSignature = Buffer.from(JSON.stringify({
   accepted: { network: 'eip155:8453' },
