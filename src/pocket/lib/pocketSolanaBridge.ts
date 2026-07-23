@@ -75,7 +75,7 @@ export async function bridgeCircleSolanaWallet(input: {
   const adapter = await createSolanaAdapterFromProvider({ provider, connection })
   const kit = new BridgeKit()
   let sourceTxHash = ''
-  kit.on('bridge.burn', payload => {
+  kit.on('burn', payload => {
     sourceTxHash = findSourceHash(payload) ?? sourceTxHash
   })
   const result = await kit.bridge({

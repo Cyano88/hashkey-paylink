@@ -71,9 +71,10 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
         setSnapshot(next)
       }
       if (next.latestPurchase) {
+        const latestPurchase = next.latestPurchase
         setPurchase(current => {
-          if (current?.status === 'completed' && current.receiptActivityId !== next.latestPurchase.receiptActivityId) return current
-          return next.latestPurchase
+          if (current?.status === 'completed' && current.receiptActivityId !== latestPurchase.receiptActivityId) return current
+          return latestPurchase
         })
       }
     } catch (reason) {

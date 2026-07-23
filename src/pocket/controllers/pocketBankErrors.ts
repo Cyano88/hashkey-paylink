@@ -3,7 +3,7 @@ export function readablePocketBankPayoutError(reason: unknown, fallback: string)
     ? reason.message
     : typeof reason === 'string' && reason
       ? reason
-      : fallback).replaceAll('Paycrest ', '')
+      : fallback).split('Paycrest ').join('')
   if (/PAYCREST_API_KEY|not configured/i.test(message)) {
     return 'Bank payouts are temporarily unavailable. Please try again later.'
   }

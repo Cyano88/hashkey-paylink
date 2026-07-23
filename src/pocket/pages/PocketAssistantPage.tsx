@@ -7,7 +7,7 @@ import usePocketAssistantController from '../controllers/usePocketAssistantContr
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_ORIGIN } from '../lib/pocketRoutes'
 
-const WELCOME_TEXT = 'Circle Pocket is ready. Ask me to receive USDC, settle to bank, create a POS terminal, manage wallets, fund x402, pay bills, or find a receipt.'
+const WELCOME_TEXT = 'Circle Pocket is ready. Ask me to receive USDC, settle to bank, create a POS terminal, manage wallets, fund App Pay, or find a receipt. I only offer actions currently available.'
 
 export default function PocketAssistantPage() {
   const navigate = useNavigate()

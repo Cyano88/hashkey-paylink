@@ -16,8 +16,8 @@ type PocketPayLinkReadyPanelProps = {
   eventMode: boolean
   accessMode: boolean
   dashboardUrl: string
-  qrRef: RefObject<HTMLDivElement | null>
-  qrHiResRef: RefObject<HTMLDivElement | null>
+  qrRef: RefObject<HTMLDivElement>
+  qrHiResRef: RefObject<HTMLDivElement>
   onReset: () => void
   onDownloadQr: () => void
   onShare: () => void

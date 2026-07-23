@@ -24,6 +24,8 @@ export default function PocketRouteShell({
   const scrollerRef = useRef<HTMLDivElement>(null)
   const touchStartY = useRef<number | null>(null)
   const scrollFrame = useRef<number | null>(null)
+  const pullFrame = useRef<number | null>(null)
+  const latestPullDistance = useRef(0)
 
   const isRefreshing = refreshing || pullRefreshing
   const showPullIndicator = pullRefreshing || pullDistance > 0
@@ -51,6 +53,7 @@ export default function PocketRouteShell({
     if (Number.isFinite(saved) && saved > 0) scroller.scrollTop = saved
     return () => {
       if (scrollFrame.current !== null) window.cancelAnimationFrame(scrollFrame.current)
+      if (pullFrame.current !== null) window.cancelAnimationFrame(pullFrame.current)
       window.sessionStorage.setItem(`pocket:scroll:${pathname}`, String(scroller.scrollTop))
     }
   }, [pathname])
@@ -72,12 +75,23 @@ export default function PocketRouteShell({
   const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
     if (touchStartY.current === null) return
     const delta = (event.touches[0]?.clientY ?? touchStartY.current) - touchStartY.current
-    setPullDistance(delta > 0 ? Math.min(92, delta * 0.48) : 0)
+    latestPullDistance.current = delta > 0 ? Math.min(92, delta * 0.48) : 0
+    if (pullFrame.current !== null) return
+    pullFrame.current = window.requestAnimationFrame(() => {
+      setPullDistance(latestPullDistance.current)
+      pullFrame.current = null
+    })
   }
 
   const finishPull = async () => {
     touchStartY.current = null
-    if (!onRefresh || pullDistance < 68 || isRefreshing) {
+    if (pullFrame.current !== null) {
+      window.cancelAnimationFrame(pullFrame.current)
+      pullFrame.current = null
+    }
+    const completedDistance = latestPullDistance.current
+    latestPullDistance.current = 0
+    if (!onRefresh || completedDistance < 68 || isRefreshing) {
       setPullDistance(0)
       return
     }
@@ -121,7 +135,13 @@ export default function PocketRouteShell({
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={() => void finishPull()}
-            onTouchCancel={() => { touchStartY.current = null; setPullDistance(0) }}
+            onTouchCancel={() => {
+              touchStartY.current = null
+              latestPullDistance.current = 0
+              if (pullFrame.current !== null) window.cancelAnimationFrame(pullFrame.current)
+              pullFrame.current = null
+              setPullDistance(0)
+            }}
             className="h-full w-full overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
             style={{ scrollPaddingTop: contentTop, scrollPaddingBottom: 'calc(7.5rem + env(safe-area-inset-bottom))' }}
           >

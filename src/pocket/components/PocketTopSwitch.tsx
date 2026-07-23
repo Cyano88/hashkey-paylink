@@ -89,7 +89,7 @@ export default function PocketTopSwitch({
               'flex min-h-9 min-w-0 items-center justify-center rounded-full font-black transition-all',
               compact ? 'gap-1 px-1 text-[9px]' : 'gap-2 px-3 text-xs',
               active
-                ? 'bg-white text-gray-950 shadow-sm dark:bg-white dark:text-gray-950'
+                ? 'bg-[#ffffff] text-gray-950 shadow-sm dark:text-gray-950'
                 : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white',
             ].join(' ')}
           >

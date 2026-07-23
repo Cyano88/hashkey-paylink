@@ -53,15 +53,6 @@ export default function PocketLandingPage() {
           </div>
           <div className="flex items-center gap-2">
             <PocketThemeToggle />
-            {!authenticated && (
-              <button
-                type="button"
-                onClick={enterPocket}
-                className="rounded-full border border-gray-950 bg-gray-950 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-gray-800 active:scale-[0.98] dark:border-white dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
-              >
-                Guest Login
-              </button>
-            )}
           </div>
         </div>
       </nav>
@@ -199,7 +190,7 @@ export default function PocketLandingPage() {
             </PrivyConnectButton>
           )}
 
-          <p className="text-center text-[11px] font-medium text-gray-500 dark:text-white/40">Secure access with email or your connected wallet.</p>
+          <p className="text-center text-[11px] font-medium text-gray-500 dark:text-white/40">Secure email access.</p>
           <p className="flex items-center justify-center gap-1.5 text-[10px] font-semibold text-gray-400 dark:text-white/30">
             <Lock className="h-3.5 w-3.5" strokeWidth={2} />
             Wallet access powered by Circle

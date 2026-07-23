@@ -449,17 +449,19 @@ export default function Layout() {
                   <PocketAccountMenu />
                 </div>
               </div>
-              <PocketTopSwitch
-                mode={circlePocketHeaderMode}
-                walletView={circlePocketWalletView}
-                moveView={circlePocketMoveView}
-                billView={circlePocketBillView}
-                activityView={circlePocketActivityView}
-                onWalletChange={(view) => navigatePocketHeader({ section: 'home', view: view === 'smart' ? 'smart-wallet' : 'x402' })}
-                onMoveChange={(view) => navigatePocketHeader({ section: 'move', view })}
-                onBillChange={(view) => navigatePocketHeader({ section: 'bills', view })}
-                onActivityChange={(view) => navigatePocketHeader({ section: 'activity', view })}
-              />
+              {pocketRoute?.section !== 'assistant' && (
+                <PocketTopSwitch
+                  mode={circlePocketHeaderMode}
+                  walletView={circlePocketWalletView}
+                  moveView={circlePocketMoveView}
+                  billView={circlePocketBillView}
+                  activityView={circlePocketActivityView}
+                  onWalletChange={(view) => navigatePocketHeader({ section: 'home', view: view === 'smart' ? 'smart-wallet' : 'x402' })}
+                  onMoveChange={(view) => navigatePocketHeader({ section: 'move', view })}
+                  onBillChange={(view) => navigatePocketHeader({ section: 'bills', view })}
+                  onActivityChange={(view) => navigatePocketHeader({ section: 'activity', view })}
+                />
+              )}
             </>
           ) : (
           <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 focus:outline-none">

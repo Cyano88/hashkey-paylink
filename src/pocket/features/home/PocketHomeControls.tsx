@@ -88,7 +88,7 @@ export function PocketHomeSignInCard() {
           <ArrowRight className="h-4 w-4" />
         </span>
       </PrivyConnectButton>
-      <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">Secure access with email or your connected wallet.</p>
+      <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">Secure email access. Wallets powered by Circle.</p>
     </div>
   )
 }

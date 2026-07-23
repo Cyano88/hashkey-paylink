@@ -124,7 +124,7 @@ export default function PocketX402Page() {
                 <ArrowRight className="h-4 w-4" />
               </span>
             </PrivyConnectButton>
-            <p className="px-3 pb-1 text-center text-[11px] font-medium text-gray-400">Secure access with email or the wallet controlling this session.</p>
+            <p className="px-3 pb-1 text-center text-[11px] font-medium text-gray-400">Secure email access. Wallets powered by Circle.</p>
           </div>
         ) : !connected ? (
           <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95">

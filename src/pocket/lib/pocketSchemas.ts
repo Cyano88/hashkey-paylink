@@ -685,9 +685,11 @@ export function isPocketBankSendCreateData(value: unknown): value is PocketBankS
 
 export function isPocketSolanaTransferPrepareRequest(value: unknown): value is PocketSolanaTransferPrepareRequest {
   if (!isRecord(value)) return false
+  const amount = value.amount
   return isNonEmptyString(value.recipient, 128)
-    && isNonEmptyString(value.amount, 80)
-    && /^\d+(?:\.\d{1,6})?$/.test(value.amount.trim())
+    && typeof amount === 'string'
+    && isNonEmptyString(amount, 80)
+    && /^\d+(?:\.\d{1,6})?$/.test(amount.trim())
 }
 
 export function isPocketSolanaTransferPrepareData(value: unknown): value is PocketSolanaTransferPrepareData {
