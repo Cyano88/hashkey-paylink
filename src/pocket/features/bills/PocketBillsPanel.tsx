@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { AlertCircle, ArrowRight, Check, Clock3, Copy, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
+import { AlertCircle, ArrowRight, Check, Clock3, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from 'lucide-react'
 import { cn } from '../../../lib/utils'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import PocketSlideAction from '../../components/PocketSlideAction'
@@ -11,6 +10,7 @@ import PocketDataBundlePicker from './PocketDataBundlePicker'
 import { Link } from 'react-router-dom'
 import UnifiedReceipt from '../../../components/UnifiedReceipt'
 import type { PaylinkReceipt } from '../../../lib/paymentReceiptPdf'
+import { detectNigerianMobileNetwork } from '../../lib/nigerianMobileNetwork'
 
 export type PocketBillView = 'airtime' | 'data' | 'tv' | 'electricity'
 
@@ -52,10 +52,6 @@ function money(value: string) {
     : '₦0'
 }
 
-function rechargeToken(value: string) {
-  return value.replace(/^token\s*:\s*/i, '').trim()
-}
-
 function SignInCard() {
   return (
     <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
@@ -70,8 +66,6 @@ function SignInCard() {
 }
 
 export default function PocketBillsPanel({ view, authenticated, bills, baseAddress, baseBalance, walletBusy, onOpenWallet }: PocketBillsPanelProps) {
-  const [copiedToken, setCopiedToken] = useState('')
-  useEffect(() => setCopiedToken(''), [bills.intent?.id])
   const meta = billMeta[view]
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
@@ -109,15 +103,17 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
     targetLabel: bills.intent.category === 'electricity' ? 'Meter Number' : bills.intent.category === 'tv' ? 'Smartcard Number' : 'Phone Number',
     targetValue: bills.intent.phone,
     referenceId: bills.intent.requestId,
+    billToken: bills.intent.category === 'electricity' ? bills.intent.purchasedCode : undefined,
   } : null
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
-  const prepaidToken = view === 'electricity' && bills.intent?.variationCode === 'prepaid' && bills.intent.state === 'delivered'
-    ? rechargeToken(bills.intent.purchasedCode)
-    : ''
   const networks = view !== 'airtime'
-    ? bills.dataServices.map(service => ({ value: service.serviceId, label: dataServiceLabel(service.name) }))
+    ? bills.dataServices
+      .filter(service => /^(mtn|airtel|glo|etisalat)-data$/.test(service.serviceId))
+      .map(service => ({ value: service.serviceId, label: dataServiceLabel(service.name) }))
     : [...NETWORKS]
   const categoryEnabled = view === 'data' ? bills.dataEnabled : view === 'tv' ? bills.tvEnabled : view === 'electricity' ? bills.electricityEnabled : bills.airtimeEnabled
+  const isMobileBill = view === 'airtime' || view === 'data'
+  const detectedNetwork = isMobileBill ? detectNigerianMobileNetwork(bills.phone) : null
   const quoteExpired = bills.errorCode === 'BILLS_QUOTE_EXPIRED'
   const refundComplete = bills.errorCode === 'BILLS_REFUNDED'
   const providerUnavailable = bills.errorCode === 'PROVIDER_UNAVAILABLE'
@@ -182,31 +178,61 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
           </div>
 
           <div className="space-y-4 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
-            <div>
-              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">{view === 'tv' ? 'TV provider' : view === 'electricity' ? 'Electricity provider' : isData ? 'Data provider' : 'Mobile network'}</p>
-              {isVerifiedBill ? (
-                <PocketSelect value={bills.serviceId} options={networks} onChange={bills.setServiceId} disabled={locked || bills.catalogBusy} placeholder="Select provider" ariaLabel={`Select ${billName} provider`} />
-              ) : (
-                <div className="flex gap-1.5 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1.5 [scrollbar-width:none] dark:border-white/10 dark:bg-[#17181d] [&::-webkit-scrollbar]:hidden">
-                  {networks.map(network => (
-                    <button key={network.value} type="button" disabled={locked} onClick={() => bills.setServiceId(network.value)} className={cn('min-h-10 min-w-[72px] shrink-0 rounded-xl border px-2.5 text-[11px] font-black transition-all', bills.serviceId === network.value ? 'border-blue-500/30 bg-blue-500/10 text-blue-700 shadow-sm dark:text-blue-300' : 'border-transparent text-gray-500 hover:bg-blue-500/[0.06] hover:text-blue-700 dark:text-gray-400 dark:hover:text-blue-300', locked && 'cursor-not-allowed opacity-60')}>{network.label}</button>
-                  ))}
-                </div>
-              )}
-              {view !== 'airtime' && bills.catalogBusy && !networks.length && <span className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-gray-400"><Loader2 className="h-3 w-3 animate-spin" />Loading providers</span>}
-            </div>
-
-            {view === 'electricity' && (
+            {isMobileBill ? (
               <div>
-                <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Meter type</span>
-                <div className="mt-1"><PocketSelect value={bills.variationCode} options={[{ value: 'prepaid', label: 'Prepaid' }, { value: 'postpaid', label: 'Postpaid' }]} onChange={bills.setVariationCode} disabled={locked} placeholder="Select meter type" ariaLabel="Select electricity meter type" /></div>
+                <div className="grid grid-cols-[minmax(112px,0.72fr)_minmax(0,1.28fr)] overflow-visible rounded-2xl border border-gray-200 bg-white shadow-sm transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10 dark:border-white/10 dark:bg-[#17181d] dark:focus-within:border-blue-400/50">
+                  <div className="min-w-0 border-r border-gray-200 p-2.5 dark:border-white/10">
+                    <span className="mb-1 block px-1 text-[9px] font-black uppercase tracking-[0.14em] text-gray-400">Network</span>
+                    <PocketSelect
+                      value={bills.serviceId}
+                      options={networks}
+                      onChange={bills.setServiceId}
+                      disabled={locked || (isData && bills.catalogBusy)}
+                      placeholder={isData && bills.catalogBusy ? 'Loading' : 'Choose'}
+                      ariaLabel={`Select ${billName} network`}
+                      buttonClassName="min-h-9 border-0 bg-transparent px-1.5 py-1 shadow-none hover:bg-gray-50 focus:border-0 focus:ring-0 dark:bg-transparent dark:hover:bg-white/[0.04]"
+                    />
+                  </div>
+                  <label className="min-w-0 p-2.5">
+                    <span className="mb-1 block px-1 text-[9px] font-black uppercase tracking-[0.14em] text-gray-400">Phone number</span>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      disabled={locked || bills.environment === 'sandbox'}
+                      value={bills.phone}
+                      onChange={event => bills.setPhone(event.target.value)}
+                      placeholder="08012345678"
+                      className="h-9 w-full min-w-0 bg-transparent px-1 text-sm font-semibold tabular-nums text-gray-900 outline-none placeholder:text-gray-300 disabled:opacity-60 dark:text-white dark:placeholder:text-gray-600"
+                    />
+                  </label>
+                </div>
+                {isData && bills.catalogBusy && !networks.length && <span className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-gray-400"><Loader2 className="h-3 w-3 animate-spin" />Loading networks</span>}
+                {bills.environment === 'live' && detectedNetwork && (
+                  <p className="mt-1.5 px-1 text-[10px] font-medium text-gray-400">Network suggested from the number. Change it if this line was ported.</p>
+                )}
               </div>
-            )}
+            ) : (
+              <>
+                <div>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">{view === 'tv' ? 'TV provider' : 'Electricity provider'}</p>
+                  <PocketSelect value={bills.serviceId} options={networks} onChange={bills.setServiceId} disabled={locked || bills.catalogBusy} placeholder="Select provider" ariaLabel={`Select ${billName} provider`} />
+                  {bills.catalogBusy && !networks.length && <span className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-gray-400"><Loader2 className="h-3 w-3 animate-spin" />Loading providers</span>}
+                </div>
 
-            <label className="block">
-              <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard number') : view === 'electricity' ? 'Meter number' : bills.environment === 'sandbox' ? 'VTpass test account' : isData ? 'Account or phone number' : 'Phone number'}</span>
-              <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked || bills.environment === 'sandbox'} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
-            </label>
+                {view === 'electricity' && (
+                  <div>
+                    <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Meter type</span>
+                    <div className="mt-1"><PocketSelect value={bills.variationCode} options={[{ value: 'prepaid', label: 'Prepaid' }, { value: 'postpaid', label: 'Postpaid' }]} onChange={bills.setVariationCode} disabled={locked} placeholder="Select meter type" ariaLabel="Select electricity meter type" /></div>
+                  </div>
+                )}
+
+                <label className="block">
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard number') : 'Meter number'}</span>
+                  <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked || bills.environment === 'sandbox'} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
+                </label>
+              </>
+            )}
             {isData ? (
               <div>
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Data plan</span>
@@ -297,18 +323,6 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
                       labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`, successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent` }}
                     />
                   </>
-                )}
-                {prepaidToken && (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="min-w-0">
-                        <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-emerald-700/70 dark:text-emerald-200/70">Recharge token</span>
-                        <span className="mt-1.5 block select-all break-all font-mono text-sm font-black tracking-[0.08em] text-emerald-950 dark:text-emerald-100">{prepaidToken}</span>
-                      </span>
-                      <button type="button" onClick={() => void navigator.clipboard.writeText(prepaidToken).then(() => setCopiedToken(prepaidToken)).catch(() => undefined)} className="flex min-h-8 shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-2.5 text-[10px] font-bold text-emerald-700 transition active:scale-[0.98] dark:border-emerald-400/20 dark:bg-white/[0.07] dark:text-emerald-200"><Copy className="h-3 w-3" />{copiedToken === prepaidToken ? 'Copied' : 'Copy'}</button>
-                    </div>
-                    <p className="mt-2 text-[10px] leading-4 text-emerald-700/70 dark:text-emerald-200/70">Enter this token on the prepaid meter. It remains available in Bills activity.</p>
-                  </div>
                 )}
               </>
             )}

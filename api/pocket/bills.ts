@@ -52,7 +52,7 @@ function normalizeDataRecipient(value: unknown, serviceId: string, environment: 
     const expected = serviceId === 'spectranet' ? '1212121212' : '08011111111'
     return recipient === expected ? recipient : ''
   }
-  return /^0\d{10}$/.test(recipient) ? recipient : ''
+  return normalizeNigerianPhone(value)
 }
 
 type BillsCategory = 'airtime' | 'data' | 'tv' | 'electricity'

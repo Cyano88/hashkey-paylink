@@ -5,6 +5,7 @@ import {
   pocketReceiptAvailability,
   pocketReceiptKind,
 } from '../src/pocket/lib/pocketReceipt.ts'
+import { paymentReceiptView } from '../src/lib/paymentReceiptPdf.ts'
 import { solanaUsdcTransferParties } from '../api/pocket/wallet-chain-activity.ts'
 
 const base = {
@@ -65,6 +66,11 @@ assert.equal(pocketActivityReceipt(bankSettled)?.title, 'Bank payout')
 const bill = { ...base, eventId: 'evt_5', source: 'bills', settlementType: 'bill_payment', paycrestStatus: 'delivered', billCategory: 'airtime', billProvider: 'Mobile provider', billTarget: '08000000000' }
 assert.equal(pocketReceiptKind(bill), 'bill_purchase')
 assert.equal(pocketActivityReceipt(bill)?.variant, 'bills')
+
+const electricityBill = { ...bill, eventId: 'evt_5_power', billCategory: 'electricity', billTarget: '1111111111111', billToken: 'Token : 26362054405982757802' }
+const electricityReceipt = pocketActivityReceipt(electricityBill)
+assert.equal(electricityReceipt?.billToken, electricityBill.billToken)
+assert.deepEqual(paymentReceiptView(electricityReceipt).rows.at(-1), { label: 'Meter Token', value: '26362054405982757802', mono: true })
 
 const appPurchase = { ...base, eventId: 'evt_6', source: 'app-pay', settlementType: 'app_pay', paycrestStatus: 'completed', recipient: 'Research service' }
 assert.equal(pocketReceiptKind(appPurchase), 'app_purchase')

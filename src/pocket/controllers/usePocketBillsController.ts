@@ -19,6 +19,7 @@ import {
   type PocketBillVerification,
 } from '../api/pocketBillsClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
+import { detectNigerianMobileNetwork, mobileNetworkServiceId, normalizeNigerianMobileNumber } from '../lib/nigerianMobileNetwork'
 
 type AccessTokenReader = () => Promise<string | null>
 type FlowStatus = 'idle' | 'quoting' | 'ready' | 'paying' | 'confirming' | 'processing' | 'successful' | 'error'
@@ -183,7 +184,24 @@ export default function usePocketBillsController({
     setVerification(null)
     resetResult()
   }, [category, environment, resetResult])
-  const setPhone = useCallback((value: string) => { setPhoneState(value.replace(/[^\d+]/g, '').slice(0, 15)); setVerification(null); resetResult() }, [resetResult])
+  const setPhone = useCallback((value: string) => {
+    const nextPhone = value.replace(/[^\d+]/g, '').slice(0, 15)
+    setPhoneState(nextPhone)
+    if (category === 'airtime' || category === 'data') {
+      const detected = detectNigerianMobileNetwork(nextPhone)
+      if (detected) {
+        const nextServiceId = mobileNetworkServiceId(detected, category)
+        if (nextServiceId !== serviceId) {
+          setServiceIdState(nextServiceId)
+          setVariationCodeState('')
+          setAmountNgnState('')
+          setDataVariations([])
+        }
+      }
+    }
+    setVerification(null)
+    resetResult()
+  }, [category, resetResult, serviceId])
   const setContactPhone = useCallback((value: string) => { setContactPhoneState(value.replace(/[^\d+]/g, '').slice(0, 14)); resetResult() }, [resetResult])
   const setAmountNgn = useCallback((value: string) => {
     if (/^\d*(?:\.\d{0,2})?$/.test(value)) setAmountNgnState(value)
@@ -452,7 +470,7 @@ export default function usePocketBillsController({
 
   const processing = ['quoting', 'paying', 'confirming', 'processing'].includes(status)
   const expectedSandboxRecipient = category === 'data' ? sandboxDataRecipient(serviceId) : category === 'tv' || category === 'electricity' ? sandboxBillAccount(category, variationCode, serviceId) : VTPASS_SANDBOX_SUCCESS_PHONE
-  const recipientReady = category === 'airtime' ? /^0\d{10}$/.test(phone) : category === 'data' ? /^\d{10,12}$/.test(phone) : /^\d{8,15}$/.test(phone)
+  const recipientReady = category === 'airtime' || category === 'data' ? /^0\d{10}$/.test(normalizeNigerianMobileNumber(phone)) : /^\d{8,15}$/.test(phone)
   const electricityAmountWithinLimits = category !== 'electricity' || !verification || (
     (verification.minimumAmount === null || Number(amountNgn) >= verification.minimumAmount)
     && (verification.maximumAmount === null || Number(amountNgn) <= verification.maximumAmount)

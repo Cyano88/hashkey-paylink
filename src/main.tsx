@@ -15,7 +15,6 @@ import { arcChain, baseMainnet } from './lib/chains'
 import { arbitrum, polygon } from 'viem/chains'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyLoginProvider } from './lib/PrivyLoginProvider'
-import { isPocketHostname } from './pocket/lib/pocketRoutes'
 
 const BRAND_ORIGIN = 'https://hashpaylink.com'
 
@@ -60,7 +59,6 @@ const queryClient = new QueryClient({
 
 function AppProviders() {
   const { theme } = useTheme()
-  const isPocketSurface = isPocketHostname() || window.location.pathname === '/pocket' || window.location.pathname.startsWith('/pocket/')
   const privyConfig = useMemo<PrivyClientConfig>(() => ({
     loginMethods: ['email'],
     allowOAuthInEmbeddedBrowsers: true,
@@ -75,7 +73,7 @@ function AppProviders() {
       disableAllExternalWallets: true,
     },
     appearance: {
-      theme: isPocketSurface ? 'light' : theme === 'dark' ? 'dark' : 'light',
+      theme: theme === 'dark' ? 'dark' : 'light',
       accentColor: '#0071E3',
       logo: new URL('/privy-mark-logo.png', window.location.origin).toString(),
       landingHeader: '\u00A0',
@@ -86,7 +84,7 @@ function AppProviders() {
       termsAndConditionsUrl: `${BRAND_ORIGIN}/docs/terms`,
       privacyPolicyUrl: `${BRAND_ORIGIN}/docs/privacy`,
     },
-  }), [isPocketSurface, theme])
+  }), [theme])
 
   const app = <App />
 

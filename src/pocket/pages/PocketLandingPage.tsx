@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Lock, Mail, RotateCw } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import { CPurseIcon } from '../components/CPurseIcon'
+import PocketThemeToggle from '../components/PocketThemeToggle'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
@@ -51,6 +52,7 @@ export default function PocketLandingPage() {
             <span className="text-[15px] font-black tracking-[-0.025em]">Pocket</span>
           </div>
           <div className="flex items-center gap-2">
+            <PocketThemeToggle />
             {!authenticated && (
               <button
                 type="button"

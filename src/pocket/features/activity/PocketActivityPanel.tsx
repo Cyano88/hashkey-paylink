@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, Copy, Cpu, ExternalLink, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
+import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Cpu, ExternalLink, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
@@ -63,7 +63,7 @@ function supportedRows(rows: PocketActivityRow[]) {
 }
 
 export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefresh, onRefund }: PocketActivityPanelProps) {
-  const [copiedBillToken, setCopiedBillToken] = useState('')
+  const [expandedActivityId, setExpandedActivityId] = useState('')
   const [refundBusy, setRefundBusy] = useState('')
   const [refundMessage, setRefundMessage] = useState<Record<string, string>>({})
   const supported = supportedRows(rows)
@@ -112,9 +112,22 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const refundIntentId = kind === 'bills' ? row.merchantId || '' : ''
                 const claimingRefund = refundBusy === refundIntentId
                 const receipt = pocketActivityReceipt(row)
+                const recordId = `${row.txHash || row.eventId}-${row.ts}-${index}`
+                const expanded = kind !== 'bills' || expandedActivityId === recordId
                 return (
-                  <div key={`${row.txHash || row.eventId}-${row.ts}-${index}`} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                    <div className="flex items-start justify-between gap-3">
+                  <div key={recordId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                    <div
+                      className={cn('flex items-start justify-between gap-3', kind === 'bills' && 'cursor-pointer')}
+                      role={kind === 'bills' ? 'button' : undefined}
+                      tabIndex={kind === 'bills' ? 0 : undefined}
+                      aria-expanded={kind === 'bills' ? expanded : undefined}
+                      onClick={() => { if (kind === 'bills') setExpandedActivityId(current => current === recordId ? '' : recordId) }}
+                      onKeyDown={event => {
+                        if (kind !== 'bills' || (event.key !== 'Enter' && event.key !== ' ')) return
+                        event.preventDefault()
+                        setExpandedActivityId(current => current === recordId ? '' : recordId)
+                      }}
+                    >
                       <span className="flex min-w-0 items-center gap-3">
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
                           {kind === 'wallet'
@@ -135,29 +148,18 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                           {amountNgn ? `NGN ${amountNgn}` : Number.isFinite(amountUsdc) ? `${formatPocketDisplayAmount(amountUsdc)} USDC` : 'Receipt'}
                         </span>
                         <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{pocketActivityStatus(row)}</span>
+                        {kind === 'bills' && <ChevronDown className={cn('ml-auto mt-1 h-3.5 w-3.5 text-gray-300 transition-transform', expanded && 'rotate-180')} />}
                       </span>
                     </div>
-                    {timestamp && (
+                    {timestamp && expanded && (
                       <p className="mt-3 border-t border-gray-100 pt-2 text-[10px] font-medium text-gray-400 dark:border-white/10">
                         {timestamp.toLocaleDateString()} at {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     )}
-                    {receipt && (
+                    {receipt && expanded && (
                       <div className="mt-2 space-y-3">
                         <UnifiedReceipt receipt={receipt} />
-                            {row.billToken && (() => {
-                              const token = row.billToken.replace(/^token\s*:\s*/i, '').trim()
-                              return (
-                                <div className="rounded-xl bg-emerald-50 px-3 py-2.5 dark:bg-emerald-400/10">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <span className="font-semibold text-emerald-700 dark:text-emerald-300">Recharge token</span>
-                                    <button type="button" onClick={() => void navigator.clipboard.writeText(token).then(() => setCopiedBillToken(row.eventId)).catch(() => undefined)} className="flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-200"><Copy className="h-3 w-3" />{copiedBillToken === row.eventId ? 'Copied' : 'Copy'}</button>
-                                  </div>
-                                  <span className="mt-1.5 block select-all break-all font-mono text-xs font-black tracking-[0.08em] text-emerald-950 dark:text-emerald-100">{token}</span>
-                                </div>
-                              )
-                            })()}
-                            {row.supportReference && (
+                            {row.supportReference && kind !== 'bills' && (
                               <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 text-[10px] dark:border-white/10">
                                 <span className="font-semibold text-gray-400">Support reference</span>
                                 <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.supportReference}</span>

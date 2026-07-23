@@ -27,6 +27,7 @@ export type PaylinkReceipt = {
   targetValue?: string
   narration?: string
   referenceId?: string
+  billToken?: string
   proof?: {
     receiptHash?: string
     ogRootHash?: string
@@ -216,6 +217,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
         { label: 'Type', value: type },
         { label: targetLabel, value: receipt.targetValue || receipt.recipient || '-' },
         { label: 'Amount', value: amount },
+        ...(receipt.billToken ? [{ label: 'Meter Token', value: receipt.billToken.replace(/^token\s*:\s*/i, '').trim(), mono: true }] : []),
       ],
       reference,
     }

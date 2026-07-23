@@ -14,6 +14,7 @@ import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
 import PocketAccountMenu from './pocket/components/PocketAccountMenu'
 import { CPurseIcon } from './pocket/components/CPurseIcon'
 import PocketTopSwitch from './pocket/components/PocketTopSwitch'
+import PocketThemeToggle from './pocket/components/PocketThemeToggle'
 import { isPocketHostname, POCKET_BASE_PATH, pocketPathFor, resolvePocketRoute, type PocketRouteState } from './pocket/lib/pocketRoutes'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
@@ -415,8 +416,8 @@ export default function Layout() {
 
   const { theme, toggle: toggleTheme } = useTheme()
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', isPocketAppPage ? false : theme === 'dark')
-  }, [isPocketAppPage, theme])
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
   const openPaymentHistory = useCallback(() => {
     navigate('/dashboard?src=ngpos')
   }, [navigate])
@@ -444,6 +445,7 @@ export default function Layout() {
                   <span className="text-sm font-black tracking-[-0.025em]">Pocket</span>
                 </Link>
                 <div className="flex items-center gap-2">
+                  <PocketThemeToggle />
                   <PocketAccountMenu />
                 </div>
               </div>
