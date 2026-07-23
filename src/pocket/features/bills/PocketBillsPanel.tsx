@@ -106,11 +106,14 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
     billToken: bills.intent.category === 'electricity' ? bills.intent.purchasedCode : undefined,
   } : null
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
-  const networks = view !== 'airtime'
-    ? bills.dataServices
-      .filter(service => /^(mtn|airtel|glo|etisalat)-data$/.test(service.serviceId))
-      .map(service => ({ value: service.serviceId, label: dataServiceLabel(service.name) }))
-    : [...NETWORKS]
+  const networks = view === 'airtime'
+    ? [...NETWORKS]
+    : bills.dataServices
+      .filter(service => view !== 'data' || /^(mtn|airtel|glo|etisalat)-data$/.test(service.serviceId))
+      .map(service => ({
+        value: service.serviceId,
+        label: view === 'data' ? dataServiceLabel(service.name) : service.name,
+      }))
   const categoryEnabled = view === 'data' ? bills.dataEnabled : view === 'tv' ? bills.tvEnabled : view === 'electricity' ? bills.electricityEnabled : bills.airtimeEnabled
   const isMobileBill = view === 'airtime' || view === 'data'
   const detectedNetwork = isMobileBill ? detectNigerianMobileNetwork(bills.phone) : null
