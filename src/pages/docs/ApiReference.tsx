@@ -13,7 +13,7 @@ export default function ApiReference() {
           Create a human-checkout or agentic-x402 project in the Privy-authenticated developer dashboard. The selected payment path is immutable and every key issued by that project inherits it. Hash PayLink also pins the platform name, supported networks, receiving wallets and allowed return origins before issuing a server key. Partners remain responsible for fulfillment after checking the authoritative payment status.
         </p>
         <SubSection title="Request access">
-          <p>Open the <a href="/developers" className="font-semibold text-blue-600 hover:underline dark:text-blue-400">developer dashboard</a>, sign in with Privy and configure checkout routing. USDC settlement requires a Privy-linked receiving wallet. Naira settlement requires a Paycrest-verified Nigerian bank account and a Privy-linked refund wallet.</p>
+          <p>Open the <a href="/developers" className="font-semibold text-blue-600 hover:underline dark:text-blue-400">developer dashboard</a>, sign in with Privy and configure checkout routing. USDC settlement accepts a valid receiving address for every enabled network. Naira settlement requires a Paycrest-verified Nigerian bank account and a Privy-linked refund wallet.</p>
         </SubSection>
         <SubSection title="Hosted flow">
           <CodeBlock lang="text">{`Create checkout → Open hosted URL → Slide to pay → Verify status and receipt`}</CodeBlock>

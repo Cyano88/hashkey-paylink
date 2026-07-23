@@ -96,8 +96,7 @@ const unlinked = await request(handler, 'PUT', {
   allowedOrigins: ['https://polydesk.trade'], webhookUrl: '',
 })
 assert.equal(unlinked.statusCode, 200)
-assert.equal(unlinked.body.project.settlementStatus, 'review_required')
-assert.equal((await request(handler, 'POST', { action: 'create-key', projectId: created.body.project.id })).statusCode, 409)
+assert.equal(unlinked.body.project.settlementStatus, 'ready')
 
 const ready = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',

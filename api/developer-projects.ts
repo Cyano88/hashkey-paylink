@@ -477,14 +477,13 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         }
 
         const linked = new Set(identity.wallets.map(wallet => wallet.toLowerCase()))
-        const recipientsVerified = networks.every(network => linked.has(String(recipients[network]).toLowerCase()))
         const refundVerified = linked.has(refundAddress.toLowerCase())
         const store = await dependencies.mutate(STORE_KEY, current => {
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           const next: DeveloperProject = {
             ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, settlementMode,
-            settlementStatus: settlementMode === 'usdc' ? (recipientsVerified ? 'ready' : 'review_required') : (refundVerified && bankVerifiedAt ? 'ready' : 'review_required'),
+            settlementStatus: settlementMode === 'usdc' ? 'ready' : (refundVerified && bankVerifiedAt ? 'ready' : 'review_required'),
             networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
             bankCode, bankName, bankAccountName: verifiedBankName, bankVerifiedAt: settlementMode === 'ngn' ? bankVerifiedAt : undefined,
             bankAccountLast4: settlementMode === 'ngn' ? (bankAccountNumber.slice(-4) || latest.bankAccountLast4) : '',
