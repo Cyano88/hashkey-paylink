@@ -21,6 +21,8 @@ type Project = {
   capabilities: Capability[]
   settlementMode: 'usdc' | 'ngn'
   settlementStatus: 'ready' | 'review_required'
+  operationalStatus?: 'active' | 'suspended'
+  suspensionReason?: string
   networks: Network[]
   defaultNetwork: Network
   recipients: Partial<Record<Network, string>>
@@ -154,7 +156,9 @@ export default function DeveloperPortalPage() {
       })
       if (!data.project) throw new Error('Project update returned no project.')
       setProjects(current => current.map(project => project.id === data.project!.id ? data.project! : project))
-      setNotice(data.project.settlementStatus === 'ready' ? 'Configuration active.' : 'Configuration saved. Review is still required.')
+      setNotice(data.project.operationalStatus === 'suspended'
+        ? 'Configuration saved. The project remains suspended.'
+        : data.project.settlementStatus === 'ready' ? 'Configuration active.' : 'Configuration saved. Setup is still required.')
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Configuration could not be saved.') }
     finally { setBusy(false) }
   }
@@ -338,7 +342,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork) ? draft.defaultNetwork : networks[0] })
   }
   return <div>
-    <PanelHeader eyebrow="Checkout setup" title={draft.name} copy="These settings become the trusted routing policy behind your API key." status={draft.settlementStatus === 'ready' ? 'Active' : 'Review required'} />
+    <PanelHeader eyebrow="Checkout setup" title={draft.name} copy="These settings become the trusted routing policy behind your API key." status={draft.operationalStatus === 'suspended' ? 'Suspended' : draft.settlementStatus === 'ready' ? 'Active' : 'Setup required'} />
     <div className="mt-7 grid gap-4 sm:grid-cols-2">
       <Field label="Platform name"><input className={fieldClass()} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Field>
       <Field label="Website"><input className={fieldClass()} value={draft.website} onChange={event => setDraft({ ...draft, website: event.target.value })} /></Field>
@@ -427,7 +431,7 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
       {newKey?.environment === environment && <SecretReveal label="Copy this key now" value={newKey.value} />}
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
         <input className={fieldClass()} value={keyNames[environment]} onChange={event => setKeyNames({ ...keyNames, [environment]: event.target.value })} placeholder="Key name" />
-        <button type="button" disabled={busy || project.settlementStatus !== 'ready' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create key</button>
+        <button type="button" disabled={busy || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create key</button>
       </div>
       <div className="mt-4 space-y-2">{keys.length ? keys.map(key => <div key={key.id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm dark:bg-white/[0.06] dark:text-gray-300"><KeyRound className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{key.name}</p><p className="mt-0.5 font-mono text-[10px] text-gray-400">{key.prefix}••••</p></div>{key.revokedAt ? <span className="text-[10px] font-semibold text-gray-400">Revoked</span> : <button type="button" onClick={() => onRevoke(key.id)} className="text-[10px] font-semibold text-red-500">Revoke</button>}</div>) : <EmptyState icon={KeyRound} text={`No ${environment} keys yet.`} />}</div>
     </section>
@@ -436,6 +440,7 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
   return <div><PanelHeader eyebrow="Credentials" title="API keys" copy="Keys authenticate your backend and inherit this project's trusted checkout routing." />
     <div className="mt-5 rounded-xl border border-gray-200 px-3 py-3 text-xs font-semibold text-gray-700 dark:border-white/10 dark:text-gray-200">{project.checkoutMode === 'agentic' ? 'Agentic x402 keys' : 'Human checkout keys'} <span className="ml-1 font-normal text-gray-400">Cannot create the other checkout mode.</span></div>
     {project.settlementStatus !== 'ready' && <p className="mt-5 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
+    {project.operationalStatus === 'suspended' && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">This project is suspended. {project.suspensionReason || 'Contact Hash PayLink operations before creating new credentials.'}</p>}
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
       {environmentSection('test', 'Test keys', `Arc Testnet only. Restricted to ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
       {environmentSection('live', 'Live keys', `Base and Arbitrum mainnet only. Restricted to ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
@@ -484,7 +489,7 @@ function PortalLoading({ delayed = false }: { delayed?: boolean }) {
   </main>
 }
 function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) { return <label className={cn('block space-y-1.5', className)}><span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{label}</span>{children}</label> }
-function PanelHeader({ eyebrow, title, copy, status }: { eyebrow: string; title: string; copy: string; status?: string }) { return <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">{eyebrow}</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">{title}</h1><p className="mt-2 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">{copy}</p></div>{status && <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide', status === 'Active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300')}>{status}</span>}</div> }
+function PanelHeader({ eyebrow, title, copy, status }: { eyebrow: string; title: string; copy: string; status?: string }) { return <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">{eyebrow}</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">{title}</h1><p className="mt-2 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">{copy}</p></div>{status && <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide', status === 'Active' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300' : status === 'Suspended' ? 'bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300')}>{status}</span>}</div> }
 function Message({ tone, children }: { tone: 'error' | 'success'; children: React.ReactNode }) { return <p className={cn('mt-5 rounded-xl border px-3 py-2 text-xs font-medium', tone === 'error' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200' : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200')}>{children}</p> }
 function SecretReveal({ label, value }: { label: string; value: string }) { return <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-400/20 dark:bg-blue-400/10"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-blue-900 dark:text-blue-100">{label}</p><p className="mt-1 text-[10px] text-blue-700/70 dark:text-blue-200/60">It will not be shown again.</p></div><CopyButton value={value} /></div><code className="mt-3 block break-all rounded-xl bg-white/70 p-3 text-[10px] text-blue-900 dark:bg-black/20 dark:text-blue-100">{value}</code></div> }
 function CopyButton({ value }: { value: string }) { const [copied, setCopied] = useState(false); return <button type="button" onClick={async () => { await copyToClipboard(value); setCopied(true); setTimeout(() => setCopied(false), 1500) }} className="flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/10 px-2.5 text-[10px] font-semibold text-current"><Copy className="h-3 w-3" />{copied ? 'Copied' : 'Copy'}</button> }

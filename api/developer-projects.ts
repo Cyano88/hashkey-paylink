@@ -39,6 +39,10 @@ type DeveloperProject = {
   capabilities?: DeveloperCapability[]
   settlementMode: SettlementMode
   settlementStatus: 'ready' | 'review_required'
+  operationalStatus?: 'active' | 'suspended'
+  suspendedAt?: string
+  suspendedBy?: string
+  suspensionReason?: string
   networks: DeveloperNetwork[]
   defaultNetwork: DeveloperNetwork
   recipients: Partial<Record<DeveloperNetwork, string>>
@@ -53,6 +57,13 @@ type DeveloperProject = {
   bankAccountCipher: string
   bankVerifiedAt?: string
   keys: DeveloperKey[]
+  operations?: Array<{
+    id: string
+    action: 'activated' | 'suspended' | 'reactivated'
+    actor: string
+    reason?: string
+    createdAt: string
+  }>
   webhookDeliveries?: Array<{ id: string; event: string; status: 'delivered' | 'failed'; responseStatus?: number; attemptedAt: string; error?: string }>
   createdAt: string
   updatedAt: string
@@ -91,6 +102,8 @@ type Dependencies = {
   listBanks: () => Promise<PaycrestInstitution[]>
   verifyBank: (input: { institution: string; accountIdentifier: string }) => Promise<string>
   portalSecret: () => string
+  adminEmails: () => string
+  adminUserIds: () => string
   createProjectId: () => string
   createKeyId: () => string
   createSecret: (prefix: string) => string
@@ -197,6 +210,8 @@ const defaults: Dependencies = {
   listBanks: () => listPaycrestInstitutions('NGN'),
   verifyBank: verifyPaycrestAccount,
   portalSecret: () => (process.env.DEVELOPER_PORTAL_SECRET ?? '').trim(),
+  adminEmails: () => (process.env.DEVELOPER_ADMIN_EMAILS ?? '').trim(),
+  adminUserIds: () => (process.env.DEVELOPER_ADMIN_USER_IDS ?? '').trim(),
   createProjectId: () => `dev_${randomUUID().replace(/-/g, '').slice(0, 18)}`,
   createKeyId: () => `key_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
   createSecret: prefix => `${prefix}_${randomBytes(24).toString('base64url')}`,
@@ -285,7 +300,7 @@ function safeDigestEqual(left: string, right: string) {
   return timingSafeEqual(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
 }
 
-function projectPublic(project: DeveloperProject) {
+function projectPublic(project: DeveloperProject, includeOperations = false) {
   return {
     id: project.id,
     name: project.name,
@@ -297,6 +312,13 @@ function projectPublic(project: DeveloperProject) {
     capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
     settlementMode: project.settlementMode,
     settlementStatus: project.settlementStatus,
+    operationalStatus: project.operationalStatus === 'suspended' ? 'suspended' : 'active',
+    suspendedAt: project.suspendedAt,
+    suspensionReason: project.suspensionReason,
+    ...(includeOperations ? {
+      suspendedBy: project.suspendedBy,
+      operations: (project.operations ?? []).slice(-50),
+    } : {}),
     networks: project.networks,
     defaultNetwork: project.defaultNetwork,
     recipients: project.recipients,
@@ -347,6 +369,41 @@ function statusCode(error: unknown) {
   return Number((error as Error & { status?: number })?.status) || 500
 }
 
+function commaSeparatedSet(value: string) {
+  return new Set(value.split(',').map(item => item.trim().toLowerCase()).filter(Boolean))
+}
+
+function requireDeveloperAdmin(identity: VerifiedDeveloper, dependencies: Dependencies) {
+  const emails = commaSeparatedSet(dependencies.adminEmails())
+  const userIds = commaSeparatedSet(dependencies.adminUserIds())
+  if (!emails.size && !userIds.size) throw Object.assign(new Error('Developer operations access is not configured.'), { status: 503 })
+  if (!emails.has(identity.email.toLowerCase()) && !userIds.has(identity.userId.toLowerCase())) {
+    throw Object.assign(new Error('Developer operations access is restricted.'), { status: 403 })
+  }
+}
+
+function projectRoutingComplete(project: DeveloperProject) {
+  if (!project.allowedOrigins.length) return false
+  if (project.settlementMode === 'usdc') {
+    return Boolean(project.networks.length) && project.networks.every(network => validRecipient(project.recipients[network]))
+  }
+  return Boolean(
+    validRecipient(project.refundAddress)
+    && project.bankVerifiedAt
+    && project.bankAccountCipher
+    && project.bankCode
+    && project.bankName
+    && project.bankAccountName,
+  )
+}
+
+function appendOperation(
+  project: DeveloperProject,
+  operation: NonNullable<DeveloperProject['operations']>[number],
+) {
+  return [...(project.operations ?? []), operation].slice(-100)
+}
+
 export function createDeveloperProjectsHandler(dependencies: Dependencies = defaults) {
   return async function developerProjectsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
@@ -357,12 +414,27 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       const identity = await dependencies.verify(req)
 
       if (req.method === 'GET') {
-        if (clean(req.query?.resource, 30) === 'institutions') {
+        const resource = clean(req.query?.resource, 30).toLowerCase()
+        if (resource === 'institutions') {
           if (!dependencies.paycrestReady()) return res.status(503).json({ ok: false, error: 'Naira settlement is temporarily unavailable.' })
           const institutions = await dependencies.listBanks()
           return res.json({ ok: true, institutions })
         }
         const store = await dependencies.read(STORE_KEY)
+        if (resource === 'admin') {
+          requireDeveloperAdmin(identity, dependencies)
+          const projects = Object.values(store?.projects ?? {}).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+          return res.json({
+            ok: true,
+            projects: projects.map(project => projectPublic(project, true)),
+            summary: {
+              total: projects.length,
+              active: projects.filter(project => project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended').length,
+              setupRequired: projects.filter(project => project.settlementStatus !== 'ready').length,
+              suspended: projects.filter(project => project.operationalStatus === 'suspended').length,
+            },
+          })
+        }
         const projects = Object.values(store?.projects ?? {}).filter(project => project.ownerId === identity.userId)
         return res.json({ ok: true, projects: projects.map(projectPublic) })
       }
@@ -391,7 +463,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           networks: ['base'], defaultNetwork: 'base', recipients: {}, refundAddress: '',
           allowedOrigins: [new URL(website).origin], webhookUrl: '', webhookSecretCipher: '',
           bankCode: '', bankName: '', bankAccountName: '', bankAccountLast4: '', bankAccountCipher: '', bankVerifiedAt: undefined,
-          keys: [], webhookDeliveries: [], createdAt: now, updatedAt: now,
+          operationalStatus: 'active', keys: [], operations: [], webhookDeliveries: [], createdAt: now, updatedAt: now,
         }
         await dependencies.mutate(STORE_KEY, current => ({ projects: { ...(current?.projects ?? {}), [project.id]: project } }))
         return res.status(201).json({ ok: true, project: projectPublic(project) })
@@ -399,6 +471,50 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       const projectId = clean(req.body?.projectId, 80)
       const currentStore = await dependencies.read(STORE_KEY)
+
+      if (req.method === 'POST' && ['admin-activate', 'admin-suspend', 'admin-reactivate'].includes(action)) {
+        requireDeveloperAdmin(identity, dependencies)
+        const currentProject = currentStore?.projects?.[projectId]
+        if (!currentProject) return res.status(404).json({ ok: false, error: 'Developer project not found.' })
+        const reason = clean(req.body?.reason, 300)
+        if (action === 'admin-suspend' && reason.length < 8) {
+          return res.status(400).json({ ok: false, error: 'Add a clear suspension reason.' })
+        }
+        if (action === 'admin-activate' && !projectRoutingComplete(currentProject)) {
+          return res.status(409).json({ ok: false, error: 'The project cannot be activated until its settlement routing is complete.' })
+        }
+        const createdAt = dependencies.now().toISOString()
+        const actor = identity.email || identity.userId
+        let updated: DeveloperProject | undefined
+        await dependencies.mutate(STORE_KEY, current => {
+          const latest = current?.projects?.[projectId]
+          if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
+          if (action === 'admin-activate' && !projectRoutingComplete(latest)) {
+            throw Object.assign(new Error('The project cannot be activated until its settlement routing is complete.'), { status: 409 })
+          }
+          const operationAction = action === 'admin-suspend' ? 'suspended' : action === 'admin-reactivate' ? 'reactivated' : 'activated'
+          updated = {
+            ...latest,
+            settlementStatus: action === 'admin-activate' ? 'ready' : latest.settlementStatus,
+            operationalStatus: action === 'admin-suspend' ? 'suspended' : 'active',
+            suspendedAt: action === 'admin-suspend' ? createdAt : undefined,
+            suspendedBy: action === 'admin-suspend' ? actor : undefined,
+            suspensionReason: action === 'admin-suspend' ? reason : undefined,
+            operations: appendOperation(latest, {
+              id: `op_${randomUUID().replace(/-/g, '').slice(0, 18)}`,
+              action: operationAction,
+              actor,
+              ...(reason ? { reason } : {}),
+              createdAt,
+            }),
+            updatedAt: createdAt,
+          }
+          return { projects: { ...(current?.projects ?? {}), [projectId]: updated } }
+        })
+        if (!updated) throw new Error('Developer project operation could not be stored.')
+        return res.json({ ok: true, project: projectPublic(updated, true) })
+      }
+
       const currentProject = findOwnedProject(currentStore, projectId, identity.userId)
       if (!currentProject) return res.status(404).json({ ok: false, error: 'Developer project not found.' })
 
@@ -484,6 +600,9 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       }
 
       if (req.method === 'POST' && action === 'create-key') {
+        if (currentProject.operationalStatus === 'suspended') {
+          return res.status(409).json({ ok: false, error: 'This project is suspended. Contact Hash PayLink operations.' })
+        }
         if (currentProject.settlementStatus !== 'ready') {
           return res.status(409).json({ ok: false, error: 'Complete and verify settlement before creating a live key.' })
         }
@@ -561,7 +680,7 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
   const digest = keyDigest(secret, apiKey)
   for (const project of Object.values(store?.projects ?? {})) {
     const key = project.keys.find(item => !item.revokedAt && safeDigestEqual(item.digest, digest))
-    if (!key || project.settlementStatus !== 'ready') continue
+    if (!key || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') continue
     const keyEnvironment: DeveloperEnvironment = key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')
     if (keyEnvironment !== requestedEnvironment) continue
     const allowedNetworks = keyEnvironment === 'test' ? new Set<DeveloperNetwork>(['arc']) : new Set<DeveloperNetwork>(['base', 'arbitrum'])

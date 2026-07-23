@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { buildDeveloperWebhookRequest, createDeveloperProjectsHandler, developerPolicyFromStore, developerWebhookSignature, validatePublicWebhookDestination } from '../api/developer-projects.ts'
 import { createHmac } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 
 function responseRecorder() {
   return {
@@ -11,9 +12,9 @@ function responseRecorder() {
   }
 }
 
-async function request(handler, method, body = undefined) {
+async function request(handler, method, body = undefined, query = {}) {
   const response = responseRecorder()
-  await handler({ method, body, headers: { authorization: 'Bearer privy-test' } }, response)
+  await handler({ method, body, query, headers: { authorization: 'Bearer privy-test' } }, response)
   return response
 }
 
@@ -23,6 +24,7 @@ let projectCount = 0
 const portalSecret = 'developer-portal-test-secret-longer-than-thirty-two-characters'
 const linkedWallet = '0x1111111111111111111111111111111111111111'
 const externalRefundWallet = '0x4444444444444444444444444444444444444444'
+let activeIdentity = { userId: 'did:privy:test-owner', email: 'owner@example.com' }
 await assert.rejects(validatePublicWebhookDestination('https://127.0.0.1/webhook'), /public HTTPS/)
 assert.equal(
   developerWebhookSignature('whsec_test', '1784452800', '{"event":"payment.confirmed"}'),
@@ -41,12 +43,14 @@ const handler = createDeveloperProjectsHandler({
   hasStore: () => true,
   read: async () => store,
   mutate: async (_key, update) => { store = update(store); return store },
-  verify: async () => ({ userId: 'did:privy:test-owner', email: 'owner@example.com' }),
+  verify: async () => activeIdentity,
   validateWebhook: async url => { assert.match(url, /^https:\/\//) },
   paycrestReady: () => true,
   listBanks: async () => [{ code: 'OPAYNGPC', name: 'OPay' }],
   verifyBank: async ({ institution, accountIdentifier }) => institution === 'OPAYNGPC' && accountIdentifier === '0123456789' ? 'POLYDESK LIMITED' : '',
   portalSecret: () => portalSecret,
+  adminEmails: () => 'operations@example.com',
+  adminUserIds: () => '',
   createProjectId: () => projectCount++ === 0 ? 'dev_testproject1234' : 'dev_agentproject1234',
   createKeyId: () => `key_test${++keyCount}`,
   createSecret: prefix => `${prefix}_generated-secret-${keyCount}`,
@@ -166,6 +170,27 @@ const agenticPolicy = developerPolicyFromStore(store, agenticKey.body.apiKey, po
 assert.equal(agenticPolicy.checkoutMode, 'agentic')
 assert.deepEqual(agenticPolicy.capabilities, ['hosted_checkout'])
 
+activeIdentity = { userId: 'did:privy:operations', email: 'operations@example.com' }
+const operationsProjects = await request(handler, 'GET', undefined, { resource: 'admin' })
+assert.equal(operationsProjects.statusCode, 200)
+assert.equal(operationsProjects.body.summary.total, 2)
+assert.equal(operationsProjects.body.summary.active, 2)
+const suspended = await request(handler, 'POST', {
+  action: 'admin-suspend', projectId: agenticProject.body.project.id, reason: 'Manual risk review required.',
+})
+assert.equal(suspended.statusCode, 200)
+assert.equal(suspended.body.project.operationalStatus, 'suspended')
+assert.equal(developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret), null)
+const reactivated = await request(handler, 'POST', {
+  action: 'admin-reactivate', projectId: agenticProject.body.project.id,
+})
+assert.equal(reactivated.statusCode, 200)
+assert.equal(reactivated.body.project.operationalStatus, 'active')
+assert.equal(developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret).checkoutMode, 'agentic')
+assert.deepEqual(reactivated.body.project.operations.map(operation => operation.action), ['suspended', 'reactivated'])
+activeIdentity = { userId: 'did:privy:test-owner', email: 'owner@example.com' }
+assert.equal((await request(handler, 'GET', undefined, { resource: 'admin' })).statusCode, 403)
+
 const webhook = await request(handler, 'POST', { action: 'rotate-webhook-secret', projectId: created.body.project.id })
 assert.equal(webhook.statusCode, 201)
 assert.match(webhook.body.webhookSecret, /^whsec_/)
@@ -207,8 +232,15 @@ const otherOwner = createDeveloperProjectsHandler({
   validateWebhook: async () => undefined,
   paycrestReady: () => true, listBanks: async () => [], verifyBank: async () => '',
   portalSecret: () => portalSecret, createProjectId: () => 'unused', createKeyId: () => 'unused',
+  adminEmails: () => 'operations@example.com', adminUserIds: () => '',
   createSecret: prefix => `${prefix}_unused`, now: () => new Date(),
 })
 assert.equal((await request(otherOwner, 'PUT', { action: 'configure', projectId: created.body.project.id })).statusCode, 404)
+
+const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const operationsSource = readFileSync(new URL('../src/pages/DeveloperOperationsPage.tsx', import.meta.url), 'utf8')
+assert.ok(appSource.includes('path="admin/developers"') && appSource.includes('<DeveloperOperationsPage />'))
+assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("'admin-suspend'") && operationsSource.includes("'admin-reactivate'"))
+assert.equal(/localStorage|sessionStorage|x-[a-z-]*admin-key/i.test(operationsSource), false)
 
 console.log('Developer projects adapter smoke tests passed.')

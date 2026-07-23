@@ -144,6 +144,10 @@ services:
         value: "hashpaylink:hosted-checkouts:v2"
       - key: DEVELOPER_PORTAL_SECRET
         sync: false                   # stable 32+ character encryption and API-key digest secret
+      - key: DEVELOPER_ADMIN_EMAILS
+        sync: false                   # comma-separated Privy email allowlist for /admin/developers
+      - key: DEVELOPER_ADMIN_USER_IDS
+        sync: false                   # optional comma-separated Privy user-id allowlist
       - key: DEVELOPER_PROJECT_STORE_KEY
         value: "hashpaylink:developer-projects:v1"
       - key: HASH_PAYLINK_BASE_URL
