@@ -7,6 +7,7 @@ import {
   circleCliInvocation,
   gatewayActivationTarget,
   gatewayBalanceReached,
+  parseCircleGatewayBalanceResponse,
 } from '../api/agent-wallet.ts'
 
 assert.equal(gatewayActivationTarget('0', '0.5'), '0.5')
@@ -29,6 +30,14 @@ const cliInvocation = circleCliInvocation(['gateway', 'balance'])
 assert.equal(cliInvocation.executable, process.execPath)
 assert.match(cliInvocation.args[0], /@circle-fin[\\/]cli[\\/]dist[\\/]index\.js$/)
 assert.deepEqual(cliInvocation.args.slice(1), ['gateway', 'balance'])
+assert.equal(parseCircleGatewayBalanceResponse({
+  token: 'USDC',
+  balances: [{ depositor: '0x1111111111111111111111111111111111111111', balance: '0.500001' }],
+}, '0x1111111111111111111111111111111111111111'), '0.500001')
+assert.equal(parseCircleGatewayBalanceResponse({
+  token: 'USDC',
+  balances: [{ depositor: '0x2222222222222222222222222222222222222222', balance: '1' }],
+}, '0x1111111111111111111111111111111111111111'), undefined)
 
 function responseRecorder() {
   return {
@@ -118,6 +127,7 @@ assert.deepEqual(claims, [{
 }])
 assert.deepEqual(activations, [{
   agentSlug: pocketX402WalletSlug('ada@example.com'),
+  email: 'ada@example.com',
   network: 'base',
   amount: '0.5',
 }])

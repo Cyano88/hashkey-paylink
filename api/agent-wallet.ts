@@ -38,6 +38,8 @@ const ARC_TESTNET_GATEWAY_CHAIN = 'ARC-TESTNET'
 const GATEWAY_DEPOSIT_VERIFY_ATTEMPTS = Math.max(1, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_ATTEMPTS ?? '6') || 6)
 const GATEWAY_DEPOSIT_VERIFY_DELAY_MS = Math.max(500, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_DELAY_MS ?? '5000') || 5000)
 const CIRCLE_GATEWAY_X402_API_BASE = (process.env.CIRCLE_GATEWAY_X402_API_BASE ?? 'https://gateway-api.circle.com').replace(/\/+$/, '')
+const CIRCLE_GATEWAY_BALANCE_API_MAINNET = (process.env.CIRCLE_GATEWAY_API_BASE_MAINNET ?? 'https://gateway-api.circle.com').replace(/\/+$/, '')
+const CIRCLE_GATEWAY_BALANCE_API_TESTNET = (process.env.CIRCLE_GATEWAY_API_BASE_TESTNET ?? 'https://gateway-api-testnet.circle.com').replace(/\/+$/, '')
 
 const ARC_TESTNET = defineChain({
   id: 5042002,
@@ -852,11 +854,47 @@ async function runCircle(args: string[], key: string, timeoutMs = 60_000, maxBuf
   return [stdout, stderr].filter(Boolean).join('\n').trim()
 }
 
-async function readGatewayBalance(address: string, chain: string, serviceKey: string) {
-  const output = await runCircle(['gateway', 'balance', '--address', address, '--chain', chain, '--output', 'json'], serviceKey, 30_000)
-  const balance = parseBalance(output)
+export function parseCircleGatewayBalanceResponse(value: unknown, address: string) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const body = value as { token?: unknown; balances?: unknown }
+  if (body.token !== 'USDC' || !Array.isArray(body.balances)) return undefined
+  const match = body.balances.find(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false
+    return String((item as { depositor?: unknown }).depositor ?? '').toLowerCase() === address.toLowerCase()
+  }) as { balance?: unknown } | undefined
+  const balance = String(match?.balance ?? '')
+  return /^\d+(?:\.\d{1,6})?$/.test(balance) ? balance : undefined
+}
+
+async function readGatewayBalance(address: string, network: 'base' | 'arc') {
+  const apiBase = network === 'arc' ? CIRCLE_GATEWAY_BALANCE_API_TESTNET : CIRCLE_GATEWAY_BALANCE_API_MAINNET
+  const response = await fetch(`${apiBase}/v1/balances`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      token: 'USDC',
+      sources: [{ depositor: address }],
+    }),
+    signal: AbortSignal.timeout(12_000),
+  })
+  const body = await response.json().catch(() => undefined)
+  if (!response.ok) {
+    throw connectionFailure(503, 'circle_provider_unavailable', `Circle Gateway balance API returned HTTP ${response.status}.`)
+  }
+  const balance = parseCircleGatewayBalanceResponse(body, address)
   if (balance === undefined) throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway returned no balance.')
   return balance
+}
+
+async function verifyCircleAgentWalletOwnership(address: string, chain: string, serviceKey: string) {
+  const output = await runCircle(['wallet', 'list', '--type', 'agent', '--chain', chain, '--output', 'json'], serviceKey, 30_000)
+  const ownsWallet = parseWalletAddresses(output).some(wallet => wallet.toLowerCase() === address.toLowerCase())
+  if (!ownsWallet) {
+    throw connectionFailure(409, 'wallet_ownership_mismatch', 'This Circle email does not control the selected agent wallet. Reconnect the wallet.')
+  }
 }
 
 export async function searchCircleMarketplaceServices(params: {
@@ -1023,12 +1061,6 @@ export async function readAgentWalletSnapshot(params: {
   const store = await readStore()
   const record = resolveAgentRecord(store, params.agentSlug)
   const balanceChain = params.network === 'arc' ? 'ARC-TESTNET' : 'BASE'
-  // Circle CLI's Eco method originates on Base but settles the Gateway
-  // deposit on Polygon. Read the configured Gateway settlement chain so the
-  // source-wallet debit and unified-balance credit are not shown as a loss.
-  const gatewayChain = params.network === 'arc'
-    ? ARC_TESTNET_GATEWAY_CHAIN
-    : normalizeGatewayBalanceChain(undefined)
   let walletBalance: string | undefined
   let walletBalanceError: string | undefined
   let gatewayBalance: string | undefined
@@ -1070,15 +1102,7 @@ export async function readAgentWalletSnapshot(params: {
       gatewayBalanceError = 'x402 balance lookup is not enabled on this server.'
     } else {
       try {
-        const key = `${params.agentSlug}_${record.sessionId}`
-        let output = ''
-        try {
-          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', gatewayChain, '--output', 'json'], key, 30_000)
-        } catch {
-          output = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', gatewayChain], key, 30_000)
-        }
-        gatewayBalance = parseBalance(output)
-        if (gatewayBalance === undefined) gatewayBalanceError = 'x402 balance is temporarily unavailable.'
+        gatewayBalance = await readGatewayBalance(record.walletAddress, params.network)
       } catch (error) {
         if (isCircleLoginExpired(error)) {
           sessionExpired = true
@@ -1280,6 +1304,7 @@ export type AgentGatewayActivationResult = {
 
 export async function activateAgentGateway(params: {
   agentSlug: string
+  email: string
   network: 'base' | 'arc'
   amount: string
 }): Promise<AgentGatewayActivationResult> {
@@ -1300,15 +1325,29 @@ export async function activateAgentGateway(params: {
   if (!record?.walletAddress || !record.sessionId) {
     throw connectionFailure(404, 'wallet_session_not_found', 'Reconnect this wallet before activating x402.')
   }
+  const normalizedEmail = normalizeEmail(params.email)
+  if (!normalizedEmail || !record.emailHash || record.emailHash !== emailHash(normalizedEmail)) {
+    throw connectionFailure(403, 'wallet_identity_mismatch', 'Reconnect the Circle wallet with the email currently signed in to Hash PayLink.')
+  }
   const depositChain = params.network === 'arc' ? ARC_TESTNET_GATEWAY_CHAIN : 'BASE'
-  const gatewayBalanceChain = params.network === 'arc'
-    ? ARC_TESTNET_GATEWAY_CHAIN
-    : normalizeGatewayBalanceChain(undefined)
   const method = params.network === 'arc' ? 'direct' : 'eco'
   const serviceKey = `${params.agentSlug}_${record.sessionId}`
+  try {
+    await verifyCircleAgentWalletOwnership(record.walletAddress, depositChain, serviceKey)
+  } catch (error) {
+    if ((error as AgentWalletConnectionFailure)?.code === 'wallet_ownership_mismatch') throw error
+    if (isCircleLoginExpired(error)) {
+      throw connectionFailure(409, 'circle_session_expired', 'Wallet session expired. Reconnect the wallet, then retry App Pay funding.')
+    }
+    console.warn('[circle-gateway-activate] ownership preflight failed:', {
+      network: params.network,
+      ...circleCliFailureMeta(error),
+    })
+    throw connectionFailure(503, 'circle_provider_unavailable', 'Could not verify Circle agent wallet ownership. No funding was submitted.')
+  }
   let startingGatewayBalance = ''
   try {
-    startingGatewayBalance = await readGatewayBalance(record.walletAddress, gatewayBalanceChain, serviceKey)
+    startingGatewayBalance = await readGatewayBalance(record.walletAddress, params.network)
   } catch (error) {
     if (isCircleLoginExpired(error)) {
       throw connectionFailure(409, 'circle_session_expired', 'Wallet session expired. Reconnect the wallet, then retry App Pay funding.')
@@ -1354,7 +1393,7 @@ export async function activateAgentGateway(params: {
   let gatewayBalance = startingGatewayBalance
   for (let attempt = 1; attempt <= GATEWAY_DEPOSIT_VERIFY_ATTEMPTS; attempt += 1) {
     try {
-      gatewayBalance = await readGatewayBalance(record.walletAddress, gatewayBalanceChain, serviceKey)
+      gatewayBalance = await readGatewayBalance(record.walletAddress, params.network)
       if (gatewayBalanceReached(gatewayBalance, targetGatewayBalance)) break
     } catch {
       // A submitted deposit remains pending when the follow-up balance read is unavailable.

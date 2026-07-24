@@ -26,7 +26,7 @@ type PocketX402ActivateDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   claim(input: { ownerId: string; idempotencyKey: string; action: string; metadata: Record<string, string> }): Promise<{ record: CirclePocketActionRecord; claimed: boolean }>
   record(input: { ownerId: string; idempotencyKey: string; action: string; status: 'completed' | 'failed'; metadata: Record<string, string> }): Promise<CirclePocketActionRecord>
-  activate(input: { agentSlug: string; network: 'base' | 'arc'; amount: string }): Promise<AgentGatewayActivationResult>
+  activate(input: { agentSlug: string; email: string; network: 'base' | 'arc'; amount: string }): Promise<AgentGatewayActivationResult>
   requestId?: () => string
 }
 
@@ -75,7 +75,8 @@ export function createPocketX402ActivateHandler(dependencies: PocketX402Activate
     try {
       const identity = await dependencies.verifyUser(req)
       ownerId = identity.userId
-      const agentSlug = pocketX402WalletSlug(identity.email ?? '')
+      const email = identity.email?.trim().toLowerCase() ?? ''
+      const agentSlug = pocketX402WalletSlug(email)
       if (!agentSlug) return fail(403, 'FORBIDDEN', 'A verified email is required for x402 activation.', false)
       const claim = await dependencies.claim({
         ownerId,
@@ -109,7 +110,7 @@ export function createPocketX402ActivateHandler(dependencies: PocketX402Activate
         return fail(409, 'DUPLICATE_REQUEST', 'This activation attempt already failed. Check the Gateway balance before starting a new attempt.', false)
       }
 
-      const result = await dependencies.activate({ agentSlug, network: req.body.network, amount: req.body.amount })
+      const result = await dependencies.activate({ agentSlug, email, network: req.body.network, amount: req.body.amount })
       const data: PocketX402ActivationData = {
         activationStatus: result.status,
         amount: result.amount,

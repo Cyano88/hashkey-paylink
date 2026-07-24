@@ -136,6 +136,10 @@ services:
         value: "hashpaylink:pocket-bills:v1"
       - key: CIRCLE_CLI_ENABLED
         value: "true"                 # required for reader wallet login, x402 balance checks, Gateway activation, and x402 pay
+      - key: CIRCLE_GATEWAY_API_BASE_MAINNET
+        value: "https://gateway-api.circle.com"
+      - key: CIRCLE_GATEWAY_API_BASE_TESTNET
+        value: "https://gateway-api-testnet.circle.com"
       - key: DATABASE_URL
         sync: false                   # Render Postgres for durable platform storage
       - key: HOSTED_CHECKOUT_SIGNING_SECRET
