@@ -21,6 +21,8 @@ for (const required of [
   'Hash PayLink could not reach secure checkout',
   'footer={<CheckoutHowItWorks />}',
   "Circle's minimum App Pay transfer is 0.5 USDC.",
+  '<span>Secure</span>',
+  '<Lock className="h-2.5 w-2.5"',
   'Check App Pay',
   'activationNeedsCheck',
   "x402.walletStep === 'done'",
@@ -39,6 +41,7 @@ for (const forbidden of [
   'This checkout needs ${checkout.amount} USDC in App Pay',
   '<Wallet className=',
   'min-h-[calc(100dvh-5rem)]',
+  'Verified against the status used by signed webhooks',
 ]) {
   assert.equal(source.includes(forbidden), false, `Agent checkout must not contain ${forbidden}`)
 }

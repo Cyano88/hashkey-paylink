@@ -6,8 +6,8 @@ import {
   ChevronDown,
   Copy,
   Loader2,
+  Lock,
   RefreshCw,
-  ShieldCheck,
 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
@@ -346,7 +346,10 @@ export default function AgentCheckoutPage() {
           ) : (
             <Link to="/" className="mt-3 flex h-11 w-full items-center justify-center rounded-full bg-gray-950 px-5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Done</Link>
           )}
-          <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] font-medium text-gray-400"><ShieldCheck className="h-3.5 w-3.5" /> Verified against the status used by signed webhooks</p>
+          <p className="mt-4 inline-flex w-full items-center justify-center gap-1 text-[10px] font-medium text-gray-400">
+            <span>Secure</span>
+            <Lock className="h-2.5 w-2.5" strokeWidth={1.8} />
+          </p>
         </div>
       </CheckoutShell>
     )
