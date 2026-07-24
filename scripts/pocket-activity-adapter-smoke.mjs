@@ -1,6 +1,31 @@
 import assert from 'node:assert/strict'
 import { createPocketActivityHandler } from '../api/pocket/activity.ts'
+import { mergeRegisteredPaycrestActivity } from '../api/ng-pos.ts'
 import { isPocketActivityReadData } from '../src/pocket/lib/pocketSchemas.ts'
+
+const registeredPayout = {
+  eventId: 'ngpos-bank-withdraw-1',
+  txHash: `0x${'a'.repeat(64)}`,
+  ts: 1_720_000_000_000,
+  receiptId: 'signed-receipt-id',
+  source: 'bank-withdraw',
+}
+const providerPayout = {
+  eventId: 'ngpos-bank-withdraw-1',
+  txHash: registeredPayout.txHash,
+  ts: 1_720_000_100_000,
+  source: 'bank-withdraw',
+  paycrestStatus: 'settled',
+  direction: 'out',
+  bankName: 'Moniepoint MFB',
+  bankLast4: '0573',
+}
+const [enrichedPayout] = mergeRegisteredPaycrestActivity([registeredPayout], [providerPayout])
+assert.equal(enrichedPayout.paycrestStatus, 'settled')
+assert.equal(enrichedPayout.direction, 'out')
+assert.equal(enrichedPayout.bankName, 'Moniepoint MFB')
+assert.equal(enrichedPayout.receiptId, 'signed-receipt-id')
+assert.equal(enrichedPayout.ts, registeredPayout.ts)
 
 function responseRecorder() {
   return {

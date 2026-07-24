@@ -53,6 +53,20 @@ export class PocketX402ConnectionError extends Error {
   }
 }
 
+export class PocketX402ActivationError extends Error {
+  code?: string
+  reason?: string
+  retryable: boolean
+
+  constructor(message: string, code?: string, reason?: string, retryable = false) {
+    super(message)
+    this.name = 'PocketX402ActivationError'
+    this.code = code
+    this.reason = reason
+    this.retryable = retryable
+  }
+}
+
 export function parsePocketX402Connection(value: unknown): PocketX402ConnectionData {
   if (!isRecord(value) || value.ok !== true || !isPocketX402ConnectionData(value)) {
     const reason = isRecord(value) && typeof value.reason === 'string' ? value.reason : undefined
@@ -156,6 +170,14 @@ export async function activatePocketX402Gateway({
     body: JSON.stringify({ network, amount }),
   })
   const data = await response.json().catch(() => undefined)
-  if (!response.ok) throw new Error(errorMessage(data))
+  if (!response.ok) {
+    const error = isRecord(data) && isRecord(data.error) ? data.error : undefined
+    throw new PocketX402ActivationError(
+      errorMessage(data),
+      typeof error?.code === 'string' ? error.code : undefined,
+      isRecord(data) && typeof data.reason === 'string' ? data.reason : undefined,
+      error?.retryable === true,
+    )
+  }
   return parsePocketX402Activation(data)
 }

@@ -465,6 +465,29 @@ function isSettledPaycrestStatus(status: string) {
   return normalized === 'settled' || normalized === 'validated'
 }
 
+export function mergeRegisteredPaycrestActivity<
+  T extends { eventId: string; txHash: string; ts: number },
+  P extends { eventId: string; txHash: string; ts: number },
+>(payments: T[], paycrestRows: P[]) {
+  const paycrestByTxHash = new Map(
+    paycrestRows
+      .filter(row => row.txHash)
+      .map(row => [row.txHash.toLowerCase(), row]),
+  )
+  return payments.map(payment => {
+    const paycrest = paycrestByTxHash.get(payment.txHash.toLowerCase())
+    if (!paycrest) return payment
+    return {
+      ...payment,
+      ...paycrest,
+      // Keep the signed receipt identity and original confirmation timestamp.
+      eventId: payment.eventId,
+      txHash: payment.txHash,
+      ts: payment.ts,
+    }
+  })
+}
+
 export async function listNgPosHistoryForOwner(privyUserId: string) {
   const store = await readStore()
   const merchants = Object.values(store.merchants ?? {})
@@ -488,9 +511,8 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
       await registerPaycrestBankSendReceipt(order).catch(() => null)
     }
   }
-  const paycrestRows = paycrestOrders
+  const allPaycrestRows = paycrestOrders
     .filter(order => isVisiblePaycrestHistoryStatus(order.status))
-    .filter(order => !order.tx_hash || !existingTxHashes.has(order.tx_hash.toLowerCase()))
     .map(order => {
       const isBankSendOrder = order.source === 'bank-send'
       const link = isBankSendOrder ? bankSendById.get(order.merchant_id) : undefined
@@ -537,6 +559,9 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
         accountName: order.bank_account_name,
       }
     })
+  const enrichedPayments = mergeRegisteredPaycrestActivity(payments, allPaycrestRows)
+  const paycrestRows = allPaycrestRows
+    .filter(row => !row.txHash || !existingTxHashes.has(row.txHash.toLowerCase()))
   return {
     merchants: merchants.map(merchant => ({
       merchant_id: merchant.merchant_id,
@@ -554,7 +579,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
       flexible_amount: link.flexible_amount,
       created_at: link.created_at,
     })),
-    payments: [...payments, ...paycrestRows].sort((a, b) => Number((b.ts || 0) - (a.ts || 0))),
+    payments: [...enrichedPayments, ...paycrestRows].sort((a, b) => Number((b.ts || 0) - (a.ts || 0))),
   }
 }
 

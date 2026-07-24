@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   activatePocketX402Gateway,
   connectPocketX402Wallet,
+  PocketX402ActivationError,
   PocketX402ConnectionError,
   readPocketX402Snapshot,
 } from '../api/pocketX402Client'
@@ -339,6 +340,22 @@ export default function usePocketX402Controller({
       await refresh({ silent: true })
     } catch (reason) {
       activationTargetBalance.current = null
+      const ownershipMismatch = reason instanceof PocketX402ActivationError
+        && (reason.reason === 'wallet_ownership_mismatch' || reason.reason === 'wallet_identity_mismatch')
+      if (ownershipMismatch) {
+        activationKey.current = ''
+        activationStartedAt.current = null
+        setActivationPending(false)
+        setWalletMode('login')
+        setWalletStep('idle')
+        setOtp('')
+        setOtpNetwork(null)
+        setExpectedWallet('')
+        setWalletChoices([])
+        const reconnectSnapshot = snapshot ? { ...snapshot, connected: false } : snapshot
+        setSnapshot(reconnectSnapshot)
+        if (reconnectSnapshot) pocketX402SnapshotCache.set(x402CacheKey(email, network), reconnectSnapshot)
+      }
       setError(readableError(reason, 'Could not add App Pay funds.'))
     } finally {
       setActivationBusy(false)

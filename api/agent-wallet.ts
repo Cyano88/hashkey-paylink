@@ -1268,10 +1268,9 @@ export async function connectAgentWallet(params: {
   if (envRecord?.walletAddress && envRecord.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
     throw connectionFailure(409, 'platform_agent_locked', 'This wallet is pinned by server configuration and cannot be replaced.')
   }
-  const explicitExpectedMatch = pendingExpectedWallet && walletAddress.toLowerCase() === pendingExpectedWallet.toLowerCase()
-  if (existing?.walletAddress && existing.walletAddress.toLowerCase() !== walletAddress.toLowerCase() && !explicitExpectedMatch) {
-    throw connectionFailure(409, 'wallet_mismatch', 'Circle returned a different wallet. The existing wallet was not replaced.')
-  }
+  // The Circle OTP session and wallet list are the authority for this email.
+  // A non-pinned stale record may be replaced after the new wallet is proven
+  // by that same authenticated Circle session.
 
   delete store.pending[id]
   store.agents = {

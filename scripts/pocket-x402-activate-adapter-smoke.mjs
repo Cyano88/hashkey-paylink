@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { createPocketX402ActivateHandler } from '../api/pocket/x402-activate.ts'
-import { activatePocketX402Gateway } from '../src/pocket/api/pocketX402Client.ts'
+import {
+  activatePocketX402Gateway,
+  PocketX402ActivationError,
+} from '../src/pocket/api/pocketX402Client.ts'
 import { pocketX402WalletSlug } from '../src/pocket/lib/pocketX402Identity.ts'
 import {
   classifyCircleGatewayDepositFailure,
@@ -184,6 +187,20 @@ assert.equal(providerFailure.body.error.code, 'PROVIDER_UNAVAILABLE')
 assert.equal(JSON.stringify(providerFailure.body).includes('secret'), false)
 assert.equal(providerRecords[0].status, 'failed')
 
+const ownershipHandler = createPocketX402ActivateHandler({
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  claim: async input => ({ claimed: true, record: actionRecord({ metadata: input.metadata }) }),
+  activate: async () => { throw Object.assign(new Error('This Circle email does not control the selected agent wallet. Reconnect the wallet.'), { status: 409, code: 'wallet_ownership_mismatch' }) },
+  record: async input => actionRecord({ status: input.status, metadata: input.metadata }),
+})
+const ownershipFailure = await request(ownershipHandler, {
+  body: { network: 'arc', amount: '0.5' },
+  key: 'pocket:x402-activate:ownership-request-0001',
+})
+assert.equal(ownershipFailure.statusCode, 409)
+assert.equal(ownershipFailure.body.error.code, 'VERSION_CONFLICT')
+assert.equal(ownershipFailure.body.reason, 'wallet_ownership_mismatch')
+
 let fetchCall
 const clientResult = await activatePocketX402Gateway({
   accessToken: 'privy-token',
@@ -213,5 +230,28 @@ assert.equal(fetchCall.init.headers.authorization, 'Bearer privy-token')
 assert.equal(fetchCall.init.headers['idempotency-key'], 'pocket:x402-activate:client-request-0001')
 assert.deepEqual(JSON.parse(fetchCall.init.body), { network: 'arc', amount: '1' })
 assert.equal(clientResult.data.activationStatus, 'pending')
+
+await assert.rejects(
+  activatePocketX402Gateway({
+    accessToken: 'privy-token',
+    network: 'arc',
+    amount: '0.5',
+    idempotencyKey: 'pocket:x402-activate:ownership-client-0001',
+    fetcher: async () => new Response(JSON.stringify({
+      ok: false,
+      status: 'failed',
+      reason: 'wallet_ownership_mismatch',
+      error: {
+        code: 'VERSION_CONFLICT',
+        message: 'This Circle email does not control the selected agent wallet. Reconnect the wallet.',
+        retryable: false,
+      },
+    }), { status: 409, headers: { 'content-type': 'application/json' } }),
+  }),
+  error => error instanceof PocketX402ActivationError
+    && error.code === 'VERSION_CONFLICT'
+    && error.reason === 'wallet_ownership_mismatch'
+    && error.retryable === false,
+)
 
 console.log('Circle Pocket x402 activation adapter smoke tests passed.')
