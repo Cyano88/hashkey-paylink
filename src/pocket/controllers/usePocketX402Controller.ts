@@ -126,10 +126,6 @@ export default function usePocketX402Controller({
         setError(next.gatewayBalanceError)
       }
       if (!next.connected) setWalletMode(next.found ? 'login' : 'create')
-      if (next.connected) {
-        setWalletStep('done')
-        setOtpNetwork(null)
-      }
     } catch (reason) {
       if (!silent && run === refreshRun.current) setError(readableError(reason, 'Could not load x402 wallet status.'))
     } finally {
@@ -204,6 +200,9 @@ export default function usePocketX402Controller({
       return
     }
     setNetworkState(next)
+    setWalletStep('idle')
+    setOtp('')
+    setOtpNetwork(null)
     const cached = pocketX402SnapshotCache.get(x402CacheKey(email, next)) ?? null
     setSnapshot(cached)
     setSnapshotReady(Boolean(cached))

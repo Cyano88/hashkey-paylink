@@ -66,7 +66,10 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
   const [expandedActivityId, setExpandedActivityId] = useState('')
   const [refundBusy, setRefundBusy] = useState('')
   const [refundMessage, setRefundMessage] = useState<Record<string, string>>({})
-  const supported = supportedRows(rows)
+  const supported = supportedRows(rows).filter(row => (
+    activityKind(row) !== 'bank'
+    || pocketActivityStatus(row) !== 'status unavailable'
+  ))
   const visibleRows = view === 'all' ? supported : supported.filter(row => activityKind(row) === view)
 
   return (
@@ -113,17 +116,18 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const claimingRefund = refundBusy === refundIntentId
                 const receipt = pocketActivityReceipt(row)
                 const recordId = `${row.txHash || row.eventId}-${row.ts}-${index}`
-                const expanded = kind !== 'bills' || expandedActivityId === recordId
+                const collapsible = kind === 'bills' || kind === 'bank'
+                const expanded = !collapsible || expandedActivityId === recordId
                 return (
                   <div key={recordId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
                     <div
-                      className={cn('flex items-start justify-between gap-3', kind === 'bills' && 'cursor-pointer')}
-                      role={kind === 'bills' ? 'button' : undefined}
-                      tabIndex={kind === 'bills' ? 0 : undefined}
-                      aria-expanded={kind === 'bills' ? expanded : undefined}
-                      onClick={() => { if (kind === 'bills') setExpandedActivityId(current => current === recordId ? '' : recordId) }}
+                      className={cn('flex items-start justify-between gap-3', collapsible && 'cursor-pointer')}
+                      role={collapsible ? 'button' : undefined}
+                      tabIndex={collapsible ? 0 : undefined}
+                      aria-expanded={collapsible ? expanded : undefined}
+                      onClick={() => { if (collapsible) setExpandedActivityId(current => current === recordId ? '' : recordId) }}
                       onKeyDown={event => {
-                        if (kind !== 'bills' || (event.key !== 'Enter' && event.key !== ' ')) return
+                        if (!collapsible || (event.key !== 'Enter' && event.key !== ' ')) return
                         event.preventDefault()
                         setExpandedActivityId(current => current === recordId ? '' : recordId)
                       }}
@@ -148,7 +152,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                           {amountNgn ? `NGN ${amountNgn}` : Number.isFinite(amountUsdc) ? `${formatPocketDisplayAmount(amountUsdc)} USDC` : 'Receipt'}
                         </span>
                         <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{pocketActivityStatus(row)}</span>
-                        {kind === 'bills' && <ChevronDown className={cn('ml-auto mt-1 h-3.5 w-3.5 text-gray-300 transition-transform', expanded && 'rotate-180')} />}
+                        {collapsible && <ChevronDown className={cn('ml-auto mt-1 h-3.5 w-3.5 text-gray-300 transition-transform', expanded && 'rotate-180')} />}
                       </span>
                     </div>
                     {timestamp && expanded && (

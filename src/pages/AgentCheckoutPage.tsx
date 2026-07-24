@@ -8,7 +8,6 @@ import {
   Loader2,
   RefreshCw,
   ShieldCheck,
-  Wallet,
 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
@@ -71,14 +70,14 @@ const NETWORK_LABELS: Record<string, string> = {
 
 function CheckoutShell({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
   return (
-    <main className="flex min-h-[calc(100dvh-5rem)] items-center justify-center bg-gray-50 px-4 py-8 dark:bg-[#090a0d]">
-      <div className="w-full max-w-md">
-        <section className="overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#111216]">
+    <div className="w-full">
+      <div className="mx-auto w-full max-w-md">
+        <section className="overflow-hidden rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] dark:border-white/10 dark:bg-[#101114]">
           {children}
         </section>
         {footer}
       </div>
-    </main>
+    </div>
   )
 }
 
@@ -225,7 +224,11 @@ export default function AgentCheckoutPage() {
   }, [lookup?.checkout?.paymentAttempt?.receiptId, lookup?.checkout?.status])
 
   const checkout = lookup?.checkout
-  const connected = Boolean(x402.snapshot?.connected && x402.snapshot.walletAddress)
+  const connected = Boolean(
+    x402.walletStep === 'done'
+    && x402.snapshot?.connected
+    && x402.snapshot.walletAddress,
+  )
   const gatewayEnough = Boolean(checkout && amountValue(x402.snapshot?.gatewayBalance) + 0.0000005 >= amountValue(checkout.amount))
   const walletCanActivate = amountValue(x402.snapshot?.walletBalance) + 0.0000005 >= amountValue(x402.amount)
   const sessionChecking = !identityReady || (authenticated && !x402.snapshotReady)
@@ -378,16 +381,15 @@ export default function AgentCheckoutPage() {
               logoutOnAuthenticated={false}
               className="relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >
-              <Wallet className="absolute left-5 h-4 w-4" />
+              <img src="/pocket-circle.png" alt="" className="absolute left-5 h-6 w-6 object-contain invert dark:invert-0" />
               <span>Continue</span>
               <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 dark:bg-black/10"><ArrowRight className="h-4 w-4" /></span>
             </PrivyConnectButton>
             <p className="text-center text-[11px] text-gray-400">Secure email access. Wallet powered by Circle.</p>
           </div>
         ) : !connected ? (
-          <div className="space-y-3 rounded-2xl border border-gray-200 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.04]">
-            <div className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5 dark:bg-white/[0.05]">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 dark:bg-white/[0.08]"><Wallet className="h-4 w-4" /></span>
+          <div className="space-y-3">
+            <div className="flex items-center px-1 py-1">
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Circle Agent Wallet</p>
                 <p className="mt-0.5 truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{email}</p>
@@ -421,7 +423,7 @@ export default function AgentCheckoutPage() {
               </>
             ) : (
               <button type="button" onClick={() => void x402.beginConnection()} disabled={x402.walletBusy} className="relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
-                {x402.walletBusy ? <Loader2 className="absolute left-5 h-4 w-4 animate-spin" /> : <Wallet className="absolute left-5 h-4 w-4" />}
+                {x402.walletBusy ? <Loader2 className="absolute left-5 h-4 w-4 animate-spin" /> : <img src="/pocket-circle.png" alt="" className="absolute left-5 h-6 w-6 object-contain invert dark:invert-0" />}
                 Continue
                 <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 dark:bg-black/10"><ArrowRight className="h-4 w-4" /></span>
               </button>

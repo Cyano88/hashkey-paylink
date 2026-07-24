@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('../src/pages/AgentCheckoutPage.tsx', import.meta.url), 'utf8')
+const controllerSource = readFileSync(new URL('../src/pocket/controllers/usePocketX402Controller.ts', import.meta.url), 'utf8')
+const layoutSource = readFileSync(new URL('../src/Layout.tsx', import.meta.url), 'utf8')
 
 for (const required of [
   'usePocketIdentity',
@@ -19,6 +21,8 @@ for (const required of [
   'Hash PayLink could not reach secure checkout',
   'footer={<CheckoutHowItWorks />}',
   "Circle's minimum App Pay transfer is 0.5 USDC.",
+  "x402.walletStep === 'done'",
+  'src="/pocket-circle.png"',
 ]) {
   assert.ok(source.includes(required), `Agent checkout must retain ${required}`)
 }
@@ -31,8 +35,15 @@ for (const forbidden of [
   '/home/x402',
   'One checkout · one approval',
   'This checkout needs ${checkout.amount} USDC in App Pay',
+  '<Wallet className=',
+  'min-h-[calc(100dvh-5rem)]',
 ]) {
   assert.equal(source.includes(forbidden), false, `Agent checkout must not contain ${forbidden}`)
 }
+
+assert.doesNotMatch(controllerSource, /if \(next\.connected\)[\s\S]{0,120}setWalletStep\('done'\)/)
+assert.match(layoutSource, /const isAgentCheckoutPage = pathname\.startsWith\('\/pay\/a\/'\)/)
+assert.match(layoutSource, /const isPayPage = pathname === '\/pay' \|\| isAgentCheckoutPage/)
+assert.match(layoutSource, /\(isAgentProfilePage \|\| isAgentCheckoutPage\)[\s\S]{0,100}privyAuthenticated/)
 
 console.log('Agent checkout UI source smoke checks passed.')

@@ -198,7 +198,8 @@ export default function Layout() {
   const isPocketAppPage = isPocketHost || pathname === '/pocket' || pathname.startsWith('/pocket/')
   const isPocketLandingPage = isPocketHost ? pathname === '/' : pathname === '/pocket' || pathname === '/pocket/'
   const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/create' || pathname === '/polymarket' || isPocketAppPage
-  const isPayPage  = pathname === '/pay'
+  const isAgentCheckoutPage = pathname.startsWith('/pay/a/')
+  const isPayPage = pathname === '/pay' || isAgentCheckoutPage
   const isNgPosPage = pathname === '/pos/ng'
   const isTelegramPaymentLinksPage = pathname === '/telegram/payment-links'
   const isReceiptPage = pathname.startsWith('/receipt/')
@@ -346,7 +347,7 @@ export default function Layout() {
   const { authenticated: privyAuthenticated } = usePrivy()
 
   const anyConnected = evmConnected || !!solanaAddress
-  const agentEmailConnected = Boolean(isAgentProfilePage && PRIVY_AUTH_ENABLED && privyAuthenticated)
+  const agentEmailConnected = Boolean((isAgentProfilePage || isAgentCheckoutPage) && PRIVY_AUTH_ENABLED && privyAuthenticated)
   const headerControlConnected = anyConnected || agentEmailConnected
   const evmNetKey    = evmConnected
     ? ([CHAIN_META.base, CHAIN_META.arc, CHAIN_META.arbitrum] as const).find(n => n.chainId === evmChainId)?.key ?? null
