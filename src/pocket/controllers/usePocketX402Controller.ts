@@ -88,6 +88,7 @@ export default function usePocketX402Controller({
   const [activationBusy, setActivationBusy] = useState(false)
   const [activationSuccess, setActivationSuccess] = useState('')
   const [activationPending, setActivationPending] = useState(false)
+  const [activationNeedsCheck, setActivationNeedsCheck] = useState(false)
   const activationKey = useRef('')
   const activationTargetBalance = useRef<number | null>(null)
   const activationStartedAt = useRef<number | null>(null)
@@ -112,6 +113,7 @@ export default function usePocketX402Controller({
       if (targetBalance != null && next.gatewayBalanceChecked && Number.isFinite(refreshedGatewayBalance)) {
         if (refreshedGatewayBalance + 0.0000005 >= targetBalance) {
           setActivationPending(false)
+          setActivationNeedsCheck(false)
           setActivationSuccess('')
           setActivationOpen(false)
           activationKey.current = ''
@@ -144,9 +146,10 @@ export default function usePocketX402Controller({
     const elapsed = Date.now() - activationStartedAt.current
     const timeout = window.setTimeout(() => {
       setActivationPending(false)
+      setActivationNeedsCheck(true)
       setActivationSuccess('')
       activationStartedAt.current = null
-      setError('App Pay funding was submitted, but Circle has not confirmed the new balance yet. Pull down to check before trying again.')
+      setError('Circle is still confirming App Pay funding. Check the balance before starting another transfer.')
     }, Math.max(0, APP_PAY_CONFIRMATION_TIMEOUT_MS - elapsed))
     return () => {
       window.clearInterval(poll)
@@ -183,6 +186,7 @@ export default function usePocketX402Controller({
       setError('')
       setActivationSuccess('')
       setActivationPending(false)
+      setActivationNeedsCheck(false)
       activationTargetBalance.current = null
       activationStartedAt.current = null
       return
@@ -209,6 +213,7 @@ export default function usePocketX402Controller({
     setActivationOpen(false)
     setActivationSuccess('')
     setActivationPending(false)
+    setActivationNeedsCheck(false)
     activationKey.current = ''
     activationTargetBalance.current = null
     activationStartedAt.current = null
@@ -287,6 +292,7 @@ export default function usePocketX402Controller({
     activationTargetBalance.current = null
     activationStartedAt.current = null
     setActivationPending(false)
+    setActivationNeedsCheck(false)
   }, [])
 
   const activationError = useMemo(
@@ -297,6 +303,7 @@ export default function usePocketX402Controller({
   const activate = useCallback(async () => {
     if (activationError || !snapshot?.connected) return
     setActivationBusy(true)
+    setActivationNeedsCheck(false)
     setError('')
     setActivationSuccess('')
     try {
@@ -325,6 +332,7 @@ export default function usePocketX402Controller({
       if (result.data?.activationStatus === 'available') {
         setActivationSuccess(`${result.data.amount} USDC is available for app payments.`)
         setActivationPending(false)
+        setActivationNeedsCheck(false)
         setActivationOpen(false)
         activationKey.current = ''
         activationTargetBalance.current = null
@@ -333,6 +341,7 @@ export default function usePocketX402Controller({
       } else {
         setActivationSuccess('Gateway activation was submitted. Confirming the updated balance automatically.')
         setActivationPending(true)
+        setActivationNeedsCheck(false)
         activationStartedAt.current = Date.now()
         setActivationOpen(false)
       }
@@ -345,6 +354,7 @@ export default function usePocketX402Controller({
         activationKey.current = ''
         activationStartedAt.current = null
         setActivationPending(false)
+        setActivationNeedsCheck(false)
         setWalletMode('login')
         setWalletStep('idle')
         setOtp('')
@@ -379,6 +389,7 @@ export default function usePocketX402Controller({
     activationBusy,
     activationSuccess,
     activationPending,
+    activationNeedsCheck,
     activationError,
     setOtp,
     setExpectedWallet,

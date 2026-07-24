@@ -6,7 +6,7 @@ import {
   pocketReceiptKind,
 } from '../src/pocket/lib/pocketReceipt.ts'
 import { paymentReceiptView } from '../src/lib/paymentReceiptPdf.ts'
-import { solanaUsdcTransferParties } from '../api/pocket/wallet-chain-activity.ts'
+import { evmLogBlockRanges, evmTransferTouchesTopic, solanaUsdcTransferParties } from '../api/pocket/wallet-chain-activity.ts'
 
 const base = {
   eventId: 'evt_1',
@@ -50,6 +50,20 @@ assert.equal(solanaParties.counterparty, solanaSender)
 
 const incompleteSolanaIncoming = { ...incoming, chain: 'solana', payer: 'Solana wallet' }
 assert.equal(pocketReceiptAvailability(incompleteSolanaIncoming), 'none')
+
+assert.deepEqual(evmLogBlockRanges(105n, 25n, 10n, 12), [
+  { fromBlock: '0x51', toBlock: '0x5a' },
+  { fromBlock: '0x5b', toBlock: '0x64' },
+  { fromBlock: '0x65', toBlock: '0x69' },
+])
+assert.deepEqual(evmLogBlockRanges(500n, 9_000n, 10n, 2), [
+  { fromBlock: '0x1e1', toBlock: '0x1ea' },
+  { fromBlock: '0x1eb', toBlock: '0x1f4' },
+])
+const walletTopic = `0x${'1'.repeat(64)}`
+assert.equal(evmTransferTouchesTopic(['transfer', walletTopic, `0x${'2'.repeat(64)}`], walletTopic), true)
+assert.equal(evmTransferTouchesTopic(['transfer', `0x${'2'.repeat(64)}`, walletTopic], walletTopic), true)
+assert.equal(evmTransferTouchesTopic(['transfer', `0x${'2'.repeat(64)}`, `0x${'3'.repeat(64)}`], walletTopic), false)
 
 const bridge = { ...base, eventId: 'evt_3', source: 'wallet-bridge', settlementType: 'wallet_bridge', paycrestStatus: 'confirmed' }
 assert.equal(pocketReceiptKind(bridge), null)

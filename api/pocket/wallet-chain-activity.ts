@@ -35,21 +35,62 @@ function shortAddress(address: string) {
   return address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address
 }
 
+function positiveInteger(value: unknown, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+export function evmLogBlockRanges(
+  latest: bigint,
+  requestedLookback: bigint,
+  blockRange: bigint,
+  maxChunks: number,
+) {
+  const safeRange = blockRange > 0n ? blockRange : 10n
+  const safeChunks = Math.max(1, Math.floor(maxChunks))
+  const availableBlocks = latest + 1n
+  const requestedBlocks = requestedLookback > 0n ? requestedLookback : safeRange
+  const boundedBlocks = requestedBlocks < safeRange * BigInt(safeChunks)
+    ? requestedBlocks
+    : safeRange * BigInt(safeChunks)
+  const scannedBlocks = boundedBlocks < availableBlocks ? boundedBlocks : availableBlocks
+  const firstBlock = availableBlocks - scannedBlocks
+  const ranges: Array<{ fromBlock: string; toBlock: string }> = []
+  for (let from = firstBlock; from <= latest; from += safeRange) {
+    const end = from + safeRange - 1n > latest ? latest : from + safeRange - 1n
+    ranges.push({
+      fromBlock: `0x${from.toString(16)}`,
+      toBlock: `0x${end.toString(16)}`,
+    })
+  }
+  return ranges
+}
+
+export function evmTransferTouchesTopic(topics: readonly string[] | undefined, walletTopic: string) {
+  const normalized = walletTopic.toLowerCase()
+  return topics?.[1]?.toLowerCase() === normalized || topics?.[2]?.toLowerCase() === normalized
+}
+
 async function evmActivity(network: EvmNetwork, wallet: string): Promise<PocketActivityRow[]> {
   const config = EVM[network]
   const rpcUrl = process.env[config.rpc]?.trim() || config.fallback
   const latest = BigInt(await rpc<string>(rpcUrl, 'eth_blockNumber', []))
-  const configured = Number(process.env.POCKET_ACTIVITY_EVM_LOOKBACK_BLOCKS || 9_000)
-  const lookback = BigInt(Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : 9_000)
-  const from = latest > lookback ? latest - lookback : 0n
-  const range = { address: config.token, fromBlock: `0x${from.toString(16)}`, toBlock: 'latest' }
+  const lookback = BigInt(positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOOKBACK_BLOCKS, 120))
+  const blockRange = BigInt(positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, 10))
+  const maxChunks = positiveInteger(process.env.POCKET_ACTIVITY_EVM_MAX_LOG_CHUNKS, 12)
+  const ranges = evmLogBlockRanges(latest, lookback, blockRange, maxChunks)
   const topic = addressTopic(wallet)
-  const [outgoing, incoming] = await Promise.all([
-    rpc<RpcLog[]>(rpcUrl, 'eth_getLogs', [{ ...range, topics: [TRANSFER_TOPIC, topic] }]),
-    rpc<RpcLog[]>(rpcUrl, 'eth_getLogs', [{ ...range, topics: [TRANSFER_TOPIC, null, topic] }]),
-  ])
+  const logs: RpcLog[] = []
+  for (const range of ranges) {
+    logs.push(...await rpc<RpcLog[]>(rpcUrl, 'eth_getLogs', [{
+      address: config.token,
+      ...range,
+      topics: [TRANSFER_TOPIC],
+    }]))
+  }
   const byId = new Map<string, RpcLog>()
-  for (const log of [...outgoing, ...incoming]) {
+  for (const log of logs) {
+    if (!evmTransferTouchesTopic(log.topics, topic)) continue
     if (log.transactionHash) byId.set(`${log.transactionHash}:${log.logIndex || '0'}`, log)
   }
   const blockNumbers = [...new Set([...byId.values()].map(log => log.blockNumber).filter(Boolean) as string[])].slice(0, 30)

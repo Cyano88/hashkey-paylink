@@ -699,6 +699,56 @@ function parseBalance(output: string) {
   return parseBalanceText(cleanOutput)
 }
 
+export function parseCircleGatewayBalanceCliOutput(output: string) {
+  const cleanOutput = output.replace(/\u001b\[[0-9;]*m/g, '').trim()
+  try {
+    const parsed = JSON.parse(cleanOutput) as unknown
+    const queue = [parsed]
+    while (queue.length) {
+      const item = queue.shift()
+      if (!item || typeof item !== 'object') continue
+      if (Array.isArray(item)) {
+        queue.push(...item)
+        continue
+      }
+      const record = item as Record<string, unknown>
+      const balance = String(record.total ?? '')
+      const depositor = String(record.backingEOA ?? '')
+      if (/^\d+(?:\.\d{1,6})?$/.test(balance) && /^0x[a-fA-F0-9]{40}$/.test(depositor)) {
+        return { balance, depositor }
+      }
+      queue.push(...Object.values(record))
+    }
+  } catch {
+    // Gateway balance is requested as JSON; malformed output must not be
+    // mistaken for a confirmed zero balance.
+  }
+  return undefined
+}
+
+export function parseCircleGatewayDepositorCliOutput(output: string) {
+  const cleanOutput = output.replace(/\u001b\[[0-9;]*m/g, '').trim()
+  try {
+    const parsed = JSON.parse(cleanOutput) as unknown
+    const queue = [parsed]
+    while (queue.length) {
+      const item = queue.shift()
+      if (!item || typeof item !== 'object') continue
+      if (Array.isArray(item)) {
+        queue.push(...item)
+        continue
+      }
+      const record = item as Record<string, unknown>
+      const depositor = String(record.backingEOA ?? '')
+      if (/^0x[a-fA-F0-9]{40}$/.test(depositor)) return depositor
+      queue.push(...Object.values(record))
+    }
+  } catch {
+    // The CLI command is requested as JSON, so text output is not trusted.
+  }
+  return undefined
+}
+
 function parseBalanceText(output: string) {
   const direct = output.match(/\b\d+(?:\.\d+)?\s+USDC\b/i)?.[0]?.replace(/\s+USDC/i, '')
     ?? output.match(/\bUSDC\b[^\d]*(\d+(?:\.\d+)?)/i)?.[1]
@@ -868,6 +918,7 @@ export function parseCircleGatewayBalanceResponse(value: unknown, address: strin
 
 async function readGatewayBalance(address: string, network: 'base' | 'arc') {
   const apiBase = network === 'arc' ? CIRCLE_GATEWAY_BALANCE_API_TESTNET : CIRCLE_GATEWAY_BALANCE_API_MAINNET
+  const domain = network === 'arc' ? 26 : 6
   const response = await fetch(`${apiBase}/v1/balances`, {
     method: 'POST',
     headers: {
@@ -876,7 +927,7 @@ async function readGatewayBalance(address: string, network: 'base' | 'arc') {
     },
     body: JSON.stringify({
       token: 'USDC',
-      sources: [{ depositor: address }],
+      sources: [{ depositor: address, domain }],
     }),
     signal: AbortSignal.timeout(12_000),
   })
@@ -886,6 +937,29 @@ async function readGatewayBalance(address: string, network: 'base' | 'arc') {
   }
   const balance = parseCircleGatewayBalanceResponse(body, address)
   if (balance === undefined) throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway returned no balance.')
+  return balance
+}
+
+async function readAgentGatewayBalance(
+  walletAddress: string,
+  network: 'base' | 'arc',
+  serviceKey: string,
+) {
+  const chain = network === 'arc' ? ARC_TESTNET_GATEWAY_CHAIN : 'BASE'
+  const output = await runCircle([
+    'gateway',
+    'balance',
+    '--address',
+    walletAddress,
+    '--chain',
+    chain,
+    '--output',
+    'json',
+  ], serviceKey, 30_000)
+  const balance = parseCircleGatewayBalanceCliOutput(output)
+  if (!balance) {
+    throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway returned no balance for this agent wallet.')
+  }
   return balance
 }
 
@@ -1102,7 +1176,8 @@ export async function readAgentWalletSnapshot(params: {
       gatewayBalanceError = 'x402 balance lookup is not enabled on this server.'
     } else {
       try {
-        gatewayBalance = await readGatewayBalance(record.walletAddress, params.network)
+        const key = `${params.agentSlug}_${record.sessionId}`
+        gatewayBalance = (await readAgentGatewayBalance(record.walletAddress, params.network, key)).balance
       } catch (error) {
         if (isCircleLoginExpired(error)) {
           sessionExpired = true
@@ -1329,7 +1404,10 @@ export async function activateAgentGateway(params: {
     throw connectionFailure(403, 'wallet_identity_mismatch', 'Reconnect the Circle wallet with the email currently signed in to Hash PayLink.')
   }
   const depositChain = params.network === 'arc' ? ARC_TESTNET_GATEWAY_CHAIN : 'BASE'
-  const method = params.network === 'arc' ? 'direct' : 'eco'
+  // A checkout's App Pay balance must remain on the network it advertises.
+  // Circle Eco deposits settle on Polygon, so both Arc and Base use a direct
+  // Gateway deposit here.
+  const method = 'direct'
   const serviceKey = `${params.agentSlug}_${record.sessionId}`
   try {
     await verifyCircleAgentWalletOwnership(record.walletAddress, depositChain, serviceKey)
@@ -1345,8 +1423,11 @@ export async function activateAgentGateway(params: {
     throw connectionFailure(503, 'circle_provider_unavailable', 'Could not verify Circle agent wallet ownership. No funding was submitted.')
   }
   let startingGatewayBalance = ''
+  let gatewayDepositor = ''
   try {
-    startingGatewayBalance = await readGatewayBalance(record.walletAddress, params.network)
+    const starting = await readAgentGatewayBalance(record.walletAddress, params.network, serviceKey)
+    startingGatewayBalance = starting.balance
+    gatewayDepositor = starting.depositor
   } catch (error) {
     if (isCircleLoginExpired(error)) {
       throw connectionFailure(409, 'circle_session_expired', 'Wallet session expired. Reconnect the wallet, then retry App Pay funding.')
@@ -1366,7 +1447,7 @@ export async function activateAgentGateway(params: {
     throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway returned an invalid balance. No funding was submitted.')
   }
   try {
-    await runCircle([
+    const output = await runCircle([
       'gateway',
       'deposit',
       '--amount',
@@ -1377,7 +1458,11 @@ export async function activateAgentGateway(params: {
       depositChain,
       '--method',
       method,
-    ], serviceKey, 120_000)
+      '--output',
+      'json',
+    ], serviceKey, 150_000)
+    const submittedDepositor = parseCircleGatewayDepositorCliOutput(output)
+    if (submittedDepositor) gatewayDepositor = submittedDepositor
   } catch (error) {
     if (isCircleLoginExpired(error)) {
       throw connectionFailure(409, 'circle_session_expired', 'Wallet session expired. Reconnect the wallet, then retry x402 activation.')
@@ -1392,7 +1477,7 @@ export async function activateAgentGateway(params: {
   let gatewayBalance = startingGatewayBalance
   for (let attempt = 1; attempt <= GATEWAY_DEPOSIT_VERIFY_ATTEMPTS; attempt += 1) {
     try {
-      gatewayBalance = await readGatewayBalance(record.walletAddress, params.network)
+      gatewayBalance = await readGatewayBalance(gatewayDepositor, params.network)
       if (gatewayBalanceReached(gatewayBalance, targetGatewayBalance)) break
     } catch {
       // A submitted deposit remains pending when the follow-up balance read is unavailable.

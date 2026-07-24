@@ -21,6 +21,8 @@ for (const required of [
   'Hash PayLink could not reach secure checkout',
   'footer={<CheckoutHowItWorks />}',
   "Circle's minimum App Pay transfer is 0.5 USDC.",
+  'Check App Pay',
+  'activationNeedsCheck',
   "x402.walletStep === 'done'",
   'src="/pocket-circle.png"',
 ]) {
@@ -42,6 +44,8 @@ for (const forbidden of [
 }
 
 assert.doesNotMatch(controllerSource, /if \(next\.connected\)[\s\S]{0,120}setWalletStep\('done'\)/)
+assert.equal(controllerSource.includes('Pull down to check'), false)
+assert.ok(controllerSource.includes('Check the balance before starting another transfer.'))
 assert.match(layoutSource, /const isAgentCheckoutPage = pathname\.startsWith\('\/pay\/a\/'\)/)
 assert.match(layoutSource, /const isPayPage = pathname === '\/pay' \|\| isAgentCheckoutPage/)
 assert.match(layoutSource, /\(isAgentProfilePage \|\| isAgentCheckoutPage\)[\s\S]{0,100}privyAuthenticated/)

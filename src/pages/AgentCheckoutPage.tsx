@@ -463,7 +463,11 @@ export default function AgentCheckoutPage() {
 
             {!gatewayEnough ? (
               <div className="space-y-2">
-                {walletCanActivate && !x402.activationError ? (
+                {x402.activationNeedsCheck ? (
+                  <button type="button" onClick={() => void x402.refresh()} disabled={x402.refreshing} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
+                    {x402.refreshing ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking App Pay</> : <>Check App Pay <ArrowRight className="h-4 w-4" /></>}
+                  </button>
+                ) : walletCanActivate && !x402.activationError ? (
                   <button type="button" onClick={() => void x402.activate()} disabled={x402.activationBusy || x402.activationPending} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
                     {x402.activationBusy || x402.activationPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Updating App Pay</> : <>Move {x402.amount} USDC to App Pay <ArrowRight className="h-4 w-4" /></>}
                   </button>

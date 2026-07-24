@@ -10,7 +10,9 @@ import {
   circleCliInvocation,
   gatewayActivationTarget,
   gatewayBalanceReached,
+  parseCircleGatewayBalanceCliOutput,
   parseCircleGatewayBalanceResponse,
+  parseCircleGatewayDepositorCliOutput,
 } from '../api/agent-wallet.ts'
 
 assert.equal(gatewayActivationTarget('0', '0.5'), '0.5')
@@ -41,6 +43,21 @@ assert.equal(parseCircleGatewayBalanceResponse({
   token: 'USDC',
   balances: [{ depositor: '0x2222222222222222222222222222222222222222', balance: '1' }],
 }, '0x1111111111111111111111111111111111111111'), undefined)
+assert.deepEqual(parseCircleGatewayBalanceCliOutput(JSON.stringify({
+  address: '0x1111111111111111111111111111111111111111',
+  backingEOA: '0x2222222222222222222222222222222222222222',
+  total: '0.5',
+  token: 'USDC',
+})), {
+  balance: '0.5',
+  depositor: '0x2222222222222222222222222222222222222222',
+})
+assert.equal(parseCircleGatewayDepositorCliOutput(JSON.stringify({
+  method: 'direct',
+  backingEOA: '0x2222222222222222222222222222222222222222',
+  depositTxHash: `0x${'3'.repeat(64)}`,
+})), '0x2222222222222222222222222222222222222222')
+assert.equal(parseCircleGatewayBalanceCliOutput('No Gateway balance found.'), undefined)
 
 function responseRecorder() {
   return {
