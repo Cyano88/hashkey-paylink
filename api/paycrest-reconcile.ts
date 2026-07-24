@@ -37,6 +37,20 @@ function isSettledPaycrestStatus(value: string | undefined) {
   return status === 'settled' || status === 'validated'
 }
 
+export function isTerminalPaycrestReconciliationStatus(value: string | undefined) {
+  const status = String(value || '').trim().toLowerCase()
+  return ['settled', 'refunded', 'failed', 'expired', 'cancelled', 'canceled'].includes(status)
+}
+
+export function isNonRetryablePaycrestReconciliationError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  const httpStatus = Number(/\bRPC HTTP (\d{3})\b/i.exec(message)?.[1])
+  if (Number.isInteger(httpStatus) && httpStatus >= 400 && httpStatus < 500) {
+    return ![408, 425, 429].includes(httpStatus)
+  }
+  return /PRIVATE_RPC_URL is not configured|Invalid USDC recipient|Invalid USDC amount/i.test(message)
+}
+
 async function registerOrderReceipt(order: PaycrestOrderRecord, txHash: string) {
   if (order.source === 'hosted-checkout') return null
   const source = receiptSource(order)
@@ -78,7 +92,7 @@ export async function registerPaycrestBankSendReceipt(order: PaycrestOrderRecord
   })
 }
 
-export async function reconcilePaycrestOrderPayment(id: string) {
+export async function reconcilePaycrestOrderPayment(id: string, options: { allowTerminalScan?: boolean } = {}) {
   let order = await refreshPaycrestOrderStatus(id).catch(() => null)
   order ??= await getPaycrestPosOrder(id)
   if (!order) return { ok: false, found: false, error: 'Paycrest order not found.' }
@@ -86,6 +100,9 @@ export async function reconcilePaycrestOrderPayment(id: string) {
   if (validTxHash(order.tx_hash)) {
     const receipt = await registerOrderReceipt(order, order.tx_hash)
     return { ok: true, found: true, order, receipt }
+  }
+  if (isTerminalPaycrestReconciliationStatus(order.status) && !options.allowTerminalScan) {
+    return { ok: true, found: false, complete: true, order, receipt: null }
   }
 
   const match = await findEvmUsdcTransfer({
@@ -115,9 +132,14 @@ export function schedulePaycrestOrderReconciliation(id: string) {
       if (attempt > 1) await sleep(delayMs(attempt))
       try {
         const result = await reconcilePaycrestOrderPayment(key)
-        if (result.found) return
+        if (result.found || ('complete' in result && result.complete)) return
       } catch (error) {
-        console.warn('[paycrest-reconcile] attempt failed:', error instanceof Error ? error.message : String(error))
+        const message = error instanceof Error ? error.message : String(error)
+        if (isNonRetryablePaycrestReconciliationError(error)) {
+          console.warn('[paycrest-reconcile] stopped after non-retryable failure:', message)
+          return
+        }
+        console.warn('[paycrest-reconcile] attempt failed:', message)
       }
     }
   })().finally(() => {

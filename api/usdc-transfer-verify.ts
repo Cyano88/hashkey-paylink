@@ -44,7 +44,7 @@ async function rpcCall<T>(rpcUrl: string, method: string, params: unknown[]): Pr
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   })
   const raw = await response.text()
-  if (!response.ok) throw new Error(`RPC HTTP ${response.status}`)
+  if (!response.ok) throw new Error(`RPC HTTP ${response.status} for ${method}`)
   const data = JSON.parse(raw) as { result?: T; error?: { code?: number; message?: string } }
   if (data.error) throw new Error(`RPC ${data.error.code ?? 'error'}: ${data.error.message ?? method}`)
   if (data.result == null) throw new Error(`RPC returned no result for ${method}`)

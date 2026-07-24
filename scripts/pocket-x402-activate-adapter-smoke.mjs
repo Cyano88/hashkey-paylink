@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import { createPocketX402ActivateHandler } from '../api/pocket/x402-activate.ts'
 import { activatePocketX402Gateway } from '../src/pocket/api/pocketX402Client.ts'
 import { pocketX402WalletSlug } from '../src/pocket/lib/pocketX402Identity.ts'
-import { gatewayActivationTarget, gatewayBalanceReached } from '../api/agent-wallet.ts'
+import {
+  classifyCircleGatewayDepositFailure,
+  gatewayActivationTarget,
+  gatewayBalanceReached,
+} from '../api/agent-wallet.ts'
 
 assert.equal(gatewayActivationTarget('0', '0.5'), '0.5')
 assert.equal(gatewayActivationTarget('0.5', '0.5'), '1')
@@ -11,6 +15,11 @@ assert.equal(gatewayActivationTarget('invalid', '0.5'), null)
 assert.equal(gatewayBalanceReached('0.5', '1'), false)
 assert.equal(gatewayBalanceReached('1', '1'), true)
 assert.equal(gatewayBalanceReached('1.000001', '1'), true)
+assert.equal(classifyCircleGatewayDepositFailure(Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' })), 'provider_timeout')
+assert.equal(classifyCircleGatewayDepositFailure(new Error('insufficient balance')), 'insufficient_wallet_balance')
+assert.equal(classifyCircleGatewayDepositFailure(new Error('unsupported chain ARC-TESTNET')), 'unsupported_chain')
+assert.equal(classifyCircleGatewayDepositFailure(Object.assign(new Error('spawn circle ENOENT'), { code: 'ENOENT' })), 'cli_unavailable')
+assert.equal(classifyCircleGatewayDepositFailure(new Error('HTTP 400 bad request')), 'provider_rejected')
 
 function responseRecorder() {
   return {

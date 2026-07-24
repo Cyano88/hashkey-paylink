@@ -144,6 +144,12 @@ export function createPocketX402ActivateHandler(dependencies: PocketX402Activate
       })
     } catch (error) {
       const normalized = error as AgentWalletConnectionFailure
+      console.warn('[pocket-x402-activate] request failed:', {
+        requestId,
+        network: req.body.network,
+        status: normalized.status ?? 503,
+        code: normalized.code ?? 'circle_provider_unavailable',
+      })
       if (ownerId) {
         await dependencies.record({
           ownerId,

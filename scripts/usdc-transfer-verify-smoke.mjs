@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { formatUnits, pad, parseUnits } from 'viem'
-import { verifyEvmUsdcTransfer } from '../api/usdc-transfer-verify.ts'
+import { findEvmUsdcTransfer, verifyEvmUsdcTransfer } from '../api/usdc-transfer-verify.ts'
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const payer = '0x2222222222222222222222222222222222222222'
@@ -63,6 +63,17 @@ blockTimestamp = `0x${(BigInt(Math.floor(Date.parse(expiry) / 1_000)) + 1n).toSt
 await assert.rejects(
   verifyEvmUsdcTransfer({ chain: 'base', txHash, payer, recipient, minAmount: amount, notBefore: createdAt, notAfter: expiry }),
   /confirmed after the checkout expired/,
+)
+
+globalThis.fetch = async () => ({
+  ok: false,
+  status: 400,
+  statusText: 'Bad Request',
+  text: async () => '',
+})
+await assert.rejects(
+  findEvmUsdcTransfer({ chain: 'base', recipient, minAmount: '1' }),
+  /RPC HTTP 400 for eth_blockNumber/,
 )
 
 globalThis.fetch = previousFetch

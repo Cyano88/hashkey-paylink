@@ -457,7 +457,7 @@ function isVisiblePaycrestHistoryStatus(status: string) {
 
 function isReconcileablePaycrestStatus(status: string) {
   const normalized = status.trim().toLowerCase()
-  return ['deposited', 'pending', 'validated', 'settling', 'settled', 'refunding', 'refunded'].includes(normalized)
+  return ['deposited', 'pending', 'validated', 'settling', 'refunding'].includes(normalized)
 }
 
 function isSettledPaycrestStatus(status: string) {
@@ -1214,7 +1214,7 @@ export default async function handler(req: Request, res: Response) {
       if (body.refresh && order.source === 'bank-send') {
         receipt = await registerPaycrestBankSendReceipt(order).catch(() => null)
       } else if (body.refresh) {
-        const reconciled = await reconcilePaycrestOrderPayment(id).catch(() => null)
+        const reconciled = await reconcilePaycrestOrderPayment(id, { allowTerminalScan: true }).catch(() => null)
         order = reconciled?.order ?? order
         receipt = reconciled?.receipt
       }

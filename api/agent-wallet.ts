@@ -757,6 +757,18 @@ export function classifyCirclePaymentFailure(error: unknown): 'submitted' | 'unk
   return isCirclePaymentSubmitted(error) ? 'submitted' : 'unknown'
 }
 
+export function classifyCircleGatewayDepositFailure(error: unknown) {
+  const detail = circleErrorDetail(error).toLowerCase()
+  const code = String((error as { code?: unknown })?.code ?? '').toLowerCase()
+  if (isCircleLoginExpired(error)) return 'session_expired'
+  if (/insufficient|not enough (?:funds|balance)|balance too low/.test(detail)) return 'insufficient_wallet_balance'
+  if (/unsupported.*chain|unknown.*chain|invalid.*chain/.test(detail)) return 'unsupported_chain'
+  if (/timed?\s*out|timeout/.test(detail) || code === 'etimedout') return 'provider_timeout'
+  if (/enoent|not recognized as an internal|command not found/.test(detail) || code === 'enoent') return 'cli_unavailable'
+  if (/\b400\b|bad request|invalid request/.test(detail)) return 'provider_rejected'
+  return 'cli_failure'
+}
+
 function safeCircleCliError(detail: string) {
   if (/otp value is not matched|otp value.*not match|otp token match|invalid otp|otp.*expired/i.test(detail)) {
     return {
@@ -1307,6 +1319,10 @@ export async function activateAgentGateway(params: {
     if (isCircleLoginExpired(error)) {
       throw connectionFailure(409, 'circle_session_expired', 'Wallet session expired. Reconnect the wallet, then retry x402 activation.')
     }
+    console.warn('[circle-gateway-activate] deposit failed:', {
+      network: params.network,
+      reason: classifyCircleGatewayDepositFailure(error),
+    })
     throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway activation is temporarily unavailable.')
   }
 

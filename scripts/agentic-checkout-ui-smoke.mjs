@@ -12,6 +12,11 @@ for (const required of [
   'App Pay balance',
   'Copy deposit address',
   'Continue to {checkout.merchantName}',
+  'How it works',
+  'Fund App Pay',
+  'Slide to pay',
+  'connectionAttempts < 3',
+  'Hash PayLink could not reach secure checkout',
 ]) {
   assert.ok(source.includes(required), `Agent checkout must retain ${required}`)
 }

@@ -88,6 +88,30 @@ function CheckoutBrand() {
   )
 }
 
+function CheckoutHowItWorks() {
+  return (
+    <div className="mt-8">
+      <p className="mb-3 text-center text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+        How it works
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { n: '1', title: 'Sign in' },
+          { n: '2', title: 'Fund App Pay' },
+          { n: '3', title: 'Slide to pay' },
+        ].map(({ n, title }) => (
+          <div key={n} className="rounded-xl border border-gray-100 bg-white p-3 text-center shadow-sm dark:border-white/[0.07] dark:bg-white/[0.04] dark:shadow-none">
+            <div className="mx-auto mb-2 flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
+              {n}
+            </div>
+            <p className="text-[11px] font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function amountValue(value: string | undefined) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
@@ -126,6 +150,7 @@ export default function AgentCheckoutPage() {
   useEffect(() => {
     let cancelled = false
     let timer: number | undefined
+    let connectionAttempts = 0
     async function loadCheckout() {
       try {
         const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(checkoutId)}&attempt=${encodeURIComponent(attemptId)}&purpose=return`, { cache: 'no-store' })
@@ -136,12 +161,23 @@ export default function AgentCheckoutPage() {
         if (cancelled) return
         setLookup(body)
         setError('')
+        connectionAttempts = 0
         if (body.checkout.status === 'paid') setPayStatus('successful')
         if (body.checkout.status === 'pending' || body.checkout.status === 'processing') {
           timer = window.setTimeout(loadCheckout, payStatus === 'pending' || payStatus === 'submitted' ? 1_500 : 2_500)
         }
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : 'This checkout could not be opened.')
+        if (cancelled) return
+        const message = cause instanceof Error ? cause.message : ''
+        const connectionFailed = cause instanceof TypeError || /failed to fetch|networkerror|network request failed/i.test(message)
+        if (connectionFailed && connectionAttempts < 3) {
+          connectionAttempts += 1
+          timer = window.setTimeout(loadCheckout, connectionAttempts * 1_200)
+          return
+        }
+        setError(connectionFailed
+          ? 'Hash PayLink could not reach secure checkout. Check your connection and try again.'
+          : message || 'This checkout could not be opened.')
       }
     }
     void loadCheckout()
@@ -456,6 +492,7 @@ export default function AgentCheckoutPage() {
         )}
 
         <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] font-medium text-gray-400"><ShieldCheck className="h-3.5 w-3.5" /> One checkout · one approval · verified by Circle Gateway</p>
+        <CheckoutHowItWorks />
       </div>
     </CheckoutShell>
   )
