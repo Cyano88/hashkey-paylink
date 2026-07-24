@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { execFile } from 'node:child_process'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import crypto from 'node:crypto'
@@ -11,7 +12,7 @@ import { setAgentProfileWallet } from './agent-profile.js'
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
 
 const execFileAsync = promisify(execFile)
-const CIRCLE_BIN = process.platform === 'win32' ? 'circle.cmd' : 'circle'
+const CIRCLE_CLI_ENTRY = createRequire(import.meta.url).resolve('@circle-fin/cli')
 const DATA_PATH = process.env.DATA_PATH?.trim()
 const STORE_PATH = process.env.AGENT_WALLET_PROVISION_STORE
   ?? (DATA_PATH ? `${DATA_PATH}/agent-wallet-provisioning.json` : './data/agent-wallet-provisioning.json')
@@ -761,12 +762,32 @@ export function classifyCircleGatewayDepositFailure(error: unknown) {
   const detail = circleErrorDetail(error).toLowerCase()
   const code = String((error as { code?: unknown })?.code ?? '').toLowerCase()
   if (isCircleLoginExpired(error)) return 'session_expired'
+  if (/requires node|unsupported node|node\.js.*(?:version|20\.18\.2)/.test(detail)) return 'runtime_incompatible'
+  if (/terms.*(?:accept|required)|accept.*terms/.test(detail)) return 'terms_not_accepted'
   if (/insufficient|not enough (?:funds|balance)|balance too low/.test(detail)) return 'insufficient_wallet_balance'
   if (/unsupported.*chain|unknown.*chain|invalid.*chain/.test(detail)) return 'unsupported_chain'
   if (/timed?\s*out|timeout/.test(detail) || code === 'etimedout') return 'provider_timeout'
+  if (/fetch failed|network error|econnreset|econnrefused|enotfound|socket hang up/.test(detail)) return 'provider_network_error'
   if (/enoent|not recognized as an internal|command not found/.test(detail) || code === 'enoent') return 'cli_unavailable'
   if (/\b400\b|bad request|invalid request/.test(detail)) return 'provider_rejected'
   return 'cli_failure'
+}
+
+function circleCliFailureMeta(error: unknown) {
+  const err = error as { code?: unknown; signal?: unknown; killed?: unknown }
+  return {
+    reason: classifyCircleGatewayDepositFailure(error),
+    ...(typeof err.code === 'number' ? { exitCode: err.code } : {}),
+    ...(typeof err.signal === 'string' && /^[A-Z0-9]+$/.test(err.signal) ? { signal: err.signal } : {}),
+    ...(err.killed === true ? { killed: true } : {}),
+  }
+}
+
+export function circleCliInvocation(args: string[]) {
+  return {
+    executable: process.execPath,
+    args: [CIRCLE_CLI_ENTRY, ...args],
+  }
 }
 
 function safeCircleCliError(detail: string) {
@@ -816,7 +837,8 @@ async function walletChoicesWithBalances(wallets: string[], key: string, chain: 
 async function runCircle(args: string[], key: string, timeoutMs = 60_000, maxBuffer = 128 * 1024) {
   const sessionHome = circleSessionHome(key)
   await mkdir(sessionHome, { recursive: true })
-  const { stdout, stderr } = await execFileAsync(CIRCLE_BIN, args, {
+  const invocation = circleCliInvocation(args)
+  const { stdout, stderr } = await execFileAsync(invocation.executable, invocation.args, {
     timeout: timeoutMs,
     maxBuffer,
     shell: false,
@@ -831,12 +853,7 @@ async function runCircle(args: string[], key: string, timeoutMs = 60_000, maxBuf
 }
 
 async function readGatewayBalance(address: string, chain: string, serviceKey: string) {
-  let output = ''
-  try {
-    output = await runCircle(['gateway', 'balance', '--address', address, '--chain', chain, '--output', 'json'], serviceKey, 30_000)
-  } catch {
-    output = await runCircle(['gateway', 'balance', '--address', address, '--chain', chain], serviceKey, 30_000)
-  }
+  const output = await runCircle(['gateway', 'balance', '--address', address, '--chain', chain, '--output', 'json'], serviceKey, 30_000)
   const balance = parseBalance(output)
   if (balance === undefined) throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway returned no balance.')
   return balance
@@ -1298,7 +1315,7 @@ export async function activateAgentGateway(params: {
     }
     console.warn('[circle-gateway-activate] balance preflight failed:', {
       network: params.network,
-      reason: classifyCircleGatewayDepositFailure(error),
+      ...circleCliFailureMeta(error),
     })
     throw connectionFailure(503, 'circle_provider_unavailable', 'Could not verify the current App Pay balance. No funding was submitted.')
   }
@@ -1329,7 +1346,7 @@ export async function activateAgentGateway(params: {
     }
     console.warn('[circle-gateway-activate] deposit failed:', {
       network: params.network,
-      reason: classifyCircleGatewayDepositFailure(error),
+      ...circleCliFailureMeta(error),
     })
     throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway activation is temporarily unavailable.')
   }

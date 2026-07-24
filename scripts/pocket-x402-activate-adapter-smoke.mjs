@@ -4,6 +4,7 @@ import { activatePocketX402Gateway } from '../src/pocket/api/pocketX402Client.ts
 import { pocketX402WalletSlug } from '../src/pocket/lib/pocketX402Identity.ts'
 import {
   classifyCircleGatewayDepositFailure,
+  circleCliInvocation,
   gatewayActivationTarget,
   gatewayBalanceReached,
 } from '../api/agent-wallet.ts'
@@ -20,6 +21,14 @@ assert.equal(classifyCircleGatewayDepositFailure(new Error('insufficient balance
 assert.equal(classifyCircleGatewayDepositFailure(new Error('unsupported chain ARC-TESTNET')), 'unsupported_chain')
 assert.equal(classifyCircleGatewayDepositFailure(Object.assign(new Error('spawn circle ENOENT'), { code: 'ENOENT' })), 'cli_unavailable')
 assert.equal(classifyCircleGatewayDepositFailure(new Error('HTTP 400 bad request')), 'provider_rejected')
+assert.equal(classifyCircleGatewayDepositFailure(new Error('Circle CLI requires Node.js version 20.18.2')), 'runtime_incompatible')
+assert.equal(classifyCircleGatewayDepositFailure(new Error('Accept the Circle CLI terms before continuing')), 'terms_not_accepted')
+assert.equal(classifyCircleGatewayDepositFailure(new Error('TypeError: fetch failed ECONNRESET')), 'provider_network_error')
+
+const cliInvocation = circleCliInvocation(['gateway', 'balance'])
+assert.equal(cliInvocation.executable, process.execPath)
+assert.match(cliInvocation.args[0], /@circle-fin[\\/]cli[\\/]dist[\\/]index\.js$/)
+assert.deepEqual(cliInvocation.args.slice(1), ['gateway', 'balance'])
 
 function responseRecorder() {
   return {
