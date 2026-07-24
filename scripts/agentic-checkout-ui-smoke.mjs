@@ -17,6 +17,8 @@ for (const required of [
   'Slide to pay',
   'connectionAttempts < 3',
   'Hash PayLink could not reach secure checkout',
+  'footer={<CheckoutHowItWorks />}',
+  "Circle's minimum App Pay transfer is 0.5 USDC.",
 ]) {
   assert.ok(source.includes(required), `Agent checkout must retain ${required}`)
 }
@@ -27,6 +29,8 @@ for (const forbidden of [
   'pocketUrl(',
   '/home/smart-wallet',
   '/home/x402',
+  'One checkout · one approval',
+  'This checkout needs ${checkout.amount} USDC in App Pay',
 ]) {
   assert.equal(source.includes(forbidden), false, `Agent checkout must not contain ${forbidden}`)
 }

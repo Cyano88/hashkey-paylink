@@ -1296,10 +1296,18 @@ export async function activateAgentGateway(params: {
     if (isCircleLoginExpired(error)) {
       throw connectionFailure(409, 'circle_session_expired', 'Wallet session expired. Reconnect the wallet, then retry App Pay funding.')
     }
+    console.warn('[circle-gateway-activate] balance preflight failed:', {
+      network: params.network,
+      reason: classifyCircleGatewayDepositFailure(error),
+    })
     throw connectionFailure(503, 'circle_provider_unavailable', 'Could not verify the current App Pay balance. No funding was submitted.')
   }
   const targetGatewayBalance = gatewayActivationTarget(startingGatewayBalance, params.amount)
   if (!targetGatewayBalance) {
+    console.warn('[circle-gateway-activate] balance preflight failed:', {
+      network: params.network,
+      reason: 'invalid_gateway_balance',
+    })
     throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Gateway returned an invalid balance. No funding was submitted.')
   }
   try {

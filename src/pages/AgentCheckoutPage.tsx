@@ -69,12 +69,15 @@ const NETWORK_LABELS: Record<string, string> = {
   arc: 'Arc Testnet',
 }
 
-function CheckoutShell({ children }: { children: ReactNode }) {
+function CheckoutShell({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
   return (
     <main className="flex min-h-[calc(100dvh-5rem)] items-center justify-center bg-gray-50 px-4 py-8 dark:bg-[#090a0d]">
-      <section className="w-full max-w-md overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#111216]">
-        {children}
-      </section>
+      <div className="w-full max-w-md">
+        <section className="overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#111216]">
+          {children}
+        </section>
+        {footer}
+      </div>
     </main>
   )
 }
@@ -90,7 +93,7 @@ function CheckoutBrand() {
 
 function CheckoutHowItWorks() {
   return (
-    <div className="mt-8">
+    <div className="mt-7">
       <p className="mb-3 text-center text-[10px] font-semibold uppercase tracking-widest text-gray-400">
         How it works
       </p>
@@ -347,16 +350,18 @@ export default function AgentCheckoutPage() {
   }
 
   return (
-    <CheckoutShell>
-      <div className="px-6 pb-6 pt-5">
+    <CheckoutShell footer={<CheckoutHowItWorks />}>
+      <div className="px-5 pb-5 pt-4">
         <CheckoutBrand />
-        <div className="pb-6 pt-7 text-center">
-          {checkout.brandImageUrl && <img src={checkout.brandImageUrl} alt="" className="mx-auto mb-3 h-9 w-9 rounded-xl object-contain" />}
-          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{checkout.merchantName}</p>
-          <h1 className="mt-1.5 text-xl font-bold tracking-[-0.035em] text-gray-950 dark:text-white">{checkout.title}</h1>
+        <div className="pb-5 pt-5 text-center">
+          <div className="flex items-center justify-center gap-2">
+            {checkout.brandImageUrl && <img src={checkout.brandImageUrl} alt="" className="h-8 w-8 rounded-lg object-contain" />}
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">{checkout.merchantName}</p>
+          </div>
+          <h1 className="mt-2 text-xl font-bold tracking-[-0.035em] text-gray-950 dark:text-white">{checkout.title}</h1>
           {checkout.description && <p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-gray-500 dark:text-gray-400">{checkout.description}</p>}
-          <p className="mt-5 text-4xl font-bold tracking-[-0.05em] text-gray-950 dark:text-white">{checkout.amount} <span className="text-lg text-gray-400">USDC</span></p>
-          <div className="mt-3 flex items-center justify-center gap-2 text-[10px] font-semibold text-gray-400">
+          <p className="mt-4 text-3xl font-bold tracking-[-0.05em] text-gray-950 dark:text-white">{checkout.amount} <span className="text-base text-gray-400">USDC</span></p>
+          <div className="mt-2 flex items-center justify-center gap-2 text-[10px] font-semibold text-gray-400">
             <span>{network}</span><span>·</span><span>Circle Gateway x402</span>
           </div>
         </div>
@@ -468,7 +473,7 @@ export default function AgentCheckoutPage() {
                 )}
                 <p className="text-center text-[11px] leading-4 text-gray-400">
                   {walletCanActivate
-                    ? `This checkout needs ${checkout.amount} USDC in App Pay. Circle's minimum transfer is 0.5 USDC.`
+                    ? `Circle's minimum App Pay transfer is 0.5 USDC.`
                     : `Add ${walletFundingDeficit} USDC to this wallet on ${network}. This checkout detects it automatically.`}
                 </p>
                 {(x402.activationError || x402.error) && <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">{x402.activationError || x402.error}</p>}
@@ -490,9 +495,6 @@ export default function AgentCheckoutPage() {
             {payError && <p className="rounded-xl bg-red-50 px-3 py-2 text-center text-xs font-medium text-red-600 dark:bg-red-400/10 dark:text-red-200">{payError}</p>}
           </div>
         )}
-
-        <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] font-medium text-gray-400"><ShieldCheck className="h-3.5 w-3.5" /> One checkout · one approval · verified by Circle Gateway</p>
-        <CheckoutHowItWorks />
       </div>
     </CheckoutShell>
   )
