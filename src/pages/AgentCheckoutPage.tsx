@@ -10,10 +10,12 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
+import CheckoutSteps from '../components/CheckoutSteps'
 import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
 import UnifiedReceipt from '../components/UnifiedReceipt'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { copyToClipboard } from '../lib/utils'
+import { PocketPillMark } from '../pocket/components/CPurseIcon'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 import usePocketX402Controller from '../pocket/controllers/usePocketX402Controller'
 import usePocketIdentity from '../pocket/hooks/usePocketIdentity'
@@ -84,32 +86,8 @@ function CheckoutShell({ children, footer }: { children: ReactNode; footer?: Rea
 function CheckoutBrand() {
   return (
     <div className="flex items-center gap-2">
-      <img src="/pocket-circle.png" alt="" className="h-5 w-5 object-contain dark:invert" />
+      <PocketPillMark size="sm" tone="subtle" />
       <span className="text-[11px] font-bold tracking-[-0.01em] text-gray-800 dark:text-gray-100">Hash PayLink Checkout</span>
-    </div>
-  )
-}
-
-function CheckoutHowItWorks() {
-  return (
-    <div className="mt-7">
-      <p className="mb-3 text-center text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-        How it works
-      </p>
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { n: '1', title: 'Sign in' },
-          { n: '2', title: 'Fund App Pay' },
-          { n: '3', title: 'Slide to pay' },
-        ].map(({ n, title }) => (
-          <div key={n} className="rounded-xl border border-gray-100 bg-white p-3 text-center shadow-sm dark:border-white/[0.07] dark:bg-white/[0.04] dark:shadow-none">
-            <div className="mx-auto mb-2 flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-[10px] font-bold text-gray-600 dark:bg-white/[0.08] dark:text-gray-300">
-              {n}
-            </div>
-            <p className="text-[11px] font-semibold text-gray-800 dark:text-gray-100">{title}</p>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
@@ -356,7 +334,7 @@ export default function AgentCheckoutPage() {
   }
 
   return (
-    <CheckoutShell footer={<CheckoutHowItWorks />}>
+    <CheckoutShell footer={<CheckoutSteps steps={['Sign in', 'Fund App Pay', 'Slide to pay']} />}>
       <div className="px-5 pb-5 pt-4">
         <CheckoutBrand />
         <div className="pb-5 pt-5 text-center">
@@ -384,7 +362,7 @@ export default function AgentCheckoutPage() {
               logoutOnAuthenticated={false}
               className="relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] dark:bg-white dark:text-gray-950"
             >
-              <img src="/pocket-circle.png" alt="" className="absolute left-5 h-6 w-6 object-contain invert dark:invert-0" />
+              <PocketPillMark className="absolute left-5" tone="contrast" />
               <span>Continue</span>
               <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 dark:bg-black/10"><ArrowRight className="h-4 w-4" /></span>
             </PrivyConnectButton>
@@ -426,7 +404,7 @@ export default function AgentCheckoutPage() {
               </>
             ) : (
               <button type="button" onClick={() => void x402.beginConnection()} disabled={x402.walletBusy} className="relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
-                {x402.walletBusy ? <Loader2 className="absolute left-5 h-4 w-4 animate-spin" /> : <img src="/pocket-circle.png" alt="" className="absolute left-5 h-6 w-6 object-contain invert dark:invert-0" />}
+                {x402.walletBusy ? <Loader2 className="absolute left-5 h-4 w-4 animate-spin" /> : <PocketPillMark className="absolute left-5" tone="contrast" />}
                 Continue
                 <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 dark:bg-black/10"><ArrowRight className="h-4 w-4" /></span>
               </button>
@@ -437,7 +415,7 @@ export default function AgentCheckoutPage() {
           <div className="space-y-3">
             <details className="group rounded-xl border border-gray-200 bg-gray-50/70 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
               <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
-                <img src="/pocket-circle.png" alt="" className="h-7 w-7 object-contain dark:invert" />
+                <PocketPillMark tone="subtle" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[10px] font-bold uppercase tracking-wider text-gray-400">Circle Agent Wallet</span>
                   <span className="block truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{walletAddress.slice(0, 8)}...{walletAddress.slice(-6)}</span>

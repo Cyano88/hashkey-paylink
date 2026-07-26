@@ -9,7 +9,7 @@ export default function PaymentLinks() {
       />
 
       <Section title="Single-payer links">
-        <p>A standard payment link is a URL with your recipient address, amount, and optional memo encoded as query params. Share it as a link or QR code. The payer opens it, connects a wallet or uses Send via Address, and pays.</p>
+        <p>A standard payment link is a URL with your recipient address, amount, and optional memo encoded as query params. Share it as a link or QR code. The payer completes payment inside the current Circle-aligned hosted checkout.</p>
         <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xYourAddress&a=25&m=Invoice+042`}</CodeBlock>
         <p className="mt-2">The 0.2% platform fee is deducted atomically in the transaction. Gas-sponsored EVM payments may also route a small configured recovery amount to treasury. The payer sees the exact amount they'll send before signing.</p>
       </Section>
@@ -50,14 +50,9 @@ export default function PaymentLinks() {
         <p className="mt-2">Rates are fetched live from Fixer.io (requires <Code>FIXER_API_KEY</Code> env var) and cached for 10 minutes. A custom rate can be passed directly with <Code>xr=1500</Code>.</p>
       </Section>
 
-      <Section title="Underpayment detection">
-        <p>If a payer sends less than the requested amount, the success screen flags it precisely:</p>
-        <ul className="list-none space-y-1 mt-2">
-          <li>• <strong className="text-gray-800 dark:text-gray-200">Partial payment (50–99%):</strong> Amber warning with exact shortfall shown</li>
-          <li>• <strong className="text-gray-800 dark:text-gray-200">Underpayment (&lt;50%):</strong> Red warning with shortfall and total received</li>
-          <li>• <strong className="text-gray-800 dark:text-gray-200">Overpayment (&gt;100.1%):</strong> Amber notice — overpayment is processed, excess goes to recipient</li>
-        </ul>
-        <p className="mt-2">Actual received amount is read from the on-chain Transfer event, not from the payer's input.</p>
+      <Section title="Payment amount">
+        <p>Fixed hosted checkout sends the exact recipient amount selected by the payment request. Platform fees and sponsored-gas recovery are accounted for separately and must not be presented as recipient overpayment.</p>
+        <InfoBox type="info">The older manual-address flow and its underpayment or overpayment handling are inactive and are not part of the current payer experience.</InfoBox>
       </Section>
 
       <Section title="Dark mode">

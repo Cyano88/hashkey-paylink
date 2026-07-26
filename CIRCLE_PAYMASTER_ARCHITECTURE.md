@@ -15,11 +15,13 @@ Arbitrum connected wallet:
 1. Hash PayLink uses the existing relayer-assisted native USDC path.
 2. The relayer pays Arbitrum ETH gas and is reimbursed according to contract/API limits.
 
-Send via Address:
+Legacy Send via Address:
 
-1. Unchanged.
-2. The payer sends USDC to a deterministic vault address.
-3. Hash PayLink relays/sweeps funds without requiring a wallet connection.
+1. Inactive and not exposed in public checkout or Pocket.
+2. Historical deterministic-vault and sweep code remains only for a possible
+   future demand-led rollout.
+3. Do not treat this as a fallback for the current Circle checkout or reactivate
+   it without an explicit product and security review.
 
 ## Circle Target Order
 

@@ -67,6 +67,19 @@ export class PocketX402ActivationError extends Error {
   }
 }
 
+const POCKET_X402_RECONNECT_REASONS = new Set([
+  'wallet_ownership_mismatch',
+  'wallet_identity_mismatch',
+  'wallet_session_not_found',
+  'circle_session_expired',
+])
+
+export function pocketX402ReconnectRequired(value: unknown) {
+  if (!(value instanceof PocketX402ActivationError)) return false
+  if (value.reason && POCKET_X402_RECONNECT_REASONS.has(value.reason)) return true
+  return value.code === 'SESSION_EXPIRED'
+}
+
 export function parsePocketX402Connection(value: unknown): PocketX402ConnectionData {
   if (!isRecord(value) || value.ok !== true || !isPocketX402ConnectionData(value)) {
     const reason = isRecord(value) && typeof value.reason === 'string' ? value.reason : undefined

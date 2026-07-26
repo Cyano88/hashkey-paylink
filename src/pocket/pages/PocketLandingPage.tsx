@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowRight, Lock, Mail, RotateCw } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
-import { CPurseIcon } from '../components/CPurseIcon'
+import { CPurseIcon, PocketPillMark } from '../components/CPurseIcon'
 import PocketThemeToggle from '../components/PocketThemeToggle'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
@@ -169,7 +169,7 @@ export default function PocketLandingPage() {
               onClick={() => setEnterAfterLogin(true)}
               className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
             >
-              <img src="/pocket-circle.png" alt="" className="absolute left-5 h-5 w-5 object-contain invert dark:invert-0" />
+              <PocketPillMark className="absolute left-5" tone="contrast" />
               <span>Open Pocket</span>
               <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5 dark:bg-black/[0.06]">
                 <ArrowRight className="h-4 w-4" />

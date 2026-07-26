@@ -23,7 +23,7 @@ export default function Chains() {
 
       <Section title="Base">
         <SubSection title="Checkout modes">
-          <p>Base supports Circle smart-wallet checkout, connected-wallet fallback, and Send via Address ghost-vault checkout. Hash PayLink records settlement metadata and can archive multi-payer proofs to 0G.</p>
+          <p>Base supports the current Circle-aligned hosted checkout. Hash PayLink records settlement metadata and can archive eligible multi-payer proofs to 0G.</p>
         </SubSection>
         <InfoBox type="info">Base remains the default network for most hosted USDC checkout and PolyDesk funding flows.</InfoBox>
       </Section>

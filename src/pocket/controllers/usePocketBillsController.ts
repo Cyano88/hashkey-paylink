@@ -19,7 +19,7 @@ import {
   type PocketBillVerification,
 } from '../api/pocketBillsClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
-import { detectNigerianMobileNetwork, mobileNetworkServiceId, normalizeNigerianMobileNumber } from '../lib/nigerianMobileNetwork'
+import { normalizeNigerianMobileNumber } from '../lib/nigerianMobileNetwork'
 
 type AccessTokenReader = () => Promise<string | null>
 type FlowStatus = 'idle' | 'quoting' | 'ready' | 'paying' | 'confirming' | 'processing' | 'successful' | 'error'
@@ -187,21 +187,9 @@ export default function usePocketBillsController({
   const setPhone = useCallback((value: string) => {
     const nextPhone = value.replace(/[^\d+]/g, '').slice(0, 15)
     setPhoneState(nextPhone)
-    if (category === 'airtime' || category === 'data') {
-      const detected = detectNigerianMobileNetwork(nextPhone)
-      if (detected) {
-        const nextServiceId = mobileNetworkServiceId(detected, category)
-        if (nextServiceId !== serviceId) {
-          setServiceIdState(nextServiceId)
-          setVariationCodeState('')
-          setAmountNgnState('')
-          setDataVariations([])
-        }
-      }
-    }
     setVerification(null)
     resetResult()
-  }, [category, resetResult, serviceId])
+  }, [resetResult])
   const setContactPhone = useCallback((value: string) => { setContactPhoneState(value.replace(/[^\d+]/g, '').slice(0, 14)); resetResult() }, [resetResult])
   const setAmountNgn = useCallback((value: string) => {
     if (/^\d*(?:\.\d{0,2})?$/.test(value)) setAmountNgnState(value)

@@ -57,11 +57,14 @@ import { hostedCheckoutPresentation, resolveHostedCheckoutKind } from '../lib/ho
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
+import CheckoutSteps from '../components/CheckoutSteps'
 import UnifiedReceipt from '../components/UnifiedReceipt'
 import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
+import { PocketPillMark } from '../pocket/components/CPurseIcon'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { linkPocketWallet, readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
+import { POCKET_ORIGIN, POCKET_ROUTES } from '../pocket/lib/pocketRoutes'
 import { type PaylinkReceipt, type ReceiptLookupResponse } from '../lib/paymentReceiptPdf'
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
@@ -713,9 +716,11 @@ export default function PaymentPage() {
   )
   const paymentAmountBlocked = flexPayDisabled || (isHostedCheckout && hostedIntentStatus !== 'verified')
 
-  // ── Direct Send state (shared across Base, Arc, and Arbitrum) ─────────────
-  // Circle Smart Wallet is the only public checkout rail. Keep the legacy
-  // direct-send implementation isolated for now, but never expose or select it.
+  // LEGACY / INACTIVE: manual-address "Direct Send" state.
+  // Circle's wallet/session checkout is the only public payer rail. This code
+  // remains solely as a possible future, demand-led capability. Never expose
+  // or select it, and never copy its ghost-vault or amount-variance behavior
+  // into Pocket or the current hosted checkout without an explicit rollout.
   const [payMode] = useState<'wallet' | 'direct'>('wallet')
   const [directLinkId,     setDirectLinkId]     = useState<string | null>(null)
   // EVM chains (Base / Arc): the CREATE2 ghost vault address
@@ -1436,11 +1441,10 @@ export default function PaymentPage() {
           if (!log)   return
           const value = (log.args as { value?: bigint }).value ?? 0n
           if (value >= (isHostedCheckout ? requestedUnits : requestedUnits * 99n / 100n)) {
-            setReceivedAmount(
-              isCircleEmailEvmWatch
-                ? circleRequiredUnits
-                : value,
-            )
+            // The observed Transfer is the amount received by the merchant.
+            // Never replace it with the payer total, which can also include
+            // platform fees and sponsored-gas recovery.
+            setReceivedAmount(value)
             setManualTxHash(log.transactionHash ?? null)
             setCirclePasskeyError(null)
             setCircleEvmPaymentProcessing(false)
@@ -1475,7 +1479,7 @@ export default function PaymentPage() {
     paymentVerificationStartBlockRef.current = null
   }, [chain, payMode])
 
-  // ── V2 EVM: Generate linkId + compute ghost vault address ─────────────────
+  // LEGACY / INACTIVE: V2 EVM ghost-vault derivation for Direct Send.
   useEffect(() => {
     if (payMode !== 'direct') return
     if (!isSupportedEvmPayChain(chain)) return
@@ -1522,7 +1526,7 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payMode, resolvedEvm, chain])
 
-  // ── V2 EVM: Poll balance at ghost vault; trigger relay on arrival ─────────
+  // LEGACY / INACTIVE: ghost-vault polling and relay.
   // Base/Arc/Arbitrum: polls ERC-20 USDC balance.
   useEffect(() => {
     if (directStatus !== 'waiting' || !directVault || !directLinkId) return
@@ -1578,7 +1582,7 @@ export default function PaymentPage() {
   }, [directStatus, directVault, directLinkId, chain])
 
 
-  // ── Solana Send-via-Address: generate linkId + fetch vault ATA ───────────
+  // LEGACY / INACTIVE: Solana Send-via-Address vault derivation.
   useEffect(() => {
     if (chain !== 'solana' || payMode !== 'direct' || !resolvedSolana) return
     const params    = new URLSearchParams(window.location.search)
@@ -1613,7 +1617,7 @@ export default function PaymentPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain, payMode, resolvedSolana])
 
-  // ── Solana Send-via-Address: poll server for sweep ────────────────────────
+  // LEGACY / INACTIVE: Solana Send-via-Address sweep polling.
   useEffect(() => {
     if (solanaDirectStatus !== 'waiting' || !solanaLinkId || !resolvedSolana || chain !== 'solana') return
     let cancelled = false
@@ -3592,6 +3596,18 @@ export default function PaymentPage() {
     return () => window.clearTimeout(timer)
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
+  const compactCheckoutSteps: readonly [string, string, string] = isHelperAccess
+    ? ['Open request', 'Slide to pay', 'Open access']
+    : isPolymarketFunding
+      ? ['Review', 'Fund', 'Return']
+      : isWalletManagerFunding
+        ? ['Review', 'Fund App Pay', 'Return']
+        : isAgentFunding
+          ? ['Review', 'Fund treasury', 'Confirmed']
+          : isHostedService
+            ? ['Review', 'Slide to pay', 'Return']
+            : ['Review', 'Slide to pay', 'Confirmed']
+
   // ────────────────────────────────────────────────────────────────────────────
   //  INVALID PARAMS
   // ────────────────────────────────────────────────────────────────────────────
@@ -3645,7 +3661,10 @@ export default function PaymentPage() {
     const comparisonAmount = Number.isFinite(expectedSettlement) && expectedSettlement > 0
       ? expectedSettlement
       : requested
-    const shouldCompareFixedAmount = !isFlex && !isPolymarketFunding
+    // LEGACY / INACTIVE: amount variance belonged to manual-address deposits.
+    // Current wallet checkout constructs an exact transfer and must not show
+    // customer-facing underpayment or overpayment states.
+    const shouldCompareFixedAmount = payMode === 'direct' && !isFlex && !isPolymarketFunding
     const isOver    = recipientAmt != null && shouldCompareFixedAmount && recipientAmt > comparisonAmount * 1.001
     const isUnder   = recipientAmt != null && shouldCompareFixedAmount && recipientAmt < comparisonAmount * 0.99
     const shortfall = isUnder
@@ -3669,28 +3688,42 @@ export default function PaymentPage() {
       : paymentReceipt
       ? 'Background'
       : 'Preparing'
+    const showNativePocketBack = !isHostedCheckout
+      && !isPolymarketFunding
+      && !isNgPosPayment
+      && !isAgentOrWalletFunding
+      && !isHelperAccess
 
     return (
       <div className="mx-auto max-w-md animate-scale-in">
+        {showNativePocketBack && (
+          <a
+            href={`${POCKET_ORIGIN}${POCKET_ROUTES.usdc}`}
+            className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-white"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Move USDC with Pocket
+          </a>
+        )}
         <div
           className={cn(
-            'overflow-hidden rounded-[1.75rem] border bg-white shadow-[0_24px_70px_rgba(15,23,42,0.10)] dark:bg-[#111216]',
+            'overflow-hidden rounded-[1.35rem] border bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] dark:bg-[#111216]',
             isUnder ? 'border-red-200 dark:border-red-400/25' : 'border-gray-200 dark:border-white/10',
           )}
         >
           <div className={cn(
-            'p-8 text-center',
+            'px-6 pb-5 pt-6 text-center',
             isUnder ? 'bg-red-50 dark:bg-red-400/10' : 'bg-gray-50/80 dark:bg-white/[0.025]',
           )}>
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center animate-bounce-in">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center animate-bounce-in">
               {isUnder
-                ? <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-red-500 shadow-sm ring-1 ring-red-100 dark:bg-white/10 dark:ring-red-400/20"><AlertCircle className="h-8 w-8" /></span>
+                ? <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-red-500 shadow-sm ring-1 ring-red-100 dark:bg-white/10 dark:ring-red-400/20"><AlertCircle className="h-6 w-6" /></span>
                 : polymarketBridgePending
-                ? <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-gray-100 dark:bg-white/10 dark:ring-white/10"><Loader2 className="h-8 w-8 animate-spin text-gray-700 dark:text-white" /></span>
-                : <PocketStatusCheck className="h-16 w-16" />
+                ? <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-gray-100 dark:bg-white/10 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin text-gray-700 dark:text-white" /></span>
+                : <PocketStatusCheck className="h-12 w-12" />
               }
             </div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
               {isUnder ? 'Underpayment Detected'
                : polymarketBridgePending ? 'Confirming funding'
                : isHostedNairaSettlement && hostedConfirmationStatus === 'processing' ? 'Sending Naira'
@@ -3743,9 +3776,9 @@ export default function PaymentPage() {
             </p>
           </div>
 
-          <div className="p-6 space-y-4">
+          <div className="space-y-3 p-5">
             <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-gray-50/60 overflow-hidden">
-              <Row label="Amount"    value={isBankSendPayment ? `${bankSendRequestedNgnLabel || 'Enter amount'} NGN` : `${formatAmount(payableAmt, meta.decimals)} ${meta.asset}`} mono={false} />
+              {isBankSendPayment && <Row label="Amount" value={`${bankSendRequestedNgnLabel || 'Enter amount'} NGN`} mono={false} />}
               {isNgPosPaycrestOfframp && (
                 <Row label="Payout" value={payoutBankLabel ? `${payoutLabel} - ${payoutBankLabel}` : payoutLabel} mono={false} />
               )}
@@ -3806,7 +3839,7 @@ export default function PaymentPage() {
                   </span>
                 </div>
               )}
-              {paymentReceiptId && (
+              {paymentReceiptId && isPolymarketBridge && (
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm text-gray-500">0G</span>
                   {ogProofValue ? (
@@ -3837,14 +3870,7 @@ export default function PaymentPage() {
             </div>
 
             {receiptReady && !isPolymarketBridge && !polymarketReturnToAgentHash && (
-              <div className="grid gap-2">
-                <UnifiedReceipt receipt={paymentReceipt!} />
-                {!ogProofValue && (
-                  <p className="text-center text-[11px] font-medium text-gray-400">
-                    Receipt is ready. 0G archive continues in background and will attach when confirmed.
-                  </p>
-                )}
-              </div>
+              <UnifiedReceipt receipt={paymentReceipt!} compact />
             )}
             {paymentReceiptId && !paymentReceipt && !isPolymarketBridge && (
               <p className="text-center text-[11px] font-medium text-gray-400">
@@ -3887,13 +3913,7 @@ export default function PaymentPage() {
 
             {isHostedCheckout && !isPolymarketBridge ? (
               <div className="space-y-2">
-                {hostedConfirmationStatus === 'verified' ? (
-                  <p className="text-center text-[11px] font-medium text-gray-400">
-                    {isHostedService
-                      ? `Checkout verified. Continue to ${hostedMerchantName || 'the platform'} when you are ready.`
-                      : 'Checkout verified and receipt recorded.'}
-                  </p>
-                ) : hostedConfirmationStatus === 'processing' ? (
+                {hostedConfirmationStatus === 'verified' ? null : hostedConfirmationStatus === 'processing' ? (
                   <p className="flex items-center justify-center gap-2 text-center text-[11px] font-medium text-gray-500 dark:text-gray-300">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     USDC confirmed. Bank delivery is processing.
@@ -3909,13 +3929,19 @@ export default function PaymentPage() {
                     Verifying checkout securely…
                   </p>
                 )}
-                {isHostedService && hostedConfirmationStatus === 'verified' && hostedReturnUrl && (
+                {hostedConfirmationStatus === 'verified' && hostedReturnUrl && (
                   <a
                     href={hostedReturnUrl}
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
                   >
                     Continue to {hostedMerchantName || 'platform'}
                   </a>
+                )}
+                {hostedConfirmationStatus === 'verified' && (
+                  <p className="inline-flex w-full items-center justify-center gap-1 text-[10px] font-medium text-gray-400">
+                    <span>Secure</span>
+                    <Lock className="h-2.5 w-2.5" strokeWidth={1.8} />
+                  </p>
                 )}
                 {hostedConfirmationStatus === 'error' && (
                   <button
@@ -3992,11 +4018,7 @@ export default function PaymentPage() {
               <a href={telegramUrl} className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]">
                 Create with Telegram
               </a>
-            ) : (
-              <Link to="/" className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-gray-800 transition-all active:scale-[0.98]">
-                Create your own Hash PayLink
-              </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -4017,12 +4039,12 @@ export default function PaymentPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           {isPolyDeskCheckout ? 'Back to PolyDesk' : 'Back'}
         </button>
-      ) : (
-        <Link to="/" className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
+      ) : !isHostedCheckout ? (
+        <a href={`${POCKET_ORIGIN}${POCKET_ROUTES.usdc}`} className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors dark:text-gray-400 dark:hover:text-white">
           <ArrowLeft className="h-3.5 w-3.5" />
-          Create a link
-        </Link>
-      )}
+          Move USDC with Pocket
+        </a>
+      ) : null}
 
       <div
         className="overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"
@@ -4703,7 +4725,7 @@ export default function PaymentPage() {
             )
           })()}
 
-          {/* ── Direct Send panel (Base / Arc / HashKey / Arbitrum) ─────── */}
+          {/* LEGACY / INACTIVE: unreachable while payMode is locked to wallet. */}
           {payMode === 'direct' && isSupportedEvmPayChain(chain) && (
             <div className="space-y-3">
               {/* Loading ghost address */}
@@ -4776,7 +4798,7 @@ export default function PaymentPage() {
             </div>
           )}
 
-          {/* ── Direct Send panel (Solana) ───────────────────────────── */}
+          {/* LEGACY / INACTIVE: unreachable while payMode is locked to wallet. */}
           {payMode === 'direct' && chain === 'solana' && (
             <div className="space-y-3">
               {!solanaVaultAddr && solanaDirectStatus !== 'error' ? (
@@ -5028,8 +5050,8 @@ export default function PaymentPage() {
                           : circleSmartAccount && circleEvmWalletChecking
                             ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
                             : circleSmartAccount && circleEvmWalletUnlocked && circleWalletNeedsFunds
-                              ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
-                              : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
+                              ? <><PocketPillMark tone="contrast" /> <span>Add USDC</span></>
+                              : <><PocketPillMark tone="contrast" /> <span>Open Pocket Wallet</span></>}
                 </button>
               )}
               {privyCircleLinkError && circleSmartAccount && (
@@ -5134,8 +5156,8 @@ export default function PaymentPage() {
                             : circleSolanaSession && circleSolanaWalletChecking
                               ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
                               : circleSolanaSession && circleSolanaNeedsFunds
-                                ? <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Add USDC</span></>
-                                : <><img src="/pocket-circle.png" alt="" className="h-6 w-6 object-contain invert dark:invert-0" /> <span>Open Pocket Wallet</span></>}
+                                ? <><PocketPillMark tone="contrast" /> <span>Add USDC</span></>
+                                : <><PocketPillMark tone="contrast" /> <span>Open Pocket Wallet</span></>}
                       </button>
                     )}
                     {circleSolanaSession && circleSolanaBalance !== null && (
@@ -5306,46 +5328,7 @@ export default function PaymentPage() {
       )}
 
       {!isNgPosPaycrestOfframp && (
-        <div className="mt-10 animate-fade-in">
-          <p className="mb-4 text-center text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-            How it works
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            {(isHelperAccess ? [
-            { n: '1', title: 'Ask Hash', body: 'Open helper access from Telegram or the agent page' },
-            { n: '2', title: 'Verify access', body: 'Hash PayLink confirms the payment receipt' },
-            { n: '3', title: 'Open helper', body: 'Return to Telegram with access unlocked' },
-          ] : isPolymarketFunding && isBankSendPayment ? [
-            { n: '1', title: 'Verify refund bank' },
-            { n: '2', title: 'Send Naira' },
-            { n: '3', title: 'Settle to PolyDesk' },
-          ] : isPolymarketFunding ? [
-            { n: '1', title: 'Review wallet' },
-            { n: '2', title: 'Fund with USDC' },
-            { n: '3', title: isHostedService ? `Continue to ${polymarketReturnLabel}` : 'Return to PolyDesk' },
-          ] : isWalletManagerFunding ? [
-            { n: '1', title: 'Fund Pocket Wallet' },
-            { n: '2', title: 'Activate x402' },
-            { n: '3', title: 'Return to PolyDesk' },
-          ] : isAgentFunding ? [
-            { n: '1', title: 'Fund treasury', body: 'Add USDC to this agent wallet' },
-            { n: '2', title: 'Use for actions', body: 'Treasury can support services, tips, and x402 activation' },
-            { n: '3', title: 'Track receipts', body: 'Return to the agent dashboard for balances and receipts' },
-          ] : [
-            { n: '1', title: 'Check the request', body: "Confirm the amount and who it's for" },
-            { n: '2', title: 'Choose how to pay', body: 'Use the gasless wallet, your wallet, or an exchange' },
-            { n: '3', title: 'Get confirmation', body: "We'll confirm when the payment is complete" },
-            ]).map(({ n, title, body }) => (
-              <div key={n} className="rounded-xl border border-gray-100 bg-white p-4 text-center shadow-sm">
-                <div className="mx-auto mb-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600">
-                  {n}
-                </div>
-                <p className="text-xs font-semibold text-gray-800">{title}</p>
-                {body && <p className="mt-0.5 text-xs text-gray-400 leading-relaxed">{body}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
+        <CheckoutSteps steps={compactCheckoutSteps} className="mt-10 animate-fade-in" />
       )}
     </div>
   )

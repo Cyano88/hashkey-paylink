@@ -164,7 +164,7 @@ export function createPocketX402ActivateHandler(dependencies: PocketX402Activate
       if (normalized.status === 400) return fail(400, 'VALIDATION_FAILED', normalized.message, false)
       if (normalized.status === 401) return fail(401, 'AUTH_REQUIRED', normalized.message, false)
       if (normalized.status === 403) return fail(403, 'FORBIDDEN', normalized.message, false, undefined, normalized.code)
-      if (normalized.status === 404) return fail(404, 'RESOURCE_NOT_FOUND', normalized.message, false)
+      if (normalized.status === 404) return fail(404, 'RESOURCE_NOT_FOUND', normalized.message, false, undefined, normalized.code)
       if (normalized.status === 409) return fail(409, normalized.code === 'circle_session_expired' ? 'SESSION_EXPIRED' : 'VERSION_CONFLICT', normalized.message, false, undefined, normalized.code)
       if (normalized.status === 429) return fail(429, 'RATE_LIMITED', normalized.message, true)
       return fail(503, 'PROVIDER_UNAVAILABLE', 'Circle Gateway activation is temporarily unavailable.', true)

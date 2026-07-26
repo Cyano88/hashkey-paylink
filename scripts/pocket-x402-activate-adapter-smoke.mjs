@@ -3,6 +3,7 @@ import { createPocketX402ActivateHandler } from '../api/pocket/x402-activate.ts'
 import {
   activatePocketX402Gateway,
   PocketX402ActivationError,
+  pocketX402ReconnectRequired,
 } from '../src/pocket/api/pocketX402Client.ts'
 import { pocketX402WalletSlug } from '../src/pocket/lib/pocketX402Identity.ts'
 import {
@@ -218,6 +219,20 @@ assert.equal(ownershipFailure.statusCode, 409)
 assert.equal(ownershipFailure.body.error.code, 'VERSION_CONFLICT')
 assert.equal(ownershipFailure.body.reason, 'wallet_ownership_mismatch')
 
+const missingSessionHandler = createPocketX402ActivateHandler({
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  claim: async input => ({ claimed: true, record: actionRecord({ metadata: input.metadata }) }),
+  activate: async () => { throw Object.assign(new Error('Reconnect this wallet before activating x402.'), { status: 404, code: 'wallet_session_not_found' }) },
+  record: async input => actionRecord({ status: input.status, metadata: input.metadata }),
+})
+const missingSessionFailure = await request(missingSessionHandler, {
+  body: { network: 'base', amount: '0.5' },
+  key: 'pocket:x402-activate:missing-session-0001',
+})
+assert.equal(missingSessionFailure.statusCode, 404)
+assert.equal(missingSessionFailure.body.error.code, 'RESOURCE_NOT_FOUND')
+assert.equal(missingSessionFailure.body.reason, 'wallet_session_not_found')
+
 let fetchCall
 const clientResult = await activatePocketX402Gateway({
   accessToken: 'privy-token',
@@ -269,6 +284,26 @@ await assert.rejects(
     && error.code === 'VERSION_CONFLICT'
     && error.reason === 'wallet_ownership_mismatch'
     && error.retryable === false,
+)
+
+for (const reason of [
+  'wallet_ownership_mismatch',
+  'wallet_identity_mismatch',
+  'wallet_session_not_found',
+  'circle_session_expired',
+]) {
+  assert.equal(
+    pocketX402ReconnectRequired(new PocketX402ActivationError('Reconnect.', 'VERSION_CONFLICT', reason)),
+    true,
+  )
+}
+assert.equal(
+  pocketX402ReconnectRequired(new PocketX402ActivationError('Expired.', 'SESSION_EXPIRED')),
+  true,
+)
+assert.equal(
+  pocketX402ReconnectRequired(new PocketX402ActivationError('Provider unavailable.', 'PROVIDER_UNAVAILABLE', 'circle_provider_unavailable')),
+  false,
 )
 
 console.log('Circle Pocket x402 activation adapter smoke tests passed.')

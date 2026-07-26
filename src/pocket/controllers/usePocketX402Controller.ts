@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   activatePocketX402Gateway,
   connectPocketX402Wallet,
-  PocketX402ActivationError,
   PocketX402ConnectionError,
+  pocketX402ReconnectRequired,
   readPocketX402Snapshot,
 } from '../api/pocketX402Client'
 import { createPocketIdempotencyKey, type PocketX402SnapshotData, type PocketX402WalletChoice } from '../lib/pocketSchemas'
@@ -348,24 +348,43 @@ export default function usePocketX402Controller({
       await refresh({ silent: true })
     } catch (reason) {
       activationTargetBalance.current = null
-      const ownershipMismatch = reason instanceof PocketX402ActivationError
-        && (reason.reason === 'wallet_ownership_mismatch' || reason.reason === 'wallet_identity_mismatch')
-      if (ownershipMismatch) {
+      if (pocketX402ReconnectRequired(reason)) {
+        const walletToVerify = snapshot?.walletAddress ?? ''
         activationKey.current = ''
         activationStartedAt.current = null
         setActivationPending(false)
         setActivationNeedsCheck(false)
+        setActivationOpen(false)
         setWalletMode('login')
         setWalletStep('idle')
         setOtp('')
         setOtpNetwork(null)
-        setExpectedWallet('')
+        setExpectedWallet(walletToVerify)
         setWalletChoices([])
         const reconnectSnapshot = snapshot ? { ...snapshot, connected: false } : snapshot
         setSnapshot(reconnectSnapshot)
         if (reconnectSnapshot) pocketX402SnapshotCache.set(x402CacheKey(email, network), reconnectSnapshot)
+        setWalletBusy(true)
+        try {
+          const accessToken = await getAccessToken()
+          if (!accessToken) throw new Error('Sign in again to reconnect this Circle wallet.')
+          await connectPocketX402Wallet({
+            accessToken,
+            action: 'init',
+            network,
+            ...(walletToVerify ? { expectedWallet: walletToVerify } : {}),
+          })
+          setOtpNetwork(network)
+          setWalletStep('otp')
+          setError('')
+        } catch (connectionReason) {
+          setError(readableError(connectionReason, 'Reconnect this Circle wallet before adding App Pay funds.'))
+        } finally {
+          setWalletBusy(false)
+        }
+      } else {
+        setError(readableError(reason, 'Could not add App Pay funds.'))
       }
-      setError(readableError(reason, 'Could not add App Pay funds.'))
     } finally {
       setActivationBusy(false)
     }

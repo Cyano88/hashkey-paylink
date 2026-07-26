@@ -1,6 +1,11 @@
 /**
  * Solana gasless USDC relay.
  *
+ * The build/relay transaction endpoints may support current signed-wallet
+ * flows. The vault/sweep endpoints documented below are LEGACY / INACTIVE
+ * manual-address checkout infrastructure retained only for a possible future
+ * demand-led rollout. Do not expose those endpoints in Pocket or checkout.
+ *
  * POST /api/solana-build-tx  — server builds a transaction with the relayer
  *                              as fee payer, partially signs it, and returns
  *                              the serialised bytes for the client to sign.

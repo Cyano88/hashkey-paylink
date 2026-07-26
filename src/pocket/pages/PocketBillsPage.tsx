@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import usePocketBillsController from '../controllers/usePocketBillsController'
@@ -11,7 +11,11 @@ import { POCKET_BASE_PATH, pocketPathFor, type PocketBillView } from '../lib/poc
 
 export default function PocketBillsPage({ view }: { view: PocketBillView }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
+  const localPreview = import.meta.env.DEV
+    && ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+    && new URLSearchParams(location.search).get('preview') === '1'
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const [walletBusy, setWalletBusy] = useState(false)
   const onWalletReady = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana', wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
@@ -59,9 +63,10 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
       <PocketBillsPanel
         view={view}
         authenticated={authenticated}
+        preview={localPreview}
         bills={bills}
-        baseAddress={wallets.wallets.base?.address ?? ''}
-        baseBalance={baseBalance}
+        baseAddress={localPreview ? '0x6F4bA8c27eDAA611Dfa019a5Bb3E42c92F1A7D10' : wallets.wallets.base?.address ?? ''}
+        baseBalance={localPreview ? 125.48 : baseBalance}
         walletBusy={walletBusy}
         onOpenWallet={() => void openBaseWallet()}
       />

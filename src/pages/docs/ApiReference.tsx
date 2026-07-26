@@ -106,9 +106,6 @@ export default function ApiReference() {
         <SubSection title="GET /api/list-event-payments">
           <p>Returns registered payments for a multi-payer event dashboard.</p>
         </SubSection>
-        <SubSection title="POST /api/relay-v2">
-          <p>Relays supported Base, Arc, and Arbitrum payment actions or ghost-vault sweeps.</p>
-        </SubSection>
       </Section>
 
       <Section title="Solana relay">
@@ -117,9 +114,6 @@ export default function ApiReference() {
         </SubSection>
         <SubSection title="POST /api/solana-relay">
           <p>Submits a payer-signed Solana transaction.</p>
-        </SubSection>
-        <SubSection title="GET /api/solana-vault">
-          <p>Returns the deterministic vault address for a Solana Send via Address checkout.</p>
         </SubSection>
       </Section>
 

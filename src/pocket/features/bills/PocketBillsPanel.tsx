@@ -10,13 +10,14 @@ import PocketDataBundlePicker from './PocketDataBundlePicker'
 import { Link } from 'react-router-dom'
 import UnifiedReceipt from '../../../components/UnifiedReceipt'
 import type { PaylinkReceipt } from '../../../lib/paymentReceiptPdf'
-import { detectNigerianMobileNetwork } from '../../lib/nigerianMobileNetwork'
+import PocketMobileNumberInput from './PocketMobileNumberInput'
 
 export type PocketBillView = 'airtime' | 'data' | 'tv' | 'electricity'
 
 type PocketBillsPanelProps = {
   view: PocketBillView
   authenticated: boolean
+  preview?: boolean
   bills: PocketBillsController
   baseAddress: string
   baseBalance: number
@@ -65,7 +66,7 @@ function SignInCard() {
   )
 }
 
-export default function PocketBillsPanel({ view, authenticated, bills, baseAddress, baseBalance, walletBusy, onOpenWallet }: PocketBillsPanelProps) {
+export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet }: PocketBillsPanelProps) {
   const meta = billMeta[view]
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
@@ -106,7 +107,7 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
     billToken: bills.intent.category === 'electricity' ? bills.intent.purchasedCode : undefined,
   } : null
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
-  const networks = view === 'airtime'
+  const catalogNetworks = view === 'airtime'
     ? [...NETWORKS]
     : bills.dataServices
       .filter(service => view !== 'data' || /^(mtn|airtel|glo|etisalat)-data$/.test(service.serviceId))
@@ -114,9 +115,11 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
         value: service.serviceId,
         label: view === 'data' ? dataServiceLabel(service.name) : service.name,
       }))
+  const networks = preview && view === 'data' && catalogNetworks.length === 0
+    ? NETWORKS.map(network => ({ ...network, value: `${network.value}-data` }))
+    : catalogNetworks
   const categoryEnabled = view === 'data' ? bills.dataEnabled : view === 'tv' ? bills.tvEnabled : view === 'electricity' ? bills.electricityEnabled : bills.airtimeEnabled
   const isMobileBill = view === 'airtime' || view === 'data'
-  const detectedNetwork = isMobileBill ? detectNigerianMobileNetwork(bills.phone) : null
   const quoteExpired = bills.errorCode === 'BILLS_QUOTE_EXPIRED'
   const refundComplete = bills.errorCode === 'BILLS_REFUNDED'
   const providerUnavailable = bills.errorCode === 'PROVIDER_UNAVAILABLE'
@@ -144,15 +147,15 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
         </div>
       </div>
 
-      {bills.availability === 'loading' ? (
+      {bills.availability === 'loading' && !preview ? (
         <div className="flex min-h-36 items-center justify-center rounded-2xl border border-gray-100 bg-white dark:border-white/10 dark:bg-[#111216]"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
-      ) : bills.availability === 'disabled' ? (
+      ) : bills.availability === 'disabled' && !preview ? (
         <div className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
           <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">Bills pilot is not open</h3>
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">Bill payments remain hidden until the protected provider and refund controls are enabled.</p>
         </div>
-      ) : !authenticated ? <SignInCard /> : !categoryEnabled ? (
+      ) : !authenticated && !preview ? <SignInCard /> : !categoryEnabled && !preview ? (
         <div className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
           <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">{billName} unavailable</h3>
@@ -183,37 +186,19 @@ export default function PocketBillsPanel({ view, authenticated, bills, baseAddre
           <div className="space-y-4 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
             {isMobileBill ? (
               <div>
-                <div className="grid grid-cols-[minmax(112px,0.72fr)_minmax(0,1.28fr)] overflow-visible rounded-2xl border border-gray-200 bg-white shadow-sm transition focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10 dark:border-white/10 dark:bg-[#17181d] dark:focus-within:border-blue-400/50">
-                  <div className="min-w-0 border-r border-gray-200 p-2.5 dark:border-white/10">
-                    <span className="mb-1 block px-1 text-[9px] font-black uppercase tracking-[0.14em] text-gray-400">Network</span>
-                    <PocketSelect
-                      value={bills.serviceId}
-                      options={networks}
-                      onChange={bills.setServiceId}
-                      disabled={locked || (isData && bills.catalogBusy)}
-                      placeholder={isData && bills.catalogBusy ? 'Loading' : 'Choose'}
-                      ariaLabel={`Select ${billName} network`}
-                      buttonClassName="min-h-9 border-0 bg-transparent px-1.5 py-1 shadow-none hover:bg-gray-50 focus:border-0 focus:ring-0 dark:bg-transparent dark:hover:bg-white/[0.04]"
-                    />
-                  </div>
-                  <label className="min-w-0 p-2.5">
-                    <span className="mb-1 block px-1 text-[9px] font-black uppercase tracking-[0.14em] text-gray-400">Phone number</span>
-                    <input
-                      type="tel"
-                      inputMode="tel"
-                      autoComplete="tel"
-                      disabled={locked || bills.environment === 'sandbox'}
-                      value={bills.phone}
-                      onChange={event => bills.setPhone(event.target.value)}
-                      placeholder="08012345678"
-                      className="h-9 w-full min-w-0 bg-transparent px-1 text-sm font-semibold tabular-nums text-gray-900 outline-none placeholder:text-gray-300 disabled:opacity-60 dark:text-white dark:placeholder:text-gray-600"
-                    />
-                  </label>
-                </div>
+                <PocketMobileNumberInput
+                  category={isData ? 'data' : 'airtime'}
+                  phoneNumber={bills.phone}
+                  selectedNetworkId={bills.serviceId}
+                  options={networks}
+                  disabled={locked || (!preview && bills.environment === 'sandbox')}
+                  loading={isData && bills.catalogBusy}
+                  onChange={({ phoneNumber, networkId }) => {
+                    if (phoneNumber !== bills.phone) bills.setPhone(phoneNumber)
+                    if (networkId && networkId !== bills.serviceId) bills.setServiceId(networkId)
+                  }}
+                />
                 {isData && bills.catalogBusy && !networks.length && <span className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-gray-400"><Loader2 className="h-3 w-3 animate-spin" />Loading networks</span>}
-                {bills.environment === 'live' && detectedNetwork && (
-                  <p className="mt-1.5 px-1 text-[10px] font-medium text-gray-400">Network suggested from the number. Change it if this line was ported.</p>
-                )}
               </div>
             ) : (
               <>

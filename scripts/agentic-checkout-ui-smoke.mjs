@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 const source = readFileSync(new URL('../src/pages/AgentCheckoutPage.tsx', import.meta.url), 'utf8')
 const controllerSource = readFileSync(new URL('../src/pocket/controllers/usePocketX402Controller.ts', import.meta.url), 'utf8')
 const layoutSource = readFileSync(new URL('../src/Layout.tsx', import.meta.url), 'utf8')
+const checkoutStepsSource = readFileSync(new URL('../src/components/CheckoutSteps.tsx', import.meta.url), 'utf8')
 
 for (const required of [
   'usePocketIdentity',
@@ -14,22 +15,24 @@ for (const required of [
   'App Pay balance',
   'Copy deposit address',
   'Continue to {checkout.merchantName}',
-  'How it works',
   'Fund App Pay',
   'Slide to pay',
   'connectionAttempts < 3',
   'Hash PayLink could not reach secure checkout',
-  'footer={<CheckoutHowItWorks />}',
+  "footer={<CheckoutSteps steps={['Sign in', 'Fund App Pay', 'Slide to pay']} />}",
   "Circle's minimum App Pay transfer is 0.5 USDC.",
   '<span>Secure</span>',
   '<Lock className="h-2.5 w-2.5"',
   'Check App Pay',
   'activationNeedsCheck',
   "x402.walletStep === 'done'",
-  'src="/pocket-circle.png"',
+  '<PocketPillMark',
 ]) {
   assert.ok(source.includes(required), `Agent checkout must retain ${required}`)
 }
+
+assert.ok(checkoutStepsSource.includes('How it works'), 'Shared checkout steps must retain How it works')
+assert.ok(checkoutStepsSource.includes('aria-label="How it works"'), 'Shared checkout steps must remain accessible')
 
 for (const forbidden of [
   'Copy agent payment endpoint',
@@ -42,6 +45,8 @@ for (const forbidden of [
   '<Wallet className=',
   'min-h-[calc(100dvh-5rem)]',
   'Verified against the status used by signed webhooks',
+  'src="/pocket-circle.png"',
+  'CheckoutHowItWorks',
 ]) {
   assert.equal(source.includes(forbidden), false, `Agent checkout must not contain ${forbidden}`)
 }

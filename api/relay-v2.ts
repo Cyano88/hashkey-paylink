@@ -1,8 +1,12 @@
 /**
  * /api/relay-v2
  *
- * Master relayer endpoint for the PayLinkFactoryV2 Direct Send flow.
- * Active networks: Base, Arc, and Arbitrum native USDC.
+ * LEGACY / INACTIVE manual-address checkout infrastructure.
+ *
+ * Retained for a possible future demand-led rollout. It is not a current
+ * public checkout rail and must not be exposed or reused by Pocket without an
+ * explicit product, security, reconciliation, recovery, and UI review.
+ * Historical networks: Base, Arc, and Arbitrum native USDC.
  */
 
 import type { Request, Response } from 'express'

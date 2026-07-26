@@ -5,10 +5,10 @@ export default function WalletsDocs() {
     <DocPage>
       <DocHeader
         title="Wallet Setup"
-        description="Current wallet access is built around hosted checkout, Privy sign-in, Circle wallet sessions, and Send via Address."
+        description="Current wallet access is built around hosted checkout, email identity, and Circle wallet sessions."
       />
 
-      <InfoBox type="tip">Many Hash PayLink flows do not require the payer to connect a browser wallet. Send via Address lets a payer send USDC from an exchange, hardware wallet, or any wallet that supports the selected network.</InfoBox>
+      <InfoBox type="tip">Hash PayLink keeps wallet execution inside the current Circle-aligned hosted checkout instead of asking payers to use a manual deposit address.</InfoBox>
 
       <Section title="Privy + Circle">
         <SubSection title="HashpayStream and Arena">
@@ -28,16 +28,8 @@ export default function WalletsDocs() {
         </SubSection>
       </Section>
 
-      <Section title="Send via Address">
-        <p>For payers who do not want to connect a wallet:</p>
-        <ol className="list-none space-y-2 mt-2">
-          <li>- Open the payment link.</li>
-          <li>- Choose the supported network.</li>
-          <li>- Copy the displayed vault or recipient address.</li>
-          <li>- Send the exact USDC amount.</li>
-          <li>- Hash PayLink detects settlement and updates the receipt.</li>
-        </ol>
-        <InfoBox type="warning">Send the exact amount shown. Do not reuse one-time vault addresses for unrelated payments.</InfoBox>
+      <Section title="Legacy manual-address checkout">
+        <InfoBox type="warning">The older Send via Address checkout is not currently offered. Its backend implementation is retained for a possible future rollout if there is verified demand.</InfoBox>
       </Section>
 
       <Section title="Arc Testnet setup">

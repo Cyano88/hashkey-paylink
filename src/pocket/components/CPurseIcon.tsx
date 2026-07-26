@@ -6,6 +6,13 @@ export type CPurseIconProps = {
   title?: string
 }
 
+export type PocketPillMarkProps = {
+  className?: string
+  size?: 'sm' | 'md'
+  tone?: 'contrast' | 'surface' | 'subtle'
+  title?: string
+}
+
 /** Scale-independent C-Purse mark. The two empty slices inherit any background. */
 export function CPurseIcon({
   className = '',
@@ -47,6 +54,32 @@ export function CPurseHeroMark({ className = '', size = 160 }: CPurseIconProps) 
       aria-hidden="true"
     >
       <CPurseIcon size="100%" title="" />
+    </span>
+  )
+}
+
+/** Compact checkout mark. Use this instead of the legacy wallet-outline image. */
+export function PocketPillMark({
+  className = '',
+  size = 'md',
+  tone = 'surface',
+  title = '',
+}: PocketPillMarkProps) {
+  const dimensions = size === 'sm' ? 'h-5 w-7' : 'h-6 w-9'
+  const iconSize = size === 'sm' ? 14 : 17
+  const colors = tone === 'contrast'
+    ? 'bg-white/[0.12] text-white dark:bg-black/10 dark:text-gray-950'
+    : tone === 'subtle'
+      ? 'bg-gray-100 text-gray-950 dark:bg-white/10 dark:text-white'
+      : 'bg-gray-950 text-white dark:bg-white dark:text-gray-950'
+
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center justify-center rounded-full ${dimensions} ${colors} ${className}`}
+      aria-hidden={title ? undefined : true}
+      aria-label={title || undefined}
+    >
+      <CPurseIcon size={iconSize} title="" />
     </span>
   )
 }

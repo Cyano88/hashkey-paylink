@@ -27,11 +27,8 @@ export default function GettingStarted() {
 
       <Section title="4. Payer completes checkout">
         <SubSection title="Wallet or email wallet">
-          <p>Payers can use supported connected wallets or Circle email wallet flows where available.</p>
-        </SubSection>
-        <SubSection title="Send via Address">
-          <p>For payers using an exchange, hardware wallet, or non-browser wallet, Hash PayLink can show a deterministic payment address. The payer sends the exact USDC amount and the payment is detected on-chain.</p>
-          <InfoBox type="tip">Send via Address keeps the payer experience simple: no browser extension is required for supported flows.</InfoBox>
+          <p>Payers complete payment through the supported Circle-aligned wallet or email-wallet flow inside hosted checkout.</p>
+          <InfoBox type="tip">Manual wallet-address deposits are not part of the current checkout.</InfoBox>
         </SubSection>
       </Section>
 

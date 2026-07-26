@@ -31,6 +31,12 @@ export default function PocketX402Page() {
   const [marketplaceRefreshToken, setMarketplaceRefreshToken] = useState(0)
   const sessionChecking = !identityReady || (authenticated && !x402.snapshotReady)
   const connected = Boolean(x402.snapshot?.connected && x402.snapshot.walletAddress)
+  const verificationRequired = Boolean(
+    !sessionChecking
+    && authenticated
+    && !connected
+    && (x402.snapshot?.found || x402.walletMode === 'login'),
+  )
   const walletBalance = Number(x402.snapshot?.walletBalance ?? '0')
   const treasuryEmpty = x402.snapshot?.walletBalanceChecked && (!Number.isFinite(walletBalance) || walletBalance <= 0)
   const fundUrl = useMemo(() => {
@@ -78,7 +84,13 @@ export default function PocketX402Page() {
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
                     : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400',
                 )}>
-                  {sessionChecking ? 'Restoring session' : connected ? 'Wallet linked' : 'Setup needed'}
+                  {sessionChecking
+                    ? 'Restoring session'
+                    : connected
+                      ? 'Wallet linked'
+                      : verificationRequired
+                        ? 'Verification needed'
+                        : 'Setup needed'}
                 </span>
               </div>
             </div>
@@ -129,16 +141,20 @@ export default function PocketX402Page() {
         ) : !connected ? (
           <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95">
             <div className="px-1 pb-1">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Set up App Pay</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                {verificationRequired ? 'Verify your App Pay wallet' : 'Set up App Pay'}
+              </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {x402.snapshot?.found ? 'Verify access to your secure payment wallet.' : 'Use a secure wallet to fund pay-per-use apps and AI tools.'}
+                {verificationRequired
+                  ? 'Confirm this Circle wallet before adding App Pay funds.'
+                  : 'Use a secure wallet to fund pay-per-use apps and AI tools.'}
               </p>
             </div>
 
             {x402.walletStep === 'otp' ? (
               <div className="space-y-2">
                 <p className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-                  Code sent to {email || 'your email'} - {x402.network === 'arc' ? 'Arc Testnet' : 'Base'} Circle wallet
+                  Circle sent a code to {email || 'your email'} for your {x402.network === 'arc' ? 'Arc Testnet' : 'Base'} wallet.
                 </p>
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                   <input value={x402.otp} onChange={event => x402.setOtp(event.target.value.trim())} placeholder="Enter Circle OTP" disabled={x402.walletBusy} className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none dark:text-white" />

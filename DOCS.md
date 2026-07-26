@@ -87,3 +87,12 @@ Do not commit:
 ## Legacy Code
 
 Some legacy adapters remain in the repository for backwards compatibility. Public docs and landing pages should only describe features that are currently surfaced in the public UI.
+
+The `direct` / `Send via Address` checkout rail is specifically inactive. Its
+ghost-vault, manual wallet-address deposit, sweep, and amount-variance code is
+retained only for a possible future demand-led rollout. Do not expose it in
+Pocket or hosted checkout, describe it as current, or reuse its underpayment
+and overpayment states in the controlled Circle checkout. Merchant recipient
+addresses, Pocket send/withdraw destinations, Polymarket bridge destinations,
+and agent-wallet funding are separate concepts and are not covered by this
+legacy label.
