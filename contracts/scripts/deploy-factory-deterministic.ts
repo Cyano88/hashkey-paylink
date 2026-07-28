@@ -37,6 +37,7 @@
  */
 
 import { ethers, network } from 'hardhat'
+import type { Signer } from 'ethers'
 
 // ── Nick's Method singleton ────────────────────────────────────────────────────
 const NICK_FACTORY = '0x4e59b44847b379578588920cA78FbF26c0B4956C'
@@ -60,7 +61,7 @@ const SALT_V2     = ethers.id('hashkey-paylink-factory-v2-universal')
 const SALT_ROUTER = ethers.id('hashkey-paylink-router-factory-v1')
 
 async function deployViaNick(
-  signer:   ethers.Signer,
+  signer:   Signer,
   salt:     string,
   initcode: string,
 ): Promise<string> {
@@ -71,7 +72,7 @@ async function deployViaNick(
 }
 
 async function estimateNickDeploy(
-  signer:   ethers.Signer,
+  signer:   Signer,
   salt:     string,
   initcode: string,
 ): Promise<bigint | null> {

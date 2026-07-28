@@ -342,15 +342,28 @@ function scoutModeLabel(value: string) {
   return 'Best reward markets'
 }
 
+function normalizedInternalRoute(value: unknown) {
+  const raw = String(value ?? '').trim()
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return ''
+  try {
+    const url = new URL(raw, window.location.origin)
+    if (url.origin !== window.location.origin) return ''
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return ''
+  }
+}
+
 function readSavedLpScoutIntent(agentSlug: string) {
   try {
     const raw = window.sessionStorage.getItem(LP_SCOUT_INTENT_KEY) || window.localStorage.getItem(LP_SCOUT_INTENT_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as SavedLpScoutIntent
-    if (!parsed?.href || !parsed.savedAt) return null
+    const href = normalizedInternalRoute(parsed?.href)
+    if (!href || !parsed.savedAt) return null
     if (Date.now() - parsed.savedAt > LP_SCOUT_INTENT_TTL_MS) return null
     if (parsed.agentSlug && agentSlug && parsed.agentSlug !== agentSlug) return null
-    return parsed
+    return { ...parsed, href }
   } catch {
     return null
   }

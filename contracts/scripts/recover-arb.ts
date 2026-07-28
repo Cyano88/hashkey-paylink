@@ -17,6 +17,7 @@
  */
 
 import { ethers } from 'hardhat'
+import type { Signer } from 'ethers'
 import * as dotenv from 'dotenv'
 dotenv.config()
 
@@ -43,7 +44,7 @@ async function main() {
   const provider = ethers.provider
 
   // ── Pick signer: prefer ARB_RECOVERY_KEY (fresh wallet, nonce=0) ──────────
-  let signer: ethers.Signer
+  let signer: Signer
   const recoveryKey = process.env.ARB_RECOVERY_KEY
   if (recoveryKey) {
     signer = new ethers.Wallet(`0x${recoveryKey.replace(/^0x/, '')}`, provider)
