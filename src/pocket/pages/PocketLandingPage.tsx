@@ -22,6 +22,7 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
   const [logoTarget, setLogoTarget] = useState<LogoTarget | null>(null)
   const splashActive = splashState !== 'idle'
   const splashLaunching = splashState === 'launching'
+  const splashLogoVisible = splashState === 'holding' || splashLaunching
 
   const enterPocket = () => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.smartWallet}`)
 
@@ -243,7 +244,7 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none fixed z-30 text-white transition-[top,left,width,height,transform] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:hidden"
+            className={`pointer-events-none fixed z-30 text-white transition-[top,left,width,height,transform,opacity] duration-[820ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:hidden ${splashLogoVisible ? 'opacity-100' : 'opacity-0'}`}
             style={splashLaunching && logoTarget
               ? {
                   top: logoTarget.top,
@@ -257,7 +258,7 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
                   left: '50%',
                   width: `${(logoTarget?.width ?? 164) * 1.2}px`,
                   height: `${(logoTarget?.height ?? 164) * 1.2}px`,
-                  transform: 'translate3d(-50%,-50%,0)',
+                  transform: `translate3d(-50%,-50%,0) scale(${splashLogoVisible ? 1 : 0.92})`,
                 }}
           >
             <CPurseIcon size={228} title="" className="h-full w-full" />

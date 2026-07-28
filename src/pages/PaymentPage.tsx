@@ -462,7 +462,7 @@ export default function PaymentPage() {
       value,
       label: value === 'arc' ? 'Arc Test' : CHAIN_META[value].label,
     })),
-    ...(isHostedCheckout && !availableChains.includes('solana')
+    ...(hasHostedCheckoutParam && !availableChains.includes('solana')
       ? [{ value: 'solana' as const, label: 'Solana Soon', disabled: true }]
       : []),
   ]

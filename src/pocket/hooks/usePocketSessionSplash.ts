@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 const POCKET_SPLASH_SESSION_KEY = 'pocket_splash_shown'
-export type PocketSplashState = 'idle' | 'holding' | 'launching'
+export type PocketSplashState = 'idle' | 'entering' | 'holding' | 'launching'
 
 function isPageReload() {
   const navigation = window.performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
@@ -22,7 +22,7 @@ function resolveInitialState(enabled: boolean): PocketSplashState {
     const alreadyShown = window.sessionStorage.getItem(POCKET_SPLASH_SESSION_KEY) === 'true'
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     window.sessionStorage.setItem(POCKET_SPLASH_SESSION_KEY, 'true')
-    return alreadyShown || isPageReload() || reduceMotion ? 'idle' : 'holding'
+    return alreadyShown || isPageReload() || reduceMotion ? 'idle' : 'entering'
   } catch {
     return 'idle'
   }
@@ -39,14 +39,20 @@ export default function usePocketSessionSplash(enabled: boolean) {
   }, [enabled])
 
   useEffect(() => {
+    if (state !== 'entering') return
+    const revealTimer = window.setTimeout(() => setState('holding'), 60)
+    return () => window.clearTimeout(revealTimer)
+  }, [state])
+
+  useEffect(() => {
     if (state !== 'holding') return
-    const launchTimer = window.setTimeout(() => setState('launching'), 400)
+    const launchTimer = window.setTimeout(() => setState('launching'), 760)
     return () => window.clearTimeout(launchTimer)
   }, [state])
 
   useEffect(() => {
     if (state !== 'launching') return
-    const finishTimer = window.setTimeout(() => setState('idle'), 720)
+    const finishTimer = window.setTimeout(() => setState('idle'), 820)
     return () => window.clearTimeout(finishTimer)
   }, [state])
 
