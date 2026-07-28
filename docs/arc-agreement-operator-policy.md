@@ -48,6 +48,25 @@ Before the wallet can be approved:
 5. Generate a fresh entity-secret ciphertext for each Circle contract-execution
    request and a fresh UUID v4 idempotency key for each intended action.
 
+The one-time provisioning command is isolated from Pocket, x402, Bills, and
+treasury variables. It accepts only `CIRCLE_TEST_API_KEY`, the registered
+`CIRCLE_ENTITY_SECRET`, and two dedicated UUID-v4 idempotency keys:
+
+- `ARC_AGREEMENT_OPERATOR_WALLET_SET_IDEMPOTENCY_KEY`
+- `ARC_AGREEMENT_OPERATOR_WALLET_IDEMPOTENCY_KEY`
+
+After reviewing those values, run:
+
+`npm run provision:arc-agreement-operator -- --confirm-create-arc-testnet-operator`
+
+The command rejects live Circle keys and creates one EOA on `ARC-TESTNET` in a
+wallet set named `Hash PayLink Arc Agreements`. It prints only the wallet-set
+ID, wallet ID, public address, network, custody type, state, and account type.
+Save the returned wallet ID and address as
+`ARC_AGREEMENT_OPERATOR_WALLET_ID` and
+`ARC_AGREEMENT_OPERATOR_ADDRESS`. Retrying must reuse the same idempotency keys
+so Circle returns the original resources instead of creating duplicates.
+
 The code in `api/arc-agreement-operator-wallet.ts` reads the configured wallet
 back from Circle and requires the matching wallet UUID, `ARC-TESTNET`,
 developer custody, `LIVE` state, a supported EOA or SCA account type, and the

@@ -101,9 +101,22 @@ a separate activation change remain mandatory.
 
 ## Verify the proposed Circle operator
 
-After Circle provisions the dedicated developer-controlled `ARC-TESTNET`
-wallet, set `CIRCLE_TEST_API_KEY`, `ARC_AGREEMENT_OPERATOR_WALLET_ID`, and
-`ARC_AGREEMENT_OPERATOR_ADDRESS` in the private operator environment. Then run:
+If the dedicated operator does not exist, store two different UUID-v4 values as
+`ARC_AGREEMENT_OPERATOR_WALLET_SET_IDEMPOTENCY_KEY` and
+`ARC_AGREEMENT_OPERATOR_WALLET_IDEMPOTENCY_KEY`. With
+`CIRCLE_TEST_API_KEY` and the registered `CIRCLE_ENTITY_SECRET` available only
+in the private operator environment, run:
+
+`npm run provision:arc-agreement-operator -- --confirm-create-arc-testnet-operator`
+
+This one-time command rejects live Circle keys and creates one dedicated EOA on
+`ARC-TESTNET`. It does not read or modify Pocket, x402, Bills, or treasury
+wallet configuration. Reuse the same two idempotency keys if the command must
+be retried.
+
+After Circle provisions the wallet, set
+`ARC_AGREEMENT_OPERATOR_WALLET_ID` and
+`ARC_AGREEMENT_OPERATOR_ADDRESS` from the sanitized output. Then run:
 
 `npm run preflight:arc-agreement-operator`
 
