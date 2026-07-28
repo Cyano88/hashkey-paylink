@@ -41,14 +41,13 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
   }
 
   return (
-    <PocketRouteShell active="activity" onSelect={selectNav} onRefresh={activity.refresh} refreshing={activity.busy}>
+    <PocketRouteShell active="activity" onSelect={selectNav}>
       <PocketActivityPanel
         view={view}
         rows={activity.rows}
         authenticated={authenticated}
         busy={activity.busy}
         error={activity.error}
-        onRefresh={() => void activity.refresh()}
         onRefund={handleBillsRefund}
       />
     </PocketRouteShell>

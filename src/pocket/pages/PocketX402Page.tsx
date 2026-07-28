@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
@@ -28,7 +28,6 @@ export default function PocketX402Page() {
   const navigate = useNavigate()
   const { ready: identityReady, authenticated, email, getAccessToken } = usePocketIdentity()
   const x402 = usePocketX402Controller({ authenticated, email, getAccessToken })
-  const [marketplaceRefreshToken, setMarketplaceRefreshToken] = useState(0)
   const sessionChecking = !identityReady || (authenticated && !x402.snapshotReady)
   const connected = Boolean(x402.snapshot?.connected && x402.snapshot.walletAddress)
   const verificationRequired = Boolean(
@@ -59,14 +58,8 @@ export default function PocketX402Page() {
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
-  const refreshAppPay = async () => {
-    if (!authenticated) return
-    await x402.refresh()
-    setMarketplaceRefreshToken(value => value + 1)
-  }
-
   return (
-    <PocketRouteShell active="home" onSelect={selectNav} onRefresh={authenticated ? refreshAppPay : undefined} refreshing={x402.refreshing}>
+    <PocketRouteShell active="home" onSelect={selectNav}>
       <div className="space-y-3">
         <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-violet-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-violet-500/[0.08]">
           <div className="flex items-start justify-between gap-3">
@@ -252,7 +245,6 @@ export default function PocketX402Page() {
               gatewayBalance={x402.snapshot?.gatewayBalance}
               getAccessToken={getAccessToken}
               onUseBase={() => x402.selectNetwork('base')}
-              refreshToken={marketplaceRefreshToken}
             />
           </div>
         )}

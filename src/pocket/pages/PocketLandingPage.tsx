@@ -1,20 +1,27 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Lock, Mail, RotateCw } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, Lock, Mail } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import { CPurseIcon, PocketPillMark } from '../components/CPurseIcon'
 import PocketThemeToggle from '../components/PocketThemeToggle'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
+import type { PocketSplashState } from '../hooks/usePocketSessionSplash'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 
-export default function PocketLandingPage() {
+type LogoTarget = { top: number; left: number; width: number; height: number }
+
+export default function PocketLandingPage({ splashState = 'idle' }: { splashState?: PocketSplashState }) {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const [enterAfterLogin, setEnterAfterLogin] = useState(false)
   const [nameStep, setNameStep] = useState<'first' | 'last'>('first')
   const [opening, setOpening] = useState(false)
+  const heroLogoRef = useRef<HTMLDivElement>(null)
+  const [logoTarget, setLogoTarget] = useState<LogoTarget | null>(null)
+  const splashActive = splashState !== 'idle'
+  const splashLaunching = splashState === 'launching'
 
   const enterPocket = () => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.smartWallet}`)
 
@@ -41,17 +48,35 @@ export default function PocketLandingPage() {
   const onboarding = authenticated && enterAfterLogin && profile.loaded && !profile.profile && !profile.loadError
   const profileLoadFailed = authenticated && enterAfterLogin && profile.loaded && Boolean(profile.loadError) && !opening
 
+  useLayoutEffect(() => {
+    if (!splashActive) return
+    const updateTarget = () => {
+      const rect = heroLogoRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setLogoTarget({ top: rect.top, left: rect.left, width: rect.width, height: rect.height })
+    }
+    updateTarget()
+    window.addEventListener('resize', updateTarget)
+    return () => window.removeEventListener('resize', updateTarget)
+  }, [splashActive])
+
+  const revealClass = splashActive
+    ? splashLaunching
+      ? 'translate-y-0 opacity-100'
+      : 'translate-y-5 opacity-0'
+    : 'translate-y-0 opacity-100'
+
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-[#F5F5F7] text-gray-950 transition-colors dark:bg-[#0A0A0A] dark:text-white">
       <div aria-hidden="true" className="pointer-events-none fixed inset-x-[-20%] top-[-24rem] h-[40rem] rounded-full bg-black/[0.035] blur-3xl dark:bg-white/[0.045]" />
 
-      <nav className="relative z-10 border-b border-black/[0.08] bg-[#F5F5F7]/90 backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0A0A0A]/90">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-5 sm:px-8">
-          <div className="flex items-center gap-2.5">
+      <nav className="pointer-events-none absolute inset-x-0 top-0 z-10 sm:relative sm:border-b sm:border-black/[0.08] sm:bg-[#F5F5F7]/90 sm:backdrop-blur-xl sm:dark:border-white/[0.08] sm:dark:bg-[#0A0A0A]/90">
+        <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-end px-5 sm:justify-between sm:px-8">
+          <div className="pointer-events-auto hidden items-center gap-2.5 sm:flex">
             <CPurseIcon size={38} title="" className="shrink-0 text-gray-950 dark:text-white" />
             <span className="text-[15px] font-black tracking-[-0.025em]">Pocket</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="pointer-events-auto flex items-center gap-2">
             <PocketThemeToggle />
           </div>
         </div>
@@ -80,7 +105,6 @@ export default function PocketLandingPage() {
                     onClick={() => void profile.reload()}
                     className="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-6 text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
                   >
-                    <RotateCw className="h-4 w-4" />
                     Try again
                   </button>
                 </div>
@@ -150,19 +174,23 @@ export default function PocketLandingPage() {
           </section>
         ) : (
           <section className="flex flex-1 flex-col items-center justify-center py-9 text-center sm:py-12">
-            <CPurseIcon size={190} title="Pocket" className="h-[164px] w-[164px] text-gray-950 dark:text-white sm:h-[190px] sm:w-[190px]" />
+            <div ref={heroLogoRef} className={`h-[164px] w-[164px] sm:h-[190px] sm:w-[190px] ${splashActive ? 'opacity-0' : 'opacity-100'}`}>
+              <CPurseIcon size={190} title="Pocket" className="h-full w-full text-gray-950 dark:text-white" />
+            </div>
 
-            <p className="mt-9 text-[11px] font-black uppercase tracking-[0.28em] text-gray-500 dark:text-white/40">Your money, ready to move</p>
-            <h1 className="mt-3 max-w-md text-4xl font-black leading-[0.98] tracking-[-0.055em] sm:text-5xl">
-              One pocket for digital dollars.
-            </h1>
-            <p className="mt-5 max-w-sm text-sm font-medium leading-6 text-gray-500 dark:text-white/55">
-              Receive, manage, and move USDC across the ways you get paid.
-            </p>
+            <div className={`transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '100ms' : '0ms' }}>
+              <p className="mt-9 text-[11px] font-black uppercase tracking-[0.28em] text-gray-500 dark:text-white/40">Your money, ready to move</p>
+              <h1 className="mt-3 max-w-md text-4xl font-black leading-[0.98] tracking-[-0.055em] sm:text-5xl">
+                One pocket for digital dollars.
+              </h1>
+              <p className="mx-auto mt-5 max-w-sm text-sm font-medium leading-6 text-gray-500 dark:text-white/55">
+                Receive, manage, and move USDC across the ways you get paid.
+              </p>
+            </div>
           </section>
         )}
 
-        {!onboarding && !checkingProfile && !profileLoadFailed && !opening && <section className="space-y-2.5">
+        {!onboarding && !checkingProfile && !profileLoadFailed && !opening && <section className={`space-y-2.5 transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '180ms' : '0ms' }}>
           {authenticated ? (
             <button
               type="button"
@@ -206,6 +234,36 @@ export default function PocketLandingPage() {
           </footer>
         </section>}
       </main>
+
+      {splashActive && (
+        <>
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none fixed inset-0 z-20 bg-[#0A0A0A] transition-opacity duration-700 ease-out motion-reduce:hidden ${splashLaunching ? 'opacity-0' : 'opacity-100'}`}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed z-30 text-white transition-[top,left,width,height,transform] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:hidden"
+            style={splashLaunching && logoTarget
+              ? {
+                  top: logoTarget.top,
+                  left: logoTarget.left,
+                  width: logoTarget.width,
+                  height: logoTarget.height,
+                  transform: 'translate3d(0,0,0)',
+                }
+              : {
+                  top: '50%',
+                  left: '50%',
+                  width: `${(logoTarget?.width ?? 164) * 1.2}px`,
+                  height: `${(logoTarget?.height ?? 164) * 1.2}px`,
+                  transform: 'translate3d(-50%,-50%,0)',
+                }}
+          >
+            <CPurseIcon size={228} title="" className="h-full w-full" />
+          </div>
+        </>
+      )}
     </div>
   )
 }

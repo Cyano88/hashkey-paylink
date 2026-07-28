@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ChevronRight, Loader2, LogOut, Pencil, UserRound } from 'lucide-react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import usePocketIdentity from '../hooks/usePocketIdentity'
+import { resetPocketSessionSplash } from '../hooks/usePocketSessionSplash'
 import usePocketProfile from '../hooks/usePocketProfile'
+import { POCKET_BASE_PATH } from '../lib/pocketRoutes'
 
 type AccountMenuMode = 'menu' | 'view' | 'edit'
 
@@ -24,6 +26,7 @@ function avatarGradient(seed: string) {
 
 export default function PocketAccountMenu() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { ready, authenticated, email, getAccessToken, logout } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const [open, setOpen] = useState(false)
@@ -122,7 +125,6 @@ export default function PocketAccountMenu() {
                 <div className="rounded-[18px] bg-red-50 p-3 dark:bg-red-400/10">
                   <p className="text-xs font-semibold leading-relaxed text-red-700 dark:text-red-200">{profile.loadError}</p>
                   <button type="button" onClick={() => void profile.reload()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-3 py-2.5 text-xs font-bold text-white dark:bg-white dark:text-gray-950">
-                    <Loader2 className="h-3.5 w-3.5" />
                     Try again
                   </button>
                 </div>
@@ -151,7 +153,13 @@ export default function PocketAccountMenu() {
 
               <button
                 type="button"
-                onClick={() => void logout().then(() => setOpen(false))}
+                onClick={() => {
+                  resetPocketSessionSplash()
+                  void logout().then(() => {
+                    setOpen(false)
+                    navigate(POCKET_BASE_PATH || '/')
+                  })
+                }}
                 className="mt-2 flex w-full items-center gap-3 rounded-2xl px-4 py-2.5 text-left text-xs font-bold text-red-600 transition hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-400/10"
               >
                 <LogOut className="h-4 w-4" />

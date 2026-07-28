@@ -10,8 +10,10 @@ import PocketMoveBankPage from './pages/PocketMoveBankPage'
 import PocketMovePosPage from './pages/PocketMovePosPage'
 import PocketMoveUsdcPage from './pages/PocketMoveUsdcPage'
 import PocketX402Page from './pages/PocketX402Page'
-import { CPurseIcon } from './components/CPurseIcon'
+import PocketLoadingState from './components/PocketLoadingState'
+import type { PocketNavTab } from './components/PocketBottomNav'
 import usePocketIdentity from './hooks/usePocketIdentity'
+import usePocketSessionSplash from './hooks/usePocketSessionSplash'
 import { prefetchPocketWalletSnapshot } from './hooks/usePocketWallets'
 
 function pocketRelativePath(pathname: string) {
@@ -26,6 +28,7 @@ export default function CirclePocketApp() {
   const landing = relativePath === '/'
   const route = useMemo(() => landing ? null : resolvePocketRoute(relativePath), [landing, relativePath])
   const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
+  const splashState = usePocketSessionSplash(landing)
 
   useEffect(() => {
     if (!ready || !authenticated || !email) return
@@ -38,18 +41,18 @@ export default function CirclePocketApp() {
   }, [landing, navigate, route])
 
   if (!ready) {
-    return (
-      <div className="flex h-full min-h-[100dvh] w-full items-center justify-center bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white" aria-label="Restoring Pocket session">
-        <div className="text-center">
-          <CPurseIcon size={64} title="" className="mx-auto opacity-90" />
-          <span className="mx-auto mt-5 block h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-50" />
-          <p className="mt-3 text-xs font-semibold text-gray-400 dark:text-white/40">Restoring your Pocket</p>
-        </div>
-      </div>
-    )
+    if (landing) return <PocketLandingPage splashState={splashState} />
+    const active: PocketNavTab = route?.section === 'move'
+      ? 'move'
+      : route?.section === 'bills'
+        ? 'bills'
+        : route?.section === 'activity'
+          ? 'activity'
+          : 'home'
+    return <PocketLoadingState active={active} />
   }
 
-  if (landing) return <PocketLandingPage />
+  if (landing) return <PocketLandingPage splashState={splashState} />
 
   if (!route) return null
 

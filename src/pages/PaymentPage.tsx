@@ -457,12 +457,14 @@ export default function PaymentPage() {
         (c !== 'solana' && isAddress(evmRecipientForChain(c))),
       )
   const resolvedEvm = evmRecipientForChain(chain)
-  const hostedCheckoutNetworkOptions = [
+  const humanCheckoutNetworkOptions = [
     ...availableChains.map(value => ({
       value,
       label: value === 'arc' ? 'Arc Test' : CHAIN_META[value].label,
     })),
-    { value: 'solana', label: 'Solana Soon', disabled: true },
+    ...(isHostedCheckout && !availableChains.includes('solana')
+      ? [{ value: 'solana' as const, label: 'Solana Soon', disabled: true }]
+      : []),
   ]
 
   // Sync header pill with initial chain on mount
@@ -4051,58 +4053,21 @@ export default function PaymentPage() {
         style={{ boxShadow: `0 18px 60px -32px rgba(15,23,42,0.42), ${meta.glowStyle}`, borderColor: meta.accentColor + '24' }}
       >
         {/* ── Payment network ──────────────────────────────────────────── */}
-        {!isBankSendPayment && isHostedCheckout && (
+        {!isBankSendPayment && (
           <div className="px-4 pb-0 pt-4">
             <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
               Payment network
             </p>
             <PocketSelect
               value={chain}
-              options={hostedCheckoutNetworkOptions}
+              options={humanCheckoutNetworkOptions}
               onChange={value => handleChainSwitch(value as ChainKey)}
-              disabled={netLocked}
+              disabled={netLocked || availableChains.length <= 1}
               ariaLabel="Payment network"
               buttonClassName="min-h-11 rounded-2xl px-3.5 shadow-none"
             />
           </div>
         )}
-
-        {!isBankSendPayment && !isHostedCheckout && <div className="flex justify-center px-4 pb-0 pt-4">
-          <div className={cn(
-            'flex items-center justify-center overflow-x-auto',
-            availableChains.length === 1
-              ? 'w-fit gap-0 rounded-lg border-0 bg-transparent p-0'
-              : 'w-full gap-0.5 rounded-xl border border-gray-200 bg-gray-100/80 p-1 sm:w-auto sm:gap-1',
-          )}>
-            {availableChains.map((c) => {
-              const m          = CHAIN_META[c]
-              const isActive   = chain === c
-              const unavailable = c === 'solana'
-                ? !isValidSolanaAddress(resolvedSolana)
-                : !isAddress(evmRecipientForChain(c))
-              return (
-                <div key={c} className="relative">
-                  <button
-                    onClick={() => !unavailable && !netLocked && handleChainSwitch(c)}
-                    disabled={(unavailable && !isActive) || (netLocked && !isActive)}
-                    className={cn(
-                      'flex shrink-0 items-center gap-1 sm:gap-1.5 rounded-lg px-1.5 py-1 sm:px-3 sm:py-1.5 text-[10px] sm:text-xs font-semibold transition-all duration-150',
-                      isActive                  ? m.toggleActive
-                      : unavailable || netLocked ? 'cursor-not-allowed text-gray-300'
-                      : 'cursor-pointer text-gray-500 hover:text-gray-800',
-                    )}
-                  >
-                    <span className={cn('h-1.5 w-1.5 rounded-full transition-colors',
-                      isActive ? 'bg-white/80' : unavailable ? 'bg-gray-200' : m.dotColor,
-                    )} />
-                    {m.label}
-                    {c === 'arc' && <span className="text-[8px] font-bold uppercase opacity-70">Test</span>}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        </div>}
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
         <div className={cn('mt-3 border-b border-gray-100 bg-gradient-to-br p-5 text-center dark:border-white/10', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
@@ -5046,7 +5011,7 @@ export default function PaymentPage() {
                       : privyCircleLinkLoading
                         ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSmartAccount && isNgPosPaycrestOfframp && !paycrestOrder
-                          ? <><img src="/hash-logo-transparent.png" alt="" className="h-5 w-5 object-contain invert dark:invert-0" /> <span>Prepare naira payout</span></>
+                          ? <span>Prepare Naira payout</span>
                           : circleSmartAccount && circleEvmWalletChecking
                             ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
                             : circleSmartAccount && circleEvmWalletUnlocked && circleWalletNeedsFunds

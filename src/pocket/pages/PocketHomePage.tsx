@@ -141,11 +141,6 @@ export default function PocketHomePage() {
     <PocketRouteShell
       active="home"
       onSelect={selectNav}
-      onRefresh={async () => {
-        await Promise.all([wallets.refreshBalances(), fx.refresh()])
-        if (tab === 'activity') await activity.refresh()
-      }}
-      refreshing={wallets.balanceBusy || fx.busy || (tab === 'activity' && activity.busy)}
     >
       <PocketHomeOverview
         globalBalance={wallets.total}

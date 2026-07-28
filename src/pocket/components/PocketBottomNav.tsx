@@ -5,6 +5,7 @@ export type PocketNavTab = 'home' | 'move' | 'bills' | 'activity'
 
 type PocketBottomNavProps = {
   active: PocketNavTab
+  disabled?: boolean
   keyboardOpen?: boolean
   onSelect: (tab: PocketNavTab) => void
 }
@@ -16,7 +17,7 @@ const items = [
   { key: 'activity', label: 'Activity', icon: TrendingUp },
 ] as const
 
-export default function PocketBottomNav({ active, keyboardOpen = false, onSelect }: PocketBottomNavProps) {
+export default function PocketBottomNav({ active, disabled = false, keyboardOpen = false, onSelect }: PocketBottomNavProps) {
   return (
     <nav
       aria-label="Circle Pocket navigation"
@@ -32,10 +33,12 @@ export default function PocketBottomNav({ active, keyboardOpen = false, onSelect
             <button
               key={key}
               type="button"
+              disabled={disabled}
+              aria-disabled={disabled || undefined}
               aria-current={selected ? 'page' : undefined}
               onClick={() => onSelect(key)}
               className={cn(
-                'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 active:scale-[0.97]',
+                'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 enabled:active:scale-[0.97] disabled:cursor-default',
                 selected
                   ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950'
                   : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-white/40 dark:hover:bg-white/[0.05] dark:hover:text-white/70',

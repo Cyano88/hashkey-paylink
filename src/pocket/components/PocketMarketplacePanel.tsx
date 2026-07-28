@@ -20,7 +20,6 @@ type Props = {
   gatewayBalance?: string
   getAccessToken(): Promise<string | null>
   onUseBase(): void
-  refreshToken?: number
 }
 
 function categoryLabel(value: string) {
@@ -43,7 +42,7 @@ function resultPreview(value: unknown) {
   }
 }
 
-export default function PocketMarketplacePanel({ connected, network, gatewayBalance, getAccessToken, onUseBase, refreshToken = 0 }: Props) {
+export default function PocketMarketplacePanel({ connected, network, gatewayBalance, getAccessToken, onUseBase }: Props) {
   const [query, setQuery] = useState('')
   const [snapshot, setSnapshot] = useState<PocketMarketplaceSnapshot | null>(null)
   const [loading, setLoading] = useState(false)
@@ -53,7 +52,6 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
   const [buying, setBuying] = useState(false)
   const [purchase, setPurchase] = useState<PocketMarketplacePurchase | null>(null)
   const autoLoadAttempted = useRef(false)
-  const lastRefreshToken = useRef(refreshToken)
   const purchaseKey = useRef('')
 
   const load = useCallback(async (nextQuery = query) => {
@@ -65,7 +63,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
       if (!token) throw new Error('Sign in again to open Marketplace.')
       const next = await readPocketMarketplace({ accessToken: token, query: nextQuery })
       if (!next.catalogAvailable) {
-        setLoadError(next.catalogMessage || 'Couldn\'t refresh Marketplace. Pull down to try again.')
+        setLoadError(next.catalogMessage || 'Couldn\'t load Marketplace. Search again to retry.')
         setSnapshot(current => ({ ...next, services: current?.services ?? [] }))
       } else {
         setSnapshot(next)
@@ -93,12 +91,6 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
     autoLoadAttempted.current = true
     void load('')
   }, [connected, load, network])
-
-  useEffect(() => {
-    if (lastRefreshToken.current === refreshToken) return
-    lastRefreshToken.current = refreshToken
-    if (connected && network === 'base') void load(query)
-  }, [connected, load, network, query, refreshToken])
 
   const canPay = useMemo(() => (
     selected !== null
@@ -214,7 +206,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
                 <span className="shrink-0 text-right"><span className="block text-xs font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(item.amount)}</span><span className="block text-[9px] font-bold text-gray-400">USDC</span></span>
               </button>
             )) : snapshot && !snapshot.catalogAvailable ? (
-              <p className="py-8 text-center text-xs text-gray-400">Catalog temporarily unavailable. Pull down to retry.</p>
+              <p className="py-8 text-center text-xs text-gray-400">Catalog temporarily unavailable. Search again to retry.</p>
             ) : (
               <p className="py-8 text-center text-xs text-gray-400">No one-tap Gateway services matched this search.</p>
             )}

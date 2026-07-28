@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Cpu, ExternalLink, Landmark, Mail, RefreshCw, Store } from 'lucide-react'
+import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Cpu, ExternalLink, Landmark, Loader2, Mail, Store } from 'lucide-react'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
@@ -19,7 +19,6 @@ type PocketActivityPanelProps = {
   authenticated: boolean
   busy: boolean
   error: string
-  onRefresh: () => void
   onRefund: (intentId: string) => Promise<string>
 }
 
@@ -62,7 +61,7 @@ function supportedRows(rows: PocketActivityRow[]) {
   })
 }
 
-export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefresh, onRefund }: PocketActivityPanelProps) {
+export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefund }: PocketActivityPanelProps) {
   const [expandedActivityId, setExpandedActivityId] = useState('')
   const [refundBusy, setRefundBusy] = useState('')
   const [refundMessage, setRefundMessage] = useState<Record<string, string>>({})
@@ -86,19 +85,10 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
 
       {authenticated && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between gap-3 px-1">
+          <div className="px-1">
             <p className="text-[11px] font-bold text-gray-400">
               {busy ? 'Loading activity...' : `${visibleRows.length} record${visibleRows.length === 1 ? '' : 's'}`}
             </p>
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={busy}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition hover:text-gray-900 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400 dark:hover:text-white"
-              aria-label="Refresh Circle Pocket activity"
-            >
-              <RefreshCw className={cn('h-3.5 w-3.5', busy && 'animate-spin')} />
-            </button>
           </div>
 
           {error ? (
@@ -198,7 +188,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                                   }}
                                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-gray-950 px-3 text-[10px] font-bold text-white transition hover:bg-black active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
                                 >
-                                  {claimingRefund && <RefreshCw className="h-3 w-3 animate-spin" />}
+                                  {claimingRefund && <Loader2 className="h-3 w-3 animate-spin" />}
                                   {claimingRefund ? 'Refunding' : row.refundAction === 'claim' ? 'Claim refund' : 'Check refund'}
                                 </button>
                               </div>

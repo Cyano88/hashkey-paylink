@@ -59,7 +59,7 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
 
   const baseBalance = wallets.rows.find(row => row.key === 'base')?.balance ?? 0
   return (
-    <PocketRouteShell active="bills" onSelect={selectNav} onRefresh={async () => { await Promise.all([wallets.refreshBalances(), bills.refresh()]) }} refreshing={wallets.balanceBusy}>
+    <PocketRouteShell active="bills" onSelect={selectNav}>
       <PocketBillsPanel
         view={view}
         authenticated={authenticated}
