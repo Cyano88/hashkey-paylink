@@ -5,6 +5,11 @@
   "description": "PaymentRouter + PaymentRouterFactory — deploy once per chain, route forever.",
   "scripts": {
     "compile":        "hardhat compile",
+    "test":           "hardhat test",
+    "test:agreements": "hardhat test test/ArcAgreementEscrow.test.ts test/ArcAgreementInvariant.test.ts test/ArcAgreementDeploymentPlan.test.ts test/ArcAgreementDeploymentVerifier.test.ts test/ArcAgreementReviewBundle.test.ts",
+    "plan:arc-agreements": "hardhat run scripts/arc-agreement-deployment-plan.ts --network hardhat",
+    "bundle:arc-agreements-review": "hardhat run --no-compile scripts/arc-agreement-review-bundle.ts --network hardhat",
+    "verify:arc-agreements": "hardhat run --no-compile scripts/arc-agreement-deployment-verify.ts --network arc",
     "deploy:base":    "hardhat run scripts/deploy.ts --network base",
     "deploy:arc":     "hardhat run scripts/deploy.ts --network arc",
     "verify:base":    "hardhat verify --network base"

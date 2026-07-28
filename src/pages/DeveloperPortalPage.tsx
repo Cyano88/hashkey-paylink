@@ -7,7 +7,7 @@ import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
 
 type Network = 'base' | 'arbitrum' | 'arc'
-type Capability = 'hosted_checkout' | 'polymarket_funding'
+type Capability = 'hosted_checkout' | 'polymarket_funding' | 'arc_agreements'
 type CheckoutMode = 'human' | 'agentic'
 type CreateProjectForm = { name: string; website: string; useCase: string; checkoutMode: CheckoutMode | ''; capabilities: Capability[] }
 type Project = {
@@ -277,7 +277,7 @@ function CreateProjectCard({ form, setForm, busy, error, onCreate, onCancel, emb
     <CheckoutModePicker value={form.checkoutMode} onChange={checkoutMode => setForm(current => ({
       ...current,
       checkoutMode,
-      capabilities: checkoutMode === 'agentic' ? ['hosted_checkout'] : current.capabilities,
+      capabilities: checkoutMode === 'agentic' ? current.capabilities.filter(capability => capability !== 'polymarket_funding') : current.capabilities,
     }))} />
     <div className="mt-6 space-y-4">
       <Field label="Platform name"><input className={fieldClass()} value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} placeholder={form.checkoutMode === 'agentic' ? 'Your platform agent' : 'Your platform'} /></Field>
@@ -315,8 +315,9 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
   const allOptions: Array<{ key: Capability; title: string; copy: string }> = [
     { key: 'hosted_checkout', title: checkoutMode === 'agentic' ? 'Agentic x402 checkout' : 'Hosted checkout', copy: checkoutMode === 'agentic' ? 'Accept fixed-price service payments from compatible agent wallets.' : 'Accept payments through the hosted human payer experience.' },
     { key: 'polymarket_funding', title: 'Polymarket funding', copy: 'Create verified bridge-backed checkouts for a customer Polymarket wallet.' },
+    { key: 'arc_agreements', title: 'Arc Agreements · Preview', copy: 'Create testnet fixed, progressive, or milestone USDC agreement drafts on Arc. Funding stays unavailable until the contract layer is reviewed.' },
   ]
-  const options = allOptions.filter(option => checkoutMode === 'human' || option.key === 'hosted_checkout')
+  const options = allOptions.filter(option => checkoutMode === 'human' || option.key !== 'polymarket_funding')
   function toggle(key: Capability) {
     const next = value.includes(key) ? value.filter(item => item !== key) : [...value, key]
     if (next.length) onChange(next)
@@ -461,17 +462,22 @@ function WebhookPanel({ draft, setDraft, newSecret, busy, onSave, onRotate }: { 
 
 function QuickstartPanel({ project }: { project: Project }) {
   const paymentPath = project.checkoutMode
+  const hasCheckout = project.capabilities.includes('hosted_checkout')
+  const hasAgreements = project.capabilities.includes('arc_agreements')
   const modeFields = `    checkoutMode: "${paymentPath}",${paymentPath === 'agentic' ? '\n    agenticType: "agent_treasury",\n    network: process.env.HASH_PAYLINK_NETWORK,' : ''}`
   const createCode = `const checkout = await fetch("https://app.hashpaylink.com/api/v2/checkouts", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASH_PAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    kind: "service",\n${modeFields}\n    title: "Premium plan",\n    amount: "10",\n    returnUrl: "${project.allowedOrigins[0] ?? project.website}/complete"\n  })\n}).then(res => res.json());`
-  const code = paymentPath === 'human'
+  const checkoutCode = paymentPath === 'human'
     ? `${createCode}\n\n// Send a person to Hash PayLink's hosted checkout.\nwindow.location.assign(new URL(checkout.checkoutUrl, "https://app.hashpaylink.com"));`
     : `${createCode}\n\n// Send an agent-wallet user to the hosted Circle wallet checkout.\nconst payerUrl = new URL(checkout.checkoutUrl, "https://app.hashpaylink.com").toString();\n\n// Autonomous agents can use the protocol endpoint directly.\n// The first GET returns HTTP 402 + PAYMENT-REQUIRED.\nconst agentPaymentUrl = new URL(\n  checkout.agentPaymentUrl,\n  "https://app.hashpaylink.com"\n).toString();`
-  return <div><PanelHeader eyebrow="Integration" title="Create your first checkout" copy={`This project and its keys are restricted to ${paymentPath === 'agentic' ? 'agentic x402' : 'human checkout'}.`} />
-    <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Server only</span><CopyButton value={code} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-[11px] leading-5 text-white/70">{code}</pre></div>
-    <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+  const agreementCode = `const agreement = await fetch("https://app.hashpaylink.com/api/v2/agreements", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASH_PAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    template: "fixed_unlock",\n    externalId: order.id,\n    resourceId: "content:premium-report",\n    title: "Premium report access",\n    description: "Unlock one premium research report.",\n    amount: "10",\n    recipient: process.env.HASH_PAYLINK_ARC_RECIPIENT,\n    durationSeconds: 86400,\n    cancellationWindowSeconds: 900\n  })\n}).then(res => res.json());\n\n// Preview only: agreement.status is "draft" and no funds move.`
+  return <div><PanelHeader eyebrow="Integration" title={hasCheckout ? 'Create your first checkout' : 'Create your first agreement draft'} copy={`This project and its keys are restricted to the ${paymentPath === 'agentic' ? 'agentic' : 'human'} path.`} />
+    {hasCheckout && <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Checkout · server only</span><CopyButton value={checkoutCode} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-[11px] leading-5 text-white/70">{checkoutCode}</pre></div>}
+    {hasAgreements && <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Arc Agreements · testnet preview</span><CopyButton value={agreementCode} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-[11px] leading-5 text-white/70">{agreementCode}</pre></div>}
+    {hasCheckout && <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
       <p className="flex items-center gap-2 text-xs font-semibold text-gray-900 dark:text-white">{paymentPath === 'agentic' ? <Bot className="h-4 w-4 text-blue-600" /> : <UserRound className="h-4 w-4 text-blue-600" />}{paymentPath === 'agentic' ? 'Agentic x402' : 'Human checkout'}</p>
       <p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{paymentPath === 'agentic' ? <>Create with <code>checkoutMode: "agentic"</code> and one enabled <code>network</code>. Open <code>checkoutUrl</code> for the authenticated Circle Agent Wallet payer flow, or give <code>agentPaymentUrl</code> to an autonomous x402 client. No human-wallet fallback is issued.</> : <>Create with <code>checkoutMode: "human"</code>, then open <code>checkoutUrl</code>. The payer chooses from this project's enabled human payment routes.</>}</p>
-    </div>
+    </div>}
+    {hasAgreements && <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-400/20 dark:bg-blue-400/10"><p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Agreement preview boundary</p><p className="mt-2 text-[11px] leading-5 text-blue-800/80 dark:text-blue-100/70">Test keys can create durable Arc agreement drafts. Contract activation, funding, releases, access grants, and receipts are not available yet.</p></div>}
     <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="text-xs font-semibold text-gray-900 dark:text-white">Environment</p><code className="mt-2 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_test_... # Arc Testnet</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=arc</code><code className="mt-3 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_live_... # Base or Arbitrum</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=base</code></div>
     <Link to="/docs/api" className="mt-5 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-300">Open API reference <ChevronRight className="h-3.5 w-3.5" /></Link>
   </div>

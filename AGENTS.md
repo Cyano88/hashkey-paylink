@@ -25,3 +25,18 @@ This boundary does not make every wallet address in the repository legacy.
 Merchant treasury/recipient configuration, Pocket send/withdraw money
 movement, Polymarket bridge destinations, and agent-wallet/App Pay funding are
 separate current concepts and must be evaluated in their own flows.
+
+## Hash PayStream migration boundary
+
+The embedded app under `modules/streampay` is a compatibility product while the
+Arc Agreements API and a new standalone Hash PayStream client are built.
+
+- Preserve existing content, unlock, checkpoint, receipt, and refund identifiers.
+- Do not add new infrastructure features to the embedded app.
+- Do not use `StreamVault` / `StreamVaultFactory`, precomputed ghost addresses,
+  or direct USDC deposits as the funding design for Arc Agreements.
+- The first Arc Agreements API is a testnet draft/state boundary only. It must
+  not claim that funds are escrowed, activated, released, or protected by a
+  contract until a separately reviewed contract layer exists.
+- Do not remove the embedded app until a standalone client has public-API
+  parity, migration checks pass, and rollback remains possible.

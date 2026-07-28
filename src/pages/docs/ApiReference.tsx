@@ -67,6 +67,36 @@ export default function ApiReference() {
         </SubSection>
       </Section>
 
+      <Section title="Arc Agreements API · Testnet preview">
+        <p>
+          Enable <code>Arc Agreements</code> on a human or agentic project to create durable agreement drafts on Arc Testnet. The agreement inherits the project's immutable payment path. This preview defines the state and validation boundary only: it does not deploy a contract, move funds, activate an agreement, release value, issue access, or create a receipt.
+        </p>
+        <SubSection title="POST /api/v2/agreements">
+          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
+  -H "X-API-Key: YOUR_TEST_SERVER_KEY" \
+  -H "Idempotency-Key: agreement:your-unique-order-id" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "template": "fixed_unlock",
+    "externalId": "order-1042",
+    "resourceId": "content:premium-report",
+    "title": "Premium report access",
+    "description": "Unlock one premium research report.",
+    "amount": "10",
+    "recipient": "0xARC_RECIPIENT",
+    "durationSeconds": 86400,
+    "cancellationWindowSeconds": 900
+  }'`}</CodeBlock>
+          <p>Supported draft templates are <code>fixed_unlock</code>, <code>progressive_release</code>, and <code>milestone</code>. Progressive checkpoints must increase and end at 100 percent. Milestone percentages must total 100. Timing defaults to 24 hours with a 15-minute payer cancellation window. The response includes a domain-separated <code>termsHash</code>, project-scoped <code>clientReference</code>, and normalized onchain schedule. A successful response remains <code>status: "draft"</code> with <code>activationStatus: "contract_unavailable"</code>.</p>
+        </SubSection>
+        <SubSection title="GET /api/v2/agreements?id=agr_...">
+          <p>Returns a draft only when it belongs to the project selected by the test API key. Live keys, projects without the capability, non-USDC settlement, and projects without an Arc Testnet route are rejected.</p>
+        </SubSection>
+        <SubSection title="Agreement webhooks">
+          <p>The internal foundation recognizes <code>agreement.activated</code>, <code>agreement.step_released</code>, <code>agreement.completed</code>, <code>agreement.cancelled</code>, and <code>agreement.refunded</code>. Each event must come from an exactly reconciled snapshot read at a confirmed Arc block and uses the existing stable event ID and HMAC delivery contract. The testnet draft preview does not emit these events until contracts are deployed, verified, and activation is enabled.</p>
+        </SubSection>
+      </Section>
+
       <Section title="Polymarket Funding API">
         <p>
           Enable <code>Polymarket funding</code> on a human-checkout USDC project. Your server supplies the customer's Polymarket wallet, amount and eligible project networks. Hash PayLink independently requests and verifies the provider deposit route; integrations cannot supply or override that destination.

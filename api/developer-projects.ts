@@ -14,7 +14,7 @@ type DeveloperNetwork = typeof NETWORKS[number]
 type SettlementMode = 'usdc' | 'ngn'
 type DeveloperEnvironment = 'test' | 'live'
 export type DeveloperCheckoutMode = 'human' | 'agentic'
-export type DeveloperCapability = 'hosted_checkout' | 'polymarket_funding'
+export type DeveloperCapability = 'hosted_checkout' | 'polymarket_funding' | 'arc_agreements'
 
 type DeveloperKey = {
   id: string
@@ -79,6 +79,7 @@ export type DeveloperCheckoutPolicy = {
   defaultNetwork: DeveloperNetwork
   paymentOptions: Array<{ network: DeveloperNetwork; recipient: string }>
   settlementMode: SettlementMode
+  environment: DeveloperEnvironment
   checkoutMode: DeveloperCheckoutMode
   capabilities: DeveloperCapability[]
   nairaSettlement?: {
@@ -360,9 +361,13 @@ function projectCheckoutMode(project: Pick<DeveloperProject, 'checkoutMode'>): D
 
 function requestedCapabilities(value: unknown, checkoutMode: DeveloperCheckoutMode): DeveloperCapability[] {
   if (!Array.isArray(value)) return ['hosted_checkout']
-  const allowed = new Set<DeveloperCapability>(checkoutMode === 'agentic' ? ['hosted_checkout'] : ['hosted_checkout', 'polymarket_funding'])
+  const allowed = new Set<DeveloperCapability>(
+    checkoutMode === 'agentic'
+      ? ['hosted_checkout', 'arc_agreements']
+      : ['hosted_checkout', 'polymarket_funding', 'arc_agreements'],
+  )
   const capabilities = value.map(item => clean(item, 40).toLowerCase()).filter((item): item is DeveloperCapability => allowed.has(item as DeveloperCapability))
-  return Array.from(new Set(capabilities)).slice(0, 2)
+  return Array.from(new Set(capabilities)).slice(0, 3)
 }
 
 function statusCode(error: unknown) {
@@ -436,7 +441,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           })
         }
         const projects = Object.values(store?.projects ?? {}).filter(project => project.ownerId === identity.userId)
-        return res.json({ ok: true, projects: projects.map(projectPublic) })
+        return res.json({ ok: true, projects: projects.map(project => projectPublic(project)) })
       }
 
       if (req.method !== 'POST' && req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
@@ -555,7 +560,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (requestedBrandImageUrl && !brandImageUrl) return res.status(400).json({ ok: false, error: 'Checkout brand marks must be PNG, WebP, or JPG files hosted on the project website origin.' })
         if (!capabilities.length) return res.status(400).json({ ok: false, error: 'Choose at least one API product.' })
         if (currentCheckoutMode === 'agentic' && settlementMode !== 'usdc') return res.status(400).json({ ok: false, error: 'Agentic x402 projects support USDC settlement only.' })
-        if (currentCheckoutMode === 'agentic' && capabilities.some(capability => capability !== 'hosted_checkout')) return res.status(400).json({ ok: false, error: 'Agentic x402 projects cannot enable human funding products.' })
+        if (currentCheckoutMode === 'agentic' && capabilities.includes('polymarket_funding')) return res.status(400).json({ ok: false, error: 'Agentic x402 projects cannot enable human funding products.' })
         if (settlementMode !== 'usdc' && settlementMode !== 'ngn') return res.status(400).json({ ok: false, error: 'Choose USDC or Naira settlement.' })
         if (!networks.length || !networks.includes(defaultNetwork)) return res.status(400).json({ ok: false, error: 'Choose a valid default payment network.' })
         if (settlementMode === 'usdc' && networks.some(network => !recipients[network])) return res.status(400).json({ ok: false, error: 'Add a valid receiving address for every selected network.' })
@@ -699,6 +704,7 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
         defaultNetwork: 'base',
         paymentOptions,
         settlementMode: 'ngn',
+        environment: keyEnvironment,
         checkoutMode: projectCheckoutMode(project),
         capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
         nairaSettlement: {
@@ -712,7 +718,7 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
       }
     }
     const defaultNetwork = paymentOptions.some(option => option.network === project.defaultNetwork) ? project.defaultNetwork : paymentOptions[0].network
-    return { partnerId: project.id, merchantName: project.name, brandImageUrl: project.brandImageUrl, allowedOrigins: project.allowedOrigins, defaultNetwork, paymentOptions, settlementMode: 'usdc', checkoutMode: projectCheckoutMode(project), capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'], projectManaged: true }
+    return { partnerId: project.id, merchantName: project.name, brandImageUrl: project.brandImageUrl, allowedOrigins: project.allowedOrigins, defaultNetwork, paymentOptions, settlementMode: 'usdc', environment: keyEnvironment, checkoutMode: projectCheckoutMode(project), capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'], projectManaged: true }
   }
   return null
 }

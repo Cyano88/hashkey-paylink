@@ -33,7 +33,7 @@ type Project = {
   website: string
   useCase: string
   checkoutMode: 'human' | 'agentic'
-  capabilities: Array<'hosted_checkout' | 'polymarket_funding'>
+  capabilities: Array<'hosted_checkout' | 'polymarket_funding' | 'arc_agreements'>
   settlementMode: 'usdc' | 'ngn'
   settlementStatus: 'ready' | 'review_required'
   operationalStatus: 'active' | 'suspended'
