@@ -42,6 +42,7 @@ const CANCELLATION_WINDOW_SECONDS = 3_600
 const CIRCLE_BASE = 'https://api.circle.com'
 const SUCCESS_STATES = new Set(['CONFIRMED', 'COMPLETE', 'CLEARED'])
 const FAILURE_STATES = new Set(['CANCELLED', 'DENIED', 'FAILED', 'STUCK'])
+const TX_HASH = /^0x[0-9a-f]{64}$/i
 const IDS = Object.freeze({
   walletSet: '27f76937-3c2d-48ad-b6a9-38ff5bd54b07',
   wallets: 'fd074491-726b-4d23-bcec-2e6ac601b5dd',
@@ -54,6 +55,7 @@ const IDS = Object.freeze({
 
 const erc20Abi = parseAbi([
   'function approve(address spender,uint256 amount) returns (bool)',
+  'function allowance(address owner,address spender) view returns (uint256)',
   'function balanceOf(address owner) view returns (uint256)',
 ])
 const factoryAbi = parseAbi([
@@ -146,9 +148,12 @@ function createCircleClient(config) {
     return request(`/v1/w3s/transactions/${encodeURIComponent(id)}?txType=OUTBOUND`, { method: 'GET' })
   }
 
-  async function waitForTransaction(id, label, timeoutMs = 600_000) {
+  async function waitForTransaction(id, label, options = {}) {
+    const timeoutMs = options.timeoutMs ?? 600_000
+    const requireHash = options.requireHash ?? false
     const deadline = Date.now() + timeoutMs
     let previousState = ''
+    let reportedMissingHash = false
     while (Date.now() < deadline) {
       const body = await transaction(id)
       const tx = body?.data?.transaction
@@ -157,7 +162,13 @@ function createCircleClient(config) {
         progress(label, `Circle state ${state || 'UNKNOWN'}`)
         previousState = state
       }
-      if (SUCCESS_STATES.has(state)) return tx
+      if (SUCCESS_STATES.has(state)) {
+        if (!requireHash || TX_HASH.test(String(tx?.txHash ?? ''))) return tx
+        if (!reportedMissingHash) {
+          progress(label, 'Circle confirmed; waiting for transaction hash')
+          reportedMissingHash = true
+        }
+      }
       if (FAILURE_STATES.has(state)) {
         throw new Error(`${label} failed in Circle state ${state}: ${String(tx?.errorReason ?? tx?.errorDetails ?? '')}`)
       }
@@ -169,15 +180,22 @@ function createCircleClient(config) {
   return { request, mutate, transaction, waitForTransaction }
 }
 
-async function waitForConfirmedRead(publicClient, txHash, confirmations = 5) {
-  progress('Waiting for Arc confirmation', `${confirmations} blocks`)
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, confirmations: 1, timeout: 180_000 })
-  if (receipt.status !== 'success') throw new Error(`Transaction ${txHash} reverted.`)
-  while (await publicClient.getBlockNumber() < receipt.blockNumber + BigInt(confirmations)) {
+async function waitForConfirmedState(publicClient, label, predicate, confirmations = 5, timeoutMs = 180_000) {
+  progress(`Waiting for ${label}`, 'authoritative Arc state')
+  const deadline = Date.now() + timeoutMs
+  let observedAt
+  while (Date.now() < deadline) {
+    if (await predicate()) {
+      observedAt = await publicClient.getBlockNumber()
+      break
+    }
     await new Promise(resolve => setTimeout(resolve, 1_000))
   }
-  progress('Arc confirmation reached', `block ${receipt.blockNumber}`)
-  return receipt
+  if (observedAt === undefined) throw new Error(`${label} was not observed on Arc before timeout.`)
+  while (await publicClient.getBlockNumber() < observedAt + BigInt(confirmations)) {
+    await new Promise(resolve => setTimeout(resolve, 1_000))
+  }
+  progress(`${label} confirmed`, `${confirmations} additional blocks`)
 }
 
 async function circleContractExecution(circle, input) {
@@ -300,7 +318,15 @@ async function main() {
       walletAddress: EXPECTED_OPERATOR,
     })
     const fundingTx = await circle.waitForTransaction(fundingResponse?.data?.id, 'payer funding')
-    await waitForConfirmedRead(publicClient, fundingTx.txHash)
+    await waitForConfirmedState(publicClient, 'payer funding', async () => {
+      const balance = await publicClient.readContract({
+        address: USDC,
+        abi: erc20Abi,
+        functionName: 'balanceOf',
+        args: [payerAddress],
+      })
+      return balance >= AMOUNT_UNITS
+    })
 
     progress('Approving reviewed factory', '0.2 test USDC ceiling')
     const approvalId = await circleContractExecution(circle, {
@@ -315,7 +341,15 @@ async function main() {
       }),
     })
     const approvalTx = await circle.waitForTransaction(approvalId, 'payer approval')
-    await waitForConfirmedRead(publicClient, approvalTx.txHash)
+    await waitForConfirmedState(publicClient, 'factory approval', async () => {
+      const allowance = await publicClient.readContract({
+        address: USDC,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [payerAddress, FACTORY],
+      })
+      return allowance >= AMOUNT_UNITS
+    })
 
     progress('Creating and atomically funding agreement', '0.2 test USDC')
     const activationTimestamp = Math.floor(Date.now() / 1000)
@@ -370,12 +404,14 @@ async function main() {
       }),
     })
     const createTx = await circle.waitForTransaction(createId, 'agreement creation')
-    await waitForConfirmedRead(publicClient, createTx.txHash)
-    escrow = await publicClient.readContract({
-      address: FACTORY,
-      abi: factoryAbi,
-      functionName: 'agreementEscrow',
-      args: [onchainAgreementId],
+    await waitForConfirmedState(publicClient, 'agreement creation', async () => {
+      escrow = await publicClient.readContract({
+        address: FACTORY,
+        abi: factoryAbi,
+        functionName: 'agreementEscrow',
+        args: [onchainAgreementId],
+      })
+      return escrow !== '0x0000000000000000000000000000000000000000'
     })
     progress('Agreement escrow created')
   } else {
@@ -429,14 +465,17 @@ async function main() {
       evidenceHash: '0x2cc44de1ec9df898b7f38ea3f19bc4a38571e126f06d4de761f5d90f7e1fc890',
     })
     const releaseId = await circleContractExecution(circle, releaseCall)
-    const releaseTx = await circle.waitForTransaction(releaseId, 'operator release')
+    const releaseTx = await circle.waitForTransaction(releaseId, 'operator release', { requireHash: true })
     await fetchAndVerifyArcAgreementOperatorTransaction({
       apiKey: config.apiKey,
       transactionId: releaseId,
       requestId: randomUUID(),
       preparedCall: releaseCall,
     })
-    await waitForConfirmedRead(publicClient, releaseTx.txHash)
+    await waitForConfirmedState(publicClient, 'first release', async () => {
+      const snapshot = await readConfirmedArcAgreementSnapshot(publicClient, escrow, 1)
+      return snapshot.snapshot.status === 1 && snapshot.snapshot.nextStep === 1
+    })
     releaseTxHash = releaseTx.txHash
     releasedConfirmed = await readConfirmedArcAgreementSnapshot(publicClient, escrow, 5)
   }
@@ -462,14 +501,17 @@ async function main() {
       reasonHash: '0xdbf0d5c4516ab44ae411573f6e4d7c7404706b6fe8ea9b963a4a042c130e2f91',
     })
     const cancelId = await circleContractExecution(circle, cancelCall)
-    const cancelTx = await circle.waitForTransaction(cancelId, 'operator cancellation')
+    const cancelTx = await circle.waitForTransaction(cancelId, 'operator cancellation', { requireHash: true })
     await fetchAndVerifyArcAgreementOperatorTransaction({
       apiKey: config.apiKey,
       transactionId: cancelId,
       requestId: randomUUID(),
       preparedCall: cancelCall,
     })
-    await waitForConfirmedRead(publicClient, cancelTx.txHash)
+    await waitForConfirmedState(publicClient, 'operator cancellation', async () => {
+      const snapshot = await readConfirmedArcAgreementSnapshot(publicClient, escrow, 1)
+      return snapshot.snapshot.status === 3
+    })
     cancelTxHash = cancelTx.txHash
   }
 
