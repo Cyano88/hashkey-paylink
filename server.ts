@@ -117,6 +117,7 @@ import publicConfigHandler from './api/public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import arcAgreementsHandler from './api/arc-agreements.js'
+import { drainArcAgreementWebhookOutbox } from './api/arc-agreement-webhooks.js'
 import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
 import agenticCheckoutsHandler from './api/agentic-checkouts.js'
 import agenticCheckoutWalletPayHandler from './api/agentic-checkout-wallet-pay.js'
@@ -392,4 +393,14 @@ const hostedCheckoutOutboxTimer = setInterval(() => {
 hostedCheckoutOutboxTimer.unref()
 void drainHostedCheckoutWebhookOutbox().catch(error => {
   console.error('[developer-webhook] startup outbox drain failed:', error instanceof Error ? error.message : String(error))
+})
+
+const arcAgreementOutboxTimer = setInterval(() => {
+  void drainArcAgreementWebhookOutbox().catch(error => {
+    console.error('[arc-agreement-webhook] scheduled outbox drain failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 10_000)
+arcAgreementOutboxTimer.unref()
+void drainArcAgreementWebhookOutbox().catch(error => {
+  console.error('[arc-agreement-webhook] startup outbox drain failed:', error instanceof Error ? error.message : String(error))
 })

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { arcAgreementClientReference, arcAgreementTerms } from '../api/arc-agreement-terms.ts'
 import { prepareArcAgreementDeployment } from '../api/arc-agreement-reconciliation.ts'
 import {
@@ -239,5 +240,11 @@ assert.throws(() => buildArcAgreementWebhookEvent({
   observedBlockNumber: 95n,
   createdAt: clock.toISOString(),
 }), /inactiveState/)
+
+const serverSource = readFileSync(new URL('../server.ts', import.meta.url), 'utf8')
+assert.match(serverSource, /import \{ drainArcAgreementWebhookOutbox \} from '\.\/api\/arc-agreement-webhooks\.js'/)
+assert.match(serverSource, /setInterval\(\(\) => \{\s*void drainArcAgreementWebhookOutbox\(\)/)
+assert.match(serverSource, /arcAgreementOutboxTimer\.unref\(\)/)
+assert.match(serverSource, /void drainArcAgreementWebhookOutbox\(\)\.catch/)
 
 console.log('Arc Agreement confirmed-chain webhook smoke checks passed.')
