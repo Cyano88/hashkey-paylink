@@ -146,6 +146,12 @@ export function prepareArcAgreementDeployment(input: {
   assertArcAgreementNetwork({ chainId: ARC_AGREEMENT_NETWORK.chainId, usdc })
   const recipient = address(input.draft.chainTerms.recipient, 'recipient')
   if (payer === recipient) throw new Error('payer and recipient must be different addresses.')
+  if (operator === payer || operator === recipient) {
+    throw new Error('operator must be different from payer and recipient.')
+  }
+  if (usdc === payer || usdc === recipient || usdc === operator) {
+    throw new Error('USDC must be different from payer, recipient, and operator.')
+  }
   const clientReference = bytes32(input.draft.clientReference, 'clientReference')
   const termsHash = bytes32(input.draft.termsHash, 'termsHash')
   const { templateCode, durationSeconds, cancellationWindowSeconds, cumulativeReleaseBps } = input.draft.chainTerms

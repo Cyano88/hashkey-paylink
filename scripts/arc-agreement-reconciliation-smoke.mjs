@@ -168,6 +168,46 @@ assert.throws(() => prepareArcAgreementDeployment({
 }), /different addresses/)
 
 assert.throws(() => prepareArcAgreementDeployment({
+  draft: { clientReference, termsHash: terms.termsHash, chainTerms: terms },
+  payer: operator,
+  factory,
+  operator,
+  usdc,
+  activationTimestamp: 1_785_240_000,
+}), /operator must be different/)
+
+assert.throws(() => prepareArcAgreementDeployment({
+  draft: {
+    clientReference,
+    termsHash: terms.termsHash,
+    chainTerms: { ...terms, recipient: operator },
+  },
+  payer,
+  factory,
+  operator,
+  usdc,
+  activationTimestamp: 1_785_240_000,
+}), /operator must be different/)
+
+assert.throws(() => prepareArcAgreementDeployment({
+  draft: { clientReference, termsHash: terms.termsHash, chainTerms: terms },
+  payer: usdc,
+  factory,
+  operator,
+  usdc,
+  activationTimestamp: 1_785_240_000,
+}), /USDC must be different/)
+
+assert.throws(() => prepareArcAgreementDeployment({
+  draft: { clientReference, termsHash: terms.termsHash, chainTerms: terms },
+  payer,
+  factory,
+  operator: usdc,
+  usdc,
+  activationTimestamp: 1_785_240_000,
+}), /USDC must be different/)
+
+assert.throws(() => prepareArcAgreementDeployment({
   draft: {
     clientReference,
     termsHash: terms.termsHash,

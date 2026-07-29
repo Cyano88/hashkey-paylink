@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { arcAgreementClientReference, arcAgreementTerms } from '../api/arc-agreement-terms.ts'
 import { prepareArcAgreementDeployment } from '../api/arc-agreement-reconciliation.ts'
 import { prepareArcAgreementReleaseCall } from '../api/arc-agreement-operator.ts'
-import { verifyArcAgreementOperatorWallet } from '../api/arc-agreement-operator-wallet.ts'
+import { fetchAndVerifyArcAgreementOperatorWallet } from '../api/arc-agreement-operator-wallet.ts'
+import { readConfirmedArcAgreementSnapshot } from '../api/arc-agreement-confirmed-snapshot.ts'
 import {
   fetchAndVerifyArcAgreementOperatorTransaction,
   verifyArcAgreementOperatorTransaction,
@@ -24,17 +25,19 @@ const evidenceHash = `0x${'11'.repeat(32)}`
 const txHash = `0x${'aa'.repeat(32)}`
 const apiKey = 'TEST_API_KEY:operator-status'
 
-const operatorWallet = verifyArcAgreementOperatorWallet({
+const operatorWallet = await fetchAndVerifyArcAgreementOperatorWallet({
+  apiKey,
   walletId,
   expectedOperator: operator,
-  response: { data: { wallet: {
-    id: walletId,
-    address: operator,
-    blockchain: 'ARC-TESTNET',
-    custodyType: 'DEVELOPER',
-    state: 'LIVE',
-    accountType: 'EOA',
-  } } },
+  requestId: crypto.randomUUID(),
+  fetchImpl: async () => new Response(JSON.stringify({ data: { wallet: {
+      id: walletId,
+      address: operator,
+      blockchain: 'ARC-TESTNET',
+      custodyType: 'DEVELOPER',
+      state: 'LIVE',
+      accountType: 'EOA',
+    } } }), { status: 200 }),
 })
 const terms = arcAgreementTerms({
   template: 'progressive_release',
@@ -59,21 +62,26 @@ const prepared = prepareArcAgreementDeployment({
   usdc,
   activationTimestamp: 1_785_240_000,
 })
-const snapshot = {
-  ...prepared,
-  escrow,
-  status: 1,
-  nextStep: 0,
-  releasedAmount: 0n,
-  tokenBalance: prepared.totalAmount,
-}
-delete snapshot.deploymentHash
+const confirmed = await readConfirmedArcAgreementSnapshot({
+  getChainId: async () => 5_042_002,
+  getBlockNumber: async () => 100n,
+  readContract: async args => {
+    if (args.functionName === 'balanceOf') return prepared.totalAmount
+    if (args.functionName === 'releaseSchedule') return prepared.cumulativeReleaseBps
+    if (args.functionName === 'template') return prepared.templateCode
+    if (args.functionName === 'status') return 1
+    if (args.functionName === 'nextStep') return 0
+    if (args.functionName === 'releasedAmount') return 0n
+    return prepared[args.functionName]
+  },
+}, escrow, 5)
 const preparedCall = prepareArcAgreementReleaseCall({
   operatorWallet,
   idempotencyKey,
+  partnerId,
   agreementId,
   prepared,
-  snapshot,
+  confirmed,
   step: 0,
   evidenceHash,
 })

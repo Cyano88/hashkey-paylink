@@ -778,13 +778,29 @@ export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPol
   }
 }
 
-export async function dispatchDeveloperWebhook(partnerId: string, event: string, data: Record<string, unknown>, delivery?: { eventId: string; createdAt: string }) {
-  if (!partnerId.startsWith('dev_') || !defaults.hasStore()) return
+export type DeveloperWebhookDispatchResult =
+  | Readonly<{ status: 'sent'; eventId: string; responseStatus: number }>
+  | Readonly<{
+      status: 'skipped'
+      reason: 'invalid_partner' | 'store_unavailable' | 'portal_secret_unavailable' | 'project_unavailable' | 'webhook_unconfigured'
+    }>
+
+export async function dispatchDeveloperWebhook(
+  partnerId: string,
+  event: string,
+  data: Record<string, unknown>,
+  delivery?: { eventId: string; createdAt: string },
+): Promise<DeveloperWebhookDispatchResult> {
+  if (!partnerId.startsWith('dev_')) return { status: 'skipped', reason: 'invalid_partner' }
+  if (!defaults.hasStore()) return { status: 'skipped', reason: 'store_unavailable' }
   const secret = defaults.portalSecret()
-  if (secret.length < 32) return
+  if (secret.length < 32) return { status: 'skipped', reason: 'portal_secret_unavailable' }
   const store = await defaults.read(STORE_KEY)
   const project = store?.projects?.[partnerId]
-  if (!project?.webhookUrl || !project.webhookSecretCipher) return
+  if (!project) return { status: 'skipped', reason: 'project_unavailable' }
+  if (!project.webhookUrl || !project.webhookSecretCipher) {
+    return { status: 'skipped', reason: 'webhook_unconfigured' }
+  }
   const signingSecret = decryptValue(secret, project.webhookSecretCipher)
   const attemptedAt = defaults.now().toISOString()
   const { eventId, payload, timestamp, signature } = buildDeveloperWebhookRequest(signingSecret, event, data, {
@@ -807,6 +823,7 @@ export async function dispatchDeveloperWebhook(partnerId: string, event: string,
     return { projects: { ...(current?.projects ?? {}), [partnerId]: { ...latest, webhookDeliveries: [...(latest.webhookDeliveries ?? []).filter(item => item.id !== eventId), delivery].slice(-100) } } }
   })
   if (failure) throw new Error(failure)
+  return { status: 'sent', eventId, responseStatus: responseStatus! }
 }
 
 export async function resolveDeveloperApiKeyPolicy(req: Pick<Request, 'headers'>): Promise<DeveloperCheckoutPolicy | null> {

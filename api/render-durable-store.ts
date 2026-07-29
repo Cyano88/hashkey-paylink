@@ -2,13 +2,58 @@ import pg from 'pg'
 
 const { Pool } = pg
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
+
+function parsedDatabaseUrl(databaseUrl: string) {
+  try {
+    const parsed = new URL(databaseUrl)
+    if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') throw new Error()
+    return parsed
+  } catch {
+    throw new Error('DATABASE_URL must be a valid PostgreSQL URL.')
+  }
+}
+
+export function renderDurableStoreSslConfig(
+  databaseUrl: string,
+  env: Partial<Pick<NodeJS.ProcessEnv, 'DATABASE_CA_CERT' | 'RENDER_POSTGRES_CA_CERT'>> = process.env,
+): false | { rejectUnauthorized: true; ca?: string } {
+  const hostname = parsedDatabaseUrl(databaseUrl).hostname.toLowerCase()
+  if (
+    hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '::1'
+    || hostname.endsWith('.internal')
+    || !hostname.includes('.')
+  ) {
+    return false
+  }
+  const ca = String(env.DATABASE_CA_CERT ?? env.RENDER_POSTGRES_CA_CERT ?? '')
+    .trim()
+    .replace(/\\n/g, '\n')
+  return ca
+    ? { rejectUnauthorized: true, ca }
+    : { rejectUnauthorized: true }
+}
+
+export function renderDurableStoreConnectionConfig(
+  databaseUrl: string,
+  env: Partial<Pick<NodeJS.ProcessEnv, 'DATABASE_CA_CERT' | 'RENDER_POSTGRES_CA_CERT'>> = process.env,
+) {
+  const parsed = parsedDatabaseUrl(databaseUrl)
+  const ssl = renderDurableStoreSslConfig(databaseUrl, env)
+  if (ssl !== false) {
+    // node-postgres lets SSL query parameters replace the explicit `ssl`
+    // object. Remove them so a Render URL containing `sslmode=require`
+    // cannot silently disable certificate verification.
+    for (const key of ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']) {
+      parsed.searchParams.delete(key)
+    }
+  }
+  return { connectionString: parsed.toString(), ssl }
+}
+
 const pool = DATABASE_URL
-  ? new Pool({
-      connectionString: DATABASE_URL,
-      ssl: DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1')
-        ? false
-        : { rejectUnauthorized: false },
-    })
+  ? new Pool(renderDurableStoreConnectionConfig(DATABASE_URL))
   : null
 
 let schemaReady: Promise<void> | null = null

@@ -1,17 +1,22 @@
 import { getAddress, isAddress, type Hex } from 'viem'
 import {
   reconcileArcAgreementSnapshot,
-  type ArcAgreementChainSnapshot,
   type ArcAgreementPreparedDeployment,
 } from './arc-agreement-reconciliation.js'
+import {
+  assertArcAgreementConfirmedSnapshot,
+  type ArcAgreementConfirmedSnapshot,
+} from './arc-agreement-confirmed-snapshot.js'
 import {
   assertArcAgreementOperatorWalletProof,
   type ArcAgreementVerifiedOperatorWallet,
 } from './arc-agreement-operator-wallet.js'
+import { arcAgreementClientReference } from './arc-agreement-terms.js'
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const BYTES32 = /^0x[0-9a-f]{64}$/i
 const AGREEMENT_ID = /^agr_[a-z0-9]{12,64}$/i
+const PARTNER_ID = /^dev_[a-z0-9]{8,64}$/i
 const preparedOperatorCalls = new WeakSet<object>()
 
 export type ArcAgreementPreparedOperatorCall = Readonly<{
@@ -44,32 +49,51 @@ function requiredAgreementId(value: unknown) {
   return agreementId
 }
 
+function requiredPartnerId(value: unknown) {
+  const partnerId = String(value ?? '').trim()
+  if (!PARTNER_ID.test(partnerId)) throw new Error('Developer project id is invalid.')
+  return partnerId
+}
+
+function requireDurableAgreementBinding(
+  partnerId: string,
+  agreementId: string,
+  prepared: ArcAgreementPreparedDeployment,
+) {
+  const expected = arcAgreementClientReference(partnerId, agreementId)
+  if (expected.toLowerCase() !== prepared.clientReference.toLowerCase()) {
+    throw new Error('Operator call is not bound to the durable developer agreement.')
+  }
+}
+
 function requireVerifiedActive(
   prepared: ArcAgreementPreparedDeployment,
-  snapshot: ArcAgreementChainSnapshot,
+  confirmed: ArcAgreementConfirmedSnapshot,
 ) {
+  const { snapshot } = assertArcAgreementConfirmedSnapshot(confirmed)
   const reconciliation = reconcileArcAgreementSnapshot(prepared, snapshot)
   if (!reconciliation.verified) {
     throw new Error(`Operator call blocked by reconciliation: ${reconciliation.mismatches.join(', ')}.`)
   }
   if (snapshot.status !== 1) throw new Error('Operator calls require an active agreement.')
-  return reconciliation
+  return { reconciliation, snapshot }
 }
 
 function baseRequest(input: {
   operatorWallet: ArcAgreementVerifiedOperatorWallet
   idempotencyKey: string
-  snapshot: ArcAgreementChainSnapshot
+  confirmed: ArcAgreementConfirmedSnapshot
   refId: string
 }) {
-  if (!isAddress(input.snapshot.escrow)) throw new Error('Escrow address is invalid.')
-  const operatorWallet = assertArcAgreementOperatorWalletProof(input.operatorWallet, input.snapshot.operator)
+  const { snapshot } = assertArcAgreementConfirmedSnapshot(input.confirmed)
+  if (!isAddress(snapshot.escrow)) throw new Error('Escrow address is invalid.')
+  const operatorWallet = assertArcAgreementOperatorWalletProof(input.operatorWallet, snapshot.operator)
   return {
     idempotencyKey: requiredIdempotencyKey(input.idempotencyKey),
     walletId: operatorWallet.walletId,
     operatorAddress: operatorWallet.address,
     network: 'ARC-TESTNET' as const,
-    contractAddress: getAddress(input.snapshot.escrow),
+    contractAddress: getAddress(snapshot.escrow),
     feeLevel: 'MEDIUM' as const,
     refId: input.refId,
   }
@@ -94,23 +118,26 @@ export function assertArcAgreementPreparedOperatorCall(
 export function prepareArcAgreementReleaseCall(input: {
   operatorWallet: ArcAgreementVerifiedOperatorWallet
   idempotencyKey: string
+  partnerId: string
   agreementId: string
   prepared: ArcAgreementPreparedDeployment
-  snapshot: ArcAgreementChainSnapshot
+  confirmed: ArcAgreementConfirmedSnapshot
   step: number
   evidenceHash: string
 }) {
-  requireVerifiedActive(input.prepared, input.snapshot)
+  const partnerId = requiredPartnerId(input.partnerId)
   const agreementId = requiredAgreementId(input.agreementId)
+  requireDurableAgreementBinding(partnerId, agreementId, input.prepared)
+  const { snapshot } = requireVerifiedActive(input.prepared, input.confirmed)
   if (!Number.isInteger(input.step) || input.step < 0 || input.step > 255) throw new Error('Release step is invalid.')
-  if (input.step !== input.snapshot.nextStep) throw new Error('Release step does not match the confirmed next step.')
+  if (input.step !== snapshot.nextStep) throw new Error('Release step does not match the confirmed next step.')
   if (input.step >= input.prepared.cumulativeReleaseBps.length) throw new Error('Release schedule is already exhausted.')
   const evidenceHash = requiredEvidence(input.evidenceHash, 'evidenceHash')
   return brandPreparedOperatorCall({
     ...baseRequest({
       operatorWallet: input.operatorWallet,
       idempotencyKey: input.idempotencyKey,
-      snapshot: input.snapshot,
+      confirmed: input.confirmed,
       refId: `${agreementId}:release:${input.step}`,
     }),
     abiFunctionSignature: 'releaseStep(uint8,bytes32)',
@@ -121,19 +148,22 @@ export function prepareArcAgreementReleaseCall(input: {
 export function prepareArcAgreementCancellationCall(input: {
   operatorWallet: ArcAgreementVerifiedOperatorWallet
   idempotencyKey: string
+  partnerId: string
   agreementId: string
   prepared: ArcAgreementPreparedDeployment
-  snapshot: ArcAgreementChainSnapshot
+  confirmed: ArcAgreementConfirmedSnapshot
   reasonHash: string
 }) {
-  requireVerifiedActive(input.prepared, input.snapshot)
+  const partnerId = requiredPartnerId(input.partnerId)
   const agreementId = requiredAgreementId(input.agreementId)
+  requireDurableAgreementBinding(partnerId, agreementId, input.prepared)
+  requireVerifiedActive(input.prepared, input.confirmed)
   const reasonHash = requiredEvidence(input.reasonHash, 'reasonHash')
   return brandPreparedOperatorCall({
     ...baseRequest({
       operatorWallet: input.operatorWallet,
       idempotencyKey: input.idempotencyKey,
-      snapshot: input.snapshot,
+      confirmed: input.confirmed,
       refId: `${agreementId}:cancel`,
     }),
     abiFunctionSignature: 'cancelByOperator(bytes32)',

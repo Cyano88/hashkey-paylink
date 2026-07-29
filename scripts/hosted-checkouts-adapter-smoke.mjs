@@ -31,7 +31,7 @@ const dependencies = {
   policy: req => req.headers['x-api-key'] === 'partner-secret'
     ? { partnerId: 'polydesk', allowedOrigins: ['https://polydesk.trade'] }
     : null,
-  notify: async () => undefined,
+  notify: async () => ({ status: 'sent', eventId: 'evt_test', responseStatus: 204 }),
   prepareNaira: async () => { throw new Error('Unexpected Naira preparation.') },
   signingSecret: () => 'a-secure-test-secret-that-is-longer-than-thirty-two-characters',
   createId: () => createdCount++ === 0 ? 'chk_testcheckout1234' : `chk_testcheckout${createdCount.toString().padStart(4, '0')}`,
@@ -284,7 +284,10 @@ const managedDependencies = {
       { network: 'arbitrum', recipient: '0x3333333333333333333333333333333333333333' },
     ],
   }),
-  notify: async (partnerId, event, data) => { managedNotifications.push({ partnerId, event, data }) },
+  notify: async (partnerId, event, data) => {
+    managedNotifications.push({ partnerId, event, data })
+    return { status: 'sent', eventId: 'evt_managed', responseStatus: 204 }
+  },
   createId: () => managedCreatedCount++ === 0 ? 'chk_managedproject123' : `chk_managedproject${managedCreatedCount}`,
 }
 const managedHandler = createHostedCheckoutsHandler(managedDependencies)
@@ -396,7 +399,10 @@ const nairaDependencies = {
       validUntil: '2026-07-19T12:45:00.000Z', status: 'initiated',
     }
   },
-  notify: async (partnerId, event, data) => { nairaNotifications.push({ partnerId, event, data }) },
+  notify: async (partnerId, event, data) => {
+    nairaNotifications.push({ partnerId, event, data })
+    return { status: 'sent', eventId: 'evt_naira', responseStatus: 204 }
+  },
   createId: () => 'chk_nairaproject1234',
 }
 const nairaHandler = createHostedCheckoutsHandler(nairaDependencies)
@@ -453,6 +459,7 @@ const retryDependencies = {
   notify: async (partnerId, event, data, delivery) => {
     retryDeliveries.push({ partnerId, event, data, delivery })
     if (failRetryDelivery) throw new Error('temporary receiver failure')
+    return { status: 'sent', eventId: delivery.eventId, responseStatus: 204 }
   },
 }
 assert.equal(await drainHostedCheckoutWebhookOutbox(retryDependencies), 0)
@@ -465,6 +472,21 @@ assert.equal(await drainHostedCheckoutWebhookOutbox(retryDependencies), 1)
 assert.equal(retryStore.outbox[0].status, 'delivered')
 assert.equal(retryStore.outbox[0].attempts, 2)
 assert.deepEqual(retryDeliveries.map(item => item.delivery.eventId), ['evt_retrydelivery12345', 'evt_retrydelivery12345'])
+retryStore.outbox.push({
+  ...retryStore.outbox[0],
+  id: 'evt_skippeddelivery123',
+  attempts: 0,
+  status: 'pending',
+  nextAttemptAt: retryNow.toISOString(),
+  deliveredAt: undefined,
+})
+const skippedRetryDependencies = {
+  ...retryDependencies,
+  notify: async () => ({ status: 'skipped', reason: 'webhook_unconfigured' }),
+}
+assert.equal(await drainHostedCheckoutWebhookOutbox(skippedRetryDependencies, 1), 0)
+assert.equal(retryStore.outbox[1].status, 'pending')
+assert.match(retryStore.outbox[1].lastError, /webhook_unconfigured/)
 await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'refunded' }, nairaDependencies)
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'paid')
 assert.equal(nairaNotifications.length, 3)

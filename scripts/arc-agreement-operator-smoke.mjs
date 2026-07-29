@@ -7,8 +7,9 @@ import {
 } from '../api/arc-agreement-operator.ts'
 import {
   fetchAndVerifyArcAgreementOperatorWallet,
-  verifyArcAgreementOperatorWallet,
 } from '../api/arc-agreement-operator-wallet.ts'
+import * as operatorWalletModule from '../api/arc-agreement-operator-wallet.ts'
+import { readConfirmedArcAgreementSnapshot } from '../api/arc-agreement-confirmed-snapshot.ts'
 
 const partnerId = 'dev_operatorrequest1234'
 const agreementId = 'agr_operatorrequest1234'
@@ -34,10 +35,13 @@ const walletResponse = {
     },
   },
 }
-const operatorWallet = verifyArcAgreementOperatorWallet({
+assert.equal('verifyArcAgreementOperatorWallet' in operatorWalletModule, false)
+const operatorWallet = await fetchAndVerifyArcAgreementOperatorWallet({
+  apiKey: 'TEST_API_KEY:operator-preflight',
   walletId,
   expectedOperator: operator,
-  response: walletResponse,
+  requestId: '123e4567-e89b-42d3-a456-426614174002',
+  fetchImpl: async () => new Response(JSON.stringify(walletResponse), { status: 200 }),
 })
 const terms = arcAgreementTerms({
   template: 'progressive_release',
@@ -62,22 +66,37 @@ const prepared = prepareArcAgreementDeployment({
   usdc,
   activationTimestamp: 1_785_240_000,
 })
-const snapshot = {
-  ...prepared,
-  escrow,
-  status: 1,
-  nextStep: 0,
-  releasedAmount: 0n,
-  tokenBalance: prepared.totalAmount,
+async function confirmedSnapshot(overrides = {}) {
+  const values = {
+    ...prepared,
+    status: 1,
+    nextStep: 0,
+    releasedAmount: 0n,
+    ...overrides,
+  }
+  return readConfirmedArcAgreementSnapshot({
+    getChainId: async () => 5_042_002,
+    getBlockNumber: async () => 100n,
+    readContract: async args => {
+      if (args.functionName === 'balanceOf') return overrides.tokenBalance ?? prepared.totalAmount
+      if (args.functionName === 'releaseSchedule') return values.cumulativeReleaseBps
+      if (args.functionName === 'template') return values.templateCode
+      return values[args.functionName]
+    },
+  }, escrow, 5)
 }
-delete snapshot.deploymentHash
+const confirmed = await confirmedSnapshot()
+assert.equal(Object.isFrozen(confirmed), true)
+assert.equal(Object.isFrozen(confirmed.snapshot), true)
+assert.equal(Object.isFrozen(confirmed.snapshot.cumulativeReleaseBps), true)
 
 const release = prepareArcAgreementReleaseCall({
   operatorWallet,
   idempotencyKey,
+  partnerId,
   agreementId,
   prepared,
-  snapshot,
+  confirmed,
   step: 0,
   evidenceHash,
 })
@@ -93,94 +112,121 @@ assert.equal('entitySecretCiphertext' in release, false)
 const cancellation = prepareArcAgreementCancellationCall({
   operatorWallet,
   idempotencyKey,
+  partnerId,
   agreementId,
   prepared,
-  snapshot,
+  confirmed,
   reasonHash,
 })
 assert.equal(cancellation.abiFunctionSignature, 'cancelByOperator(bytes32)')
 assert.deepEqual(cancellation.abiParameters, [reasonHash])
+const mismatchedTerms = await confirmedSnapshot({ termsHash: `0x${'ff'.repeat(32)}` })
+const cancelledAgreement = await confirmedSnapshot({ status: 3, tokenBalance: 0n })
 
 assert.throws(() => prepareArcAgreementReleaseCall({
   operatorWallet,
   idempotencyKey,
+  partnerId,
   agreementId,
   prepared,
-  snapshot,
+  confirmed,
   step: 1,
   evidenceHash,
 }), /confirmed next step/)
 assert.throws(() => prepareArcAgreementReleaseCall({
   operatorWallet,
   idempotencyKey,
+  partnerId,
   agreementId,
   prepared,
-  snapshot,
+  confirmed,
   step: 0,
   evidenceHash: `0x${'00'.repeat(32)}`,
 }), /non-zero bytes32/)
 assert.throws(() => prepareArcAgreementReleaseCall({
   operatorWallet: { ...operatorWallet, walletId: 'not-a-wallet-id' },
   idempotencyKey,
+  partnerId,
   agreementId,
   prepared,
-  snapshot,
+  confirmed,
   step: 0,
   evidenceHash,
 }), /ownership preflight/)
 assert.throws(() => prepareArcAgreementReleaseCall({
   operatorWallet,
   idempotencyKey,
+  partnerId,
   agreementId: 'unsafe:reference',
   prepared,
-  snapshot,
+  confirmed,
   step: 0,
   evidenceHash,
 }), /Agreement id/)
 assert.throws(() => prepareArcAgreementCancellationCall({
   operatorWallet,
   idempotencyKey,
+  partnerId,
   agreementId,
   prepared,
-  snapshot: { ...snapshot, termsHash: `0x${'ff'.repeat(32)}` },
+  confirmed: mismatchedTerms,
   reasonHash,
 }), /reconciliation: termsHash/)
 assert.throws(() => prepareArcAgreementCancellationCall({
   operatorWallet,
   idempotencyKey,
+  partnerId,
   agreementId,
   prepared,
-  snapshot: { ...snapshot, status: 3, tokenBalance: 0n },
+  confirmed: cancelledAgreement,
   reasonHash,
 }), /active agreement/)
 
-assert.throws(() => verifyArcAgreementOperatorWallet({
-  walletId,
-  expectedOperator: operator,
-  response: { data: { wallet: { ...walletResponse.data.wallet, blockchain: 'BASE-SEPOLIA' } } },
-}), /ARC-TESTNET/)
-assert.throws(() => verifyArcAgreementOperatorWallet({
-  walletId,
-  expectedOperator: operator,
-  response: { data: { wallet: { ...walletResponse.data.wallet, custodyType: 'ENDUSER' } } },
-}), /developer-controlled/)
-assert.throws(() => verifyArcAgreementOperatorWallet({
-  walletId,
-  expectedOperator: operator,
-  response: { data: { wallet: { ...walletResponse.data.wallet, state: 'FROZEN' } } },
-}), /must be live/)
-assert.throws(() => verifyArcAgreementOperatorWallet({
-  walletId,
-  expectedOperator: operator,
-  response: { data: { wallet: { ...walletResponse.data.wallet, address: payer } } },
-}), /immutable agreement operator/)
+assert.throws(() => prepareArcAgreementReleaseCall({
+  operatorWallet,
+  idempotencyKey,
+  partnerId,
+  agreementId,
+  prepared,
+  confirmed: { ...confirmed },
+  step: 0,
+  evidenceHash,
+}), /confirmed-chain read boundary/)
+
+assert.throws(() => prepareArcAgreementReleaseCall({
+  operatorWallet,
+  idempotencyKey,
+  partnerId: 'dev_otherproject1234',
+  agreementId,
+  prepared,
+  confirmed,
+  step: 0,
+  evidenceHash,
+}), /durable developer agreement/)
+
+for (const [overrides, message] of [
+  [{ blockchain: 'BASE-SEPOLIA' }, /ARC-TESTNET/],
+  [{ custodyType: 'ENDUSER' }, /developer-controlled/],
+  [{ state: 'FROZEN' }, /must be live/],
+  [{ address: payer }, /immutable agreement operator/],
+]) {
+  await assert.rejects(() => fetchAndVerifyArcAgreementOperatorWallet({
+    apiKey: 'TEST_API_KEY:operator-preflight',
+    walletId,
+    expectedOperator: operator,
+    requestId: crypto.randomUUID(),
+    fetchImpl: async () => new Response(JSON.stringify({
+      data: { wallet: { ...walletResponse.data.wallet, ...overrides } },
+    }), { status: 200 }),
+  }), message)
+}
 
 let observedRequest
 const fetchedWallet = await fetchAndVerifyArcAgreementOperatorWallet({
   apiKey: 'TEST_API_KEY:operator-preflight',
   walletId,
   expectedOperator: operator,
-  requestId: '123e4567-e89b-42d3-a456-426614174002',
+  requestId: '123e4567-e89b-42d3-a456-426614174003',
   fetchImpl: async (url, init) => {
     observedRequest = { url, init }
     return new Response(JSON.stringify(walletResponse), {
@@ -194,12 +240,12 @@ assert.equal(observedRequest.url, `https://api.circle.com/v1/w3s/wallets/${walle
 assert.equal(observedRequest.init.method, 'GET')
 assert.equal(observedRequest.init.redirect, 'error')
 assert.equal(observedRequest.init.headers.authorization, 'Bearer TEST_API_KEY:operator-preflight')
-assert.equal(observedRequest.init.headers['x-request-id'], '123e4567-e89b-42d3-a456-426614174002')
+assert.equal(observedRequest.init.headers['x-request-id'], '123e4567-e89b-42d3-a456-426614174003')
 await assert.rejects(() => fetchAndVerifyArcAgreementOperatorWallet({
   apiKey: 'TEST_API_KEY:operator-preflight',
   walletId,
   expectedOperator: operator,
-  requestId: '123e4567-e89b-42d3-a456-426614174003',
+  requestId: '123e4567-e89b-42d3-a456-426614174004',
   fetchImpl: async () => new Response('', { status: 401 }),
 }), /authentication failed/)
 

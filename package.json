@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20.18.2",
+    "node": "^20.19.0 || >=22.12.0",
     "npm": ">=9.0.0"
   },
   "scripts": {
@@ -33,6 +33,8 @@
     "test:pocket-bank-fund-adapter": "node --import tsx scripts/pocket-bank-fund-adapter-smoke.mjs",
     "test:pocket-bank-withdraw-adapter": "node --import tsx scripts/pocket-bank-withdraw-adapter-smoke.mjs",
     "test:pocket-solana-transfer-adapter": "node --import tsx scripts/pocket-solana-transfer-adapter-smoke.mjs",
+    "test:solana-token-security": "node --import tsx scripts/solana-token-security-smoke.mjs",
+    "test:router-security": "node scripts/react-router-security-smoke.mjs",
     "test:pocket-evm-transfer-client": "node --import tsx scripts/pocket-evm-transfer-client-smoke.mjs",
     "test:payment-tx-lookup": "node --import tsx scripts/payment-tx-lookup-handler-smoke.mjs",
     "test:usdc-transfer-verify": "node --import tsx scripts/usdc-transfer-verify-smoke.mjs",
@@ -63,6 +65,7 @@
     "test:arc-agreement-operator-provision": "node --import tsx scripts/arc-agreement-operator-provision-smoke.mjs",
     "test:arc-agreement-operator-preflight": "node --import tsx scripts/arc-agreement-operator-preflight-smoke.mjs",
     "test:arc-agreement-operator-status": "node --import tsx scripts/arc-agreement-operator-status-smoke.mjs",
+    "test:durable-store-security": "node --import tsx scripts/render-durable-store-security-smoke.mjs",
     "test:arc-agreement-contracts": "npm --prefix contracts run test:agreements",
     "provision:arc-agreement-operator": "node --import tsx scripts/arc-agreement-operator-provision.mjs",
     "preflight:arc-agreement-operator": "node --import tsx scripts/arc-agreement-operator-preflight.mjs",
@@ -75,7 +78,7 @@
     "test:agentic-checkout-ui": "node scripts/agentic-checkout-ui-smoke.mjs",
     "test:receipt-security": "node --import tsx scripts/receipt-capability-security-smoke.mjs",
     "test:polymarket-funding-checkouts": "node --import tsx scripts/polymarket-funding-checkouts-adapter-smoke.mjs",
-    "test:checkout": "npm run test:hosted-checkouts && npm run test:agentic-checkouts && npm run test:agentic-checkout-wallet-pay && npm run test:agentic-checkout-ui && npm run test:partner-access && npm run test:developer-projects && npm run test:arc-agreements && npm run test:arc-agreement-reconciliation && npm run test:arc-agreement-webhooks && npm run test:arc-agreement-operator && npm run test:arc-agreement-operator-provision && npm run test:arc-agreement-operator-preflight && npm run test:arc-agreement-operator-status && npm run test:polymarket-funding-checkouts && npm run test:usdc-transfer-verify && npm run test:paycrest-reconcile-policy && npm run test:payment-tx-lookup && npm run test:receipt-security && npm run test:pocket-contracts",
+    "test:checkout": "npm run test:hosted-checkouts && npm run test:agentic-checkouts && npm run test:agentic-checkout-wallet-pay && npm run test:agentic-checkout-ui && npm run test:partner-access && npm run test:developer-projects && npm run test:arc-agreements && npm run test:arc-agreement-reconciliation && npm run test:arc-agreement-webhooks && npm run test:arc-agreement-operator && npm run test:arc-agreement-operator-provision && npm run test:arc-agreement-operator-preflight && npm run test:arc-agreement-operator-status && npm run test:durable-store-security && npm run test:solana-token-security && npm run test:router-security && npm run test:polymarket-funding-checkouts && npm run test:usdc-transfer-verify && npm run test:paycrest-reconcile-policy && npm run test:payment-tx-lookup && npm run test:receipt-security && npm run test:pocket-contracts",
     "test:pocket-x402-adapter": "node --import tsx scripts/pocket-x402-adapter-smoke.mjs",
     "test:pocket-x402-connect-adapter": "node --import tsx scripts/pocket-x402-connect-adapter-smoke.mjs",
     "test:pocket-x402-activate-adapter": "node --import tsx scripts/pocket-x402-activate-adapter-smoke.mjs",
@@ -104,7 +107,6 @@
     "@privy-io/server-auth": "^1.32.5",
     "@privy-io/wagmi": "^4.0.10",
     "@solana-program/memo": "^0.10.0",
-    "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "@tanstack/react-query": "^5.100.5",
     "@x402/core": "^2.12.0",
@@ -120,11 +122,10 @@
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.30.4",
+    "react-router-dom": "7.18.2",
     "tailwind-merge": "^2.4.0",
     "tsx": "^4.19.2",
     "viem": "^2.51.2",
-    "vite-plugin-node-polyfills": "^0.26.0",
     "wagmi": "^2.12.11"
   },
   "overrides": {
@@ -142,11 +143,12 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
+    "@vitejs/plugin-react": "5.1.4",
     "autoprefixer": "^10.4.19",
     "postcss": "^8.5.24",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.3",
-    "vite": "^5.4.21"
+    "vite": "7.3.6",
+    "vite-plugin-node-polyfills": "0.28.0"
   }
 }

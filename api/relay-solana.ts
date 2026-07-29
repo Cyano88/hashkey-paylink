@@ -42,10 +42,9 @@ import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
   createTransferCheckedInstruction,
-  createCloseAccountInstruction,
-  getAccount,
-  TokenAccountNotFoundError,
-} from '@solana/spl-token'
+  createCloseTokenAccountInstruction,
+  readTokenAccountAmount,
+} from './solana-token.js'
 import crypto from 'crypto'
 import bs58   from 'bs58'
 
@@ -233,14 +232,10 @@ async function ensureATA(
   payer: PublicKey,
 ): Promise<{ ata: PublicKey; created: boolean }> {
   const ata = await getAssociatedTokenAddress(mint, owner, true)
-  try {
-    await getAccount(connection, ata)
-  } catch (e) {
-    if (e instanceof TokenAccountNotFoundError) {
-      tx.add(createAssociatedTokenAccountInstruction(payer, ata, owner, mint))
-      return { ata, created: true }
-    }
-    throw e
+  const amount = await readTokenAccountAmount(connection, ata)
+  if (amount === null) {
+    tx.add(createAssociatedTokenAccountInstruction(payer, ata, owner, mint))
+    return { ata, created: true }
   }
   return { ata, created: false }
 }
@@ -270,8 +265,8 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
 
     // Ensure sender ATA exists (if it doesn't, payment will fail — sender must have USDC)
     const fromATA = await getAssociatedTokenAddress(USDC_MINT, fromPubkey)
-    const fromAccount = await getAccount(connection, fromATA)
-    if (BigInt(fromAccount.amount.toString()) < totalRaw) {
+    const fromAmount = await readTokenAccountAmount(connection, fromATA)
+    if (fromAmount === null || fromAmount < totalRaw) {
       throw new Error('Sender has insufficient Solana USDC for this payment')
     }
     // Ensure recipient ATA exists (relayer creates it if needed, covers rent)
@@ -285,7 +280,7 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     const requiredRaw    = grossFees ? totalRaw + treasuryRaw : totalRaw
     const recipientRaw   = grossFees ? totalRaw : totalRaw - treasuryRaw
     if (recipientRaw <= 0n) throw new Error('Payment amount is too small after fees')
-    if (BigInt(fromAccount.amount.toString()) < requiredRaw) {
+    if (fromAmount < requiredRaw) {
       throw new Error('Sender has insufficient Solana USDC for this payment')
     }
 
@@ -403,8 +398,7 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
     // Check USDC balance at vault ATA
     let balanceRaw = 0n
     try {
-      const acct = await getAccount(connection, vaultATA)
-      balanceRaw = BigInt(acct.amount.toString())
+      balanceRaw = await readTokenAccountAmount(connection, vaultATA) ?? 0n
     } catch {
       res.json({ ok: false, status: 'waiting' }); return
     }
@@ -436,7 +430,7 @@ export async function sweepSolanaVault(req: Request, res: Response): Promise<voi
 
     // Close the vault ATA after sweeping — returns the ~0.002 SOL rent back to
     // the relayer, keeping the relayer self-funded without manual top-ups.
-    tx.add(createCloseAccountInstruction(
+    tx.add(createCloseTokenAccountInstruction(
       vaultATA,                // account to close (now empty)
       relayer.publicKey,       // rent destination → relayer recoups SOL
       vaultKeypair.publicKey,  // authority

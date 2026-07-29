@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from '@solana/web3.js'
-import { getAssociatedTokenAddress } from '@solana/spl-token'
+import { getAssociatedTokenAddress } from '../solana-token.js'
 import { circleLinkKey, readCircleLink } from '../privy-circle-link.js'
 import type { PocketActivityRow } from '../../src/pocket/lib/pocketSchemas.js'
 

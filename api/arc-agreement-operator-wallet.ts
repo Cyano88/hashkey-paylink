@@ -46,7 +46,7 @@ function requiredOperator(value: unknown) {
   return getAddress(operator)
 }
 
-export function verifyArcAgreementOperatorWallet(input: {
+function verifyArcAgreementOperatorWalletResponse(input: {
   walletId: unknown
   expectedOperator: unknown
   response: unknown
@@ -87,18 +87,11 @@ export function assertArcAgreementOperatorWalletProof(
   if (!wallet || !verifiedOperatorWallets.has(wallet)) {
     throw new Error('Circle operator wallet has not passed the ownership preflight.')
   }
-  return verifyArcAgreementOperatorWallet({
-    walletId: wallet?.walletId,
-    expectedOperator,
-    response: { data: { wallet: {
-      id: wallet?.walletId,
-      address: wallet?.address,
-      blockchain: wallet?.blockchain,
-      custodyType: wallet?.custodyType,
-      state: wallet?.state,
-      accountType: wallet?.accountType,
-    } } },
-  })
+  const operator = requiredOperator(expectedOperator)
+  if (wallet.address !== operator) {
+    throw new Error('Circle operator wallet address does not match the immutable agreement operator.')
+  }
+  return wallet
 }
 
 export async function fetchAndVerifyArcAgreementOperatorWallet(input: {
@@ -138,7 +131,7 @@ export async function fetchAndVerifyArcAgreementOperatorWallet(input: {
   } catch {
     throw new Error('Circle operator wallet preflight returned invalid JSON.')
   }
-  return verifyArcAgreementOperatorWallet({
+  return verifyArcAgreementOperatorWalletResponse({
     walletId,
     expectedOperator: input.expectedOperator,
     response: body,

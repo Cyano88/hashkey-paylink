@@ -126,7 +126,7 @@ type Dependencies = {
   read: (key: string) => Promise<CheckoutStore | undefined>
   mutate: (key: string, update: (current: CheckoutStore | undefined) => CheckoutStore) => Promise<CheckoutStore>
   policy: (req: Request) => PartnerPolicy | null | Promise<PartnerPolicy | null>
-  notify: (partnerId: string, event: string, data: Record<string, unknown>, delivery?: { eventId: string; createdAt: string }) => Promise<void>
+  notify: typeof dispatchDeveloperWebhook
   prepareNaira: typeof prepareDeveloperNairaCheckout
   signingSecret: () => string
   createId: () => string
@@ -221,7 +221,15 @@ export async function drainHostedCheckoutWebhookOutbox(dependencies: Dependencie
 
     let failure = ''
     try {
-      await dependencies.notify(claimed.partnerId, claimed.event, claimed.data, { eventId: claimed.id, createdAt: claimed.createdAt })
+      const deliveryResult = await dependencies.notify(
+        claimed.partnerId,
+        claimed.event,
+        claimed.data,
+        { eventId: claimed.id, createdAt: claimed.createdAt },
+      )
+      if (deliveryResult.status !== 'sent') {
+        failure = `Webhook delivery skipped: ${deliveryResult.reason}.`
+      }
     } catch (error) {
       failure = error instanceof Error ? error.message.slice(0, 240) : 'Webhook delivery failed.'
     }

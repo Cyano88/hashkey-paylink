@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from '@solana/web3.js'
-import { getAssociatedTokenAddress } from '@solana/spl-token'
+import { getAssociatedTokenAddress } from '../solana-token.js'
 
 export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'solana'
 

@@ -1,17 +1,17 @@
 import { createHash } from 'node:crypto'
 import {
-  readArcAgreementSnapshot,
   reconcileArcAgreementSnapshot,
   type ArcAgreementChainSnapshot,
   type ArcAgreementPreparedDeployment,
-  type ArcAgreementPublicClient,
 } from './arc-agreement-reconciliation.js'
+import {
+  readConfirmedArcAgreementSnapshot,
+  type ArcAgreementConfirmationClient,
+} from './arc-agreement-confirmed-snapshot.js'
 import { dispatchDeveloperWebhook } from './developer-projects.js'
 import { hasRenderDurableStore, mutateDurableJson } from './render-durable-store.js'
 
 const STORE_KEY = (process.env.ARC_AGREEMENT_WEBHOOK_STORE_KEY ?? 'hashpaylink:arc-agreement-webhooks:v1').trim()
-const DEFAULT_CONFIRMATION_BLOCKS = 5
-const MAX_CONFIRMATION_BLOCKS = 128
 const WEBHOOK_LEASE_MS = 60_000
 const WEBHOOK_MAX_ATTEMPTS = 8
 const WEBHOOK_RETRY_DELAYS_MS = [30_000, 120_000, 600_000, 1_800_000, 3_600_000, 7_200_000, 21_600_000, 43_200_000]
@@ -44,9 +44,8 @@ type ArcAgreementWebhookStore = {
   events: Record<string, ArcAgreementWebhookEvent>
 }
 
-export type ArcAgreementConfirmationClient = ArcAgreementPublicClient & {
-  getBlockNumber: () => Promise<bigint>
-}
+export { readConfirmedArcAgreementSnapshot } from './arc-agreement-confirmed-snapshot.js'
+export type { ArcAgreementConfirmationClient } from './arc-agreement-confirmed-snapshot.js'
 
 type Dependencies = {
   hasStore: () => boolean
@@ -63,14 +62,6 @@ const defaults: Dependencies = {
   mutate: (key, update) => mutateDurableJson<ArcAgreementWebhookStore>(key, update),
   notify: dispatchDeveloperWebhook,
   now: () => new Date(),
-}
-
-function confirmationBlocks(value: number | undefined) {
-  const configured = value ?? Number(process.env.ARC_AGREEMENT_CONFIRMATION_BLOCKS || DEFAULT_CONFIRMATION_BLOCKS)
-  if (!Number.isInteger(configured) || configured < 1 || configured > MAX_CONFIRMATION_BLOCKS) {
-    throw new Error(`confirmationBlocks must be a whole number from 1 to ${MAX_CONFIRMATION_BLOCKS}.`)
-  }
-  return configured
 }
 
 function eventName(snapshot: ArcAgreementChainSnapshot): ArcAgreementWebhookName {
@@ -92,21 +83,6 @@ function stableEventId(snapshot: ArcAgreementChainSnapshot, event: ArcAgreementW
     snapshot.releasedAmount.toString(),
   ])).digest('hex')
   return `evt_${digest.slice(0, 24)}`
-}
-
-export async function readConfirmedArcAgreementSnapshot(
-  client: ArcAgreementConfirmationClient,
-  escrow: string,
-  requiredConfirmations?: number,
-) {
-  const confirmations = confirmationBlocks(requiredConfirmations)
-  const headBlockNumber = await client.getBlockNumber()
-  if (headBlockNumber < BigInt(confirmations)) {
-    throw new Error('Arc head is too young for the required confirmation depth.')
-  }
-  const observedBlockNumber = headBlockNumber - BigInt(confirmations)
-  const snapshot = await readArcAgreementSnapshot(client, escrow, { blockNumber: observedBlockNumber })
-  return { snapshot, headBlockNumber, observedBlockNumber, confirmations }
 }
 
 export function buildArcAgreementWebhookEvent(input: {
@@ -236,10 +212,13 @@ export async function drainArcAgreementWebhookOutbox(
 
     let failure = ''
     try {
-      await dependencies.notify(claimed.partnerId, claimed.event, claimed.data, {
+      const deliveryResult = await dependencies.notify(claimed.partnerId, claimed.event, claimed.data, {
         eventId: claimed.id,
         createdAt: claimed.createdAt,
       })
+      if (deliveryResult.status !== 'sent') {
+        failure = `Webhook delivery skipped: ${deliveryResult.reason}.`
+      }
     } catch (error) {
       failure = error instanceof Error ? error.message.slice(0, 240) : 'Webhook delivery failed.'
     }

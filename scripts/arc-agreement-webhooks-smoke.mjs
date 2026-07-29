@@ -140,6 +140,7 @@ const dependencies = {
       },
     ))
     if (deliveryAttempt === 1) throw new Error('temporary receiver failure')
+    return { status: 'sent', eventId: delivery.eventId, responseStatus: 204 }
   },
   now: () => new Date(clock),
 }
@@ -185,6 +186,19 @@ assert.equal(signedAttempts[0].eventId, signedAttempts[1].eventId)
 assert.equal(signedAttempts[0].payload, signedAttempts[1].payload)
 assert.notEqual(signedAttempts[0].timestamp, signedAttempts[1].timestamp)
 assert.notEqual(signedAttempts[0].signature, signedAttempts[1].signature)
+
+const skippedDelivery = { ...dependencies, notify: async () => ({ status: 'skipped', reason: 'webhook_unconfigured' }) }
+const secondEvent = {
+  ...first.event,
+  id: `${first.event.id}_skipped`,
+  attempts: 0,
+  status: 'pending',
+  nextAttemptAt: clock.toISOString(),
+}
+store.events[secondEvent.id] = secondEvent
+assert.equal(await drainArcAgreementWebhookOutbox(skippedDelivery, 1), 0)
+assert.equal(store.events[secondEvent.id].status, 'pending')
+assert.match(store.events[secondEvent.id].lastError, /webhook_unconfigured/)
 
 const completed = buildArcAgreementWebhookEvent({
   partnerId,

@@ -12,10 +12,9 @@
 import type { Request, Response } from 'express'
 import { Connection, PublicKey } from '@solana/web3.js'
 import {
-  getAccount,
   getAssociatedTokenAddress,
-  TokenAccountNotFoundError,
-} from '@solana/spl-token'
+  readTokenAccountAmount,
+} from './solana-token.js'
 
 const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const PUBLIC_SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com'
@@ -34,10 +33,10 @@ export async function readSolanaUsdcBalance(accountAddress: string) {
   for (const [index, rpcUrl] of solanaRpcUrls().entries()) {
     try {
       const connection = new Connection(rpcUrl, 'confirmed')
-      const account = await getAccount(connection, ata)
-      return { balance: account.amount, ata: ata.toBase58() }
+      const amount = await readTokenAccountAmount(connection, ata)
+      if (amount === null) return { balance: 0n, ata: null }
+      return { balance: amount, ata: ata.toBase58() }
     } catch (error) {
-      if (error instanceof TokenAccountNotFoundError) return { balance: 0n, ata: null }
       lastError = error
       console.error('[solana-balance] balance RPC failed', {
         rpc: index === 0 && solanaRpcUrls().length > 1 ? 'configured' : 'public',
