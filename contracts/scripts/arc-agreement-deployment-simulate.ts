@@ -46,6 +46,23 @@ function maximumFee(feeData: FeeData) {
   return feeData.maxFeePerGas ?? feeData.gasPrice ?? null
 }
 
+function isRateLimitError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  return /-32011|request limit reached|rate limit/i.test(message)
+}
+
+async function readWithBoundedRetry<T>(operation: () => Promise<T>) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      if (!isRateLimitError(error) || attempt === 2) throw error
+      await new Promise(resolveDelay => setTimeout(resolveDelay, 300 * (attempt + 1)))
+    }
+  }
+  throw new Error('Arc RPC read retry exhausted.')
+}
+
 async function main() {
   const manifestPath = resolve(
     required(process.env.ARC_AGREEMENT_MANIFEST_PATH, 'ARC_AGREEMENT_MANIFEST_PATH'),
@@ -73,17 +90,19 @@ async function main() {
   const provider = new JsonRpcProvider(ARC_RPC_URL, ARC_CHAIN_ID, {
     staticNetwork: true,
   })
-  const network = await provider.getNetwork()
-  const [deployerCode, deployerBalance, usdcCode, operatorCode, simulatedRuntime, feeData] = await Promise.all([
-    provider.getCode(deployer),
-    provider.getBalance(deployer),
-    provider.getCode(manifest.network.usdc),
-    provider.getCode(manifest.operator),
-    provider.call({ from: deployer, data: deploymentData }),
-    provider.getFeeData(),
-  ])
+  const network = await readWithBoundedRetry(() => provider.getNetwork())
+  const deployerCode = await readWithBoundedRetry(() => provider.getCode(deployer))
+  const deployerBalance = await readWithBoundedRetry(() => provider.getBalance(deployer))
+  const usdcCode = await readWithBoundedRetry(() => provider.getCode(manifest.network.usdc))
+  const operatorCode = deployer.toLowerCase() === manifest.operator.toLowerCase()
+    ? deployerCode
+    : await readWithBoundedRetry(() => provider.getCode(manifest.operator))
+  const simulatedRuntime = await readWithBoundedRetry(
+    () => provider.call({ from: deployer, data: deploymentData }),
+  )
+  const feeData = await readWithBoundedRetry(() => provider.getFeeData())
   const usdc = new Contract(manifest.network.usdc, USDC_READ_ABI, provider)
-  const usdcDecimals = await usdc.decimals() as bigint
+  const usdcDecimals = await readWithBoundedRetry(() => usdc.decimals() as Promise<bigint>)
   if (usdcDecimals !== 6n) {
     throw new Error('Arc Testnet USDC precision does not match the reviewed network configuration.')
   }
@@ -91,7 +110,9 @@ async function main() {
   let estimatedGas: bigint | null = null
   let estimateError: string | null = null
   try {
-    estimatedGas = await provider.estimateGas({ from: deployer, data: deploymentData })
+    estimatedGas = await readWithBoundedRetry(
+      () => provider.estimateGas({ from: deployer, data: deploymentData }),
+    )
   } catch (error) {
     estimateError = safeEstimateError(error)
   }
