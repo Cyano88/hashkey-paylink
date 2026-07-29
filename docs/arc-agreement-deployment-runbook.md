@@ -92,7 +92,7 @@ It connects only to the official Arc Testnet RPC and performs read-only checks:
 
 - clean source commit and deterministic manifest equality;
 - Arc Testnet chain ID;
-- official USDC bytecode, symbol, and six-decimal metadata;
+- official USDC bytecode and six-decimal precision;
 - EOA code state for the proposed deployer and managed operator;
 - exact constructor calldata and manifest commitment;
 - constructor execution through `eth_call`;

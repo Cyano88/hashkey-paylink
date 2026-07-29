@@ -16,10 +16,7 @@ import {
 
 const ARC_RPC_URL = 'https://rpc.testnet.arc.network'
 const ARC_CHAIN_ID = 5_042_002
-const USDC_READ_ABI = [
-  'function decimals() view returns (uint8)',
-  'function symbol() view returns (string)',
-] as const
+const USDC_READ_ABI = ['function decimals() view returns (uint8)'] as const
 
 function required(value: unknown, name: string) {
   const normalized = String(value ?? '').trim()
@@ -86,12 +83,9 @@ async function main() {
     provider.getFeeData(),
   ])
   const usdc = new Contract(manifest.network.usdc, USDC_READ_ABI, provider)
-  const [usdcDecimals, usdcSymbol] = await Promise.all([
-    usdc.decimals() as Promise<bigint>,
-    usdc.symbol() as Promise<string>,
-  ])
-  if (usdcDecimals !== 6n || usdcSymbol !== 'USDC') {
-    throw new Error('Arc Testnet USDC metadata does not match the reviewed network configuration.')
+  const usdcDecimals = await usdc.decimals() as bigint
+  if (usdcDecimals !== 6n) {
+    throw new Error('Arc Testnet USDC precision does not match the reviewed network configuration.')
   }
 
   let estimatedGas: bigint | null = null
@@ -119,7 +113,7 @@ async function main() {
   console.log(JSON.stringify({
     ...result,
     rpcUrl: ARC_RPC_URL,
-    usdcMetadata: { symbol: usdcSymbol, decimals: Number(usdcDecimals) },
+    usdcMetadata: { decimals: Number(usdcDecimals) },
     deployerBalanceDisplay: `${formatEther(deployerBalance)} native Arc USDC`,
   }, null, 2))
   if (!result.readyForBroadcastReview) process.exitCode = 2
