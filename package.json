@@ -70,6 +70,7 @@
     "provision:arc-agreement-operator": "node --import tsx scripts/arc-agreement-operator-provision.mjs",
     "preflight:arc-agreement-operator": "node --import tsx scripts/arc-agreement-operator-preflight.mjs",
     "plan:arc-agreements": "npm --prefix contracts run plan:arc-agreements",
+    "simulate:arc-agreements": "npm --prefix contracts run simulate:arc-agreements",
     "bundle:arc-agreement-review": "npm --prefix contracts run bundle:arc-agreements-review",
     "verify:arc-agreement-deployment": "npm --prefix contracts run verify:arc-agreements",
     "test:hosted-checkouts": "node --import tsx scripts/hosted-checkouts-adapter-smoke.mjs",

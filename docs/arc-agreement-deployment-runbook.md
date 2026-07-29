@@ -74,6 +74,35 @@ Generating this packet is not an independent security review. The packet has
 no input or output capable of changing its `deploy`, `broadcast`, or `activate`
 authorization fields from `false`.
 
+## Run the read-only deployment simulation
+
+After committing the simulation code, regenerate the schema-v2 manifest so its
+`sourceCommit` equals the new clean Git commit. Set:
+
+- `ARC_AGREEMENT_MANIFEST_PATH` to that exact manifest;
+- `ARC_AGREEMENT_DEPLOYER_ADDRESS` to the proposed funded Arc Testnet EOA.
+
+Then run:
+
+`npm run simulate:arc-agreements`
+
+The simulation command does not load Hardhat network accounts, a private key,
+Circle credentials, or an entity secret. It cannot sign, deploy, or broadcast.
+It connects only to the official Arc Testnet RPC and performs read-only checks:
+
+- clean source commit and deterministic manifest equality;
+- Arc Testnet chain ID;
+- official USDC bytecode, symbol, and six-decimal metadata;
+- EOA code state for the proposed deployer and managed operator;
+- exact constructor calldata and manifest commitment;
+- constructor execution through `eth_call`;
+- simulated runtime-bytecode equality;
+- gas estimation, current fee data, and deployer funding readiness.
+
+The command returns a non-ready result when gas estimation is unavailable or
+the deployer balance is insufficient. Its authorization fields always remain
+false. A passing simulation still does not authorize signing or broadcast.
+
 ## Verify an approved deployment
 
 After an explicitly approved deployment, keep the product inactive. Set the
