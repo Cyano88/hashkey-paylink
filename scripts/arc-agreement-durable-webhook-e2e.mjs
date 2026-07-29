@@ -291,7 +291,18 @@ async function prepare(config) {
   const beforeEvent = outboxBefore?.events?.[queued.event.id]
   if (!beforeEvent) throw new Error('Durable event was not persisted.')
   if (beforeEvent.status === 'delivered') throw new Error('Durable test event was already delivered unexpectedly.')
-  if (beforeEvent.attempts === 0) {
+  if (beforeEvent.status === 'dead') throw new Error('Durable test event exhausted its retry budget.')
+  const expectedFailureAlreadyRecorded = beforeEvent.status === 'pending'
+    && /HTTP 500/.test(beforeEvent.lastError ?? '')
+  if (!expectedFailureAlreadyRecorded) {
+    const retryAt = beforeEvent.status === 'delivering'
+      ? beforeEvent.leaseUntil
+      : beforeEvent.nextAttemptAt
+    const dueIn = Math.max(0, Date.parse(retryAt ?? '') - Date.now())
+    if (dueIn > 0) {
+      progress('Waiting for persisted retry deadline', `${Math.ceil(dueIn / 1000)} seconds`)
+      await new Promise(resolve => setTimeout(resolve, dueIn + 250))
+    }
     progress('Forcing first delivery failure')
     if (await drainArcAgreementWebhookOutbox(undefined, 1) !== 0) {
       throw new Error('HTTP 500 delivery must not be reported as delivered.')

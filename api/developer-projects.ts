@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
-import { BlockList } from 'node:net'
+import { BlockList, type LookupFunction } from 'node:net'
 import { request as httpsRequest } from 'node:https'
 import type { Request, Response } from 'express'
 import { PrivyClient, type User } from '@privy-io/server-auth'
@@ -163,6 +163,16 @@ export async function validatePublicWebhookDestination(value: string) {
   await resolvePublicWebhookDestination(value)
 }
 
+export function pinnedPublicWebhookLookup(address: string, family: number): LookupFunction {
+  return (_hostname, options, callback) => {
+    if (options.all) {
+      callback(null, [{ address, family }])
+      return
+    }
+    callback(null, address, family)
+  }
+}
+
 async function resolvePublicWebhookDestination(value: string) {
   const url = new URL(value)
   if (url.protocol !== 'https:' || url.username || url.password) throw Object.assign(new Error('Webhook URLs must use public HTTPS endpoints.'), { status: 400 })
@@ -190,7 +200,7 @@ async function postPublicWebhook(value: string, payload: string, headers: Record
       headers: { ...headers, 'content-length': Buffer.byteLength(payload).toString() },
       servername: destination.url.hostname,
       timeout: 10_000,
-      lookup: (_hostname, _options, callback) => callback(null, destination.address, destination.family),
+      lookup: pinnedPublicWebhookLookup(destination.address, destination.family),
     }, response => {
       response.resume()
       response.once('end', () => resolve(response.statusCode ?? 0))

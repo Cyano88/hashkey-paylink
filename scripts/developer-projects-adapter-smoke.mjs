@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { buildDeveloperWebhookRequest, createDeveloperProjectsHandler, developerPolicyFromStore, developerWebhookSignature, validatePublicWebhookDestination } from '../api/developer-projects.ts'
+import { buildDeveloperWebhookRequest, createDeveloperProjectsHandler, developerPolicyFromStore, developerWebhookSignature, pinnedPublicWebhookLookup, validatePublicWebhookDestination } from '../api/developer-projects.ts'
 import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
@@ -26,6 +26,22 @@ const linkedWallet = '0x1111111111111111111111111111111111111111'
 const externalRefundWallet = '0x4444444444444444444444444444444444444444'
 let activeIdentity = { userId: 'did:privy:test-owner', email: 'owner@example.com' }
 await assert.rejects(validatePublicWebhookDestination('https://127.0.0.1/webhook'), /public HTTPS/)
+const pinnedLookup = pinnedPublicWebhookLookup('203.0.113.10', 4)
+await new Promise((resolve, reject) => {
+  pinnedLookup('example.com', { all: true }, (error, addresses) => {
+    if (error) return reject(error)
+    assert.deepEqual(addresses, [{ address: '203.0.113.10', family: 4 }])
+    resolve()
+  })
+})
+await new Promise((resolve, reject) => {
+  pinnedLookup('example.com', { all: false }, (error, address, family) => {
+    if (error) return reject(error)
+    assert.equal(address, '203.0.113.10')
+    assert.equal(family, 4)
+    resolve()
+  })
+})
 assert.equal(
   developerWebhookSignature('whsec_test', '1784452800', '{"event":"payment.confirmed"}'),
   createHmac('sha256', 'whsec_test').update('1784452800.{"event":"payment.confirmed"}').digest('hex'),
