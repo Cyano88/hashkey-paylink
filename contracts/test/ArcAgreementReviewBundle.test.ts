@@ -30,6 +30,11 @@ describe('Arc Agreement independent-review bundle', () => {
     expect(first.reviewDecision.status).to.equal('not-recorded')
     expect(first.testEvidence.status).to.equal('not-attested')
     expect(first.evidence).to.have.length.greaterThan(8)
+    expect(first.evidence.map(item => item.id)).to.include.members([
+      'deployment-simulation-code',
+      'deployment-simulation-entrypoint',
+      'deployment-simulation-tests',
+    ])
     expect(first.bundleCommitment).to.match(/^0x[0-9a-f]{64}$/)
   })
 
