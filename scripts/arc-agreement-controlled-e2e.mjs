@@ -61,6 +61,11 @@ const factoryAbi = parseAbi([
   'function createAndFund((bytes32 clientReference,bytes32 termsHash,address recipient,uint8 template,uint256 totalAmount,uint64 cancelUntil,uint64 expiresAt,uint16[] cumulativeReleaseBps) params) returns (address)',
 ])
 
+function progress(stage, detail = '') {
+  const suffix = detail ? ` — ${detail}` : ''
+  console.log(`[arc-agreement-e2e] ${stage}${suffix}`)
+}
+
 function required(name) {
   const value = String(process.env[name] ?? '').trim()
   if (!value) throw new Error(`${name} is required.`)
@@ -143,10 +148,15 @@ function createCircleClient(config) {
 
   async function waitForTransaction(id, label, timeoutMs = 600_000) {
     const deadline = Date.now() + timeoutMs
+    let previousState = ''
     while (Date.now() < deadline) {
       const body = await transaction(id)
       const tx = body?.data?.transaction
       const state = String(tx?.state ?? '')
+      if (state !== previousState) {
+        progress(label, `Circle state ${state || 'UNKNOWN'}`)
+        previousState = state
+      }
       if (SUCCESS_STATES.has(state)) return tx
       if (FAILURE_STATES.has(state)) {
         throw new Error(`${label} failed in Circle state ${state}: ${String(tx?.errorReason ?? tx?.errorDetails ?? '')}`)
@@ -160,11 +170,13 @@ function createCircleClient(config) {
 }
 
 async function waitForConfirmedRead(publicClient, txHash, confirmations = 5) {
+  progress('Waiting for Arc confirmation', `${confirmations} blocks`)
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, confirmations: 1, timeout: 180_000 })
   if (receipt.status !== 'success') throw new Error(`Transaction ${txHash} reverted.`)
   while (await publicClient.getBlockNumber() < receipt.blockNumber + BigInt(confirmations)) {
     await new Promise(resolve => setTimeout(resolve, 1_000))
   }
+  progress('Arc confirmation reached', `block ${receipt.blockNumber}`)
   return receipt
 }
 
@@ -213,6 +225,7 @@ function createMemoryWebhookDependencies() {
 }
 
 async function main() {
+  progress('Starting guarded lifecycle')
   const config = assertSafetyBoundary()
   const circle = createCircleClient(config)
   const publicClient = createPublicClient({
@@ -222,6 +235,7 @@ async function main() {
   if (await publicClient.getChainId() !== 5_042_002) throw new Error('RPC is not Arc Testnet.')
   const code = await publicClient.getBytecode({ address: FACTORY })
   if (!code || code === '0x') throw new Error('Reviewed factory bytecode is unavailable.')
+  progress('Safety preflight passed', 'public activation disabled')
 
   const operatorWallet = await fetchAndVerifyArcAgreementOperatorWallet({
     apiKey: config.apiKey,
@@ -229,7 +243,9 @@ async function main() {
     expectedOperator: EXPECTED_OPERATOR,
     requestId: randomUUID(),
   })
+  progress('Operator ownership verified')
 
+  progress('Loading isolated test wallet set')
   const walletSetResponse = await circle.mutate('/v1/w3s/developer/walletSets', {
     idempotencyKey: IDS.walletSet,
     name: 'Hash PayLink Arc Agreement Controlled Test',
@@ -237,6 +253,7 @@ async function main() {
   const walletSetId = String(walletSetResponse?.data?.walletSet?.id ?? '')
   if (!walletSetId) throw new Error('Circle did not return the controlled-test wallet set.')
 
+  progress('Loading isolated payer and recipient wallets')
   const walletsResponse = await circle.mutate('/v1/w3s/developer/wallets', {
     idempotencyKey: IDS.wallets,
     blockchains: ['ARC-TESTNET'],
@@ -254,6 +271,7 @@ async function main() {
   const recipient = wallets.find(item => item?.refId === 'arc-agreement-controlled-recipient') ?? wallets[1]
   const payerAddress = getAddress(payer.address)
   const recipientAddress = getAddress(recipient.address)
+  progress('Isolated wallets ready')
 
   const clientReference = arcAgreementClientReference(PARTNER_ID, AGREEMENT_ID)
   const onchainAgreementId = await publicClient.readContract({
@@ -270,6 +288,7 @@ async function main() {
   })
 
   if (escrow === '0x0000000000000000000000000000000000000000') {
+    progress('Funding controlled payer', '0.5 test USDC')
     const fundingResponse = await circle.mutate('/v1/w3s/developer/transactions/transfer', {
       idempotencyKey: IDS.funding,
       destinationAddress: payerAddress,
@@ -283,6 +302,7 @@ async function main() {
     const fundingTx = await circle.waitForTransaction(fundingResponse?.data?.id, 'payer funding')
     await waitForConfirmedRead(publicClient, fundingTx.txHash)
 
+    progress('Approving reviewed factory', '0.2 test USDC ceiling')
     const approvalId = await circleContractExecution(circle, {
       idempotencyKey: IDS.approval,
       walletId: payer.id,
@@ -297,6 +317,7 @@ async function main() {
     const approvalTx = await circle.waitForTransaction(approvalId, 'payer approval')
     await waitForConfirmedRead(publicClient, approvalTx.txHash)
 
+    progress('Creating and atomically funding agreement', '0.2 test USDC')
     const activationTimestamp = Math.floor(Date.now() / 1000)
     const terms = arcAgreementTerms({
       template: 'progressive_release',
@@ -356,6 +377,9 @@ async function main() {
       functionName: 'agreementEscrow',
       args: [onchainAgreementId],
     })
+    progress('Agreement escrow created')
+  } else {
+    progress('Resuming existing controlled agreement')
   }
 
   if (escrow === '0x0000000000000000000000000000000000000000') {
@@ -388,10 +412,12 @@ async function main() {
   if (!initialReconciliation.verified) {
     throw new Error(`Initial agreement reconciliation failed: ${initialReconciliation.mismatches.join(', ')}`)
   }
+  progress('Initial chain reconciliation passed', initialReconciliation.lifecycle)
 
   let releaseTxHash = null
   let releasedConfirmed = initialConfirmed
   if (initialSnapshot.status === 1 && initialSnapshot.nextStep === 0) {
+    progress('Releasing first agreement step', '0.1 test USDC')
     const releaseCall = prepareArcAgreementReleaseCall({
       operatorWallet,
       idempotencyKey: IDS.release,
@@ -421,9 +447,11 @@ async function main() {
   )) {
     throw new Error(`Released agreement reconciliation failed: ${releasedReconciliation.mismatches.join(', ')}`)
   }
+  progress('Release reconciliation passed', releasedReconciliation.lifecycle)
 
   let cancelTxHash = null
   if (releasedConfirmed.snapshot.status === 1) {
+    progress('Cancelling unreleased remainder', 'returning 0.1 test USDC')
     const cancelCall = prepareArcAgreementCancellationCall({
       operatorWallet,
       idempotencyKey: IDS.cancel,
@@ -450,7 +478,9 @@ async function main() {
   if (!finalReconciliation.verified || finalConfirmed.snapshot.status !== 3) {
     throw new Error(`Final agreement reconciliation failed: ${finalReconciliation.mismatches.join(', ')}`)
   }
+  progress('Final chain reconciliation passed', finalReconciliation.lifecycle)
 
+  progress('Testing webhook replay and retry recovery')
   const memoryWebhook = createMemoryWebhookDependencies()
   const queued = await reconcileAndQueueArcAgreementWebhook({
     client: publicClient,
@@ -477,6 +507,7 @@ async function main() {
   if (delivered !== 1 || event?.status !== 'delivered' || webhookState.deliveryAttempts !== 2) {
     throw new Error('Webhook retry and recovery validation failed.')
   }
+  progress('Webhook replay and retry recovery passed')
 
   const payerBalance = await publicClient.readContract({
     address: USDC,
