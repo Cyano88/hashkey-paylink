@@ -89,9 +89,16 @@ preview endpoint continues to return `contract_unavailable`.
 Confirmed reads are pinned to a block behind the configured Arc head. Verified
 states enter a durable webhook outbox with a stable state-derived event ID,
 leased delivery, bounded retry, and the existing developer-project HMAC
-signature. This event boundary is implemented but is not connected to a public
-activation route or production reconciliation worker, so the preview emits no
-agreement webhook.
+signature. The server drains this durable outbox and its signed retry behavior
+has passed a controlled external test. It is not connected to a public
+activation route or a production reconciliation worker, so the preview emits
+no agreement webhook.
+
+The activation policy module is a non-broadcast safety boundary for the future
+payer flow. It requires explicit project and checkout-mode allowlists, pilot
+amount and duration ceilings, reviewed runtime addresses, operator
+configuration, and a signed developer webhook. It cannot activate an agreement
+by itself.
 
 ## Contract and migration gates
 

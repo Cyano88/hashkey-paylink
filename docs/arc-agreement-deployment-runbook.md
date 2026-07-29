@@ -2,9 +2,14 @@
 
 ## Current state
 
-Arc Agreements is inactive. The API returns `contract_unavailable`, webhook
-delivery is not wired to a public route or worker, and the repository contains
-no Arc Agreements broadcast command.
+Arc Agreements is inactive. The API returns `contract_unavailable` and the
+repository contains no public payer activation command.
+
+The Arc Testnet factory has been deployed and verified, a controlled agreement
+completed release and cancellation, and the signed webhook outbox passed a
+durable HTTP 500 to HTTP 200 retry across separate processes. The server drains
+the durable webhook outbox, but there is not yet a production reconciliation
+worker that discovers lifecycle changes for every active escrow.
 
 The deployment plan is a deterministic review artifact, not authorization to
 deploy.

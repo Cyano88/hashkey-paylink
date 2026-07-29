@@ -82,6 +82,7 @@ export type DeveloperCheckoutPolicy = {
   environment: DeveloperEnvironment
   checkoutMode: DeveloperCheckoutMode
   capabilities: DeveloperCapability[]
+  webhookConfigured: boolean
   nairaSettlement?: {
     bankCode: string
     bankName: string
@@ -724,11 +725,12 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
           accountNumber: decryptValue(secret, project.bankAccountCipher),
           refundAddress: project.refundAddress,
         },
+        webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher),
         projectManaged: true,
       }
     }
     const defaultNetwork = paymentOptions.some(option => option.network === project.defaultNetwork) ? project.defaultNetwork : paymentOptions[0].network
-    return { partnerId: project.id, merchantName: project.name, brandImageUrl: project.brandImageUrl, allowedOrigins: project.allowedOrigins, defaultNetwork, paymentOptions, settlementMode: 'usdc', environment: keyEnvironment, checkoutMode: projectCheckoutMode(project), capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'], projectManaged: true }
+    return { partnerId: project.id, merchantName: project.name, brandImageUrl: project.brandImageUrl, allowedOrigins: project.allowedOrigins, defaultNetwork, paymentOptions, settlementMode: 'usdc', environment: keyEnvironment, checkoutMode: projectCheckoutMode(project), capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'], webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher), projectManaged: true }
   }
   return null
 }

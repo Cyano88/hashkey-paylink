@@ -141,6 +141,7 @@ assert.equal(policy.merchantName, 'PolyDesk API')
 assert.equal(policy.brandImageUrl, 'https://polydesk.trade/brand/polydesk-mark-bw-transparent.png')
 assert.equal(policy.checkoutMode, 'human')
 assert.deepEqual(policy.capabilities, ['hosted_checkout', 'polymarket_funding', 'arc_agreements'])
+assert.equal(policy.webhookConfigured, false)
 assert.equal(policy.environment, 'live')
 assert.deepEqual(policy.paymentOptions.map(option => option.network), ['base', 'arbitrum'])
 assert.equal(developerPolicyFromStore(store, `${generated.body.apiKey}tampered`, portalSecret), null)
@@ -214,6 +215,7 @@ const webhook = await request(handler, 'POST', { action: 'rotate-webhook-secret'
 assert.equal(webhook.statusCode, 201)
 assert.match(webhook.body.webhookSecret, /^whsec_/)
 assert.equal(JSON.stringify(webhook.body.project).includes('webhookSecretCipher'), false)
+assert.equal(developerPolicyFromStore(store, generated.body.apiKey, portalSecret).webhookConfigured, true)
 
 const naira = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',

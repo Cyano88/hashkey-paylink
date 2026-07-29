@@ -29,6 +29,7 @@ const humanPolicy = {
   environment: 'test',
   checkoutMode: 'human',
   capabilities: ['arc_agreements'],
+  webhookConfigured: false,
   projectManaged: true,
 }
 
