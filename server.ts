@@ -120,6 +120,7 @@ import arcAgreementsHandler from './api/arc-agreements.js'
 import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
 import arcAgreementOperationsHandler from './api/arc-agreement-operations.js'
 import { drainArcAgreementWebhookOutbox } from './api/arc-agreement-webhooks.js'
+import hashPayStreamArcWebhookHandler from './api/hashpaystream-arc-webhook.js'
 import { drainArcAgreementActivationReconciliations } from './api/arc-agreement-activation-worker.js'
 import { drainArcAgreementLifecycleReconciliations } from './api/arc-agreement-lifecycle-worker.js'
 import { drainArcAgreementOperatorActions } from './api/arc-agreement-operator-worker.js'
@@ -204,9 +205,16 @@ app.use((_req, res, next) => {
 })
 
 const vtpassWebhookLimiter = rateLimit({ name: 'vtpass-webhook', windowMs: 60_000, max: 60 })
+const hashPayStreamArcWebhookLimiter = rateLimit({ name: 'hashpaystream-arc-webhook', windowMs: 60_000, max: 120 })
 
 app.post('/api/paycrest-webhook', express.raw({ type: 'application/json', limit: '128kb' }), paycrestWebhookHandler)
 app.post('/api/vtpass-webhook', vtpassWebhookLimiter, express.json({ type: 'application/json', limit: '32kb' }), vtpassBillsWebhookHandler)
+app.post(
+  '/api/hashpaystream/arc-agreement-webhook',
+  hashPayStreamArcWebhookLimiter,
+  express.raw({ type: 'application/json', limit: '64kb' }),
+  hashPayStreamArcWebhookHandler,
+)
 
 // Parse JSON bodies before any route handler sees req.body. Creator Studio
 // publish payloads can include sanitized article HTML plus a compressed cover.

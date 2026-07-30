@@ -122,6 +122,7 @@ export function buildArcAgreementWebhookEvent(input: {
     agreementId: input.agreementId,
     event,
     data: {
+      partnerId: input.partnerId,
       agreementId: input.agreementId,
       onchainAgreementId: input.snapshot.agreementId,
       escrow: input.snapshot.escrow,

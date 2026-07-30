@@ -214,3 +214,23 @@ reviewed factory bytecode, and all strict limits, and prints no API key,
 entity secret, wallet id, or webhook secret. Passing it does not activate
 anything. A later one-agreement activation window still requires explicit
 authorization and must not enable the payer-lifecycle or operator workers.
+
+## Hash PayStream pilot receiver
+
+The standalone Hash PayStream pilot receives confirmed lifecycle events at:
+
+`POST /api/hashpaystream/arc-agreement-webhook`
+
+The route is mounted with a raw JSON body before the global JSON parser so its
+HMAC covers the exact bytes Hash PayLink sent. It requires
+`x-hashpaylink-event` and `x-hashpaylink-signature`, accepts only a five-minute
+timestamp window, and binds the signed payload to
+`HASHPAYSTREAM_ARC_PROJECT_ID`, Arc Testnet chain 5042002, a durable agreement
+id, and the known agreement lifecycle event set.
+
+`HASHPAYSTREAM_ARC_WEBHOOK_SECRET` contains the one-time `whsec_` value created
+for that developer project and is server-only. Accepted events are stored in
+the Render durable store without the signature or signing secret. Identical
+delivery retries increment a duplicate counter and return success; reusing an
+event id with a changed payload is rejected. The receiver records authoritative
+events but does not release funds, fulfill content, or trust browser redirects.

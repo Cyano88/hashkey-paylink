@@ -226,6 +226,14 @@ operator wallet, a private Arc RPC, and at least five confirmations. The
 read-only invite preflight refuses to run while activation or any worker switch
 is enabled.
 
+Hash PayStream's pilot webhook receiver is a separate root API integration,
+not a new feature inside the embedded legacy StreamPay module. It verifies the
+exact signed raw body, timestamp, event id, project id, agreement id, event
+name, and Arc Testnet network before durably recording the event. Stable
+identical retries are idempotent; same-id payload drift is a conflict. Receipt
+of an event is not authority to release escrow or fulfill a separate product
+action.
+
 ## Contract and migration gates
 
 Before funding or activation can ship:
