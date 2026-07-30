@@ -17,13 +17,26 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const ENTITY_SECRET = /^[0-9a-f]{64}$/i
 const TEST_API_KEY = /^TEST_API_KEY:[^:\s]+:[^:\s]+$/
 const MAX_PILOT_USDC_UNITS = 1_000_000_000n
+const MAX_PILOT_DAILY_VOLUME_USDC_UNITS = 10_000_000_000n
 const MAX_PILOT_DURATION_SECONDS = 2_592_000
+const MAX_PILOT_ACTIVE_AGREEMENTS = 100
+const INVITE_PILOT_MAX_USDC_UNITS = 1_000_000n
+const INVITE_PILOT_MAX_DURATION_SECONDS = 604_800
+const INVITE_PILOT_DISABLED_FLAGS = [
+  'ARC_AGREEMENTS_ENABLED',
+  'ARC_AGREEMENT_RECONCILIATION_WORKER_ENABLED',
+  'ARC_AGREEMENT_LIFECYCLE_WORKER_ENABLED',
+  'ARC_AGREEMENT_OPERATOR_WORKER_ENABLED',
+  'ARC_AGREEMENT_PAYER_LIFECYCLE_ENABLED',
+] as const
 
 export type ArcAgreementActivationAuthorization = Readonly<{
   authorized: true
   partnerId: string
   checkoutMode: DeveloperCheckoutMode
   amountCeilingUsdcUnits: bigint
+  dailyVolumeCeilingUsdcUnits: bigint
+  activeAgreementLimit: number
   durationCeilingSeconds: number
   factory: Address
   operator: Address
@@ -61,17 +74,25 @@ function allowedCheckoutModes(value: unknown) {
   return new Set(modes as DeveloperCheckoutMode[])
 }
 
-function amountCeiling(value: unknown) {
-  const normalized = required(value, 'ARC_AGREEMENT_MAX_USDC')
+function usdcCeiling(value: unknown, name: string, maximum: bigint) {
+  const normalized = required(value, name)
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(normalized)) {
-    throw new Error('ARC_AGREEMENT_MAX_USDC must be a positive USDC amount with at most 6 decimals.')
+    throw new Error(`${name} must be a positive USDC amount with at most 6 decimals.`)
   }
   const [whole, fraction = ''] = normalized.split('.')
   const units = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'))
-  if (units <= 0n || units > MAX_PILOT_USDC_UNITS) {
-    throw new Error('ARC_AGREEMENT_MAX_USDC must be greater than 0 and no more than 1,000 test USDC.')
+  if (units <= 0n || units > maximum) {
+    throw new Error(`${name} must be greater than 0 and no more than ${maximum / 1_000_000n} test USDC.`)
   }
   return units
+}
+
+function activeAgreementLimit(value: unknown) {
+  const parsed = Number(required(value, 'ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT'))
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_PILOT_ACTIVE_AGREEMENTS) {
+    throw new Error(`ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT must be from 1 to ${MAX_PILOT_ACTIVE_AGREEMENTS}.`)
+  }
+  return parsed
 }
 
 function durationCeiling(value: unknown) {
@@ -119,6 +140,75 @@ function requireProjectPolicy(
   return getAddress(arcRoute.recipient)
 }
 
+export function auditArcAgreementInvitePilot(input: {
+  policy: DeveloperCheckoutPolicy
+  env?: NodeJS.ProcessEnv
+}) {
+  const env = input.env ?? process.env
+  const nonDisabledFlags = INVITE_PILOT_DISABLED_FLAGS.filter(
+    name => String(env[name] ?? '').trim().toLowerCase() !== 'false',
+  )
+  if (nonDisabledFlags.length) {
+    throw new Error(`Invite pilot preflight requires runtime switches explicitly set to false: ${nonDisabledFlags.join(', ')}.`)
+  }
+
+  const runtime = arcAgreementRuntimeConfig(env)
+  if (runtime.factory !== REVIEWED_ARC_AGREEMENT_FACTORY) {
+    throw new Error('ARC_AGREEMENT_FACTORY_ADDRESS does not match the reviewed Arc Testnet factory.')
+  }
+  if (runtime.operator !== REVIEWED_ARC_AGREEMENT_OPERATOR) {
+    throw new Error('ARC_AGREEMENT_OPERATOR_ADDRESS does not match the reviewed immutable operator.')
+  }
+  if (runtime.confirmations < 5) {
+    throw new Error('Arc Agreement activation requires at least 5 confirmation blocks.')
+  }
+
+  const allowedProjectIds = allowedProjects(env.ARC_AGREEMENT_ALLOWED_PROJECT_IDS)
+  if (allowedProjectIds.size !== 1 || !allowedProjectIds.has(input.policy.partnerId.toLowerCase())) {
+    throw new Error('Invite pilot must allowlist exactly the selected developer project.')
+  }
+  const allowedModes = allowedCheckoutModes(env.ARC_AGREEMENT_ALLOWED_CHECKOUT_MODES)
+  if (allowedModes.size !== 1 || !allowedModes.has('human')) {
+    throw new Error('Invite pilot must allowlist human checkout only.')
+  }
+
+  const amountCeilingUsdcUnits = usdcCeiling(
+    env.ARC_AGREEMENT_MAX_USDC,
+    'ARC_AGREEMENT_MAX_USDC',
+    INVITE_PILOT_MAX_USDC_UNITS,
+  )
+  const dailyVolumeCeilingUsdcUnits = usdcCeiling(
+    env.ARC_AGREEMENT_DAILY_VOLUME_USDC,
+    'ARC_AGREEMENT_DAILY_VOLUME_USDC',
+    INVITE_PILOT_MAX_USDC_UNITS,
+  )
+  const projectActiveAgreementLimit = activeAgreementLimit(env.ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT)
+  if (projectActiveAgreementLimit !== 1) {
+    throw new Error('Invite pilot must limit the selected project to one active agreement.')
+  }
+  const durationCeilingSeconds = durationCeiling(env.ARC_AGREEMENT_MAX_DURATION_SECONDS)
+  if (durationCeilingSeconds > INVITE_PILOT_MAX_DURATION_SECONDS) {
+    throw new Error('Invite pilot duration ceiling must not exceed 604800 seconds.')
+  }
+
+  requireOperatorConfiguration(env)
+  const recipient = requireProjectPolicy(input.policy, allowedProjectIds, allowedModes)
+  return Object.freeze({
+    ok: true as const,
+    activationEnabled: false as const,
+    projectId: input.policy.partnerId,
+    checkoutMode: input.policy.checkoutMode,
+    recipient,
+    amountCeilingUsdcUnits,
+    dailyVolumeCeilingUsdcUnits,
+    activeAgreementLimit: projectActiveAgreementLimit,
+    durationCeilingSeconds,
+    factory: runtime.factory,
+    operator: runtime.operator,
+    confirmationBlocks: runtime.confirmations,
+  })
+}
+
 export function authorizeArcAgreementActivation(input: {
   policy: DeveloperCheckoutPolicy
   draft: ArcAgreementDraftBinding
@@ -143,7 +233,13 @@ export function authorizeArcAgreementActivation(input: {
 
   const allowedProjectIds = allowedProjects(env.ARC_AGREEMENT_ALLOWED_PROJECT_IDS)
   const allowedModes = allowedCheckoutModes(env.ARC_AGREEMENT_ALLOWED_CHECKOUT_MODES)
-  const ceiling = amountCeiling(env.ARC_AGREEMENT_MAX_USDC)
+  const ceiling = usdcCeiling(env.ARC_AGREEMENT_MAX_USDC, 'ARC_AGREEMENT_MAX_USDC', MAX_PILOT_USDC_UNITS)
+  const dailyVolumeCeiling = usdcCeiling(
+    env.ARC_AGREEMENT_DAILY_VOLUME_USDC,
+    'ARC_AGREEMENT_DAILY_VOLUME_USDC',
+    MAX_PILOT_DAILY_VOLUME_USDC_UNITS,
+  )
+  const maxActiveAgreements = activeAgreementLimit(env.ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT)
   const maxDuration = durationCeiling(env.ARC_AGREEMENT_MAX_DURATION_SECONDS)
   requireOperatorConfiguration(env)
   const configuredRecipient = requireProjectPolicy(input.policy, allowedProjectIds, allowedModes)
@@ -153,6 +249,9 @@ export function authorizeArcAgreementActivation(input: {
   }
   const amount = BigInt(input.draft.chainTerms.amountUsdcUnits)
   if (amount > ceiling) throw new Error('Agreement amount exceeds the configured testnet activation ceiling.')
+  if (amount > dailyVolumeCeiling) {
+    throw new Error('Agreement amount exceeds the configured project daily-volume ceiling.')
+  }
   if (input.draft.chainTerms.durationSeconds > maxDuration) {
     throw new Error('Agreement duration exceeds the configured testnet activation ceiling.')
   }
@@ -170,6 +269,8 @@ export function authorizeArcAgreementActivation(input: {
     partnerId: input.policy.partnerId,
     checkoutMode: input.policy.checkoutMode,
     amountCeilingUsdcUnits: ceiling,
+    dailyVolumeCeilingUsdcUnits: dailyVolumeCeiling,
+    activeAgreementLimit: maxActiveAgreements,
     durationCeilingSeconds: maxDuration,
     factory: runtime.factory,
     operator: runtime.operator,

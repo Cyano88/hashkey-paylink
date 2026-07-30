@@ -199,7 +199,8 @@ export default function Layout() {
   const isPocketLandingPage = isPocketHost ? pathname === '/' : pathname === '/pocket' || pathname === '/pocket/'
   const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/create' || pathname === '/polymarket' || isPocketAppPage
   const isAgentCheckoutPage = pathname.startsWith('/pay/a/')
-  const isPayPage = pathname === '/pay' || isAgentCheckoutPage
+  const isAgreementPayerPage = pathname.startsWith('/agreements/')
+  const isPayPage = pathname === '/pay' || isAgentCheckoutPage || isAgreementPayerPage
   const isNgPosPage = pathname === '/pos/ng'
   const isTelegramPaymentLinksPage = pathname === '/telegram/payment-links'
   const isReceiptPage = pathname.startsWith('/receipt/')

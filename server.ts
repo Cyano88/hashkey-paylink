@@ -117,7 +117,12 @@ import publicConfigHandler from './api/public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import arcAgreementsHandler from './api/arc-agreements.js'
+import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
+import arcAgreementOperationsHandler from './api/arc-agreement-operations.js'
 import { drainArcAgreementWebhookOutbox } from './api/arc-agreement-webhooks.js'
+import { drainArcAgreementActivationReconciliations } from './api/arc-agreement-activation-worker.js'
+import { drainArcAgreementLifecycleReconciliations } from './api/arc-agreement-lifecycle-worker.js'
+import { drainArcAgreementOperatorActions } from './api/arc-agreement-operator-worker.js'
 import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
 import agenticCheckoutsHandler from './api/agentic-checkouts.js'
 import agenticCheckoutWalletPayHandler from './api/agentic-checkout-wallet-pay.js'
@@ -337,6 +342,8 @@ app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)
 app.get('/api/public-config',          readLimiter, publicConfigHandler)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
+app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)
+app.post('/api/v2/agreements/payer',   strictLimiter, arcAgreementPayerHandler)
 app.get('/api/v2/agreements',          readLimiter, arcAgreementsHandler)
 app.post('/api/v2/agreements',         strictLimiter, arcAgreementsHandler)
 app.all('/api/v2/agreements',          strictLimiter, arcAgreementsHandler)
@@ -403,4 +410,34 @@ const arcAgreementOutboxTimer = setInterval(() => {
 arcAgreementOutboxTimer.unref()
 void drainArcAgreementWebhookOutbox().catch(error => {
   console.error('[arc-agreement-webhook] startup outbox drain failed:', error instanceof Error ? error.message : String(error))
+})
+
+const arcAgreementActivationReconciliationTimer = setInterval(() => {
+  void drainArcAgreementActivationReconciliations().catch(error => {
+    console.error('[arc-agreement-activation] scheduled reconciliation failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 10_000)
+arcAgreementActivationReconciliationTimer.unref()
+void drainArcAgreementActivationReconciliations().catch(error => {
+  console.error('[arc-agreement-activation] startup reconciliation failed:', error instanceof Error ? error.message : String(error))
+})
+
+const arcAgreementLifecycleReconciliationTimer = setInterval(() => {
+  void drainArcAgreementLifecycleReconciliations().catch(error => {
+    console.error('[arc-agreement-lifecycle] scheduled reconciliation failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 15_000)
+arcAgreementLifecycleReconciliationTimer.unref()
+void drainArcAgreementLifecycleReconciliations().catch(error => {
+  console.error('[arc-agreement-lifecycle] startup reconciliation failed:', error instanceof Error ? error.message : String(error))
+})
+
+const arcAgreementOperatorTimer = setInterval(() => {
+  void drainArcAgreementOperatorActions().catch(error => {
+    console.error('[arc-agreement-operator] scheduled drain failed:', error instanceof Error ? error.message : String(error))
+  })
+}, 10_000)
+arcAgreementOperatorTimer.unref()
+void drainArcAgreementOperatorActions().catch(error => {
+  console.error('[arc-agreement-operator] startup drain failed:', error instanceof Error ? error.message : String(error))
 })

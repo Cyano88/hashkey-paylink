@@ -398,6 +398,12 @@ function requireDeveloperAdmin(identity: VerifiedDeveloper, dependencies: Depend
   }
 }
 
+export async function verifyDeveloperOperationsAdmin(req: Request) {
+  const identity = await verifyDeveloper(req)
+  requireDeveloperAdmin(identity, defaults)
+  return identity
+}
+
 function projectRoutingComplete(project: DeveloperProject) {
   if (!project.allowedOrigins.length) return false
   if (project.settlementMode === 'usdc') {
@@ -690,49 +696,94 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
   }
 }
 
+function policyForDeveloperProject(
+  project: DeveloperProject,
+  environment: DeveloperEnvironment,
+  secret: string,
+): DeveloperCheckoutPolicy | null {
+  if (secret.length < 32 || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
+  const allowedNetworks = environment === 'test'
+    ? new Set<DeveloperNetwork>(['arc'])
+    : new Set<DeveloperNetwork>(['base', 'arbitrum'])
+  if (project.settlementMode === 'ngn' && environment !== 'live') return null
+  const paymentOptions = project.settlementMode === 'ngn'
+    ? (project.refundAddress ? [{ network: 'base' as const, recipient: project.refundAddress }] : [])
+    : project.networks.flatMap(network => (
+        allowedNetworks.has(network) && project.recipients[network]
+          ? [{ network, recipient: project.recipients[network]! }]
+          : []
+      ))
+  if (!paymentOptions.length) return null
+  if (project.settlementMode === 'ngn') {
+    if (!project.bankAccountCipher || !project.bankCode || !project.bankName || !project.bankAccountName || !project.refundAddress) return null
+    return {
+      partnerId: project.id,
+      merchantName: project.name,
+      brandImageUrl: project.brandImageUrl,
+      allowedOrigins: project.allowedOrigins,
+      defaultNetwork: 'base',
+      paymentOptions,
+      settlementMode: 'ngn',
+      environment,
+      checkoutMode: projectCheckoutMode(project),
+      capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
+      nairaSettlement: {
+        bankCode: project.bankCode,
+        bankName: project.bankName,
+        accountName: project.bankAccountName,
+        accountNumber: decryptValue(secret, project.bankAccountCipher),
+        refundAddress: project.refundAddress,
+      },
+      webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher),
+      projectManaged: true,
+    }
+  }
+  const defaultNetwork = paymentOptions.some(option => option.network === project.defaultNetwork)
+    ? project.defaultNetwork
+    : paymentOptions[0].network
+  return {
+    partnerId: project.id,
+    merchantName: project.name,
+    brandImageUrl: project.brandImageUrl,
+    allowedOrigins: project.allowedOrigins,
+    defaultNetwork,
+    paymentOptions,
+    settlementMode: 'usdc',
+    environment,
+    checkoutMode: projectCheckoutMode(project),
+    capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
+    webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher),
+    projectManaged: true,
+  }
+}
+
 export function developerPolicyFromStore(store: DeveloperStore | undefined, apiKey: string, secret: string): DeveloperCheckoutPolicy | null {
   const requestedEnvironment: DeveloperEnvironment | null = apiKey.startsWith('hpl_live_') ? 'live' : apiKey.startsWith('hpl_test_') ? 'test' : null
   if (!requestedEnvironment || secret.length < 32) return null
   const digest = keyDigest(secret, apiKey)
   for (const project of Object.values(store?.projects ?? {})) {
     const key = project.keys.find(item => !item.revokedAt && safeDigestEqual(item.digest, digest))
-    if (!key || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') continue
+    if (!key) continue
     const keyEnvironment: DeveloperEnvironment = key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')
     if (keyEnvironment !== requestedEnvironment) continue
-    const allowedNetworks = keyEnvironment === 'test' ? new Set<DeveloperNetwork>(['arc']) : new Set<DeveloperNetwork>(['base', 'arbitrum'])
-    if (project.settlementMode === 'ngn' && keyEnvironment !== 'live') return null
-    const paymentOptions = project.settlementMode === 'ngn'
-      ? (project.refundAddress ? [{ network: 'base' as const, recipient: project.refundAddress }] : [])
-      : project.networks.flatMap(network => allowedNetworks.has(network) && project.recipients[network] ? [{ network, recipient: project.recipients[network]! }] : [])
-    if (!paymentOptions.length) return null
-    if (project.settlementMode === 'ngn') {
-      if (!project.bankAccountCipher || !project.bankCode || !project.bankName || !project.bankAccountName || !project.refundAddress) return null
-      return {
-        partnerId: project.id,
-        merchantName: project.name,
-        brandImageUrl: project.brandImageUrl,
-        allowedOrigins: project.allowedOrigins,
-        defaultNetwork: 'base',
-        paymentOptions,
-        settlementMode: 'ngn',
-        environment: keyEnvironment,
-        checkoutMode: projectCheckoutMode(project),
-        capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
-        nairaSettlement: {
-          bankCode: project.bankCode,
-          bankName: project.bankName,
-          accountName: project.bankAccountName,
-          accountNumber: decryptValue(secret, project.bankAccountCipher),
-          refundAddress: project.refundAddress,
-        },
-        webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher),
-        projectManaged: true,
-      }
-    }
-    const defaultNetwork = paymentOptions.some(option => option.network === project.defaultNetwork) ? project.defaultNetwork : paymentOptions[0].network
-    return { partnerId: project.id, merchantName: project.name, brandImageUrl: project.brandImageUrl, allowedOrigins: project.allowedOrigins, defaultNetwork, paymentOptions, settlementMode: 'usdc', environment: keyEnvironment, checkoutMode: projectCheckoutMode(project), capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'], webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher), projectManaged: true }
+    return policyForDeveloperProject(project, keyEnvironment, secret)
   }
   return null
+}
+
+export async function resolveDeveloperProjectPolicy(
+  projectId: string,
+  environment: DeveloperEnvironment,
+): Promise<DeveloperCheckoutPolicy | null> {
+  const secret = defaults.portalSecret()
+  if (!defaults.hasStore() || secret.length < 32) return null
+  const project = (await defaults.read(STORE_KEY))?.projects?.[projectId]
+  if (!project) return null
+  const hasActiveEnvironmentKey = project.keys.some(key => {
+    if (key.revokedAt) return false
+    return (key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')) === environment
+  })
+  return hasActiveEnvironmentKey ? policyForDeveloperProject(project, environment, secret) : null
 }
 
 export function developerWebhookSignature(signingSecret: string, timestamp: string, rawBody: string) {

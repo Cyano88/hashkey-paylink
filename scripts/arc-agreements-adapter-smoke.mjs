@@ -45,6 +45,7 @@ const handler = createArcAgreementsHandler({
   },
   policy: async () => policy,
   createId: () => `agr_testagreement${(++id).toString().padStart(4, '0')}`,
+  createPayerAccessToken: () => `agrp_${String(id + 1).padStart(43, 'a')}`,
   now: () => new Date('2026-07-28T12:00:00.000Z'),
 })
 
@@ -88,6 +89,9 @@ assert.deepEqual(created.body.agreement.chainTerms.cumulativeReleaseBps, [10000]
 assert.equal(created.body.agreement.status, 'draft')
 assert.equal(created.body.agreement.activationStatus, 'contract_unavailable')
 assert.equal('requestHash' in created.body.agreement, false)
+assert.equal('payerAccessHash' in created.body.agreement, false)
+assert.match(created.body.payerAccessToken, /^agrp_[A-Za-z0-9_-]{40,100}$/)
+assert.equal(created.body.payerReviewPath, `/agreements/${created.body.agreement.id}#access=${created.body.payerAccessToken}`)
 assert.match(created.body.nextAction, /No funds have moved/)
 assert.equal(JSON.stringify(created.body).includes('checkoutUrl'), false)
 assert.equal(JSON.stringify(created.body).includes('depositAddress'), false)
@@ -96,6 +100,7 @@ const replay = await request(handler, 'POST', { body: fixed, headers })
 assert.equal(replay.statusCode, 200)
 assert.equal(replay.body.replayed, true)
 assert.equal(replay.body.agreement.id, created.body.agreement.id)
+assert.equal('payerAccessToken' in replay.body, false)
 
 const conflict = await request(handler, 'POST', { body: { ...fixed, amount: '11' }, headers })
 assert.equal(conflict.statusCode, 409)

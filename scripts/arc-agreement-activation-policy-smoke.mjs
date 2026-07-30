@@ -47,6 +47,8 @@ const env = {
   ARC_AGREEMENT_ALLOWED_PROJECT_IDS: partnerId,
   ARC_AGREEMENT_ALLOWED_CHECKOUT_MODES: 'human',
   ARC_AGREEMENT_MAX_USDC: '25',
+  ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT: '3',
+  ARC_AGREEMENT_DAILY_VOLUME_USDC: '50',
   ARC_AGREEMENT_MAX_DURATION_SECONDS: '2592000',
   ARC_AGREEMENT_CONFIRMATION_BLOCKS: '5',
   CIRCLE_TEST_API_KEY: 'TEST_API_KEY:test-id:test-secret',
@@ -79,11 +81,19 @@ assert.throws(() => authorizeArcAgreementActivation({
 assert.throws(() => authorizeArcAgreementActivation({
   policy, draft, payer, activationTimestamp, env: { ...env, CIRCLE_TEST_API_KEY: 'LIVE_API_KEY:id:secret' },
 }), /Circle test API key/)
+assert.throws(() => authorizeArcAgreementActivation({
+  policy, draft, payer, activationTimestamp, env: { ...env, ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT: '0' },
+}), /MAX_ACTIVE_PER_PROJECT/)
+assert.throws(() => authorizeArcAgreementActivation({
+  policy, draft, payer, activationTimestamp, env: { ...env, ARC_AGREEMENT_DAILY_VOLUME_USDC: '0' },
+}), /DAILY_VOLUME_USDC/)
 
 const authorized = authorizeArcAgreementActivation({ policy, draft, payer, activationTimestamp, env })
 assert.equal(authorized.authorization.authorized, true)
 assert.equal(authorized.authorization.partnerId, partnerId)
 assert.equal(authorized.authorization.amountCeilingUsdcUnits, 25_000_000n)
+assert.equal(authorized.authorization.activeAgreementLimit, 3)
+assert.equal(authorized.authorization.dailyVolumeCeilingUsdcUnits, 50_000_000n)
 assert.equal(authorized.authorization.durationCeilingSeconds, 2_592_000)
 assert.equal(authorized.authorization.factory, REVIEWED_ARC_AGREEMENT_FACTORY)
 assert.equal(authorized.authorization.operator, REVIEWED_ARC_AGREEMENT_OPERATOR)

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import type { Request, Response } from 'express'
 import { getAddress, isAddress, parseUnits } from 'viem'
 import {
@@ -42,6 +42,7 @@ export type ArcAgreement = {
   status: 'draft'
   activationStatus: 'contract_unavailable'
   requestHash: string
+  payerAccessHash: string
   createdAt: string
   updatedAt: string
 }
@@ -57,6 +58,7 @@ type Dependencies = {
   mutate: (key: string, update: (current: AgreementStore | undefined) => AgreementStore) => Promise<AgreementStore>
   policy: (req: Pick<Request, 'headers'>) => Promise<DeveloperCheckoutPolicy | null>
   createId: () => string
+  createPayerAccessToken: () => string
   now: () => Date
 }
 
@@ -66,6 +68,7 @@ const defaults: Dependencies = {
   mutate: mutateDurableJson,
   policy: resolveDeveloperApiKeyPolicy,
   createId: () => `agr_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
+  createPayerAccessToken: () => `agrp_${randomBytes(32).toString('base64url')}`,
   now: () => new Date(),
 }
 
@@ -216,8 +219,50 @@ function idempotencyScope(partnerId: string, idempotencyKey: string) {
 }
 
 function publicAgreement(agreement: ArcAgreement) {
-  const { requestHash: _requestHash, ...publicRecord } = agreement
+  const { requestHash: _requestHash, payerAccessHash: _payerAccessHash, ...publicRecord } = agreement
   return publicRecord
+}
+
+function payerAccessHash(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+function safeHashEqual(left: string, right: string) {
+  if (!/^[a-f0-9]{64}$/i.test(left) || !/^[a-f0-9]{64}$/i.test(right)) return false
+  return timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'))
+}
+
+export async function readArcAgreementByPayerAccess(
+  agreementIdValue: string,
+  accessTokenValue: string,
+  read: Dependencies['read'] = defaults.read,
+) {
+  const agreementId = clean(agreementIdValue, 80)
+  const accessToken = clean(accessTokenValue, 160)
+  if (!/^agr_[a-z0-9]{12,64}$/i.test(agreementId) || !/^agrp_[A-Za-z0-9_-]{40,100}$/.test(accessToken)) {
+    return null
+  }
+  const agreement = (await read(STORE_KEY))?.agreements?.[agreementId]
+  if (!agreement?.payerAccessHash || !safeHashEqual(agreement.payerAccessHash, payerAccessHash(accessToken))) {
+    return null
+  }
+  return agreement
+}
+
+export async function listArcAgreementRecords(
+  input: { partnerId?: string; limit?: number } = {},
+  read: Dependencies['read'] = defaults.read,
+) {
+  const partnerId = clean(input.partnerId, 80)
+  if (partnerId && !/^dev_[a-z0-9]{8,64}$/i.test(partnerId)) {
+    throw new Error('Developer project id is invalid.')
+  }
+  const limit = Math.min(250, Math.max(1, Math.trunc(input.limit ?? 100)))
+  const store = await read(STORE_KEY)
+  return Object.values(store?.agreements ?? {})
+    .filter(agreement => !partnerId || agreement.partnerId === partnerId)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, limit)
 }
 
 function requirePreviewPolicy(policy: DeveloperCheckoutPolicy | null) {
@@ -264,6 +309,7 @@ export function createArcAgreementsHandler(dependencies: Dependencies = defaults
       const now = dependencies.now().toISOString()
       let agreement: ArcAgreement | undefined
       let replayed = false
+      let payerAccessToken = ''
 
       await dependencies.mutate(STORE_KEY, current => {
         const store: AgreementStore = {
@@ -283,6 +329,10 @@ export function createArcAgreementsHandler(dependencies: Dependencies = defaults
         }
 
         const id = dependencies.createId()
+        payerAccessToken = dependencies.createPayerAccessToken()
+        if (!/^agrp_[A-Za-z0-9_-]{40,100}$/.test(payerAccessToken)) {
+          throw new Error('Agreement payer-access token generator is invalid.')
+        }
         const chainTerms = arcAgreementTerms(input)
         agreement = {
           id,
@@ -297,6 +347,7 @@ export function createArcAgreementsHandler(dependencies: Dependencies = defaults
           status: 'draft',
           activationStatus: 'contract_unavailable',
           requestHash,
+          payerAccessHash: payerAccessHash(payerAccessToken),
           createdAt: now,
           updatedAt: now,
         }
@@ -310,6 +361,10 @@ export function createArcAgreementsHandler(dependencies: Dependencies = defaults
         ok: true,
         replayed,
         agreement: publicAgreement(agreement),
+        ...(!replayed && payerAccessToken ? {
+          payerAccessToken,
+          payerReviewPath: `/agreements/${agreement.id}#access=${encodeURIComponent(payerAccessToken)}`,
+        } : {}),
         nextAction: 'Contract activation is unavailable in this testnet preview. No funds have moved.',
       })
     } catch (error) {

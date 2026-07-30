@@ -52,6 +52,13 @@ export function arcAgreementOperatorPreflightConfig(env = process.env) {
   })
 }
 
+/**
+ * @param {{
+ *   env?: NodeJS.ProcessEnv
+ *   fetchImpl?: typeof fetch
+ *   requestId?: string
+ * }} input
+ */
 export async function runArcAgreementOperatorPreflight({
   env = process.env,
   fetchImpl,

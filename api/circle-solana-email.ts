@@ -194,6 +194,89 @@ export async function listCircleUserWallets(userToken: string, chain: string): P
   return data.wallets ?? []
 }
 
+export async function createCircleArcUserContractChallenge(input: {
+  userToken: string
+  walletId: string
+  walletAddress: string
+  callData: string
+  idempotencyKey: string
+  refId: string
+}) {
+  if (!input.userToken || input.userToken.length > 8_000) throw new Error('A valid Circle wallet session is required.')
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.idempotencyKey)) {
+    throw new Error('Circle challenge idempotency key must be a UUID v4.')
+  }
+  if (!input.walletId || input.walletId.length > 256 || !isAddress(input.walletAddress)) {
+    throw new Error('A valid linked Circle Arc wallet is required.')
+  }
+  if (!/^0x[0-9a-f]+$/i.test(input.callData) || input.callData.length > 32_000) {
+    throw new Error('Prepared Circle Arc call data is invalid.')
+  }
+  if (!/^[a-zA-Z0-9:_-]{8,120}$/.test(input.refId)) throw new Error('Circle challenge reference is invalid.')
+  return circleJson<{
+    challengeId?: string
+    id?: string
+    transactionId?: string
+    transaction?: Record<string, unknown>
+  }>('/v1/w3s/user/transactions/contractExecution', {
+    method: 'POST',
+    userToken: input.userToken,
+    apiKey: circleApiKey({ chain: 'arc' }),
+    body: JSON.stringify({
+      idempotencyKey: input.idempotencyKey,
+      walletId: input.walletId,
+      feeLevel: 'HIGH',
+      refId: input.refId,
+      contractAddress: input.walletAddress,
+      callData: input.callData,
+    }),
+  })
+}
+
+export async function readCircleArcUserChallenge(input: {
+  userToken: string
+  challengeId: string
+}) {
+  const userToken = String(input.userToken ?? '').trim()
+  const challengeId = String(input.challengeId ?? '').trim()
+  if (!userToken || userToken.length > 8_000) throw new Error('A valid Circle wallet session is required.')
+  if (!challengeId || challengeId.length > 256 || !/^[a-zA-Z0-9_-]+$/.test(challengeId)) {
+    throw new Error('Circle payer challenge id is invalid.')
+  }
+  const data = await circleJson<{ challenge?: Record<string, unknown> }>(
+    `/v1/w3s/user/challenges/${encodeURIComponent(challengeId)}`,
+    {
+      method: 'GET',
+      userToken,
+      apiKey: circleApiKey({ chain: 'arc' }),
+      headers: { accept: 'application/json' },
+    },
+  )
+  return data.challenge ?? data
+}
+
+export async function readCircleArcUserTransaction(input: {
+  userToken: string
+  transactionId: string
+}) {
+  const userToken = String(input.userToken ?? '').trim()
+  const transactionId = String(input.transactionId ?? '').trim()
+  if (!userToken || userToken.length > 8_000) throw new Error('A valid Circle wallet session is required.')
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(transactionId)) {
+    throw new Error('Circle payer transaction id is invalid.')
+  }
+  const data = await circleJson<{ transaction?: Record<string, unknown> }>(
+    `/v1/w3s/transactions/${encodeURIComponent(transactionId)}`,
+    {
+      method: 'GET',
+      userToken,
+      apiKey: circleApiKey({ chain: 'arc' }),
+      headers: { accept: 'application/json' },
+    },
+  )
+  return data.transaction ?? data
+}
+
 function isBytes32(value: string | undefined): value is `0x${string}` {
   return typeof value === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value)
 }

@@ -19,6 +19,7 @@ const WEBHOOK_RETRY_DELAYS_MS = [30_000, 120_000, 600_000, 1_800_000, 3_600_000,
 export type ArcAgreementWebhookName =
   | 'agreement.activated'
   | 'agreement.step_released'
+  | 'agreement.expired'
   | 'agreement.completed'
   | 'agreement.cancelled'
   | 'agreement.refunded'
@@ -64,7 +65,15 @@ const defaults: Dependencies = {
   now: () => new Date(),
 }
 
-function eventName(snapshot: ArcAgreementChainSnapshot): ArcAgreementWebhookName {
+function eventName(
+  snapshot: ArcAgreementChainSnapshot,
+  observedBlockTimestamp?: bigint,
+): ArcAgreementWebhookName {
+  if (
+    snapshot.status === 1
+    && observedBlockTimestamp !== undefined
+    && observedBlockTimestamp >= snapshot.expiresAt
+  ) return 'agreement.expired'
   if (snapshot.status === 1) return snapshot.nextStep === 0 ? 'agreement.activated' : 'agreement.step_released'
   if (snapshot.status === 2) return 'agreement.completed'
   if (snapshot.status === 3) return 'agreement.cancelled'
@@ -91,6 +100,7 @@ export function buildArcAgreementWebhookEvent(input: {
   prepared: ArcAgreementPreparedDeployment
   snapshot: ArcAgreementChainSnapshot
   observedBlockNumber: bigint
+  observedBlockTimestamp?: bigint
   createdAt: string
 }): ArcAgreementWebhookEvent {
   if (!/^dev_[a-z0-9]{8,64}$/i.test(input.partnerId)) throw new Error('A developer project id is required.')
@@ -100,7 +110,10 @@ export function buildArcAgreementWebhookEvent(input: {
   if (!reconciliation.verified) {
     throw new Error(`Agreement snapshot failed reconciliation: ${reconciliation.mismatches.join(', ')}.`)
   }
-  const event = eventName(input.snapshot)
+  if (input.observedBlockTimestamp !== undefined && input.observedBlockTimestamp < 0n) {
+    throw new Error('Observed block timestamp is invalid.')
+  }
+  const event = eventName(input.snapshot, input.observedBlockTimestamp)
   const id = stableEventId(input.snapshot, event)
   const unreleasedAmount = input.prepared.totalAmount - input.snapshot.releasedAmount
   return {
@@ -114,7 +127,7 @@ export function buildArcAgreementWebhookEvent(input: {
       escrow: input.snapshot.escrow,
       network: 'arc',
       chainId: input.snapshot.chainId,
-      status: reconciliation.lifecycle,
+      status: event === 'agreement.expired' ? 'expired' : reconciliation.lifecycle,
       amountUsdcUnits: input.prepared.totalAmount.toString(),
       releasedAmountUsdcUnits: input.snapshot.releasedAmount.toString(),
       unreleasedAmountUsdcUnits: unreleasedAmount.toString(),
@@ -122,6 +135,9 @@ export function buildArcAgreementWebhookEvent(input: {
       releaseSteps: input.prepared.cumulativeReleaseBps.length,
       termsHash: input.snapshot.termsHash,
       observedBlockNumber: input.observedBlockNumber.toString(),
+      ...(input.observedBlockTimestamp === undefined
+        ? {}
+        : { observedBlockTimestamp: input.observedBlockTimestamp.toString() }),
     },
     createdAt: input.createdAt,
     observedBlockNumber: input.observedBlockNumber.toString(),

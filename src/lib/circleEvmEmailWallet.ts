@@ -326,7 +326,7 @@ function authenticatedSdk(session: CircleEvmEmailSession) {
 function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
   amount?: string
   asset?: string
-  recipient?: Address
+  recipient?: string
   chainLabel?: string
 }) {
   const asset = context?.asset ?? 'USDC'
@@ -676,6 +676,30 @@ export async function sendCircleEvmEmailPayment(params: {
     if (hash) return hash
   }
   throw new Error('Circle accepted the payment, but the transaction hash is not available yet. Use Check Payment Status in a moment.')
+}
+
+export async function executeCircleEvmEmailChallenge(params: {
+  session: CircleEvmEmailSession
+  challengeId: string
+  pendingMessage?: string
+}) {
+  const challengeId = String(params.challengeId ?? '').trim()
+  if (!challengeId || challengeId.length > 256) throw new Error('Circle wallet challenge is invalid.')
+  const sdk = authenticatedSdk(params.session)
+  const result = await executeChallengeWithTimeout(
+    sdk,
+    challengeId,
+    params.pendingMessage
+      ?? 'Circle wallet confirmation did not finish. If you approved it, check the agreement status before trying again.',
+  )
+  const txHash = findTxHash(result)
+  if (txHash) return { transactionHash: txHash, transactionId: findTransactionId(result) }
+  const transactionId = findTransactionId(result)
+  if (transactionId) {
+    const hash = await pollTransactionHash(params.session, transactionId, 5_000).catch(() => null)
+    return { transactionHash: hash, transactionId }
+  }
+  return { transactionHash: null, transactionId: null }
 }
 
 export async function sendCircleEvmEmailWithdraw(params: {

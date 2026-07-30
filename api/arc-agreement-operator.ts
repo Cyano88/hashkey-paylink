@@ -170,3 +170,73 @@ export function prepareArcAgreementCancellationCall(input: {
     abiParameters: Object.freeze([reasonHash]),
   })
 }
+
+export function restoreArcAgreementOperatorCallForStatus(input: {
+  operatorWallet: ArcAgreementVerifiedOperatorWallet
+  partnerId: string
+  agreementId: string
+  prepared: ArcAgreementPreparedDeployment
+  confirmed: ArcAgreementConfirmedSnapshot
+  persistedCall: {
+    idempotencyKey: string
+    walletId: string
+    operatorAddress: string
+    contractAddress: string
+    abiFunctionSignature: 'releaseStep(uint8,bytes32)' | 'cancelByOperator(bytes32)'
+    abiParameters: readonly (number | Hex)[]
+    refId: string
+  }
+}) {
+  const partnerId = requiredPartnerId(input.partnerId)
+  const agreementId = requiredAgreementId(input.agreementId)
+  requireDurableAgreementBinding(partnerId, agreementId, input.prepared)
+  const { snapshot } = assertArcAgreementConfirmedSnapshot(input.confirmed)
+  const reconciliation = reconcileArcAgreementSnapshot(input.prepared, snapshot)
+  if (!reconciliation.verified) {
+    throw new Error(`Operator status blocked by reconciliation: ${reconciliation.mismatches.join(', ')}.`)
+  }
+  const operatorWallet = assertArcAgreementOperatorWalletProof(input.operatorWallet, snapshot.operator)
+  if (
+    !isAddress(input.persistedCall.contractAddress)
+    || getAddress(input.persistedCall.contractAddress) !== getAddress(snapshot.escrow)
+    || input.persistedCall.walletId.toLowerCase() !== operatorWallet.walletId.toLowerCase()
+    || !isAddress(input.persistedCall.operatorAddress)
+    || getAddress(input.persistedCall.operatorAddress) !== operatorWallet.address
+  ) {
+    throw new Error('Persisted operator call does not match the durable agreement binding.')
+  }
+  const idempotencyKey = requiredIdempotencyKey(input.persistedCall.idempotencyKey)
+  if (input.persistedCall.abiFunctionSignature === 'releaseStep(uint8,bytes32)') {
+    if (
+      input.persistedCall.abiParameters.length !== 2
+      || !Number.isInteger(input.persistedCall.abiParameters[0])
+      || Number(input.persistedCall.abiParameters[0]) < 0
+      || Number(input.persistedCall.abiParameters[0]) > 255
+    ) {
+      throw new Error('Persisted release call parameters are invalid.')
+    }
+    requiredEvidence(input.persistedCall.abiParameters[1], 'persisted evidenceHash')
+    if (input.persistedCall.refId !== `${agreementId}:release:${input.persistedCall.abiParameters[0]}`) {
+      throw new Error('Persisted release reference does not match the durable agreement.')
+    }
+  } else {
+    if (input.persistedCall.abiParameters.length !== 1) {
+      throw new Error('Persisted cancellation call parameters are invalid.')
+    }
+    requiredEvidence(input.persistedCall.abiParameters[0], 'persisted reasonHash')
+    if (input.persistedCall.refId !== `${agreementId}:cancel`) {
+      throw new Error('Persisted cancellation reference does not match the durable agreement.')
+    }
+  }
+  return brandPreparedOperatorCall({
+    idempotencyKey,
+    walletId: operatorWallet.walletId,
+    operatorAddress: operatorWallet.address,
+    network: 'ARC-TESTNET',
+    contractAddress: getAddress(snapshot.escrow),
+    feeLevel: 'MEDIUM',
+    refId: input.persistedCall.refId,
+    abiFunctionSignature: input.persistedCall.abiFunctionSignature,
+    abiParameters: Object.freeze([...input.persistedCall.abiParameters]),
+  })
+}

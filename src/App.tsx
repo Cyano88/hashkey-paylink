@@ -8,6 +8,7 @@ import HostedCheckoutEntry from './pages/HostedCheckoutEntry'
 import AgentCheckoutPage from './pages/AgentCheckoutPage'
 import DeveloperPortalPage from './pages/DeveloperPortalPage'
 import DeveloperOperationsPage from './pages/DeveloperOperationsPage'
+import ArcAgreementPayerPage from './pages/ArcAgreementPayerPage'
 import Dashboard from './pages/Dashboard'
 import EventDashboard from './pages/EventDashboard'
 import AgentWorkspace from './pages/AgentWorkspace'
@@ -90,6 +91,7 @@ export default function App() {
       <Route path="pay" element={<PaymentPage />} />
       <Route path="pay/c/:checkoutId" element={<HostedCheckoutEntry />} />
       <Route path="pay/a/:checkoutId" element={<AgentCheckoutPage />} />
+      <Route path="agreements/:agreementId" element={<ArcAgreementPayerPage />} />
       <Route path="developers" element={<DeveloperPortalPage />} />
       <Route path="admin/developers" element={<DeveloperOperationsPage />} />
       <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />

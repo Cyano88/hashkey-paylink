@@ -17,6 +17,7 @@ import {
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn } from '../lib/utils'
+import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
 
 type Network = 'base' | 'arbitrum' | 'arc'
 type Operation = {
@@ -90,6 +91,7 @@ export default function DeveloperOperationsPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [suspensionReason, setSuspensionReason] = useState('')
+  const [surface, setSurface] = useState<'projects' | 'agreements'>('projects')
 
   async function api(method: string, body?: Record<string, unknown>) {
     const token = await getAccessToken()
@@ -182,6 +184,27 @@ export default function DeveloperOperationsPage() {
   return (
     <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-6xl px-4 py-8 sm:py-10">
       <OperationsTop onLogout={logout} />
+      <div className="mt-6 inline-grid grid-cols-2 rounded-full bg-gray-100 p-1 dark:bg-white/8">
+        {([
+          ['projects', 'Projects'],
+          ['agreements', 'Arc Agreements'],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setSurface(value)}
+            className={cn(
+              'h-9 rounded-full px-5 text-xs font-semibold transition',
+              surface === value
+                ? 'bg-white text-gray-950 shadow-sm dark:bg-white dark:text-gray-950'
+                : 'text-gray-500 dark:text-gray-400',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {surface === 'agreements' ? <ArcAgreementOperationsPanel /> : <>
       <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="Projects" value={summary.total} />
         <SummaryCard label="Active" value={summary.active} tone="success" />
@@ -247,6 +270,7 @@ export default function DeveloperOperationsPage() {
           {notice && <Message tone="success">{notice}</Message>}
         </section>
       </div>
+      </>}
     </main>
   )
 }
