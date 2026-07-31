@@ -83,6 +83,7 @@ let durableStore
 let confirmed = await snapshot()
 let blockTimestamp = BigInt(activationTimestamp + 300)
 let now = new Date('2026-07-30T10:00:00.000Z')
+const queuedWebhookEvents = []
 const dependencies = {
   hasStore: () => true,
   read: async () => durableStore,
@@ -100,6 +101,10 @@ const dependencies = {
     prepared,
   }),
   confirmed: async () => confirmed,
+  queueWebhook: async event => {
+    queuedWebhookEvents.push(event)
+    return { event, replayed: queuedWebhookEvents.some(item => item.id === event.id && item !== event) }
+  },
   now: () => now,
 }
 let observedTransaction = {
@@ -245,6 +250,8 @@ const reconciled = await reconcileArcAgreementPayerLifecycleAction({
 assert.equal(reconciled.pending, false)
 assert.equal(reconciled.changed, true)
 assert.equal(reconciled.action.status, 'confirmed')
+assert.equal(reconciled.action.webhookEventId, queuedWebhookEvents[0].id)
+assert.equal(queuedWebhookEvents[0].event, 'agreement.cancelled')
 assert.equal((await readArcAgreementPayerLifecycleAction({
   partnerId,
   agreementId,
@@ -434,6 +441,23 @@ assert.equal(recoveredUserOperation.pending, false)
 assert.equal(recoveredUserOperation.changed, true)
 assert.equal(recoveredUserOperation.action.status, 'confirmed')
 assert.equal(recoveredUserOperation.action.execution, 'circle_user_operation')
+assert.equal(recoveredUserOperation.action.webhookEventId, queuedWebhookEvents[1].id)
+assert.equal(queuedWebhookEvents[1].event, 'agreement.refunded')
+
+// Older confirmed actions are backfilled with the same stable terminal event
+// without creating or recording another Arc transaction.
+delete durableStore.actions[recoveredUserOperation.action.id].webhookEventId
+const backfilledUserOperation = await reconcileArcAgreementPayerLifecycleAction({
+  client,
+  partnerId,
+  agreementId,
+  payerIdentity: identity,
+}, dependencies)
+assert.equal(backfilledUserOperation.pending, false)
+assert.equal(backfilledUserOperation.changed, true)
+assert.equal(backfilledUserOperation.action.status, 'confirmed')
+assert.equal(backfilledUserOperation.action.webhookEventId, queuedWebhookEvents[2].id)
+assert.equal(queuedWebhookEvents[2].id, queuedWebhookEvents[1].id)
 
 const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8')
 assert.match(envExample, /^ARC_AGREEMENTS_ENABLED=false$/m)

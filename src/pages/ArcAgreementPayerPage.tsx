@@ -51,6 +51,7 @@ type LifecycleAction = {
   action: 'cancel' | 'refund'
   status: 'reserved' | 'issued' | 'transaction_pending' | 'submitted' | 'confirmed' | 'provider_failed' | 'failed' | 'manual_review'
   transactionHash: string | null
+  webhookPending?: boolean
   retryable?: boolean
 }
 
@@ -280,8 +281,10 @@ export default function ArcAgreementPayerPage() {
   }, [busy, request, review?.recovery?.chainSubmitted, review?.recovery?.stage, session])
 
   useEffect(() => {
-    const lifecycleStatus = review?.lifecycle?.action?.status
-    if (!['transaction_pending', 'submitted'].includes(lifecycleStatus ?? '')) return
+    const lifecycleAction = review?.lifecycle?.action
+    const lifecycleStatus = lifecycleAction?.status
+    const terminalWebhookPending = lifecycleStatus === 'confirmed' && lifecycleAction?.webhookPending === true
+    if (!terminalWebhookPending && !['transaction_pending', 'submitted'].includes(lifecycleStatus ?? '')) return
     const check = () => {
       void request<ActionResponse>({ action: 'lifecycle-status' })
         .then(result => {
@@ -291,12 +294,14 @@ export default function ArcAgreementPayerPage() {
           } : current)
           setError('')
         })
-        .catch(caught => setError(readableError(caught)))
+        .catch(caught => {
+          if (!terminalWebhookPending) setError(readableError(caught))
+        })
     }
     check()
     const timer = window.setInterval(check, 4_000)
     return () => window.clearInterval(timer)
-  }, [request, review?.lifecycle?.action?.status])
+  }, [request, review?.lifecycle?.action?.status, review?.lifecycle?.action?.webhookPending])
 
   useEffect(() => {
     const lifecycleStatus = review?.lifecycle?.action?.status

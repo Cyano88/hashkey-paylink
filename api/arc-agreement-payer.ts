@@ -178,6 +178,7 @@ function publicLifecycleAction(action: ArcAgreementPayerLifecycleAction | null) 
     action: action.action,
     status: action.status,
     transactionHash: action.transactionHash ?? null,
+    webhookPending: action.status === 'confirmed' && !action.webhookEventId,
     retryable: action.status === 'provider_failed'
       && !action.providerTransactionId
       && !action.transactionHash,
@@ -326,12 +327,27 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
               walletId: linkedWallet.id,
               walletAddress: linkedWallet.address,
             })
+            let lifecycleAction = lifecycleReview.action
+            if (lifecycleAction?.status === 'confirmed' && !lifecycleAction.webhookEventId) {
+              try {
+                const backfill = await dependencies.reconcileLifecycle({
+                  client: dependencies.client(),
+                  partnerId: agreement.partnerId,
+                  agreementId: agreement.id,
+                  payerIdentity: identityValue,
+                })
+                lifecycleAction = backfill.action ?? lifecycleAction
+              } catch {
+                // Preserve the confirmed payer UI; a later review safely retries
+                // the stable, duplicate-suppressed terminal webhook backfill.
+              }
+            }
             lifecycle = {
               available: true,
               enabled: String(dependencies.env().ARC_AGREEMENT_PAYER_LIFECYCLE_ENABLED ?? '').trim().toLowerCase() === 'true',
               cancel: lifecycleReview.eligibility.cancel,
               refund: lifecycleReview.eligibility.refund,
-              action: publicLifecycleAction(lifecycleReview.action),
+              action: publicLifecycleAction(lifecycleAction),
             }
           } catch {
             lifecycle = { available: false }

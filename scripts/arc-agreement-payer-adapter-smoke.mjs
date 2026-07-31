@@ -137,6 +137,7 @@ let walletVerifications = 0
 let challengeInput
 let currentJournal
 let lifecycleJournal
+let lifecycleReconcileCalls = 0
 let recordedTransactionInput
 let reconciliationResult
 const challengeOrder = []
@@ -301,11 +302,18 @@ const dependencies = {
     }
     return { action: lifecycleJournal, replayed: false }
   },
-  reconcileLifecycle: async () => ({
-    action: lifecycleJournal,
-    pending: lifecycleJournal?.status === 'submitted',
-    changed: false,
-  }),
+  reconcileLifecycle: async () => {
+    lifecycleReconcileCalls += 1
+    if (lifecycleJournal?.status === 'confirmed' && !lifecycleJournal.webhookEventId) {
+      lifecycleJournal = { ...lifecycleJournal, webhookEventId: 'evt_terminalbackfill1234567890' }
+      return { action: lifecycleJournal, pending: false, changed: true }
+    }
+    return {
+      action: lifecycleJournal,
+      pending: lifecycleJournal?.status === 'submitted',
+      changed: false,
+    }
+  },
   client: () => ({}),
   env: () => ({
     ARC_AGREEMENTS_ENABLED: 'true',
@@ -472,6 +480,14 @@ const lifecycleStatus = await request(handler, {
 }, headers)
 assert.equal(lifecycleStatus.statusCode, 200)
 assert.equal(lifecycleStatus.body.pending, true)
+const reconcileCallsBeforeBackfill = lifecycleReconcileCalls
+lifecycleJournal = { ...lifecycleJournal, status: 'confirmed', webhookEventId: undefined }
+const terminalLifecycleReview = await request(handler, { action: 'review', agreementId }, headers)
+assert.equal(terminalLifecycleReview.statusCode, 200)
+assert.equal(terminalLifecycleReview.body.lifecycle.action.status, 'confirmed')
+assert.equal(terminalLifecycleReview.body.lifecycle.action.webhookPending, false)
+assert.equal(lifecycleReconcileCalls, reconcileCallsBeforeBackfill + 1)
+assert.equal(lifecycleJournal.webhookEventId, 'evt_terminalbackfill1234567890')
 currentPolicy = policy
 
 currentIdentity = { ...identity, userId: 'did:privy:other-user-5678' }
@@ -500,6 +516,7 @@ assert.match(payerPageSource, /Return remaining USDC/)
 assert.match(payerPageSource, /action:\s*'lifecycle-challenge'/)
 assert.match(payerPageSource, /action:\s*'lifecycle-recover'/)
 assert.match(payerPageSource, /action:\s*'lifecycle-status'/)
+assert.match(payerPageSource, /terminalWebhookPending/)
 assert.match(payerPageSource, /\['transaction_pending',\s*'submitted'\]\.includes\(lifecycleStatus/)
 assert.match(payerPageSource, /review\.lifecycle\?\.action\?\.status\s*!==\s*'confirmed'/)
 assert.doesNotMatch(payerPageSource, /Send via Address|ghost.?vault|deposit address/i)

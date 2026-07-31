@@ -20,6 +20,10 @@ import {
 } from './arc-agreement-confirmed-snapshot.js'
 import { reconcileArcAgreementSnapshot } from './arc-agreement-reconciliation.js'
 import {
+  buildArcAgreementWebhookEvent,
+  queueArcAgreementWebhookEvent,
+} from './arc-agreement-webhooks.js'
+import {
   hasRenderDurableStore,
   mutateDurableJson,
   readDurableJson,
@@ -82,6 +86,7 @@ export type ArcAgreementPayerLifecycleAction = {
   submittedAt?: string
   confirmedAt?: string
   observedBlockNumber?: string
+  webhookEventId?: string
   lastError?: string
   createdAt: string
   updatedAt: string
@@ -101,6 +106,7 @@ type Dependencies = {
   ) => Promise<Store>
   binding: typeof readArcAgreementActivationBinding
   confirmed: typeof readConfirmedArcAgreementSnapshot
+  queueWebhook: typeof queueArcAgreementWebhookEvent
   now: () => Date
 }
 
@@ -110,6 +116,7 @@ const defaults: Dependencies = {
   mutate: (key, update) => mutateDurableJson<Store>(key, update),
   binding: readArcAgreementActivationBinding,
   confirmed: readConfirmedArcAgreementSnapshot,
+  queueWebhook: queueArcAgreementWebhookEvent,
   now: () => new Date(),
 }
 
@@ -651,8 +658,49 @@ export async function reconcileArcAgreementPayerLifecycleAction(input: {
   confirmationBlocks?: number
 }, dependencies: Dependencies = defaults) {
   let action = await readArcAgreementPayerLifecycleAction(input, dependencies)
-  if (!action || action.status === 'confirmed' || action.status === 'failed') {
+  if (!action || action.status === 'failed') {
     return { action, pending: false, changed: false }
+  }
+  if (action.status === 'confirmed') {
+    if (action.webhookEventId) return { action, pending: false, changed: false }
+    if (!action.transactionHash) {
+      throw new Error('Confirmed payer lifecycle action is missing its Arc transaction hash.')
+    }
+    await verifyPayerLifecycleTransaction({
+      client: input.client,
+      action,
+      transactionHash: action.transactionHash,
+    })
+    const confirmations = confirmationBlocks(input.confirmationBlocks)
+    const binding = await dependencies.binding(action.partnerId, action.agreementId)
+    if (
+      binding.payerIdentityHash !== action.payerIdentityHash
+      || binding.prepared.payer !== action.walletAddress
+      || binding.escrow !== action.escrow
+    ) {
+      throw new Error('Payer lifecycle action no longer matches the durable agreement binding.')
+    }
+    const confirmed = await dependencies.confirmed(input.client, binding.escrow, confirmations)
+    const reconciliation = reconcileArcAgreementSnapshot(binding.prepared, confirmed.snapshot)
+    const expectedStatus = action.action === 'cancel' ? 3 : 4
+    if (!reconciliation.verified || confirmed.snapshot.status !== expectedStatus) {
+      throw new Error('Confirmed payer lifecycle webhook backfill does not match authoritative Arc state.')
+    }
+    const event = buildArcAgreementWebhookEvent({
+      partnerId: action.partnerId,
+      agreementId: action.agreementId,
+      prepared: binding.prepared,
+      snapshot: confirmed.snapshot,
+      observedBlockNumber: confirmed.observedBlockNumber,
+      createdAt: dependencies.now().toISOString(),
+    })
+    await dependencies.queueWebhook(event)
+    const backfilled = await updateAction(input, (current, timestamp) => ({
+      ...current,
+      webhookEventId: event.id,
+      updatedAt: timestamp,
+    }), dependencies)
+    return { action: backfilled, pending: false, changed: true }
   }
   if (action.status === 'transaction_pending' && action.transactionHash) {
     const recovered = await recordArcAgreementPayerLifecycleTransaction({
@@ -711,11 +759,21 @@ export async function reconcileArcAgreementPayerLifecycleAction(input: {
   if (confirmed.snapshot.status !== expectedStatus) {
     return { action, pending: true, changed: false }
   }
+  const event = buildArcAgreementWebhookEvent({
+    partnerId: action.partnerId,
+    agreementId: action.agreementId,
+    prepared: binding.prepared,
+    snapshot: confirmed.snapshot,
+    observedBlockNumber: confirmed.observedBlockNumber,
+    createdAt: dependencies.now().toISOString(),
+  })
+  await dependencies.queueWebhook(event)
   const completed = await updateAction(input, (current, timestamp) => ({
     ...current,
     status: 'confirmed',
     confirmedAt: timestamp,
     observedBlockNumber: confirmed.observedBlockNumber.toString(),
+    webhookEventId: event.id,
     lastError: undefined,
     updatedAt: timestamp,
   }), dependencies)
