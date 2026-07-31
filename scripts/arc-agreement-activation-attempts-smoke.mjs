@@ -800,6 +800,13 @@ const reservedAfterRollover = await reserveArcAgreementPayerChallenge({
   },
 }, memory.dependencies)
 assert.equal(reservedAfterRollover.attempt.capacityReservation.utcDay, '2026-07-30')
+chain.state.transactions.set(thirdActivationHash, {
+  hash: thirdActivationHash,
+  from: payer,
+  to: reservedAfterRollover.attempt.calls.activation.to,
+  input: reservedAfterRollover.attempt.calls.activation.data,
+  value: 0n,
+})
 const admittedAfterRollover = await recordArcAgreementPayerTransaction({
   client: chain.client,
   policy,
@@ -1003,6 +1010,9 @@ assert.equal((await readArcAgreementActivationAttempt(
   seventhAgreementId,
   memory.dependencies,
 )).capacityReservation.amountUsdcUnits, '10000000')
+const staleActivationTimestamp = seventhReservation.attempt.activationTimestamp
+const staleDeploymentHash = seventhReservation.attempt.prepared.deploymentHash
+memory.advance(2 * 60 * 60 * 1_000)
 const seventhRetry = await reserveArcAgreementPayerChallenge({
   policy,
   agreementId: seventhAgreementId,
@@ -1015,6 +1025,20 @@ const seventhRetry = await reserveArcAgreementPayerChallenge({
 assert.equal(seventhRetry.replayed, false)
 assert.equal(seventhRetry.challenge.sequence, 1)
 assert.notEqual(seventhRetry.challenge.idempotencyKey, seventhReservation.challenge.idempotencyKey)
+assert.equal(seventhRetry.attempt.activationTimestamp, staleActivationTimestamp + (2 * 60 * 60))
+assert.notEqual(seventhRetry.attempt.prepared.deploymentHash, staleDeploymentHash)
+assert.equal(
+  BigInt(seventhRetry.attempt.prepared.cancelUntil),
+  BigInt(seventhRetry.attempt.activationTimestamp + 900),
+)
+assert.equal(
+  BigInt(seventhRetry.attempt.prepared.expiresAt),
+  BigInt(seventhRetry.attempt.activationTimestamp + 86_400),
+)
+assert.equal(
+  seventhRetry.attempt.calls.approval.data,
+  seventhReservation.attempt.calls.approval.data,
+)
 assert.equal((await readArcAgreementActivationAttempt(
   policy,
   seventhAgreementId,

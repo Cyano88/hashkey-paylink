@@ -659,38 +659,82 @@ function publicAuthorization(authorization: ArcAgreementActivationAuthorization)
   }
 }
 
-function reauthorizeAttempt(
-  attempt: ArcAgreementActivationAttempt,
-  policy: DeveloperCheckoutPolicy,
-  env: NodeJS.ProcessEnv,
-) {
+function activationDraft(attempt: ArcAgreementActivationAttempt): ArcAgreementDraftBinding {
   const prepared = hydratePrepared(attempt.prepared)
   const cancellationWindowSeconds = prepared.cancelUntil === 0n
     ? 0
     : Number(prepared.cancelUntil) - attempt.activationTimestamp
   const durationSeconds = Number(prepared.expiresAt) - attempt.activationTimestamp
-  const authorized = authorizeArcAgreementActivation({
-    policy,
-    draft: {
-      clientReference: prepared.clientReference,
-      termsHash: prepared.termsHash,
-      chainTerms: {
-        templateCode: prepared.templateCode,
-        amountUsdcUnits: prepared.totalAmount.toString(),
-        recipient: prepared.recipient,
-        cumulativeReleaseBps: [...prepared.cumulativeReleaseBps],
-        durationSeconds,
-        cancellationWindowSeconds,
-      },
+  return {
+    clientReference: prepared.clientReference,
+    termsHash: prepared.termsHash,
+    chainTerms: {
+      templateCode: prepared.templateCode,
+      amountUsdcUnits: prepared.totalAmount.toString(),
+      recipient: prepared.recipient,
+      cumulativeReleaseBps: [...prepared.cumulativeReleaseBps],
+      durationSeconds,
+      cancellationWindowSeconds,
     },
-    payer: prepared.payer,
-    activationTimestamp: attempt.activationTimestamp,
+  }
+}
+
+function authorizedAttemptAt(
+  attempt: ArcAgreementActivationAttempt,
+  policy: DeveloperCheckoutPolicy,
+  activationTimestamp: number,
+  env: NodeJS.ProcessEnv,
+) {
+  return authorizeArcAgreementActivation({
+    policy,
+    draft: activationDraft(attempt),
+    payer: attempt.prepared.payer,
+    activationTimestamp,
     env,
   })
-  if (authorized.prepared.deploymentHash !== prepared.deploymentHash) {
+}
+
+function reauthorizeAttempt(
+  attempt: ArcAgreementActivationAttempt,
+  policy: DeveloperCheckoutPolicy,
+  env: NodeJS.ProcessEnv,
+) {
+  const authorized = authorizedAttemptAt(
+    attempt,
+    policy,
+    attempt.activationTimestamp,
+    env,
+  )
+  if (authorized.prepared.deploymentHash !== attempt.prepared.deploymentHash) {
     throw new Error('The durable Arc Agreement commitment no longer matches the activation policy.')
   }
   return authorized.authorization
+}
+
+function renewActivationCommitment(
+  attempt: ArcAgreementActivationAttempt,
+  policy: DeveloperCheckoutPolicy,
+  activationTimestamp: number,
+  env: NodeJS.ProcessEnv,
+  updatedAt: string,
+) {
+  const authorized = authorizedAttemptAt(attempt, policy, activationTimestamp, env)
+  const prepared = serializePrepared(authorized.prepared)
+  const calls = payerCalls(authorized.prepared)
+  if (
+    calls.approval.to !== attempt.calls.approval.to
+    || calls.approval.data !== attempt.calls.approval.data
+  ) {
+    throw new Error('Renewing activation timestamps changed the approved payer authorization.')
+  }
+  return {
+    ...attempt,
+    activationTimestamp,
+    authorization: publicAuthorization(authorized.authorization),
+    prepared,
+    calls,
+    updatedAt,
+  }
 }
 
 function activationTransactionCountsForVolume(transaction: ArcAgreementPayerTransaction) {
@@ -1094,34 +1138,13 @@ export async function reserveArcAgreementPayerChallenge(input: {
     if (attempt.payerIdentityHash !== identityHash || attempt.prepared.payer !== walletAddress) {
       throw new Error('This Arc Agreement is bound to another authenticated payer wallet.')
     }
-    const authorization = reauthorizeAttempt(attempt, input.policy, input.env ?? process.env)
     if (input.stage === 'approval' && attempt.status !== 'awaiting_approval' && attempt.status !== 'approval_failed') {
       throw new Error('The approval challenge is not expected in the current activation state.')
     }
     if (input.stage === 'activation' && attempt.status !== 'ready_to_activate' && attempt.status !== 'activation_failed') {
       throw new Error('The activation challenge requires confirmed payer approval.')
     }
-    let capacityAttempt = attempt
-    if (input.stage === 'activation' && !attempt.capacityReservation) {
-      assertArcAgreementProjectCapacity({
-        store,
-        attempt,
-        authorization,
-        timestamp,
-        excludeAttemptId: attempt.id,
-      })
-      capacityAttempt = {
-        ...attempt,
-        capacityReservation: {
-          utcDay: timestamp.slice(0, 10),
-          amountUsdcUnits: attempt.prepared.totalAmount,
-          reservedAt: timestamp,
-        },
-        updatedAt: timestamp,
-      }
-      store.attempts[attempt.id] = capacityAttempt
-    }
-    const latest = currentChallenge(capacityAttempt, input.stage)
+    const latest = currentChallenge(attempt, input.stage)
     if (latest?.status === 'manual_review') {
       throw new Error('The existing Circle payer challenge requires support review.')
     }
@@ -1133,13 +1156,49 @@ export async function reserveArcAgreementPayerChallenge(input: {
       throw new Error('The existing Circle activation transaction requires recovery before retry.')
     }
     if (latest && !['provider_failed', 'recorded'].includes(latest.status)) {
+      reauthorizeAttempt(attempt, input.policy, input.env ?? process.env)
       if (latest.walletId !== walletId || latest.walletAddress !== walletAddress) {
         throw new Error('The durable Circle challenge belongs to another payer wallet.')
       }
       replayed = true
-      durableAttempt = capacityAttempt
+      durableAttempt = attempt
       durableChallenge = latest
       return store
+    }
+    const workingAttempt = input.stage === 'activation'
+      ? renewActivationCommitment(
+          attempt,
+          input.policy,
+          Math.floor(dependencies.now().getTime() / 1_000),
+          input.env ?? process.env,
+          timestamp,
+        )
+      : attempt
+    const authorization = reauthorizeAttempt(
+      workingAttempt,
+      input.policy,
+      input.env ?? process.env,
+    )
+    if (workingAttempt !== attempt) store.attempts[workingAttempt.id] = workingAttempt
+    let capacityAttempt = workingAttempt
+    if (input.stage === 'activation' && !workingAttempt.capacityReservation) {
+      assertArcAgreementProjectCapacity({
+        store,
+        attempt: workingAttempt,
+        authorization,
+        timestamp,
+        excludeAttemptId: workingAttempt.id,
+      })
+      capacityAttempt = {
+        ...workingAttempt,
+        capacityReservation: {
+          utcDay: timestamp.slice(0, 10),
+          amountUsdcUnits: workingAttempt.prepared.totalAmount,
+          reservedAt: timestamp,
+        },
+        updatedAt: timestamp,
+      }
+      store.attempts[workingAttempt.id] = capacityAttempt
     }
     const sequence = (latest?.sequence ?? -1) + 1
     const challenge: ArcAgreementPayerChallenge = {
