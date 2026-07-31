@@ -1003,7 +1003,7 @@ assert.equal((await readArcAgreementActivationAttempt(
   seventhAgreementId,
   memory.dependencies,
 )).capacityReservation.amountUsdcUnits, '10000000')
-await assert.rejects(reserveArcAgreementPayerChallenge({
+const seventhRetry = await reserveArcAgreementPayerChallenge({
   policy,
   agreementId: seventhAgreementId,
   payerIdentity: 'privy:test-user-1234',
@@ -1011,6 +1011,14 @@ await assert.rejects(reserveArcAgreementPayerChallenge({
   walletId: 'circle-ambiguous-wallet',
   walletAddress: payer,
   env: { ...env, ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT: '3' },
-}, memory.dependencies), /requires recovery before retry/)
+}, memory.dependencies)
+assert.equal(seventhRetry.replayed, false)
+assert.equal(seventhRetry.challenge.sequence, 1)
+assert.notEqual(seventhRetry.challenge.idempotencyKey, seventhReservation.challenge.idempotencyKey)
+assert.equal((await readArcAgreementActivationAttempt(
+  policy,
+  seventhAgreementId,
+  memory.dependencies,
+)).capacityReservation.amountUsdcUnits, '10000000')
 
 console.log('Arc Agreement durable activation-attempt smoke checks passed.')

@@ -1128,7 +1128,7 @@ export async function reserveArcAgreementPayerChallenge(input: {
     if (
       input.stage === 'activation'
       && latest?.status === 'provider_failed'
-      && (latest.providerTransactionId || latest.transactionHash)
+      && latest.transactionHash
     ) {
       throw new Error('The existing Circle activation transaction requires recovery before retry.')
     }
