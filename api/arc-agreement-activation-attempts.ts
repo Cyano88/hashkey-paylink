@@ -1279,7 +1279,7 @@ export async function attachArcAgreementPayerChallenge(input: {
 }
 
 export async function observeArcAgreementPayerChallenge(input: {
-  policy: DeveloperCheckoutPolicy
+  policy: Pick<DeveloperCheckoutPolicy, 'partnerId'>
   agreementId: string
   payerIdentity: string
   stage: 'approval' | 'activation'
@@ -1354,7 +1354,7 @@ export async function observeArcAgreementPayerChallenge(input: {
 }
 
 export async function markArcAgreementPayerChallengeRecorded(input: {
-  policy: DeveloperCheckoutPolicy
+  policy: Pick<DeveloperCheckoutPolicy, 'partnerId'>
   agreementId: string
   payerIdentity: string
   stage: 'approval' | 'activation'
@@ -1391,11 +1391,12 @@ export function latestArcAgreementPayerChallenge(
 
 export async function recordArcAgreementPayerTransaction(input: {
   client: ArcAgreementActivationClient
-  policy: DeveloperCheckoutPolicy
+  policy: DeveloperCheckoutPolicy | Pick<DeveloperCheckoutPolicy, 'partnerId'>
   agreementId: string
   payer: string
   stage: 'approval' | 'activation'
   transactionHash: string
+  recoverSubmittedChallenge?: boolean
   env?: NodeJS.ProcessEnv
 }, dependencies: Dependencies = defaults) {
   if (!dependencies.hasStore()) throw new Error('Arc Agreement activation storage is not configured.')
@@ -1407,11 +1408,24 @@ export async function recordArcAgreementPayerTransaction(input: {
   if (!isAddress(input.payer) || getAddress(input.payer) !== observedAttempt.prepared.payer) {
     throw new Error('Only the prepared agreement payer can submit this transaction.')
   }
-  const currentAuthorization = reauthorizeAttempt(
-    observedAttempt,
-    input.policy,
-    input.env ?? process.env,
-  )
+  if (input.recoverSubmittedChallenge) {
+    const challenge = latestArcAgreementPayerChallenge(observedAttempt, input.stage)
+    if (
+      !challenge
+      || challenge.status !== 'transaction_pending'
+      || challenge.transactionHash !== transactionHash
+      || challenge.walletAddress !== observedAttempt.prepared.payer
+    ) {
+      throw new Error('The Arc transaction is not bound to the durable Circle payer challenge.')
+    }
+  }
+  const currentAuthorization = input.recoverSubmittedChallenge
+    ? null
+    : reauthorizeAttempt(
+        observedAttempt,
+        input.policy as DeveloperCheckoutPolicy,
+        input.env ?? process.env,
+      )
   const verifiedTransaction = await verifiedPayerTransaction({
     client: input.client,
     attempt: observedAttempt,
@@ -1456,7 +1470,7 @@ export async function recordArcAgreementPayerTransaction(input: {
     if (input.stage === 'activation' && attempt.status !== 'ready_to_activate' && attempt.status !== 'activation_failed') {
       throw new Error('The agreement cannot be activated before payer approval is confirmed.')
     }
-    if (input.stage === 'activation') {
+    if (input.stage === 'activation' && currentAuthorization) {
       assertArcAgreementProjectCapacity({
         store,
         attempt,

@@ -155,7 +155,7 @@ function publicAttempt(attempt: ArcAgreementActivationAttempt) {
 
 function publicRecovery(attempt: ArcAgreementActivationAttempt | null) {
   if (!attempt) return null
-  const stage = attempt.status === 'awaiting_approval' || attempt.status === 'approval_failed'
+  const stage: 'approval' | 'activation' | null = attempt.status === 'awaiting_approval' || attempt.status === 'approval_failed'
     ? 'approval'
     : attempt.status === 'ready_to_activate' || attempt.status === 'activation_failed'
       ? 'activation'
@@ -165,7 +165,11 @@ function publicRecovery(attempt: ArcAgreementActivationAttempt | null) {
   if (!challenge || !['reserved', 'issued', 'transaction_pending', 'manual_review'].includes(challenge.status)) {
     return null
   }
-  return { stage, pending: true }
+  return {
+    stage,
+    pending: true,
+    chainSubmitted: Boolean(challenge.transactionHash),
+  }
 }
 
 function publicLifecycleAction(action: ArcAgreementPayerLifecycleAction | null) {
@@ -351,6 +355,32 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
 
       if (action === 'status') {
         if (!knownAttempt) throw fail('Prepare this agreement before checking activation status.', 409)
+        const recovery = publicRecovery(knownAttempt)
+        if (recovery?.chainSubmitted) {
+          const challenge = latestArcAgreementPayerChallenge(knownAttempt, recovery.stage)
+          if (!challenge?.transactionHash) {
+            throw new Error('The durable Arc transaction hash is unavailable for recovery.')
+          }
+          const recorded = await dependencies.recordTransaction({
+            client: dependencies.client(),
+            policy: { partnerId: agreement.partnerId },
+            agreementId: agreement.id,
+            payer: link.address,
+            stage: recovery.stage,
+            transactionHash: challenge.transactionHash,
+            recoverSubmittedChallenge: true,
+            env: dependencies.env(),
+          })
+          knownAttempt = recorded.attempt
+          await dependencies.markChallengeRecorded({
+            policy: { partnerId: agreement.partnerId },
+            agreementId: agreement.id,
+            payerIdentity: identityValue,
+            stage: recovery.stage,
+            challengeId: challenge.challengeId ?? '',
+            transactionHash: challenge.transactionHash,
+          })
+        }
         const result = await dependencies.reconcileAttempt({
           client: dependencies.client(),
           policy: { partnerId: agreement.partnerId },

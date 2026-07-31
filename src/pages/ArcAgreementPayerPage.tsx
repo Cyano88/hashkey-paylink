@@ -66,6 +66,7 @@ type ReviewResponse = {
   recovery?: {
     stage: 'approval' | 'activation'
     pending: true
+    chainSubmitted: boolean
   } | null
   lifecycle?: {
     available: boolean
@@ -223,21 +224,34 @@ export default function ArcAgreementPayerPage() {
 
   useEffect(() => {
     const status = review?.attempt?.status
-    if (status !== 'approval_submitted' && status !== 'activation_submitted') return
-    const timer = window.setInterval(() => {
+    const chainRecoveryPending = review?.recovery?.chainSubmitted === true
+    if (
+      status !== 'approval_submitted'
+      && status !== 'activation_submitted'
+      && !chainRecoveryPending
+    ) return
+    const check = () => {
       void request<ActionResponse>({ action: 'status' })
         .then(result => {
-          setReview(current => current ? { ...current, attempt: result.attempt } : current)
+          setReview(current => current ? {
+            ...current,
+            attempt: result.attempt,
+            recovery: result.attempt.status === 'approval_submitted' || result.attempt.status === 'activation_submitted'
+              ? current.recovery
+              : null,
+          } : current)
           setError('')
         })
         .catch(caught => setError(readableError(caught)))
-    }, 4_000)
+    }
+    check()
+    const timer = window.setInterval(check, 4_000)
     return () => window.clearInterval(timer)
-  }, [request, review?.attempt?.status])
+  }, [request, review?.attempt?.status, review?.recovery?.chainSubmitted])
 
   useEffect(() => {
     const stage = review?.recovery?.stage
-    if (!stage || !session || busy) return
+    if (!stage || review?.recovery?.chainSubmitted || !session || busy) return
     const recover = () => {
       void request<ActionResponse>({
         action: 'recover',
@@ -263,7 +277,7 @@ export default function ArcAgreementPayerPage() {
     recover()
     const timer = window.setInterval(recover, 4_000)
     return () => window.clearInterval(timer)
-  }, [busy, request, review?.recovery?.stage, session])
+  }, [busy, request, review?.recovery?.chainSubmitted, review?.recovery?.stage, session])
 
   useEffect(() => {
     const lifecycleStatus = review?.lifecycle?.action?.status
@@ -388,7 +402,9 @@ export default function ArcAgreementPayerPage() {
         setReview(current => current ? {
           ...current,
           attempt: result.attempt,
-          recovery: { stage, pending: true },
+          recovery: result.attempt.status === 'approval_submitted' || result.attempt.status === 'activation_submitted'
+            ? null
+            : { stage, pending: true, chainSubmitted: false },
         } : current)
       }
     } catch (caught) {

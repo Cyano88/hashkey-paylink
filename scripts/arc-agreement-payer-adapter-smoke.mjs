@@ -137,6 +137,8 @@ let walletVerifications = 0
 let challengeInput
 let currentJournal
 let lifecycleJournal
+let recordedTransactionInput
+let reconciliationResult
 const providerTransactionId = '123e4567-e89b-42d3-a456-426614174002'
 const dependencies = {
   verifyUser: async () => currentIdentity,
@@ -215,10 +217,14 @@ const dependencies = {
   },
   recordTransaction: async input => {
     assert.equal(input.transactionHash, `0x${'9'.repeat(64)}`)
-    currentAttempt = { ...currentAttempt, status: 'approval_submitted' }
+    recordedTransactionInput = input
+    currentAttempt = {
+      ...currentAttempt,
+      status: input.stage === 'approval' ? 'approval_submitted' : 'activation_submitted',
+    }
     return { attempt: currentAttempt, replayed: false }
   },
-  reconcileAttempt: async () => ({
+  reconcileAttempt: async () => reconciliationResult ?? ({
     attempt: { ...currentAttempt, status: 'approval_submitted' },
     pending: true,
     changed: false,
@@ -383,7 +389,40 @@ const status = await request(handler, { action: 'status', agreementId }, headers
 assert.equal(status.statusCode, 200)
 assert.equal(status.body.pending, true)
 
-currentAttempt = { ...currentAttempt, status: 'active', escrow: getAddress('0x5555555555555555555555555555555555555555') }
+// Circle can complete after the browser session disappears. Recover the
+// already-bound Arc transaction with activation disabled and without a new OTP.
+const activeEscrow = getAddress('0x5555555555555555555555555555555555555555')
+currentJournal = {
+  ...currentJournal,
+  stage: 'activation',
+  sequence: 2,
+  status: 'transaction_pending',
+  transactionHash: `0x${'9'.repeat(64)}`,
+  walletAddress: payer,
+}
+currentAttempt = {
+  ...currentAttempt,
+  status: 'ready_to_activate',
+  challenges: [currentJournal],
+}
+currentPolicy = null
+reconciliationResult = {
+  attempt: { ...currentAttempt, status: 'active', escrow: activeEscrow },
+  pending: false,
+  changed: true,
+}
+const chainRecoveryReview = await request(handler, { action: 'review', agreementId }, headers)
+assert.equal(chainRecoveryReview.statusCode, 200)
+assert.equal(chainRecoveryReview.body.recovery.chainSubmitted, true)
+const chainRecovered = await request(handler, { action: 'status', agreementId }, headers)
+assert.equal(chainRecovered.statusCode, 200)
+assert.equal(chainRecovered.body.attempt.status, 'active')
+assert.equal(recordedTransactionInput.recoverSubmittedChallenge, true)
+assert.deepEqual(recordedTransactionInput.policy, { partnerId })
+assert.equal(currentJournal.status, 'recorded')
+currentAttempt = reconciliationResult.attempt
+reconciliationResult = undefined
+
 const activeReview = await request(handler, { action: 'review', agreementId }, headers)
 assert.equal(activeReview.statusCode, 200)
 assert.equal(activeReview.body.lifecycle.available, true)
@@ -392,7 +431,6 @@ assert.equal(activeReview.body.lifecycle.cancel.eligible, true)
 
 // Suspending a developer project blocks new activation, but must not strand an
 // already-active payer escrow or hide its cancellation/refund controls.
-currentPolicy = null
 const suspendedReview = await request(handler, { action: 'review', agreementId }, headers)
 assert.equal(suspendedReview.statusCode, 200)
 assert.equal(suspendedReview.body.attempt.status, 'active')
