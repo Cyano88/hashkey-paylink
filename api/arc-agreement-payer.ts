@@ -254,6 +254,28 @@ function providerState(value: unknown) {
 }
 
 const PROVIDER_FAILURES = new Set(['CANCELLED', 'DENIED', 'EXPIRED', 'FAILED'])
+const PAYER_POLICY_CONFLICTS = [
+  'Arc Agreement activation is disabled.',
+  'This developer project has reached its active Arc Agreement limit.',
+  'This developer project has reached its Arc Agreement daily-volume limit.',
+  'Agreement amount exceeds the configured testnet activation ceiling.',
+  'Agreement duration exceeds the configured testnet activation ceiling.',
+]
+
+function payerFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  const explicitStatus = Number((error as Error & { status?: number })?.status) || 0
+  if (explicitStatus) return { status: explicitStatus, message }
+  if (PAYER_POLICY_CONFLICTS.includes(message)) {
+    return {
+      status: 409,
+      message: message === 'Arc Agreement activation is disabled.'
+        ? 'Agreement activation is currently paused.'
+        : message,
+    }
+  }
+  return { status: 500, message: 'Arc Agreement payer service is temporarily unavailable.' }
+}
 
 async function existingAttempt(
   dependencies: Dependencies,
@@ -769,13 +791,14 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
 
       throw fail('Unknown Arc Agreement payer action.', 400)
     } catch (error) {
-      const status = Number((error as Error & { status?: number })?.status) || 500
+      const failure = payerFailure(error)
+      const status = failure.status
       if (status >= 500) {
         console.error('[arc-agreement-payer] request failed:', error instanceof Error ? error.message : String(error))
       }
       return res.status(status).json({
         ok: false,
-        error: status >= 500 ? 'Arc Agreement payer service is temporarily unavailable.' : (error as Error).message,
+        error: failure.message,
       })
     }
   }

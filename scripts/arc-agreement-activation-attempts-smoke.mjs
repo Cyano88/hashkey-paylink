@@ -14,6 +14,7 @@ import {
   observeArcAgreementPayerChallenge,
   prepareArcAgreementActivationAttempt,
   readArcAgreementActivationAttempt,
+  recordArcAgreementLifecycleObservation,
   recordArcAgreementPayerTransaction,
   reconcileArcAgreementActivationAttempt,
   reserveArcAgreementPayerChallenge,
@@ -1113,5 +1114,40 @@ assert.equal(recoveredDrift.attempt.status, 'activation_submitted')
 assert.equal(recoveredDrift.attempt.activationTimestamp, staleActivationTimestamp)
 assert.equal(recoveredDrift.attempt.prepared.deploymentHash, staleDeploymentHash)
 assert.equal(recoveredDrift.attempt.transactions.at(-1).execution, 'circle_user_operation')
+
+await memory.dependencies.mutate('ignored', store => {
+  store.attempts[recoveredDrift.attempt.id].status = 'active'
+  return store
+})
+
+const capacityStoreBeforeTerminal = await memory.dependencies.read()
+const capacityBeforeTerminal = arcAgreementProjectCapacitySnapshot({
+  attempts: Object.values(capacityStoreBeforeTerminal.attempts),
+  partnerId,
+  utcDay: '2026-07-30',
+})
+const terminalObservation = await recordArcAgreementLifecycleObservation(partnerId, seventhAgreementId, {
+  status: 'refunded',
+  nextStep: 0,
+  releasedAmountUsdcUnits: '0',
+  obligationAmountUsdcUnits: '0',
+  excessAmountUsdcUnits: '0',
+  observedBlockNumber: '200',
+  observedBlockTimestamp: '2026-07-29T15:00:00.000Z',
+  eventId: 'evt_terminalcapacity1234',
+  observedAt: '2026-07-29T15:00:01.000Z',
+}, memory.dependencies)
+assert.equal(terminalObservation.attempt.lifecycle.status, 'refunded')
+assert.equal(terminalObservation.replayed, false)
+assert.equal((await recordArcAgreementLifecycleObservation(partnerId, seventhAgreementId, {
+  ...terminalObservation.attempt.lifecycle,
+}, memory.dependencies)).replayed, true)
+const finalStore = await memory.dependencies.read()
+const capacityAfterTerminal = arcAgreementProjectCapacitySnapshot({
+  attempts: Object.values(finalStore.attempts),
+  partnerId,
+  utcDay: '2026-07-30',
+})
+assert.equal(capacityAfterTerminal.activeAgreements, capacityBeforeTerminal.activeAgreements - 1)
 
 console.log('Arc Agreement durable activation-attempt smoke checks passed.')

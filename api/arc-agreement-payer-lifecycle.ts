@@ -10,8 +10,10 @@ import {
 } from 'viem'
 import {
   arcAgreementPayerIdentityHash,
+  recordArcAgreementLifecycleObservation,
   readArcAgreementActivationBinding,
   type ArcAgreementActivationClient,
+  type ArcAgreementLifecycleObservation,
   type ArcAgreementPayerCall,
 } from './arc-agreement-activation-attempts.js'
 import {
@@ -107,6 +109,7 @@ type Dependencies = {
   binding: typeof readArcAgreementActivationBinding
   confirmed: typeof readConfirmedArcAgreementSnapshot
   queueWebhook: typeof queueArcAgreementWebhookEvent
+  recordObservation: typeof recordArcAgreementLifecycleObservation
   now: () => Date
 }
 
@@ -117,6 +120,7 @@ const defaults: Dependencies = {
   binding: readArcAgreementActivationBinding,
   confirmed: readConfirmedArcAgreementSnapshot,
   queueWebhook: queueArcAgreementWebhookEvent,
+  recordObservation: recordArcAgreementLifecycleObservation,
   now: () => new Date(),
 }
 
@@ -238,6 +242,36 @@ function eligibility(
     cancel: { eligible: cancelReason === null, reason: cancelReason },
     refund: { eligible: refundReason === null, reason: refundReason },
   }
+}
+
+async function persistLifecycleObservation(input: {
+  client: ArcAgreementActivationClient
+  partnerId: string
+  agreementId: string
+  confirmed: ArcAgreementConfirmedSnapshot
+  reconciliation: ReturnType<typeof reconcileArcAgreementSnapshot>
+  event: ReturnType<typeof buildArcAgreementWebhookEvent>
+  observedAt: string
+}, dependencies: Dependencies) {
+  const block = await input.client.getBlock({ blockNumber: input.confirmed.observedBlockNumber })
+  const status = input.event.event === 'agreement.expired'
+    ? 'expired'
+    : input.reconciliation.lifecycle
+  if (!['active', 'expired', 'completed', 'cancelled', 'refunded'].includes(status)) {
+    throw new Error(`Unsupported verified agreement lifecycle: ${status}.`)
+  }
+  const observation: ArcAgreementLifecycleObservation = {
+    status: status as ArcAgreementLifecycleObservation['status'],
+    nextStep: input.confirmed.snapshot.nextStep,
+    releasedAmountUsdcUnits: input.reconciliation.releasedAmount,
+    obligationAmountUsdcUnits: input.reconciliation.obligationAmount,
+    excessAmountUsdcUnits: input.reconciliation.excessAmount,
+    observedBlockNumber: input.confirmed.observedBlockNumber.toString(),
+    observedBlockTimestamp: new Date(Number(block.timestamp) * 1_000).toISOString(),
+    eventId: input.event.id,
+    observedAt: input.observedAt,
+  }
+  return dependencies.recordObservation(input.partnerId, input.agreementId, observation)
 }
 
 function requireWallet(input: { walletId: string; walletAddress: string }) {
@@ -662,7 +696,6 @@ export async function reconcileArcAgreementPayerLifecycleAction(input: {
     return { action, pending: false, changed: false }
   }
   if (action.status === 'confirmed') {
-    if (action.webhookEventId) return { action, pending: false, changed: false }
     if (!action.transactionHash) {
       throw new Error('Confirmed payer lifecycle action is missing its Arc transaction hash.')
     }
@@ -686,15 +719,28 @@ export async function reconcileArcAgreementPayerLifecycleAction(input: {
     if (!reconciliation.verified || confirmed.snapshot.status !== expectedStatus) {
       throw new Error('Confirmed payer lifecycle webhook backfill does not match authoritative Arc state.')
     }
+    const observedAt = dependencies.now().toISOString()
     const event = buildArcAgreementWebhookEvent({
       partnerId: action.partnerId,
       agreementId: action.agreementId,
       prepared: binding.prepared,
       snapshot: confirmed.snapshot,
       observedBlockNumber: confirmed.observedBlockNumber,
-      createdAt: dependencies.now().toISOString(),
+      createdAt: observedAt,
     })
-    await dependencies.queueWebhook(event)
+    if (!action.webhookEventId) await dependencies.queueWebhook(event)
+    const recorded = await persistLifecycleObservation({
+      client: input.client,
+      partnerId: action.partnerId,
+      agreementId: action.agreementId,
+      confirmed,
+      reconciliation,
+      event,
+      observedAt,
+    }, dependencies)
+    if (action.webhookEventId) {
+      return { action, pending: false, changed: !recorded.replayed }
+    }
     const backfilled = await updateAction(input, (current, timestamp) => ({
       ...current,
       webhookEventId: event.id,
@@ -759,15 +805,25 @@ export async function reconcileArcAgreementPayerLifecycleAction(input: {
   if (confirmed.snapshot.status !== expectedStatus) {
     return { action, pending: true, changed: false }
   }
+  const observedAt = dependencies.now().toISOString()
   const event = buildArcAgreementWebhookEvent({
     partnerId: action.partnerId,
     agreementId: action.agreementId,
     prepared: binding.prepared,
     snapshot: confirmed.snapshot,
     observedBlockNumber: confirmed.observedBlockNumber,
-    createdAt: dependencies.now().toISOString(),
+    createdAt: observedAt,
   })
   await dependencies.queueWebhook(event)
+  await persistLifecycleObservation({
+    client: input.client,
+    partnerId: action.partnerId,
+    agreementId: action.agreementId,
+    confirmed,
+    reconciliation,
+    event,
+    observedAt,
+  }, dependencies)
   const completed = await updateAction(input, (current, timestamp) => ({
     ...current,
     status: 'confirmed',

@@ -84,6 +84,7 @@ let confirmed = await snapshot()
 let blockTimestamp = BigInt(activationTimestamp + 300)
 let now = new Date('2026-07-30T10:00:00.000Z')
 const queuedWebhookEvents = []
+const recordedLifecycleObservations = []
 const dependencies = {
   hasStore: () => true,
   read: async () => durableStore,
@@ -104,6 +105,11 @@ const dependencies = {
   queueWebhook: async event => {
     queuedWebhookEvents.push(event)
     return { event, replayed: queuedWebhookEvents.some(item => item.id === event.id && item !== event) }
+  },
+  recordObservation: async (recordedPartnerId, recordedAgreementId, observation) => {
+    const replayed = recordedLifecycleObservations.some(item => item.observation.eventId === observation.eventId)
+    recordedLifecycleObservations.push({ recordedPartnerId, recordedAgreementId, observation })
+    return { attempt: {}, replayed }
   },
   now: () => now,
 }
@@ -252,6 +258,7 @@ assert.equal(reconciled.changed, true)
 assert.equal(reconciled.action.status, 'confirmed')
 assert.equal(reconciled.action.webhookEventId, queuedWebhookEvents[0].id)
 assert.equal(queuedWebhookEvents[0].event, 'agreement.cancelled')
+assert.equal(recordedLifecycleObservations[0].observation.status, 'cancelled')
 assert.equal((await readArcAgreementPayerLifecycleAction({
   partnerId,
   agreementId,
@@ -443,6 +450,7 @@ assert.equal(recoveredUserOperation.action.status, 'confirmed')
 assert.equal(recoveredUserOperation.action.execution, 'circle_user_operation')
 assert.equal(recoveredUserOperation.action.webhookEventId, queuedWebhookEvents[1].id)
 assert.equal(queuedWebhookEvents[1].event, 'agreement.refunded')
+assert.equal(recordedLifecycleObservations.at(-1).observation.status, 'refunded')
 
 // Older confirmed actions are backfilled with the same stable terminal event
 // without creating or recording another Arc transaction.

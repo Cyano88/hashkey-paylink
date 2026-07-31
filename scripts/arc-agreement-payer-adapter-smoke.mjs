@@ -366,6 +366,28 @@ assert.equal(prepared.body.attempt.status, 'awaiting_approval')
 assert.equal('payerIdentityHash' in prepared.body.attempt, false)
 assert.equal(walletVerifications, 1)
 
+const paused = await request(createArcAgreementPayerHandler({
+  ...dependencies,
+  prepareAttempt: async () => { throw new Error('Arc Agreement activation is disabled.') },
+}), {
+  action: 'prepare',
+  agreementId,
+  circleUserToken: 'circle-user-token',
+}, headers)
+assert.equal(paused.statusCode, 409)
+assert.equal(paused.body.error, 'Agreement activation is currently paused.')
+
+const atCapacity = await request(createArcAgreementPayerHandler({
+  ...dependencies,
+  prepareAttempt: async () => { throw new Error('This developer project has reached its active Arc Agreement limit.') },
+}), {
+  action: 'prepare',
+  agreementId,
+  circleUserToken: 'circle-user-token',
+}, headers)
+assert.equal(atCapacity.statusCode, 409)
+assert.equal(atCapacity.body.error, 'This developer project has reached its active Arc Agreement limit.')
+
 const challenge = await request(handler, {
   action: 'challenge',
   stage: 'approval',

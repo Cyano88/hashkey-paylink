@@ -520,6 +520,75 @@ export async function completeArcAgreementLifecycleReconciliation(input: {
   })
 }
 
+export async function recordArcAgreementLifecycleObservation(
+  partnerIdValue: string,
+  agreementIdValue: string,
+  observation: ArcAgreementLifecycleObservation,
+  dependencies: Dependencies = defaults,
+) {
+  if (!dependencies.hasStore()) throw new Error('Arc Agreement activation storage is not configured.')
+  const partnerId = String(partnerIdValue ?? '').trim()
+  if (!/^dev_[a-z0-9]{8,64}$/i.test(partnerId)) throw new Error('Developer project id is invalid.')
+  const agreementId = requireAgreementId(agreementIdValue)
+  if (!['active', 'expired', 'completed', 'cancelled', 'refunded'].includes(observation.status)) {
+    throw new Error('Arc Agreement lifecycle status is invalid.')
+  }
+  if (!/^evt_[a-z0-9]{12,64}$/i.test(observation.eventId)) {
+    throw new Error('Arc Agreement lifecycle event id is invalid.')
+  }
+  for (const [label, value] of Object.entries({
+    observedBlockNumber: observation.observedBlockNumber,
+    releasedAmountUsdcUnits: observation.releasedAmountUsdcUnits,
+    obligationAmountUsdcUnits: observation.obligationAmountUsdcUnits,
+    excessAmountUsdcUnits: observation.excessAmountUsdcUnits,
+  })) {
+    if (!/^\d+$/.test(value)) throw new Error(`Arc Agreement lifecycle ${label} is invalid.`)
+  }
+  if (!Number.isInteger(observation.nextStep) || observation.nextStep < 0) {
+    throw new Error('Arc Agreement lifecycle next step is invalid.')
+  }
+  if (!Number.isFinite(Date.parse(observation.observedBlockTimestamp)) || !Number.isFinite(Date.parse(observation.observedAt))) {
+    throw new Error('Arc Agreement lifecycle observation time is invalid.')
+  }
+  let durable: ArcAgreementActivationAttempt | undefined
+  let replayed = false
+  await dependencies.mutate(STORE_KEY, current => {
+    const store = safeStore(current)
+    const attempt = requireProjectAttempt(store, { partnerId }, agreementId)
+    if (attempt.status !== 'active') {
+      throw new Error('Only an active Arc Agreement can record lifecycle state.')
+    }
+    const existing = attempt.lifecycle
+    if (existing?.eventId === observation.eventId) {
+      durable = attempt
+      replayed = true
+      return store
+    }
+    if (existing && ['completed', 'cancelled', 'refunded'].includes(existing.status)) {
+      throw new Error('A terminal Arc Agreement lifecycle observation cannot be replaced.')
+    }
+    if (existing && BigInt(observation.observedBlockNumber) < BigInt(existing.observedBlockNumber)) {
+      throw new Error('Arc Agreement lifecycle observation cannot move backwards.')
+    }
+    if (existing && BigInt(observation.releasedAmountUsdcUnits) < BigInt(existing.releasedAmountUsdcUnits)) {
+      throw new Error('Arc Agreement released amount cannot decrease.')
+    }
+    durable = {
+      ...attempt,
+      lifecycle: { ...observation },
+      observedBlockNumber: observation.observedBlockNumber,
+      updatedAt: dependencies.now().toISOString(),
+    }
+    store.attempts[attempt.id] = durable
+    if (['completed', 'cancelled', 'refunded'].includes(observation.status)) {
+      delete store.lifecycleJobs?.[attempt.id]
+    }
+    return store
+  })
+  if (!durable) throw new Error('Arc Agreement lifecycle observation was not persisted.')
+  return { attempt: durable, replayed }
+}
+
 export async function failArcAgreementLifecycleReconciliation(input: {
   attemptId: string
   leaseToken: string

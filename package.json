@@ -79,6 +79,7 @@
     "provision:arc-agreement-operator": "node --import tsx scripts/arc-agreement-operator-provision.mjs",
     "preflight:arc-agreement-operator": "node --import tsx scripts/arc-agreement-operator-preflight.mjs",
     "preflight:arc-agreement-invite": "node --import tsx scripts/arc-agreement-invite-preflight.mjs",
+    "reconcile:arc-agreement-capacity": "node --import tsx scripts/arc-agreement-capacity-reconcile.mjs",
     "test:arc-agreement-invite": "node --import tsx scripts/arc-agreement-invite-pilot-smoke.mjs",
     "test:hashpaystream-arc-webhook": "node --import tsx scripts/hashpaystream-arc-webhook-smoke.mjs",
     "test:hashpaystream-arc-agreements": "node --import tsx scripts/hashpaystream-arc-agreements-smoke.mjs",
