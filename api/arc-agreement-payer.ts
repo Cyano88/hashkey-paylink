@@ -582,13 +582,6 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
         if (!currentPolicy) {
           throw fail('This developer project is not currently eligible for new Arc Agreement activation.', 409)
         }
-        const prepared = await dependencies.prepareChallenge({
-          policy: currentPolicy,
-          agreementId: agreement.id,
-          payerIdentity: identityValue,
-          stage,
-          env: dependencies.env(),
-        })
         const reservation = await dependencies.reserveChallenge({
           policy: currentPolicy,
           agreementId: agreement.id,
@@ -596,6 +589,15 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
           stage,
           walletId: link.id,
           walletAddress: link.address,
+          env: dependencies.env(),
+        })
+        // Activation reservation renews its absolute Arc timestamps. Prepare
+        // the Circle call only after that durable commitment is reserved.
+        const prepared = await dependencies.prepareChallenge({
+          policy: currentPolicy,
+          agreementId: agreement.id,
+          payerIdentity: identityValue,
+          stage,
           env: dependencies.env(),
         })
         let journal = reservation.challenge

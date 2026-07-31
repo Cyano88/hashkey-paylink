@@ -139,6 +139,7 @@ let currentJournal
 let lifecycleJournal
 let recordedTransactionInput
 let reconciliationResult
+const challengeOrder = []
 const providerTransactionId = '123e4567-e89b-42d3-a456-426614174002'
 const dependencies = {
   verifyUser: async () => currentIdentity,
@@ -164,13 +165,17 @@ const dependencies = {
     if (!currentAttempt) throw new Error('Arc Agreement activation attempt was not found for this project.')
     return currentAttempt
   },
-  prepareChallenge: async input => ({
-    attempt: currentAttempt,
-    call: { chainId: 5_042_002, to: payer, data: '0xabcdef', value: '0' },
-    priorStageTransactions: 0,
-    stage: input.stage,
-  }),
+  prepareChallenge: async input => {
+    challengeOrder.push('prepare')
+    return {
+      attempt: currentAttempt,
+      call: { chainId: 5_042_002, to: payer, data: '0xabcdef', value: '0' },
+      priorStageTransactions: 0,
+      stage: input.stage,
+    }
+  },
   reserveChallenge: async input => {
+    challengeOrder.push('reserve')
     if (!currentJournal) {
       currentJournal = {
         idempotencyKey: '123e4567-e89b-42d3-a456-426614174001',
@@ -365,6 +370,7 @@ assert.match(challenge.body.idempotencyKey, /^[0-9a-f-]{36}$/)
 assert.equal(challengeInput.walletId, link.circleWalletId)
 assert.equal(challengeInput.walletAddress, payer)
 assert.equal(challengeInput.callData, '0xabcdef')
+assert.deepEqual(challengeOrder, ['reserve', 'prepare'])
 assert.match(challengeInput.refId, /^arc-agreement:/)
 assert.equal('challenges' in challenge.body.attempt, false)
 const reviewWithJournal = await request(handler, { action: 'review', agreementId }, headers)

@@ -1045,4 +1045,73 @@ assert.equal((await readArcAgreementActivationAttempt(
   memory.dependencies,
 )).capacityReservation.amountUsdcUnits, '10000000')
 
+// Recover a Circle user operation that executed the prior immutable activation
+// commitment even though the attempt was renewed before its hash was recorded.
+const driftedActivationHash = transactionHash('e')
+const driftedSmartWalletCall = arcAgreementCircleSmartWalletCall(
+  seventhReservation.attempt,
+  'activation',
+)
+const driftedCircleCall = encodeFunctionData({
+  abi: circleAccountAbi,
+  functionName: 'execute',
+  args: [payer, 0n, driftedSmartWalletCall.data],
+})
+chain.state.transactions.set(driftedActivationHash, {
+  hash: driftedActivationHash,
+  from: bundler,
+  to: entryPoint,
+  input: encodeFunctionData({
+    abi: entryPointAbi,
+    functionName: 'handleOps',
+    args: [[{
+      sender: payer,
+      nonce: 3n,
+      initCode: '0x',
+      callData: driftedCircleCall,
+      callGasLimit: 200_000n,
+      verificationGasLimit: 200_000n,
+      preVerificationGas: 50_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 1n,
+      paymasterAndData: '0x',
+      signature: '0x',
+    }], bundler],
+  }),
+  value: 0n,
+})
+await attachArcAgreementPayerChallenge({
+  policy,
+  agreementId: seventhAgreementId,
+  payerIdentity: 'privy:test-user-1234',
+  idempotencyKey: seventhRetry.challenge.idempotencyKey,
+  challengeId: 'challenge-drift-recovery',
+  providerTransactionId: '22222222-2222-4222-8222-222222222222',
+}, memory.dependencies)
+await observeArcAgreementPayerChallenge({
+  policy,
+  agreementId: seventhAgreementId,
+  payerIdentity: 'privy:test-user-1234',
+  stage: 'activation',
+  challengeId: 'challenge-drift-recovery',
+  providerTransactionId: '22222222-2222-4222-8222-222222222222',
+  transactionHash: driftedActivationHash,
+  providerState: 'COMPLETE',
+  status: 'transaction_pending',
+}, memory.dependencies)
+const recoveredDrift = await recordArcAgreementPayerTransaction({
+  client: chain.client,
+  policy: { partnerId },
+  agreementId: seventhAgreementId,
+  payer,
+  stage: 'activation',
+  transactionHash: driftedActivationHash,
+  recoverSubmittedChallenge: true,
+  env: { ...env, ARC_AGREEMENTS_ENABLED: 'false' },
+}, memory.dependencies)
+assert.equal(recoveredDrift.attempt.status, 'activation_submitted')
+assert.equal(recoveredDrift.attempt.activationTimestamp, staleActivationTimestamp)
+assert.equal(recoveredDrift.attempt.prepared.deploymentHash, staleDeploymentHash)
+assert.equal(recoveredDrift.attempt.transactions.at(-1).execution, 'circle_user_operation')
+
 console.log('Arc Agreement durable activation-attempt smoke checks passed.')

@@ -14,6 +14,7 @@ import {
   type ArcAgreementActivationAuthorization,
 } from './arc-agreement-activation-policy.js'
 import {
+  prepareArcAgreementDeployment,
   readArcAgreementSnapshot,
   reconcileArcAgreementSnapshot,
   type ArcAgreementDraftBinding,
@@ -844,6 +845,91 @@ function isExactCircleUserOperation(
   }
 }
 
+function observedCircleSmartWalletCall(
+  transaction: TransactionObservation,
+  payer: Address,
+) {
+  if (transaction.to !== null && getAddress(transaction.to) === payer) {
+    return {
+      data: transaction.input,
+      execution: 'circle_smart_wallet' as const,
+    }
+  }
+  if (transaction.to === null || getAddress(transaction.to) !== ENTRY_POINT_V06) return null
+  try {
+    const entryPointCall = decodeFunctionData({
+      abi: entryPointV06Abi,
+      data: transaction.input,
+    })
+    if (entryPointCall.functionName !== 'handleOps') return null
+    const [operations] = entryPointCall.args
+    if (operations.length !== 1) return null
+    const operation = operations[0]
+    if (getAddress(operation.sender) !== payer) return null
+    const accountCall = decodeFunctionData({
+      abi: circleAccountAbi,
+      data: operation.callData,
+    })
+    if (accountCall.functionName !== 'execute') return null
+    const [destination, value, callData] = accountCall.args
+    if (getAddress(destination) !== payer || value !== 0n) return null
+    return {
+      data: callData,
+      execution: 'circle_user_operation' as const,
+    }
+  } catch {
+    return null
+  }
+}
+
+function recoverActivationCommitment(
+  transaction: TransactionObservation,
+  attempt: ArcAgreementActivationAttempt,
+) {
+  const observed = observedCircleSmartWalletCall(transaction, attempt.prepared.payer)
+  if (!observed) return null
+  try {
+    const smartWalletCall = decodeFunctionData({
+      abi: smartWalletAbi,
+      data: observed.data,
+    })
+    if (smartWalletCall.functionName !== 'executeBatch') return null
+    const [calls] = smartWalletCall.args
+    if (calls.length !== 1) return null
+    const call = calls[0]
+    const prepared = hydratePrepared(attempt.prepared)
+    if (getAddress(call.target) !== prepared.factory || call.value !== 0n) return null
+    const factoryCall = decodeFunctionData({
+      abi: factoryAbi,
+      data: call.data,
+    })
+    if (factoryCall.functionName !== 'createAndFund') return null
+    const [params] = factoryCall.args
+    const draft = activationDraft(attempt)
+    const activationTimestamp = Number(params.expiresAt) - draft.chainTerms.durationSeconds
+    if (!Number.isSafeInteger(activationTimestamp) || activationTimestamp <= 0) return null
+    const recoveredPrepared = prepareArcAgreementDeployment({
+      draft,
+      payer: prepared.payer,
+      factory: prepared.factory,
+      operator: prepared.operator,
+      usdc: prepared.usdc,
+      activationTimestamp,
+    })
+    const recoveredAttempt: ArcAgreementActivationAttempt = {
+      ...attempt,
+      activationTimestamp,
+      prepared: serializePrepared(recoveredPrepared),
+      calls: payerCalls(recoveredPrepared),
+    }
+    const expected = arcAgreementCircleSmartWalletCall(recoveredAttempt, 'activation')
+    if (expected.data.toLowerCase() !== observed.data.toLowerCase()) return null
+    return { attempt: recoveredAttempt, execution: observed.execution }
+  } catch {
+    return null
+  }
+}
+
 export function arcAgreementCircleSmartWalletCall(
   attempt: ArcAgreementActivationAttempt,
   stage: 'approval' | 'activation',
@@ -870,6 +956,7 @@ async function verifiedPayerTransaction(input: {
   attempt: ArcAgreementActivationAttempt
   stage: 'approval' | 'activation'
   transactionHash: Hex
+  recoverSubmittedChallenge?: boolean
 }) {
   if (await input.client.getChainId() !== 5_042_002) throw new Error('Payer transaction is not on Arc Testnet.')
   const transaction = await input.client.getTransaction({ hash: input.transactionHash })
@@ -895,6 +982,16 @@ async function verifiedPayerTransaction(input: {
   if (wrapped) return { transaction, execution: 'circle_smart_wallet' as const }
   if (isExactCircleUserOperation(transaction, input.attempt.prepared.payer, smartWallet)) {
     return { transaction, execution: 'circle_user_operation' as const }
+  }
+  if (input.stage === 'activation' && input.recoverSubmittedChallenge) {
+    const recovered = recoverActivationCommitment(transaction, input.attempt)
+    if (recovered) {
+      return {
+        transaction,
+        execution: recovered.execution,
+        recoveredAttempt: recovered.attempt,
+      }
+    }
   }
   throw new Error('Payer transaction does not match the prepared direct, Circle smart-wallet, or Circle user-operation call.')
 }
@@ -1431,6 +1528,7 @@ export async function recordArcAgreementPayerTransaction(input: {
     attempt: observedAttempt,
     stage: input.stage,
     transactionHash,
+    recoverSubmittedChallenge: input.recoverSubmittedChallenge,
   })
 
   const timestamp = dependencies.now().toISOString()
@@ -1445,11 +1543,19 @@ export async function recordArcAgreementPayerTransaction(input: {
     ) {
       throw new Error('Arc Agreement activation commitment changed while recording the transaction.')
     }
+    const recordingAttempt = verifiedTransaction.recoveredAttempt
+      ? {
+          ...attempt,
+          activationTimestamp: verifiedTransaction.recoveredAttempt.activationTimestamp,
+          prepared: verifiedTransaction.recoveredAttempt.prepared,
+          calls: verifiedTransaction.recoveredAttempt.calls,
+        }
+      : attempt
     const indexed = store.transactionIndex[transactionHash]
     if (indexed && (indexed.attemptId !== attempt.id || indexed.stage !== input.stage)) {
       throw new Error('This Arc transaction hash is already bound to another activation action.')
     }
-    const prior = transactionForStage(attempt, input.stage)
+    const prior = transactionForStage(recordingAttempt, input.stage)
     if (prior?.status === 'submitted') {
       if (prior.hash !== transactionHash) {
         throw new Error('A payer transaction is already awaiting authoritative Arc reconciliation.')
@@ -1464,19 +1570,19 @@ export async function recordArcAgreementPayerTransaction(input: {
       durableAttempt = attempt
       return store
     }
-    if (input.stage === 'approval' && attempt.status !== 'awaiting_approval' && attempt.status !== 'approval_failed') {
+    if (input.stage === 'approval' && recordingAttempt.status !== 'awaiting_approval' && recordingAttempt.status !== 'approval_failed') {
       throw new Error('The approval transaction is not expected in the current activation state.')
     }
-    if (input.stage === 'activation' && attempt.status !== 'ready_to_activate' && attempt.status !== 'activation_failed') {
+    if (input.stage === 'activation' && recordingAttempt.status !== 'ready_to_activate' && recordingAttempt.status !== 'activation_failed') {
       throw new Error('The agreement cannot be activated before payer approval is confirmed.')
     }
     if (input.stage === 'activation' && currentAuthorization) {
       assertArcAgreementProjectCapacity({
         store,
-        attempt,
+        attempt: recordingAttempt,
         authorization: currentAuthorization,
         timestamp,
-        ...(attempt.capacityReservation ? { excludeAttemptId: attempt.id } : {}),
+        ...(recordingAttempt.capacityReservation ? { excludeAttemptId: recordingAttempt.id } : {}),
       })
     }
     const transaction: ArcAgreementPayerTransaction = {
@@ -1489,7 +1595,7 @@ export async function recordArcAgreementPayerTransaction(input: {
     const {
       capacityReservation: _capacityReservation,
       ...attemptWithoutCapacityReservation
-    } = attempt
+    } = recordingAttempt
     durableAttempt = {
       ...attemptWithoutCapacityReservation,
       status: input.stage === 'approval' ? 'approval_submitted' : 'activation_submitted',
