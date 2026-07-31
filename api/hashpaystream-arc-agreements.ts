@@ -1,6 +1,11 @@
+import { createHash } from 'node:crypto'
 import type { Request, Response } from 'express'
-import { listArcAgreementRecords, type ArcAgreement } from './arc-agreements.js'
-import { verifyDeveloperProjectOwner } from './developer-projects.js'
+import { createArcAgreementsHandler, listArcAgreementRecords, type ArcAgreement } from './arc-agreements.js'
+import {
+  resolveDeveloperProjectPolicy,
+  verifyDeveloperProjectOwner,
+  type DeveloperCheckoutPolicy,
+} from './developer-projects.js'
 import { hasRenderDurableStore, readDurableJson } from './render-durable-store.js'
 
 const DEFAULT_EVENT_STORE_KEY = 'hashpaylink:hashpaystream-arc-webhooks:v1'
@@ -26,6 +31,8 @@ type Dependencies = {
   authorize: (req: Request, projectId: string) => Promise<{ id: string; name: string; capabilities: string[] }>
   readEvents: (key: string) => Promise<EventStore | undefined>
   listAgreements: (input: { partnerId: string; limit: number }) => Promise<ArcAgreement[]>
+  projectPolicy: (projectId: string) => Promise<DeveloperCheckoutPolicy | null>
+  createAgreement: (req: Request, res: Response, policy: DeveloperCheckoutPolicy) => Promise<unknown>
   env: () => NodeJS.ProcessEnv
 }
 
@@ -34,6 +41,8 @@ const defaults: Dependencies = {
   authorize: verifyDeveloperProjectOwner,
   readEvents: readDurableJson,
   listAgreements: input => listArcAgreementRecords(input),
+  projectPolicy: projectId => resolveDeveloperProjectPolicy(projectId, 'test'),
+  createAgreement: (req, res, policy) => createArcAgreementsHandler({ policy: async () => policy })(req, res),
   env: () => process.env,
 }
 
@@ -143,8 +152,8 @@ function agreementRecord(agreementId: string, draft: ArcAgreement | undefined, e
 export function createHashPayStreamArcAgreementsHandler(dependencies: Dependencies = defaults) {
   return async function hashPayStreamArcAgreementsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
-    if (req.method !== 'GET') {
-      res.setHeader('Allow', 'GET')
+    if (req.method !== 'GET' && req.method !== 'POST') {
+      res.setHeader('Allow', 'GET, POST')
       return res.status(405).json({ ok: false, error: 'Method not allowed.' })
     }
     try {
@@ -157,6 +166,34 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
       const project = await dependencies.authorize(req, projectId)
       if (!project.capabilities.includes('arc_agreements')) {
         throw Object.assign(new Error('This project has not enabled Arc Agreements.'), { status: 403 })
+      }
+      if (req.method === 'POST') {
+        const policy = await dependencies.projectPolicy(projectId)
+        if (!policy || policy.partnerId !== projectId) {
+          throw Object.assign(new Error('Create an active Arc sandbox key for this project first.'), { status: 409 })
+        }
+        const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+          ? req.body as Record<string, unknown>
+          : {}
+        const idempotencyKey = String(req.headers['idempotency-key'] ?? '').trim()
+        const reference = createHash('sha256').update(`${projectId}\0${idempotencyKey}`).digest('hex').slice(0, 20)
+        const originalBody = req.body
+        req.body = {
+          template: 'fixed_unlock',
+          externalId: `hps-${reference}`,
+          resourceId: `agreement:${reference}`,
+          title: body.title,
+          description: body.description,
+          amount: body.amount,
+          recipient: body.recipient,
+          durationSeconds: body.durationSeconds,
+          cancellationWindowSeconds: body.cancellationWindowSeconds,
+        }
+        try {
+          return await dependencies.createAgreement(req, res, policy)
+        } finally {
+          req.body = originalBody
+        }
       }
       const [drafts, eventStore] = await Promise.all([
         dependencies.listAgreements({ partnerId: projectId, limit: 250 }),

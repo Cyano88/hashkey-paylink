@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { ArrowUpRight, Loader2, LockKeyhole } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { PrivyConnectButton } from '../../../../../src/lib/PrivyConnectButton'
 
 type AgreementStatus = 'awaiting_start' | 'active' | 'expired' | 'completed' | 'cancelled' | 'refunded'
@@ -196,9 +197,12 @@ export default function AgreementDashboard() {
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">Agreements</h1>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{projectName} · confirmed from signed lifecycle events</p>
         </div>
-        {agreements.length > 0 && (
-          <p className="text-xs text-gray-400 dark:text-gray-500">Updates automatically</p>
-        )}
+        <div className="flex items-center gap-3">
+          {agreements.length > 0 && <p className="text-xs text-gray-400 dark:text-gray-500">Updates automatically</p>}
+          <Link to="/agreements/new" className="rounded-xl bg-gray-950 px-3.5 py-2.5 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
+            New agreement
+          </Link>
+        </div>
       </div>
 
       {error && (
@@ -230,7 +234,7 @@ export default function AgreementDashboard() {
           </div>
 
           <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-            <div className="space-y-2">
+            <div className={`space-y-2 ${agreements.length === 1 ? 'hidden lg:block' : ''}`}>
               {agreements.map(agreement => (
                 <button
                   type="button"

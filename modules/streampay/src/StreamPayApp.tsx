@@ -3,6 +3,7 @@ import { StreamPayLayout } from './components/StreamPayLayout'
 import { CreatorAdminPage, CreatorPage } from './components/creator/CreatorPage'
 import { StreamGate } from './components/creator/StreamGate'
 import AgreementDashboard from './components/agreements/AgreementDashboard'
+import FixedAgreementForm from './components/agreements/FixedAgreementForm'
 import X402Receipt from '../../../src/pages/X402Receipt'
 
 export default function StreamPayApp() {
@@ -13,6 +14,7 @@ export default function StreamPayApp() {
           {/* Arc Agreements is the standalone product. Legacy creator routes remain compatibility-only. */}
           <Route index element={<AgreementDashboard />} />
           <Route path="agreements" element={<AgreementDashboard />} />
+          <Route path="agreements/new" element={<FixedAgreementForm />} />
           <Route path="stream" element={<Navigate to="/creator" replace />} />
           <Route path="stream/:vaultAddress" element={<Navigate to="/creator" replace />} />
           <Route path="agentic" element={<Navigate to="/creator" replace />} />

@@ -283,7 +283,8 @@ function noStore(res: Response) {
   res.setHeader('Cache-Control', 'no-store')
 }
 
-export function createArcAgreementsHandler(dependencies: Dependencies = defaults) {
+export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}) {
+  const dependencies: Dependencies = { ...defaults, ...overrides }
   return async function arcAgreementsHandler(req: Request, res: Response) {
     noStore(res)
     try {

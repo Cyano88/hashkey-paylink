@@ -94,12 +94,46 @@ const dependencies = {
     assert.deepEqual(input, { partnerId: projectId, limit: 250 })
     return [draft]
   },
+  projectPolicy: async id => ({
+    partnerId: id,
+    merchantName: 'Hash PayStream Arc Pilot',
+    allowedOrigins: ['https://hashpaystream.app'],
+    defaultNetwork: 'arc',
+    paymentOptions: [{ network: 'arc', recipient: draft.recipient }],
+    settlementMode: 'usdc',
+    environment: 'test',
+    checkoutMode: 'human',
+    capabilities: ['arc_agreements'],
+    webhookConfigured: true,
+    projectManaged: true,
+  }),
+  createAgreement: async (req, res, policy) => {
+    assert.equal(policy.partnerId, projectId)
+    assert.equal(req.body.template, 'fixed_unlock')
+    assert.match(req.body.externalId, /^hps-[a-f0-9]{20}$/)
+    assert.match(req.body.resourceId, /^agreement:[a-f0-9]{20}$/)
+    assert.equal(req.body.title, 'New protected payment')
+    assert.equal(req.body.amount, '0.1')
+    assert.equal(req.originalBody.externalId, 'must-not-pass-through')
+    assert.notEqual(req.body.externalId, req.originalBody.externalId)
+    return res.status(201).json({
+      ok: true,
+      agreement: { id: 'agr_createdagreement1234', title: req.body.title, amount: req.body.amount, recipient: req.body.recipient },
+      payerReviewPath: '/agreements/agr_createdagreement1234#access=agrp_private',
+    })
+  },
   env: () => ({ HASHPAYSTREAM_ARC_PROJECT_ID: projectId }),
 }
 
-async function call(handler, method = 'GET') {
+async function call(handler, method = 'GET', input = {}) {
   const response = responseRecorder()
-  await handler({ method, headers: { authorization: 'Bearer test' } }, response)
+  const request = {
+    method,
+    headers: { authorization: 'Bearer test', ...(input.headers ?? {}) },
+    body: input.body,
+  }
+  request.originalBody = request.body
+  await handler(request, response)
   return response
 }
 
@@ -119,9 +153,25 @@ assert.equal('payloadHash' in response.body.agreements[0].timeline[0], false)
 assert.equal(JSON.stringify(response.body).includes('private-payer-access-hash'), false)
 assert.equal(JSON.stringify(response.body).includes('must-never-leave-the-api'), false)
 
-const methodResponse = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST')
+const created = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
+  headers: { 'idempotency-key': 'hashpaystream:create:1234' },
+  body: {
+    title: 'New protected payment',
+    description: 'One protected test payment.',
+    amount: '0.1',
+    recipient: draft.recipient,
+    durationSeconds: 7200,
+    cancellationWindowSeconds: 900,
+    externalId: 'must-not-pass-through',
+    template: 'milestone',
+  },
+})
+assert.equal(created.statusCode, 201)
+assert.equal(created.body.agreement.title, 'New protected payment')
+
+const methodResponse = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'PUT')
 assert.equal(methodResponse.statusCode, 405)
-assert.equal(methodResponse.headers.allow, 'GET')
+assert.equal(methodResponse.headers.allow, 'GET, POST')
 
 const unauthorized = await call(createHashPayStreamArcAgreementsHandler({
   ...dependencies,
@@ -138,7 +188,13 @@ assert.equal(wrongCapability.statusCode, 403)
 
 const serverSource = readFileSync(new URL('../server.ts', import.meta.url), 'utf8')
 assert.match(serverSource, /app\.get\('\/api\/hashpaystream\/arc-agreements',\s*readLimiter/)
+assert.match(serverSource, /app\.post\('\/api\/hashpaystream\/arc-agreements',\s*strictLimiter/)
 const appSource = readFileSync(new URL('../modules/streampay/src/StreamPayApp.tsx', import.meta.url), 'utf8')
 assert.match(appSource, /<Route index element={<AgreementDashboard\s*\/>}/)
+assert.match(appSource, /path="agreements\/new" element={<FixedAgreementForm\s*\/>}/)
+const formSource = readFileSync(new URL('../modules/streampay/src/components/agreements/FixedAgreementForm.tsx', import.meta.url), 'utf8')
+assert.match(formSource, /fetch\('\/api\/hashpaystream\/arc-agreements'/)
+assert.match(formSource, /'idempotency-key': idempotencyKey/)
+assert.doesNotMatch(formSource, /['"]x-api-key['"]/i)
 
 console.log('Hash PayStream Arc Agreements dashboard smoke checks passed.')
