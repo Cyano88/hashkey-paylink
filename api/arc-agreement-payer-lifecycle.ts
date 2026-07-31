@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import {
+  decodeFunctionData,
   encodeFunctionData,
   getAddress,
   isAddress,
@@ -39,6 +40,13 @@ const escrowAbi = parseAbi([
 const smartWalletAbi = parseAbi([
   'function executeBatch((address target,uint256 value,bytes data)[] calls)',
 ])
+const entryPointV06Abi = parseAbi([
+  'function handleOps((address sender,uint256 nonce,bytes initCode,bytes callData,uint256 callGasLimit,uint256 verificationGasLimit,uint256 preVerificationGas,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,bytes paymasterAndData,bytes signature)[] ops,address payable beneficiary)',
+])
+const circleAccountAbi = parseAbi([
+  'function execute(address dest,uint256 value,bytes func)',
+])
+const ENTRY_POINT_V06 = getAddress('0x5FF137D4b0FDcd49DCa30c7CF57E578a026d2789')
 
 export type ArcAgreementPayerLifecycleActionName = 'cancel' | 'refund'
 export type ArcAgreementPayerLifecycleActionStatus =
@@ -70,7 +78,7 @@ export type ArcAgreementPayerLifecycleAction = {
   providerTransactionId?: string
   providerState?: string
   transactionHash?: Hex
-  execution?: 'direct' | 'circle_smart_wallet'
+  execution?: 'direct' | 'circle_smart_wallet' | 'circle_user_operation'
   submittedAt?: string
   confirmedAt?: string
   observedBlockNumber?: string
@@ -557,9 +565,38 @@ async function verifyPayerLifecycleTransaction(input: {
     && getAddress(transaction.to) === input.action.wrappedCall.to
     && transaction.input.toLowerCase() === input.action.wrappedCall.data.toLowerCase()
   )
+  let userOperation = false
+  if (transaction.to !== null && getAddress(transaction.to) === ENTRY_POINT_V06) {
+    try {
+      const entryPointCall = decodeFunctionData({
+        abi: entryPointV06Abi,
+        data: transaction.input,
+      })
+      if (entryPointCall.functionName === 'handleOps') {
+        const [operations] = entryPointCall.args
+        if (operations.length === 1 && getAddress(operations[0].sender) === input.action.walletAddress) {
+          const accountCall = decodeFunctionData({
+            abi: circleAccountAbi,
+            data: operations[0].callData,
+          })
+          if (accountCall.functionName === 'execute') {
+            const [destination, value, callData] = accountCall.args
+            userOperation = (
+              getAddress(destination) === input.action.walletAddress
+              && value === 0n
+              && callData.toLowerCase() === input.action.wrappedCall.data.toLowerCase()
+            )
+          }
+        }
+      }
+    } catch {
+      userOperation = false
+    }
+  }
   if (direct) return 'direct' as const
   if (wrapped) return 'circle_smart_wallet' as const
-  throw new Error('Payer lifecycle transaction does not match the prepared escrow call.')
+  if (userOperation) return 'circle_user_operation' as const
+  throw new Error('Payer lifecycle transaction does not match the prepared direct, Circle smart-wallet, or Circle user-operation call.')
 }
 
 export async function recordArcAgreementPayerLifecycleTransaction(input: {
@@ -588,8 +625,10 @@ export async function recordArcAgreementPayerLifecycleTransaction(input: {
       if (current.transactionHash !== transactionHash) {
         throw new Error('Another Arc transaction is already bound to this payer lifecycle action.')
       }
-      replayed = true
-      return current
+      if (['submitted', 'confirmed'].includes(current.status)) {
+        replayed = true
+        return current
+      }
     }
     store.transactionIndex[transactionHash] = current.id
     return {
@@ -611,9 +650,19 @@ export async function reconcileArcAgreementPayerLifecycleAction(input: {
   payerIdentity: string
   confirmationBlocks?: number
 }, dependencies: Dependencies = defaults) {
-  const action = await readArcAgreementPayerLifecycleAction(input, dependencies)
+  let action = await readArcAgreementPayerLifecycleAction(input, dependencies)
   if (!action || action.status === 'confirmed' || action.status === 'failed') {
     return { action, pending: false, changed: false }
+  }
+  if (action.status === 'transaction_pending' && action.transactionHash) {
+    const recovered = await recordArcAgreementPayerLifecycleTransaction({
+      client: input.client,
+      partnerId: input.partnerId,
+      agreementId: input.agreementId,
+      payerIdentity: input.payerIdentity,
+      transactionHash: action.transactionHash,
+    }, dependencies)
+    action = recovered.action
   }
   if (action.status !== 'submitted' || !action.transactionHash) {
     return { action, pending: true, changed: false }

@@ -281,7 +281,7 @@ export default function ArcAgreementPayerPage() {
 
   useEffect(() => {
     const lifecycleStatus = review?.lifecycle?.action?.status
-    if (lifecycleStatus !== 'submitted') return
+    if (!['transaction_pending', 'submitted'].includes(lifecycleStatus ?? '')) return
     const check = () => {
       void request<ActionResponse>({ action: 'lifecycle-status' })
         .then(result => {

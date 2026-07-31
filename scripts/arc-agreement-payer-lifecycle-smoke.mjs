@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import { encodeFunctionData, parseAbi } from 'viem'
 import { arcAgreementClientReference, arcAgreementTerms } from '../api/arc-agreement-terms.ts'
 import { prepareArcAgreementDeployment } from '../api/arc-agreement-reconciliation.ts'
 import { readConfirmedArcAgreementSnapshot } from '../api/arc-agreement-confirmed-snapshot.ts'
@@ -25,6 +26,13 @@ const usdc = '0x3600000000000000000000000000000000000000'
 const escrow = '0x5555555555555555555555555555555555555555'
 const walletId = '123e4567-e89b-42d3-a456-426614174000'
 const transactionHash = `0x${'aa'.repeat(32)}`
+const entryPoint = '0x5FF137D4b0FDcd49DCa30c7CF57E578a026d2789'
+const entryPointAbi = parseAbi([
+  'function handleOps((address sender,uint256 nonce,bytes initCode,bytes callData,uint256 callGasLimit,uint256 verificationGasLimit,uint256 preVerificationGas,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,bytes paymasterAndData,bytes signature)[] ops,address payable beneficiary)',
+])
+const circleAccountAbi = parseAbi([
+  'function execute(address dest,uint256 value,bytes func)',
+])
 const activationTimestamp = 1_785_240_000
 const terms = arcAgreementTerms({
   template: 'progressive_release',
@@ -331,6 +339,101 @@ const directRecorded = await recordArcAgreementPayerLifecycleTransaction({
 }, dependencies)
 assert.equal(directRecorded.action.status, 'submitted')
 assert.equal(directRecorded.action.execution, 'direct')
+
+// Circle submits Arc smart-wallet actions through EntryPoint v0.6. A durable
+// provider-complete hash must be recoverable without issuing another challenge.
+durableStore = undefined
+confirmed = await snapshot({
+  status: 1,
+  releasedAmount: 0n,
+  tokenBalance: prepared.totalAmount,
+  head: 200n,
+})
+blockTimestamp = prepared.expiresAt
+const userOperationReservation = await reserveArcAgreementPayerLifecycleAction({
+  client,
+  partnerId,
+  agreementId,
+  payerIdentity: identity,
+  walletId,
+  walletAddress: payer,
+  action: 'refund',
+  env: { ARC_AGREEMENT_PAYER_LIFECYCLE_ENABLED: 'true' },
+}, dependencies)
+const userOperationHash = `0x${'cc'.repeat(32)}`
+const accountCall = destination => encodeFunctionData({
+  abi: circleAccountAbi,
+  functionName: 'execute',
+  args: [destination, 0n, userOperationReservation.action.wrappedCall.data],
+})
+const entryPointCall = destination => encodeFunctionData({
+  abi: entryPointAbi,
+  functionName: 'handleOps',
+  args: [[{
+    sender: payer,
+    nonce: 0n,
+    initCode: '0x',
+    callData: accountCall(destination),
+    callGasLimit: 1n,
+    verificationGasLimit: 1n,
+    preVerificationGas: 1n,
+    maxFeePerGas: 1n,
+    maxPriorityFeePerGas: 1n,
+    paymasterAndData: '0x',
+    signature: '0x',
+  }], payer],
+})
+observedTransaction = {
+  hash: userOperationHash,
+  from: '0x9999999999999999999999999999999999999999',
+  to: entryPoint,
+  input: entryPointCall(recipient),
+  value: 0n,
+}
+await assert.rejects(() => recordArcAgreementPayerLifecycleTransaction({
+  client,
+  partnerId,
+  agreementId,
+  payerIdentity: identity,
+  transactionHash: userOperationHash,
+}, dependencies), /does not match/)
+await attachArcAgreementPayerLifecycleChallenge({
+  partnerId,
+  agreementId,
+  payerIdentity: identity,
+  challengeId: 'challenge_payer_lifecycle_user_op',
+  providerTransactionId: '123e4567-e89b-42d3-a456-426614174004',
+}, dependencies)
+await observeArcAgreementPayerLifecycleAction({
+  partnerId,
+  agreementId,
+  payerIdentity: identity,
+  status: 'transaction_pending',
+  providerState: 'COMPLETE',
+  transactionHash: userOperationHash,
+}, dependencies)
+observedTransaction = {
+  ...observedTransaction,
+  input: entryPointCall(payer),
+}
+receipt = { status: 'success', blockNumber: 195n }
+head = 205n
+confirmed = await snapshot({
+  status: 4,
+  releasedAmount: 0n,
+  tokenBalance: 0n,
+  head: 200n,
+})
+const recoveredUserOperation = await reconcileArcAgreementPayerLifecycleAction({
+  client,
+  partnerId,
+  agreementId,
+  payerIdentity: identity,
+}, dependencies)
+assert.equal(recoveredUserOperation.pending, false)
+assert.equal(recoveredUserOperation.changed, true)
+assert.equal(recoveredUserOperation.action.status, 'confirmed')
+assert.equal(recoveredUserOperation.action.execution, 'circle_user_operation')
 
 const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8')
 assert.match(envExample, /^ARC_AGREEMENTS_ENABLED=false$/m)
