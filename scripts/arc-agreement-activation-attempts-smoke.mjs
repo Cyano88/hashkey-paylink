@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict'
-import { getAddress, zeroAddress } from 'viem'
+import {
+  encodeFunctionData,
+  getAddress,
+  parseAbi,
+  zeroAddress,
+} from 'viem'
 import {
   arcAgreementProjectCapacitySnapshot,
   arcAgreementCircleSmartWalletCall,
@@ -25,6 +30,14 @@ const agreementId = 'agr_attemptpilot123456'
 const payer = getAddress('0x3333333333333333333333333333333333333333')
 const recipient = getAddress('0x2222222222222222222222222222222222222222')
 const escrow = getAddress('0x4444444444444444444444444444444444444444')
+const entryPoint = getAddress('0x5FF137D4b0FDcd49DCa30c7CF57E578a026d2789')
+const bundler = getAddress('0x6666666666666666666666666666666666666666')
+const entryPointAbi = parseAbi([
+  'function handleOps((address sender,uint256 nonce,bytes initCode,bytes callData,uint256 callGasLimit,uint256 verificationGasLimit,uint256 preVerificationGas,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,bytes paymasterAndData,bytes signature)[] ops,address payable beneficiary)',
+])
+const circleAccountAbi = parseAbi([
+  'function execute(address dest,uint256 value,bytes func)',
+])
 const chainTerms = arcAgreementTerms({
   template: 'progressive_release',
   externalId: 'attempt-001',
@@ -273,6 +286,40 @@ chain.state.transactions.set(approvalHash, {
   input: preparedResult.attempt.calls.approval.data,
   value: 0n,
 })
+const approvalSmartWalletCall = arcAgreementCircleSmartWalletCall(
+  preparedResult.attempt,
+  'approval',
+)
+const circleApprovalCall = encodeFunctionData({
+  abi: circleAccountAbi,
+  functionName: 'execute',
+  args: [payer, 0n, approvalSmartWalletCall.data],
+})
+const approvalUserOperationData = encodeFunctionData({
+  abi: entryPointAbi,
+  functionName: 'handleOps',
+  args: [[{
+    sender: payer,
+    nonce: 1n,
+    initCode: '0x',
+    callData: circleApprovalCall,
+    callGasLimit: 200_000n,
+    verificationGasLimit: 200_000n,
+    preVerificationGas: 50_000n,
+    maxFeePerGas: 1n,
+    maxPriorityFeePerGas: 1n,
+    paymasterAndData: '0x',
+    signature: '0x',
+  }], bundler],
+})
+const approvalUserOperationHash = transactionHash('c')
+chain.state.transactions.set(approvalUserOperationHash, {
+  hash: approvalUserOperationHash,
+  from: bundler,
+  to: entryPoint,
+  input: approvalUserOperationData,
+  value: 0n,
+})
 const tamperedHash = transactionHash('a')
 chain.state.transactions.set(tamperedHash, {
   hash: tamperedHash,
@@ -289,7 +336,7 @@ await assert.rejects(recordArcAgreementPayerTransaction({
   stage: 'approval',
   transactionHash: tamperedHash,
   env,
-}, memory.dependencies), /does not match the prepared direct or Circle smart-wallet call/)
+}, memory.dependencies), /does not match the prepared direct, Circle smart-wallet, or Circle user-operation call/)
 const valueHash = transactionHash('b')
 chain.state.transactions.set(valueHash, {
   hash: valueHash,
@@ -307,6 +354,44 @@ await assert.rejects(recordArcAgreementPayerTransaction({
   transactionHash: valueHash,
   env,
 }, memory.dependencies), /must not transfer native value/)
+const tamperedUserOperationHash = transactionHash('d')
+const tamperedCircleCall = encodeFunctionData({
+  abi: circleAccountAbi,
+  functionName: 'execute',
+  args: [recipient, 0n, approvalSmartWalletCall.data],
+})
+chain.state.transactions.set(tamperedUserOperationHash, {
+  hash: tamperedUserOperationHash,
+  from: bundler,
+  to: entryPoint,
+  input: encodeFunctionData({
+    abi: entryPointAbi,
+    functionName: 'handleOps',
+    args: [[{
+      sender: payer,
+      nonce: 2n,
+      initCode: '0x',
+      callData: tamperedCircleCall,
+      callGasLimit: 200_000n,
+      verificationGasLimit: 200_000n,
+      preVerificationGas: 50_000n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 1n,
+      paymasterAndData: '0x',
+      signature: '0x',
+    }], bundler],
+  }),
+  value: 0n,
+})
+await assert.rejects(recordArcAgreementPayerTransaction({
+  client: chain.client,
+  policy,
+  agreementId,
+  payer,
+  stage: 'approval',
+  transactionHash: tamperedUserOperationHash,
+  env,
+}, memory.dependencies), /does not match the prepared direct, Circle smart-wallet, or Circle user-operation call/)
 await assert.rejects(recordArcAgreementPayerTransaction({
   client: chain.client,
   policy,
@@ -333,28 +418,29 @@ const submittedApproval = await recordArcAgreementPayerTransaction({
   agreementId,
   payer,
   stage: 'approval',
-  transactionHash: approvalHash,
+  transactionHash: approvalUserOperationHash,
   env,
 }, memory.dependencies)
 assert.equal(submittedApproval.attempt.status, 'approval_submitted')
 assert.equal(submittedApproval.replayed, false)
+assert.equal(submittedApproval.attempt.transactions[0].execution, 'circle_user_operation')
 const recordedChallenge = await markArcAgreementPayerChallengeRecorded({
   policy,
   agreementId,
   payerIdentity: 'privy:test-user-1234',
   stage: 'approval',
   challengeId: 'challenge-test-1234',
-  transactionHash: approvalHash,
+  transactionHash: approvalUserOperationHash,
 }, memory.dependencies)
 assert.equal(recordedChallenge.status, 'recorded')
-assert.equal(recordedChallenge.transactionHash, approvalHash)
+assert.equal(recordedChallenge.transactionHash, approvalUserOperationHash)
 assert.equal((await recordArcAgreementPayerTransaction({
   client: chain.client,
   policy,
   agreementId,
   payer,
   stage: 'approval',
-  transactionHash: approvalHash,
+  transactionHash: approvalUserOperationHash,
   env,
 }, memory.dependencies)).replayed, true)
 
@@ -374,7 +460,7 @@ assert.equal((await reconcileArcAgreementActivationAttempt({
   agreementId,
   confirmationBlocks: 5,
 }, memory.dependencies)).pending, true)
-chain.state.receipts.set(approvalHash, { status: 'success', blockNumber: 99n })
+chain.state.receipts.set(approvalUserOperationHash, { status: 'success', blockNumber: 99n })
 assert.equal((await reconcileArcAgreementActivationAttempt({
   client: chain.client,
   policy,
@@ -502,7 +588,7 @@ await assert.rejects(recordArcAgreementPayerTransaction({
   agreementId: secondAgreementId,
   payer,
   stage: 'approval',
-  transactionHash: approvalHash,
+  transactionHash: approvalUserOperationHash,
   env,
 }, memory.dependencies), /already bound to another activation action/)
 

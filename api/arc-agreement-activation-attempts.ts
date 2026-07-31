@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import {
+  decodeFunctionData,
   encodeFunctionData,
   getAddress,
   isAddress,
@@ -48,6 +49,13 @@ const factoryAbi = parseAbi([
 const smartWalletAbi = parseAbi([
   'function executeBatch((address target,uint256 value,bytes data)[] calls)',
 ])
+const entryPointV06Abi = parseAbi([
+  'function handleOps((address sender,uint256 nonce,bytes initCode,bytes callData,uint256 callGasLimit,uint256 verificationGasLimit,uint256 preVerificationGas,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,bytes paymasterAndData,bytes signature)[] ops,address payable beneficiary)',
+])
+const circleAccountAbi = parseAbi([
+  'function execute(address dest,uint256 value,bytes func)',
+])
+const ENTRY_POINT_V06 = getAddress('0x5FF137D4b0FDcd49DCa30c7CF57E578a026d2789')
 
 export type ArcAgreementActivationStatus =
   | 'awaiting_approval'
@@ -88,7 +96,7 @@ export type ArcAgreementPayerTransaction = {
   hash: Hex
   stage: 'approval' | 'activation'
   status: 'submitted' | 'confirmed' | 'failed'
-  execution: 'direct' | 'circle_smart_wallet'
+  execution: 'direct' | 'circle_smart_wallet' | 'circle_user_operation'
   submittedAt: string
   confirmedAt?: string
   blockNumber?: string
@@ -760,6 +768,38 @@ function expectedCall(attempt: ArcAgreementActivationAttempt, stage: 'approval' 
   return attempt.calls[stage]
 }
 
+function isExactCircleUserOperation(
+  transaction: TransactionObservation,
+  payer: Address,
+  smartWallet: ArcAgreementPayerCall,
+) {
+  if (transaction.to === null || getAddress(transaction.to) !== ENTRY_POINT_V06) return false
+  try {
+    const entryPointCall = decodeFunctionData({
+      abi: entryPointV06Abi,
+      data: transaction.input,
+    })
+    if (entryPointCall.functionName !== 'handleOps') return false
+    const [operations] = entryPointCall.args
+    if (operations.length !== 1) return false
+    const operation = operations[0]
+    if (getAddress(operation.sender) !== payer) return false
+    const accountCall = decodeFunctionData({
+      abi: circleAccountAbi,
+      data: operation.callData,
+    })
+    if (accountCall.functionName !== 'execute') return false
+    const [destination, value, callData] = accountCall.args
+    return (
+      getAddress(destination) === payer
+      && value === 0n
+      && callData.toLowerCase() === smartWallet.data.toLowerCase()
+    )
+  } catch {
+    return false
+  }
+}
+
 export function arcAgreementCircleSmartWalletCall(
   attempt: ArcAgreementActivationAttempt,
   stage: 'approval' | 'activation',
@@ -809,7 +849,10 @@ async function verifiedPayerTransaction(input: {
     && transaction.input.toLowerCase() === smartWallet.data.toLowerCase()
   )
   if (wrapped) return { transaction, execution: 'circle_smart_wallet' as const }
-  throw new Error('Payer transaction does not match the prepared direct or Circle smart-wallet call.')
+  if (isExactCircleUserOperation(transaction, input.attempt.prepared.payer, smartWallet)) {
+    return { transaction, execution: 'circle_user_operation' as const }
+  }
+  throw new Error('Payer transaction does not match the prepared direct, Circle smart-wallet, or Circle user-operation call.')
 }
 
 function transactionForStage(
