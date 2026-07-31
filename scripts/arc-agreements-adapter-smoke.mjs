@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
-import { createArcAgreementsHandler } from '../api/arc-agreements.ts'
+import {
+  createArcAgreementsHandler,
+  readArcAgreementByPayerAccess,
+  rotateArcAgreementPayerAccess,
+} from '../api/arc-agreements.ts'
 
 function responseRecorder() {
   return {
@@ -20,7 +24,7 @@ async function request(handler, method, { body, headers = {}, query = {} } = {})
 
 const arcRoute = [{ network: 'arc', recipient: '0x1111111111111111111111111111111111111111' }]
 const humanPolicy = {
-  partnerId: 'project_human',
+  partnerId: 'dev_projecthuman1234',
   merchantName: 'Creator Studio',
   allowedOrigins: ['https://creator.example'],
   defaultNetwork: 'arc',
@@ -95,6 +99,32 @@ assert.equal(created.body.payerReviewPath, `/agreements/${created.body.agreement
 assert.match(created.body.nextAction, /No funds have moved/)
 assert.equal(JSON.stringify(created.body).includes('checkoutUrl'), false)
 assert.equal(JSON.stringify(created.body).includes('depositAddress'), false)
+
+const originalPayerAccessToken = created.body.payerAccessToken
+const originalPayerAccessHash = store.agreements[created.body.agreement.id].payerAccessHash
+const rotatedPayerAccessToken = `agrp_${'z'.repeat(43)}`
+const rotated = await rotateArcAgreementPayerAccess(
+  humanPolicy.partnerId,
+  created.body.agreement.id,
+  {
+    hasStore: () => true,
+    mutate: async (_key, update) => {
+      store = update(store)
+      return store
+    },
+    createPayerAccessToken: () => rotatedPayerAccessToken,
+    now: () => new Date('2026-07-28T13:00:00.000Z'),
+  },
+)
+assert.equal(rotated.payerAccessToken, rotatedPayerAccessToken)
+assert.equal(rotated.payerReviewPath, `/agreements/${created.body.agreement.id}#access=${rotatedPayerAccessToken}`)
+assert.equal('payerAccessHash' in rotated.agreement, false)
+assert.notEqual(store.agreements[created.body.agreement.id].payerAccessHash, originalPayerAccessHash)
+assert.equal(await readArcAgreementByPayerAccess(created.body.agreement.id, originalPayerAccessToken, async () => store), null)
+assert.equal(
+  (await readArcAgreementByPayerAccess(created.body.agreement.id, rotatedPayerAccessToken, async () => store))?.id,
+  created.body.agreement.id,
+)
 
 const replay = await request(handler, 'POST', { body: fixed, headers })
 assert.equal(replay.statusCode, 200)

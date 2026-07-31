@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
-import { ArrowUpRight, Loader2, LockKeyhole } from 'lucide-react'
+import { ArrowUpRight, Check, Copy, Loader2, LockKeyhole } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PrivyConnectButton } from '../../../../../src/lib/PrivyConnectButton'
 
@@ -105,6 +105,9 @@ export default function AgreementDashboard() {
   const [activeId, setActiveId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [rotatingLink, setRotatingLink] = useState(false)
+  const [payerLink, setPayerLink] = useState('')
+  const [linkCopied, setLinkCopied] = useState(false)
 
   const load = useCallback(async (quiet = false) => {
     if (!authenticated) {
@@ -150,6 +153,43 @@ export default function AgreementDashboard() {
     () => agreements.find(item => item.id === activeId) ?? agreements[0],
     [activeId, agreements],
   )
+
+  useEffect(() => {
+    setPayerLink('')
+    setLinkCopied(false)
+  }, [active?.id])
+
+  async function rotatePayerLink() {
+    if (!active || active.status !== 'awaiting_start') return
+    setRotatingLink(true)
+    setError('')
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to generate a payer link.')
+      const response = await fetch('/api/hashpaystream/arc-agreements', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'rotate_payer_link', agreementId: active.id }),
+      })
+      const data = await response.json().catch(() => undefined) as { ok?: boolean; payerReviewPath?: string; error?: string } | undefined
+      if (!response.ok || !data?.ok || !data.payerReviewPath) {
+        throw new Error(data?.error || 'A new payer link could not be generated.')
+      }
+      setPayerLink(`https://app.hashpaylink.com${data.payerReviewPath}`)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'A new payer link could not be generated.')
+    } finally {
+      setRotatingLink(false)
+    }
+  }
+
+  async function copyPayerLink() {
+    if (!payerLink) return
+    await navigator.clipboard.writeText(payerLink)
+    setLinkCopied(true)
+    window.setTimeout(() => setLinkCopied(false), 1800)
+  }
 
   const totals = useMemo(() => agreements.reduce((result, agreement) => {
     const chain = agreement.chain
@@ -248,7 +288,7 @@ export default function AgreementDashboard() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{agreement.title || 'Arc agreement'}</p>
                       <p className={`mt-1 text-xs ${active?.id === agreement.id ? 'text-white/60 dark:text-gray-500' : 'text-gray-400'}`}>
-                        {formatUsdc(agreement.chain?.amountUsdcUnits)} · {templateLabel(agreement.template)}
+                        {agreement.chain ? formatUsdc(agreement.chain.amountUsdcUnits) : `${agreement.amount || '0'} USDC`} · {templateLabel(agreement.template)}
                       </p>
                     </div>
                     <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-semibold ${active?.id === agreement.id
@@ -281,13 +321,45 @@ export default function AgreementDashboard() {
                 </div>
 
                 <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-5 border-y border-gray-100 py-5 dark:border-white/10">
-                  <Detail label="Protected" value={formatUsdc(active.chain?.amountUsdcUnits)} />
+                  <Detail label={active.chain ? 'Protected' : 'Agreement amount'} value={active.chain ? formatUsdc(active.chain.amountUsdcUnits) : `${active.amount || '0'} USDC`} />
                   <Detail label="Released" value={formatUsdc(active.chain?.releasedUsdcUnits)} />
                   <Detail label="Remaining" value={formatUsdc(active.chain?.remainingUsdcUnits)} />
                   <Detail label="Release" value={templateLabel(active.template)} />
                   <Detail label="Recipient" value={shortAddress(active.recipient)} />
                   <Detail label="Escrow" value={shortAddress(active.chain?.escrow)} />
                 </div>
+
+                {active.status === 'awaiting_start' && (
+                  <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                    {payerLink ? (
+                      <>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">New private payer link</p>
+                        <p className="mt-2 break-all text-xs leading-5 text-gray-500 dark:text-gray-400">{payerLink}</p>
+                        <p className="mt-2 text-[11px] leading-5 text-gray-400">The previous payer link no longer works.</p>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <button type="button" onClick={() => void copyPayerLink()} className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-xs font-semibold text-gray-900 dark:border-white/10 dark:bg-[#18181b] dark:text-white">
+                            {linkCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            {linkCopied ? 'Copied' : 'Copy link'}
+                          </button>
+                          <a href={payerLink} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
+                            Open checkout
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-medium text-gray-900 dark:text-white">Payer link</p>
+                          <p className="mt-1 text-[11px] leading-5 text-gray-400">Generate a new link if the original was not saved.</p>
+                        </div>
+                        <button type="button" disabled={rotatingLink} onClick={() => void rotatePayerLink()} className="shrink-0 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950">
+                          {rotatingLink ? 'Generating…' : 'Generate link'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-6">
                   <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">Activity</h3>

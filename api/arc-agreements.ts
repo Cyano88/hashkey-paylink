@@ -265,6 +265,46 @@ export async function listArcAgreementRecords(
     .slice(0, limit)
 }
 
+export async function rotateArcAgreementPayerAccess(
+  partnerIdValue: string,
+  agreementIdValue: string,
+  overrides: Partial<Pick<Dependencies, 'hasStore' | 'mutate' | 'createPayerAccessToken' | 'now'>> = {},
+) {
+  const dependencies = { ...defaults, ...overrides }
+  if (!dependencies.hasStore()) throw Object.assign(new Error('Agreement storage is not configured.'), { status: 503 })
+  const partnerId = clean(partnerIdValue, 80)
+  const agreementId = clean(agreementIdValue, 80)
+  if (!/^dev_[a-z0-9]{8,64}$/i.test(partnerId) || !/^agr_[a-z0-9]{12,64}$/i.test(agreementId)) {
+    throw Object.assign(new Error('Agreement identity is invalid.'), { status: 400 })
+  }
+  const payerAccessToken = dependencies.createPayerAccessToken()
+  if (!/^agrp_[A-Za-z0-9_-]{40,100}$/.test(payerAccessToken)) {
+    throw new Error('Agreement payer-access token generator is invalid.')
+  }
+  let agreement: ArcAgreement | undefined
+  await dependencies.mutate(STORE_KEY, current => {
+    const existing = current?.agreements?.[agreementId]
+    if (!existing || existing.partnerId !== partnerId) {
+      throw Object.assign(new Error('Agreement not found.'), { status: 404 })
+    }
+    agreement = {
+      ...existing,
+      payerAccessHash: payerAccessHash(payerAccessToken),
+      updatedAt: dependencies.now().toISOString(),
+    }
+    return {
+      agreements: { ...(current?.agreements ?? {}), [agreementId]: agreement },
+      idempotency: { ...(current?.idempotency ?? {}) },
+    }
+  })
+  if (!agreement) throw new Error('Agreement payer access could not be rotated.')
+  return {
+    agreement: publicAgreement(agreement),
+    payerAccessToken,
+    payerReviewPath: `/agreements/${agreement.id}#access=${encodeURIComponent(payerAccessToken)}`,
+  }
+}
+
 function requirePreviewPolicy(policy: DeveloperCheckoutPolicy | null) {
   if (!policy) throw Object.assign(new Error('A valid developer API key is required.'), { status: 401 })
   if (!policy.capabilities.includes('arc_agreements')) {

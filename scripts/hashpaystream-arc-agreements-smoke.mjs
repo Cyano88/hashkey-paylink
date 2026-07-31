@@ -122,6 +122,16 @@ const dependencies = {
       payerReviewPath: '/agreements/agr_createdagreement1234#access=agrp_private',
     })
   },
+  hasActivationAttempt: async () => false,
+  rotatePayerAccess: async (partnerId, id) => {
+    assert.equal(partnerId, projectId)
+    assert.equal(id, agreementId)
+    return {
+      agreement: draft,
+      payerAccessToken: `agrp_${'r'.repeat(43)}`,
+      payerReviewPath: `/agreements/${agreementId}#access=agrp_rotated_private`,
+    }
+  },
   env: () => ({ HASHPAYSTREAM_ARC_PROJECT_ID: projectId }),
 }
 
@@ -169,6 +179,27 @@ const created = await call(createHashPayStreamArcAgreementsHandler(dependencies)
 assert.equal(created.statusCode, 201)
 assert.equal(created.body.agreement.title, 'New protected payment')
 
+const rotated = await call(createHashPayStreamArcAgreementsHandler({
+  ...dependencies,
+  readEvents: async () => ({ schema: 1, events: {} }),
+}), 'POST', {
+  body: { action: 'rotate_payer_link', agreementId },
+})
+assert.equal(rotated.statusCode, 200)
+assert.equal(rotated.body.payerReviewPath, `/agreements/${agreementId}#access=agrp_rotated_private`)
+
+const rotationBlocked = await call(createHashPayStreamArcAgreementsHandler({
+  ...dependencies,
+  readEvents: async () => ({ schema: 1, events: {} }),
+  hasActivationAttempt: async () => true,
+}), 'POST', { body: { action: 'rotate_payer_link', agreementId } })
+assert.equal(rotationBlocked.statusCode, 409)
+
+const rotationBlockedByLifecycle = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
+  body: { action: 'rotate_payer_link', agreementId },
+})
+assert.equal(rotationBlockedByLifecycle.statusCode, 409)
+
 const methodResponse = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'PUT')
 assert.equal(methodResponse.statusCode, 405)
 assert.equal(methodResponse.headers.allow, 'GET, POST')
@@ -196,5 +227,9 @@ const formSource = readFileSync(new URL('../modules/streampay/src/components/agr
 assert.match(formSource, /fetch\('\/api\/hashpaystream\/arc-agreements'/)
 assert.match(formSource, /'idempotency-key': idempotencyKey/)
 assert.doesNotMatch(formSource, /['"]x-api-key['"]/i)
+const dashboardSource = readFileSync(new URL('../modules/streampay/src/components/agreements/AgreementDashboard.tsx', import.meta.url), 'utf8')
+assert.match(dashboardSource, /action:\s*'rotate_payer_link'/)
+assert.match(dashboardSource, /agreement\.amount \|\| '0'/)
+assert.doesNotMatch(dashboardSource, /['"]x-api-key['"]/i)
 
 console.log('Hash PayStream Arc Agreements dashboard smoke checks passed.')

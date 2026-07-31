@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto'
 import type { Request, Response } from 'express'
-import { createArcAgreementsHandler, listArcAgreementRecords, type ArcAgreement } from './arc-agreements.js'
+import {
+  createArcAgreementsHandler,
+  listArcAgreementRecords,
+  rotateArcAgreementPayerAccess,
+  type ArcAgreement,
+} from './arc-agreements.js'
+import { readArcAgreementActivationAttemptRecord } from './arc-agreement-activation-attempts.js'
 import {
   resolveDeveloperProjectPolicy,
   verifyDeveloperProjectOwner,
@@ -33,6 +39,8 @@ type Dependencies = {
   listAgreements: (input: { partnerId: string; limit: number }) => Promise<ArcAgreement[]>
   projectPolicy: (projectId: string) => Promise<DeveloperCheckoutPolicy | null>
   createAgreement: (req: Request, res: Response, policy: DeveloperCheckoutPolicy) => Promise<unknown>
+  hasActivationAttempt: (partnerId: string, agreementId: string) => Promise<boolean>
+  rotatePayerAccess: (partnerId: string, agreementId: string) => ReturnType<typeof rotateArcAgreementPayerAccess>
   env: () => NodeJS.ProcessEnv
 }
 
@@ -43,6 +51,16 @@ const defaults: Dependencies = {
   listAgreements: input => listArcAgreementRecords(input),
   projectPolicy: projectId => resolveDeveloperProjectPolicy(projectId, 'test'),
   createAgreement: (req, res, policy) => createArcAgreementsHandler({ policy: async () => policy })(req, res),
+  hasActivationAttempt: async (partnerId, agreementId) => {
+    try {
+      await readArcAgreementActivationAttemptRecord(partnerId, agreementId)
+      return true
+    } catch (reason) {
+      if (reason instanceof Error && reason.message.includes('was not found for this project')) return false
+      throw reason
+    }
+  },
+  rotatePayerAccess: rotateArcAgreementPayerAccess,
   env: () => process.env,
 }
 
@@ -175,6 +193,34 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
         const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
           ? req.body as Record<string, unknown>
           : {}
+        const action = String(body.action ?? '').trim()
+        if (action === 'rotate_payer_link') {
+          const agreementId = String(body.agreementId ?? '').trim()
+          if (!/^agr_[a-z0-9]{12,64}$/i.test(agreementId)) {
+            throw Object.assign(new Error('A valid agreement id is required.'), { status: 400 })
+          }
+          const [eventStore, hasActivationAttempt] = await Promise.all([
+            dependencies.readEvents(storeKey),
+            dependencies.hasActivationAttempt(projectId, agreementId),
+          ])
+          const hasLifecycleEvent = Object.values(eventStore?.events ?? {}).some(event => (
+            event.projectId === projectId && event.agreementId === agreementId
+          ))
+          if (hasLifecycleEvent || hasActivationAttempt) {
+            throw Object.assign(new Error('Payer access cannot be changed after agreement activation has started.'), { status: 409 })
+          }
+          const rotated = await dependencies.rotatePayerAccess(projectId, agreementId)
+          return res.json({
+            ok: true,
+            agreement: {
+              id: rotated.agreement.id,
+              title: rotated.agreement.title,
+              amount: rotated.agreement.amount,
+              recipient: rotated.agreement.recipient,
+            },
+            payerReviewPath: rotated.payerReviewPath,
+          })
+        }
         const idempotencyKey = String(req.headers['idempotency-key'] ?? '').trim()
         const reference = createHash('sha256').update(`${projectId}\0${idempotencyKey}`).digest('hex').slice(0, 20)
         const originalBody = req.body
