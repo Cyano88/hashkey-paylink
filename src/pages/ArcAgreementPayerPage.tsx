@@ -577,9 +577,11 @@ export default function ArcAgreementPayerPage() {
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 )}
-                <p className="mt-3 text-center text-[11px] leading-5 text-gray-400">
-                  {statusCopy(attempt, walletLinked)}
-                </p>
+                {review.lifecycle?.action?.status !== 'confirmed' && (
+                  <p className="mt-3 text-center text-[11px] leading-5 text-gray-400">
+                    {statusCopy(attempt, walletLinked)}
+                  </p>
+                )}
               </div>
 
               {error && (

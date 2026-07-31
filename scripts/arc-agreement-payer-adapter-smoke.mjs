@@ -501,6 +501,7 @@ assert.match(payerPageSource, /action:\s*'lifecycle-challenge'/)
 assert.match(payerPageSource, /action:\s*'lifecycle-recover'/)
 assert.match(payerPageSource, /action:\s*'lifecycle-status'/)
 assert.match(payerPageSource, /\['transaction_pending',\s*'submitted'\]\.includes\(lifecycleStatus/)
+assert.match(payerPageSource, /review\.lifecycle\?\.action\?\.status\s*!==\s*'confirmed'/)
 assert.doesNotMatch(payerPageSource, /Send via Address|ghost.?vault|deposit address/i)
 
 console.log('Arc Agreement authenticated payer adapter smoke checks passed.')
