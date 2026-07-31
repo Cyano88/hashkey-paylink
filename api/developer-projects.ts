@@ -355,6 +355,28 @@ function findOwnedProject(store: DeveloperStore | undefined, projectId: string, 
   return project?.ownerId === ownerId ? project : undefined
 }
 
+export async function verifyDeveloperProjectOwner(req: Request, projectIdValue: string) {
+  const projectId = clean(projectIdValue, 80)
+  if (!/^dev_[a-z0-9]{8,64}$/i.test(projectId)) {
+    throw Object.assign(new Error('Developer project id is invalid.'), { status: 400 })
+  }
+  if (!defaults.hasStore()) {
+    throw Object.assign(new Error('Developer project storage is unavailable.'), { status: 503 })
+  }
+  const identity = await verifyDeveloper(req)
+  const project = findOwnedProject(await defaults.read(STORE_KEY), projectId, identity.userId)
+  if (!project) {
+    throw Object.assign(new Error('Developer project was not found.'), { status: 404 })
+  }
+  return {
+    id: project.id,
+    name: project.name,
+    checkoutMode: projectCheckoutMode(project),
+    capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'] as DeveloperCapability[],
+    operationalStatus: project.operationalStatus === 'suspended' ? 'suspended' as const : 'active' as const,
+  }
+}
+
 function requestedNetworks(value: unknown) {
   if (!Array.isArray(value)) return []
   const networks = value.map(item => clean(item, 20).toLowerCase()).filter((item): item is DeveloperNetwork => NETWORKS.includes(item as DeveloperNetwork))

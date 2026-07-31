@@ -121,6 +121,7 @@ import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
 import arcAgreementOperationsHandler from './api/arc-agreement-operations.js'
 import { drainArcAgreementWebhookOutbox } from './api/arc-agreement-webhooks.js'
 import hashPayStreamArcWebhookHandler from './api/hashpaystream-arc-webhook.js'
+import hashPayStreamArcAgreementsHandler from './api/hashpaystream-arc-agreements.js'
 import { drainArcAgreementActivationReconciliations } from './api/arc-agreement-activation-worker.js'
 import { drainArcAgreementLifecycleReconciliations } from './api/arc-agreement-lifecycle-worker.js'
 import { drainArcAgreementOperatorActions } from './api/arc-agreement-operator-worker.js'
@@ -348,6 +349,7 @@ app.get('/api/check-agent-url',        strictLimiter, checkAgentUrlHandler)
 app.get('/api/dashboard-payments',     readLimiter, dashboardPaymentsHandler)
 app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)
 app.get('/api/public-config',          readLimiter, publicConfigHandler)
+app.get('/api/hashpaystream/arc-agreements', readLimiter, hashPayStreamArcAgreementsHandler)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)

@@ -22,9 +22,12 @@ export function StreamPayHeader() {
   const { theme, toggle } = useTheme()
 
   const creatorTo = useModePath('/creator')
+  const agreementsTo = useModePath('/')
+  const isAgreementsMode = pathname === '/' || pathname.startsWith('/agreements')
   const isCreatorMode = pathname.startsWith('/creator') || pathname.startsWith('/gate')
   const telegramMode = isTelegramStreamPay(search)
   const navItems = [
+    { label: 'Agreements', to: agreementsTo, active: isAgreementsMode, external: false },
     { label: 'Creator', to: creatorTo, active: isCreatorMode, external: false },
     { label: 'x402', to: HASH_PAYLINK_X402_MANAGER_URL, active: false, external: true },
   ] as const
@@ -71,7 +74,7 @@ export function StreamPayHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/60 dark:border-white/5 bg-white/80 dark:bg-[#111113]/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 pt-3 pb-2 sm:px-6">
-        <Link to={creatorTo} className="group flex items-center gap-2.5 focus:outline-none">
+        <Link to={agreementsTo} className="group flex items-center gap-2.5 focus:outline-none">
           <GeometricO />
           <span className="text-[15px] font-semibold tracking-tight">
             <span className="text-gray-900 dark:text-white">Hashpay</span><span style={{ color: '#3b82f6' }}>Stream</span>
@@ -97,7 +100,7 @@ export function StreamPayHeader() {
       </div>
       {!telegramMode && (
         <div className="mx-auto flex max-w-5xl px-4 pb-3 sm:hidden">
-          <div className="grid w-full grid-cols-2 gap-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
+          <div className="grid w-full grid-cols-3 gap-1 rounded-full border border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-[#1c1c20] p-0.5">
             {navItems.map(item => renderNavItem(item, true))}
           </div>
         </div>

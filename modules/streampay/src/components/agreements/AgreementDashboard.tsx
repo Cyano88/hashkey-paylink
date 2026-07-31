@@ -1,0 +1,325 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
+import { ArrowUpRight, Loader2, LockKeyhole } from 'lucide-react'
+import { PrivyConnectButton } from '../../../../../src/lib/PrivyConnectButton'
+
+type AgreementStatus = 'awaiting_start' | 'active' | 'expired' | 'completed' | 'cancelled' | 'refunded'
+
+type Agreement = {
+  id: string
+  title?: string
+  description?: string
+  template?: 'fixed_unlock' | 'progressive_release' | 'milestone'
+  amount?: string
+  recipient?: string
+  durationSeconds?: number
+  cancellationWindowSeconds?: number
+  status: AgreementStatus
+  chain: null | {
+    escrow: string
+    amountUsdcUnits: string
+    releasedUsdcUnits: string
+    remainingUsdcUnits: string
+    nextStep: number
+    releaseSteps: number
+    observedBlockNumber: string
+  }
+  timeline: Array<{
+    id: string
+    event: string
+    createdAt: string
+    receivedAt: string
+    observedBlockNumber: string
+  }>
+  updatedAt: string
+}
+
+type DashboardResponse = {
+  ok: boolean
+  project?: { id: string; name: string }
+  summary?: { total: number; active: number; awaitingStart: number; closed: number }
+  agreements?: Agreement[]
+  error?: string
+}
+
+const STATUS_LABEL: Record<AgreementStatus, string> = {
+  awaiting_start: 'Awaiting start',
+  active: 'Active',
+  expired: 'Refund available',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  refunded: 'Refunded',
+}
+
+const EVENT_LABEL: Record<string, string> = {
+  'agreement.activated': 'Agreement started',
+  'agreement.step_released': 'Release confirmed',
+  'agreement.expired': 'Agreement ended',
+  'agreement.completed': 'Agreement completed',
+  'agreement.cancelled': 'Agreement cancelled',
+  'agreement.refunded': 'Remaining USDC returned',
+}
+
+function formatUsdc(units?: string) {
+  try {
+    const value = BigInt(units || '0')
+    const whole = value / 1_000_000n
+    const decimal = (value % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '')
+    return `${decimal ? `${whole}.${decimal}` : whole} USDC`
+  } catch {
+    return '0 USDC'
+  }
+}
+
+function formatDate(value?: string) {
+  if (!value) return 'Not started'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Not started'
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
+
+function shortAddress(value?: string) {
+  return value && value.length > 14 ? `${value.slice(0, 7)}…${value.slice(-5)}` : value || 'Not available'
+}
+
+function templateLabel(value?: Agreement['template']) {
+  if (value === 'progressive_release') return 'Progressive release'
+  if (value === 'milestone') return 'Milestones'
+  return 'One release'
+}
+
+function StatusBadge({ status }: { status: AgreementStatus }) {
+  const tone = status === 'active'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
+    : status === 'expired'
+      ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-300'
+      : 'border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300'
+  return <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${tone}`}>{STATUS_LABEL[status]}</span>
+}
+
+export default function AgreementDashboard() {
+  const { ready, authenticated, getAccessToken } = usePrivy()
+  const [agreements, setAgreements] = useState<Agreement[]>([])
+  const [projectName, setProjectName] = useState('Hash PayStream')
+  const [activeId, setActiveId] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async (quiet = false) => {
+    if (!authenticated) {
+      setLoading(false)
+      return
+    }
+    if (!quiet) setLoading(true)
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to view agreements.')
+      const response = await fetch('/api/hashpaystream/arc-agreements', {
+        cache: 'no-store',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      const data = await response.json().catch(() => undefined) as DashboardResponse | undefined
+      if (!response.ok || !data?.ok) throw new Error(data?.error || 'Agreements could not be loaded.')
+      const next = data.agreements ?? []
+      setAgreements(next)
+      setProjectName(data.project?.name || 'Hash PayStream')
+      setActiveId(current => current && next.some(item => item.id === current) ? current : next[0]?.id ?? '')
+      setError('')
+    } catch (reason) {
+      if (!quiet) setError(reason instanceof Error ? reason.message : 'Agreements could not be loaded.')
+    } finally {
+      if (!quiet) setLoading(false)
+    }
+  }, [authenticated, getAccessToken])
+
+  useEffect(() => {
+    if (!ready) return
+    void load()
+    if (!authenticated) return
+    const timer = window.setInterval(() => void load(true), 15_000)
+    const onVisibility = () => document.visibilityState === 'visible' && void load(true)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [authenticated, load, ready])
+
+  const active = useMemo(
+    () => agreements.find(item => item.id === activeId) ?? agreements[0],
+    [activeId, agreements],
+  )
+
+  const totals = useMemo(() => agreements.reduce((result, agreement) => {
+    const chain = agreement.chain
+    if (!chain) return result
+    result.protected += BigInt(chain.amountUsdcUnits || '0')
+    result.released += BigInt(chain.releasedUsdcUnits || '0')
+    result.remaining += BigInt(chain.remainingUsdcUnits || '0')
+    return result
+  }, { protected: 0n, released: 0n, remaining: 0n }), [agreements])
+
+  if (!ready || loading) {
+    return (
+      <section className="flex min-h-[58vh] w-full max-w-5xl items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-gray-300 dark:text-gray-600" />
+      </section>
+    )
+  }
+
+  if (!authenticated) {
+    return (
+      <section className="flex min-h-[64vh] w-full max-w-md flex-col items-center justify-center text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-950 text-white dark:bg-white dark:text-gray-950">
+          <LockKeyhole className="h-5 w-5" />
+        </div>
+        <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Arc Agreements</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">Your protected payments.</h1>
+        <p className="mt-3 max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">
+          Sign in with the developer identity that owns this Hash PayStream project.
+        </p>
+        <PrivyConnectButton
+          debugLabel="hashpaystream-agreements"
+          className="mt-7 w-full rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white transition-transform active:scale-[0.99] dark:bg-white dark:text-gray-950"
+        >
+          Continue with email
+        </PrivyConnectButton>
+      </section>
+    )
+  }
+
+  return (
+    <section className="w-full max-w-5xl py-8 sm:py-12">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Arc Testnet</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">Agreements</h1>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{projectName} · confirmed from signed lifecycle events</p>
+        </div>
+        {agreements.length > 0 && (
+          <p className="text-xs text-gray-400 dark:text-gray-500">Updates automatically</p>
+        )}
+      </div>
+
+      {error && (
+        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
+          {error}
+        </div>
+      )}
+
+      {!error && agreements.length === 0 ? (
+        <div className="mt-8 rounded-3xl border border-gray-200 bg-white px-6 py-12 text-center dark:border-white/10 dark:bg-[#18181b]">
+          <h2 className="text-lg font-semibold text-gray-950 dark:text-white">No agreements yet</h2>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">
+            Agreements created through this project will appear here after they are saved.
+          </p>
+        </div>
+      ) : !error && (
+        <>
+          <div className="mt-7 grid grid-cols-3 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#18181b]">
+            {[
+              ['Protected', formatUsdc(totals.protected.toString())],
+              ['Released', formatUsdc(totals.released.toString())],
+              ['Remaining', formatUsdc(totals.remaining.toString())],
+            ].map(([label, value], index) => (
+              <div key={label} className={`min-w-0 px-3 py-4 sm:px-5 ${index ? 'border-l border-gray-100 dark:border-white/10' : ''}`}>
+                <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-gray-400">{label}</p>
+                <p className="mt-1 truncate text-sm font-semibold text-gray-950 dark:text-white sm:text-base">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+            <div className="space-y-2">
+              {agreements.map(agreement => (
+                <button
+                  type="button"
+                  key={agreement.id}
+                  onClick={() => setActiveId(agreement.id)}
+                  className={`w-full rounded-2xl border p-4 text-left transition-colors ${active?.id === agreement.id
+                    ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                    : 'border-gray-200 bg-white text-gray-950 hover:border-gray-300 dark:border-white/10 dark:bg-[#18181b] dark:text-white dark:hover:border-white/20'}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{agreement.title || 'Arc agreement'}</p>
+                      <p className={`mt-1 text-xs ${active?.id === agreement.id ? 'text-white/60 dark:text-gray-500' : 'text-gray-400'}`}>
+                        {formatUsdc(agreement.chain?.amountUsdcUnits)} · {templateLabel(agreement.template)}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-semibold ${active?.id === agreement.id
+                      ? 'bg-white/10 text-white dark:bg-gray-100 dark:text-gray-700'
+                      : 'bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-400'}`}>{STATUS_LABEL[agreement.status]}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {active && (
+              <article className="rounded-3xl border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#18181b] sm:p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <StatusBadge status={active.status} />
+                    <h2 className="mt-4 text-xl font-semibold tracking-tight text-gray-950 dark:text-white">{active.title || 'Arc agreement'}</h2>
+                    {active.description && <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{active.description}</p>}
+                  </div>
+                  {active.chain?.escrow && (
+                    <a
+                      href={`https://testnet.arcscan.app/address/${active.chain.escrow}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="View escrow on Arcscan"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-colors hover:text-gray-950 dark:border-white/10 dark:text-gray-400 dark:hover:text-white"
+                    >
+                      <ArrowUpRight className="h-4 w-4" />
+                    </a>
+                  )}
+                </div>
+
+                <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-5 border-y border-gray-100 py-5 dark:border-white/10">
+                  <Detail label="Protected" value={formatUsdc(active.chain?.amountUsdcUnits)} />
+                  <Detail label="Released" value={formatUsdc(active.chain?.releasedUsdcUnits)} />
+                  <Detail label="Remaining" value={formatUsdc(active.chain?.remainingUsdcUnits)} />
+                  <Detail label="Release" value={templateLabel(active.template)} />
+                  <Detail label="Recipient" value={shortAddress(active.recipient)} />
+                  <Detail label="Escrow" value={shortAddress(active.chain?.escrow)} />
+                </div>
+
+                <div className="mt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">Activity</h3>
+                  {active.timeline.length ? (
+                    <div className="mt-3 space-y-0">
+                      {[...active.timeline].reverse().map((event, index) => (
+                        <div key={event.id} className="flex gap-3">
+                          <div className="flex w-3 flex-col items-center">
+                            <span className="mt-1.5 h-2 w-2 rounded-full bg-blue-600 dark:bg-blue-400" />
+                            {index < active.timeline.length - 1 && <span className="min-h-8 w-px flex-1 bg-gray-200 dark:bg-white/10" />}
+                          </div>
+                          <div className="pb-4">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{EVENT_LABEL[event.event] || 'Agreement updated'}</p>
+                            <p className="mt-0.5 text-xs text-gray-400">{formatDate(event.createdAt || event.receivedAt)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Waiting for the payer to start this agreement.</p>
+                  )}
+                </div>
+              </article>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-gray-400">{label}</p>
+      <p className="mt-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100">{value}</p>
+    </div>
+  )
+}
