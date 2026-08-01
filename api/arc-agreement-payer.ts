@@ -197,11 +197,12 @@ function publicLifecycleAction(action: ArcAgreementPayerLifecycleAction | null) 
   }
 }
 
-function publicDelivery(action: ArcAgreementOperatorAction | null) {
+function publicDelivery(action: ArcAgreementOperatorAction | null, reviewerId = '') {
   if (!action || action.action !== 'release') return null
   return {
     id: action.id,
     status: action.status,
+    canReview: Boolean(reviewerId && action.requestedBy !== reviewerId),
     deliveryNote: action.deliveryNote ?? '',
     evidenceReference: action.evidenceReference,
     requestedAt: action.requestedAt,
@@ -288,6 +289,7 @@ const PAYER_POLICY_CONFLICTS = [
   'This developer project has reached its Arc Agreement daily-volume limit.',
   'Agreement amount exceeds the configured testnet activation ceiling.',
   'Agreement duration exceeds the configured testnet activation ceiling.',
+  'Operator action requires an independent reviewer.',
 ]
 
 function payerFailure(error: unknown) {
@@ -299,6 +301,8 @@ function payerFailure(error: unknown) {
       status: 409,
       message: message === 'Arc Agreement activation is disabled.'
         ? 'Agreement activation is currently paused.'
+        : message === 'Operator action requires an independent reviewer.'
+          ? 'Use the payer account that funded this agreement to review the delivery.'
         : message,
     }
   }
@@ -421,7 +425,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
           attempt: knownAttempt ? publicAttempt(knownAttempt) : null,
           recovery: publicRecovery(knownAttempt),
           lifecycle,
-          delivery: publicDelivery(deliveryAction),
+          delivery: publicDelivery(deliveryAction, identity.userId),
         })
       }
 
@@ -439,6 +443,9 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
         if (deliveryAction.reviewPolicy !== 'payer') {
           throw fail('This release uses the restricted operations review path.', 409)
         }
+        if (deliveryAction.requestedBy === identity.userId) {
+          throw fail('Use the payer account that funded this agreement to review the delivery.', 409)
+        }
         const decision = clean(req.body?.decision, 20)
         if (decision !== 'accept' && decision !== 'dispute') {
           throw fail('Choose release payment or report an issue.', 400)
@@ -447,7 +454,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
           const accepted = ['queued', 'provider_pending', 'chain_pending', 'completed'].includes(deliveryAction.status)
           const disputed = deliveryAction.status === 'disputed'
           if ((decision === 'accept' && accepted) || (decision === 'dispute' && disputed)) {
-            return res.json({ ok: true, replayed: true, delivery: publicDelivery(deliveryAction) })
+            return res.json({ ok: true, replayed: true, delivery: publicDelivery(deliveryAction, identity.userId) })
           }
           throw fail('This delivery decision has already been recorded.', 409)
         }
@@ -464,7 +471,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
               reviewedBy: identity.userId,
               reviewNote: clean(req.body?.issue, 300),
             })
-        return res.json({ ok: true, replayed: false, delivery: publicDelivery(decided) })
+        return res.json({ ok: true, replayed: false, delivery: publicDelivery(decided, identity.userId) })
       }
 
       const link = requireLinkedArcWallet(linkRecord, identity)

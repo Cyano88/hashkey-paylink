@@ -58,6 +58,7 @@ type LifecycleAction = {
 type DeliveryReview = {
   id: string
   status: 'awaiting_review' | 'disputed' | 'queued' | 'provider_pending' | 'chain_pending' | 'completed' | 'failed' | 'manual_review'
+  canReview: boolean
   deliveryNote: string
   evidenceReference: string
   requestedAt: string
@@ -703,6 +704,11 @@ function ActiveAgreementPanel({
   onIssueText: (value: string) => void
   onDeliveryDecision: (value: 'accept' | 'dispute') => void
 }) {
+  const availableAction = lifecycle?.cancel?.eligible
+    ? 'cancel'
+    : lifecycle?.refund?.eligible
+      ? 'refund'
+      : null
   if (delivery) {
     const accepting = ['queued', 'provider_pending', 'chain_pending'].includes(delivery.status)
     if (delivery.status === 'completed') {
@@ -716,6 +722,41 @@ function ActiveAgreementPanel({
     }
     if (delivery.status === 'failed' || delivery.status === 'manual_review') {
       return <DeliveryState title="Release needs review" copy="No new release should be submitted for this delivery." tone="warning" />
+    }
+    if (!delivery.canReview) {
+      if (confirmation) {
+        const cancelling = confirmation === 'cancel'
+        return (
+          <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+            <p className="text-sm font-semibold text-gray-950 dark:text-white">
+              {cancelling ? 'Cancel this agreement?' : 'Return the remaining USDC?'}
+            </p>
+            <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
+              {cancelling ? `${amount} USDC returns to your payer wallet.` : 'The unreleased balance returns to your payer wallet.'}
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => onConfirm(null)} disabled={busy} className="h-10 rounded-full bg-gray-100 text-xs font-semibold text-gray-700 disabled:opacity-50 dark:bg-white/8 dark:text-gray-200">Keep agreement</button>
+              <button type="button" onClick={() => onSubmit(confirmation)} disabled={busy} className="h-10 rounded-full bg-gray-950 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
+                {busy ? 'Please wait' : cancelling ? 'Confirm cancellation' : 'Confirm refund'}
+              </button>
+            </div>
+          </div>
+        )
+      }
+      return (
+        <div>
+          <DeliveryState title="Payer review required" copy="The creator account cannot approve its own delivery." tone="warning" />
+          {availableAction && lifecycle?.enabled && (
+            <button
+              type="button"
+              onClick={() => onConfirm(availableAction)}
+              className="mt-3 h-10 w-full rounded-full border border-gray-200 text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
+            >
+              {availableAction === 'cancel' ? 'Cancel agreement' : 'Return remaining USDC'}
+            </button>
+          )}
+        </div>
+      )
     }
     return (
       <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
@@ -846,11 +887,6 @@ function ActiveAgreementPanel({
       </div>
     )
   }
-  const availableAction = lifecycle?.cancel?.eligible
-    ? 'cancel'
-    : lifecycle?.refund?.eligible
-      ? 'refund'
-      : null
   return (
     <div>
       <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3.5 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300">

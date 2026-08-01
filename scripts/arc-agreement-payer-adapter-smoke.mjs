@@ -498,7 +498,18 @@ assert.equal(activeReview.body.lifecycle.enabled, true)
 assert.equal(activeReview.body.lifecycle.cancel.eligible, true)
 assert.equal(activeReview.body.delivery.status, 'awaiting_review')
 assert.equal(activeReview.body.delivery.deliveryNote, 'Completed the agreed website delivery.')
+assert.equal(activeReview.body.delivery.canReview, true)
 assert.equal('requestHash' in activeReview.body.delivery, false)
+operatorAction = { ...operatorAction, requestedBy: identity.userId }
+const selfReview = await request(handler, { action: 'review', agreementId }, headers)
+assert.equal(selfReview.body.delivery.canReview, false)
+assert.equal((await request(handler, {
+  action: 'delivery-decision',
+  agreementId,
+  decision: 'dispute',
+  issue: 'Please add the final deployment link.',
+}, headers)).statusCode, 409)
+operatorAction = { ...operatorAction, requestedBy: 'did:privy:creator-owner' }
 const acceptedDelivery = await request(handler, {
   action: 'delivery-decision',
   agreementId,
