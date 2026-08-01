@@ -86,6 +86,8 @@ function publicOperatorAction(action: ArcAgreementOperatorAction) {
     step: action.step,
     evidenceHash: action.evidenceHash,
     evidenceReference: action.evidenceReference,
+    deliveryNote: action.deliveryNote,
+    reviewPolicy: action.reviewPolicy ?? 'operations',
     requestHash: action.requestHash,
     requestedBy: action.requestedBy,
     requestedAt: action.requestedAt,
@@ -232,7 +234,7 @@ export function createArcAgreementOperationsHandler(dependencies: Dependencies =
         const attention = rows.filter(row => (
           row.chainUnavailable
           || row.payerAction?.status === 'manual_review'
-          || row.operatorActions.some(action => action.status === 'manual_review' || action.status === 'failed')
+          || row.operatorActions.some(action => ['disputed', 'manual_review', 'failed'].includes(action.status))
         )).length
         return res.json({
           ok: true,
@@ -324,6 +326,12 @@ export function createArcAgreementOperationsHandler(dependencies: Dependencies =
         if (!/^opa_[a-f0-9]{24}$/.test(actionId)) throw fail('Operator action id is invalid.', 400)
         if (!/^[a-f0-9]{64}$/.test(requestHash)) throw fail('Operator request hash is invalid.', 400)
         if (reviewNote.length < 8) throw fail('A review note is required.', 400)
+        const pendingAction = (await dependencies.listOperatorActions({ limit: 250 }))
+          .find(item => item.id === actionId)
+        if (!pendingAction) throw fail('Operator action request was not found.', 404)
+        if (pendingAction.reviewPolicy === 'payer') {
+          throw fail('This delivery must be accepted by its authenticated payer.', 409)
+        }
         const approved = await dependencies.approveAction({
           actionId,
           requestHash,

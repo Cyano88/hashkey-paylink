@@ -22,6 +22,7 @@ const TX_HASH = /^0x[0-9a-f]{64}$/i
 
 export type ArcAgreementOperatorActionStatus =
   | 'awaiting_review'
+  | 'disputed'
   | 'queued'
   | 'provider_pending'
   | 'chain_pending'
@@ -37,6 +38,8 @@ export type ArcAgreementOperatorAction = {
   step?: number
   evidenceHash: Hex
   evidenceReference: string
+  deliveryNote?: string
+  reviewPolicy?: 'operations' | 'payer'
   preparedCall: {
     walletId: string
     operatorAddress: `0x${string}`
@@ -136,6 +139,8 @@ function requestDigest(input: {
   step?: number
   evidenceHash: string
   evidenceReference: string
+  deliveryNote?: string
+  reviewPolicy?: 'operations' | 'payer'
   operatorAddress: string
   contractAddress: string
   walletId: string
@@ -150,6 +155,8 @@ function requestDigest(input: {
     step: input.step ?? null,
     evidenceHash: input.evidenceHash.toLowerCase(),
     evidenceReference: input.evidenceReference,
+    deliveryNote: input.deliveryNote ?? '',
+    reviewPolicy: input.reviewPolicy ?? 'operations',
     operatorAddress: input.operatorAddress.toLowerCase(),
     contractAddress: input.contractAddress.toLowerCase(),
     walletId: input.walletId.toLowerCase(),
@@ -188,6 +195,8 @@ export async function createArcAgreementOperatorActionRequest(input: {
   step?: number
   evidenceHash: string
   evidenceReference: string
+  deliveryNote?: string
+  reviewPolicy?: 'operations' | 'payer'
   requestedBy: string
   idempotencyKey: string
   preparedCall: ArcAgreementPreparedOperatorCall
@@ -199,6 +208,8 @@ export async function createArcAgreementOperatorActionRequest(input: {
   const evidenceHash = required(input.evidenceHash, BYTES32, 'Evidence hash', 66) as Hex
   if (/^0x0{64}$/i.test(evidenceHash)) throw new Error('Evidence hash must be non-zero.')
   const evidenceReference = requiredEvidenceReference(input.evidenceReference)
+  const deliveryNote = clean(input.deliveryNote, 500)
+  const reviewPolicy = input.reviewPolicy === 'payer' ? 'payer' : 'operations'
   const requestedBy = requiredActor(input.requestedBy, 'Operator action requester')
   if (input.action === 'release' && (!Number.isInteger(input.step) || input.step! < 0 || input.step! > 255)) {
     throw new Error('Release step is invalid.')
@@ -230,6 +241,8 @@ export async function createArcAgreementOperatorActionRequest(input: {
     step: input.step,
     evidenceHash,
     evidenceReference,
+    deliveryNote,
+    reviewPolicy,
     operatorAddress: preparedCall.operatorAddress,
     contractAddress: preparedCall.contractAddress,
     walletId: preparedCall.walletId,
@@ -257,6 +270,8 @@ export async function createArcAgreementOperatorActionRequest(input: {
       ...(input.action === 'release' ? { step: input.step } : {}),
       evidenceHash,
       evidenceReference,
+      ...(deliveryNote ? { deliveryNote } : {}),
+      reviewPolicy,
       preparedCall: {
         walletId: preparedCall.walletId,
         operatorAddress: preparedCall.operatorAddress,
@@ -279,6 +294,45 @@ export async function createArcAgreementOperatorActionRequest(input: {
     return store
   })
   if (!durable) throw new Error('Operator action request was not persisted.')
+  return publicAction(durable)
+}
+
+export async function disputeArcAgreementOperatorAction(input: {
+  actionId: string
+  requestHash: string
+  reviewedBy: string
+  reviewNote: string
+}, dependencies: Dependencies = defaults) {
+  if (!dependencies.hasStore()) throw new Error('Arc Agreement operator action storage is not configured.')
+  const id = required(input.actionId, ACTION_ID, 'Operator action id', 28)
+  const requestHash = required(input.requestHash, /^[a-f0-9]{64}$/, 'Operator action request hash', 64)
+  const reviewedBy = requiredActor(input.reviewedBy, 'Operator action reviewer')
+  const reviewNote = clean(input.reviewNote, 300)
+  if (reviewNote.length < 8) throw new Error('Issue details are required.')
+  let durable: ArcAgreementOperatorAction | undefined
+  await dependencies.mutate(STORE_KEY, current => {
+    const store = safeStore(current)
+    const action = store.actions[id]
+    if (!action) throw new Error('Operator action request was not found.')
+    if (action.requestHash !== requestHash) throw new Error('Operator action changed after evidence review.')
+    if (action.requestedBy === reviewedBy) throw new Error('Operator action requires an independent reviewer.')
+    if (action.status !== 'awaiting_review') {
+      durable = action
+      return store
+    }
+    const timestamp = dependencies.now().toISOString()
+    durable = {
+      ...action,
+      status: 'disputed',
+      reviewedBy,
+      reviewedAt: timestamp,
+      reviewNote,
+      updatedAt: timestamp,
+    }
+    store.actions[id] = durable
+    return store
+  })
+  if (!durable) throw new Error('Operator action dispute was not persisted.')
   return publicAction(durable)
 }
 

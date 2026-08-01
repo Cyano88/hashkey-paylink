@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Check, LockKeyhole, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Check, ExternalLink, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
@@ -55,6 +55,19 @@ type LifecycleAction = {
   retryable?: boolean
 }
 
+type DeliveryReview = {
+  id: string
+  status: 'awaiting_review' | 'disputed' | 'queued' | 'provider_pending' | 'chain_pending' | 'completed' | 'failed' | 'manual_review'
+  deliveryNote: string
+  evidenceReference: string
+  requestedAt: string
+  reviewedAt?: string
+  reviewNote?: string
+  completedAt?: string
+  transactionHash: string | null
+  updatedAt: string
+}
+
 type ReviewResponse = {
   ok: true
   agreement: Agreement
@@ -76,6 +89,7 @@ type ReviewResponse = {
     refund?: { eligible: boolean; reason: string | null }
     action?: LifecycleAction | null
   } | null
+  delivery?: DeliveryReview | null
 }
 
 type ActionResponse = {
@@ -85,6 +99,7 @@ type ActionResponse = {
   stage?: 'approval' | 'activation'
   challengeId?: string
   lifecycleAction?: LifecycleAction | null
+  delivery?: DeliveryReview | null
 }
 
 function emailFromPrivyUser(user: unknown) {
@@ -124,6 +139,10 @@ function releaseLabel(agreement: Agreement) {
     return `${agreement.checkpoints?.length ?? 0} scheduled releases`
   }
   return `${agreement.milestones?.length ?? 0} milestone releases`
+}
+
+function deliveryHost(value: string) {
+  try { return new URL(value).hostname.replace(/^www\./, '') } catch { return 'Delivery proof' }
 }
 
 function readableError(value: unknown) {
@@ -169,6 +188,8 @@ export default function ArcAgreementPayerPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [confirmLifecycle, setConfirmLifecycle] = useState<'cancel' | 'refund' | null>(null)
+  const [issueMode, setIssueMode] = useState(false)
+  const [issueText, setIssueText] = useState('')
   const mounted = useRef(true)
 
   const request = useCallback(async <T,>(body: Record<string, unknown>): Promise<T> => {
@@ -457,6 +478,29 @@ export default function ArcAgreementPayerPage() {
     }
   }
 
+  async function decideDelivery(decision: 'accept' | 'dispute') {
+    if (decision === 'dispute' && issueText.trim().length < 8) {
+      setError('Briefly explain what needs to be fixed.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const result = await request<ActionResponse>({
+        action: 'delivery-decision',
+        decision,
+        ...(decision === 'dispute' ? { issue: issueText } : {}),
+      })
+      setReview(current => current ? { ...current, delivery: result.delivery ?? null } : current)
+      setIssueMode(false)
+      setIssueText('')
+    } catch (caught) {
+      setError(readableError(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const agreement = review?.agreement
   const attempt = review?.attempt ?? null
   const walletLinked = review?.payer.walletLinked ?? false
@@ -555,12 +599,18 @@ export default function ArcAgreementPayerPage() {
                 ) : isActive ? (
                   <ActiveAgreementPanel
                     lifecycle={review.lifecycle ?? null}
+                    delivery={review.delivery ?? null}
                     amount={agreement.amount}
                     busy={busy}
                     walletSessionReady={Boolean(session)}
                     confirmation={confirmLifecycle}
                     onConfirm={setConfirmLifecycle}
                     onSubmit={value => void submitLifecycleAction(value)}
+                    issueMode={issueMode}
+                    issueText={issueText}
+                    onIssueMode={setIssueMode}
+                    onIssueText={setIssueText}
+                    onDeliveryDecision={value => void decideDelivery(value)}
                   />
                 ) : isPending ? (
                   <div className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-100 text-sm font-semibold text-gray-600 dark:bg-white/8 dark:text-gray-300">
@@ -582,7 +632,7 @@ export default function ArcAgreementPayerPage() {
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 )}
-                {review.lifecycle?.action?.status !== 'confirmed' && (
+                {!review.delivery && review.lifecycle?.action?.status !== 'confirmed' && (
                   <p className="mt-3 text-center text-[11px] leading-5 text-gray-400">
                     {statusCopy(attempt, walletLinked)}
                   </p>
@@ -626,21 +676,85 @@ export default function ArcAgreementPayerPage() {
 
 function ActiveAgreementPanel({
   lifecycle,
+  delivery,
   amount,
   busy,
   walletSessionReady,
   confirmation,
   onConfirm,
   onSubmit,
+  issueMode,
+  issueText,
+  onIssueMode,
+  onIssueText,
+  onDeliveryDecision,
 }: {
   lifecycle: ReviewResponse['lifecycle']
+  delivery: DeliveryReview | null
   amount: string
   busy: boolean
   walletSessionReady: boolean
   confirmation: 'cancel' | 'refund' | null
   onConfirm: (value: 'cancel' | 'refund' | null) => void
   onSubmit: (value: 'cancel' | 'refund') => void
+  issueMode: boolean
+  issueText: string
+  onIssueMode: (value: boolean) => void
+  onIssueText: (value: string) => void
+  onDeliveryDecision: (value: 'accept' | 'dispute') => void
 }) {
+  if (delivery) {
+    const accepting = ['queued', 'provider_pending', 'chain_pending'].includes(delivery.status)
+    if (delivery.status === 'completed') {
+      return <DeliveryState title="Payment released" copy="Confirmed on Arc." tone="success" />
+    }
+    if (delivery.status === 'disputed') {
+      return <DeliveryState title="Issue reported" copy="The USDC remains protected while the delivery is reviewed." tone="warning" />
+    }
+    if (accepting) {
+      return <DeliveryState title="Release approved" copy="The reviewed Arc release is queued for guarded execution." tone="success" />
+    }
+    if (delivery.status === 'failed' || delivery.status === 'manual_review') {
+      return <DeliveryState title="Release needs review" copy="No new release should be submitted for this delivery." tone="warning" />
+    }
+    return (
+      <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">Delivery ready</p>
+        <p className="mt-2 text-sm font-semibold text-gray-950 dark:text-white">Review the completed work</p>
+        <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{delivery.deliveryNote}</p>
+        <a
+          href={delivery.evidenceReference}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="mt-3 flex h-10 items-center justify-between rounded-xl bg-gray-50 px-3 text-xs font-semibold text-gray-700 dark:bg-white/[0.055] dark:text-gray-200"
+        >
+          <span className="truncate">Open proof · {deliveryHost(delivery.evidenceReference)}</span>
+          <ExternalLink className="ml-3 h-3.5 w-3.5 shrink-0" />
+        </a>
+        {issueMode ? (
+          <div className="mt-4">
+            <textarea
+              value={issueText}
+              onChange={event => onIssueText(event.target.value)}
+              maxLength={300}
+              placeholder="What needs to be fixed?"
+              className="h-20 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+            />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" disabled={busy} onClick={() => onIssueMode(false)} className="h-10 rounded-full bg-gray-100 text-xs font-semibold text-gray-700 disabled:opacity-50 dark:bg-white/8 dark:text-gray-200">Cancel</button>
+              <button type="button" disabled={busy || issueText.trim().length < 8} onClick={() => onDeliveryDecision('dispute')} className="h-10 rounded-full bg-gray-950 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">Report issue</button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" disabled={busy} onClick={() => onIssueMode(true)} className="h-10 rounded-full border border-gray-200 text-xs font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:text-gray-200">Report issue</button>
+            <button type="button" disabled={busy} onClick={() => onDeliveryDecision('accept')} className="h-10 rounded-full bg-gray-950 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">Release {amount} USDC</button>
+          </div>
+        )}
+        <p className="mt-3 text-center text-[10px] leading-4 text-gray-400">Only release after checking the delivered work.</p>
+      </div>
+    )
+  }
   const current = lifecycle?.action
   if (current?.status === 'confirmed') {
     return (
@@ -757,6 +871,23 @@ function ActiveAgreementPanel({
           {availableAction === 'cancel' ? 'Cancel agreement' : 'Return remaining USDC'}
         </button>
       )}
+    </div>
+  )
+}
+
+function DeliveryState({ title, copy, tone }: { title: string; copy: string; tone: 'success' | 'warning' }) {
+  const success = tone === 'success'
+  return (
+    <div className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 ${success
+      ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300'
+      : 'bg-amber-50 text-amber-800 dark:bg-amber-400/10 dark:text-amber-200'}`}>
+      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-white ${success ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+        {success ? <Check className="h-4 w-4" /> : <LockKeyhole className="h-3.5 w-3.5" />}
+      </span>
+      <div>
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="text-[11px] opacity-75">{copy}</p>
+      </div>
     </div>
   )
 }

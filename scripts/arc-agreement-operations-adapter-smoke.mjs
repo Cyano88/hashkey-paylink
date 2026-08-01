@@ -249,6 +249,16 @@ assert.equal(preparedInput.step, 0)
 assert.equal(createdInput.requestedBy, identity.userId)
 assert.equal(createdInput.preparedCall.refId, `${agreementId}:release:0`)
 
+operatorAction = { ...operatorAction, reviewPolicy: 'payer' }
+const payerOnlyApproval = await request(handler, 'POST', {
+  action: 'approve',
+  actionId: operatorAction.id,
+  requestHash: operatorAction.requestHash,
+  reviewNote: 'Operations must not bypass payer review.',
+})
+assert.equal(payerOnlyApproval.statusCode, 409)
+operatorAction = { ...operatorAction, reviewPolicy: 'operations' }
+
 activeIdentity = { ...identity, userId: createdInput.requestedBy }
 operatorAction = { ...operatorAction, requestedBy: createdInput.requestedBy }
 const selfApproval = await request(handler, 'POST', {

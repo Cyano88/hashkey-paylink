@@ -18,6 +18,11 @@ const agreementId = 'agr_hashpaystream12345678'
 const ownerId = 'did:privy:hashpaystream-owner'
 let authorizedProject = ''
 let operatorAction
+let operatorActionSequence = 0
+let expectedDelivery = {
+  note: 'Completed the agreed website delivery.',
+  url: 'https://delivery.example/proof',
+}
 
 const draft = {
   id: agreementId,
@@ -179,9 +184,11 @@ const dependencies = {
     assert.equal(input.step, 0)
     assert.equal(input.requestedBy, ownerId)
     assert.match(input.evidenceHash, /^0x[a-f0-9]{64}$/)
-    assert.equal(input.evidenceReference, 'ipfs://delivery-proof')
+    assert.equal(input.evidenceReference, expectedDelivery.url)
+    assert.equal(input.deliveryNote, expectedDelivery.note)
+    assert.equal(input.reviewPolicy, 'payer')
     operatorAction = {
-      id: 'opa_1234567890abcdef12345678',
+      id: `opa_${String(++operatorActionSequence).padStart(24, '0')}`,
       ...input,
       requestHash: 'a'.repeat(64),
       requestedAt: '2026-08-01T00:45:00.000Z',
@@ -239,18 +246,47 @@ assert.equal(created.statusCode, 201)
 assert.equal(created.body.agreement.title, 'New protected payment')
 
 const releaseRequested = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
-  body: { action: 'request_release', agreementId, evidenceReference: 'ipfs://delivery-proof' },
+  body: {
+    action: 'request_release',
+    agreementId,
+    deliveryNote: 'Completed the agreed website delivery.',
+    evidenceReference: 'https://delivery.example/proof',
+  },
 })
 assert.equal(releaseRequested.statusCode, 201)
 assert.equal(releaseRequested.body.releaseRequest.status, 'awaiting_review')
 assert.equal('evidenceHash' in releaseRequested.body.releaseRequest, false)
-assert.equal('evidenceReference' in releaseRequested.body.releaseRequest, false)
+assert.equal(releaseRequested.body.releaseRequest.evidenceReference, 'https://delivery.example/proof')
+assert.equal(releaseRequested.body.releaseRequest.deliveryNote, 'Completed the agreed website delivery.')
 
 const releaseReplayed = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
-  body: { action: 'request_release', agreementId, evidenceReference: 'another reference' },
+  body: {
+    action: 'request_release',
+    agreementId,
+    deliveryNote: 'A different description should not replace the durable request.',
+    evidenceReference: 'https://delivery.example/another-proof',
+  },
 })
 assert.equal(releaseReplayed.statusCode, 200)
 assert.equal(releaseReplayed.body.replayed, true)
+
+const disputedActionId = operatorAction.id
+operatorAction = { ...operatorAction, status: 'disputed', reviewNote: 'Please add the final handoff file.' }
+expectedDelivery = {
+  note: 'Added the requested final handoff file.',
+  url: 'https://delivery.example/revised-proof',
+}
+const revisedDelivery = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
+  body: {
+    action: 'request_release',
+    agreementId,
+    deliveryNote: expectedDelivery.note,
+    evidenceReference: expectedDelivery.url,
+  },
+})
+assert.equal(revisedDelivery.statusCode, 201)
+assert.notEqual(revisedDelivery.body.releaseRequest.id, disputedActionId)
+assert.equal(revisedDelivery.body.releaseRequest.status, 'awaiting_review')
 
 const rotated = await call(createHashPayStreamArcAgreementsHandler({
   ...dependencies,

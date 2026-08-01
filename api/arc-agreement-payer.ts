@@ -52,6 +52,12 @@ import {
   type ArcAgreementPayerLifecycleAction,
   type ArcAgreementPayerLifecycleActionName,
 } from './arc-agreement-payer-lifecycle.js'
+import {
+  approveArcAgreementOperatorAction,
+  disputeArcAgreementOperatorAction,
+  listArcAgreementOperatorActions,
+  type ArcAgreementOperatorAction,
+} from './arc-agreement-operator-actions.js'
 
 type Dependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
@@ -83,6 +89,9 @@ type Dependencies = {
   observeLifecycle: typeof observeArcAgreementPayerLifecycleAction
   recordLifecycle: typeof recordArcAgreementPayerLifecycleTransaction
   reconcileLifecycle: typeof reconcileArcAgreementPayerLifecycleAction
+  listOperatorActions: typeof listArcAgreementOperatorActions
+  approveOperatorAction: typeof approveArcAgreementOperatorAction
+  disputeOperatorAction: typeof disputeArcAgreementOperatorAction
   client(): ArcAgreementActivationClient
   env(): NodeJS.ProcessEnv
 }
@@ -113,6 +122,9 @@ const defaults: Dependencies = {
   observeLifecycle: observeArcAgreementPayerLifecycleAction,
   recordLifecycle: recordArcAgreementPayerLifecycleTransaction,
   reconcileLifecycle: reconcileArcAgreementPayerLifecycleAction,
+  listOperatorActions: listArcAgreementOperatorActions,
+  approveOperatorAction: approveArcAgreementOperatorAction,
+  disputeOperatorAction: disputeArcAgreementOperatorAction,
   client: createArcAgreementActivationClient,
   env: () => process.env,
 }
@@ -182,6 +194,22 @@ function publicLifecycleAction(action: ArcAgreementPayerLifecycleAction | null) 
     retryable: action.status === 'provider_failed'
       && !action.providerTransactionId
       && !action.transactionHash,
+  }
+}
+
+function publicDelivery(action: ArcAgreementOperatorAction | null) {
+  if (!action || action.action !== 'release') return null
+  return {
+    id: action.id,
+    status: action.status,
+    deliveryNote: action.deliveryNote ?? '',
+    evidenceReference: action.evidenceReference,
+    requestedAt: action.requestedAt,
+    reviewedAt: action.reviewedAt,
+    reviewNote: action.reviewNote,
+    completedAt: action.completedAt,
+    transactionHash: action.transactionHash ?? null,
+    updatedAt: action.updatedAt,
   }
 }
 
@@ -332,6 +360,13 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
 
       if (action === 'review') {
         const linkedWallet = linkedArcWallet(linkRecord, identity)
+        const deliveryAction = knownAttempt
+          ? (await dependencies.listOperatorActions({
+              partnerId: agreement.partnerId,
+              agreementId: agreement.id,
+              limit: 20,
+            })).find(item => item.action === 'release') ?? null
+          : null
         let lifecycle: {
           available: boolean
           enabled?: boolean
@@ -386,7 +421,50 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
           attempt: knownAttempt ? publicAttempt(knownAttempt) : null,
           recovery: publicRecovery(knownAttempt),
           lifecycle,
+          delivery: publicDelivery(deliveryAction),
         })
+      }
+
+      if (action === 'delivery-decision') {
+        if (knownAttempt?.status !== 'active') {
+          throw fail('This agreement is not active.', 409)
+        }
+        requireLinkedArcWallet(linkRecord, identity)
+        const deliveryAction = (await dependencies.listOperatorActions({
+          partnerId: agreement.partnerId,
+          agreementId: agreement.id,
+          limit: 20,
+        })).find(item => item.action === 'release')
+        if (!deliveryAction) throw fail('No delivery is ready for review.', 404)
+        if (deliveryAction.reviewPolicy !== 'payer') {
+          throw fail('This release uses the restricted operations review path.', 409)
+        }
+        const decision = clean(req.body?.decision, 20)
+        if (decision !== 'accept' && decision !== 'dispute') {
+          throw fail('Choose release payment or report an issue.', 400)
+        }
+        if (deliveryAction.status !== 'awaiting_review') {
+          const accepted = ['queued', 'provider_pending', 'chain_pending', 'completed'].includes(deliveryAction.status)
+          const disputed = deliveryAction.status === 'disputed'
+          if ((decision === 'accept' && accepted) || (decision === 'dispute' && disputed)) {
+            return res.json({ ok: true, replayed: true, delivery: publicDelivery(deliveryAction) })
+          }
+          throw fail('This delivery decision has already been recorded.', 409)
+        }
+        const decided = decision === 'accept'
+          ? await dependencies.approveOperatorAction({
+              actionId: deliveryAction.id,
+              requestHash: deliveryAction.requestHash,
+              reviewedBy: identity.userId,
+              reviewNote: 'Payer accepted the submitted delivery.',
+            })
+          : await dependencies.disputeOperatorAction({
+              actionId: deliveryAction.id,
+              requestHash: deliveryAction.requestHash,
+              reviewedBy: identity.userId,
+              reviewNote: clean(req.body?.issue, 300),
+            })
+        return res.json({ ok: true, replayed: false, delivery: publicDelivery(decided) })
       }
 
       const link = requireLinkedArcWallet(linkRecord, identity)

@@ -9,6 +9,7 @@ import {
   claimArcAgreementOperatorActions,
   completeArcAgreementOperatorAction,
   createArcAgreementOperatorActionRequest,
+  disputeArcAgreementOperatorAction,
   readArcAgreementOperatorAction,
   recordArcAgreementOperatorSubmission,
 } from '../api/arc-agreement-operator-actions.ts'
@@ -107,6 +108,7 @@ const requestInput = {
   step: 0,
   evidenceHash,
   evidenceReference: 'case/operator-queue-001',
+  deliveryNote: 'Completed the first delivery checkpoint.',
   requestedBy: 'operations.requester',
   idempotencyKey,
   preparedCall: call,
@@ -160,6 +162,19 @@ await assert.rejects(() => approveArcAgreementOperatorAction({
   reviewedBy: 'operations.second-reviewer',
   reviewNote: 'Second evidence record reviewed independently.',
 }, dependencies), /already open/)
+await assert.rejects(() => disputeArcAgreementOperatorAction({
+  actionId: secondRequest.id,
+  requestHash: secondRequest.requestHash,
+  reviewedBy: requestInput.requestedBy,
+  reviewNote: 'The submitted work is incomplete.',
+}, dependencies), /independent reviewer/)
+const disputed = await disputeArcAgreementOperatorAction({
+  actionId: secondRequest.id,
+  requestHash: secondRequest.requestHash,
+  reviewedBy: 'payer.reviewer',
+  reviewNote: 'The submitted work is incomplete.',
+}, dependencies)
+assert.equal(disputed.status, 'disputed')
 
 const [firstClaim] = await claimArcAgreementOperatorActions({
   workerId: 'arc-operator:test-worker',

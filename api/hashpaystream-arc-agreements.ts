@@ -138,12 +138,29 @@ function publicReleaseRequest(action?: ArcAgreementOperatorAction) {
   return {
     id: action.id,
     status: action.status,
+    deliveryNote: action.deliveryNote ?? '',
+    evidenceReference: action.evidenceReference,
     requestedAt: action.requestedAt,
     reviewedAt: action.reviewedAt,
+    reviewNote: action.reviewNote,
     completedAt: action.completedAt,
     transactionHash: action.transactionHash,
     updatedAt: action.updatedAt,
   }
+}
+
+function deliveryEvidenceUrl(value: unknown) {
+  const candidate = String(value ?? '').trim().slice(0, 240)
+  let parsed: URL
+  try {
+    parsed = new URL(candidate)
+  } catch {
+    throw Object.assign(new Error('Add a complete HTTPS delivery link.'), { status: 400 })
+  }
+  if (parsed.protocol !== 'https:' || !parsed.hostname || parsed.username || parsed.password) {
+    throw Object.assign(new Error('Delivery proof must use a secure HTTPS link.'), { status: 400 })
+  }
+  return parsed.toString()
 }
 
 function blockNumber(event: StoredEvent) {
@@ -244,21 +261,23 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
         const action = String(body.action ?? '').trim()
         if (action === 'request_release') {
           const agreementId = String(body.agreementId ?? '').trim()
-          const evidenceReference = String(body.evidenceReference ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
+          const deliveryNote = String(body.deliveryNote ?? '').replace(/\s+/g, ' ').trim().slice(0, 500)
+          const evidenceReference = deliveryEvidenceUrl(body.evidenceReference)
           if (!/^agr_[a-z0-9]{12,64}$/i.test(agreementId)) {
             throw Object.assign(new Error('A valid agreement id is required.'), { status: 400 })
           }
-          if (evidenceReference.length < 6) {
-            throw Object.assign(new Error('Add a delivery link or reference for review.'), { status: 400 })
+          if (deliveryNote.length < 12) {
+            throw Object.assign(new Error('Briefly describe what was delivered.'), { status: 400 })
           }
           const agreement = (await dependencies.listAgreements({ partnerId: projectId, limit: 250 }))
             .find(item => item.id === agreementId)
           if (!agreement || agreement.template !== 'fixed_unlock') {
             throw Object.assign(new Error('Only an owned fixed agreement can request this release.'), { status: 404 })
           }
-          const existing = (await dependencies.listOperatorActions({ partnerId: projectId, limit: 250 }))
-            .find(item => item.agreementId === agreementId && item.action === 'release')
-          if (existing) {
+          const priorActions = (await dependencies.listOperatorActions({ partnerId: projectId, limit: 250 }))
+            .filter(item => item.agreementId === agreementId && item.action === 'release')
+          const existing = priorActions[0]
+          if (existing && existing.status !== 'disputed') {
             return res.json({ ok: true, replayed: true, releaseRequest: publicReleaseRequest(existing) })
           }
           const binding = await dependencies.binding(projectId, agreementId)
@@ -272,6 +291,8 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
             projectId,
             agreementId,
             evidenceReference,
+            deliveryNote,
+            reviewPolicy: 'payer',
             requestedBy: project.ownerId,
           })).digest('hex')}`
           const requestKey = createRequestIdempotencyKey([
@@ -279,6 +300,7 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
             projectId,
             agreementId,
             project.ownerId,
+            existing?.id ?? 'initial',
           ].join('\0'))
           const preparedCall = dependencies.prepareRelease({
             operatorWallet,
@@ -297,6 +319,8 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
             step: 0,
             evidenceHash,
             evidenceReference,
+            deliveryNote,
+            reviewPolicy: 'payer',
             requestedBy: project.ownerId,
             idempotencyKey: requestKey,
             preparedCall,

@@ -35,8 +35,11 @@ type Agreement = {
   releaseRequest: null | {
     id: string
     status: string
+    deliveryNote: string
+    evidenceReference: string
     requestedAt?: string
     reviewedAt?: string
+    reviewNote?: string
     completedAt?: string
     transactionHash?: string
     updatedAt: string
@@ -71,8 +74,9 @@ const EVENT_LABEL: Record<string, string> = {
 }
 
 const RELEASE_STATUS: Record<string, string> = {
-  awaiting_review: 'Awaiting Hash PayLink review',
-  queued: 'Approved for guarded execution',
+  awaiting_review: 'Waiting for payer review',
+  disputed: 'The payer reported an issue',
+  queued: 'Approved by payer',
   provider_pending: 'Release submitted',
   chain_pending: 'Confirming on Arc',
   completed: 'Release confirmed',
@@ -128,6 +132,7 @@ export default function AgreementDashboard() {
   const [payerLink, setPayerLink] = useState('')
   const [linkCopied, setLinkCopied] = useState(false)
   const [releaseMode, setReleaseMode] = useState(false)
+  const [deliveryNote, setDeliveryNote] = useState('')
   const [evidenceReference, setEvidenceReference] = useState('')
   const [requestingRelease, setRequestingRelease] = useState(false)
 
@@ -180,6 +185,7 @@ export default function AgreementDashboard() {
     setPayerLink('')
     setLinkCopied(false)
     setReleaseMode(false)
+    setDeliveryNote('')
     setEvidenceReference('')
   }, [active?.id])
 
@@ -226,7 +232,7 @@ export default function AgreementDashboard() {
         method: 'POST',
         cache: 'no-store',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'request_release', agreementId: active.id, evidenceReference }),
+        body: JSON.stringify({ action: 'request_release', agreementId: active.id, deliveryNote, evidenceReference }),
       })
       const data = await response.json().catch(() => undefined) as { ok?: boolean; releaseRequest?: Agreement['releaseRequest']; error?: string } | undefined
       if (!response.ok || !data?.ok || !data.releaseRequest) {
@@ -236,6 +242,7 @@ export default function AgreementDashboard() {
         ? { ...item, releaseRequest: data.releaseRequest ?? null }
         : item))
       setReleaseMode(false)
+      setDeliveryNote('')
       setEvidenceReference('')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The release request could not be saved.')
@@ -418,7 +425,7 @@ export default function AgreementDashboard() {
 
                 {active.status === 'active' && active.template === 'fixed_unlock' && (
                   <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                    {active.releaseRequest ? (
+                    {active.releaseRequest && active.releaseRequest.status !== 'disputed' ? (
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="text-xs font-medium text-gray-900 dark:text-white">Release requested</p>
@@ -427,25 +434,37 @@ export default function AgreementDashboard() {
                           </p>
                         </div>
                         <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-600 dark:bg-white/[0.07] dark:text-gray-300">
-                          {active.releaseRequest.status === 'completed' ? 'Complete' : 'Pending'}
+                          {active.releaseRequest.status === 'completed'
+                            ? 'Complete'
+                            : active.releaseRequest.status === 'disputed'
+                              ? 'Action needed'
+                              : 'Pending'}
                         </span>
                       </div>
                     ) : releaseMode ? (
                       <div>
-                        <p className="text-xs font-medium text-gray-900 dark:text-white">Request final release</p>
-                        <p className="mt-1 text-[11px] leading-5 text-gray-400">Add the delivery link or reference Hash PayLink should review.</p>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">Submit delivery</p>
+                        <p className="mt-1 text-[11px] leading-5 text-gray-400">Tell the payer what was completed and where to review it.</p>
+                        <textarea
+                          value={deliveryNote}
+                          onChange={event => setDeliveryNote(event.target.value)}
+                          maxLength={500}
+                          placeholder="What was delivered?"
+                          className="mt-3 h-20 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-[#18181b] dark:text-white dark:focus:border-white/30"
+                        />
                         <input
                           value={evidenceReference}
                           onChange={event => setEvidenceReference(event.target.value)}
                           maxLength={240}
-                          placeholder="Delivery link or reference"
+                          inputMode="url"
+                          placeholder="https://delivery-link.com"
                           className="mt-3 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-[#18181b] dark:text-white dark:focus:border-white/30"
                         />
                         <div className="mt-3 grid grid-cols-2 gap-2">
                           <button type="button" disabled={requestingRelease} onClick={() => setReleaseMode(false)} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-xs font-semibold text-gray-700 disabled:opacity-60 dark:border-white/10 dark:bg-[#18181b] dark:text-gray-200">
                             Cancel
                           </button>
-                          <button type="button" disabled={requestingRelease || evidenceReference.trim().length < 6} onClick={() => void requestRelease()} className="rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
+                          <button type="button" disabled={requestingRelease || deliveryNote.trim().length < 12 || !evidenceReference.trim().startsWith('https://')} onClick={() => void requestRelease()} className="rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
                             {requestingRelease ? 'Saving…' : 'Submit request'}
                           </button>
                         </div>
@@ -453,11 +472,17 @@ export default function AgreementDashboard() {
                     ) : (
                       <div className="flex items-center justify-between gap-4">
                         <div>
-                          <p className="text-xs font-medium text-gray-900 dark:text-white">Work delivered?</p>
-                          <p className="mt-1 text-[11px] leading-5 text-gray-400">Request the protected USDC release.</p>
+                          <p className="text-xs font-medium text-gray-900 dark:text-white">
+                            {active.releaseRequest?.status === 'disputed' ? 'Delivery needs an update' : 'Work delivered?'}
+                          </p>
+                          <p className="mt-1 text-[11px] leading-5 text-gray-400">
+                            {active.releaseRequest?.status === 'disputed'
+                              ? active.releaseRequest.reviewNote || 'The payer reported an issue with this delivery.'
+                              : 'Submit the completed work for payer review.'}
+                          </p>
                         </div>
                         <button type="button" onClick={() => setReleaseMode(true)} className="shrink-0 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
-                          Request release
+                          {active.releaseRequest?.status === 'disputed' ? 'Update delivery' : 'Submit delivery'}
                         </button>
                       </div>
                     )}

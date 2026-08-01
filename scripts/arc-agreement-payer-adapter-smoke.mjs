@@ -140,6 +140,7 @@ let lifecycleJournal
 let lifecycleReconcileCalls = 0
 let recordedTransactionInput
 let reconciliationResult
+let operatorAction
 const challengeOrder = []
 const providerTransactionId = '123e4567-e89b-42d3-a456-426614174002'
 const dependencies = {
@@ -314,6 +315,22 @@ const dependencies = {
       changed: false,
     }
   },
+  listOperatorActions: async input => {
+    assert.equal(input.partnerId, partnerId)
+    assert.equal(input.agreementId, agreementId)
+    return operatorAction ? [operatorAction] : []
+  },
+  approveOperatorAction: async input => {
+    assert.equal(input.actionId, operatorAction.id)
+    assert.equal(input.requestHash, operatorAction.requestHash)
+    assert.equal(input.reviewedBy, identity.userId)
+    operatorAction = { ...operatorAction, status: 'queued', reviewedBy: input.reviewedBy, reviewNote: input.reviewNote }
+    return operatorAction
+  },
+  disputeOperatorAction: async input => {
+    operatorAction = { ...operatorAction, status: 'disputed', reviewedBy: input.reviewedBy, reviewNote: input.reviewNote }
+    return operatorAction
+  },
   client: () => ({}),
   env: () => ({
     ARC_AGREEMENTS_ENABLED: 'true',
@@ -458,12 +475,42 @@ assert.deepEqual(recordedTransactionInput.policy, { partnerId })
 assert.equal(currentJournal.status, 'recorded')
 currentAttempt = reconciliationResult.attempt
 reconciliationResult = undefined
+operatorAction = {
+  id: 'opa_1234567890abcdef12345678',
+  partnerId,
+  agreementId,
+  action: 'release',
+  step: 0,
+  status: 'awaiting_review',
+  deliveryNote: 'Completed the agreed website delivery.',
+  evidenceReference: 'https://delivery.example/proof',
+  requestHash: 'a'.repeat(64),
+  reviewPolicy: 'payer',
+  requestedBy: 'did:privy:creator-owner',
+  requestedAt: agreement.createdAt,
+  updatedAt: agreement.updatedAt,
+}
 
 const activeReview = await request(handler, { action: 'review', agreementId }, headers)
 assert.equal(activeReview.statusCode, 200)
 assert.equal(activeReview.body.lifecycle.available, true)
 assert.equal(activeReview.body.lifecycle.enabled, true)
 assert.equal(activeReview.body.lifecycle.cancel.eligible, true)
+assert.equal(activeReview.body.delivery.status, 'awaiting_review')
+assert.equal(activeReview.body.delivery.deliveryNote, 'Completed the agreed website delivery.')
+assert.equal('requestHash' in activeReview.body.delivery, false)
+const acceptedDelivery = await request(handler, {
+  action: 'delivery-decision',
+  agreementId,
+  decision: 'accept',
+}, headers)
+assert.equal(acceptedDelivery.statusCode, 200)
+assert.equal(acceptedDelivery.body.delivery.status, 'queued')
+assert.equal((await request(handler, {
+  action: 'delivery-decision',
+  agreementId,
+  decision: 'accept',
+}, headers)).body.replayed, true)
 
 // Suspending a developer project blocks new activation, but must not strand an
 // already-active payer escrow or hide its cancellation/refund controls.
@@ -538,6 +585,9 @@ assert.match(payerPageSource, /Return remaining USDC/)
 assert.match(payerPageSource, /action:\s*'lifecycle-challenge'/)
 assert.match(payerPageSource, /action:\s*'lifecycle-recover'/)
 assert.match(payerPageSource, /action:\s*'lifecycle-status'/)
+assert.match(payerPageSource, /action:\s*'delivery-decision'/)
+assert.match(payerPageSource, /Release \{amount\} USDC/)
+assert.match(payerPageSource, /Report issue/)
 assert.match(payerPageSource, /terminalWebhookPending/)
 assert.match(payerPageSource, /\['transaction_pending',\s*'submitted'\]\.includes\(lifecycleStatus/)
 assert.match(payerPageSource, /review\.lifecycle\?\.action\?\.status\s*!==\s*'confirmed'/)

@@ -13,6 +13,7 @@ import { cn } from '../lib/utils'
 
 type OperatorActionStatus =
   | 'awaiting_review'
+  | 'disputed'
   | 'queued'
   | 'provider_pending'
   | 'chain_pending'
@@ -28,6 +29,8 @@ type OperatorAction = {
   step?: number
   evidenceHash: string
   evidenceReference: string
+  deliveryNote?: string
+  reviewPolicy?: 'operations' | 'payer'
   requestHash: string
   requestedBy: string
   requestedAt: string
@@ -120,7 +123,7 @@ function usdc(units: string) {
 function operationState(agreement: AgreementOperation) {
   if (agreement.chainUnavailable) return { label: 'Chain unavailable', tone: 'danger' as const }
   if (agreement.payerAction?.status === 'manual_review'
-    || agreement.operatorActions.some(action => ['manual_review', 'failed'].includes(action.status))) {
+    || agreement.operatorActions.some(action => ['disputed', 'manual_review', 'failed'].includes(action.status))) {
     return { label: 'Needs review', tone: 'danger' as const }
   }
   if (agreement.operatorActions.some(action => action.status === 'awaiting_review')) {
@@ -378,7 +381,7 @@ function AgreementDetail({
   const state = operationState(agreement)
   const latest = agreement.operatorActions[0]
   const openAction = agreement.operatorActions.find(action => (
-    ['awaiting_review', 'queued', 'provider_pending', 'chain_pending', 'manual_review'].includes(action.status)
+    ['awaiting_review', 'disputed', 'queued', 'provider_pending', 'chain_pending', 'manual_review'].includes(action.status)
   ))
   const canRequest = agreement.chain?.status === 'active' && !openAction && !agreement.chainUnavailable
   return (
@@ -438,7 +441,7 @@ function AgreementDetail({
         </section>
       )}
 
-      {openAction?.status === 'awaiting_review' && (
+      {openAction?.status === 'awaiting_review' && openAction.reviewPolicy !== 'payer' && (
         <ReviewPanel
           action={openAction}
           currentUserId={currentUserId}
@@ -449,7 +452,7 @@ function AgreementDetail({
         />
       )}
 
-      {openAction && openAction.status !== 'awaiting_review' && (
+      {openAction && (openAction.status !== 'awaiting_review' || openAction.reviewPolicy === 'payer') && (
         <ActionState action={openAction} workerEnabled={workerEnabled} />
       )}
 
@@ -511,6 +514,7 @@ function ReviewPanel({ action, currentUserId, reviewNote, busy, onReviewNote, on
             {action.action === 'release' ? `Release step ${(action.step ?? 0) + 1}` : 'Cancel agreement'}
           </p>
           <p className="mt-1 text-[11px] leading-5 text-amber-800/75 dark:text-amber-200/70">{action.evidenceReference}</p>
+          {action.deliveryNote && <p className="mt-2 text-[11px] leading-5 text-amber-900 dark:text-amber-100">{action.deliveryNote}</p>}
           <p className="mt-2 break-all font-mono text-[9px] text-amber-700/60 dark:text-amber-200/50">{action.evidenceHash}</p>
         </div>
       </div>
@@ -542,7 +546,8 @@ function ReviewPanel({ action, currentUserId, reviewNote, busy, onReviewNote, on
 }
 
 function ActionState({ action, workerEnabled }: { action: OperatorAction; workerEnabled: boolean }) {
-  const danger = action.status === 'manual_review' || action.status === 'failed'
+  const danger = action.status === 'disputed' || action.status === 'manual_review' || action.status === 'failed'
+  const awaitingPayer = action.status === 'awaiting_review' && action.reviewPolicy === 'payer'
   return (
     <section className={cn(
       'mt-5 rounded-2xl border p-4',
@@ -556,13 +561,17 @@ function ActionState({ action, workerEnabled }: { action: OperatorAction; worker
           : <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />}
         <div>
           <p className={cn('text-xs font-semibold', danger ? 'text-red-900 dark:text-red-100' : 'text-blue-900 dark:text-blue-100')}>
-            {action.status === 'queued' && !workerEnabled
+            {awaitingPayer
+              ? 'Waiting for payer review'
+              : action.status === 'queued' && !workerEnabled
               ? 'Reviewed · execution disabled'
               : action.status.replaceAll('_', ' ')}
           </p>
           <p className={cn('mt-1 text-[11px] leading-5', danger ? 'text-red-700/75 dark:text-red-200/70' : 'text-blue-700/75 dark:text-blue-200/70')}>
             {action.lastError
-              || (action.status === 'queued' && !workerEnabled
+              || (awaitingPayer
+                ? 'Only the authenticated payer bound to this agreement can accept or dispute the submitted delivery.'
+                : action.status === 'queued' && !workerEnabled
                 ? 'The immutable request is queued, but no Circle transaction can be submitted while the operator worker is disabled.'
                 : 'The durable journal will recover this exact action without issuing a replacement transaction.')}
           </p>
