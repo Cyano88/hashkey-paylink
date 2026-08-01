@@ -137,6 +137,7 @@ function publicReleaseRequest(action?: ArcAgreementOperatorAction) {
   if (!action || action.action !== 'release') return null
   return {
     id: action.id,
+    step: action.step ?? 0,
     status: action.status,
     deliveryNote: action.deliveryNote ?? '',
     evidenceReference: action.evidenceReference,
@@ -292,34 +293,39 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
           }
           const agreement = (await dependencies.listAgreements({ partnerId: projectId, limit: 250 }))
             .find(item => item.id === agreementId)
-          if (!agreement || agreement.template !== 'fixed_unlock') {
-            throw Object.assign(new Error('Only an owned fixed agreement can request this release.'), { status: 404 })
+          if (!agreement || !['fixed_unlock', 'milestone'].includes(agreement.template)) {
+            throw Object.assign(new Error('Only an owned fixed or milestone agreement can request this release.'), { status: 404 })
+          }
+          const binding = await dependencies.binding(projectId, agreementId)
+          const confirmed = await dependencies.confirmed(dependencies.chainClient(), binding.escrow)
+          const step = agreement.template === 'fixed_unlock' ? 0 : confirmed.snapshot.nextStep
+          const releaseSteps = binding.prepared.cumulativeReleaseBps.length
+          if (confirmed.snapshot.status !== 1 || step !== confirmed.snapshot.nextStep || step >= releaseSteps) {
+            throw Object.assign(new Error('This agreement has no release ready for review.'), { status: 409 })
           }
           const priorActions = (await dependencies.listOperatorActions({ partnerId: projectId, limit: 250 }))
-            .filter(item => item.agreementId === agreementId && item.action === 'release')
+            .filter(item => item.agreementId === agreementId && item.action === 'release' && item.step === step)
           const existing = priorActions[0]
           if (existing && existing.status !== 'disputed') {
             return res.json({ ok: true, replayed: true, releaseRequest: publicReleaseRequest(existing) })
           }
-          const binding = await dependencies.binding(projectId, agreementId)
-          const confirmed = await dependencies.confirmed(dependencies.chainClient(), binding.escrow)
-          if (confirmed.snapshot.status !== 1 || confirmed.snapshot.nextStep !== 0) {
-            throw Object.assign(new Error('This agreement is not eligible for its fixed release.'), { status: 409 })
-          }
           const operatorWallet = await dependencies.operatorClient().operatorWallet(confirmed.snapshot.operator)
           const evidenceHash = `0x${createHash('sha256').update(JSON.stringify({
-            domain: 'hashpaystream.fixed-release.evidence',
+            domain: 'hashpaystream.agreement-release.evidence',
             projectId,
             agreementId,
+            template: agreement.template,
+            step,
             evidenceReference,
             deliveryNote,
             reviewPolicy: 'payer',
             requestedBy: project.ownerId,
           })).digest('hex')}`
           const requestKey = createRequestIdempotencyKey([
-            'hashpaystream.fixed-release.request',
+            'hashpaystream.agreement-release.request',
             projectId,
             agreementId,
+            String(step),
             project.ownerId,
             existing?.id ?? 'initial',
           ].join('\0'))
@@ -330,14 +336,14 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
             agreementId,
             prepared: binding.prepared,
             confirmed,
-            step: 0,
+            step,
             evidenceHash,
           })
           const created = await dependencies.createOperatorAction({
             partnerId: projectId,
             agreementId,
             action: 'release',
-            step: 0,
+            step,
             evidenceHash,
             evidenceReference,
             deliveryNote,
@@ -378,8 +384,16 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
         const idempotencyKey = String(req.headers['idempotency-key'] ?? '').trim()
         const reference = createHash('sha256').update(`${projectId}\0${idempotencyKey}`).digest('hex').slice(0, 20)
         const originalBody = req.body
+        const template = body.template === undefined || body.template === 'fixed_unlock'
+          ? 'fixed_unlock'
+          : body.template === 'milestone'
+            ? 'milestone'
+            : null
+        if (!template) {
+          throw Object.assign(new Error('Hash PayStream supports fixed or milestone agreements.'), { status: 400 })
+        }
         req.body = {
-          template: 'fixed_unlock',
+          template,
           externalId: `hps-${reference}`,
           resourceId: `agreement:${reference}`,
           title: body.title,
@@ -388,6 +402,7 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
           recipient: body.recipient,
           durationSeconds: body.durationSeconds,
           cancellationWindowSeconds: body.cancellationWindowSeconds,
+          ...(template === 'milestone' ? { milestones: body.milestones } : {}),
         }
         try {
           return await dependencies.createAgreement(req, res, policy)
@@ -419,11 +434,18 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
         if (!releaseByAgreement.has(action.agreementId)) releaseByAgreement.set(action.agreementId, action)
       }
       const agreements = [...ids]
-        .map(id => ({
-          ...agreementRecord(id, draftsById.get(id), eventsByAgreement.get(id) ?? []),
-          releaseRequest: publicReleaseRequest(releaseByAgreement.get(id)),
-          deliveryTimeline: publicDeliveryTimeline(releaseActionsByAgreement.get(id) ?? []),
-        }))
+        .map(id => {
+          const agreement = agreementRecord(id, draftsById.get(id), eventsByAgreement.get(id) ?? [])
+          const releaseActions = releaseActionsByAgreement.get(id) ?? []
+          const currentRelease = agreement.status === 'completed'
+            ? releaseByAgreement.get(id)
+            : releaseActions.find(action => action.step === agreement.chain?.nextStep)
+          return {
+            ...agreement,
+            releaseRequest: publicReleaseRequest(currentRelease),
+            deliveryTimeline: publicDeliveryTimeline(releaseActions),
+          }
+        })
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       return res.json({
         ok: true,

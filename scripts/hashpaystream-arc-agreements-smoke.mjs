@@ -19,6 +19,7 @@ const ownerId = 'did:privy:hashpaystream-owner'
 let authorizedProject = ''
 let operatorActions = []
 let operatorActionSequence = 0
+let expectedStep = 0
 let expectedDelivery = {
   note: 'Completed the agreed website delivery.',
   url: 'https://delivery.example/proof',
@@ -116,16 +117,24 @@ const dependencies = {
   }),
   createAgreement: async (req, res, policy) => {
     assert.equal(policy.partnerId, projectId)
-    assert.equal(req.body.template, 'fixed_unlock')
+    assert.ok(['fixed_unlock', 'milestone'].includes(req.body.template))
     assert.match(req.body.externalId, /^hps-[a-f0-9]{20}$/)
     assert.match(req.body.resourceId, /^agreement:[a-f0-9]{20}$/)
-    assert.equal(req.body.title, 'New protected payment')
     assert.equal(req.body.amount, '0.1')
-    assert.equal(req.originalBody.externalId, 'must-not-pass-through')
-    assert.notEqual(req.body.externalId, req.originalBody.externalId)
+    if (req.body.template === 'fixed_unlock') {
+      assert.equal(req.body.title, 'New protected payment')
+      assert.equal(req.originalBody.externalId, 'must-not-pass-through')
+      assert.notEqual(req.body.externalId, req.originalBody.externalId)
+    } else {
+      assert.equal(req.body.title, 'Milestone delivery')
+      assert.deepEqual(req.body.milestones, [
+        { label: 'Design', percentage: 40 },
+        { label: 'Launch', percentage: 60 },
+      ])
+    }
     return res.status(201).json({
       ok: true,
-      agreement: { id: 'agr_createdagreement1234', title: req.body.title, amount: req.body.amount, recipient: req.body.recipient },
+      agreement: { id: 'agr_createdagreement1234', title: req.body.title, amount: req.body.amount, recipient: req.body.recipient, template: req.body.template },
       payerReviewPath: '/agreements/agr_createdagreement1234#access=agrp_private',
     })
   },
@@ -181,7 +190,7 @@ const dependencies = {
     assert.equal(input.partnerId, projectId)
     assert.equal(input.agreementId, agreementId)
     assert.equal(input.action, 'release')
-    assert.equal(input.step, 0)
+    assert.equal(input.step, expectedStep)
     assert.equal(input.requestedBy, ownerId)
     assert.match(input.evidenceHash, /^0x[a-f0-9]{64}$/)
     assert.equal(input.evidenceReference, expectedDelivery.url)
@@ -244,11 +253,30 @@ const created = await call(createHashPayStreamArcAgreementsHandler(dependencies)
     durationSeconds: 7200,
     cancellationWindowSeconds: 900,
     externalId: 'must-not-pass-through',
-    template: 'milestone',
+    template: 'fixed_unlock',
   },
 })
 assert.equal(created.statusCode, 201)
 assert.equal(created.body.agreement.title, 'New protected payment')
+
+const milestoneCreated = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
+  headers: { 'idempotency-key': 'hashpaystream:create:milestone:1234' },
+  body: {
+    template: 'milestone',
+    title: 'Milestone delivery',
+    description: 'Release each approved delivery step.',
+    amount: '0.1',
+    recipient: draft.recipient,
+    durationSeconds: 7200,
+    cancellationWindowSeconds: 900,
+    milestones: [
+      { label: 'Design', percentage: 40 },
+      { label: 'Launch', percentage: 60 },
+    ],
+  },
+})
+assert.equal(milestoneCreated.statusCode, 201)
+assert.equal(milestoneCreated.body.agreement.template, 'milestone')
 
 const releaseRequested = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
   body: {
@@ -314,6 +342,46 @@ assert.deepEqual(deliveryUpdated.body.agreements[0].deliveryTimeline.map(item =>
   'delivery.updated',
 ])
 
+expectedStep = 1
+expectedDelivery = {
+  note: 'Completed the launch milestone delivery.',
+  url: 'https://delivery.example/launch-proof',
+}
+const milestoneRelease = await call(createHashPayStreamArcAgreementsHandler({
+  ...dependencies,
+  listAgreements: async () => [{
+    ...draft,
+    template: 'milestone',
+    milestones: [
+      { label: 'Design', percentage: 40 },
+      { label: 'Launch', percentage: 60 },
+    ],
+  }],
+  binding: async () => ({
+    partnerId: projectId,
+    agreementId,
+    escrow: '0x4C556C9C362E1569CD2d3A0566a35237a2d81C78',
+    prepared: { cumulativeReleaseBps: [4_000, 10_000] },
+  }),
+  confirmed: async () => ({
+    snapshot: {
+      status: 1,
+      nextStep: 1,
+      operator: '0xd55d6ba98eABeCeCD24C84e715b13157ee4fCb49',
+    },
+    observedBlockNumber: 101n,
+  }),
+}), 'POST', {
+  body: {
+    action: 'request_release',
+    agreementId,
+    deliveryNote: expectedDelivery.note,
+    evidenceReference: expectedDelivery.url,
+  },
+})
+assert.equal(milestoneRelease.statusCode, 201)
+assert.equal(milestoneRelease.body.releaseRequest.step, 1)
+
 const rotated = await call(createHashPayStreamArcAgreementsHandler({
   ...dependencies,
   readEvents: async () => ({ schema: 1, events: {} }),
@@ -361,6 +429,9 @@ assert.match(appSource, /path="agreements\/new" element={<FixedAgreementForm\s*\
 const formSource = readFileSync(new URL('../modules/streampay/src/components/agreements/FixedAgreementForm.tsx', import.meta.url), 'utf8')
 assert.match(formSource, /fetch\('\/api\/hashpaystream\/arc-agreements'/)
 assert.match(formSource, /'idempotency-key': idempotencyKey/)
+assert.match(formSource, /template === 'milestone'/)
+assert.match(formSource, /Milestone shares must total 100%/)
+assert.match(formSource, /Add milestone/)
 assert.doesNotMatch(formSource, /['"]x-api-key['"]/i)
 const dashboardSource = readFileSync(new URL('../modules/streampay/src/components/agreements/AgreementDashboard.tsx', import.meta.url), 'utf8')
 assert.match(dashboardSource, /action:\s*'rotate_payer_link'/)

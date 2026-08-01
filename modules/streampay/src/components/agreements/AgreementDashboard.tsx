@@ -39,6 +39,7 @@ type Agreement = {
   }>
   releaseRequest: null | {
     id: string
+    step: number
     status: string
     deliveryNote: string
     evidenceReference: string
@@ -85,9 +86,9 @@ const EVENT_LABEL: Record<string, string> = {
 const RELEASE_STATUS: Record<string, string> = {
   awaiting_review: 'Waiting for payer review',
   disputed: 'The payer reported an issue',
-  queued: 'Approved by payer',
-  provider_pending: 'Release submitted',
-  chain_pending: 'Confirming on Arc',
+  queued: 'Confirming payment on Arc',
+  provider_pending: 'Confirming payment on Arc',
+  chain_pending: 'Confirming payment on Arc',
   completed: 'Release confirmed',
   failed: 'Release needs review',
   manual_review: 'Release needs review',
@@ -197,6 +198,9 @@ export default function AgreementDashboard() {
       ...(active.deliveryTimeline ?? []).map(event => ({ ...event, receivedAt: '', observedBlockNumber: '', occurredAt: event.createdAt })),
     ].filter(event => event.occurredAt).sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
   }, [active])
+  const activeMilestone = active?.template === 'milestone'
+    ? active.milestones?.[active.chain?.nextStep ?? 0]
+    : undefined
 
   useEffect(() => {
     setPayerLink('')
@@ -239,7 +243,7 @@ export default function AgreementDashboard() {
   }
 
   async function requestRelease() {
-    if (!active || active.status !== 'active' || active.template !== 'fixed_unlock') return
+    if (!active || active.status !== 'active' || !['fixed_unlock', 'milestone'].includes(active.template ?? '')) return
     setRequestingRelease(true)
     setError('')
     try {
@@ -438,12 +442,25 @@ export default function AgreementDashboard() {
                   </div>
                 )}
 
-                {active.status === 'active' && active.template === 'fixed_unlock' && (
+                {active.status === 'active' && (active.template === 'fixed_unlock' || active.template === 'milestone') && (
                   <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                    {activeMilestone && (
+                      <div className="mb-4 border-b border-gray-200 pb-4 dark:border-white/10">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                          Milestone {(active.chain?.nextStep ?? 0) + 1} of {active.milestones?.length ?? 0}
+                        </p>
+                        <div className="mt-1 flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{activeMilestone.label}</p>
+                          <p className="shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-300">{activeMilestone.percentage}%</p>
+                        </div>
+                      </div>
+                    )}
                     {active.releaseRequest && active.releaseRequest.status !== 'disputed' ? (
                       <div className="flex items-center justify-between gap-4">
                         <div>
-                          <p className="text-xs font-medium text-gray-900 dark:text-white">Release requested</p>
+                          <p className="text-xs font-medium text-gray-900 dark:text-white">
+                            {['queued', 'provider_pending', 'chain_pending'].includes(active.releaseRequest.status) ? 'Payment approved' : 'Release requested'}
+                          </p>
                           <p className="mt-1 text-[11px] leading-5 text-gray-400">
                             {RELEASE_STATUS[active.releaseRequest.status] || 'Under review'}
                           </p>
@@ -451,14 +468,14 @@ export default function AgreementDashboard() {
                         <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-600 dark:bg-white/[0.07] dark:text-gray-300">
                           {active.releaseRequest.status === 'completed'
                             ? 'Complete'
-                            : active.releaseRequest.status === 'disputed'
-                              ? 'Action needed'
+                            : ['queued', 'provider_pending', 'chain_pending'].includes(active.releaseRequest.status)
+                              ? 'Confirming'
                               : 'Pending'}
                         </span>
                       </div>
                     ) : releaseMode ? (
                       <div>
-                        <p className="text-xs font-medium text-gray-900 dark:text-white">Submit delivery</p>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">{activeMilestone ? 'Submit milestone' : 'Submit delivery'}</p>
                         <p className="mt-1 text-[11px] leading-5 text-gray-400">Tell the payer what was completed and where to review it.</p>
                         <textarea
                           value={deliveryNote}
@@ -488,7 +505,7 @@ export default function AgreementDashboard() {
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="text-xs font-medium text-gray-900 dark:text-white">
-                            {active.releaseRequest?.status === 'disputed' ? 'Delivery needs an update' : 'Work delivered?'}
+                            {active.releaseRequest?.status === 'disputed' ? 'Delivery needs an update' : activeMilestone ? 'Milestone complete?' : 'Work delivered?'}
                           </p>
                           <p className="mt-1 text-[11px] leading-5 text-gray-400">
                             {active.releaseRequest?.status === 'disputed'
@@ -497,7 +514,7 @@ export default function AgreementDashboard() {
                           </p>
                         </div>
                         <button type="button" onClick={() => setReleaseMode(true)} className="shrink-0 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
-                          {active.releaseRequest?.status === 'disputed' ? 'Update delivery' : 'Submit delivery'}
+                          {active.releaseRequest?.status === 'disputed' ? 'Update delivery' : activeMilestone ? 'Submit milestone' : 'Submit delivery'}
                         </button>
                       </div>
                     )}

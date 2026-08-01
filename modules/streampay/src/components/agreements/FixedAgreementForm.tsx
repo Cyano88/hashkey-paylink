@@ -5,9 +5,12 @@ import { Link } from 'react-router-dom'
 import { PrivyConnectButton } from '../../../../../src/lib/PrivyConnectButton'
 
 type CreatedAgreement = {
-  agreement: { id: string; title: string; amount: string; recipient: string }
+  agreement: { id: string; title: string; amount: string; recipient: string; template?: 'fixed_unlock' | 'milestone' }
   payerReviewPath: string
 }
+
+type AgreementTemplate = 'fixed_unlock' | 'milestone'
+type MilestoneDraft = { label: string; percentage: string }
 
 const APP_ORIGIN = 'https://app.hashpaylink.com'
 
@@ -20,6 +23,7 @@ function newIdempotencyKey() {
 
 export default function FixedAgreementForm() {
   const { ready, authenticated, getAccessToken } = usePrivy()
+  const [template, setTemplate] = useState<AgreementTemplate>('fixed_unlock')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
@@ -31,11 +35,29 @@ export default function FixedAgreementForm() {
   const [error, setError] = useState('')
   const [created, setCreated] = useState<CreatedAgreement | null>(null)
   const [copied, setCopied] = useState(false)
+  const [milestones, setMilestones] = useState<MilestoneDraft[]>([
+    { label: '', percentage: '50' },
+    { label: '', percentage: '50' },
+  ])
 
   const payerUrl = created?.payerReviewPath ? `${APP_ORIGIN}${created.payerReviewPath}` : ''
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    const normalizedMilestones = milestones.map(item => ({
+      label: item.label.trim(),
+      percentage: Number(item.percentage),
+    }))
+    if (template === 'milestone') {
+      if (normalizedMilestones.some(item => item.label.length < 2 || !Number.isInteger(item.percentage) || item.percentage < 1)) {
+        setError('Each milestone needs a name and a whole-number share.')
+        return
+      }
+      if (normalizedMilestones.reduce((sum, item) => sum + item.percentage, 0) !== 100) {
+        setError('Milestone shares must total 100%.')
+        return
+      }
+    }
     setSubmitting(true)
     setError('')
     try {
@@ -50,12 +72,14 @@ export default function FixedAgreementForm() {
           'idempotency-key': idempotencyKey,
         },
         body: JSON.stringify({
+          template,
           title,
           description,
           amount,
           recipient,
           durationSeconds: Number(durationSeconds),
           cancellationWindowSeconds: Number(cancellationWindowSeconds),
+          ...(template === 'milestone' ? { milestones: normalizedMilestones } : {}),
         }),
       })
       const data = await response.json().catch(() => undefined) as (CreatedAgreement & { ok?: boolean; error?: string }) | undefined
@@ -151,11 +175,34 @@ export default function FixedAgreementForm() {
         <ArrowLeft className="h-4 w-4" />
         Agreements
       </Link>
-      <p className="mt-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Fixed payment · Arc Testnet</p>
+      <p className="mt-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Arc Testnet</p>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">New agreement</h1>
-      <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">Protect one USDC payment and release it when the work is complete.</p>
+      <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
+        {template === 'fixed_unlock'
+          ? 'Protect one USDC payment and release it when the work is complete.'
+          : 'Protect the full payment and release it as each milestone is approved.'}
+      </p>
 
       <form onSubmit={submit} className="mt-7 space-y-5 rounded-3xl border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#18181b] sm:p-7">
+        <Field label="Payment structure">
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              ['fixed_unlock', 'One release'],
+              ['milestone', 'Milestones'],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => { setTemplate(value); setError('') }}
+                className={`rounded-xl border px-3 py-3 text-sm font-semibold transition-colors ${template === value
+                  ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                  : 'border-gray-200 text-gray-500 dark:border-white/10 dark:text-gray-400'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
         <Field label="Agreement title">
           <input value={title} onChange={event => setTitle(event.target.value)} required minLength={3} maxLength={140} placeholder="Website design delivery" className={inputClass} />
         </Field>
@@ -173,6 +220,65 @@ export default function FixedAgreementForm() {
             <input value={recipient} onChange={event => setRecipient(event.target.value.trim())} required placeholder="0x…" className={inputClass} />
           </Field>
         </div>
+
+        {template === 'milestone' && (
+          <div>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium text-gray-600 dark:text-gray-300">Milestones</p>
+                <p className="mt-1 text-[11px] text-gray-400">Each share releases only after payer approval.</p>
+              </div>
+              <p className={`text-xs font-semibold ${milestones.reduce((sum, item) => sum + Number(item.percentage || 0), 0) === 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                {milestones.reduce((sum, item) => sum + Number(item.percentage || 0), 0)}%
+              </p>
+            </div>
+            <div className="mt-3 space-y-2">
+              {milestones.map((milestone, index) => (
+                <div key={index} className="grid grid-cols-[minmax(0,1fr)_84px_auto] gap-2">
+                  <input
+                    value={milestone.label}
+                    onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))}
+                    required
+                    minLength={2}
+                    maxLength={80}
+                    placeholder={`Milestone ${index + 1}`}
+                    className={inputClass}
+                  />
+                  <div className="relative">
+                    <input
+                      value={milestone.percentage}
+                      onChange={event => setMilestones(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, percentage: event.target.value.replace(/\D/g, '').slice(0, 3) } : item))}
+                      required
+                      inputMode="numeric"
+                      aria-label={`Milestone ${index + 1} share`}
+                      className={`${inputClass} pr-7`}
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-gray-400">%</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={milestones.length <= 2}
+                    onClick={() => setMilestones(current => current.filter((_, itemIndex) => itemIndex !== index))}
+                    className="px-2 text-xs font-semibold text-gray-400 disabled:opacity-30"
+                    aria-label={`Remove milestone ${index + 1}`}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+            {milestones.length < 5 && (
+              <button
+                type="button"
+                onClick={() => setMilestones(current => [...current, { label: '', percentage: '' }])}
+                className="mt-3 text-xs font-semibold text-gray-600 dark:text-gray-300"
+              >
+                Add milestone
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Agreement duration">
             <select value={durationSeconds} onChange={event => setDurationSeconds(event.target.value)} className={inputClass}>

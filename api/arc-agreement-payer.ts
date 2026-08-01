@@ -201,6 +201,7 @@ function publicDelivery(action: ArcAgreementOperatorAction | null, reviewerId = 
   if (!action || action.action !== 'release') return null
   return {
     id: action.id,
+    step: action.step ?? 0,
     status: action.status,
     canReview: Boolean(reviewerId && action.requestedBy !== reviewerId),
     deliveryNote: action.deliveryNote ?? '',
@@ -212,6 +213,25 @@ function publicDelivery(action: ArcAgreementOperatorAction | null, reviewerId = 
     transactionHash: action.transactionHash ?? null,
     updatedAt: action.updatedAt,
   }
+}
+
+function currentReleaseAction(
+  actions: ArcAgreementOperatorAction[],
+  attempt: ArcAgreementActivationAttempt,
+  agreement: ArcAgreement,
+) {
+  const releases = actions.filter(item => item.action === 'release')
+  const nextStep = attempt.lifecycle?.nextStep
+  if (!Number.isInteger(nextStep)) {
+    return releases.find(item => item.status !== 'completed') ?? null
+  }
+  const releaseSteps = agreement.template === 'milestone'
+    ? agreement.milestones?.length ?? 0
+    : agreement.template === 'progressive_release'
+      ? agreement.checkpoints?.length ?? 0
+      : 1
+  if ((nextStep ?? 0) >= releaseSteps) return releases[0] ?? null
+  return releases.find(item => item.step === nextStep) ?? null
 }
 
 function lifecycleActionName(value: unknown): ArcAgreementPayerLifecycleActionName {
@@ -365,11 +385,11 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
       if (action === 'review') {
         const linkedWallet = linkedArcWallet(linkRecord, identity)
         const deliveryAction = knownAttempt
-          ? (await dependencies.listOperatorActions({
+          ? currentReleaseAction(await dependencies.listOperatorActions({
               partnerId: agreement.partnerId,
               agreementId: agreement.id,
               limit: 20,
-            })).find(item => item.action === 'release') ?? null
+            }), knownAttempt, agreement)
           : null
         let lifecycle: {
           available: boolean
@@ -434,11 +454,15 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
           throw fail('This agreement is not active.', 409)
         }
         requireLinkedArcWallet(linkRecord, identity)
+        const deliveryId = clean(req.body?.deliveryId, 40)
+        if (!/^opa_[a-f0-9]{24}$/.test(deliveryId)) {
+          throw fail('A valid delivery review id is required.', 400)
+        }
         const deliveryAction = (await dependencies.listOperatorActions({
           partnerId: agreement.partnerId,
           agreementId: agreement.id,
           limit: 20,
-        })).find(item => item.action === 'release')
+        })).find(item => item.action === 'release' && item.id === deliveryId)
         if (!deliveryAction) throw fail('No delivery is ready for review.', 404)
         if (deliveryAction.reviewPolicy !== 'payer') {
           throw fail('This release uses the restricted operations review path.', 409)

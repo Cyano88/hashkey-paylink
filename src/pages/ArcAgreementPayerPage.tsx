@@ -57,6 +57,7 @@ type LifecycleAction = {
 
 type DeliveryReview = {
   id: string
+  step: number
   status: 'awaiting_review' | 'disputed' | 'queued' | 'provider_pending' | 'chain_pending' | 'completed' | 'failed' | 'manual_review'
   canReview: boolean
   deliveryNote: string
@@ -140,6 +141,13 @@ function releaseLabel(agreement: Agreement) {
     return `${agreement.checkpoints?.length ?? 0} scheduled releases`
   }
   return `${agreement.milestones?.length ?? 0} milestone releases`
+}
+
+function deliveryContext(agreement: Agreement, delivery: DeliveryReview | null) {
+  if (agreement.template !== 'milestone' || !delivery) return null
+  const milestone = agreement.milestones?.[delivery.step]
+  if (!milestone) return null
+  return `Milestone ${delivery.step + 1} of ${agreement.milestones?.length ?? 0} · ${milestone.label}`
 }
 
 function deliveryHost(value: string) {
@@ -513,6 +521,7 @@ export default function ArcAgreementPayerPage() {
     try {
       const result = await request<ActionResponse>({
         action: 'delivery-decision',
+        deliveryId: review?.delivery?.id,
         decision,
         ...(decision === 'dispute' ? { issue: issueText } : {}),
       })
@@ -642,6 +651,8 @@ export default function ArcAgreementPayerPage() {
                     lifecycle={review.lifecycle ?? null}
                     delivery={review.delivery ?? null}
                     amount={agreement.amount}
+                    deliveryContext={deliveryContext(agreement, review.delivery ?? null)}
+                    releaseActionLabel={agreement.template === 'milestone' ? 'Release milestone' : `Release ${agreement.amount} USDC`}
                     busy={busy}
                     walletSessionReady={Boolean(session)}
                     confirmation={confirmLifecycle}
@@ -719,6 +730,8 @@ function ActiveAgreementPanel({
   lifecycle,
   delivery,
   amount,
+  deliveryContext,
+  releaseActionLabel,
   busy,
   walletSessionReady,
   confirmation,
@@ -733,6 +746,8 @@ function ActiveAgreementPanel({
   lifecycle: ReviewResponse['lifecycle']
   delivery: DeliveryReview | null
   amount: string
+  deliveryContext: string | null
+  releaseActionLabel: string
   busy: boolean
   walletSessionReady: boolean
   confirmation: 'cancel' | 'refund' | null
@@ -774,7 +789,7 @@ function ActiveAgreementPanel({
       return <DeliveryState title="Issue reported" copy="The USDC remains protected while the recipient updates the delivery." tone="warning" />
     }
     if (accepting) {
-      return <DeliveryState title="Release approved" copy="The reviewed Arc release is queued for guarded execution." tone="success" />
+      return <DeliveryState title="Release approved" copy="Confirming payment on Arc." tone="success" />
     }
     if (delivery.status === 'failed' || delivery.status === 'manual_review') {
       return <DeliveryState title="Release needs review" copy="No new release should be submitted for this delivery." tone="warning" />
@@ -818,6 +833,7 @@ function ActiveAgreementPanel({
       <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">Delivery ready</p>
         <p className="mt-2 text-sm font-semibold text-gray-950 dark:text-white">Review the completed work</p>
+        {deliveryContext && <p className="mt-1 text-[11px] font-medium text-gray-400">{deliveryContext}</p>}
         <p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{delivery.deliveryNote}</p>
         <a
           href={delivery.evidenceReference}
@@ -845,7 +861,7 @@ function ActiveAgreementPanel({
         ) : (
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button type="button" disabled={busy} onClick={() => onIssueMode(true)} className="h-10 rounded-full border border-gray-200 text-xs font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:text-gray-200">Report issue</button>
-            <button type="button" disabled={busy} onClick={() => onDeliveryDecision('accept')} className="h-10 rounded-full bg-gray-950 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">Release {amount} USDC</button>
+            <button type="button" disabled={busy} onClick={() => onDeliveryDecision('accept')} className="h-10 rounded-full bg-gray-950 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{releaseActionLabel}</button>
           </div>
         )}
         <p className="mt-3 text-center text-[10px] leading-4 text-gray-400">Only release after checking the delivered work.</p>

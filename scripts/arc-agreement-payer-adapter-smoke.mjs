@@ -506,6 +506,7 @@ assert.equal(selfReview.body.delivery.canReview, false)
 assert.equal((await request(handler, {
   action: 'delivery-decision',
   agreementId,
+  deliveryId: operatorAction.id,
   decision: 'dispute',
   issue: 'Please add the final deployment link.',
 }, headers)).statusCode, 409)
@@ -513,6 +514,7 @@ operatorAction = { ...operatorAction, requestedBy: 'did:privy:creator-owner' }
 const acceptedDelivery = await request(handler, {
   action: 'delivery-decision',
   agreementId,
+  deliveryId: operatorAction.id,
   decision: 'accept',
 }, headers)
 assert.equal(acceptedDelivery.statusCode, 200)
@@ -520,6 +522,7 @@ assert.equal(acceptedDelivery.body.delivery.status, 'queued')
 assert.equal((await request(handler, {
   action: 'delivery-decision',
   agreementId,
+  deliveryId: operatorAction.id,
   decision: 'accept',
 }, headers)).body.replayed, true)
 
@@ -599,7 +602,10 @@ assert.match(payerPageSource, /action:\s*'lifecycle-challenge'/)
 assert.match(payerPageSource, /action:\s*'lifecycle-recover'/)
 assert.match(payerPageSource, /action:\s*'lifecycle-status'/)
 assert.match(payerPageSource, /action:\s*'delivery-decision'/)
-assert.match(payerPageSource, /Release \{amount\} USDC/)
+assert.match(payerPageSource, /deliveryId:\s*review\?\.delivery\?\.id/)
+assert.match(payerPageSource, /releaseActionLabel/)
+assert.match(payerPageSource, /Release milestone/)
+assert.match(payerPageSource, /Milestone \$\{delivery\.step \+ 1\}/)
 assert.match(payerPageSource, /Report issue/)
 assert.match(payerPageSource, /terminalWebhookPending/)
 assert.match(payerPageSource, /\['transaction_pending',\s*'submitted'\]\.includes\(lifecycleStatus/)
