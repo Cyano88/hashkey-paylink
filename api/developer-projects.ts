@@ -370,6 +370,7 @@ export async function verifyDeveloperProjectOwner(req: Request, projectIdValue: 
   }
   return {
     id: project.id,
+    ownerId: project.ownerId,
     name: project.name,
     checkoutMode: projectCheckoutMode(project),
     capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'] as DeveloperCapability[],

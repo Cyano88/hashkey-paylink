@@ -32,6 +32,15 @@ type Agreement = {
     receivedAt: string
     observedBlockNumber: string
   }>
+  releaseRequest: null | {
+    id: string
+    status: string
+    requestedAt?: string
+    reviewedAt?: string
+    completedAt?: string
+    transactionHash?: string
+    updatedAt: string
+  }
   updatedAt: string
 }
 
@@ -59,6 +68,16 @@ const EVENT_LABEL: Record<string, string> = {
   'agreement.completed': 'Agreement completed',
   'agreement.cancelled': 'Agreement cancelled',
   'agreement.refunded': 'Remaining USDC returned',
+}
+
+const RELEASE_STATUS: Record<string, string> = {
+  awaiting_review: 'Awaiting Hash PayLink review',
+  queued: 'Approved for guarded execution',
+  provider_pending: 'Release submitted',
+  chain_pending: 'Confirming on Arc',
+  completed: 'Release confirmed',
+  failed: 'Release needs review',
+  manual_review: 'Release needs review',
 }
 
 function formatUsdc(units?: string) {
@@ -108,6 +127,9 @@ export default function AgreementDashboard() {
   const [rotatingLink, setRotatingLink] = useState(false)
   const [payerLink, setPayerLink] = useState('')
   const [linkCopied, setLinkCopied] = useState(false)
+  const [releaseMode, setReleaseMode] = useState(false)
+  const [evidenceReference, setEvidenceReference] = useState('')
+  const [requestingRelease, setRequestingRelease] = useState(false)
 
   const load = useCallback(async (quiet = false) => {
     if (!authenticated) {
@@ -157,6 +179,8 @@ export default function AgreementDashboard() {
   useEffect(() => {
     setPayerLink('')
     setLinkCopied(false)
+    setReleaseMode(false)
+    setEvidenceReference('')
   }, [active?.id])
 
   async function rotatePayerLink() {
@@ -191,14 +215,45 @@ export default function AgreementDashboard() {
     window.setTimeout(() => setLinkCopied(false), 1800)
   }
 
+  async function requestRelease() {
+    if (!active || active.status !== 'active' || active.template !== 'fixed_unlock') return
+    setRequestingRelease(true)
+    setError('')
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to request this release.')
+      const response = await fetch('/api/hashpaystream/arc-agreements', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'request_release', agreementId: active.id, evidenceReference }),
+      })
+      const data = await response.json().catch(() => undefined) as { ok?: boolean; releaseRequest?: Agreement['releaseRequest']; error?: string } | undefined
+      if (!response.ok || !data?.ok || !data.releaseRequest) {
+        throw new Error(data?.error || 'The release request could not be saved.')
+      }
+      setAgreements(current => current.map(item => item.id === active.id
+        ? { ...item, releaseRequest: data.releaseRequest ?? null }
+        : item))
+      setReleaseMode(false)
+      setEvidenceReference('')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The release request could not be saved.')
+    } finally {
+      setRequestingRelease(false)
+    }
+  }
+
   const totals = useMemo(() => agreements.reduce((result, agreement) => {
     const chain = agreement.chain
     if (!chain) return result
-    result.protected += BigInt(chain.amountUsdcUnits || '0')
+    if (agreement.status === 'active' || agreement.status === 'expired') {
+      result.activeProtected += BigInt(chain.amountUsdcUnits || '0')
+    }
     result.released += BigInt(chain.releasedUsdcUnits || '0')
     result.remaining += BigInt(chain.remainingUsdcUnits || '0')
     return result
-  }, { protected: 0n, released: 0n, remaining: 0n }), [agreements])
+  }, { activeProtected: 0n, released: 0n, remaining: 0n }), [agreements])
 
   if (!ready || loading) {
     return (
@@ -262,7 +317,7 @@ export default function AgreementDashboard() {
         <>
           <div className="mt-7 grid grid-cols-3 overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/10 dark:bg-[#18181b]">
             {[
-              ['Protected', formatUsdc(totals.protected.toString())],
+              ['Active protected', formatUsdc(totals.activeProtected.toString())],
               ['Released', formatUsdc(totals.released.toString())],
               ['Remaining', formatUsdc(totals.remaining.toString())],
             ].map(([label, value], index) => (
@@ -355,6 +410,54 @@ export default function AgreementDashboard() {
                         </div>
                         <button type="button" disabled={rotatingLink} onClick={() => void rotatePayerLink()} className="shrink-0 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950">
                           {rotatingLink ? 'Generating…' : 'Generate link'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {active.status === 'active' && active.template === 'fixed_unlock' && (
+                  <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                    {active.releaseRequest ? (
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-medium text-gray-900 dark:text-white">Release requested</p>
+                          <p className="mt-1 text-[11px] leading-5 text-gray-400">
+                            {RELEASE_STATUS[active.releaseRequest.status] || 'Under review'}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-600 dark:bg-white/[0.07] dark:text-gray-300">
+                          {active.releaseRequest.status === 'completed' ? 'Complete' : 'Pending'}
+                        </span>
+                      </div>
+                    ) : releaseMode ? (
+                      <div>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">Request final release</p>
+                        <p className="mt-1 text-[11px] leading-5 text-gray-400">Add the delivery link or reference Hash PayLink should review.</p>
+                        <input
+                          value={evidenceReference}
+                          onChange={event => setEvidenceReference(event.target.value)}
+                          maxLength={240}
+                          placeholder="Delivery link or reference"
+                          className="mt-3 h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-[#18181b] dark:text-white dark:focus:border-white/30"
+                        />
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <button type="button" disabled={requestingRelease} onClick={() => setReleaseMode(false)} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-xs font-semibold text-gray-700 disabled:opacity-60 dark:border-white/10 dark:bg-[#18181b] dark:text-gray-200">
+                            Cancel
+                          </button>
+                          <button type="button" disabled={requestingRelease || evidenceReference.trim().length < 6} onClick={() => void requestRelease()} className="rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
+                            {requestingRelease ? 'Saving…' : 'Submit request'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-medium text-gray-900 dark:text-white">Work delivered?</p>
+                          <p className="mt-1 text-[11px] leading-5 text-gray-400">Request the protected USDC release.</p>
+                        </div>
+                        <button type="button" onClick={() => setReleaseMode(true)} className="shrink-0 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
+                          Request release
                         </button>
                       </div>
                     )}

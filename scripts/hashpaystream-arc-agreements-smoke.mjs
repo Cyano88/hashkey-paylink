@@ -15,7 +15,9 @@ function responseRecorder() {
 
 const projectId = 'dev_hashpaystream1234'
 const agreementId = 'agr_hashpaystream12345678'
+const ownerId = 'did:privy:hashpaystream-owner'
 let authorizedProject = ''
+let operatorAction
 
 const draft = {
   id: agreementId,
@@ -76,7 +78,7 @@ const dependencies = {
   hasStore: () => true,
   authorize: async (_req, id) => {
     authorizedProject = id
-    return { id, name: 'Hash PayStream Arc Pilot', capabilities: ['arc_agreements'] }
+    return { id, ownerId, name: 'Hash PayStream Arc Pilot', capabilities: ['arc_agreements'] }
   },
   readEvents: async () => ({
     schema: 1,
@@ -132,6 +134,63 @@ const dependencies = {
       payerReviewPath: `/agreements/${agreementId}#access=agrp_rotated_private`,
     }
   },
+  listOperatorActions: async input => {
+    assert.equal(input.partnerId, projectId)
+    return operatorAction ? [operatorAction] : []
+  },
+  binding: async (partnerId, id) => {
+    assert.equal(partnerId, projectId)
+    assert.equal(id, agreementId)
+    return {
+      partnerId,
+      agreementId: id,
+      escrow: '0x4C556C9C362E1569CD2d3A0566a35237a2d81C78',
+      prepared: { cumulativeReleaseBps: [10_000] },
+    }
+  },
+  confirmed: async () => ({
+    snapshot: {
+      status: 1,
+      nextStep: 0,
+      operator: '0xd55d6ba98eABeCeCD24C84e715b13157ee4fCb49',
+    },
+    observedBlockNumber: 100n,
+  }),
+  operatorClient: () => ({
+    operatorWallet: async () => ({
+      walletId: 'operator-wallet-id',
+      address: '0xd55d6ba98eABeCeCD24C84e715b13157ee4fCb49',
+    }),
+  }),
+  chainClient: () => ({}),
+  prepareRelease: input => ({
+    walletId: input.operatorWallet.walletId,
+    operatorAddress: input.operatorWallet.address,
+    contractAddress: '0x4C556C9C362E1569CD2d3A0566a35237a2d81C78',
+    abiFunctionSignature: 'releaseStep(uint8,bytes32)',
+    abiParameters: [input.step, input.evidenceHash],
+    idempotencyKey: input.idempotencyKey,
+    refId: `${input.agreementId}:release:${input.step}`,
+  }),
+  createOperatorAction: async input => {
+    assert.equal(input.partnerId, projectId)
+    assert.equal(input.agreementId, agreementId)
+    assert.equal(input.action, 'release')
+    assert.equal(input.step, 0)
+    assert.equal(input.requestedBy, ownerId)
+    assert.match(input.evidenceHash, /^0x[a-f0-9]{64}$/)
+    assert.equal(input.evidenceReference, 'ipfs://delivery-proof')
+    operatorAction = {
+      id: 'opa_1234567890abcdef12345678',
+      ...input,
+      requestHash: 'a'.repeat(64),
+      requestedAt: '2026-08-01T00:45:00.000Z',
+      status: 'awaiting_review',
+      attempts: 0,
+      updatedAt: '2026-08-01T00:45:00.000Z',
+    }
+    return operatorAction
+  },
   env: () => ({ HASHPAYSTREAM_ARC_PROJECT_ID: projectId }),
 }
 
@@ -179,6 +238,20 @@ const created = await call(createHashPayStreamArcAgreementsHandler(dependencies)
 assert.equal(created.statusCode, 201)
 assert.equal(created.body.agreement.title, 'New protected payment')
 
+const releaseRequested = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
+  body: { action: 'request_release', agreementId, evidenceReference: 'ipfs://delivery-proof' },
+})
+assert.equal(releaseRequested.statusCode, 201)
+assert.equal(releaseRequested.body.releaseRequest.status, 'awaiting_review')
+assert.equal('evidenceHash' in releaseRequested.body.releaseRequest, false)
+assert.equal('evidenceReference' in releaseRequested.body.releaseRequest, false)
+
+const releaseReplayed = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
+  body: { action: 'request_release', agreementId, evidenceReference: 'another reference' },
+})
+assert.equal(releaseReplayed.statusCode, 200)
+assert.equal(releaseReplayed.body.replayed, true)
+
 const rotated = await call(createHashPayStreamArcAgreementsHandler({
   ...dependencies,
   readEvents: async () => ({ schema: 1, events: {} }),
@@ -213,7 +286,7 @@ assert.equal(unauthorized.body.error, 'Sign in first.')
 
 const wrongCapability = await call(createHashPayStreamArcAgreementsHandler({
   ...dependencies,
-  authorize: async () => ({ id: projectId, name: 'Project', capabilities: ['hosted_checkout'] }),
+  authorize: async () => ({ id: projectId, ownerId, name: 'Project', capabilities: ['hosted_checkout'] }),
 }))
 assert.equal(wrongCapability.statusCode, 403)
 
@@ -229,6 +302,8 @@ assert.match(formSource, /'idempotency-key': idempotencyKey/)
 assert.doesNotMatch(formSource, /['"]x-api-key['"]/i)
 const dashboardSource = readFileSync(new URL('../modules/streampay/src/components/agreements/AgreementDashboard.tsx', import.meta.url), 'utf8')
 assert.match(dashboardSource, /action:\s*'rotate_payer_link'/)
+assert.match(dashboardSource, /action:\s*'request_release'/)
+assert.match(dashboardSource, /Active protected/)
 assert.match(dashboardSource, /agreement\.amount \|\| '0'/)
 assert.doesNotMatch(dashboardSource, /['"]x-api-key['"]/i)
 
