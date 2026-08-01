@@ -138,6 +138,7 @@ let challengeInput
 let currentJournal
 let lifecycleJournal
 let lifecycleReconcileCalls = 0
+let refundEligible = false
 let recordedTransactionInput
 let reconciliationResult
 let operatorAction
@@ -250,8 +251,8 @@ const dependencies = {
   },
   reviewLifecycle: async () => ({
     eligibility: {
-      cancel: { eligible: true, reason: null },
-      refund: { eligible: false, reason: 'not_expired' },
+      cancel: { eligible: !refundEligible, reason: refundEligible ? 'expired' : null },
+      refund: { eligible: refundEligible, reason: refundEligible ? null : 'not_expired' },
     },
     action: lifecycleJournal ?? null,
   }),
@@ -527,6 +528,16 @@ assert.equal((await request(handler, {
   deliveryId: operatorAction.id,
   decision: 'accept',
 }, headers)).body.replayed, true)
+refundEligible = true
+const expiredDeliveryDecision = await request(handler, {
+  action: 'delivery-decision',
+  agreementId,
+  deliveryId: operatorAction.id,
+  decision: 'accept',
+}, headers)
+assert.equal(expiredDeliveryDecision.statusCode, 409)
+assert.match(expiredDeliveryDecision.body.error, /ended.*remaining USDC/i)
+refundEligible = false
 
 // Suspending a developer project blocks new activation, but must not strand an
 // already-active payer escrow or hide its cancellation/refund controls.

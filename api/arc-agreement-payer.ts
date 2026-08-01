@@ -453,7 +453,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
         if (knownAttempt?.status !== 'active') {
           throw fail('This agreement is not active.', 409)
         }
-        requireLinkedArcWallet(linkRecord, identity)
+        const linkedWallet = requireLinkedArcWallet(linkRecord, identity)
         const deliveryId = clean(req.body?.deliveryId, 40)
         if (!/^opa_[a-f0-9]{24}$/.test(deliveryId)) {
           throw fail('A valid delivery review id is required.', 400)
@@ -473,6 +473,17 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
         }
         if (deliveryAction.requestedBy === identity.userId) {
           throw fail('Use the payer account that funded this agreement to review the delivery.', 409)
+        }
+        const lifecycleReview = await dependencies.reviewLifecycle({
+          client: dependencies.client(),
+          partnerId: agreement.partnerId,
+          agreementId: agreement.id,
+          payerIdentity: identityValue,
+          walletId: linkedWallet.id,
+          walletAddress: linkedWallet.address,
+        })
+        if (lifecycleReview.eligibility.refund.eligible) {
+          throw fail('This agreement has ended. Return the remaining USDC.', 409)
         }
         const decision = clean(req.body?.decision, 20)
         if (decision !== 'accept' && decision !== 'dispute') {

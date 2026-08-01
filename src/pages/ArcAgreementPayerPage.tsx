@@ -780,6 +780,76 @@ function ActiveAgreementPanel({
       </div>
     )
   }
+  if (availableAction === 'refund') {
+    if (
+      current
+      && (
+        current.status === 'submitted'
+        || (current.status === 'transaction_pending' && walletSessionReady)
+      )
+    ) {
+      return (
+        <div className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-100 text-sm font-semibold text-gray-600 dark:bg-white/8 dark:text-gray-300">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-current" />
+          Confirming refund on Arc
+        </div>
+      )
+    }
+    if (
+      current
+      && (
+        current.status === 'reserved'
+        || current.status === 'issued'
+        || (current.status === 'transaction_pending' && !walletSessionReady)
+        || (current.status === 'provider_failed' && current.retryable)
+      )
+    ) {
+      return (
+        <button
+          type="button"
+          onClick={() => onSubmit('refund')}
+          disabled={busy}
+          className="flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
+        >
+          <span>{busy ? 'Please wait' : 'Continue refund'}</span>
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      )
+    }
+    if (current && ['manual_review', 'provider_failed', 'failed'].includes(current.status)) {
+      return <DeliveryState title="Refund needs review" copy="Do not submit another wallet transaction." tone="warning" />
+    }
+    if (confirmation === 'refund') {
+      return (
+        <div className="rounded-2xl border border-gray-200 p-4 dark:border-white/10">
+          <p className="text-sm font-semibold text-gray-950 dark:text-white">Return the remaining USDC?</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">
+            The unreleased balance returns to your payer wallet. This cannot be undone.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => onConfirm(null)} disabled={busy} className="h-10 rounded-full bg-gray-100 text-xs font-semibold text-gray-700 disabled:opacity-50 dark:bg-white/8 dark:text-gray-200">Keep agreement</button>
+            <button type="button" onClick={() => onSubmit('refund')} disabled={busy} className="h-10 rounded-full bg-gray-950 text-xs font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">
+              {busy ? 'Please wait' : 'Confirm refund'}
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <div>
+        <DeliveryState title="Agreement ended" copy="The unreleased USDC is ready to return." tone="warning" />
+        {lifecycle?.enabled && (
+          <button
+            type="button"
+            onClick={() => onConfirm('refund')}
+            className="mt-3 h-10 w-full rounded-full bg-gray-950 text-xs font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+          >
+            Return remaining USDC
+          </button>
+        )}
+      </div>
+    )
+  }
   if (delivery) {
     const accepting = ['queued', 'provider_pending', 'chain_pending'].includes(delivery.status)
     if (delivery.status === 'completed') {
