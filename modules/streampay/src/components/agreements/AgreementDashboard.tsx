@@ -410,6 +410,18 @@ export default function AgreementDashboard() {
                   <Detail label="Escrow" value={shortAddress(active.chain?.escrow)} />
                 </div>
 
+                {active.chain?.escrow && ['completed', 'cancelled', 'refunded'].includes(active.status) && (
+                  <a
+                    href={`https://testnet.arcscan.app/address/${active.chain.escrow}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 transition-colors hover:text-gray-950 dark:text-gray-300 dark:hover:text-white"
+                  >
+                    View Arc proof
+                    <ArrowUpRight className="h-3.5 w-3.5" />
+                  </a>
+                )}
+
                 {active.status === 'awaiting_start' && (
                   <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                     {payerLink ? (

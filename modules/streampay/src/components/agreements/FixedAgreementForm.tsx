@@ -170,7 +170,7 @@ export default function FixedAgreementForm() {
             <Check className="h-5 w-5" />
           </div>
           <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">Agreement ready</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">Send the payer link.</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">Send this link to the payer.</h1>
           <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
             {created.agreement.amount} USDC · {created.agreement.title}
           </p>
@@ -179,7 +179,7 @@ export default function FixedAgreementForm() {
             <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-gray-400">Private payer link</p>
             <p className="mt-2 break-all text-xs leading-5 text-gray-600 dark:text-gray-300">{payerUrl}</p>
           </div>
-          <p className="mt-3 text-xs leading-5 text-gray-400">Anyone with this link can review and fund this agreement.</p>
+          <p className="mt-3 text-xs leading-5 text-gray-400">The signed-in payer who starts the agreement controls its funding, approvals, cancellation, and refund.</p>
 
           <div className="mt-6 grid grid-cols-2 gap-2">
             <button
@@ -221,6 +221,7 @@ export default function FixedAgreementForm() {
           ? 'Protect one USDC payment and release it when the work is complete.'
           : 'Protect the full payment and release it as each milestone is approved.'}
       </p>
+      <p className="mt-2 text-xs leading-5 text-gray-400">You create the terms. The payer funds the agreement and approves each release.</p>
 
       <form onSubmit={submit} className="mt-7 space-y-5 rounded-3xl border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#18181b] sm:p-7">
         <Field label="Payment structure">

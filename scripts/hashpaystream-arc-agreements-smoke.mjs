@@ -44,7 +44,7 @@ const draft = {
   clientReference: `0x${'2'.repeat(64)}`,
   chainTerms: {},
   status: 'draft',
-  activationStatus: 'contract_unavailable',
+  activationStatus: 'private_pilot',
   requestHash: 'private-request-hash',
   payerAccessHash: 'private-payer-access-hash',
   createdAt: '2026-07-31T12:00:00.000Z',
@@ -435,6 +435,8 @@ assert.match(formSource, /Add milestone/)
 assert.match(formSource, /const formReady =/)
 assert.match(formSource, /disabled=\{!formReady \|\| submitting\}/)
 assert.match(formSource, /Complete every required field before creating the payer link/)
+assert.match(formSource, /You create the terms\. The payer funds the agreement and approves each release\./)
+assert.match(formSource, /The signed-in payer who starts the agreement controls its funding, approvals, cancellation, and refund\./)
 const payerPageSource = readFileSync(new URL('../src/pages/ArcAgreementPayerPage.tsx', import.meta.url), 'utf8')
 assert.match(payerPageSource, /Agreement completed/)
 assert.match(payerPageSource, /All protected USDC has been released on Arc/)
@@ -446,6 +448,7 @@ assert.match(dashboardSource, /Active protected/)
 assert.match(dashboardSource, /Refund available/)
 assert.match(dashboardSource, /delivery\.issue_reported/)
 assert.match(dashboardSource, /agreement\.amount \|\| '0'/)
+assert.match(dashboardSource, /View Arc proof/)
 assert.doesNotMatch(dashboardSource, /['"]x-api-key['"]/i)
 
 console.log('Hash PayStream Arc Agreements dashboard smoke checks passed.')

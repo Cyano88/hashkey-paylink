@@ -40,7 +40,7 @@ export type ArcAgreement = {
   clientReference: `0x${string}`
   chainTerms: ReturnType<typeof arcAgreementTerms>
   status: 'draft'
-  activationStatus: 'contract_unavailable'
+  activationStatus: 'private_pilot'
   requestHash: string
   payerAccessHash: string
   createdAt: string
@@ -386,7 +386,7 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
           clientReference: arcAgreementClientReference(policy.partnerId, id),
           chainTerms,
           status: 'draft',
-          activationStatus: 'contract_unavailable',
+          activationStatus: 'private_pilot',
           requestHash,
           payerAccessHash: payerAccessHash(payerAccessToken),
           createdAt: now,
@@ -406,7 +406,7 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
           payerAccessToken,
           payerReviewPath: `/agreements/${agreement.id}#access=${encodeURIComponent(payerAccessToken)}`,
         } : {}),
-        nextAction: 'Contract activation is unavailable in this testnet preview. No funds have moved.',
+        nextAction: 'Send payerReviewPath to the payer. Funding remains restricted to projects authorized for the private Arc Testnet pilot.',
       })
     } catch (error) {
       const status = Number((error as Error & { status?: number })?.status) || 500

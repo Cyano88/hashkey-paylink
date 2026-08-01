@@ -67,9 +67,9 @@ export default function ApiReference() {
         </SubSection>
       </Section>
 
-      <Section title="Arc Agreements API · Testnet preview">
+      <Section title="Arc Agreements API · Arc Testnet private pilot">
         <p>
-          Enable <code>Arc Agreements</code> on a human or agentic project to create durable agreement drafts on Arc Testnet. The agreement inherits the project's immutable payment path. This preview defines the state and validation boundary only: it does not deploy a contract, move funds, activate an agreement, release value, issue access, or create a receipt.
+          Enable <code>Arc Agreements</code> on a test project to create durable fixed, progressive, or milestone USDC terms on Arc Testnet. Creation returns a private payer-review path once. Funding and lifecycle execution remain invite-only: the project must pass Hash PayLink's pilot authorization, limits, operator, and runtime gates before a payer can activate an escrow.
         </p>
         <SubSection title="POST /api/v2/agreements">
           <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
@@ -87,13 +87,13 @@ export default function ApiReference() {
     "durationSeconds": 86400,
     "cancellationWindowSeconds": 900
   }'`}</CodeBlock>
-          <p>Supported draft templates are <code>fixed_unlock</code>, <code>progressive_release</code>, and <code>milestone</code>. Progressive checkpoints must increase and end at 100 percent. Milestone percentages must total 100. Timing defaults to 24 hours with a 15-minute payer cancellation window. The response includes a domain-separated <code>termsHash</code>, project-scoped <code>clientReference</code>, and normalized onchain schedule. A successful response remains <code>status: "draft"</code> with <code>activationStatus: "contract_unavailable"</code>.</p>
+          <p>Progressive checkpoints must increase and end at 100 percent. Milestone percentages must total 100. Timing defaults to 24 hours with a 15-minute payer cancellation window. The response includes a domain-separated <code>termsHash</code>, project-scoped <code>clientReference</code>, normalized onchain schedule, one-time <code>payerReviewPath</code>, and <code>activationStatus: "private_pilot"</code>. Creating a draft never proves that funds moved.</p>
         </SubSection>
         <SubSection title="GET /api/v2/agreements?id=agr_...">
-          <p>Returns a draft only when it belongs to the project selected by the test API key. Live keys, projects without the capability, non-USDC settlement, and projects without an Arc Testnet route are rejected.</p>
+          <p>Returns the durable agreement only when it belongs to the project selected by the test API key. The payer-access token is never returned again. Live keys, projects without the capability, non-USDC settlement, and projects without an Arc Testnet route are rejected.</p>
         </SubSection>
         <SubSection title="Agreement webhooks">
-          <p>The internal foundation recognizes <code>agreement.activated</code>, <code>agreement.step_released</code>, <code>agreement.completed</code>, <code>agreement.cancelled</code>, and <code>agreement.refunded</code>. Each event must come from an exactly reconciled snapshot read at a confirmed Arc block and uses the existing stable event ID and HMAC delivery contract. The testnet draft preview does not emit these events until contracts are deployed, verified, and activation is enabled.</p>
+          <p>Authorized pilot projects receive <code>agreement.activated</code>, <code>agreement.step_released</code>, <code>agreement.completed</code>, <code>agreement.cancelled</code>, and <code>agreement.refunded</code>. Each signed event is derived from an exactly reconciled snapshot at a confirmed Arc block. Draft creation alone emits no lifecycle event and must never trigger fulfillment.</p>
         </SubSection>
       </Section>
 

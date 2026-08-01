@@ -615,7 +615,7 @@ export default function ArcAgreementPayerPage() {
 
               <div className="mt-6 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-medium text-gray-400">Payer wallet</p>
+                  <p className="text-[11px] font-medium text-gray-400">Your payer wallet</p>
                   <p className="mt-1 truncate font-mono text-xs font-semibold text-gray-700 dark:text-gray-200">
                     {review.payer.walletAddress ? compactAddress(review.payer.walletAddress) : 'Not connected'}
                   </p>

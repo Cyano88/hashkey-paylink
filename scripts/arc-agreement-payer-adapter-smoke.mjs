@@ -55,7 +55,7 @@ const agreement = {
     cancellationWindowSeconds: 900,
   },
   status: 'draft',
-  activationStatus: 'contract_unavailable',
+  activationStatus: 'private_pilot',
   requestHash: 'request-secret',
   payerAccessHash: 'access-secret',
   createdAt: '2026-07-29T14:00:00.000Z',
@@ -634,6 +634,7 @@ assert.match(payerPageSource, /status:\s*'transaction_pending'/)
 assert.match(payerPageSource, /if \(!confirmationAccepted\)/)
 assert.match(payerPageSource, /arc-agreement-change-payer/)
 assert.match(payerPageSource, /Use another email/)
+assert.match(payerPageSource, /Your payer wallet/)
 assert.match(payerPageSource, /setSession\(null\)/)
 assert.doesNotMatch(payerPageSource, /Send via Address|ghost.?vault|deposit address/i)
 const activePanelSource = payerPageSource.slice(payerPageSource.indexOf('function ActiveAgreementPanel'))
