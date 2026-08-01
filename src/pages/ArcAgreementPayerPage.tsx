@@ -771,7 +771,7 @@ function ActiveAgreementPanel({
       return <DeliveryState title="Payment released" copy="Confirmed on Arc." tone="success" />
     }
     if (delivery.status === 'disputed') {
-      return <DeliveryState title="Issue reported" copy="The USDC remains protected while the delivery is reviewed." tone="warning" />
+      return <DeliveryState title="Issue reported" copy="The USDC remains protected while the recipient updates the delivery." tone="warning" />
     }
     if (accepting) {
       return <DeliveryState title="Release approved" copy="The reviewed Arc release is queued for guarded execution." tone="success" />

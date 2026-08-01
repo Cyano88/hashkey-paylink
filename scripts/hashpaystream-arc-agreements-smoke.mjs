@@ -17,7 +17,7 @@ const projectId = 'dev_hashpaystream1234'
 const agreementId = 'agr_hashpaystream12345678'
 const ownerId = 'did:privy:hashpaystream-owner'
 let authorizedProject = ''
-let operatorAction
+let operatorActions = []
 let operatorActionSequence = 0
 let expectedDelivery = {
   note: 'Completed the agreed website delivery.',
@@ -141,7 +141,7 @@ const dependencies = {
   },
   listOperatorActions: async input => {
     assert.equal(input.partnerId, projectId)
-    return operatorAction ? [operatorAction] : []
+    return operatorActions
   },
   binding: async (partnerId, id) => {
     assert.equal(partnerId, projectId)
@@ -187,15 +187,20 @@ const dependencies = {
     assert.equal(input.evidenceReference, expectedDelivery.url)
     assert.equal(input.deliveryNote, expectedDelivery.note)
     assert.equal(input.reviewPolicy, 'payer')
-    operatorAction = {
-      id: `opa_${String(++operatorActionSequence).padStart(24, '0')}`,
+    operatorActionSequence += 1
+    const requestedAt = operatorActionSequence === 1
+      ? '2026-08-01T00:45:00.000Z'
+      : '2026-08-01T00:55:00.000Z'
+    const operatorAction = {
+      id: `opa_${String(operatorActionSequence).padStart(24, '0')}`,
       ...input,
       requestHash: 'a'.repeat(64),
-      requestedAt: '2026-08-01T00:45:00.000Z',
+      requestedAt,
       status: 'awaiting_review',
       attempts: 0,
-      updatedAt: '2026-08-01T00:45:00.000Z',
+      updatedAt: requestedAt,
     }
+    operatorActions = [operatorAction, ...operatorActions]
     return operatorAction
   },
   env: () => ({ HASHPAYSTREAM_ARC_PROJECT_ID: projectId }),
@@ -259,6 +264,9 @@ assert.equal('evidenceHash' in releaseRequested.body.releaseRequest, false)
 assert.equal(releaseRequested.body.releaseRequest.evidenceReference, 'https://delivery.example/proof')
 assert.equal(releaseRequested.body.releaseRequest.deliveryNote, 'Completed the agreed website delivery.')
 
+const deliverySubmitted = await call(createHashPayStreamArcAgreementsHandler(dependencies))
+assert.deepEqual(deliverySubmitted.body.agreements[0].deliveryTimeline.map(item => item.event), ['delivery.submitted'])
+
 const releaseReplayed = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
   body: {
     action: 'request_release',
@@ -270,8 +278,19 @@ const releaseReplayed = await call(createHashPayStreamArcAgreementsHandler(depen
 assert.equal(releaseReplayed.statusCode, 200)
 assert.equal(releaseReplayed.body.replayed, true)
 
-const disputedActionId = operatorAction.id
-operatorAction = { ...operatorAction, status: 'disputed', reviewNote: 'Please add the final handoff file.' }
+const disputedActionId = operatorActions[0].id
+operatorActions[0] = {
+  ...operatorActions[0],
+  status: 'disputed',
+  reviewedAt: '2026-08-01T00:50:00.000Z',
+  reviewNote: 'Please add the final handoff file.',
+  updatedAt: '2026-08-01T00:50:00.000Z',
+}
+const issueReported = await call(createHashPayStreamArcAgreementsHandler(dependencies))
+assert.deepEqual(issueReported.body.agreements[0].deliveryTimeline.map(item => item.event), [
+  'delivery.submitted',
+  'delivery.issue_reported',
+])
 expectedDelivery = {
   note: 'Added the requested final handoff file.',
   url: 'https://delivery.example/revised-proof',
@@ -287,6 +306,13 @@ const revisedDelivery = await call(createHashPayStreamArcAgreementsHandler(depen
 assert.equal(revisedDelivery.statusCode, 201)
 assert.notEqual(revisedDelivery.body.releaseRequest.id, disputedActionId)
 assert.equal(revisedDelivery.body.releaseRequest.status, 'awaiting_review')
+
+const deliveryUpdated = await call(createHashPayStreamArcAgreementsHandler(dependencies))
+assert.deepEqual(deliveryUpdated.body.agreements[0].deliveryTimeline.map(item => item.event), [
+  'delivery.submitted',
+  'delivery.issue_reported',
+  'delivery.updated',
+])
 
 const rotated = await call(createHashPayStreamArcAgreementsHandler({
   ...dependencies,
@@ -340,6 +366,8 @@ const dashboardSource = readFileSync(new URL('../modules/streampay/src/component
 assert.match(dashboardSource, /action:\s*'rotate_payer_link'/)
 assert.match(dashboardSource, /action:\s*'request_release'/)
 assert.match(dashboardSource, /Active protected/)
+assert.match(dashboardSource, /Refund available/)
+assert.match(dashboardSource, /delivery\.issue_reported/)
 assert.match(dashboardSource, /agreement\.amount \|\| '0'/)
 assert.doesNotMatch(dashboardSource, /['"]x-api-key['"]/i)
 

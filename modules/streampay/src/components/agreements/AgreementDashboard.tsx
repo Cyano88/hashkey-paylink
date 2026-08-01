@@ -32,6 +32,11 @@ type Agreement = {
     receivedAt: string
     observedBlockNumber: string
   }>
+  deliveryTimeline: Array<{
+    id: string
+    event: string
+    createdAt: string
+  }>
   releaseRequest: null | {
     id: string
     status: string
@@ -71,6 +76,10 @@ const EVENT_LABEL: Record<string, string> = {
   'agreement.completed': 'Agreement completed',
   'agreement.cancelled': 'Agreement cancelled',
   'agreement.refunded': 'Remaining USDC returned',
+  'delivery.submitted': 'Delivery submitted',
+  'delivery.updated': 'Delivery updated',
+  'delivery.issue_reported': 'Issue reported',
+  'delivery.release_approved': 'Release approved',
 }
 
 const RELEASE_STATUS: Record<string, string> = {
@@ -181,6 +190,14 @@ export default function AgreementDashboard() {
     [activeId, agreements],
   )
 
+  const activity = useMemo(() => {
+    if (!active) return []
+    return [
+      ...active.timeline.map(event => ({ ...event, occurredAt: event.createdAt || event.receivedAt })),
+      ...(active.deliveryTimeline ?? []).map(event => ({ ...event, receivedAt: '', observedBlockNumber: '', occurredAt: event.createdAt })),
+    ].filter(event => event.occurredAt).sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
+  }, [active])
+
   useEffect(() => {
     setPayerLink('')
     setLinkCopied(false)
@@ -254,13 +271,11 @@ export default function AgreementDashboard() {
   const totals = useMemo(() => agreements.reduce((result, agreement) => {
     const chain = agreement.chain
     if (!chain) return result
-    if (agreement.status === 'active' || agreement.status === 'expired') {
-      result.activeProtected += BigInt(chain.amountUsdcUnits || '0')
-    }
+    if (agreement.status === 'active') result.activeProtected += BigInt(chain.remainingUsdcUnits || '0')
+    if (agreement.status === 'expired') result.refundAvailable += BigInt(chain.remainingUsdcUnits || '0')
     result.released += BigInt(chain.releasedUsdcUnits || '0')
-    result.remaining += BigInt(chain.remainingUsdcUnits || '0')
     return result
-  }, { activeProtected: 0n, released: 0n, remaining: 0n }), [agreements])
+  }, { activeProtected: 0n, released: 0n, refundAvailable: 0n }), [agreements])
 
   if (!ready || loading) {
     return (
@@ -326,7 +341,7 @@ export default function AgreementDashboard() {
             {[
               ['Active protected', formatUsdc(totals.activeProtected.toString())],
               ['Released', formatUsdc(totals.released.toString())],
-              ['Remaining', formatUsdc(totals.remaining.toString())],
+              ['Refund available', formatUsdc(totals.refundAvailable.toString())],
             ].map(([label, value], index) => (
               <div key={label} className={`min-w-0 px-3 py-4 sm:px-5 ${index ? 'border-l border-gray-100 dark:border-white/10' : ''}`}>
                 <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-gray-400">{label}</p>
@@ -491,17 +506,17 @@ export default function AgreementDashboard() {
 
                 <div className="mt-6">
                   <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-400">Activity</h3>
-                  {active.timeline.length ? (
+                  {activity.length ? (
                     <div className="mt-3 space-y-0">
-                      {[...active.timeline].reverse().map((event, index) => (
+                      {activity.map((event, index) => (
                         <div key={event.id} className="flex gap-3">
                           <div className="flex w-3 flex-col items-center">
                             <span className="mt-1.5 h-2 w-2 rounded-full bg-blue-600 dark:bg-blue-400" />
-                            {index < active.timeline.length - 1 && <span className="min-h-8 w-px flex-1 bg-gray-200 dark:bg-white/10" />}
+                            {index < activity.length - 1 && <span className="min-h-8 w-px flex-1 bg-gray-200 dark:bg-white/10" />}
                           </div>
                           <div className="pb-4">
                             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{EVENT_LABEL[event.event] || 'Agreement updated'}</p>
-                            <p className="mt-0.5 text-xs text-gray-400">{formatDate(event.createdAt || event.receivedAt)}</p>
+                            <p className="mt-0.5 text-xs text-gray-400">{formatDate(event.occurredAt)}</p>
                           </div>
                         </div>
                       ))}

@@ -149,6 +149,27 @@ function publicReleaseRequest(action?: ArcAgreementOperatorAction) {
   }
 }
 
+function publicDeliveryTimeline(actions: ArcAgreementOperatorAction[]) {
+  const releases = actions
+    .filter(action => action.action === 'release')
+    .sort((left, right) => left.requestedAt.localeCompare(right.requestedAt))
+  return releases.flatMap((action, index) => {
+    const previous = releases[index - 1]
+    const isRevision = previous?.status === 'disputed' && previous.step === action.step
+    const events = [{
+      id: `${action.id}:submitted`,
+      event: isRevision ? 'delivery.updated' : 'delivery.submitted',
+      createdAt: safeDate(action.requestedAt),
+    }]
+    if (action.status === 'disputed' && action.reviewedAt) {
+      events.push({ id: `${action.id}:disputed`, event: 'delivery.issue_reported', createdAt: safeDate(action.reviewedAt) })
+    } else if (action.reviewedAt && action.status !== 'awaiting_review') {
+      events.push({ id: `${action.id}:approved`, event: 'delivery.release_approved', createdAt: safeDate(action.reviewedAt) })
+    }
+    return events
+  }).filter(event => event.createdAt)
+}
+
 function deliveryEvidenceUrl(value: unknown) {
   const candidate = String(value ?? '').trim().slice(0, 240)
   let parsed: URL
@@ -389,14 +410,19 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
       }
       const ids = new Set([...draftsById.keys(), ...eventsByAgreement.keys()])
       const releaseByAgreement = new Map<string, ArcAgreementOperatorAction>()
+      const releaseActionsByAgreement = new Map<string, ArcAgreementOperatorAction[]>()
       for (const action of operatorActions) {
-        if (action.action !== 'release' || releaseByAgreement.has(action.agreementId)) continue
-        releaseByAgreement.set(action.agreementId, action)
+        if (action.action !== 'release') continue
+        const actions = releaseActionsByAgreement.get(action.agreementId) ?? []
+        actions.push(action)
+        releaseActionsByAgreement.set(action.agreementId, actions)
+        if (!releaseByAgreement.has(action.agreementId)) releaseByAgreement.set(action.agreementId, action)
       }
       const agreements = [...ids]
         .map(id => ({
           ...agreementRecord(id, draftsById.get(id), eventsByAgreement.get(id) ?? []),
           releaseRequest: publicReleaseRequest(releaseByAgreement.get(id)),
+          deliveryTimeline: publicDeliveryTimeline(releaseActionsByAgreement.get(id) ?? []),
         }))
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       return res.json({
