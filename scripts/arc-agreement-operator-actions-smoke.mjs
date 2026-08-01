@@ -217,4 +217,53 @@ assert.deepEqual(await claimArcAgreementOperatorActions({
   workerId: 'arc-operator:post-complete',
 }, dependencies), [])
 
+// The chain can advance before an earlier release's durable queue record is
+// reconciled from chain_pending to completed. Authoritative nextStep permits
+// the next milestone without allowing two actions for the same chain step.
+store.actions[requested.id] = {
+  ...store.actions[requested.id],
+  status: 'chain_pending',
+  nextAttemptAt: '2026-07-30T10:05:00.000Z',
+}
+const confirmedAfterFirstRelease = await readConfirmedArcAgreementSnapshot({
+  getChainId: async () => 5_042_002,
+  getBlockNumber: async () => 110n,
+  readContract: async args => {
+    if (args.functionName === 'balanceOf') return prepared.totalAmount / 2n
+    if (args.functionName === 'releaseSchedule') return prepared.cumulativeReleaseBps
+    if (args.functionName === 'template') return prepared.templateCode
+    if (args.functionName === 'status') return 1
+    if (args.functionName === 'nextStep') return 1
+    if (args.functionName === 'releasedAmount') return prepared.totalAmount / 2n
+    return prepared[args.functionName]
+  },
+}, escrow, 5)
+const thirdIdempotencyKey = '123e4567-e89b-42d3-b456-426614174010'
+const thirdEvidenceHash = `0x${'33'.repeat(32)}`
+const thirdRequest = await createArcAgreementOperatorActionRequest({
+  ...requestInput,
+  step: 1,
+  evidenceHash: thirdEvidenceHash,
+  evidenceReference: 'case/operator-queue-003',
+  idempotencyKey: thirdIdempotencyKey,
+  preparedCall: prepareArcAgreementReleaseCall({
+    operatorWallet,
+    idempotencyKey: thirdIdempotencyKey,
+    partnerId,
+    agreementId,
+    prepared,
+    confirmed: confirmedAfterFirstRelease,
+    step: 1,
+    evidenceHash: thirdEvidenceHash,
+  }),
+}, dependencies)
+const sequentialApproval = await approveArcAgreementOperatorAction({
+  actionId: thirdRequest.id,
+  requestHash: thirdRequest.requestHash,
+  reviewedBy: 'operations.milestone-reviewer',
+  reviewNote: 'The second milestone evidence was reviewed independently.',
+  authoritativeNextStep: 1,
+}, dependencies)
+assert.equal(sequentialApproval.status, 'queued')
+
 console.log('Arc Agreement durable operator action smoke checks passed.')

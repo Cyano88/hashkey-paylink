@@ -324,6 +324,7 @@ const dependencies = {
     assert.equal(input.actionId, operatorAction.id)
     assert.equal(input.requestHash, operatorAction.requestHash)
     assert.equal(input.reviewedBy, identity.userId)
+    assert.equal(input.authoritativeNextStep, currentAttempt.lifecycle?.nextStep)
     operatorAction = { ...operatorAction, status: 'queued', reviewedBy: input.reviewedBy, reviewNote: input.reviewNote }
     return operatorAction
   },
@@ -511,6 +512,7 @@ assert.equal((await request(handler, {
   issue: 'Please add the final deployment link.',
 }, headers)).statusCode, 409)
 operatorAction = { ...operatorAction, requestedBy: 'did:privy:creator-owner' }
+currentAttempt = { ...currentAttempt, lifecycle: { nextStep: 0 } }
 const acceptedDelivery = await request(handler, {
   action: 'delivery-decision',
   agreementId,

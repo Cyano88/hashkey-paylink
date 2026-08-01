@@ -341,6 +341,7 @@ export async function approveArcAgreementOperatorAction(input: {
   requestHash: string
   reviewedBy: string
   reviewNote: string
+  authoritativeNextStep?: number
 }, dependencies: Dependencies = defaults) {
   if (!dependencies.hasStore()) throw new Error('Arc Agreement operator action storage is not configured.')
   const id = required(input.actionId, ACTION_ID, 'Operator action id', 28)
@@ -348,6 +349,10 @@ export async function approveArcAgreementOperatorAction(input: {
   const reviewedBy = requiredActor(input.reviewedBy, 'Operator action reviewer')
   const reviewNote = clean(input.reviewNote, 300)
   if (reviewNote.length < 8) throw new Error('Operator action review note is required.')
+  const authoritativeNextStep = Number.isInteger(input.authoritativeNextStep)
+    && Number(input.authoritativeNextStep) >= 0
+    ? Number(input.authoritativeNextStep)
+    : null
   let durable: ArcAgreementOperatorAction | undefined
   await dependencies.mutate(STORE_KEY, current => {
     const store = safeStore(current)
@@ -364,6 +369,13 @@ export async function approveArcAgreementOperatorAction(input: {
       && item.partnerId === action.partnerId
       && item.agreementId === action.agreementId
       && ['queued', 'provider_pending', 'chain_pending', 'manual_review'].includes(item.status)
+      && !(
+        action.action === 'release'
+        && item.action === 'release'
+        && authoritativeNextStep !== null
+        && Number.isInteger(item.step)
+        && Number(item.step) < authoritativeNextStep
+      )
     ))
     if (conflicting) {
       throw new Error('Another operator action is already open for this agreement.')

@@ -458,12 +458,16 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
         if (!/^opa_[a-f0-9]{24}$/.test(deliveryId)) {
           throw fail('A valid delivery review id is required.', 400)
         }
-        const deliveryAction = (await dependencies.listOperatorActions({
+        const releaseActions = await dependencies.listOperatorActions({
           partnerId: agreement.partnerId,
           agreementId: agreement.id,
           limit: 20,
-        })).find(item => item.action === 'release' && item.id === deliveryId)
+        })
+        const deliveryAction = releaseActions.find(item => item.action === 'release' && item.id === deliveryId)
         if (!deliveryAction) throw fail('No delivery is ready for review.', 404)
+        if (currentReleaseAction(releaseActions, knownAttempt, agreement)?.id !== deliveryAction.id) {
+          throw fail('This delivery is no longer the current milestone.', 409)
+        }
         if (deliveryAction.reviewPolicy !== 'payer') {
           throw fail('This release uses the restricted operations review path.', 409)
         }
@@ -488,6 +492,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
               requestHash: deliveryAction.requestHash,
               reviewedBy: identity.userId,
               reviewNote: 'Payer accepted the submitted delivery.',
+              authoritativeNextStep: knownAttempt.lifecycle?.nextStep,
             })
           : await dependencies.disputeOperatorAction({
               actionId: deliveryAction.id,
