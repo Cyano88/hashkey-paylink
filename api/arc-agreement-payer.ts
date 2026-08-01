@@ -598,7 +598,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
         if (!journal.challengeId) throw fail('Circle did not return a payer confirmation challenge.', 503)
         return res.json({
           ok: true,
-          lifecycleAction,
+          lifecycleAction: publicLifecycleAction(journal),
           challengeId: journal.challengeId,
           replayed: reservation.replayed,
         })

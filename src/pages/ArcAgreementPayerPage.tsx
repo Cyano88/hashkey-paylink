@@ -316,9 +316,10 @@ export default function ArcAgreementPayerPage() {
           } : current)
           setError('')
         })
-        .catch(caught => {
-          if (!terminalWebhookPending) setError(readableError(caught))
-        })
+        // The transaction may already be confirmed while RPC or webhook
+        // reconciliation is briefly unavailable. Preserve the authoritative
+        // pending/confirmed state and retry quietly on the next interval.
+        .catch(() => undefined)
     }
     check()
     const timer = window.setInterval(check, 4_000)
@@ -338,7 +339,11 @@ export default function ArcAgreementPayerPage() {
           lifecycle: { ...current.lifecycle, action: result.lifecycleAction ?? null },
         } : current)
         setError('')
-      }).catch(caught => setError(readableError(caught)))
+      }).catch(() => {
+        // Circle can return COMPLETE before the Arc transaction is visible to
+        // the reconciliation RPC. Keep polling the durable action instead of
+        // presenting a false failure after payer confirmation.
+      })
     }
     recover()
     const timer = window.setInterval(recover, 4_000)
@@ -446,6 +451,7 @@ export default function ArcAgreementPayerPage() {
     if (!activeSession) return
     setBusy(true)
     setError('')
+    let confirmationAccepted = false
     try {
       const challenge = await request<ActionResponse>({
         action: 'lifecycle-challenge',
@@ -457,6 +463,22 @@ export default function ArcAgreementPayerPage() {
         session: activeSession,
         challengeId: challenge.challengeId,
       })
+      confirmationAccepted = true
+      setConfirmLifecycle(null)
+      const pendingAction: LifecycleAction = {
+        ...(challenge.lifecycleAction ?? {
+          action: lifecycleAction,
+          status: 'issued',
+          transactionHash: null,
+        }),
+        action: lifecycleAction,
+        status: 'transaction_pending',
+        transactionHash: execution.transactionHash ?? challenge.lifecycleAction?.transactionHash ?? null,
+      }
+      setReview(current => current?.lifecycle ? {
+        ...current,
+        lifecycle: { ...current.lifecycle, action: pendingAction },
+      } : current)
       const result = execution.transactionHash
         ? await request<ActionResponse>({
             action: 'lifecycle-record',
@@ -473,7 +495,9 @@ export default function ArcAgreementPayerPage() {
       } : current)
       setConfirmLifecycle(null)
     } catch (caught) {
-      setError(readableError(caught))
+      if (!confirmationAccepted) {
+        setError(readableError(caught))
+      }
     } finally {
       setBusy(false)
     }
