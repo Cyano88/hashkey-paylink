@@ -56,7 +56,7 @@ type DashboardResponse = {
 }
 
 const STATUS_LABEL: Record<AgreementStatus, string> = {
-  awaiting_start: 'Awaiting start',
+  awaiting_start: 'Waiting for payer funding',
   active: 'Active',
   expired: 'Refund available',
   completed: 'Completed',
@@ -65,7 +65,7 @@ const STATUS_LABEL: Record<AgreementStatus, string> = {
 }
 
 const EVENT_LABEL: Record<string, string> = {
-  'agreement.activated': 'Agreement started',
+  'agreement.activated': 'Agreement funded',
   'agreement.step_released': 'Release confirmed',
   'agreement.expired': 'Agreement ended',
   'agreement.completed': 'Agreement completed',
@@ -507,7 +507,7 @@ export default function AgreementDashboard() {
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Waiting for the payer to start this agreement.</p>
+                    <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Waiting for the payer to fund this agreement.</p>
                   )}
                 </div>
               </article>

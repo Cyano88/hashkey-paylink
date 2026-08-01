@@ -165,17 +165,17 @@ function capabilityForAgreement(agreementId: string) {
 
 function statusCopy(attempt: Attempt | null, walletLinked: boolean) {
   if (!walletLinked) return 'Continue to connect your Arc wallet.'
-  if (!attempt) return 'Review the terms before approving.'
+  if (!attempt) return 'Review the terms before funding the agreement.'
   if (attempt.status === 'awaiting_approval' || attempt.status === 'approval_failed') {
     return 'Approve the exact USDC amount for this agreement.'
   }
   if (attempt.status === 'ready_to_activate' || attempt.status === 'activation_failed') {
-    return 'Start the agreement after checking the final terms.'
+    return 'Fund the Arc escrow after checking the final terms.'
   }
   if (attempt.status === 'approval_submitted' || attempt.status === 'activation_submitted') {
     return 'Confirmation is in progress on Arc.'
   }
-  if (attempt.status === 'active') return 'Agreement started.'
+  if (attempt.status === 'active') return 'Agreement funded.'
   return 'This agreement needs support review.'
 }
 
@@ -547,7 +547,7 @@ export default function ArcAgreementPayerPage() {
       actionLabel = 'Approve USDC'
       action = () => void approveStage('approval')
     } else if (attempt.status === 'ready_to_activate' || attempt.status === 'activation_failed') {
-      actionLabel = 'Start agreement'
+      actionLabel = 'Fund and start'
       action = () => void approveStage('activation')
     }
   }
@@ -707,7 +707,7 @@ export default function ArcAgreementPayerPage() {
           <div className="grid grid-cols-3 gap-3">
             <Step number="1" label="Review" />
             <Step number="2" label="Approve USDC" />
-            <Step number="3" label="Start" />
+            <Step number="3" label="Fund escrow" />
           </div>
         </section>
       )}
@@ -934,8 +934,8 @@ function ActiveAgreementPanel({
           <Check className="h-4 w-4" />
         </span>
         <div>
-          <p className="text-sm font-semibold">Agreement started</p>
-          <p className="text-[11px] opacity-75">The Arc escrow is confirmed.</p>
+          <p className="text-sm font-semibold">Agreement funded</p>
+          <p className="text-[11px] opacity-75">{amount} USDC is protected on Arc. Work can begin.</p>
         </div>
       </div>
       {availableAction && lifecycle?.enabled && (
