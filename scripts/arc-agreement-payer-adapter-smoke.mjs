@@ -608,5 +608,10 @@ assert.match(payerPageSource, /let confirmationAccepted = false/)
 assert.match(payerPageSource, /status:\s*'transaction_pending'/)
 assert.match(payerPageSource, /if \(!confirmationAccepted\)/)
 assert.doesNotMatch(payerPageSource, /Send via Address|ghost.?vault|deposit address/i)
+const activePanelSource = payerPageSource.slice(payerPageSource.indexOf('function ActiveAgreementPanel'))
+assert.ok(
+  activePanelSource.indexOf("if (current?.status === 'confirmed')") < activePanelSource.indexOf('if (delivery)'),
+  'Confirmed cancellation or refund must override stale delivery-review UI.',
+)
 
 console.log('Arc Agreement authenticated payer adapter smoke checks passed.')

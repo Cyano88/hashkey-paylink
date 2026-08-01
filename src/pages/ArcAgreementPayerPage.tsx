@@ -733,6 +733,22 @@ function ActiveAgreementPanel({
     : lifecycle?.refund?.eligible
       ? 'refund'
       : null
+  const current = lifecycle?.action
+  if (current?.status === 'confirmed') {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3.5 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300">
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-600 text-white">
+          <Check className="h-4 w-4" />
+        </span>
+        <div>
+          <p className="text-sm font-semibold">
+            {current.action === 'cancel' ? 'Agreement cancelled' : 'Remaining USDC returned'}
+          </p>
+          <p className="text-[11px] opacity-75">Confirmed on Arc.</p>
+        </div>
+      </div>
+    )
+  }
   if (delivery) {
     const accepting = ['queued', 'provider_pending', 'chain_pending'].includes(delivery.status)
     if (delivery.status === 'completed') {
@@ -817,22 +833,6 @@ function ActiveAgreementPanel({
           </div>
         )}
         <p className="mt-3 text-center text-[10px] leading-4 text-gray-400">Only release after checking the delivered work.</p>
-      </div>
-    )
-  }
-  const current = lifecycle?.action
-  if (current?.status === 'confirmed') {
-    return (
-      <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3.5 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300">
-        <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-600 text-white">
-          <Check className="h-4 w-4" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold">
-            {current.action === 'cancel' ? 'Agreement cancelled' : 'Remaining USDC returned'}
-          </p>
-          <p className="text-[11px] opacity-75">Confirmed on Arc.</p>
-        </div>
       </div>
     )
   }
