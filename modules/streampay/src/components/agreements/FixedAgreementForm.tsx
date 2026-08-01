@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { ArrowLeft, ArrowUpRight, Check, Copy, Loader2, LockKeyhole } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { isAddress } from 'viem'
 import { PrivyConnectButton } from '../../../../../src/lib/PrivyConnectButton'
 
 type CreatedAgreement = {
@@ -19,6 +20,13 @@ function newIdempotencyKey() {
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`
   return `hashpaystream:${suffix}`
+}
+
+function validAmount(value: string) {
+  const normalized = value.trim()
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(normalized)) return false
+  const [whole, fraction = ''] = normalized.split('.')
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0')) > 0n
 }
 
 export default function FixedAgreementForm() {
@@ -41,9 +49,40 @@ export default function FixedAgreementForm() {
   ])
 
   const payerUrl = created?.payerReviewPath ? `${APP_ORIGIN}${created.payerReviewPath}` : ''
+  const milestoneShares = milestones.map(item => Number(item.percentage))
+  const milestonesValid = template !== 'milestone' || (
+    milestones.length >= 2
+    && milestones.length <= 5
+    && milestones.every((item, index) => (
+      item.label.replace(/\s+/g, ' ').trim().length >= 2
+      && Number.isInteger(milestoneShares[index])
+      && milestoneShares[index] >= 1
+      && milestoneShares[index] <= 100
+    ))
+    && milestoneShares.reduce((sum, value) => sum + value, 0) === 100
+  )
+  const duration = Number(durationSeconds)
+  const cancellationWindow = Number(cancellationWindowSeconds)
+  const formReady = (
+    title.replace(/\s+/g, ' ').trim().length >= 3
+    && description.replace(/\s+/g, ' ').trim().length >= 10
+    && validAmount(amount)
+    && isAddress(recipient)
+    && !/^0x0{40}$/i.test(recipient)
+    && Number.isInteger(duration)
+    && duration >= 3_600
+    && Number.isInteger(cancellationWindow)
+    && cancellationWindow >= 0
+    && cancellationWindow < duration
+    && milestonesValid
+  )
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (!formReady) {
+      setError('Complete every required field before creating the payer link.')
+      return
+    }
     const normalizedMilestones = milestones.map(item => ({
       label: item.label.trim(),
       percentage: Number(item.percentage),
@@ -301,8 +340,8 @@ export default function FixedAgreementForm() {
 
         <button
           type="submit"
-          disabled={submitting}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950"
+          disabled={!formReady || submitting}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 dark:bg-white dark:text-gray-950 dark:disabled:bg-white/10 dark:disabled:text-gray-600"
         >
           {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
           Create payer link

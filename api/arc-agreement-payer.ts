@@ -222,6 +222,7 @@ function currentReleaseAction(
 ) {
   const releases = actions.filter(item => item.action === 'release')
   const nextStep = attempt.lifecycle?.nextStep
+  if (attempt.lifecycle && attempt.lifecycle.status !== 'active') return null
   if (!Number.isInteger(nextStep)) {
     return releases.find(item => item.status !== 'completed') ?? null
   }
@@ -230,7 +231,7 @@ function currentReleaseAction(
     : agreement.template === 'progressive_release'
       ? agreement.checkpoints?.length ?? 0
       : 1
-  if ((nextStep ?? 0) >= releaseSteps) return releases[0] ?? null
+  if ((nextStep ?? 0) >= releaseSteps) return null
   return releases.find(item => item.step === nextStep) ?? null
 }
 

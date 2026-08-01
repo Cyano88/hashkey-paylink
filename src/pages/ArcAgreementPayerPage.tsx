@@ -45,6 +45,10 @@ type Attempt = {
     stage: 'approval' | 'activation'
     status: 'submitted' | 'confirmed' | 'failed'
   }>
+  lifecycle?: {
+    status: 'active' | 'expired' | 'completed' | 'cancelled' | 'refunded'
+    nextStep: number
+  }
 }
 
 type LifecycleAction = {
@@ -653,6 +657,7 @@ export default function ArcAgreementPayerPage() {
                     amount={agreement.amount}
                     deliveryContext={deliveryContext(agreement, review.delivery ?? null)}
                     releaseActionLabel={agreement.template === 'milestone' ? 'Release milestone' : `Release ${agreement.amount} USDC`}
+                    agreementLifecycleStatus={attempt.lifecycle?.status}
                     busy={busy}
                     walletSessionReady={Boolean(session)}
                     confirmation={confirmLifecycle}
@@ -732,6 +737,7 @@ function ActiveAgreementPanel({
   amount,
   deliveryContext,
   releaseActionLabel,
+  agreementLifecycleStatus,
   busy,
   walletSessionReady,
   confirmation,
@@ -748,6 +754,7 @@ function ActiveAgreementPanel({
   amount: string
   deliveryContext: string | null
   releaseActionLabel: string
+  agreementLifecycleStatus?: 'active' | 'expired' | 'completed' | 'cancelled' | 'refunded'
   busy: boolean
   walletSessionReady: boolean
   confirmation: 'cancel' | 'refund' | null
@@ -765,6 +772,12 @@ function ActiveAgreementPanel({
       ? 'refund'
       : null
   const current = lifecycle?.action
+  if (agreementLifecycleStatus === 'completed') {
+    return <DeliveryState title="Agreement completed" copy="All protected USDC has been released on Arc." tone="success" />
+  }
+  if (agreementLifecycleStatus === 'cancelled' || agreementLifecycleStatus === 'refunded') {
+    return <DeliveryState title={agreementLifecycleStatus === 'cancelled' ? 'Agreement cancelled' : 'Remaining USDC returned'} copy="Confirmed on Arc." tone="success" />
+  }
   if (current?.status === 'confirmed') {
     return (
       <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3.5 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300">

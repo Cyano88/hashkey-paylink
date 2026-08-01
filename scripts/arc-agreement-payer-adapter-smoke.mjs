@@ -502,6 +502,12 @@ assert.equal(activeReview.body.delivery.status, 'awaiting_review')
 assert.equal(activeReview.body.delivery.deliveryNote, 'Completed the agreed website delivery.')
 assert.equal(activeReview.body.delivery.canReview, true)
 assert.equal('requestHash' in activeReview.body.delivery, false)
+currentAttempt = { ...currentAttempt, lifecycle: { status: 'completed', nextStep: 1 } }
+const completedReview = await request(handler, { action: 'review', agreementId }, headers)
+assert.equal(completedReview.statusCode, 200)
+assert.equal(completedReview.body.attempt.lifecycle.status, 'completed')
+assert.equal(completedReview.body.delivery, null)
+currentAttempt = { ...currentAttempt, lifecycle: { status: 'active', nextStep: 0 } }
 operatorAction = { ...operatorAction, requestedBy: identity.userId }
 const selfReview = await request(handler, { action: 'review', agreementId }, headers)
 assert.equal(selfReview.body.delivery.canReview, false)
@@ -513,7 +519,7 @@ assert.equal((await request(handler, {
   issue: 'Please add the final deployment link.',
 }, headers)).statusCode, 409)
 operatorAction = { ...operatorAction, requestedBy: 'did:privy:creator-owner' }
-currentAttempt = { ...currentAttempt, lifecycle: { nextStep: 0 } }
+currentAttempt = { ...currentAttempt, lifecycle: { status: 'active', nextStep: 0 } }
 const acceptedDelivery = await request(handler, {
   action: 'delivery-decision',
   agreementId,
