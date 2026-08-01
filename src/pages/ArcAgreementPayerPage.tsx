@@ -607,7 +607,23 @@ export default function ArcAgreementPayerPage() {
                     {review.payer.walletAddress ? compactAddress(review.payer.walletAddress) : 'Not connected'}
                   </p>
                 </div>
-                <PocketPillMark tone="subtle" />
+                {authenticated ? (
+                  <PrivyConnectButton
+                    debugLabel="arc-agreement-change-payer"
+                    loginOptions={{ loginMethods: ['email'] }}
+                    disabled={busy}
+                    onBeforeLogin={() => {
+                      setSession(null)
+                      setError('')
+                      setConfirmLifecycle(null)
+                    }}
+                    className="shrink-0 rounded-full border border-gray-200 px-3 py-2 text-[11px] font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
+                  >
+                    Use another email
+                  </PrivyConnectButton>
+                ) : (
+                  <PocketPillMark tone="subtle" />
+                )}
               </div>
 
               <div className="mt-6">

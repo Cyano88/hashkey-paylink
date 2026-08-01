@@ -607,6 +607,9 @@ assert.match(payerPageSource, /review\.lifecycle\?\.action\?\.status\s*!==\s*'co
 assert.match(payerPageSource, /let confirmationAccepted = false/)
 assert.match(payerPageSource, /status:\s*'transaction_pending'/)
 assert.match(payerPageSource, /if \(!confirmationAccepted\)/)
+assert.match(payerPageSource, /arc-agreement-change-payer/)
+assert.match(payerPageSource, /Use another email/)
+assert.match(payerPageSource, /setSession\(null\)/)
 assert.doesNotMatch(payerPageSource, /Send via Address|ghost.?vault|deposit address/i)
 const activePanelSource = payerPageSource.slice(payerPageSource.indexOf('function ActiveAgreementPanel'))
 assert.ok(
