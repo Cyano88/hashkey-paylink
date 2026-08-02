@@ -15,6 +15,20 @@ type SettlementMode = 'usdc' | 'ngn'
 type DeveloperEnvironment = 'test' | 'live'
 export type DeveloperCheckoutMode = 'human' | 'agentic'
 export type DeveloperCapability = 'hosted_checkout' | 'polymarket_funding' | 'arc_agreements'
+export type ArcAgreementPilotPolicy = {
+  status: 'draft_only' | 'approved' | 'disabled'
+  maxAgreementUsdc: string
+  dailyVolumeUsdc: string
+  maxActiveAgreements: number
+  maxDurationSeconds: number
+  updatedAt: string
+  updatedBy: string
+  approvedAt?: string
+  approvedBy?: string
+  disabledAt?: string
+  disabledBy?: string
+  reason?: string
+}
 
 type DeveloperKey = {
   id: string
@@ -43,6 +57,7 @@ type DeveloperProject = {
   suspendedAt?: string
   suspendedBy?: string
   suspensionReason?: string
+  arcAgreementPilot?: ArcAgreementPilotPolicy
   networks: DeveloperNetwork[]
   defaultNetwork: DeveloperNetwork
   recipients: Partial<Record<DeveloperNetwork, string>>
@@ -59,9 +74,10 @@ type DeveloperProject = {
   keys: DeveloperKey[]
   operations?: Array<{
     id: string
-    action: 'activated' | 'suspended' | 'reactivated'
+    action: 'activated' | 'suspended' | 'reactivated' | 'arc_pilot_approved' | 'arc_pilot_disabled'
     actor: string
     reason?: string
+    details?: Record<string, string | number | boolean>
     createdAt: string
   }>
   webhookDeliveries?: Array<{ id: string; event: string; status: 'delivered' | 'failed'; responseStatus?: number; attemptedAt: string; error?: string }>
@@ -83,6 +99,7 @@ export type DeveloperCheckoutPolicy = {
   checkoutMode: DeveloperCheckoutMode
   capabilities: DeveloperCapability[]
   webhookConfigured: boolean
+  arcAgreementPilot?: ArcAgreementPilotPolicy
   nairaSettlement?: {
     bankCode: string
     bankName: string
@@ -313,6 +330,18 @@ function safeDigestEqual(left: string, right: string) {
 }
 
 function projectPublic(project: DeveloperProject, includeOperations = false) {
+  const arcAgreementPilot = project.arcAgreementPilot
+    ? includeOperations
+      ? project.arcAgreementPilot
+      : {
+          status: project.arcAgreementPilot.status,
+          maxAgreementUsdc: project.arcAgreementPilot.maxAgreementUsdc,
+          dailyVolumeUsdc: project.arcAgreementPilot.dailyVolumeUsdc,
+          maxActiveAgreements: project.arcAgreementPilot.maxActiveAgreements,
+          maxDurationSeconds: project.arcAgreementPilot.maxDurationSeconds,
+          updatedAt: project.arcAgreementPilot.updatedAt,
+        }
+    : undefined
   return {
     id: project.id,
     name: project.name,
@@ -325,6 +354,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     settlementMode: project.settlementMode,
     settlementStatus: project.settlementStatus,
     operationalStatus: project.operationalStatus === 'suspended' ? 'suspended' : 'active',
+    arcAgreementPilot,
     suspendedAt: project.suspendedAt,
     suspensionReason: project.suspensionReason,
     ...(includeOperations ? {
@@ -446,7 +476,46 @@ function appendOperation(
   project: DeveloperProject,
   operation: NonNullable<DeveloperProject['operations']>[number],
 ) {
-  return [...(project.operations ?? []), operation].slice(-100)
+  return [...(project.operations ?? []), operation]
+}
+
+const ARC_PILOT_MAX_USDC = 1_000_000_000n
+const ARC_PILOT_MAX_DAILY_USDC = 10_000_000_000n
+const ARC_PILOT_MAX_ACTIVE = 100
+const ARC_PILOT_MAX_DURATION_SECONDS = 2_592_000
+
+function pilotUsdc(value: unknown, name: string, maximum: bigint) {
+  const normalized = clean(value, 40)
+  if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/.test(normalized)) {
+    throw Object.assign(new Error(`${name} must be a positive USDC amount with at most 6 decimals.`), { status: 400 })
+  }
+  const [whole, fraction = ''] = normalized.split('.')
+  const units = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'))
+  if (units <= 0n || units > maximum) {
+    throw Object.assign(new Error(`${name} is outside the private-pilot limit.`), { status: 400 })
+  }
+  return fraction ? `${BigInt(whole)}.${fraction.replace(/0+$/, '') || '0'}`.replace(/\.0$/, '') : BigInt(whole).toString()
+}
+
+function pilotInteger(value: unknown, name: string, minimum: number, maximum: number) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw Object.assign(new Error(`${name} must be from ${minimum} to ${maximum}.`), { status: 400 })
+  }
+  return parsed
+}
+
+function projectArcPilotReady(project: DeveloperProject) {
+  const hasArcRecipient = project.networks.includes('arc') && validRecipient(project.recipients.arc)
+  const hasTestKey = project.keys.some(key => !key.revokedAt && (key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')) === 'test')
+  return projectCheckoutMode(project) === 'human'
+    && project.settlementMode === 'usdc'
+    && project.settlementStatus === 'ready'
+    && project.operationalStatus !== 'suspended'
+    && Boolean(project.capabilities?.includes('arc_agreements'))
+    && Boolean(project.webhookUrl && project.webhookSecretCipher)
+    && Boolean(hasArcRecipient)
+    && hasTestKey
 }
 
 export function createDeveloperProjectsHandler(dependencies: Dependencies = defaults) {
@@ -508,6 +577,10 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           networks: ['base'], defaultNetwork: 'base', recipients: {}, refundAddress: '',
           allowedOrigins: [new URL(website).origin], webhookUrl: '', webhookSecretCipher: '',
           bankCode: '', bankName: '', bankAccountName: '', bankAccountLast4: '', bankAccountCipher: '', bankVerifiedAt: undefined,
+          arcAgreementPilot: {
+            status: 'draft_only', maxAgreementUsdc: '1', dailyVolumeUsdc: '1', maxActiveAgreements: 1,
+            maxDurationSeconds: 604_800, updatedAt: now, updatedBy: identity.email || identity.userId,
+          },
           operationalStatus: 'active', keys: [], operations: [], webhookDeliveries: [], createdAt: now, updatedAt: now,
         }
         await dependencies.mutate(STORE_KEY, current => ({ projects: { ...(current?.projects ?? {}), [project.id]: project } }))
@@ -516,6 +589,81 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       const projectId = clean(req.body?.projectId, 80)
       const currentStore = await dependencies.read(STORE_KEY)
+
+      if (req.method === 'POST' && ['admin-arc-pilot-approve', 'admin-arc-pilot-disable'].includes(action)) {
+        requireDeveloperAdmin(identity, dependencies)
+        const currentProject = currentStore?.projects?.[projectId]
+        if (!currentProject) return res.status(404).json({ ok: false, error: 'Developer project not found.' })
+        const approving = action === 'admin-arc-pilot-approve'
+        const reason = clean(req.body?.reason, 300)
+        if (approving && !projectArcPilotReady(currentProject)) {
+          return res.status(409).json({ ok: false, error: 'Arc pilot approval requires a ready human USDC project with Arc routing, an active test key, and a signed webhook.' })
+        }
+        if (!approving && reason.length < 8) {
+          return res.status(400).json({ ok: false, error: 'Add a clear reason for disabling Arc Agreement activation.' })
+        }
+        const createdAt = dependencies.now().toISOString()
+        const actor = identity.email || identity.userId
+        const limits = approving ? {
+          maxAgreementUsdc: pilotUsdc(req.body?.maxAgreementUsdc, 'Maximum agreement amount', ARC_PILOT_MAX_USDC),
+          dailyVolumeUsdc: pilotUsdc(req.body?.dailyVolumeUsdc, 'Daily volume', ARC_PILOT_MAX_DAILY_USDC),
+          maxActiveAgreements: pilotInteger(req.body?.maxActiveAgreements, 'Active agreements', 1, ARC_PILOT_MAX_ACTIVE),
+          maxDurationSeconds: pilotInteger(req.body?.maxDurationSeconds, 'Agreement duration', 3_600, ARC_PILOT_MAX_DURATION_SECONDS),
+        } : {
+          maxAgreementUsdc: currentProject.arcAgreementPilot?.maxAgreementUsdc ?? '1',
+          dailyVolumeUsdc: currentProject.arcAgreementPilot?.dailyVolumeUsdc ?? '1',
+          maxActiveAgreements: currentProject.arcAgreementPilot?.maxActiveAgreements ?? 1,
+          maxDurationSeconds: currentProject.arcAgreementPilot?.maxDurationSeconds ?? 604_800,
+        }
+        if (approving) {
+          const toUnits = (value: string) => {
+            const [whole, fraction = ''] = value.split('.')
+            return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'))
+          }
+          const amountUnits = toUnits(limits.maxAgreementUsdc)
+          const dailyUnits = toUnits(limits.dailyVolumeUsdc)
+          if (dailyUnits < amountUnits) {
+            return res.status(400).json({ ok: false, error: 'Daily volume must be at least the maximum agreement amount.' })
+          }
+        }
+        let updated: DeveloperProject | undefined
+        await dependencies.mutate(STORE_KEY, current => {
+          const latest = current?.projects?.[projectId]
+          if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
+          if (approving && !projectArcPilotReady(latest)) {
+            throw Object.assign(new Error('Arc pilot approval requires a ready human USDC project with Arc routing, an active test key, and a signed webhook.'), { status: 409 })
+          }
+          const pilot: ArcAgreementPilotPolicy = {
+            status: approving ? 'approved' : 'disabled',
+            ...limits,
+            updatedAt: createdAt,
+            updatedBy: actor,
+            ...(approving ? { approvedAt: createdAt, approvedBy: actor } : { disabledAt: createdAt, disabledBy: actor, reason }),
+          }
+          updated = {
+            ...latest,
+            arcAgreementPilot: pilot,
+            operations: appendOperation(latest, {
+              id: `op_${randomUUID().replace(/-/g, '').slice(0, 18)}`,
+              action: approving ? 'arc_pilot_approved' : 'arc_pilot_disabled',
+              actor,
+              ...(reason ? { reason } : {}),
+              details: {
+                status: pilot.status,
+                maxAgreementUsdc: pilot.maxAgreementUsdc,
+                dailyVolumeUsdc: pilot.dailyVolumeUsdc,
+                maxActiveAgreements: pilot.maxActiveAgreements,
+                maxDurationSeconds: pilot.maxDurationSeconds,
+              },
+              createdAt,
+            }),
+            updatedAt: createdAt,
+          }
+          return { projects: { ...(current?.projects ?? {}), [projectId]: updated } }
+        })
+        if (!updated) throw new Error('Arc pilot policy could not be stored.')
+        return res.json({ ok: true, project: projectPublic(updated, true) })
+      }
 
       if (req.method === 'POST' && ['admin-activate', 'admin-suspend', 'admin-reactivate'].includes(action)) {
         requireDeveloperAdmin(identity, dependencies)
@@ -758,6 +906,7 @@ function policyForDeveloperProject(
         refundAddress: project.refundAddress,
       },
       webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher),
+      arcAgreementPilot: project.arcAgreementPilot,
       projectManaged: true,
     }
   }
@@ -776,6 +925,7 @@ function policyForDeveloperProject(
     checkoutMode: projectCheckoutMode(project),
     capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
     webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher),
+    arcAgreementPilot: project.arcAgreementPilot,
     projectManaged: true,
   }
 }

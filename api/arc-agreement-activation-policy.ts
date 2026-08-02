@@ -116,12 +116,8 @@ function requireOperatorConfiguration(env: NodeJS.ProcessEnv) {
 
 function requireProjectPolicy(
   policy: DeveloperCheckoutPolicy,
-  allowedProjectIds: Set<string>,
   allowedModes: Set<DeveloperCheckoutMode>,
 ) {
-  if (!allowedProjectIds.has(policy.partnerId.toLowerCase())) {
-    throw new Error('This developer project is not allowlisted for Arc Agreement activation.')
-  }
   if (!allowedModes.has(policy.checkoutMode)) {
     throw new Error('This checkout mode is not allowlisted for Arc Agreement activation.')
   }
@@ -138,6 +134,49 @@ function requireProjectPolicy(
     throw new Error('Arc Agreement activation requires a configured Arc Testnet recipient.')
   }
   return getAddress(arcRoute.recipient)
+}
+
+function requireLegacyProjectAllowlist(policy: DeveloperCheckoutPolicy, env: NodeJS.ProcessEnv) {
+  if (!allowedProjects(env.ARC_AGREEMENT_ALLOWED_PROJECT_IDS).has(policy.partnerId.toLowerCase())) {
+    throw new Error('This developer project is not allowlisted for Arc Agreement activation.')
+  }
+}
+
+function projectPilotLimits(policy: DeveloperCheckoutPolicy, env: NodeJS.ProcessEnv) {
+  const globalAmount = usdcCeiling(env.ARC_AGREEMENT_MAX_USDC, 'ARC_AGREEMENT_MAX_USDC', MAX_PILOT_USDC_UNITS)
+  const globalDaily = usdcCeiling(
+    env.ARC_AGREEMENT_DAILY_VOLUME_USDC,
+    'ARC_AGREEMENT_DAILY_VOLUME_USDC',
+    MAX_PILOT_DAILY_VOLUME_USDC_UNITS,
+  )
+  const globalActive = activeAgreementLimit(env.ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT)
+  const globalDuration = durationCeiling(env.ARC_AGREEMENT_MAX_DURATION_SECONDS)
+  const pilot = policy.arcAgreementPilot
+  if (!pilot) {
+    requireLegacyProjectAllowlist(policy, env)
+    return {
+      amountCeilingUsdcUnits: globalAmount,
+      dailyVolumeCeilingUsdcUnits: globalDaily,
+      activeAgreementLimit: globalActive,
+      durationCeilingSeconds: globalDuration,
+    }
+  }
+  if (pilot.status === 'draft_only') {
+    throw new Error('Arc Agreement activation is awaiting project approval. Draft creation remains available.')
+  }
+  if (pilot.status === 'disabled') {
+    throw new Error('Arc Agreement activation is disabled for this developer project.')
+  }
+  const projectAmount = usdcCeiling(pilot.maxAgreementUsdc, 'Project Arc Agreement maximum', MAX_PILOT_USDC_UNITS)
+  const projectDaily = usdcCeiling(pilot.dailyVolumeUsdc, 'Project Arc Agreement daily volume', MAX_PILOT_DAILY_VOLUME_USDC_UNITS)
+  const projectActive = activeAgreementLimit(pilot.maxActiveAgreements)
+  const projectDuration = durationCeiling(pilot.maxDurationSeconds)
+  return {
+    amountCeilingUsdcUnits: projectAmount < globalAmount ? projectAmount : globalAmount,
+    dailyVolumeCeilingUsdcUnits: projectDaily < globalDaily ? projectDaily : globalDaily,
+    activeAgreementLimit: projectActive < globalActive ? projectActive : globalActive,
+    durationCeilingSeconds: projectDuration < globalDuration ? projectDuration : globalDuration,
+  }
 }
 
 export function auditArcAgreementInvitePilot(input: {
@@ -192,7 +231,8 @@ export function auditArcAgreementInvitePilot(input: {
   }
 
   requireOperatorConfiguration(env)
-  const recipient = requireProjectPolicy(input.policy, allowedProjectIds, allowedModes)
+  requireLegacyProjectAllowlist(input.policy, env)
+  const recipient = requireProjectPolicy(input.policy, allowedModes)
   return Object.freeze({
     ok: true as const,
     activationEnabled: false as const,
@@ -231,28 +271,20 @@ export function authorizeArcAgreementActivation(input: {
     throw new Error('Arc Agreement activation requires at least 5 confirmation blocks.')
   }
 
-  const allowedProjectIds = allowedProjects(env.ARC_AGREEMENT_ALLOWED_PROJECT_IDS)
   const allowedModes = allowedCheckoutModes(env.ARC_AGREEMENT_ALLOWED_CHECKOUT_MODES)
-  const ceiling = usdcCeiling(env.ARC_AGREEMENT_MAX_USDC, 'ARC_AGREEMENT_MAX_USDC', MAX_PILOT_USDC_UNITS)
-  const dailyVolumeCeiling = usdcCeiling(
-    env.ARC_AGREEMENT_DAILY_VOLUME_USDC,
-    'ARC_AGREEMENT_DAILY_VOLUME_USDC',
-    MAX_PILOT_DAILY_VOLUME_USDC_UNITS,
-  )
-  const maxActiveAgreements = activeAgreementLimit(env.ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT)
-  const maxDuration = durationCeiling(env.ARC_AGREEMENT_MAX_DURATION_SECONDS)
+  const limits = projectPilotLimits(input.policy, env)
   requireOperatorConfiguration(env)
-  const configuredRecipient = requireProjectPolicy(input.policy, allowedProjectIds, allowedModes)
+  const configuredRecipient = requireProjectPolicy(input.policy, allowedModes)
 
   if (getAddress(input.draft.chainTerms.recipient) !== configuredRecipient) {
     throw new Error('Agreement recipient must match the project Arc Testnet recipient.')
   }
   const amount = BigInt(input.draft.chainTerms.amountUsdcUnits)
-  if (amount > ceiling) throw new Error('Agreement amount exceeds the configured testnet activation ceiling.')
-  if (amount > dailyVolumeCeiling) {
+  if (amount > limits.amountCeilingUsdcUnits) throw new Error('Agreement amount exceeds the configured testnet activation ceiling.')
+  if (amount > limits.dailyVolumeCeilingUsdcUnits) {
     throw new Error('Agreement amount exceeds the configured project daily-volume ceiling.')
   }
-  if (input.draft.chainTerms.durationSeconds > maxDuration) {
+  if (input.draft.chainTerms.durationSeconds > limits.durationCeilingSeconds) {
     throw new Error('Agreement duration exceeds the configured testnet activation ceiling.')
   }
 
@@ -268,10 +300,10 @@ export function authorizeArcAgreementActivation(input: {
     authorized: true,
     partnerId: input.policy.partnerId,
     checkoutMode: input.policy.checkoutMode,
-    amountCeilingUsdcUnits: ceiling,
-    dailyVolumeCeilingUsdcUnits: dailyVolumeCeiling,
-    activeAgreementLimit: maxActiveAgreements,
-    durationCeilingSeconds: maxDuration,
+    amountCeilingUsdcUnits: limits.amountCeilingUsdcUnits,
+    dailyVolumeCeilingUsdcUnits: limits.dailyVolumeCeilingUsdcUnits,
+    activeAgreementLimit: limits.activeAgreementLimit,
+    durationCeilingSeconds: limits.durationCeilingSeconds,
     factory: runtime.factory,
     operator: runtime.operator,
     confirmationBlocks: runtime.confirmations,

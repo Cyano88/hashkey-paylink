@@ -101,4 +101,52 @@ assert.equal(authorized.prepared.totalAmount, 10_000_000n)
 assert.equal(authorized.prepared.payer, payer)
 assert.equal(authorized.prepared.recipient, recipient)
 
+const approvedPolicy = {
+  ...policy,
+  arcAgreementPilot: {
+    status: 'approved',
+    maxAgreementUsdc: '20',
+    dailyVolumeUsdc: '30',
+    maxActiveAgreements: 2,
+    maxDurationSeconds: 86_400,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'operations@example.com',
+  },
+}
+assert.throws(() => authorizeArcAgreementActivation({
+  policy: { ...policy, arcAgreementPilot: { ...approvedPolicy.arcAgreementPilot, status: 'draft_only' } },
+  draft, payer, activationTimestamp, env,
+}), /awaiting project approval/)
+assert.throws(() => authorizeArcAgreementActivation({
+  policy: { ...policy, arcAgreementPilot: { ...approvedPolicy.arcAgreementPilot, status: 'disabled' } },
+  draft, payer, activationTimestamp, env,
+}), /disabled for this developer project/)
+assert.throws(() => authorizeArcAgreementActivation({
+  policy: approvedPolicy,
+  draft: { ...draft, chainTerms: { ...draft.chainTerms, amountUsdcUnits: '21000000' } },
+  payer,
+  activationTimestamp,
+  env: { ...env, ARC_AGREEMENT_ALLOWED_PROJECT_IDS: 'dev_otherproject1234' },
+}), /amount exceeds/)
+const durableAuthorized = authorizeArcAgreementActivation({
+  policy: approvedPolicy,
+  draft,
+  payer,
+  activationTimestamp,
+  env: { ...env, ARC_AGREEMENT_ALLOWED_PROJECT_IDS: 'dev_otherproject1234' },
+})
+assert.equal(durableAuthorized.authorization.amountCeilingUsdcUnits, 20_000_000n)
+assert.equal(durableAuthorized.authorization.dailyVolumeCeilingUsdcUnits, 30_000_000n)
+assert.equal(durableAuthorized.authorization.activeAgreementLimit, 2)
+assert.equal(durableAuthorized.authorization.durationCeilingSeconds, 86_400)
+
+const globallyCapped = authorizeArcAgreementActivation({
+  policy: { ...approvedPolicy, arcAgreementPilot: { ...approvedPolicy.arcAgreementPilot, maxAgreementUsdc: '40' } },
+  draft,
+  payer,
+  activationTimestamp,
+  env,
+})
+assert.equal(globallyCapped.authorization.amountCeilingUsdcUnits, 25_000_000n)
+
 console.log('Arc Agreement activation policy smoke checks passed.')

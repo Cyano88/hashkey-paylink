@@ -90,6 +90,8 @@ assert.equal(created.body.project.ownerEmail, 'owner@example.com')
 assert.deepEqual(created.body.project.allowedOrigins, ['https://polydesk.trade'])
 assert.equal(created.body.project.brandImageUrl, '')
 assert.equal(created.body.project.checkoutMode, 'human')
+assert.equal(created.body.project.arcAgreementPilot.status, 'draft_only')
+assert.equal('updatedBy' in created.body.project.arcAgreementPilot, false)
 
 const immutableMode = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, checkoutMode: 'agentic',
@@ -217,6 +219,44 @@ assert.match(webhook.body.webhookSecret, /^whsec_/)
 assert.equal(JSON.stringify(webhook.body.project).includes('webhookSecretCipher'), false)
 assert.equal(developerPolicyFromStore(store, generated.body.apiKey, portalSecret).webhookConfigured, true)
 
+activeIdentity = { userId: 'did:privy:operations', email: 'operations@example.com' }
+const agentPilotRejected = await request(handler, 'POST', {
+  action: 'admin-arc-pilot-approve', projectId: agenticProject.body.project.id,
+  maxAgreementUsdc: '1', dailyVolumeUsdc: '1', maxActiveAgreements: 1, maxDurationSeconds: 604800,
+})
+assert.equal(agentPilotRejected.statusCode, 409)
+const invalidPilotLimits = await request(handler, 'POST', {
+  action: 'admin-arc-pilot-approve', projectId: created.body.project.id,
+  maxAgreementUsdc: '2', dailyVolumeUsdc: '1', maxActiveAgreements: 1, maxDurationSeconds: 604800,
+})
+assert.equal(invalidPilotLimits.statusCode, 400)
+assert.match(invalidPilotLimits.body.error, /Daily volume/)
+const pilotApproved = await request(handler, 'POST', {
+  action: 'admin-arc-pilot-approve', projectId: created.body.project.id,
+  maxAgreementUsdc: '2.5', dailyVolumeUsdc: '5', maxActiveAgreements: 2, maxDurationSeconds: 86400,
+})
+assert.equal(pilotApproved.statusCode, 200)
+assert.equal(pilotApproved.body.project.arcAgreementPilot.status, 'approved')
+assert.equal(pilotApproved.body.project.arcAgreementPilot.approvedBy, 'operations@example.com')
+assert.equal(pilotApproved.body.project.operations.at(-1).action, 'arc_pilot_approved')
+assert.deepEqual(pilotApproved.body.project.operations.at(-1).details, {
+  status: 'approved', maxAgreementUsdc: '2.5', dailyVolumeUsdc: '5', maxActiveAgreements: 2, maxDurationSeconds: 86400,
+})
+assert.equal(developerPolicyFromStore(store, testKey.body.apiKey, portalSecret).arcAgreementPilot.status, 'approved')
+const pilotDisabled = await request(handler, 'POST', {
+  action: 'admin-arc-pilot-disable', projectId: created.body.project.id, reason: 'Private pilot paused for review.',
+})
+assert.equal(pilotDisabled.statusCode, 200)
+assert.equal(pilotDisabled.body.project.arcAgreementPilot.status, 'disabled')
+assert.equal(pilotDisabled.body.project.operations.at(-1).action, 'arc_pilot_disabled')
+activeIdentity = { userId: 'did:privy:test-owner', email: 'owner@example.com' }
+const ownerProjects = await request(handler, 'GET')
+const ownerPilot = ownerProjects.body.projects.find(project => project.id === created.body.project.id).arcAgreementPilot
+assert.equal(ownerPilot.status, 'disabled')
+assert.equal('updatedBy' in ownerPilot, false)
+assert.equal('disabledBy' in ownerPilot, false)
+assert.equal('reason' in ownerPilot, false)
+
 const naira = await request(handler, 'PUT', {
   action: 'configure', projectId: created.body.project.id, name: 'PolyDesk API', website: 'https://polydesk.trade',
   useCase: 'Settle customer payments into a verified Nigerian business bank account.', settlementMode: 'ngn',
@@ -261,7 +301,7 @@ assert.equal((await request(otherOwner, 'PUT', { action: 'configure', projectId:
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const operationsSource = readFileSync(new URL('../src/pages/DeveloperOperationsPage.tsx', import.meta.url), 'utf8')
 assert.ok(appSource.includes('path="admin/developers"') && appSource.includes('<DeveloperOperationsPage />'))
-assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("'admin-suspend'") && operationsSource.includes("'admin-reactivate'"))
+assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("'admin-suspend'") && operationsSource.includes("'admin-reactivate'") && operationsSource.includes("'admin-arc-pilot-approve'"))
 assert.equal(/localStorage|sessionStorage|x-[a-z-]*admin-key/i.test(operationsSource), false)
 
 console.log('Developer projects adapter smoke tests passed.')

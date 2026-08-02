@@ -22,10 +22,20 @@ import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPan
 type Network = 'base' | 'arbitrum' | 'arc'
 type Operation = {
   id: string
-  action: 'activated' | 'suspended' | 'reactivated'
+  action: 'activated' | 'suspended' | 'reactivated' | 'arc_pilot_approved' | 'arc_pilot_disabled'
   actor: string
   reason?: string
+  details?: Record<string, string | number | boolean>
   createdAt: string
+}
+type ArcPilotPolicy = {
+  status: 'draft_only' | 'approved' | 'disabled'
+  maxAgreementUsdc: string
+  dailyVolumeUsdc: string
+  maxActiveAgreements: number
+  maxDurationSeconds: number
+  updatedAt: string
+  reason?: string
 }
 type Project = {
   id: string
@@ -41,6 +51,7 @@ type Project = {
   suspendedAt?: string
   suspendedBy?: string
   suspensionReason?: string
+  arcAgreementPilot?: ArcPilotPolicy
   networks: Network[]
   defaultNetwork: Network
   recipients: Partial<Record<Network, string>>
@@ -91,6 +102,8 @@ export default function DeveloperOperationsPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [suspensionReason, setSuspensionReason] = useState('')
+  const [pilotReason, setPilotReason] = useState('')
+  const [pilotLimits, setPilotLimits] = useState({ maxAgreementUsdc: '1', dailyVolumeUsdc: '1', maxActiveAgreements: '1', maxDurationSeconds: '604800' })
   const [surface, setSurface] = useState<'projects' | 'agreements'>('projects')
 
   async function api(method: string, body?: Record<string, unknown>) {
@@ -152,6 +165,13 @@ export default function DeveloperOperationsPage() {
   }, [active, filtered])
   useEffect(() => {
     setSuspensionReason('')
+    setPilotReason('')
+    setPilotLimits({
+      maxAgreementUsdc: active?.arcAgreementPilot?.maxAgreementUsdc ?? '1',
+      dailyVolumeUsdc: active?.arcAgreementPilot?.dailyVolumeUsdc ?? '1',
+      maxActiveAgreements: String(active?.arcAgreementPilot?.maxActiveAgreements ?? 1),
+      maxDurationSeconds: String(active?.arcAgreementPilot?.maxDurationSeconds ?? 604800),
+    })
     setNotice('')
   }, [active?.id])
 
@@ -173,6 +193,29 @@ export default function DeveloperOperationsPage() {
       await loadProjects()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The project operation failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function operateArcPilot(action: 'admin-arc-pilot-approve' | 'admin-arc-pilot-disable') {
+    if (!active) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const data = await api('POST', {
+        action,
+        projectId: active.id,
+        ...(action === 'admin-arc-pilot-approve' ? pilotLimits : { reason: pilotReason }),
+      })
+      if (!data.project) throw new Error('The Arc pilot operation returned no project.')
+      setProjects(current => current.map(project => project.id === data.project!.id ? data.project! : project))
+      setPilotReason('')
+      setNotice(action === 'admin-arc-pilot-approve' ? 'Arc Agreement activation approved within the stored project limits.' : 'Arc Agreement activation disabled for this project.')
+      await loadProjects()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'The Arc pilot operation failed.')
     } finally {
       setBusy(false)
     }
@@ -264,6 +307,11 @@ export default function DeveloperOperationsPage() {
                   reason={suspensionReason}
                   setReason={setSuspensionReason}
                   onOperate={operate}
+                  pilotLimits={pilotLimits}
+                  setPilotLimits={setPilotLimits}
+                  pilotReason={pilotReason}
+                  setPilotReason={setPilotReason}
+                  onOperateArcPilot={operateArcPilot}
                 />
               : !error && <EmptyProjects />}
           {error && <Message tone="error">{error}</Message>}
@@ -275,12 +323,17 @@ export default function DeveloperOperationsPage() {
   )
 }
 
-function ProjectOperations({ project, busy, reason, setReason, onOperate }: {
+function ProjectOperations({ project, busy, reason, setReason, onOperate, pilotLimits, setPilotLimits, pilotReason, setPilotReason, onOperateArcPilot }: {
   project: Project
   busy: boolean
   reason: string
   setReason: (value: string) => void
   onOperate: (action: 'admin-activate' | 'admin-suspend' | 'admin-reactivate') => Promise<void>
+  pilotLimits: { maxAgreementUsdc: string; dailyVolumeUsdc: string; maxActiveAgreements: string; maxDurationSeconds: string }
+  setPilotLimits: (value: { maxAgreementUsdc: string; dailyVolumeUsdc: string; maxActiveAgreements: string; maxDurationSeconds: string }) => void
+  pilotReason: string
+  setPilotReason: (value: string) => void
+  onOperateArcPilot: (action: 'admin-arc-pilot-approve' | 'admin-arc-pilot-disable') => Promise<void>
 }) {
   const state = projectState(project)
   const activeKeys = project.keys.filter(key => !key.revokedAt)
@@ -329,6 +382,8 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate }: {
       </div>
     </section>
 
+    <ArcPilotControl project={project} busy={busy} limits={pilotLimits} setLimits={setPilotLimits} reason={pilotReason} setReason={setPilotReason} onOperate={onOperateArcPilot} />
+
     <OperationsControl project={project} busy={busy} reason={reason} setReason={setReason} onOperate={onOperate} />
 
     <section className="mt-4">
@@ -343,12 +398,48 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate }: {
               </div>
               <p className="mt-1 text-[10px] text-gray-500 dark:text-gray-400">{operation.actor}</p>
               {operation.reason && <p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{operation.reason}</p>}
+              {operation.details && <p className="mt-2 text-[10px] leading-5 text-gray-400">{Object.entries(operation.details).map(([key, value]) => `${key}: ${value}`).join(' · ')}</p>}
             </div>
           ))
           : <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-8 text-center text-xs text-gray-400 dark:border-white/10">No operator actions recorded.</div>}
       </div>
     </section>
   </div>
+}
+
+function ArcPilotControl({ project, busy, limits, setLimits, reason, setReason, onOperate }: {
+  project: Project
+  busy: boolean
+  limits: { maxAgreementUsdc: string; dailyVolumeUsdc: string; maxActiveAgreements: string; maxDurationSeconds: string }
+  setLimits: (value: { maxAgreementUsdc: string; dailyVolumeUsdc: string; maxActiveAgreements: string; maxDurationSeconds: string }) => void
+  reason: string
+  setReason: (value: string) => void
+  onOperate: (action: 'admin-arc-pilot-approve' | 'admin-arc-pilot-disable') => Promise<void>
+}) {
+  if (!project.capabilities.includes('arc_agreements')) return null
+  const pilot = project.arcAgreementPilot
+  const status = pilot?.status === 'approved' ? 'Activation approved' : pilot?.status === 'disabled' ? 'Activation disabled' : pilot ? 'Draft only' : 'Legacy pilot'
+  const activeTestKey = project.keys.some(key => !key.revokedAt && (key.environment === 'test' || key.prefix.startsWith('hpl_test_')))
+  const ready = project.checkoutMode === 'human' && project.settlementMode === 'usdc' && project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended' && project.networks.includes('arc') && Boolean(project.recipients.arc) && project.webhookConfigured && activeTestKey
+  const update = (key: keyof typeof limits, value: string) => setLimits({ ...limits, [key]: value })
+  return <section className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-400/20 dark:bg-blue-400/[0.07]">
+    <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-gray-950 dark:text-white">Arc Agreement pilot</p><p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Durable project approval. Global runtime controls remain the emergency ceiling.</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-blue-200">{status}</span></div>
+    <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-gray-500 dark:text-gray-400 sm:grid-cols-5">
+      {[['Human', project.checkoutMode === 'human'], ['USDC ready', project.settlementMode === 'usdc' && project.settlementStatus === 'ready'], ['Arc route', project.networks.includes('arc') && Boolean(project.recipients.arc)], ['Webhook', project.webhookConfigured], ['Test key', activeTestKey]].map(([label, ok]) => <span key={String(label)} className={cn('rounded-lg border px-2 py-2 text-center', ok ? 'border-emerald-200 text-emerald-700 dark:border-emerald-400/20 dark:text-emerald-300' : 'border-amber-200 text-amber-700 dark:border-amber-400/20 dark:text-amber-300')}>{label}</span>)}
+    </div>
+    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <PilotField label="Per agreement · USDC" value={limits.maxAgreementUsdc} onChange={value => update('maxAgreementUsdc', value)} />
+      <PilotField label="Daily volume · USDC" value={limits.dailyVolumeUsdc} onChange={value => update('dailyVolumeUsdc', value)} />
+      <PilotField label="Active agreements" value={limits.maxActiveAgreements} onChange={value => update('maxActiveAgreements', value)} />
+      <PilotField label="Max duration · seconds" value={limits.maxDurationSeconds} onChange={value => update('maxDurationSeconds', value)} />
+    </div>
+    <button type="button" disabled={busy || !ready} onClick={() => void onOperate('admin-arc-pilot-approve')} className="mt-4 flex h-10 items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} {pilot?.status === 'approved' ? 'Update pilot limits' : 'Approve private pilot'}</button>
+    {pilot?.status === 'approved' && <><textarea value={reason} onChange={event => setReason(event.target.value)} placeholder="Reason required to disable activation" className="mt-4 h-20 w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-950 outline-none dark:border-white/10 dark:bg-black/20 dark:text-white" /><button type="button" disabled={busy || reason.trim().length < 8} onClick={() => void onOperate('admin-arc-pilot-disable')} className="mt-3 h-9 rounded-full border border-red-200 px-4 text-xs font-semibold text-red-600 disabled:opacity-40 dark:border-red-400/20 dark:text-red-300">Disable activation</button></>}
+  </section>
+}
+
+function PilotField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label className="space-y-1.5"><span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">{label}</span><input value={value} onChange={event => onChange(event.target.value)} inputMode="decimal" className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-xs text-gray-950 outline-none focus:border-blue-400 dark:border-white/10 dark:bg-black/20 dark:text-white" /></label>
 }
 
 function OperationsControl({ project, busy, reason, setReason, onOperate }: {

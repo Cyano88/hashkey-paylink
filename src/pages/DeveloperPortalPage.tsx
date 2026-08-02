@@ -23,6 +23,7 @@ type Project = {
   settlementStatus: 'ready' | 'review_required'
   operationalStatus?: 'active' | 'suspended'
   suspensionReason?: string
+  arcAgreementPilot?: { status: 'draft_only' | 'approved' | 'disabled'; maxAgreementUsdc: string; dailyVolumeUsdc: string; maxActiveAgreements: number; maxDurationSeconds: number; updatedAt: string }
   networks: Network[]
   defaultNetwork: Network
   recipients: Partial<Record<Network, string>>
@@ -493,10 +494,16 @@ function QuickstartPanel({ project }: { project: Project }) {
       <p className="flex items-center gap-2 text-xs font-semibold text-gray-900 dark:text-white">{paymentPath === 'agentic' ? <Bot className="h-4 w-4 text-blue-600" /> : <UserRound className="h-4 w-4 text-blue-600" />}{paymentPath === 'agentic' ? 'Agentic x402' : 'Human checkout'}</p>
       <p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{paymentPath === 'agentic' ? <>Create with <code>checkoutMode: "agentic"</code> and one enabled <code>network</code>. Open <code>checkoutUrl</code> for the authenticated Circle Agent Wallet payer flow, or give <code>agentPaymentUrl</code> to an autonomous x402 client. No human-wallet fallback is issued.</> : <>Create with <code>checkoutMode: "human"</code>, then open <code>checkoutUrl</code>. The payer chooses from this project's enabled human payment routes.</>}</p>
     </div>}
-    {hasAgreements && <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-400/20 dark:bg-blue-400/10"><p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Private pilot boundary</p><p className="mt-2 text-[11px] leading-5 text-blue-800/80 dark:text-blue-100/70">Test keys create durable Arc agreement terms and a private payer path. Funding and lifecycle execution work only for explicitly authorized pilot projects; signed webhooks, not browser state, are the fulfillment source.</p></div>}
+    {hasAgreements && <ArcPilotStatus project={project} />}
     <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="text-xs font-semibold text-gray-900 dark:text-white">Environment</p><code className="mt-2 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_test_... # Arc Testnet</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=arc</code><code className="mt-3 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_live_... # Base or Arbitrum</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=base</code></div>
     <Link to="/docs/api" className="mt-5 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-300">Open API reference <ChevronRight className="h-3.5 w-3.5" /></Link>
   </div>
+}
+
+function ArcPilotStatus({ project }: { project: Project }) {
+  const pilot = project.arcAgreementPilot
+  const label = pilot?.status === 'approved' ? 'Activation approved' : pilot?.status === 'disabled' ? 'Activation disabled' : pilot ? 'Draft only' : 'Legacy pilot'
+  return <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-400/20 dark:bg-blue-400/10"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Arc Agreements · Private pilot</p><span className="rounded-full bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-blue-200">{label}</span></div><p className="mt-2 text-[11px] leading-5 text-blue-800/80 dark:text-blue-100/70">Test keys create durable Arc agreement terms and a private payer path. Signed webhooks, not browser state, are the fulfillment source.</p>{pilot?.status === 'approved' && <p className="mt-3 text-[10px] leading-5 text-blue-700/70 dark:text-blue-200/60">Up to {pilot.maxAgreementUsdc} USDC per agreement · {pilot.dailyVolumeUsdc} USDC daily · {pilot.maxActiveAgreements} active · {Math.round(pilot.maxDurationSeconds / 3600)}h maximum</p>}</div>
 }
 
 function PortalTop({ onLogout }: { onLogout: () => Promise<void> }) { return <header className="flex items-center justify-between"><Link to="/" className="text-sm font-bold text-gray-950 dark:text-white">Hash PayLink <span className="font-medium text-gray-400">Developers</span></Link><button type="button" onClick={() => void onLogout()} className="flex h-9 items-center gap-1.5 rounded-full border border-gray-200 px-3 text-xs font-semibold text-gray-500 dark:border-white/10 dark:text-gray-300"><LogOut className="h-3.5 w-3.5" /> Sign out</button></header> }
