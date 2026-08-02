@@ -148,7 +148,13 @@ function releaseLabel(agreement: Agreement) {
 }
 
 function deliveryContext(agreement: Agreement, delivery: DeliveryReview | null) {
-  if (agreement.template !== 'milestone' || !delivery) return null
+  if (!delivery) return null
+  if (agreement.template === 'progressive_release') {
+    const checkpoint = agreement.checkpoints?.[delivery.step]
+    if (!checkpoint) return null
+    return `Release ${delivery.step + 1} of ${agreement.checkpoints?.length ?? 0} · ${checkpoint.percentage}% total`
+  }
+  if (agreement.template !== 'milestone') return null
   const milestone = agreement.milestones?.[delivery.step]
   if (!milestone) return null
   return `Milestone ${delivery.step + 1} of ${agreement.milestones?.length ?? 0} · ${milestone.label}`

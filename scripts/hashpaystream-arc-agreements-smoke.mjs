@@ -117,7 +117,7 @@ const dependencies = {
   }),
   createAgreement: async (req, res, policy) => {
     assert.equal(policy.partnerId, projectId)
-    assert.ok(['fixed_unlock', 'milestone'].includes(req.body.template))
+    assert.ok(['fixed_unlock', 'progressive_release', 'milestone'].includes(req.body.template))
     assert.match(req.body.externalId, /^hps-[a-f0-9]{20}$/)
     assert.match(req.body.resourceId, /^agreement:[a-f0-9]{20}$/)
     assert.equal(req.body.amount, '0.1')
@@ -125,6 +125,12 @@ const dependencies = {
       assert.equal(req.body.title, 'New protected payment')
       assert.equal(req.originalBody.externalId, 'must-not-pass-through')
       assert.notEqual(req.body.externalId, req.originalBody.externalId)
+    } else if (req.body.template === 'progressive_release') {
+      assert.equal(req.body.title, 'Progress delivery')
+      assert.deepEqual(req.body.checkpoints, [
+        { label: 'Half complete', percentage: 50 },
+        { label: 'Complete', percentage: 100 },
+      ])
     } else {
       assert.equal(req.body.title, 'Milestone delivery')
       assert.deepEqual(req.body.milestones, [
@@ -259,6 +265,25 @@ const created = await call(createHashPayStreamArcAgreementsHandler(dependencies)
 assert.equal(created.statusCode, 201)
 assert.equal(created.body.agreement.title, 'New protected payment')
 
+const progressiveCreated = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
+  headers: { 'idempotency-key': 'hashpaystream:create:progress:1234' },
+  body: {
+    template: 'progressive_release',
+    title: 'Progress delivery',
+    description: 'Release payment as the work progresses.',
+    amount: '0.1',
+    recipient: draft.recipient,
+    durationSeconds: 7200,
+    cancellationWindowSeconds: 900,
+    checkpoints: [
+      { label: 'Half complete', percentage: 50 },
+      { label: 'Complete', percentage: 100 },
+    ],
+  },
+})
+assert.equal(progressiveCreated.statusCode, 201)
+assert.equal(progressiveCreated.body.agreement.template, 'progressive_release')
+
 const milestoneCreated = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
   headers: { 'idempotency-key': 'hashpaystream:create:milestone:1234' },
   body: {
@@ -277,6 +302,32 @@ const milestoneCreated = await call(createHashPayStreamArcAgreementsHandler(depe
 })
 assert.equal(milestoneCreated.statusCode, 201)
 assert.equal(milestoneCreated.body.agreement.template, 'milestone')
+
+const progressiveRelease = await call(createHashPayStreamArcAgreementsHandler({
+  ...dependencies,
+  listAgreements: async () => [{
+    ...draft,
+    template: 'progressive_release',
+    checkpoints: [{ label: 'Half complete', percentage: 50 }, { label: 'Complete', percentage: 100 }],
+  }],
+  binding: async () => ({
+    partnerId: projectId,
+    agreementId,
+    escrow: '0x4C556C9C362E1569CD2d3A0566a35237a2d81C78',
+    prepared: { cumulativeReleaseBps: [5_000, 10_000] },
+  }),
+}), 'POST', {
+  body: {
+    action: 'request_release',
+    agreementId,
+    deliveryNote: expectedDelivery.note,
+    evidenceReference: expectedDelivery.url,
+  },
+})
+assert.equal(progressiveRelease.statusCode, 201)
+assert.equal(progressiveRelease.body.releaseRequest.step, 0)
+operatorActions = []
+operatorActionSequence = 0
 
 const releaseRequested = await call(createHashPayStreamArcAgreementsHandler(dependencies), 'POST', {
   body: {
@@ -430,6 +481,9 @@ const formSource = readFileSync(new URL('../modules/streampay/src/components/agr
 assert.match(formSource, /fetch\('\/api\/hashpaystream\/arc-agreements'/)
 assert.match(formSource, /'idempotency-key': idempotencyKey/)
 assert.match(formSource, /template === 'milestone'/)
+assert.match(formSource, /template === 'progressive_release'/)
+assert.match(formSource, /Progress releases/)
+assert.match(formSource, /The payer reviews every release/)
 assert.match(formSource, /Milestone shares must total 100%/)
 assert.match(formSource, /Add milestone/)
 assert.match(formSource, /const formReady =/)
@@ -444,6 +498,8 @@ assert.doesNotMatch(formSource, /['"]x-api-key['"]/i)
 const dashboardSource = readFileSync(new URL('../modules/streampay/src/components/agreements/AgreementDashboard.tsx', import.meta.url), 'utf8')
 assert.match(dashboardSource, /action:\s*'rotate_payer_link'/)
 assert.match(dashboardSource, /action:\s*'request_release'/)
+assert.match(dashboardSource, /activeCheckpoint/)
+assert.match(dashboardSource, /Submit progress/)
 assert.match(dashboardSource, /Active protected/)
 assert.match(dashboardSource, /Refund available/)
 assert.match(dashboardSource, /Open payer review/)

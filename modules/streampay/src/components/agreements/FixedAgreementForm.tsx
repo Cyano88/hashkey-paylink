@@ -6,11 +6,11 @@ import { isAddress } from 'viem'
 import { PrivyConnectButton } from '../../../../../src/lib/PrivyConnectButton'
 
 type CreatedAgreement = {
-  agreement: { id: string; title: string; amount: string; recipient: string; template?: 'fixed_unlock' | 'milestone' }
+  agreement: { id: string; title: string; amount: string; recipient: string; template?: AgreementTemplate }
   payerReviewPath: string
 }
 
-type AgreementTemplate = 'fixed_unlock' | 'milestone'
+type AgreementTemplate = 'fixed_unlock' | 'progressive_release' | 'milestone'
 type MilestoneDraft = { label: string; percentage: string }
 
 const APP_ORIGIN = 'https://app.hashpaylink.com'
@@ -43,6 +43,7 @@ export default function FixedAgreementForm() {
   const [error, setError] = useState('')
   const [created, setCreated] = useState<CreatedAgreement | null>(null)
   const [copied, setCopied] = useState(false)
+  const [progressReleaseCount, setProgressReleaseCount] = useState<2 | 4>(4)
   const [milestones, setMilestones] = useState<MilestoneDraft[]>([
     { label: '', percentage: '50' },
     { label: '', percentage: '50' },
@@ -50,6 +51,14 @@ export default function FixedAgreementForm() {
 
   const payerUrl = created?.payerReviewPath ? `${APP_ORIGIN}${created.payerReviewPath}` : ''
   const milestoneShares = milestones.map(item => Number(item.percentage))
+  const checkpoints = progressReleaseCount === 2
+    ? [{ label: 'Half complete', percentage: 50 }, { label: 'Complete', percentage: 100 }]
+    : [
+        { label: '25% complete', percentage: 25 },
+        { label: 'Half complete', percentage: 50 },
+        { label: '75% complete', percentage: 75 },
+        { label: 'Complete', percentage: 100 },
+      ]
   const milestonesValid = template !== 'milestone' || (
     milestones.length >= 2
     && milestones.length <= 5
@@ -118,6 +127,7 @@ export default function FixedAgreementForm() {
           recipient,
           durationSeconds: Number(durationSeconds),
           cancellationWindowSeconds: Number(cancellationWindowSeconds),
+          ...(template === 'progressive_release' ? { checkpoints } : {}),
           ...(template === 'milestone' ? { milestones: normalizedMilestones } : {}),
         }),
       })
@@ -219,15 +229,18 @@ export default function FixedAgreementForm() {
       <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
         {template === 'fixed_unlock'
           ? 'Protect one USDC payment and release it when the work is complete.'
-          : 'Protect the full payment and release it as each milestone is approved.'}
+          : template === 'progressive_release'
+            ? 'Protect the full payment and release it as the work progresses.'
+            : 'Protect the full payment and release it as each milestone is approved.'}
       </p>
       <p className="mt-2 text-xs leading-5 text-gray-400">You create the terms. The payer funds the agreement and approves each release.</p>
 
       <form onSubmit={submit} className="mt-7 space-y-5 rounded-3xl border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#18181b] sm:p-7">
         <Field label="Payment structure">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {([
               ['fixed_unlock', 'One release'],
+              ['progressive_release', 'Progress'],
               ['milestone', 'Milestones'],
             ] as const).map(([value, label]) => (
               <button
@@ -260,6 +273,28 @@ export default function FixedAgreementForm() {
             <input value={recipient} onChange={event => setRecipient(event.target.value.trim())} required placeholder="0x…" className={inputClass} />
           </Field>
         </div>
+
+        {template === 'progressive_release' && (
+          <Field label="Progress releases">
+            <div className="grid grid-cols-2 gap-2">
+              {([2, 4] as const).map(count => (
+                <button
+                  key={count}
+                  type="button"
+                  onClick={() => setProgressReleaseCount(count)}
+                  className={`rounded-xl border px-3 py-3 text-sm font-semibold transition-colors ${progressReleaseCount === count
+                    ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
+                    : 'border-gray-200 text-gray-500 dark:border-white/10 dark:text-gray-400'}`}
+                >
+                  {count} releases
+                </button>
+              ))}
+            </div>
+            <span className="mt-2 block text-[11px] leading-5 text-gray-400">
+              {checkpoints.map(item => `${item.percentage}%`).join(' · ')}. The payer reviews every release.
+            </span>
+          </Field>
+        )}
 
         {template === 'milestone' && (
           <div>

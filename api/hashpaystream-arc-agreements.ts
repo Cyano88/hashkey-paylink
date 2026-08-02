@@ -293,8 +293,8 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
           }
           const agreement = (await dependencies.listAgreements({ partnerId: projectId, limit: 250 }))
             .find(item => item.id === agreementId)
-          if (!agreement || !['fixed_unlock', 'milestone'].includes(agreement.template)) {
-            throw Object.assign(new Error('Only an owned fixed or milestone agreement can request this release.'), { status: 404 })
+          if (!agreement || !['fixed_unlock', 'progressive_release', 'milestone'].includes(agreement.template)) {
+            throw Object.assign(new Error('Only an owned Arc agreement can request this release.'), { status: 404 })
           }
           const binding = await dependencies.binding(projectId, agreementId)
           const confirmed = await dependencies.confirmed(dependencies.chainClient(), binding.escrow)
@@ -386,11 +386,13 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
         const originalBody = req.body
         const template = body.template === undefined || body.template === 'fixed_unlock'
           ? 'fixed_unlock'
+          : body.template === 'progressive_release'
+            ? 'progressive_release'
           : body.template === 'milestone'
             ? 'milestone'
             : null
         if (!template) {
-          throw Object.assign(new Error('Hash PayStream supports fixed or milestone agreements.'), { status: 400 })
+          throw Object.assign(new Error('Hash PayStream supports fixed, progress, or milestone agreements.'), { status: 400 })
         }
         req.body = {
           template,
@@ -402,6 +404,7 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
           recipient: body.recipient,
           durationSeconds: body.durationSeconds,
           cancellationWindowSeconds: body.cancellationWindowSeconds,
+          ...(template === 'progressive_release' ? { checkpoints: body.checkpoints } : {}),
           ...(template === 'milestone' ? { milestones: body.milestones } : {}),
         }
         try {

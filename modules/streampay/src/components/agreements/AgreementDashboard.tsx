@@ -15,6 +15,8 @@ type Agreement = {
   recipient?: string
   durationSeconds?: number
   cancellationWindowSeconds?: number
+  checkpoints?: Array<{ label?: string; percentage: number }>
+  milestones?: Array<{ label: string; percentage: number }>
   status: AgreementStatus
   chain: null | {
     escrow: string
@@ -200,6 +202,9 @@ export default function AgreementDashboard() {
   }, [active])
   const activeMilestone = active?.template === 'milestone'
     ? active.milestones?.[active.chain?.nextStep ?? 0]
+    : undefined
+  const activeCheckpoint = active?.template === 'progressive_release'
+    ? active.checkpoints?.[active.chain?.nextStep ?? 0]
     : undefined
 
   useEffect(() => {
@@ -461,7 +466,7 @@ export default function AgreementDashboard() {
                   </div>
                 )}
 
-                {active.status === 'active' && (active.template === 'fixed_unlock' || active.template === 'milestone') && (
+                {active.status === 'active' && ['fixed_unlock', 'progressive_release', 'milestone'].includes(active.template ?? 'fixed_unlock') && (
                   <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                     {activeMilestone && (
                       <div className="mb-4 border-b border-gray-200 pb-4 dark:border-white/10">
@@ -471,6 +476,17 @@ export default function AgreementDashboard() {
                         <div className="mt-1 flex items-center justify-between gap-3">
                           <p className="text-sm font-semibold text-gray-900 dark:text-white">{activeMilestone.label}</p>
                           <p className="shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-300">{activeMilestone.percentage}%</p>
+                        </div>
+                      </div>
+                    )}
+                    {activeCheckpoint && (
+                      <div className="mb-4 border-b border-gray-200 pb-4 dark:border-white/10">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+                          Release {(active.chain?.nextStep ?? 0) + 1} of {active.checkpoints?.length ?? 0}
+                        </p>
+                        <div className="mt-1 flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{activeCheckpoint.label || 'Work progress'}</p>
+                          <p className="shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-300">{activeCheckpoint.percentage}% total</p>
                         </div>
                       </div>
                     )}
@@ -494,7 +510,7 @@ export default function AgreementDashboard() {
                       </div>
                     ) : releaseMode ? (
                       <div>
-                        <p className="text-xs font-medium text-gray-900 dark:text-white">{activeMilestone ? 'Submit milestone' : 'Submit delivery'}</p>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">{activeMilestone ? 'Submit milestone' : activeCheckpoint ? 'Submit progress' : 'Submit delivery'}</p>
                         <p className="mt-1 text-[11px] leading-5 text-gray-400">Tell the payer what was completed and where to review it.</p>
                         <textarea
                           value={deliveryNote}
@@ -524,7 +540,7 @@ export default function AgreementDashboard() {
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="text-xs font-medium text-gray-900 dark:text-white">
-                            {active.releaseRequest?.status === 'disputed' ? 'Delivery needs an update' : activeMilestone ? 'Milestone complete?' : 'Work delivered?'}
+                            {active.releaseRequest?.status === 'disputed' ? 'Delivery needs an update' : activeMilestone ? 'Milestone complete?' : activeCheckpoint ? 'Progress ready?' : 'Work delivered?'}
                           </p>
                           <p className="mt-1 text-[11px] leading-5 text-gray-400">
                             {active.releaseRequest?.status === 'disputed'
@@ -533,7 +549,7 @@ export default function AgreementDashboard() {
                           </p>
                         </div>
                         <button type="button" onClick={() => setReleaseMode(true)} className="shrink-0 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
-                          {active.releaseRequest?.status === 'disputed' ? 'Update delivery' : activeMilestone ? 'Submit milestone' : 'Submit delivery'}
+                          {active.releaseRequest?.status === 'disputed' ? 'Update delivery' : activeMilestone ? 'Submit milestone' : activeCheckpoint ? 'Submit progress' : 'Submit delivery'}
                         </button>
                       </div>
                     )}
