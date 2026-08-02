@@ -197,6 +197,11 @@ const operationsProjects = await request(handler, 'GET', undefined, { resource: 
 assert.equal(operationsProjects.statusCode, 200)
 assert.equal(operationsProjects.body.summary.total, 2)
 assert.equal(operationsProjects.body.summary.active, 2)
+assert.equal(operationsProjects.body.scope, 'admin')
+const operationsProjectsPost = await request(handler, 'POST', { action: 'admin-list' })
+assert.equal(operationsProjectsPost.statusCode, 200)
+assert.equal(operationsProjectsPost.body.scope, 'admin')
+assert.equal(operationsProjectsPost.body.summary.total, 2)
 const suspended = await request(handler, 'POST', {
   action: 'admin-suspend', projectId: agenticProject.body.project.id, reason: 'Manual risk review required.',
 })
@@ -301,7 +306,7 @@ assert.equal((await request(otherOwner, 'PUT', { action: 'configure', projectId:
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const operationsSource = readFileSync(new URL('../src/pages/DeveloperOperationsPage.tsx', import.meta.url), 'utf8')
 assert.ok(appSource.includes('path="admin/developers"') && appSource.includes('<DeveloperOperationsPage />'))
-assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("'admin-suspend'") && operationsSource.includes("'admin-reactivate'") && operationsSource.includes("'admin-arc-pilot-approve'"))
+assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("'admin-list'") && operationsSource.includes("'admin-suspend'") && operationsSource.includes("'admin-reactivate'") && operationsSource.includes("'admin-arc-pilot-approve'"))
 assert.equal(/localStorage|sessionStorage|x-[a-z-]*admin-key/i.test(operationsSource), false)
 
 console.log('Developer projects adapter smoke tests passed.')

@@ -109,7 +109,7 @@ export default function DeveloperOperationsPage() {
   async function api(method: string, body?: Record<string, unknown>) {
     const token = await getAccessToken()
     if (!token) throw new Error('Sign in again to continue.')
-    const response = await fetch(method === 'GET' ? '/api/developer-projects?resource=admin' : '/api/developer-projects', {
+    const response = await fetch('/api/developer-projects', {
       method,
       cache: 'no-store',
       headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
@@ -120,6 +120,7 @@ export default function DeveloperOperationsPage() {
       projects?: Project[]
       project?: Project
       summary?: Summary
+      scope?: 'admin'
       error?: string
     } | undefined
     if (!response.ok || !data?.ok) throw new Error(data?.error || 'Developer operations request failed.')
@@ -130,7 +131,8 @@ export default function DeveloperOperationsPage() {
     setLoading(true)
     setError('')
     try {
-      const data = await api('GET')
+      const data = await api('POST', { action: 'admin-list' })
+      if (data.scope !== 'admin') throw new Error('The server did not return the restricted operations scope.')
       const next = data.projects ?? []
       setProjects(next)
       setSummary(data.summary ?? EMPTY_SUMMARY)

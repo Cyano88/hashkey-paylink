@@ -518,6 +518,21 @@ function projectArcPilotReady(project: DeveloperProject) {
     && hasTestKey
 }
 
+function adminProjectIndex(store: DeveloperStore | undefined) {
+  const projects = Object.values(store?.projects ?? {}).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+  return {
+    ok: true as const,
+    scope: 'admin' as const,
+    projects: projects.map(project => projectPublic(project, true)),
+    summary: {
+      total: projects.length,
+      active: projects.filter(project => project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended').length,
+      setupRequired: projects.filter(project => project.settlementStatus !== 'ready').length,
+      suspended: projects.filter(project => project.operationalStatus === 'suspended').length,
+    },
+  }
+}
+
 export function createDeveloperProjectsHandler(dependencies: Dependencies = defaults) {
   return async function developerProjectsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
@@ -537,17 +552,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const store = await dependencies.read(STORE_KEY)
         if (resource === 'admin') {
           requireDeveloperAdmin(identity, dependencies)
-          const projects = Object.values(store?.projects ?? {}).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-          return res.json({
-            ok: true,
-            projects: projects.map(project => projectPublic(project, true)),
-            summary: {
-              total: projects.length,
-              active: projects.filter(project => project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended').length,
-              setupRequired: projects.filter(project => project.settlementStatus !== 'ready').length,
-              suspended: projects.filter(project => project.operationalStatus === 'suspended').length,
-            },
-          })
+          return res.json(adminProjectIndex(store))
         }
         const projects = Object.values(store?.projects ?? {}).filter(project => project.ownerId === identity.userId)
         return res.json({ ok: true, projects: projects.map(project => projectPublic(project)) })
@@ -555,6 +560,11 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
 
       if (req.method !== 'POST' && req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
       const action = clean(req.body?.action, 40).toLowerCase()
+
+      if (req.method === 'POST' && action === 'admin-list') {
+        requireDeveloperAdmin(identity, dependencies)
+        return res.json(adminProjectIndex(await dependencies.read(STORE_KEY)))
+      }
 
       if (req.method === 'POST' && action === 'create') {
         const name = clean(req.body?.name, 100)
