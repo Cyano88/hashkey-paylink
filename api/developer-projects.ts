@@ -89,6 +89,7 @@ type DeveloperStore = { projects: Record<string, DeveloperProject> }
 
 export type DeveloperCheckoutPolicy = {
   partnerId: string
+  ownerId?: string
   merchantName: string
   brandImageUrl?: string
   allowedOrigins: string[]
@@ -899,6 +900,7 @@ function policyForDeveloperProject(
     if (!project.bankAccountCipher || !project.bankCode || !project.bankName || !project.bankAccountName || !project.refundAddress) return null
     return {
       partnerId: project.id,
+      ownerId: project.ownerId,
       merchantName: project.name,
       brandImageUrl: project.brandImageUrl,
       allowedOrigins: project.allowedOrigins,
@@ -925,6 +927,7 @@ function policyForDeveloperProject(
     : paymentOptions[0].network
   return {
     partnerId: project.id,
+    ownerId: project.ownerId,
     merchantName: project.name,
     brandImageUrl: project.brandImageUrl,
     allowedOrigins: project.allowedOrigins,

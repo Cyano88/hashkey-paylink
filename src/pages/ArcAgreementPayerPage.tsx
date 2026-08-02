@@ -81,6 +81,7 @@ type ReviewResponse = {
     walletLinked: boolean
     walletAddress: string | null
     network: 'arc'
+    creatorFundingBlocked?: boolean
   }
   attempt: Attempt | null
   recovery?: {
@@ -591,6 +592,7 @@ export default function ArcAgreementPayerPage() {
   const agreement = review?.agreement
   const attempt = review?.attempt ?? null
   const walletLinked = review?.payer.walletLinked ?? false
+  const creatorFundingBlocked = Boolean(review?.payer.creatorFundingBlocked && !attempt)
   const isPending = attempt?.status === 'approval_submitted' || attempt?.status === 'activation_submitted'
     || Boolean(review?.recovery?.pending && session)
   const isActive = attempt?.status === 'active'
@@ -599,7 +601,9 @@ export default function ArcAgreementPayerPage() {
   let actionLabel = 'Continue with email'
   let action: (() => void) | null = null
   if (authenticated && agreement) {
-    if (!walletLinked || !session) {
+    if (creatorFundingBlocked) {
+      actionLabel = 'Use another email'
+    } else if (!walletLinked || !session) {
       actionLabel = walletLinked ? 'Verify Arc wallet' : 'Connect Arc wallet'
       action = () => void connectWallet()
     } else if (!attempt) {
@@ -701,6 +705,11 @@ export default function ArcAgreementPayerPage() {
                     <span>{actionLabel}</span>
                     <ArrowRight className="h-4 w-4" />
                   </PrivyConnectButton>
+                ) : creatorFundingBlocked ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-400/20 dark:bg-amber-400/10">
+                    <p className="text-xs font-semibold text-amber-950 dark:text-amber-100">Use a different payer account</p>
+                    <p className="mt-1 text-[11px] leading-5 text-amber-800/75 dark:text-amber-200/75">The agreement creator cannot also fund this agreement.</p>
+                  </div>
                 ) : isActive ? (
                   <ActiveAgreementPanel
                     lifecycle={review.lifecycle ?? null}
@@ -740,7 +749,7 @@ export default function ArcAgreementPayerPage() {
                     <ArrowRight className="h-4 w-4" />
                   </button>
                 )}
-                {!review.delivery && review.lifecycle?.action?.status !== 'confirmed' && (
+                {!creatorFundingBlocked && !review.delivery && review.lifecycle?.action?.status !== 'confirmed' && (
                   <p className="mt-3 text-center text-[11px] leading-5 text-gray-400">
                     {statusCopy(attempt, walletLinked)}
                   </p>
@@ -950,7 +959,7 @@ function ActiveAgreementPanel({
       }
       return (
         <div>
-          <DeliveryState title="Payer review required" copy="The creator account cannot approve its own delivery." tone="warning" />
+          <DeliveryState title="Payer review unavailable" copy="Sign in with the original payer account to review this delivery." tone="warning" />
           {availableAction && lifecycle?.enabled && (
             <button
               type="button"

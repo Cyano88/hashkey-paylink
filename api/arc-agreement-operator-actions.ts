@@ -302,6 +302,7 @@ export async function disputeArcAgreementOperatorAction(input: {
   requestHash: string
   reviewedBy: string
   reviewNote: string
+  requesterReviewAuthorized?: boolean
 }, dependencies: Dependencies = defaults) {
   if (!dependencies.hasStore()) throw new Error('Arc Agreement operator action storage is not configured.')
   const id = required(input.actionId, ACTION_ID, 'Operator action id', 28)
@@ -315,7 +316,9 @@ export async function disputeArcAgreementOperatorAction(input: {
     const action = store.actions[id]
     if (!action) throw new Error('Operator action request was not found.')
     if (action.requestHash !== requestHash) throw new Error('Operator action changed after evidence review.')
-    if (action.requestedBy === reviewedBy) throw new Error('Operator action requires an independent reviewer.')
+    if (action.requestedBy === reviewedBy && !input.requesterReviewAuthorized) {
+      throw new Error('Operator action requires an independent reviewer.')
+    }
     if (action.status !== 'awaiting_review') {
       durable = action
       return store
@@ -342,6 +345,7 @@ export async function approveArcAgreementOperatorAction(input: {
   reviewedBy: string
   reviewNote: string
   authoritativeNextStep?: number
+  requesterReviewAuthorized?: boolean
 }, dependencies: Dependencies = defaults) {
   if (!dependencies.hasStore()) throw new Error('Arc Agreement operator action storage is not configured.')
   const id = required(input.actionId, ACTION_ID, 'Operator action id', 28)
@@ -359,7 +363,9 @@ export async function approveArcAgreementOperatorAction(input: {
     const action = store.actions[id]
     if (!action) throw new Error('Operator action request was not found.')
     if (action.requestHash !== requestHash) throw new Error('Operator action changed after evidence review.')
-    if (action.requestedBy === reviewedBy) throw new Error('Operator action requires an independent reviewer.')
+    if (action.requestedBy === reviewedBy && !input.requesterReviewAuthorized) {
+      throw new Error('Operator action requires an independent reviewer.')
+    }
     if (action.status !== 'awaiting_review') {
       durable = action
       return store

@@ -209,7 +209,7 @@ function publicDelivery(action: ArcAgreementOperatorAction | null, reviewerId = 
     id: action.id,
     step: action.step ?? 0,
     status: action.status,
-    canReview: Boolean(reviewerId && action.requestedBy !== reviewerId),
+    canReview: Boolean(reviewerId),
     deliveryNote: action.deliveryNote ?? '',
     evidenceReference: action.evidenceReference,
     requestedAt: action.requestedAt,
@@ -403,6 +403,10 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
       ) {
         throw fail('This agreement is bound to another authenticated payer.', 403)
       }
+      const creatorFundingBlocked = currentPolicy?.ownerId === identity.userId && knownAttempt?.status !== 'active'
+      if (creatorFundingBlocked && action !== 'review') {
+        throw fail('Use a different payer account. The agreement creator cannot also fund this agreement.', 409)
+      }
 
       if (action === 'review') {
         const linkedWallet = linkedArcWallet(linkRecord, identity)
@@ -463,6 +467,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
             walletLinked: Boolean(linkedWallet),
             walletAddress: linkedWallet?.address ?? null,
             network: 'arc',
+            creatorFundingBlocked,
           },
           attempt: knownAttempt ? publicAttempt(knownAttempt) : null,
           recovery: publicRecovery(knownAttempt),
@@ -492,9 +497,6 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
         }
         if (deliveryAction.reviewPolicy !== 'payer') {
           throw fail('This release uses the restricted operations review path.', 409)
-        }
-        if (deliveryAction.requestedBy === identity.userId) {
-          throw fail('Use the payer account that funded this agreement to review the delivery.', 409)
         }
         const lifecycleReview = await dependencies.reviewLifecycle({
           client: dependencies.client(),
@@ -526,12 +528,14 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
               reviewedBy: identity.userId,
               reviewNote: 'Payer accepted the submitted delivery.',
               authoritativeNextStep: knownAttempt.lifecycle?.nextStep,
+              requesterReviewAuthorized: true,
             })
           : await dependencies.disputeOperatorAction({
               actionId: deliveryAction.id,
               requestHash: deliveryAction.requestHash,
               reviewedBy: identity.userId,
               reviewNote: clean(req.body?.issue, 300),
+              requesterReviewAuthorized: true,
             })
         return res.json({ ok: true, replayed: false, delivery: publicDelivery(decided, identity.userId) })
       }

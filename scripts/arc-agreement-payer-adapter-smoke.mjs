@@ -63,6 +63,7 @@ const agreement = {
 }
 const policy = {
   partnerId,
+  ownerId: 'did:privy:project-owner',
   merchantName: 'Payer Route',
   allowedOrigins: ['https://payer.example'],
   defaultNetwork: 'arc',
@@ -336,10 +337,12 @@ const dependencies = {
     assert.equal(input.requestHash, operatorAction.requestHash)
     assert.equal(input.reviewedBy, identity.userId)
     assert.equal(input.authoritativeNextStep, currentAttempt.lifecycle?.nextStep)
+    assert.equal(input.requesterReviewAuthorized, true)
     operatorAction = { ...operatorAction, status: 'queued', reviewedBy: input.reviewedBy, reviewNote: input.reviewNote }
     return operatorAction
   },
   disputeOperatorAction: async input => {
+    assert.equal(input.requesterReviewAuthorized, true)
     operatorAction = { ...operatorAction, status: 'disputed', reviewedBy: input.reviewedBy, reviewNote: input.reviewNote }
     return operatorAction
   },
@@ -375,11 +378,26 @@ assert.equal((await request(handler, {
 }, headers)).statusCode, 409)
 currentLink = link
 
+currentPolicy = { ...policy, ownerId: identity.userId }
+const creatorReview = await request(handler, { action: 'review', agreementId }, headers)
+assert.equal(creatorReview.statusCode, 200)
+assert.equal(creatorReview.body.payer.creatorFundingBlocked, true)
+const creatorPrepare = await request(handler, {
+  action: 'prepare',
+  agreementId,
+  circleUserToken: 'circle-user-token',
+}, headers)
+assert.equal(creatorPrepare.statusCode, 409)
+assert.match(creatorPrepare.body.error, /different payer account/i)
+assert.equal(walletVerifications, 0)
+currentPolicy = policy
+
 const review = await request(handler, { action: 'review', agreementId }, headers)
 assert.equal(review.statusCode, 200)
 assert.equal(review.headers['cache-control'], 'no-store')
 assert.equal(review.body.payer.walletAddress, payer)
 assert.equal(review.body.payer.walletLinked, true)
+assert.equal(review.body.payer.creatorFundingBlocked, false)
 assert.equal(review.body.attempt, null)
 assert.equal(JSON.stringify(review.body).includes('request-secret'), false)
 assert.equal(JSON.stringify(review.body).includes('access-secret'), false)
@@ -529,16 +547,19 @@ assert.equal(completedReview.body.attempt.lifecycle.status, 'completed')
 assert.equal(completedReview.body.delivery, null)
 currentAttempt = { ...currentAttempt, lifecycle: { status: 'active', nextStep: 0 } }
 operatorAction = { ...operatorAction, requestedBy: identity.userId }
+currentPolicy = { ...policy, ownerId: identity.userId }
 const selfReview = await request(handler, { action: 'review', agreementId }, headers)
-assert.equal(selfReview.body.delivery.canReview, false)
+assert.equal(selfReview.body.payer.creatorFundingBlocked, false)
+assert.equal(selfReview.body.delivery.canReview, true)
 assert.equal((await request(handler, {
   action: 'delivery-decision',
   agreementId,
   deliveryId: operatorAction.id,
   decision: 'dispute',
   issue: 'Please add the final deployment link.',
-}, headers)).statusCode, 409)
-operatorAction = { ...operatorAction, requestedBy: 'did:privy:creator-owner' }
+}, headers)).statusCode, 200)
+currentPolicy = null
+operatorAction = { ...operatorAction, status: 'awaiting_review', requestedBy: 'did:privy:creator-owner' }
 currentAttempt = { ...currentAttempt, lifecycle: { status: 'active', nextStep: 0 } }
 const acceptedDelivery = await request(handler, {
   action: 'delivery-decision',
@@ -654,6 +675,8 @@ assert.match(payerPageSource, /status:\s*'transaction_pending'/)
 assert.match(payerPageSource, /if \(!confirmationAccepted\)/)
 assert.match(payerPageSource, /arc-agreement-change-payer/)
 assert.match(payerPageSource, /Use another email/)
+assert.match(payerPageSource, /creatorFundingBlocked/)
+assert.match(payerPageSource, /The agreement creator cannot also fund this agreement/)
 assert.match(payerPageSource, /Your payer wallet/)
 assert.match(payerPageSource, /setSession\(null\)/)
 assert.doesNotMatch(payerPageSource, /Send via Address|ghost.?vault|deposit address/i)

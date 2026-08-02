@@ -133,8 +133,9 @@ await assert.rejects(() => approveArcAgreementOperatorAction({
 const approved = await approveArcAgreementOperatorAction({
   actionId: requested.id,
   requestHash: requested.requestHash,
-  reviewedBy: 'operations.reviewer',
+  reviewedBy: requestInput.requestedBy,
   reviewNote: 'Evidence checked against the delivery record.',
+  requesterReviewAuthorized: true,
 }, dependencies)
 assert.equal(approved.status, 'queued')
 const secondIdempotencyKey = '123e4567-e89b-42d3-b456-426614174009'
