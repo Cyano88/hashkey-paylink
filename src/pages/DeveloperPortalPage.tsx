@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { Link } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
-import { Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
+import { ArrowLeft, Bot, Check, ChevronRight, Copy, KeyRound, Loader2, Lock, LogOut, Plus, RotateCw, ShieldCheck, UserRound, Webhook } from 'lucide-react'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
@@ -225,7 +225,7 @@ export default function DeveloperPortalPage() {
     return (
       <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-2xl px-4 py-12">
         <PortalTop onLogout={logout} />
-        <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} />
+        <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} emptyAccount />
       </main>
     )
   }
@@ -261,7 +261,7 @@ export default function DeveloperPortalPage() {
   )
 }
 
-function CreateProjectCard({ form, setForm, busy, error, onCreate, onCancel, embedded = false }: {
+function CreateProjectCard({ form, setForm, busy, error, onCreate, onCancel, embedded = false, emptyAccount = false }: {
   form: CreateProjectForm
   setForm: Dispatch<SetStateAction<CreateProjectForm>>
   busy: boolean
@@ -269,11 +269,14 @@ function CreateProjectCard({ form, setForm, busy, error, onCreate, onCancel, emb
   onCreate: () => Promise<void>
   onCancel?: () => void
   embedded?: boolean
+  emptyAccount?: boolean
 }) {
   const content = <>
+    {onCancel && <button type="button" disabled={busy} onClick={onCancel} className="mb-5 inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 transition hover:text-gray-950 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Back to projects</button>}
     <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">New project</p>
     <h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">Choose one payment path.</h1>
     <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">Human and agentic checkouts use separate projects, policies, and API keys.</p>
+    {emptyAccount && <p className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-[11px] leading-5 text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">No projects are linked to this sign-in. If you expected an existing project, sign out and use the email that created it.</p>}
     <CheckoutModePicker value={form.checkoutMode} onChange={checkoutMode => setForm(current => ({
       ...current,
       checkoutMode,
@@ -315,7 +318,7 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
   const allOptions: Array<{ key: Capability; title: string; copy: string }> = [
     { key: 'hosted_checkout', title: checkoutMode === 'agentic' ? 'Agentic x402 checkout' : 'Hosted checkout', copy: checkoutMode === 'agentic' ? 'Accept fixed-price service payments from compatible agent wallets.' : 'Accept payments through the hosted human payer experience.' },
     { key: 'polymarket_funding', title: 'Polymarket funding', copy: 'Create verified bridge-backed checkouts for a customer Polymarket wallet.' },
-    { key: 'arc_agreements', title: 'Arc Agreements · Preview', copy: 'Create testnet fixed, progressive, or milestone USDC agreement drafts on Arc. Funding stays unavailable until the contract layer is reviewed.' },
+    { key: 'arc_agreements', title: 'Arc Agreements · Private pilot', copy: 'Create fixed, progressive, or milestone USDC agreements on Arc Testnet. Funding and lifecycle execution require an authorized pilot project.' },
   ]
   const options = allOptions.filter(option => checkoutMode === 'human' || option.key !== 'polymarket_funding')
   function toggle(key: Capability) {
