@@ -204,6 +204,18 @@ export default function ArcAgreementPayerPage() {
   const [issueMode, setIssueMode] = useState(false)
   const [issueText, setIssueText] = useState('')
   const mounted = useRef(true)
+  const identityId = user?.id ?? ''
+  const sessionIdentityId = useRef(identityId)
+
+  useEffect(() => {
+    if (sessionIdentityId.current === identityId) return
+    sessionIdentityId.current = identityId
+    setSession(null)
+    setReview(null)
+    setError('')
+    setConfirmLifecycle(null)
+    setLoading(true)
+  }, [identityId])
 
   useEffect(() => {
     setCapability(capabilityForAgreement(agreementId))
@@ -658,6 +670,8 @@ export default function ArcAgreementPayerPage() {
                     disabled={busy}
                     onBeforeLogin={() => {
                       setSession(null)
+                      setReview(null)
+                      setLoading(true)
                       setError('')
                       setConfirmLifecycle(null)
                     }}

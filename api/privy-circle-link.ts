@@ -159,6 +159,16 @@ function expectedBlockchain(chain: CircleLinkChain) {
   return (process.env.CIRCLE_SOLANA_BLOCKCHAIN ?? 'SOL').trim().toUpperCase()
 }
 
+function blockchainMatchesChain(chain: CircleLinkChain, blockchain: string) {
+  const normalized = blockchain.trim().toUpperCase()
+  if (chain === 'base') return normalized === 'BASE'
+  if (chain === 'arbitrum') {
+    return ['ARB', 'ARBITRUM', 'ARBITRUM-ONE', 'ARBITRUM_ONE', 'ARBITRUMONE'].includes(normalized)
+  }
+  if (chain === 'arc') return ['ARC-TESTNET', 'ARC_TESTNET', 'ARC'].includes(normalized)
+  return normalized === expectedBlockchain(chain)
+}
+
 function sameAddress(chain: CircleLinkChain, left: string, right: string) {
   return chain === 'solana' ? left === right : left.toLowerCase() === right.toLowerCase()
 }
@@ -168,20 +178,28 @@ export async function verifyCircleLinkWallet(input: {
   chain: CircleLinkChain
   wallet: CircleLinkWallet
   listWallets?: (userToken: string, chain: string) => Promise<CircleUserWallet[]>
+  attempts?: number
+  wait?: (milliseconds: number) => Promise<void>
 }) {
-  const wallets = await (input.listWallets ?? listCircleUserWallets)(input.userToken, input.chain)
-  const expected = expectedBlockchain(input.chain)
-  const owned = wallets.some(wallet => (
-    input.wallet.blockchain.trim().toUpperCase() === expected
-    && wallet.id === input.wallet.id
-    && sameAddress(input.chain, wallet.address, input.wallet.address)
-    && wallet.blockchain.trim().toUpperCase() === expected
-  ))
-  if (!owned) {
-    const error = new Error('Circle wallet ownership could not be verified for the signed-in wallet session.')
-    ;(error as Error & { status?: number }).status = 403
-    throw error
+  const listWallets = input.listWallets ?? listCircleUserWallets
+  const attempts = Math.max(1, Math.min(input.attempts ?? 3, 3))
+  const wait = input.wait ?? (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)))
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const wallets = await listWallets(input.userToken, input.chain)
+    const owned = blockchainMatchesChain(input.chain, input.wallet.blockchain)
+      && wallets.some(wallet => (
+        wallet.id === input.wallet.id
+        && sameAddress(input.chain, wallet.address, input.wallet.address)
+        && blockchainMatchesChain(input.chain, wallet.blockchain)
+      ))
+    if (owned) return
+    if (attempt + 1 < attempts) await wait(250 * (attempt + 1))
   }
+
+  const error = new Error('Circle wallet ownership could not be verified for the signed-in wallet session.')
+  ;(error as Error & { status?: number }).status = 403
+  throw error
 }
 
 async function readStore(): Promise<Store> {
@@ -444,7 +462,7 @@ export function createPrivyCircleLinkHandler(dependencies: LinkHandlerDependenci
         if (!validWalletAddress) {
           return res.status(400).json({ ok: false, error: 'Invalid Circle wallet address' })
         }
-        if (purpose === 'payment' && wallet.blockchain !== expectedBlockchain(chain)) {
+        if (purpose === 'payment' && !blockchainMatchesChain(chain, wallet.blockchain)) {
           return res.status(400).json({ ok: false, error: 'Circle wallet blockchain does not match the selected chain' })
         }
 

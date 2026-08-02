@@ -102,12 +102,31 @@ await verifyCircleLinkWallet({
   wallet,
   listWallets: async () => [{ ...wallet, address: wallet.address.toUpperCase() }],
 })
+await verifyCircleLinkWallet({
+  userToken: 'arc-alias-token',
+  chain: 'arc',
+  wallet: { ...wallet, blockchain: 'ARC_TESTNET' },
+  listWallets: async () => [{ ...wallet, blockchain: 'ARC' }],
+})
+let transientWalletLists = 0
+await verifyCircleLinkWallet({
+  userToken: 'transient-token',
+  chain: 'arc',
+  wallet: { ...wallet, blockchain: 'ARC-TESTNET' },
+  listWallets: async () => {
+    transientWalletLists += 1
+    return transientWalletLists === 1 ? [] : [{ ...wallet, blockchain: 'ARC-TESTNET' }]
+  },
+  wait: async () => undefined,
+})
+assert.equal(transientWalletLists, 2)
 await assert.rejects(
   verifyCircleLinkWallet({
     userToken: 'unowned-token',
     chain: 'base',
     wallet,
     listWallets: async () => [{ ...wallet, id: 'different-wallet' }],
+    attempts: 1,
   }),
   error => error.status === 403 && /ownership could not be verified/.test(error.message),
 )
@@ -117,6 +136,7 @@ await assert.rejects(
     chain: 'base',
     wallet: { ...wallet, blockchain: 'ARB' },
     listWallets: async () => [wallet],
+    attempts: 1,
   }),
   error => error.status === 403 && /ownership could not be verified/.test(error.message),
 )
