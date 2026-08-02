@@ -194,7 +194,7 @@ function statusCopy(attempt: Attempt | null, walletLinked: boolean) {
 export default function ArcAgreementPayerPage() {
   const { agreementId = '' } = useParams()
   const { authenticated, ready, user, getAccessToken } = usePrivy()
-  const capability = useMemo(() => capabilityForAgreement(agreementId), [agreementId])
+  const [capability, setCapability] = useState(() => capabilityForAgreement(agreementId))
   const [review, setReview] = useState<ReviewResponse | null>(null)
   const [session, setSession] = useState<CircleEvmEmailSession | null>(null)
   const [busy, setBusy] = useState(false)
@@ -204,6 +204,26 @@ export default function ArcAgreementPayerPage() {
   const [issueMode, setIssueMode] = useState(false)
   const [issueText, setIssueText] = useState('')
   const mounted = useRef(true)
+
+  useEffect(() => {
+    setCapability(capabilityForAgreement(agreementId))
+  }, [agreementId])
+
+  const recoverPayerAccess = useCallback(async () => {
+    const identityToken = await getAccessToken()
+    if (!identityToken) throw new Error('Sign in with the payer email to recover this agreement.')
+    const response = await fetch('/api/v2/agreements/payer', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${identityToken}` },
+      body: JSON.stringify({ agreementId, action: 'recover-access' }),
+    })
+    const data = await response.json().catch(() => ({})) as { ok?: boolean; payerAccessToken?: string; error?: string }
+    if (!response.ok || !data.ok || !data.payerAccessToken) {
+      throw new Error(data.error || 'This agreement could not be recovered for the signed-in payer.')
+    }
+    sessionStorage.setItem(`hashpaylink:arc-agreement-access:${agreementId}`, data.payerAccessToken)
+    setCapability(data.payerAccessToken)
+  }, [agreementId, getAccessToken])
 
   const request = useCallback(async <T,>(body: Record<string, unknown>): Promise<T> => {
     const identityToken = await getAccessToken()
@@ -231,8 +251,19 @@ export default function ArcAgreementPayerPage() {
       return
     }
     if (!capability || !agreementId) {
-      setError('This agreement link is incomplete.')
-      setLoading(false)
+      if (!agreementId) {
+        setError('This agreement link is incomplete.')
+        setLoading(false)
+        return
+      }
+      try {
+        await recoverPayerAccess()
+        setError('')
+      } catch (caught) {
+        setError(readableError(caught))
+      } finally {
+        setLoading(false)
+      }
       return
     }
     if (!quiet) setLoading(true)
@@ -247,7 +278,7 @@ export default function ArcAgreementPayerPage() {
     } finally {
       if (mounted.current) setLoading(false)
     }
-  }, [agreementId, authenticated, capability, ready, request])
+  }, [agreementId, authenticated, capability, ready, recoverPayerAccess, request])
 
   useEffect(() => {
     mounted.current = true

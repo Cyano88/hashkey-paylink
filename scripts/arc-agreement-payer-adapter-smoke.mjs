@@ -168,6 +168,16 @@ const dependencies = {
     if (!currentAttempt) throw new Error('Arc Agreement activation attempt was not found for this project.')
     return currentAttempt
   },
+  listAttempts: async () => currentAttempt ? [currentAttempt] : [],
+  rotatePayerAccess: async (project, id) => {
+    assert.equal(project, partnerId)
+    assert.equal(id, agreementId)
+    return {
+      agreement,
+      payerAccessToken: `agrp_${'r'.repeat(43)}`,
+      payerReviewPath: `/agreements/${agreementId}#access=agrp_${'r'.repeat(43)}`,
+    }
+  },
   prepareChallenge: async input => {
     challengeOrder.push('prepare')
     return {
@@ -384,6 +394,16 @@ assert.equal(prepared.statusCode, 201)
 assert.equal(prepared.body.attempt.status, 'awaiting_approval')
 assert.equal('payerIdentityHash' in prepared.body.attempt, false)
 assert.equal(walletVerifications, 1)
+const recoveredAccess = await request(handler, { action: 'recover-access', agreementId }, {
+  authorization: 'Bearer privy-token',
+})
+assert.equal(recoveredAccess.statusCode, 200)
+assert.match(recoveredAccess.body.payerAccessToken, /^agrp_/)
+const wrongPayerRecovery = await request(createArcAgreementPayerHandler({
+  ...dependencies,
+  verifyUser: async () => ({ ...identity, userId: 'did:privy:other-payer' }),
+}), { action: 'recover-access', agreementId }, { authorization: 'Bearer privy-token' })
+assert.equal(wrongPayerRecovery.statusCode, 404)
 
 const paused = await request(createArcAgreementPayerHandler({
   ...dependencies,

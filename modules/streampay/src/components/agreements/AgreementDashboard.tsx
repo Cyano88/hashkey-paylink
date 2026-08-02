@@ -422,6 +422,13 @@ export default function AgreementDashboard() {
                   </a>
                 )}
 
+                {active.status === 'expired' && (
+                  <div className="mt-5 flex items-center justify-between gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-400/20 dark:bg-amber-400/10">
+                    <div><p className="text-xs font-medium text-amber-950 dark:text-amber-100">Refund available</p><p className="mt-1 text-[11px] leading-5 text-amber-800/70 dark:text-amber-200/70">The original payer can return the remaining USDC.</p></div>
+                    <a href={`https://app.hashpaylink.com/agreements/${active.id}`} className="shrink-0 rounded-xl bg-gray-950 px-3 py-2.5 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">Open payer review</a>
+                  </div>
+                )}
+
                 {active.status === 'awaiting_start' && (
                   <div className="mt-5 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                     {payerLink ? (

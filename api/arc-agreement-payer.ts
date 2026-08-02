@@ -13,6 +13,7 @@ import {
   prepareArcAgreementPayerChallenge,
   readArcAgreementActivationAttemptRecord,
   readArcAgreementActivationAttempt,
+  listArcAgreementActivationAttemptRecords,
   recordArcAgreementPayerTransaction,
   reconcileArcAgreementActivationAttempt,
   reserveArcAgreementPayerChallenge,
@@ -22,6 +23,7 @@ import {
 import { createArcAgreementActivationClient } from './arc-agreement-activation-client.js'
 import {
   readArcAgreementByPayerAccess,
+  rotateArcAgreementPayerAccess,
   type ArcAgreement,
 } from './arc-agreements.js'
 import {
@@ -72,6 +74,8 @@ type Dependencies = {
   prepareAttempt: typeof prepareArcAgreementActivationAttempt
   readAttempt: typeof readArcAgreementActivationAttempt
   readAttemptRecord: typeof readArcAgreementActivationAttemptRecord
+  listAttempts?: typeof listArcAgreementActivationAttemptRecords
+  rotatePayerAccess?: typeof rotateArcAgreementPayerAccess
   prepareChallenge: typeof prepareArcAgreementPayerChallenge
   reserveChallenge: typeof reserveArcAgreementPayerChallenge
   attachChallenge: typeof attachArcAgreementPayerChallenge
@@ -105,6 +109,8 @@ const defaults: Dependencies = {
   prepareAttempt: prepareArcAgreementActivationAttempt,
   readAttempt: readArcAgreementActivationAttempt,
   readAttemptRecord: readArcAgreementActivationAttemptRecord,
+  listAttempts: listArcAgreementActivationAttemptRecords,
+  rotatePayerAccess: rotateArcAgreementPayerAccess,
   prepareChallenge: prepareArcAgreementPayerChallenge,
   reserveChallenge: reserveArcAgreementPayerChallenge,
   attachChallenge: attachArcAgreementPayerChallenge,
@@ -351,16 +357,31 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
       const agreementId = clean(req.body?.agreementId, 80)
       const action = clean(req.body?.action, 40)
       const capability = accessToken(req)
-      if (!agreementId || !action || !capability) {
-        throw fail('Agreement id, payer access, and action are required.', 400)
+      if (!agreementId || !action) {
+        throw fail('Agreement id and action are required.', 400)
+      }
+      const identity = await dependencies.verifyUser(req)
+      const identityValue = payerIdentity(identity.userId)
+      if (action === 'recover-access') {
+        const attempts = await (dependencies.listAttempts ?? listArcAgreementActivationAttemptRecords)({ limit: 250 })
+        const attempt = attempts.find(item => item.agreementId === agreementId)
+        if (!attempt || attempt.payerIdentityHash !== arcAgreementPayerIdentityHash(identityValue)) {
+          throw fail('This agreement is not available for this payer identity.', 404)
+        }
+        if (attempt.checkoutMode !== 'human') {
+          throw fail('Agentic agreements do not support human payer recovery.', 409)
+        }
+        const recovered = await (dependencies.rotatePayerAccess ?? rotateArcAgreementPayerAccess)(attempt.partnerId, agreementId)
+        return res.json({ ok: true, payerAccessToken: recovered.payerAccessToken, payerReviewPath: recovered.payerReviewPath })
+      }
+      if (!capability) {
+        throw fail('Agreement payer access is required.', 400)
       }
       const agreement = await dependencies.readAgreement(agreementId, capability)
       if (!agreement) throw fail('Agreement payer access is invalid or expired.', 404)
       if (agreement.checkoutMode !== 'human') {
         throw fail('Agentic agreements require the dedicated agent activation flow.', 409)
       }
-      const identity = await dependencies.verifyUser(req)
-      const identityValue = payerIdentity(identity.userId)
       const linkRecord = await dependencies.readLink(circleLinkKey(identity.userId, 'arc', 'payment'))
       const policy = await dependencies.resolvePolicy(agreement.partnerId)
       const currentPolicy = policy?.partnerId === agreement.partnerId && policy.checkoutMode === agreement.checkoutMode
