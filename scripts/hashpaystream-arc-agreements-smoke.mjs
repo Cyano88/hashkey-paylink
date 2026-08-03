@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createHashPayStreamArcAgreementsHandler } from '../api/hashpaystream-arc-agreements.ts'
+import { createArcAgreementReceipt } from '../api/arc-agreement-receipt.ts'
+import { paymentReceiptView } from '../src/lib/paymentReceiptPdf.ts'
 
 function responseRecorder() {
   return {
@@ -51,6 +53,31 @@ const draft = {
   updatedAt: '2026-07-31T12:00:00.000Z',
 }
 
+const completedReceiptInput = {
+  agreementId,
+  title: draft.title,
+  description: draft.description,
+  template: 'fixed_unlock',
+  status: 'completed',
+  payer: '0xF3bE84452e17e9F0656F54884113cD2D7288C2E3',
+  recipient: draft.recipient,
+  escrow: '0x4C556C9C362E1569CD2d3A0566a35237a2d81C78',
+  transactionHash: `0x${'5'.repeat(64)}`,
+  eventId: `evt_${'c'.repeat(24)}`,
+  createdAt: '2026-08-01T21:51:00.000Z',
+  amountUsdcUnits: '100000',
+  releasedUsdcUnits: '100000',
+  returnedUsdcUnits: '0',
+}
+const completedReceipt = createArcAgreementReceipt(completedReceiptInput)
+assert.ok(completedReceipt)
+assert.equal(completedReceipt.source, 'arc-agreement')
+assert.equal(completedReceipt.releasedAmount, '0.1')
+const completedReceiptView = paymentReceiptView(completedReceipt)
+assert.equal(completedReceiptView.badge, 'Arc Agreement')
+assert.equal(completedReceiptView.rows.find(row => row.label === 'Outcome')?.value, '0.1 USDC released')
+assert.equal(createArcAgreementReceipt({ ...completedReceiptInput, transactionHash: '' }), null)
+
 function event(id, eventName, block, data = {}) {
   return {
     id,
@@ -89,8 +116,8 @@ const dependencies = {
   readEvents: async () => ({
     schema: 1,
     events: {
-      activation: event('evt_hashpaystreamactivate12', 'agreement.activated', '10'),
-      refund: event('evt_hashpaystreamrefund123', 'agreement.refunded', '20'),
+      activation: event(`evt_${'a'.repeat(24)}`, 'agreement.activated', '10'),
+      refund: event(`evt_${'b'.repeat(24)}`, 'agreement.refunded', '20'),
       foreign: {
         ...event('evt_hashpaystreamforeign123', 'agreement.activated', '999'),
         projectId: 'dev_anotherproject1234',
@@ -157,6 +184,26 @@ const dependencies = {
   listOperatorActions: async input => {
     assert.equal(input.partnerId, projectId)
     return operatorActions
+  },
+  listActivationAttempts: async input => {
+    assert.deepEqual(input, { partnerId: projectId, limit: 250 })
+    return [{
+      agreementId,
+      prepared: {
+        payer: '0xF3bE84452e17e9F0656F54884113cD2D7288C2E3',
+        recipient: draft.recipient,
+        totalAmount: '100000',
+      },
+    }]
+  },
+  listPayerLifecycleActions: async input => {
+    assert.deepEqual(input, { partnerId: projectId, limit: 250 })
+    return [{
+      agreementId,
+      action: 'refund',
+      status: 'confirmed',
+      transactionHash: `0x${'4'.repeat(64)}`,
+    }]
   },
   binding: async (partnerId, id) => {
     assert.equal(partnerId, projectId)
@@ -245,6 +292,10 @@ assert.equal(response.body.agreements[0].title, draft.title)
 assert.equal(response.body.agreements[0].status, 'refunded')
 assert.equal(response.body.agreements[0].chain.remainingUsdcUnits, '0')
 assert.equal(response.body.agreements[0].timeline.length, 2)
+assert.equal(response.body.agreements[0].receipt.source, 'arc-agreement')
+assert.equal(response.body.agreements[0].receipt.agreementStatus, 'refunded')
+assert.equal(response.body.agreements[0].receipt.returnedAmount, '0.1')
+assert.equal(response.body.agreements[0].receipt.txHash, `0x${'4'.repeat(64)}`)
 assert.equal('payloadHash' in response.body.agreements[0].timeline[0], false)
 assert.equal(JSON.stringify(response.body).includes('private-payer-access-hash'), false)
 assert.equal(JSON.stringify(response.body).includes('must-never-leave-the-api'), false)
@@ -506,6 +557,8 @@ assert.match(dashboardSource, /Open payer review/)
 assert.match(dashboardSource, /delivery\.issue_reported/)
 assert.match(dashboardSource, /agreement\.amount \|\| '0'/)
 assert.match(dashboardSource, /View Arc proof/)
+assert.match(dashboardSource, /<UnifiedReceipt receipt=\{active\.receipt\}/)
+assert.match(payerPageSource, /<UnifiedReceipt receipt=\{receipt\}/)
 assert.doesNotMatch(dashboardSource, /['"]x-api-key['"]/i)
 
 console.log('Hash PayStream Arc Agreements dashboard smoke checks passed.')

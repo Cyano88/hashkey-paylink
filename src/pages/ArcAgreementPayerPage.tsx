@@ -10,6 +10,8 @@ import {
 } from '../lib/circleEvmEmailWallet'
 import { PocketPillMark } from '../pocket/components/CPurseIcon'
 import { linkPocketWallet } from '../pocket/api/pocketWalletLinkClient'
+import UnifiedReceipt from '../components/UnifiedReceipt'
+import type { PaylinkReceipt } from '../lib/paymentReceiptPdf'
 
 type AgreementTemplate = 'fixed_unlock' | 'progressive_release' | 'milestone'
 type AttemptStatus =
@@ -97,6 +99,7 @@ type ReviewResponse = {
     action?: LifecycleAction | null
   } | null
   delivery?: DeliveryReview | null
+  receipt?: PaylinkReceipt | null
 }
 
 type ActionResponse = {
@@ -718,6 +721,7 @@ export default function ArcAgreementPayerPage() {
                     deliveryContext={deliveryContext(agreement, review.delivery ?? null)}
                     releaseActionLabel={agreement.template === 'milestone' ? 'Release milestone' : `Release ${agreement.amount} USDC`}
                     agreementLifecycleStatus={attempt.lifecycle?.status}
+                    receipt={review.receipt ?? null}
                     busy={busy}
                     walletSessionReady={Boolean(session)}
                     confirmation={confirmLifecycle}
@@ -798,6 +802,7 @@ function ActiveAgreementPanel({
   deliveryContext,
   releaseActionLabel,
   agreementLifecycleStatus,
+  receipt,
   busy,
   walletSessionReady,
   confirmation,
@@ -815,6 +820,7 @@ function ActiveAgreementPanel({
   deliveryContext: string | null
   releaseActionLabel: string
   agreementLifecycleStatus?: 'active' | 'expired' | 'completed' | 'cancelled' | 'refunded'
+  receipt: PaylinkReceipt | null
   busy: boolean
   walletSessionReady: boolean
   confirmation: 'cancel' | 'refund' | null
@@ -833,10 +839,10 @@ function ActiveAgreementPanel({
       : null
   const current = lifecycle?.action
   if (agreementLifecycleStatus === 'completed') {
-    return <DeliveryState title="Agreement completed" copy="All protected USDC has been released on Arc." tone="success" />
+    return <TerminalAgreementState title="Agreement completed" copy="All protected USDC has been released on Arc." receipt={receipt} />
   }
   if (agreementLifecycleStatus === 'cancelled' || agreementLifecycleStatus === 'refunded') {
-    return <DeliveryState title={agreementLifecycleStatus === 'cancelled' ? 'Agreement cancelled' : 'Remaining USDC returned'} copy="Confirmed on Arc." tone="success" />
+    return <TerminalAgreementState title={agreementLifecycleStatus === 'cancelled' ? 'Agreement cancelled' : 'Remaining USDC returned'} copy="Confirmed on Arc." receipt={receipt} />
   }
   if (current?.status === 'confirmed') {
     return (
@@ -1123,6 +1129,15 @@ function DeliveryState({ title, copy, tone }: { title: string; copy: string; ton
         <p className="text-sm font-semibold">{title}</p>
         <p className="text-[11px] opacity-75">{copy}</p>
       </div>
+    </div>
+  )
+}
+
+function TerminalAgreementState({ title, copy, receipt }: { title: string; copy: string; receipt: PaylinkReceipt | null }) {
+  return (
+    <div>
+      <DeliveryState title={title} copy={copy} tone="success" />
+      {receipt && <UnifiedReceipt receipt={receipt} className="mt-3" />}
     </div>
   )
 }

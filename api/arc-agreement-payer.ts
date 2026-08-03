@@ -60,6 +60,7 @@ import {
   listArcAgreementOperatorActions,
   type ArcAgreementOperatorAction,
 } from './arc-agreement-operator-actions.js'
+import { createArcAgreementReceipt } from './arc-agreement-receipt.js'
 
 type Dependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
@@ -241,6 +242,44 @@ function currentReleaseAction(
   return releases.find(item => item.step === nextStep) ?? null
 }
 
+function terminalAgreementReceipt(
+  agreement: ArcAgreement,
+  attempt: ArcAgreementActivationAttempt | null,
+  releases: ArcAgreementOperatorAction[],
+  payerLifecycle: ArcAgreementPayerLifecycleAction | null,
+) {
+  const observation = attempt?.lifecycle
+  if (!attempt?.escrow || !observation || !['completed', 'cancelled', 'refunded'].includes(observation.status)) return null
+  const completedRelease = releases
+    .filter(item => item.action === 'release' && item.status === 'completed' && item.transactionHash)
+    .sort((left, right) => (right.step ?? 0) - (left.step ?? 0))[0]
+  const transactionHash = observation.status === 'completed'
+    ? completedRelease?.transactionHash
+    : payerLifecycle?.status === 'confirmed'
+      ? payerLifecycle.transactionHash
+      : undefined
+  if (!transactionHash) return null
+  const returned = observation.status === 'completed'
+    ? '0'
+    : (BigInt(attempt.prepared.totalAmount) - BigInt(observation.releasedAmountUsdcUnits)).toString()
+  return createArcAgreementReceipt({
+    agreementId: agreement.id,
+    title: agreement.title,
+    description: agreement.description,
+    template: agreement.template,
+    status: observation.status as 'completed' | 'cancelled' | 'refunded',
+    payer: attempt.prepared.payer,
+    recipient: attempt.prepared.recipient,
+    escrow: attempt.escrow,
+    transactionHash,
+    eventId: observation.eventId,
+    createdAt: observation.observedAt,
+    amountUsdcUnits: attempt.prepared.totalAmount,
+    releasedUsdcUnits: observation.releasedAmountUsdcUnits,
+    returnedUsdcUnits: returned,
+  })
+}
+
 function lifecycleActionName(value: unknown): ArcAgreementPayerLifecycleActionName {
   const action = clean(value, 20)
   if (action !== 'cancel' && action !== 'refund') {
@@ -410,13 +449,15 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
 
       if (action === 'review') {
         const linkedWallet = linkedArcWallet(linkRecord, identity)
-        const deliveryAction = knownAttempt
-          ? currentReleaseAction(await dependencies.listOperatorActions({
+        const operatorActions = knownAttempt
+          ? await dependencies.listOperatorActions({
               partnerId: agreement.partnerId,
               agreementId: agreement.id,
               limit: 20,
-            }), knownAttempt, agreement)
-          : null
+            })
+          : []
+        const deliveryAction = knownAttempt ? currentReleaseAction(operatorActions, knownAttempt, agreement) : null
+        let terminalLifecycleAction: ArcAgreementPayerLifecycleAction | null = null
         let lifecycle: {
           available: boolean
           enabled?: boolean
@@ -456,6 +497,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
               refund: lifecycleReview.eligibility.refund,
               action: publicLifecycleAction(lifecycleAction),
             }
+            terminalLifecycleAction = lifecycleAction
           } catch {
             lifecycle = { available: false }
           }
@@ -473,6 +515,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
           recovery: publicRecovery(knownAttempt),
           lifecycle,
           delivery: publicDelivery(deliveryAction, identity.userId),
+          receipt: terminalAgreementReceipt(agreement, knownAttempt, operatorActions, terminalLifecycleAction),
         })
       }
 

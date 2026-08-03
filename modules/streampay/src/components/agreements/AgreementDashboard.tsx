@@ -3,6 +3,8 @@ import { usePrivy } from '@privy-io/react-auth'
 import { ArrowUpRight, Check, Copy, Loader2, LockKeyhole } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PrivyConnectButton } from '../../../../../src/lib/PrivyConnectButton'
+import UnifiedReceipt from '../../../../../src/components/UnifiedReceipt'
+import type { PaylinkReceipt } from '../../../../../src/lib/paymentReceiptPdf'
 
 type AgreementStatus = 'awaiting_start' | 'active' | 'expired' | 'completed' | 'cancelled' | 'refunded'
 
@@ -52,6 +54,7 @@ type Agreement = {
     transactionHash?: string
     updatedAt: string
   }
+  receipt?: PaylinkReceipt | null
   updatedAt: string
 }
 
@@ -415,7 +418,9 @@ export default function AgreementDashboard() {
                   <Detail label="Escrow" value={shortAddress(active.chain?.escrow)} />
                 </div>
 
-                {active.chain?.escrow && ['completed', 'cancelled', 'refunded'].includes(active.status) && (
+                {active.receipt ? (
+                  <UnifiedReceipt receipt={active.receipt} className="mt-5" />
+                ) : active.chain?.escrow && ['completed', 'cancelled', 'refunded'].includes(active.status) && (
                   <a
                     href={`https://testnet.arcscan.app/address/${active.chain.escrow}`}
                     target="_blank"

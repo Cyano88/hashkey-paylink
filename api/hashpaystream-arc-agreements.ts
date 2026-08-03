@@ -9,6 +9,7 @@ import {
 import {
   readArcAgreementActivationAttemptRecord,
   readArcAgreementActivationBinding,
+  listArcAgreementActivationAttemptRecords,
   type ArcAgreementActivationClient,
 } from './arc-agreement-activation-attempts.js'
 import { createArcAgreementActivationClient } from './arc-agreement-activation-client.js'
@@ -20,6 +21,8 @@ import {
 } from './arc-agreement-operator-actions.js'
 import { createArcAgreementOperatorClient } from './arc-agreement-operator-client.js'
 import { prepareArcAgreementReleaseCall } from './arc-agreement-operator.js'
+import { listArcAgreementPayerLifecycleActions } from './arc-agreement-payer-lifecycle.js'
+import { createArcAgreementReceipt } from './arc-agreement-receipt.js'
 import {
   resolveDeveloperProjectPolicy,
   verifyDeveloperProjectOwner,
@@ -55,6 +58,8 @@ type Dependencies = {
   hasActivationAttempt: (partnerId: string, agreementId: string) => Promise<boolean>
   rotatePayerAccess: (partnerId: string, agreementId: string) => ReturnType<typeof rotateArcAgreementPayerAccess>
   listOperatorActions: typeof listArcAgreementOperatorActions
+  listActivationAttempts: typeof listArcAgreementActivationAttemptRecords
+  listPayerLifecycleActions: typeof listArcAgreementPayerLifecycleActions
   binding: typeof readArcAgreementActivationBinding
   confirmed: typeof readConfirmedArcAgreementSnapshot
   prepareRelease: typeof prepareArcAgreementReleaseCall
@@ -82,6 +87,8 @@ const defaults: Dependencies = {
   },
   rotatePayerAccess: rotateArcAgreementPayerAccess,
   listOperatorActions: listArcAgreementOperatorActions,
+  listActivationAttempts: listArcAgreementActivationAttemptRecords,
+  listPayerLifecycleActions: listArcAgreementPayerLifecycleActions,
   binding: readArcAgreementActivationBinding,
   confirmed: readConfirmedArcAgreementSnapshot,
   prepareRelease: prepareArcAgreementReleaseCall,
@@ -413,10 +420,12 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
           req.body = originalBody
         }
       }
-      const [drafts, eventStore, operatorActions] = await Promise.all([
+      const [drafts, eventStore, operatorActions, activationAttempts, payerLifecycleActions] = await Promise.all([
         dependencies.listAgreements({ partnerId: projectId, limit: 250 }),
         dependencies.readEvents(storeKey),
         dependencies.listOperatorActions({ partnerId: projectId, limit: 250 }),
+        dependencies.listActivationAttempts({ partnerId: projectId, limit: 250 }),
+        dependencies.listPayerLifecycleActions({ partnerId: projectId, limit: 250 }),
       ])
       const draftsById = new Map(drafts.map(agreement => [agreement.id, agreement]))
       const eventsByAgreement = new Map<string, StoredEvent[]>()
@@ -436,17 +445,56 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
         releaseActionsByAgreement.set(action.agreementId, actions)
         if (!releaseByAgreement.has(action.agreementId)) releaseByAgreement.set(action.agreementId, action)
       }
+      const attemptsByAgreement = new Map(activationAttempts.map(attempt => [attempt.agreementId, attempt]))
+      const lifecycleByAgreement = new Map(payerLifecycleActions.map(action => [action.agreementId, action]))
       const agreements = [...ids]
         .map(id => {
-          const agreement = agreementRecord(id, draftsById.get(id), eventsByAgreement.get(id) ?? [])
+          const draft = draftsById.get(id)
+          const events = eventsByAgreement.get(id) ?? []
+          const agreement = agreementRecord(id, draft, events)
           const releaseActions = releaseActionsByAgreement.get(id) ?? []
           const currentRelease = agreement.status === 'completed'
             ? releaseByAgreement.get(id)
             : releaseActions.find(action => action.step === agreement.chain?.nextStep)
+          const terminalEvent = [...events]
+            .sort(compareEvents)
+            .filter(event => ['agreement.completed', 'agreement.cancelled', 'agreement.refunded'].includes(event.event))
+            .at(-1)
+          const attempt = attemptsByAgreement.get(id)
+          const payerLifecycle = lifecycleByAgreement.get(id)
+          const completedRelease = releaseActions
+            .filter(action => action.status === 'completed' && action.transactionHash)
+            .sort((left, right) => (right.step ?? 0) - (left.step ?? 0))[0]
+          const transactionHash = agreement.status === 'completed'
+            ? completedRelease?.transactionHash
+            : payerLifecycle?.status === 'confirmed'
+              ? payerLifecycle.transactionHash
+              : undefined
+          const receipt = terminalEvent && attempt && draft && agreement.chain && transactionHash
+            ? createArcAgreementReceipt({
+                agreementId: id,
+                title: draft.title,
+                description: draft.description,
+                template: draft.template,
+                status: agreement.status as 'completed' | 'cancelled' | 'refunded',
+                payer: attempt.prepared.payer,
+                recipient: attempt.prepared.recipient,
+                escrow: agreement.chain.escrow,
+                transactionHash,
+                eventId: terminalEvent.id,
+                createdAt: terminalEvent.createdAt || terminalEvent.receivedAt,
+                amountUsdcUnits: agreement.chain.amountUsdcUnits,
+                releasedUsdcUnits: agreement.chain.releasedUsdcUnits,
+                returnedUsdcUnits: ['cancelled', 'refunded'].includes(agreement.status)
+                  ? safeUnits(terminalEvent.data?.unreleasedAmountUsdcUnits)
+                  : '0',
+              })
+            : null
           return {
             ...agreement,
             releaseRequest: publicReleaseRequest(currentRelease),
             deliveryTimeline: publicDeliveryTimeline(releaseActions),
+            receipt,
           }
         })
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))

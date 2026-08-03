@@ -28,6 +28,12 @@ export type PaylinkReceipt = {
   narration?: string
   referenceId?: string
   billToken?: string
+  agreementId?: string
+  agreementStatus?: 'completed' | 'cancelled' | 'refunded'
+  agreementTemplate?: string
+  escrowAddress?: string
+  releasedAmount?: string
+  returnedAmount?: string
   proof?: {
     receiptHash?: string
     ogRootHash?: string
@@ -153,6 +159,7 @@ export function compactReceiptAmount(value?: string) {
 
 export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
   const prefix = receipt?.source === 'streampay' ? 'hashpaystream'
+    : receipt?.source === 'arc-agreement' ? 'arc-agreement'
     : receipt?.source === 'agentic-checkout' ? 'agent-checkout'
     : receipt?.source === 'bank-receive' ? 'bank-receive'
     : receipt?.source === 'bank-send' ? 'bank-send'
@@ -206,6 +213,27 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const amount = localAmount || `${compactReceiptAmount(receipt.amount)} ${receipt.asset}`
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
+  if (receipt.source === 'arc-agreement') {
+    const outcome = receipt.agreementStatus === 'completed'
+      ? `${compactReceiptAmount(receipt.releasedAmount)} USDC released`
+      : `${compactReceiptAmount(receipt.returnedAmount)} USDC returned`
+    return {
+      variant: 'general',
+      badge: 'Arc Agreement',
+      amount,
+      timestamp: fmtTime(receipt.createdAt),
+      rows: [
+        { label: 'Agreement', value: receipt.narration || receipt.title || '-' },
+        { label: 'Type', value: receipt.agreementTemplate || 'Arc agreement' },
+        { label: 'Payer', value: receipt.payer || '-', mono: true },
+        { label: 'Recipient', value: receipt.recipient || '-', mono: true },
+        { label: 'Protected by', value: receipt.escrowAddress || receipt.destination || '-', mono: true },
+        { label: 'Outcome', value: outcome },
+        { label: 'Agreement ID', value: receipt.agreementId || receipt.eventId, mono: true },
+      ],
+      reference,
+    }
+  }
   if (variant === 'bills') {
     const targetLabel = receipt.targetLabel || (type.toLowerCase().includes('electric') ? 'Meter Number' : type.toLowerCase().includes('tv') ? 'Smartcard Number' : 'Phone Number')
     return {
