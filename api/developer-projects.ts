@@ -509,7 +509,7 @@ function pilotInteger(value: unknown, name: string, minimum: number, maximum: nu
 function projectArcPilotReady(project: DeveloperProject) {
   const hasArcRecipient = project.networks.includes('arc') && validRecipient(project.recipients.arc)
   const hasTestKey = project.keys.some(key => !key.revokedAt && (key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')) === 'test')
-  return projectCheckoutMode(project) === 'human'
+  return (projectCheckoutMode(project) === 'human' || projectCheckoutMode(project) === 'agentic')
     && project.settlementMode === 'usdc'
     && project.settlementStatus === 'ready'
     && project.operationalStatus !== 'suspended'
@@ -608,7 +608,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const approving = action === 'admin-arc-pilot-approve'
         const reason = clean(req.body?.reason, 300)
         if (approving && !projectArcPilotReady(currentProject)) {
-          return res.status(409).json({ ok: false, error: 'Arc pilot approval requires a ready human USDC project with Arc routing, an active test key, and a signed webhook.' })
+          return res.status(409).json({ ok: false, error: 'Arc pilot approval requires a ready USDC project with Arc routing, an active test key, and a signed webhook.' })
         }
         if (!approving && reason.length < 8) {
           return res.status(400).json({ ok: false, error: 'Add a clear reason for disabling Arc Agreement activation.' })
@@ -642,7 +642,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const latest = current?.projects?.[projectId]
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           if (approving && !projectArcPilotReady(latest)) {
-            throw Object.assign(new Error('Arc pilot approval requires a ready human USDC project with Arc routing, an active test key, and a signed webhook.'), { status: 409 })
+            throw Object.assign(new Error('Arc pilot approval requires a ready USDC project with Arc routing, an active test key, and a signed webhook.'), { status: 409 })
           }
           const pilot: ArcAgreementPilotPolicy = {
             status: approving ? 'approved' : 'disabled',

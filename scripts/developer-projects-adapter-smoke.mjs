@@ -182,11 +182,13 @@ const agenticReady = await request(handler, 'PUT', {
   name: 'PolyDesk Agent API', website: 'https://polydesk.trade',
   useCase: 'Sell fixed-price LP Scout research to compatible agent wallets.',
   capabilities: ['hosted_checkout', 'arc_agreements'], settlementMode: 'usdc', networks: ['arc'], defaultNetwork: 'arc',
-  recipients: { arc: linkedWallet }, allowedOrigins: ['https://polydesk.trade'], webhookUrl: '',
+  recipients: { arc: linkedWallet }, allowedOrigins: ['https://polydesk.trade'], webhookUrl: 'https://polydesk.trade/webhooks/hashpaylink-agent',
 })
 assert.equal(agenticReady.body.project.settlementStatus, 'ready')
 const agenticKey = await request(handler, 'POST', { action: 'create-key', projectId: agenticProject.body.project.id, name: 'Agent sandbox', environment: 'test' })
 assert.equal(agenticKey.statusCode, 201)
+const agenticWebhook = await request(handler, 'POST', { action: 'rotate-webhook-secret', projectId: agenticProject.body.project.id })
+assert.equal(agenticWebhook.statusCode, 201)
 const agenticPolicy = developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret)
 assert.equal(agenticPolicy.checkoutMode, 'agentic')
 assert.deepEqual(agenticPolicy.capabilities, ['hosted_checkout', 'arc_agreements'])
@@ -225,11 +227,14 @@ assert.equal(JSON.stringify(webhook.body.project).includes('webhookSecretCipher'
 assert.equal(developerPolicyFromStore(store, generated.body.apiKey, portalSecret).webhookConfigured, true)
 
 activeIdentity = { userId: 'did:privy:operations', email: 'operations@example.com' }
-const agentPilotRejected = await request(handler, 'POST', {
+const agentPilotApproved = await request(handler, 'POST', {
   action: 'admin-arc-pilot-approve', projectId: agenticProject.body.project.id,
   maxAgreementUsdc: '1', dailyVolumeUsdc: '1', maxActiveAgreements: 1, maxDurationSeconds: 604800,
 })
-assert.equal(agentPilotRejected.statusCode, 409)
+assert.equal(agentPilotApproved.statusCode, 200)
+assert.equal(agentPilotApproved.body.project.checkoutMode, 'agentic')
+assert.equal(agentPilotApproved.body.project.arcAgreementPilot.status, 'approved')
+assert.equal(developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret).arcAgreementPilot.status, 'approved')
 const invalidPilotLimits = await request(handler, 'POST', {
   action: 'admin-arc-pilot-approve', projectId: created.body.project.id,
   maxAgreementUsdc: '2', dailyVolumeUsdc: '1', maxActiveAgreements: 1, maxDurationSeconds: 604800,
