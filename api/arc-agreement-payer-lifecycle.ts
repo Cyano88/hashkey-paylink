@@ -664,9 +664,17 @@ async function verifyPayerLifecycleTransaction(input: {
           if (accountCall.functionName === 'execute') {
             const [destination, value, callData] = accountCall.args
             userOperation = (
-              getAddress(destination) === input.action.walletAddress
-              && value === 0n
-              && callData.toLowerCase() === input.action.wrappedCall.data.toLowerCase()
+              value === 0n
+              && (
+                (
+                  getAddress(destination) === input.action.directCall.to
+                  && callData.toLowerCase() === input.action.directCall.data.toLowerCase()
+                )
+                || (
+                  getAddress(destination) === input.action.walletAddress
+                  && callData.toLowerCase() === input.action.wrappedCall.data.toLowerCase()
+                )
+              )
             )
           }
         }

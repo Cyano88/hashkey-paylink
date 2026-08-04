@@ -378,19 +378,19 @@ const userOperationReservation = await reserveArcAgreementPayerLifecycleAction({
   env: { ARC_AGREEMENT_PAYER_LIFECYCLE_ENABLED: 'true' },
 }, dependencies)
 const userOperationHash = `0x${'cc'.repeat(32)}`
-const accountCall = destination => encodeFunctionData({
+const accountCall = (destination, data = userOperationReservation.action.wrappedCall.data) => encodeFunctionData({
   abi: circleAccountAbi,
   functionName: 'execute',
-  args: [destination, 0n, userOperationReservation.action.wrappedCall.data],
+  args: [destination, 0n, data],
 })
-const entryPointCall = destination => encodeFunctionData({
+const entryPointCall = (destination, data) => encodeFunctionData({
   abi: entryPointAbi,
   functionName: 'handleOps',
   args: [[{
     sender: payer,
     nonce: 0n,
     initCode: '0x',
-    callData: accountCall(destination),
+    callData: accountCall(destination, data),
     callGasLimit: 1n,
     verificationGasLimit: 1n,
     preVerificationGas: 1n,
@@ -431,7 +431,10 @@ await observeArcAgreementPayerLifecycleAction({
 }, dependencies)
 observedTransaction = {
   ...observedTransaction,
-  input: entryPointCall(payer),
+  input: entryPointCall(
+    userOperationReservation.action.directCall.to,
+    userOperationReservation.action.directCall.data,
+  ),
 }
 receipt = { status: 'success', blockNumber: 195n }
 head = 205n

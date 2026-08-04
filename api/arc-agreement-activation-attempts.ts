@@ -893,6 +893,7 @@ function expectedCall(attempt: ArcAgreementActivationAttempt, stage: 'approval' 
 function isExactCircleUserOperation(
   transaction: TransactionObservation,
   payer: Address,
+  directCall: ArcAgreementPayerCall,
   smartWallet: ArcAgreementPayerCall,
 ) {
   if (transaction.to === null || getAddress(transaction.to) !== ENTRY_POINT_V06) return false
@@ -913,9 +914,17 @@ function isExactCircleUserOperation(
     if (accountCall.functionName !== 'execute') return false
     const [destination, value, callData] = accountCall.args
     return (
-      getAddress(destination) === payer
-      && value === 0n
-      && callData.toLowerCase() === smartWallet.data.toLowerCase()
+      value === 0n
+      && (
+        (
+          getAddress(destination) === directCall.to
+          && callData.toLowerCase() === directCall.data.toLowerCase()
+        )
+        || (
+          getAddress(destination) === payer
+          && callData.toLowerCase() === smartWallet.data.toLowerCase()
+        )
+      )
     )
   } catch {
     return false
@@ -949,9 +958,10 @@ function observedCircleSmartWalletCall(
     })
     if (accountCall.functionName !== 'execute') return null
     const [destination, value, callData] = accountCall.args
-    if (getAddress(destination) !== payer || value !== 0n) return null
+    if (value !== 0n) return null
     return {
       data: callData,
+      target: getAddress(destination),
       execution: 'circle_user_operation' as const,
     }
   } catch {
@@ -966,19 +976,26 @@ function recoverActivationCommitment(
   const observed = observedCircleSmartWalletCall(transaction, attempt.prepared.payer)
   if (!observed) return null
   try {
-    const smartWalletCall = decodeFunctionData({
-      abi: smartWalletAbi,
-      data: observed.data,
-    })
-    if (smartWalletCall.functionName !== 'executeBatch') return null
-    const [calls] = smartWalletCall.args
-    if (calls.length !== 1) return null
-    const call = calls[0]
     const prepared = hydratePrepared(attempt.prepared)
-    if (getAddress(call.target) !== prepared.factory || call.value !== 0n) return null
+    let factoryCallData: Hex
+    if ('target' in observed && observed.target !== prepared.payer) {
+      if (observed.target !== prepared.factory) return null
+      factoryCallData = observed.data
+    } else {
+      const smartWalletCall = decodeFunctionData({
+        abi: smartWalletAbi,
+        data: observed.data,
+      })
+      if (smartWalletCall.functionName !== 'executeBatch') return null
+      const [calls] = smartWalletCall.args
+      if (calls.length !== 1) return null
+      const call = calls[0]
+      if (getAddress(call.target) !== prepared.factory || call.value !== 0n) return null
+      factoryCallData = call.data
+    }
     const factoryCall = decodeFunctionData({
       abi: factoryAbi,
-      data: call.data,
+      data: factoryCallData,
     })
     if (factoryCall.functionName !== 'createAndFund') return null
     const [params] = factoryCall.args
@@ -999,8 +1016,16 @@ function recoverActivationCommitment(
       prepared: serializePrepared(recoveredPrepared),
       calls: payerCalls(recoveredPrepared),
     }
-    const expected = arcAgreementCircleSmartWalletCall(recoveredAttempt, 'activation')
-    if (expected.data.toLowerCase() !== observed.data.toLowerCase()) return null
+    const expectedDirect = expectedCall(recoveredAttempt, 'activation')
+    if ('target' in observed && observed.target !== prepared.payer) {
+      if (
+        observed.target !== expectedDirect.to
+        || observed.data.toLowerCase() !== expectedDirect.data.toLowerCase()
+      ) return null
+    } else {
+      const expectedWrapped = arcAgreementCircleSmartWalletCall(recoveredAttempt, 'activation')
+      if (expectedWrapped.data.toLowerCase() !== observed.data.toLowerCase()) return null
+    }
     return { attempt: recoveredAttempt, execution: observed.execution }
   } catch {
     return null
@@ -1057,7 +1082,7 @@ async function verifiedPayerTransaction(input: {
     && transaction.input.toLowerCase() === smartWallet.data.toLowerCase()
   )
   if (wrapped) return { transaction, execution: 'circle_smart_wallet' as const }
-  if (isExactCircleUserOperation(transaction, input.attempt.prepared.payer, smartWallet)) {
+  if (isExactCircleUserOperation(transaction, input.attempt.prepared.payer, expected, smartWallet)) {
     return { transaction, execution: 'circle_user_operation' as const }
   }
   if (input.stage === 'activation' && input.recoverSubmittedChallenge) {

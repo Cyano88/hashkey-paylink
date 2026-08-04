@@ -294,7 +294,11 @@ const approvalSmartWalletCall = arcAgreementCircleSmartWalletCall(
 const circleApprovalCall = encodeFunctionData({
   abi: circleAccountAbi,
   functionName: 'execute',
-  args: [payer, 0n, approvalSmartWalletCall.data],
+  args: [
+    preparedResult.attempt.calls.approval.to,
+    0n,
+    preparedResult.attempt.calls.approval.data,
+  ],
 })
 const approvalUserOperationData = encodeFunctionData({
   abi: entryPointAbi,
@@ -1049,14 +1053,14 @@ assert.equal((await readArcAgreementActivationAttempt(
 // Recover a Circle user operation that executed the prior immutable activation
 // commitment even though the attempt was renewed before its hash was recorded.
 const driftedActivationHash = transactionHash('e')
-const driftedSmartWalletCall = arcAgreementCircleSmartWalletCall(
-  seventhReservation.attempt,
-  'activation',
-)
 const driftedCircleCall = encodeFunctionData({
   abi: circleAccountAbi,
   functionName: 'execute',
-  args: [payer, 0n, driftedSmartWalletCall.data],
+  args: [
+    seventhReservation.attempt.calls.activation.to,
+    0n,
+    seventhReservation.attempt.calls.activation.data,
+  ],
 })
 chain.state.transactions.set(driftedActivationHash, {
   hash: driftedActivationHash,
