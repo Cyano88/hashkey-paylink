@@ -7,6 +7,17 @@ import {
   arcAgreementTerms,
   assertArcAgreementReleasePayouts,
 } from './arc-agreement-terms.js'
+import {
+  listArcAgreementActivationAttemptRecords,
+  readArcAgreementActivationAttemptRecord,
+} from './arc-agreement-activation-attempts.js'
+import {
+  publicArcAgreementReleaseRequest,
+  requestArcAgreementRelease,
+} from './arc-agreement-creator-actions.js'
+import { listArcAgreementOperatorActions } from './arc-agreement-operator-actions.js'
+import { listArcAgreementPayerLifecycleActions } from './arc-agreement-payer-lifecycle.js'
+import { createArcAgreementDeveloperView } from './arc-agreement-developer-view.js'
 import { resolveDeveloperApiKeyPolicy, type DeveloperCheckoutMode, type DeveloperCheckoutPolicy } from './developer-projects.js'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
 
@@ -57,6 +68,11 @@ type Dependencies = {
   read: (key: string) => Promise<AgreementStore | undefined>
   mutate: (key: string, update: (current: AgreementStore | undefined) => AgreementStore) => Promise<AgreementStore>
   policy: (req: Pick<Request, 'headers'>) => Promise<DeveloperCheckoutPolicy | null>
+  hasActivationAttempt: (partnerId: string, agreementId: string) => Promise<boolean>
+  requestRelease: typeof requestArcAgreementRelease
+  listOperatorActions: typeof listArcAgreementOperatorActions
+  listActivationAttempts: typeof listArcAgreementActivationAttemptRecords
+  listPayerLifecycleActions: typeof listArcAgreementPayerLifecycleActions
   createId: () => string
   createPayerAccessToken: () => string
   now: () => Date
@@ -67,6 +83,19 @@ const defaults: Dependencies = {
   read: readDurableJson,
   mutate: mutateDurableJson,
   policy: resolveDeveloperApiKeyPolicy,
+  hasActivationAttempt: async (partnerId, agreementId) => {
+    try {
+      await readArcAgreementActivationAttemptRecord(partnerId, agreementId)
+      return true
+    } catch (reason) {
+      if (reason instanceof Error && reason.message.includes('was not found for this project')) return false
+      throw reason
+    }
+  },
+  requestRelease: requestArcAgreementRelease,
+  listOperatorActions: listArcAgreementOperatorActions,
+  listActivationAttempts: listArcAgreementActivationAttemptRecords,
+  listPayerLifecycleActions: listArcAgreementPayerLifecycleActions,
   createId: () => `agr_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
   createPayerAccessToken: () => `agrp_${randomBytes(32).toString('base64url')}`,
   now: () => new Date(),
@@ -265,6 +294,20 @@ export async function listArcAgreementRecords(
     .slice(0, limit)
 }
 
+export async function readArcAgreementForProject(
+  partnerIdValue: string,
+  agreementIdValue: string,
+  read: Dependencies['read'] = defaults.read,
+) {
+  const partnerId = clean(partnerIdValue, 80)
+  const agreementId = clean(agreementIdValue, 80)
+  if (!/^dev_[a-z0-9]{8,64}$/i.test(partnerId) || !/^agr_[a-z0-9]{12,64}$/i.test(agreementId)) {
+    throw Object.assign(new Error('Agreement identity is invalid.'), { status: 400 })
+  }
+  const agreement = (await read(STORE_KEY))?.agreements?.[agreementId]
+  return agreement?.partnerId === partnerId ? agreement : null
+}
+
 export async function rotateArcAgreementPayerAccess(
   partnerIdValue: string,
   agreementIdValue: string,
@@ -334,10 +377,119 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
 
       if (req.method === 'GET') {
         const id = clean(req.query?.id, 80)
+        if (!id) {
+          const requestedIds = [...new Set(clean(req.query?.ids, 8_100)
+            .split(',')
+            .map(value => value.trim())
+            .filter(Boolean))]
+          if (requestedIds.length > 100 || requestedIds.some(value => !/^agr_[a-z0-9]{12,64}$/i.test(value))) {
+            return res.status(400).json({ ok: false, error: 'ids must contain no more than 100 valid agreement ids.' })
+          }
+          const requestedLimit = Number(req.query?.limit ?? 100)
+          const limit = Number.isFinite(requestedLimit)
+            ? Math.min(250, Math.max(1, Math.trunc(requestedLimit)))
+            : 100
+          const recordsPromise = requestedIds.length
+            ? dependencies.read(STORE_KEY).then(store => requestedIds.flatMap(requestedId => {
+                const agreement = store?.agreements?.[requestedId]
+                return agreement?.partnerId === policy.partnerId ? [agreement] : []
+              }))
+            : listArcAgreementRecords({ partnerId: policy.partnerId, limit }, dependencies.read)
+          const [records, actions, attempts, payerActions] = await Promise.all([
+            recordsPromise,
+            dependencies.listOperatorActions({ partnerId: policy.partnerId, limit: 250 }),
+            dependencies.listActivationAttempts({ partnerId: policy.partnerId, limit: 250 }),
+            dependencies.listPayerLifecycleActions({ partnerId: policy.partnerId, limit: 250 }),
+          ])
+          const attemptsByAgreement = new Map(attempts.map(attempt => [attempt.agreementId, attempt]))
+          const agreements = records.map(agreement => ({
+            ...publicAgreement(agreement),
+            ...createArcAgreementDeveloperView({
+              draft: agreement,
+              attempt: attemptsByAgreement.get(agreement.id),
+              operatorActions: actions.filter(action => action.agreementId === agreement.id),
+              payerActions: payerActions.filter(action => action.agreementId === agreement.id),
+            }),
+          }))
+          return res.json({ ok: true, agreements })
+        }
         if (!/^agr_[a-z0-9]{12,64}$/i.test(id)) return res.status(400).json({ ok: false, error: 'A valid agreement id is required.' })
         const agreement = (await dependencies.read(STORE_KEY))?.agreements?.[id]
         if (!agreement || agreement.partnerId !== policy.partnerId) return res.status(404).json({ ok: false, error: 'Agreement not found.' })
-        return res.json({ ok: true, agreement: publicAgreement(agreement) })
+        const [actions, attempts, payerActions] = await Promise.all([
+          dependencies.listOperatorActions({ partnerId: policy.partnerId, agreementId: agreement.id, limit: 250 }),
+          dependencies.listActivationAttempts({ partnerId: policy.partnerId, limit: 250 }),
+          dependencies.listPayerLifecycleActions({ partnerId: policy.partnerId, limit: 250 }),
+        ])
+        const view = createArcAgreementDeveloperView({
+          draft: agreement,
+          attempt: attempts.find(attempt => attempt.agreementId === agreement.id),
+          operatorActions: actions,
+          payerActions: payerActions.filter(action => action.agreementId === agreement.id),
+        })
+        return res.json({
+          ok: true,
+          agreement: { ...publicAgreement(agreement), ...view },
+          releaseRequest: view.releaseRequest,
+          receipt: view.receipt,
+        })
+      }
+
+      const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+        ? req.body as Record<string, unknown>
+        : {}
+      if (body.action === 'rotate_payer_link') {
+        if (policy.checkoutMode !== 'human') {
+          return res.status(409).json({
+            ok: false,
+            error: 'Agentic agreements do not use human payer links. Use the dedicated agent activation API.',
+          })
+        }
+        const agreementId = clean(body.agreementId, 80)
+        if (!/^agr_[a-z0-9]{12,64}$/i.test(agreementId)) {
+          return res.status(400).json({ ok: false, error: 'A valid agreement id is required.' })
+        }
+        if (await dependencies.hasActivationAttempt(policy.partnerId, agreementId)) {
+          return res.status(409).json({
+            ok: false,
+            error: 'Payer access cannot be changed after agreement activation has started.',
+          })
+        }
+        const rotated = await rotateArcAgreementPayerAccess(policy.partnerId, agreementId, {
+          hasStore: dependencies.hasStore,
+          mutate: dependencies.mutate,
+          createPayerAccessToken: dependencies.createPayerAccessToken,
+          now: dependencies.now,
+        })
+        return res.json({
+          ok: true,
+          agreement: rotated.agreement,
+          payerAccessToken: rotated.payerAccessToken,
+          payerReviewPath: rotated.payerReviewPath,
+        })
+      }
+      if (body.action === 'request_release') {
+        const agreementId = clean(body.agreementId, 80)
+        if (!/^agr_[a-z0-9]{12,64}$/i.test(agreementId)) {
+          return res.status(400).json({ ok: false, error: 'A valid agreement id is required.' })
+        }
+        const agreement = (await dependencies.read(STORE_KEY))?.agreements?.[agreementId]
+        if (!agreement || agreement.partnerId !== policy.partnerId) {
+          return res.status(404).json({ ok: false, error: 'Agreement not found.' })
+        }
+        const result = await dependencies.requestRelease({
+          partnerId: policy.partnerId,
+          agreementId,
+          template: agreement.template,
+          requestedBy: `developer-api:${policy.partnerId}`,
+          deliveryNote: body.deliveryNote,
+          evidenceReference: body.evidenceReference,
+        })
+        return res.status(result.replayed ? 200 : 201).json({
+          ok: true,
+          replayed: result.replayed,
+          releaseRequest: publicArcAgreementReleaseRequest(result.action),
+        })
       }
 
       const idempotencyKey = clean(req.headers['idempotency-key'], 160)
@@ -370,9 +522,11 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
         }
 
         const id = dependencies.createId()
-        payerAccessToken = dependencies.createPayerAccessToken()
-        if (!/^agrp_[A-Za-z0-9_-]{40,100}$/.test(payerAccessToken)) {
-          throw new Error('Agreement payer-access token generator is invalid.')
+        if (policy.checkoutMode === 'human') {
+          payerAccessToken = dependencies.createPayerAccessToken()
+          if (!/^agrp_[A-Za-z0-9_-]{40,100}$/.test(payerAccessToken)) {
+            throw new Error('Agreement payer-access token generator is invalid.')
+          }
         }
         const chainTerms = arcAgreementTerms(input)
         agreement = {
@@ -388,7 +542,7 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
           status: 'draft',
           activationStatus: 'private_pilot',
           requestHash,
-          payerAccessHash: payerAccessHash(payerAccessToken),
+          payerAccessHash: payerAccessToken ? payerAccessHash(payerAccessToken) : '',
           createdAt: now,
           updatedAt: now,
         }
@@ -406,7 +560,9 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
           payerAccessToken,
           payerReviewPath: `/agreements/${agreement.id}#access=${encodeURIComponent(payerAccessToken)}`,
         } : {}),
-        nextAction: 'Send payerReviewPath to the payer. Funding remains restricted to projects authorized for the private Arc Testnet pilot.',
+        nextAction: policy.checkoutMode === 'human'
+          ? 'Send payerReviewPath to the payer. Funding remains restricted to projects authorized for the private Arc Testnet pilot.'
+          : 'Prepare the agent payer calls through /api/v2/agreements/agent. Funding remains restricted to approved Arc Testnet pilot projects.',
       })
     } catch (error) {
       const status = Number((error as Error & { status?: number })?.status) || 500

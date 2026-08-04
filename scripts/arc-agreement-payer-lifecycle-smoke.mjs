@@ -7,6 +7,7 @@ import { readConfirmedArcAgreementSnapshot } from '../api/arc-agreement-confirme
 import {
   attachArcAgreementPayerLifecycleChallenge,
   observeArcAgreementPayerLifecycleAction,
+  prepareArcAgreementAgentPayerLifecycleCall,
   readArcAgreementPayerLifecycleAction,
   reconcileArcAgreementPayerLifecycleAction,
   recordArcAgreementPayerLifecycleTransaction,
@@ -80,6 +81,8 @@ async function snapshot({
 }
 
 let durableStore
+let bindingCheckoutMode = 'human'
+let bindingIdentity = identity
 let confirmed = await snapshot()
 let blockTimestamp = BigInt(activationTimestamp + 300)
 let now = new Date('2026-07-30T10:00:00.000Z')
@@ -96,8 +99,8 @@ const dependencies = {
     attemptId: 'aat_payerlifecycle1234',
     partnerId,
     agreementId,
-    payerIdentityHash: arcAgreementPayerIdentityHash(identity),
-    checkoutMode: 'human',
+    payerIdentityHash: arcAgreementPayerIdentityHash(bindingIdentity),
+    checkoutMode: bindingCheckoutMode,
     escrow,
     prepared,
   }),
@@ -466,6 +469,61 @@ assert.equal(backfilledUserOperation.changed, true)
 assert.equal(backfilledUserOperation.action.status, 'confirmed')
 assert.equal(backfilledUserOperation.action.webhookEventId, queuedWebhookEvents[2].id)
 assert.equal(queuedWebhookEvents[2].id, queuedWebhookEvents[1].id)
+
+// Agent lifecycle calls use the same verified escrow rules, but the durable
+// journal is explicitly agent-direct and rejects Circle smart-wallet execution.
+durableStore = undefined
+bindingCheckoutMode = 'agentic'
+bindingIdentity = `agent:${partnerId}:apr_${'d'.repeat(40)}`
+confirmed = await snapshot({ status: 1, releasedAmount: 0n, tokenBalance: prepared.totalAmount, head: 300n })
+blockTimestamp = BigInt(activationTimestamp + 300)
+const agentReservation = await prepareArcAgreementAgentPayerLifecycleCall({
+  client,
+  partnerId,
+  agreementId,
+  payerIdentity: bindingIdentity,
+  walletAddress: payer,
+  action: 'cancel',
+  env: { ARC_AGREEMENT_PAYER_LIFECYCLE_ENABLED: 'true' },
+}, dependencies)
+assert.equal(agentReservation.action.executionMode, 'agent_direct')
+assert.equal(agentReservation.call.to, escrow)
+assert.equal(agentReservation.call.data, agentReservation.action.directCall.data)
+
+const agentTransactionHash = `0x${'dd'.repeat(32)}`
+observedTransaction = {
+  hash: agentTransactionHash,
+  from: '0x9999999999999999999999999999999999999999',
+  to: payer,
+  input: agentReservation.action.wrappedCall.data,
+  value: 0n,
+}
+await assert.rejects(() => recordArcAgreementPayerLifecycleTransaction({
+  client,
+  partnerId,
+  agreementId,
+  payerIdentity: bindingIdentity,
+  transactionHash: agentTransactionHash,
+  requireAgentPreparation: true,
+  directOnly: true,
+}, dependencies), /directly execute/)
+observedTransaction = {
+  hash: agentTransactionHash,
+  from: payer,
+  to: escrow,
+  input: agentReservation.action.directCall.data,
+  value: 0n,
+}
+const agentRecorded = await recordArcAgreementPayerLifecycleTransaction({
+  client,
+  partnerId,
+  agreementId,
+  payerIdentity: bindingIdentity,
+  transactionHash: agentTransactionHash,
+  requireAgentPreparation: true,
+  directOnly: true,
+}, dependencies)
+assert.equal(agentRecorded.action.execution, 'direct')
 
 const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8')
 assert.match(envExample, /^ARC_AGREEMENTS_ENABLED=false$/m)

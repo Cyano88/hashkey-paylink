@@ -4,6 +4,7 @@ import {
   readArcAgreementByPayerAccess,
   rotateArcAgreementPayerAccess,
 } from '../api/arc-agreements.ts'
+import { requestArcAgreementRelease } from '../api/arc-agreement-creator-actions.ts'
 
 function responseRecorder() {
   return {
@@ -48,6 +49,10 @@ const handler = createArcAgreementsHandler({
     return store
   },
   policy: async () => policy,
+  hasActivationAttempt: async () => false,
+  listOperatorActions: async () => [],
+  listActivationAttempts: async () => [],
+  listPayerLifecycleActions: async () => [],
   createId: () => `agr_testagreement${(++id).toString().padStart(4, '0')}`,
   createPayerAccessToken: () => `agrp_${String(id + 1).padStart(43, 'a')}`,
   now: () => new Date('2026-07-28T12:00:00.000Z'),
@@ -142,6 +147,193 @@ assert.equal(read.statusCode, 200)
 assert.equal(read.body.agreement.resourceId, fixed.resourceId)
 assert.equal('requestHash' in read.body.agreement, false)
 
+const listed = await request(handler, 'GET', { query: { limit: '10' } })
+assert.equal(listed.statusCode, 200)
+assert.equal(listed.body.agreements.length, 1)
+assert.equal(listed.body.agreements[0].id, created.body.agreement.id)
+assert.equal('payerAccessHash' in listed.body.agreements[0], false)
+assert.equal(listed.body.agreements[0].releaseRequest, null)
+
+const completedAction = {
+  id: `opa_${'4'.repeat(24)}`,
+  partnerId: humanPolicy.partnerId,
+  agreementId: created.body.agreement.id,
+  action: 'release',
+  step: 0,
+  evidenceHash: `0x${'5'.repeat(64)}`,
+  evidenceReference: 'https://delivery.example/proof',
+  deliveryNote: 'Completed the protected delivery.',
+  reviewPolicy: 'payer',
+  preparedCall: {},
+  requestHash: '6'.repeat(64),
+  idempotencyKey: '00000000-0000-4000-8000-000000000000',
+  requestedBy: 'developer-api:test',
+  requestedAt: '2026-07-28T15:00:00.000Z',
+  reviewedAt: '2026-07-28T15:05:00.000Z',
+  completedAt: '2026-07-28T15:06:00.000Z',
+  transactionHash: `0x${'7'.repeat(64)}`,
+  status: 'completed',
+  attempts: 1,
+  updatedAt: '2026-07-28T15:06:00.000Z',
+}
+const completedRead = await request(createArcAgreementsHandler({
+  hasStore: () => true,
+  read: async () => store,
+  policy: async () => humanPolicy,
+  listOperatorActions: async () => [completedAction],
+  listPayerLifecycleActions: async () => [],
+  listActivationAttempts: async () => [{
+    agreementId: created.body.agreement.id,
+    partnerId: humanPolicy.partnerId,
+    status: 'active',
+    escrow: '0x3333333333333333333333333333333333333333',
+    prepared: {
+      agreementId: `0x${'8'.repeat(64)}`,
+      termsHash: created.body.agreement.termsHash,
+      payer: '0x4444444444444444444444444444444444444444',
+      recipient: created.body.agreement.recipient,
+      totalAmount: '10500000',
+      cumulativeReleaseBps: [10000],
+    },
+    lifecycle: {
+      status: 'completed',
+      nextStep: 1,
+      releasedAmountUsdcUnits: '10500000',
+      eventId: `evt_${'9'.repeat(24)}`,
+      observedBlockNumber: '100',
+      observedAt: '2026-07-28T15:06:00.000Z',
+    },
+    updatedAt: '2026-07-28T15:06:00.000Z',
+  }],
+}), 'GET', { query: { id: created.body.agreement.id } })
+assert.equal(completedRead.statusCode, 200)
+assert.equal(completedRead.body.agreement.status, 'completed')
+assert.equal(completedRead.body.agreement.chain.releasedUsdcUnits, '10500000')
+assert.equal(completedRead.body.receipt.source, 'arc-agreement')
+assert.equal(completedRead.body.receipt.agreementStatus, 'completed')
+assert.equal(completedRead.body.receipt.txHash, completedAction.transactionHash)
+assert.equal(JSON.stringify(completedRead.body).includes(completedAction.evidenceHash), false)
+
+const apiRotatedToken = `agrp_${'y'.repeat(43)}`
+const apiRotated = await request(createArcAgreementsHandler({
+  hasStore: () => true,
+  read: async () => store,
+  mutate: async (_key, update) => {
+    store = update(store)
+    return store
+  },
+  policy: async () => humanPolicy,
+  hasActivationAttempt: async () => false,
+  createPayerAccessToken: () => apiRotatedToken,
+  now: () => new Date('2026-07-28T14:00:00.000Z'),
+}), 'POST', {
+  body: { action: 'rotate_payer_link', agreementId: created.body.agreement.id },
+  headers: { 'x-api-key': 'hpl_test_mock' },
+})
+assert.equal(apiRotated.statusCode, 200)
+assert.equal(apiRotated.body.payerAccessToken, apiRotatedToken)
+assert.equal(apiRotated.body.payerReviewPath, `/agreements/${created.body.agreement.id}#access=${apiRotatedToken}`)
+
+const apiRotationBlocked = await request(createArcAgreementsHandler({
+  hasStore: () => true,
+  read: async () => store,
+  policy: async () => humanPolicy,
+  hasActivationAttempt: async () => true,
+}), 'POST', {
+  body: { action: 'rotate_payer_link', agreementId: created.body.agreement.id },
+  headers: { 'x-api-key': 'hpl_test_mock' },
+})
+assert.equal(apiRotationBlocked.statusCode, 409)
+assert.match(apiRotationBlocked.body.error, /activation has started/)
+
+let releaseInput
+const publicRelease = await request(createArcAgreementsHandler({
+  hasStore: () => true,
+  read: async () => store,
+  policy: async () => humanPolicy,
+  requestRelease: async input => {
+    releaseInput = input
+    return {
+      replayed: false,
+      action: {
+        id: `opa_${'1'.repeat(24)}`,
+        partnerId: input.partnerId,
+        agreementId: input.agreementId,
+        action: 'release',
+        step: 0,
+        evidenceHash: `0x${'2'.repeat(64)}`,
+        evidenceReference: 'https://delivery.example/proof',
+        deliveryNote: 'Completed the protected delivery.',
+        reviewPolicy: 'payer',
+        preparedCall: {},
+        requestHash: '3'.repeat(64),
+        idempotencyKey: '00000000-0000-4000-8000-000000000000',
+        requestedBy: input.requestedBy,
+        requestedAt: '2026-07-28T15:00:00.000Z',
+        status: 'awaiting_review',
+        attempts: 0,
+        updatedAt: '2026-07-28T15:00:00.000Z',
+      },
+    }
+  },
+}), 'POST', {
+  body: {
+    action: 'request_release',
+    agreementId: created.body.agreement.id,
+    deliveryNote: 'Completed the protected delivery.',
+    evidenceReference: 'https://delivery.example/proof',
+  },
+  headers: { 'x-api-key': 'hpl_test_mock' },
+})
+assert.equal(publicRelease.statusCode, 201)
+assert.equal(publicRelease.body.releaseRequest.status, 'awaiting_review')
+assert.equal(publicRelease.body.releaseRequest.evidenceReference, 'https://delivery.example/proof')
+assert.equal('evidenceHash' in publicRelease.body.releaseRequest, false)
+assert.equal(releaseInput.partnerId, humanPolicy.partnerId)
+assert.equal(releaseInput.requestedBy, `developer-api:${humanPolicy.partnerId}`)
+
+const foreignRelease = await request(createArcAgreementsHandler({
+  hasStore: () => true,
+  read: async () => store,
+  policy: async () => ({ ...humanPolicy, partnerId: 'dev_foreignproject1234' }),
+  requestRelease: async () => { throw new Error('must not run') },
+}), 'POST', {
+  body: {
+    action: 'request_release',
+    agreementId: created.body.agreement.id,
+    deliveryNote: 'Completed the protected delivery.',
+    evidenceReference: 'https://delivery.example/proof',
+  },
+  headers: { 'x-api-key': 'hpl_test_mock' },
+})
+assert.equal(foreignRelease.statusCode, 404)
+
+await assert.rejects(
+  requestArcAgreementRelease({
+    partnerId: humanPolicy.partnerId,
+    agreementId: created.body.agreement.id,
+    template: 'fixed_unlock',
+    requestedBy: `developer-api:${humanPolicy.partnerId}`,
+    deliveryNote: 'Completed the protected delivery.',
+    evidenceReference: 'http://delivery.example/proof',
+  }),
+  error => error?.status === 400 && /secure HTTPS link/.test(error.message),
+)
+
+await assert.rejects(
+  requestArcAgreementRelease({
+    partnerId: humanPolicy.partnerId,
+    agreementId: created.body.agreement.id,
+    template: 'fixed_unlock',
+    requestedBy: `developer-api:${humanPolicy.partnerId}`,
+    deliveryNote: 'Completed the protected delivery.',
+    evidenceReference: 'https://delivery.example/proof',
+  }, {
+    binding: async () => { throw new Error('Arc Agreement lifecycle actions require a durably active escrow.') },
+  }),
+  error => error?.status === 409 && /must be active/.test(error.message),
+)
+
 policy = { ...humanPolicy, partnerId: 'project_other' }
 assert.equal((await request(handler, 'GET', { query: { id: created.body.agreement.id } })).statusCode, 404)
 
@@ -152,6 +344,16 @@ const agentCreated = await request(handler, 'POST', {
 })
 assert.equal(agentCreated.statusCode, 201)
 assert.equal(agentCreated.body.agreement.checkoutMode, 'agentic')
+assert.equal('payerAccessToken' in agentCreated.body, false)
+assert.equal('payerReviewPath' in agentCreated.body, false)
+assert.match(agentCreated.body.nextAction, /\/api\/v2\/agreements\/agent/)
+assert.equal(store.agreements[agentCreated.body.agreement.id].payerAccessHash, '')
+const agentRotationBlocked = await request(handler, 'POST', {
+  headers: { 'x-api-key': 'hpl_test_mock' },
+  body: { action: 'rotate_payer_link', agreementId: agentCreated.body.agreement.id },
+})
+assert.equal(agentRotationBlocked.statusCode, 409)
+assert.match(agentRotationBlocked.body.error, /do not use human payer links/)
 
 policy = humanPolicy
 const progressiveHeaders = { ...headers, 'idempotency-key': 'agreement:progressive-0001' }

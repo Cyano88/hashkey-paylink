@@ -80,6 +80,7 @@ export type ArcAgreementPayerLifecycleAction = {
   sequence: number
   idempotencyKey: string
   status: ArcAgreementPayerLifecycleActionStatus
+  executionMode?: 'circle' | 'agent_direct'
   challengeId?: string
   providerTransactionId?: string
   providerState?: string
@@ -296,14 +297,16 @@ export async function reviewArcAgreementPayerLifecycle(input: {
   walletId: string
   walletAddress: string
   confirmationBlocks?: number
+  checkoutMode?: 'human' | 'agentic'
 }, dependencies: Dependencies = defaults) {
   const partnerId = required(input.partnerId, PARTNER_ID, 'Developer project id', 80)
   const agreementId = required(input.agreementId, AGREEMENT_ID, 'Agreement id', 80)
   const identityHash = arcAgreementPayerIdentityHash(input.payerIdentity)
   const wallet = requireWallet(input)
   const binding = await dependencies.binding(partnerId, agreementId)
+  const checkoutMode = input.checkoutMode ?? 'human'
   if (
-    binding.checkoutMode !== 'human'
+    binding.checkoutMode !== checkoutMode
     || binding.payerIdentityHash !== identityHash
     || binding.prepared.payer !== wallet.walletAddress
   ) {
@@ -350,9 +353,24 @@ export async function reserveArcAgreementPayerLifecycleAction(input: {
   action: ArcAgreementPayerLifecycleActionName
   env?: NodeJS.ProcessEnv
 }, dependencies: Dependencies = defaults) {
+  return reservePayerLifecycleAction({ ...input, checkoutMode: 'human', executionMode: 'circle' }, dependencies)
+}
+
+async function reservePayerLifecycleAction(input: {
+  client: ArcAgreementActivationClient
+  partnerId: string
+  agreementId: string
+  payerIdentity: string
+  walletId: string
+  walletAddress: string
+  action: ArcAgreementPayerLifecycleActionName
+  checkoutMode: 'human' | 'agentic'
+  executionMode: 'circle' | 'agent_direct'
+  env?: NodeJS.ProcessEnv
+}, dependencies: Dependencies) {
   if (!dependencies.hasStore()) throw new Error('Arc Agreement payer lifecycle storage is not configured.')
   requireLifecycleEnabled(input.env ?? process.env)
-  const reviewed = await reviewArcAgreementPayerLifecycle(input, dependencies)
+  const reviewed = await reviewArcAgreementPayerLifecycle({ ...input, checkoutMode: input.checkoutMode }, dependencies)
   if (!reviewed.eligibility[input.action].eligible) {
     throw new Error(
       input.action === 'cancel'
@@ -422,6 +440,7 @@ export async function reserveArcAgreementPayerLifecycleAction(input: {
       sequence,
       idempotencyKey: uuidV4(`${id}\0${requestHash}\0${sequence}`),
       status: 'reserved',
+      executionMode: input.executionMode,
       createdAt: timestamp,
       updatedAt: timestamp,
     }
@@ -430,7 +449,29 @@ export async function reserveArcAgreementPayerLifecycleAction(input: {
     return store
   })
   if (!durable) throw new Error('Payer lifecycle action was not persisted.')
-  return { action: Object.freeze({ ...durable }), call: wrapped, replayed }
+  return {
+    action: Object.freeze({ ...durable }),
+    call: input.executionMode === 'agent_direct' ? call : wrapped,
+    replayed,
+  }
+}
+
+export async function prepareArcAgreementAgentPayerLifecycleCall(input: {
+  client: ArcAgreementActivationClient
+  partnerId: string
+  agreementId: string
+  payerIdentity: string
+  walletAddress: string
+  action: ArcAgreementPayerLifecycleActionName
+  env?: NodeJS.ProcessEnv
+}, dependencies: Dependencies = defaults) {
+  const identityHash = arcAgreementPayerIdentityHash(input.payerIdentity)
+  return reservePayerLifecycleAction({
+    ...input,
+    walletId: `agent_${identityHash.slice(0, 40)}`,
+    checkoutMode: 'agentic',
+    executionMode: 'agent_direct',
+  }, dependencies)
 }
 
 function requireActionBinding(
@@ -646,16 +687,24 @@ export async function recordArcAgreementPayerLifecycleTransaction(input: {
   agreementId: string
   payerIdentity: string
   transactionHash: string
+  requireAgentPreparation?: boolean
+  directOnly?: boolean
 }, dependencies: Dependencies = defaults) {
   if (!dependencies.hasStore()) throw new Error('Arc Agreement payer lifecycle storage is not configured.')
   const transactionHash = required(input.transactionHash, TX_HASH, 'Arc transaction hash', 66).toLowerCase() as Hex
   const action = await readArcAgreementPayerLifecycleAction(input, dependencies)
   if (!action) throw new Error('Payer lifecycle action was not found.')
+  if (input.requireAgentPreparation && action.executionMode !== 'agent_direct') {
+    throw new Error('Prepare this agent lifecycle call before recording its transaction.')
+  }
   const execution = await verifyPayerLifecycleTransaction({
     client: input.client,
     action,
     transactionHash,
   })
+  if (input.directOnly && execution !== 'direct') {
+    throw new Error('Agent lifecycle transactions must directly execute the prepared escrow call.')
+  }
   let replayed = false
   const durable = await updateAction(input, (current, timestamp, store) => {
     const indexed = store.transactionIndex[transactionHash]

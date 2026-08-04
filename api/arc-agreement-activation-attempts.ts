@@ -119,6 +119,13 @@ export type ArcAgreementPayerChallenge = {
   updatedAt: string
 }
 
+export type ArcAgreementAgentCallPreparation = {
+  stage: 'approval' | 'activation'
+  sequence: number
+  deploymentHash: Hex
+  preparedAt: string
+}
+
 export type ArcAgreementLifecycleObservation = {
   status: 'active' | 'expired' | 'completed' | 'cancelled' | 'refunded'
   nextStep: number
@@ -158,6 +165,7 @@ export type ArcAgreementActivationAttempt = {
   }
   transactions: ArcAgreementPayerTransaction[]
   challenges?: ArcAgreementPayerChallenge[]
+  agentCallPreparations?: ArcAgreementAgentCallPreparation[]
   activationTimestamp: number
   escrow?: Address
   observedBlockNumber?: string
@@ -1076,6 +1084,19 @@ function challenges(attempt: ArcAgreementActivationAttempt) {
   return [...(attempt.challenges ?? [])]
 }
 
+function agentCallPreparations(attempt: ArcAgreementActivationAttempt) {
+  return [...(attempt.agentCallPreparations ?? [])]
+}
+
+function latestAgentCallPreparation(
+  attempt: ArcAgreementActivationAttempt,
+  stage: 'approval' | 'activation',
+) {
+  return agentCallPreparations(attempt)
+    .filter(item => item.stage === stage)
+    .sort((left, right) => right.sequence - left.sequence)[0]
+}
+
 function challengeIdempotencyKey(
   attempt: ArcAgreementActivationAttempt,
   stage: 'approval' | 'activation',
@@ -1273,6 +1294,113 @@ export async function prepareArcAgreementPayerChallenge(input: {
     attempt,
     call: arcAgreementCircleSmartWalletCall(attempt, input.stage),
     priorStageTransactions: attempt.transactions.filter(item => item.stage === input.stage).length,
+  }
+}
+
+export async function prepareArcAgreementAgentPayerCall(input: {
+  policy: DeveloperCheckoutPolicy
+  agreementId: string
+  payer: string
+  payerIdentity: string
+  stage: 'approval' | 'activation'
+  env?: NodeJS.ProcessEnv
+}, dependencies: Dependencies = defaults) {
+  if (!dependencies.hasStore()) throw new Error('Arc Agreement activation storage is not configured.')
+  if (input.policy.checkoutMode !== 'agentic') {
+    throw new Error('Direct agent payer calls require an agentic developer project.')
+  }
+  const agreementId = requireAgreementId(input.agreementId)
+  if (!isAddress(input.payer)) throw new Error('A valid Arc payer address is required.')
+  const payer = getAddress(input.payer)
+  const payerIdentityHash = arcAgreementPayerIdentityHash(input.payerIdentity)
+  const timestamp = dependencies.now().toISOString()
+  let durableAttempt: ArcAgreementActivationAttempt | undefined
+  let preparation: ArcAgreementAgentCallPreparation | undefined
+  let replayed = false
+
+  await dependencies.mutate(STORE_KEY, current => {
+    const store = safeStore(current)
+    const attempt = requireProjectAttempt(store, input.policy, agreementId)
+    if (
+      attempt.checkoutMode !== 'agentic'
+      || attempt.payerIdentityHash !== payerIdentityHash
+      || attempt.prepared.payer !== payer
+    ) {
+      throw new Error('This Arc Agreement is bound to another authenticated agent payer.')
+    }
+    if (input.stage === 'approval' && attempt.status !== 'awaiting_approval' && attempt.status !== 'approval_failed') {
+      throw new Error('The approval transaction is not expected in the current activation state.')
+    }
+    if (input.stage === 'activation' && attempt.status !== 'ready_to_activate' && attempt.status !== 'activation_failed') {
+      throw new Error('The activation transaction requires confirmed payer approval.')
+    }
+
+    const latest = latestAgentCallPreparation(attempt, input.stage)
+    const canReplay = Boolean(
+      latest
+      && latest.deploymentHash === attempt.prepared.deploymentHash
+      && (
+        (input.stage === 'approval' && attempt.status === 'awaiting_approval')
+        || (input.stage === 'activation' && attempt.status === 'ready_to_activate')
+      ),
+    )
+    if (canReplay && latest) {
+      reauthorizeAttempt(attempt, input.policy, input.env ?? process.env)
+      durableAttempt = attempt
+      preparation = latest
+      replayed = true
+      return store
+    }
+
+    const workingAttempt = input.stage === 'activation'
+      ? renewActivationCommitment(
+          attempt,
+          input.policy,
+          Math.floor(dependencies.now().getTime() / 1_000),
+          input.env ?? process.env,
+          timestamp,
+        )
+      : attempt
+    const authorization = reauthorizeAttempt(workingAttempt, input.policy, input.env ?? process.env)
+    let capacityAttempt = workingAttempt
+    if (input.stage === 'activation' && !workingAttempt.capacityReservation) {
+      assertArcAgreementProjectCapacity({
+        store,
+        attempt: workingAttempt,
+        authorization,
+        timestamp,
+        excludeAttemptId: workingAttempt.id,
+      })
+      capacityAttempt = {
+        ...workingAttempt,
+        capacityReservation: {
+          utcDay: timestamp.slice(0, 10),
+          amountUsdcUnits: workingAttempt.prepared.totalAmount,
+          reservedAt: timestamp,
+        },
+      }
+    }
+    const nextPreparation: ArcAgreementAgentCallPreparation = {
+      stage: input.stage,
+      sequence: (latest?.sequence ?? -1) + 1,
+      deploymentHash: capacityAttempt.prepared.deploymentHash,
+      preparedAt: timestamp,
+    }
+    preparation = nextPreparation
+    durableAttempt = {
+      ...capacityAttempt,
+      agentCallPreparations: [...agentCallPreparations(capacityAttempt), nextPreparation],
+      updatedAt: timestamp,
+    }
+    store.attempts[attempt.id] = durableAttempt
+    return store
+  })
+  if (!durableAttempt || !preparation) throw new Error('Agent payer call preparation was not persisted.')
+  return {
+    attempt: durableAttempt,
+    preparation,
+    call: expectedCall(durableAttempt, input.stage),
+    replayed,
   }
 }
 
@@ -1563,6 +1691,9 @@ export async function recordArcAgreementPayerTransaction(input: {
   stage: 'approval' | 'activation'
   transactionHash: string
   recoverSubmittedChallenge?: boolean
+  requireAgentPreparation?: boolean
+  payerIdentity?: string
+  directOnly?: boolean
   env?: NodeJS.ProcessEnv
 }, dependencies: Dependencies = defaults) {
   if (!dependencies.hasStore()) throw new Error('Arc Agreement activation storage is not configured.')
@@ -1573,6 +1704,15 @@ export async function recordArcAgreementPayerTransaction(input: {
   const observedAttempt = requireProjectAttempt(snapshot, input.policy, agreementId)
   if (!isAddress(input.payer) || getAddress(input.payer) !== observedAttempt.prepared.payer) {
     throw new Error('Only the prepared agreement payer can submit this transaction.')
+  }
+  if (input.requireAgentPreparation) {
+    if (!input.payerIdentity || observedAttempt.payerIdentityHash !== arcAgreementPayerIdentityHash(input.payerIdentity)) {
+      throw new Error('This Arc Agreement is bound to another authenticated agent payer.')
+    }
+    const preparation = latestAgentCallPreparation(observedAttempt, input.stage)
+    if (!preparation || preparation.deploymentHash !== observedAttempt.prepared.deploymentHash) {
+      throw new Error('Prepare the exact agent payer call before recording its transaction.')
+    }
   }
   if (input.recoverSubmittedChallenge) {
     const challenge = latestArcAgreementPayerChallenge(observedAttempt, input.stage)
@@ -1599,6 +1739,9 @@ export async function recordArcAgreementPayerTransaction(input: {
     transactionHash,
     recoverSubmittedChallenge: input.recoverSubmittedChallenge,
   })
+  if (input.directOnly && verifiedTransaction.execution !== 'direct') {
+    throw new Error('Agent payer transactions must directly execute the prepared contract call.')
+  }
 
   const timestamp = dependencies.now().toISOString()
   let replayed = false

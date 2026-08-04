@@ -118,10 +118,12 @@ import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import arcAgreementsHandler from './api/arc-agreements.js'
 import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
+import arcAgreementAgentHandler from './api/arc-agreement-agent.js'
 import arcAgreementOperationsHandler from './api/arc-agreement-operations.js'
 import { drainArcAgreementWebhookOutbox } from './api/arc-agreement-webhooks.js'
 import hashPayStreamArcWebhookHandler from './api/hashpaystream-arc-webhook.js'
 import hashPayStreamArcAgreementsHandler from './api/hashpaystream-arc-agreements.js'
+import hashPayStreamAgreementGateway from './modules/streampay/api/agreement-gateway.js'
 import { drainArcAgreementActivationReconciliations } from './api/arc-agreement-activation-worker.js'
 import { drainArcAgreementLifecycleReconciliations } from './api/arc-agreement-lifecycle-worker.js'
 import { drainArcAgreementOperatorActions } from './api/arc-agreement-operator-worker.js'
@@ -351,10 +353,13 @@ app.post('/api/payment-tx-lookup',     readLimiter, paymentTxLookupHandler)
 app.get('/api/public-config',          readLimiter, publicConfigHandler)
 app.get('/api/hashpaystream/arc-agreements', readLimiter, hashPayStreamArcAgreementsHandler)
 app.post('/api/hashpaystream/arc-agreements', strictLimiter, hashPayStreamArcAgreementsHandler)
+app.get('/api/hashpaystream/v2/agreements', readLimiter, hashPayStreamAgreementGateway)
+app.post('/api/hashpaystream/v2/agreements', strictLimiter, hashPayStreamAgreementGateway)
 app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)
 app.post('/api/v2/agreements/payer',   strictLimiter, arcAgreementPayerHandler)
+app.post('/api/v2/agreements/agent',   strictLimiter, arcAgreementAgentHandler)
 app.get('/api/v2/agreements',          readLimiter, arcAgreementsHandler)
 app.post('/api/v2/agreements',         strictLimiter, arcAgreementsHandler)
 app.all('/api/v2/agreements',          strictLimiter, arcAgreementsHandler)
