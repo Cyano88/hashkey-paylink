@@ -424,6 +424,7 @@ const submittedApproval = await recordArcAgreementPayerTransaction({
   payer,
   stage: 'approval',
   transactionHash: approvalUserOperationHash,
+  directOnly: true,
   env,
 }, memory.dependencies)
 assert.equal(submittedApproval.attempt.status, 'approval_submitted')

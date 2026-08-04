@@ -509,12 +509,36 @@ await assert.rejects(() => recordArcAgreementPayerLifecycleTransaction({
   transactionHash: agentTransactionHash,
   requireAgentPreparation: true,
   directOnly: true,
-}, dependencies), /directly execute/)
+}, dependencies), /direct call or exact Circle user operation/)
 observedTransaction = {
   hash: agentTransactionHash,
-  from: payer,
-  to: escrow,
-  input: agentReservation.action.directCall.data,
+  from: '0x9999999999999999999999999999999999999999',
+  to: entryPoint,
+  input: encodeFunctionData({
+    abi: entryPointAbi,
+    functionName: 'handleOps',
+    args: [[{
+      sender: payer,
+      nonce: 1n,
+      initCode: '0x',
+      callData: encodeFunctionData({
+        abi: circleAccountAbi,
+        functionName: 'execute',
+        args: [
+          agentReservation.action.directCall.to,
+          0n,
+          agentReservation.action.directCall.data,
+        ],
+      }),
+      callGasLimit: 1n,
+      verificationGasLimit: 1n,
+      preVerificationGas: 1n,
+      maxFeePerGas: 1n,
+      maxPriorityFeePerGas: 1n,
+      paymasterAndData: '0x',
+      signature: '0x',
+    }], payer],
+  }),
   value: 0n,
 }
 const agentRecorded = await recordArcAgreementPayerLifecycleTransaction({
@@ -526,7 +550,7 @@ const agentRecorded = await recordArcAgreementPayerLifecycleTransaction({
   requireAgentPreparation: true,
   directOnly: true,
 }, dependencies)
-assert.equal(agentRecorded.action.execution, 'direct')
+assert.equal(agentRecorded.action.execution, 'circle_user_operation')
 
 const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8')
 assert.match(envExample, /^ARC_AGREEMENTS_ENABLED=false$/m)

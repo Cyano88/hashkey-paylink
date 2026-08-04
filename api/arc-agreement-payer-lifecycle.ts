@@ -710,8 +710,8 @@ export async function recordArcAgreementPayerLifecycleTransaction(input: {
     action,
     transactionHash,
   })
-  if (input.directOnly && execution !== 'direct') {
-    throw new Error('Agent lifecycle transactions must directly execute the prepared escrow call.')
+  if (input.directOnly && execution === 'circle_smart_wallet') {
+    throw new Error('Agent lifecycle transactions must use a direct call or exact Circle user operation.')
   }
   let replayed = false
   const durable = await updateAction(input, (current, timestamp, store) => {

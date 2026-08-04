@@ -1764,8 +1764,8 @@ export async function recordArcAgreementPayerTransaction(input: {
     transactionHash,
     recoverSubmittedChallenge: input.recoverSubmittedChallenge,
   })
-  if (input.directOnly && verifiedTransaction.execution !== 'direct') {
-    throw new Error('Agent payer transactions must directly execute the prepared contract call.')
+  if (input.directOnly && verifiedTransaction.execution === 'circle_smart_wallet') {
+    throw new Error('Agent payer transactions must use a direct call or exact Circle user operation.')
   }
 
   const timestamp = dependencies.now().toISOString()
