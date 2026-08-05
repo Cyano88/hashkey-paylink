@@ -124,12 +124,28 @@ function requiredActor(value: unknown, label: string) {
   return actor
 }
 
+function invalidEvidenceReference() {
+  return Object.assign(new Error('Evidence reference is invalid.'), { status: 400 })
+}
+
 function requiredEvidenceReference(value: unknown) {
   const reference = clean(value, 240)
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9:/._# -]{5,239}$/.test(reference)) {
-    throw new Error('Evidence reference is invalid.')
+  if (reference.length < 6) throw invalidEvidenceReference()
+  if (/^https:/i.test(reference)) {
+    try {
+      const parsed = new URL(reference)
+      if (parsed.protocol === 'https:' && parsed.hostname && !parsed.username && !parsed.password) {
+        return parsed.toString()
+      }
+    } catch {
+      // Fall through to the shared input error below.
+    }
+    throw invalidEvidenceReference()
   }
-  return reference
+  if (/^(?:(?:ipfs|evidence|reason):\/\/|case\/)[a-zA-Z0-9][a-zA-Z0-9:/._#?&=%+@~,-]*$/i.test(reference)) {
+    return reference
+  }
+  throw invalidEvidenceReference()
 }
 
 function requestDigest(input: {

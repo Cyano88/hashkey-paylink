@@ -107,7 +107,7 @@ const requestInput = {
   action: 'release',
   step: 0,
   evidenceHash,
-  evidenceReference: 'case/operator-queue-001',
+  evidenceReference: 'https://delivery.example/proof?version=1&source=hashpaystream',
   deliveryNote: 'Completed the first delivery checkpoint.',
   requestedBy: 'operations.requester',
   idempotencyKey,
@@ -115,8 +115,13 @@ const requestInput = {
 }
 const requested = await createArcAgreementOperatorActionRequest(requestInput, dependencies)
 assert.equal(requested.status, 'awaiting_review')
+assert.equal(requested.evidenceReference, 'https://delivery.example/proof?version=1&source=hashpaystream')
 assert.equal(requested.preparedCall.contractAddress, escrow)
 assert.equal((await createArcAgreementOperatorActionRequest(requestInput, dependencies)).id, requested.id)
+await assert.rejects(() => createArcAgreementOperatorActionRequest({
+  ...requestInput,
+  evidenceReference: 'https://reviewer:password@delivery.example/proof',
+}, dependencies), error => error?.status === 400 && /Evidence reference is invalid/.test(error.message))
 await assert.rejects(() => createArcAgreementOperatorActionRequest({
   ...requestInput,
   evidenceReference: 'case/operator-queue-conflict',
