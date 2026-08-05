@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import {
+  decodeFunctionData,
   encodeFunctionData,
   getAddress,
   parseAbi,
@@ -33,6 +34,13 @@ const operatorAbi = parseAbi([
   'function releaseStep(uint8 step,bytes32 evidenceHash)',
   'function cancelByOperator(bytes32 reasonHash)',
 ])
+const entryPointV06Abi = parseAbi([
+  'function handleOps((address sender,uint256 nonce,bytes initCode,bytes callData,uint256 callGasLimit,uint256 verificationGasLimit,uint256 preVerificationGas,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,bytes paymasterAndData,bytes signature)[] ops,address payable beneficiary)',
+])
+const circleAccountAbi = parseAbi([
+  'function execute(address dest,uint256 value,bytes func)',
+])
+const ENTRY_POINT_V06 = getAddress('0x5FF137D4b0FDcd49DCa30c7CF57E578a026d2789')
 
 type ChainClient = ReturnType<typeof createArcAgreementActivationClient>
 
@@ -111,6 +119,46 @@ function expectedCallData(call: ArcAgreementPreparedOperatorCall) {
   })
 }
 
+function matchesConfirmedExecution(
+  transaction: Awaited<ReturnType<ChainClient['getTransaction']>>,
+  call: ArcAgreementPreparedOperatorCall,
+) {
+  if (transaction.value !== 0n) return false
+  const expected = expectedCallData(call).toLowerCase()
+  const direct = (
+    getAddress(transaction.from) === call.operatorAddress
+    && transaction.to !== null
+    && getAddress(transaction.to) === call.contractAddress
+    && transaction.input.toLowerCase() === expected
+  )
+  if (direct) return true
+  if (transaction.to === null || getAddress(transaction.to) !== ENTRY_POINT_V06) return false
+  try {
+    const entryPointCall = decodeFunctionData({
+      abi: entryPointV06Abi,
+      data: transaction.input,
+    })
+    if (entryPointCall.functionName !== 'handleOps') return false
+    const [operations] = entryPointCall.args
+    if (operations.length !== 1) return false
+    const operation = operations[0]
+    if (getAddress(operation.sender) !== call.operatorAddress) return false
+    const accountCall = decodeFunctionData({
+      abi: circleAccountAbi,
+      data: operation.callData,
+    })
+    if (accountCall.functionName !== 'execute') return false
+    const [destination, value, callData] = accountCall.args
+    return (
+      value === 0n
+      && getAddress(destination) === call.contractAddress
+      && callData.toLowerCase() === expected
+    )
+  } catch {
+    return false
+  }
+}
+
 async function assertConfirmedExecution(input: {
   chain: ChainClient
   claim: ArcAgreementOperatorActionClaim
@@ -119,13 +167,7 @@ async function assertConfirmedExecution(input: {
   confirmed: Awaited<ReturnType<typeof readConfirmedArcAgreementSnapshot>>
 }) {
   const transaction = await input.chain.getTransaction({ hash: input.transactionHash })
-  if (
-    transaction.from !== input.call.operatorAddress
-    || transaction.to === null
-    || getAddress(transaction.to) !== input.call.contractAddress
-    || transaction.value !== 0n
-    || transaction.input.toLowerCase() !== expectedCallData(input.call).toLowerCase()
-  ) {
+  if (!matchesConfirmedExecution(transaction, input.call)) {
     throw new Error('Confirmed Arc operator transaction does not match the reviewed contract execution.')
   }
   const receipt = await input.chain.getTransactionReceipt({ hash: input.transactionHash })

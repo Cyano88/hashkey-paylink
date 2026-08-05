@@ -25,7 +25,16 @@ const walletId = '123e4567-e89b-42d3-a456-426614174000'
 const idempotencyKey = '123e4567-e89b-42d3-b456-426614174001'
 const transactionId = '123e4567-e89b-42d3-a456-426614174003'
 const transactionHash = `0x${'aa'.repeat(32)}`
+const userOperationTransactionHash = `0x${'bb'.repeat(32)}`
 const evidenceHash = `0x${'11'.repeat(32)}`
+const entryPoint = '0x5FF137D4b0FDcd49DCa30c7CF57E578a026d2789'
+const bundler = '0x6666666666666666666666666666666666666666'
+const entryPointAbi = parseAbi([
+  'function handleOps((address sender,uint256 nonce,bytes initCode,bytes callData,uint256 callGasLimit,uint256 verificationGasLimit,uint256 preVerificationGas,uint256 maxFeePerGas,uint256 maxPriorityFeePerGas,bytes paymasterAndData,bytes signature)[] ops,address payable beneficiary)',
+])
+const circleAccountAbi = parseAbi([
+  'function execute(address dest,uint256 value,bytes func)',
+])
 const terms = arcAgreementTerms({
   template: 'progressive_release',
   resourceId: 'service:operator-worker-test',
@@ -173,6 +182,28 @@ const expectedInput = encodeFunctionData({
   functionName: 'releaseStep',
   args: [0, evidenceHash],
 })
+const circleAccountCall = (destination, data) => encodeFunctionData({
+  abi: circleAccountAbi,
+  functionName: 'execute',
+  args: [destination, 0n, data],
+})
+const circleUserOperation = (sender, destination, data) => encodeFunctionData({
+  abi: entryPointAbi,
+  functionName: 'handleOps',
+  args: [[{
+    sender,
+    nonce: 1n,
+    initCode: '0x',
+    callData: circleAccountCall(destination, data),
+    callGasLimit: 100_000n,
+    verificationGasLimit: 100_000n,
+    preVerificationGas: 50_000n,
+    maxFeePerGas: 1n,
+    maxPriorityFeePerGas: 1n,
+    paymasterAndData: '0x',
+    signature: '0x1234',
+  }], bundler],
+})
 let completed
 const recoveryAction = {
   ...baseAction,
@@ -217,6 +248,81 @@ const completionResult = await drainArcAgreementOperatorActions({
 assert.equal(completionResult.completed, 1)
 assert.equal(completed.transactionHash, transactionHash)
 assert.equal(completed.observedBlockNumber, '115')
+
+let userOperationCompleted
+const userOperationCompletionResult = await drainArcAgreementOperatorActions({
+  enabled: () => true,
+  claim: async () => [{ action: recoveryAction, leaseToken: 'lease-user-operation' }],
+  binding,
+  confirmed: async () => after,
+  recordSubmission: async () => { throw new Error('user operation recovery resubmitted transaction') },
+  reschedule: async () => undefined,
+  complete: async input => { userOperationCompleted = input },
+  fail: async input => { throw input.error },
+  operatorClient: () => ({
+    operatorWallet: async () => operatorWallet,
+    submit: async () => { throw new Error('user operation recovery resubmitted transaction') },
+    status: async () => ({
+      verified: true,
+      transactionId,
+      circleState: 'COMPLETE',
+      classification: 'chain_reconciliation_required',
+      txHash: userOperationTransactionHash,
+      blockHeight: 110,
+      authoritativeAgreementState: false,
+      requiresConfirmedChainReconciliation: true,
+    }),
+  }),
+  chainClient: () => ({
+    getTransaction: async () => ({
+      hash: userOperationTransactionHash,
+      from: bundler,
+      to: entryPoint,
+      input: circleUserOperation(operator, escrow, expectedInput),
+      value: 0n,
+    }),
+    getTransactionReceipt: async () => ({ status: 'success', blockNumber: 110n }),
+  }),
+})
+assert.equal(userOperationCompletionResult.completed, 1)
+assert.equal(userOperationCompleted.transactionHash, userOperationTransactionHash)
+
+let rejectedUserOperationError
+const rejectedUserOperationResult = await drainArcAgreementOperatorActions({
+  enabled: () => true,
+  claim: async () => [{ action: recoveryAction, leaseToken: 'lease-wrong-user-operation-target' }],
+  binding,
+  confirmed: async () => after,
+  recordSubmission: async () => undefined,
+  reschedule: async () => undefined,
+  complete: async () => undefined,
+  fail: async input => { rejectedUserOperationError = input.error },
+  operatorClient: () => ({
+    operatorWallet: async () => operatorWallet,
+    submit: async () => { throw new Error('rejected user operation resubmitted transaction') },
+    status: async () => ({
+      verified: true,
+      transactionId,
+      circleState: 'COMPLETE',
+      classification: 'chain_reconciliation_required',
+      txHash: userOperationTransactionHash,
+      blockHeight: 110,
+      authoritativeAgreementState: false,
+      requiresConfirmedChainReconciliation: true,
+    }),
+  }),
+  chainClient: () => ({
+    getTransaction: async () => ({
+      hash: userOperationTransactionHash,
+      from: bundler,
+      to: entryPoint,
+      input: circleUserOperation(operator, recipient, expectedInput),
+      value: 0n,
+    }),
+  }),
+})
+assert.equal(rejectedUserOperationResult.failed, 1)
+assert.match(rejectedUserOperationError.message, /does not match the reviewed contract execution/)
 
 let rescheduled
 const pendingResult = await drainArcAgreementOperatorActions({
