@@ -635,6 +635,23 @@ export default function ArcAgreementPayerPage() {
             <div className="h-8 w-3/4 animate-pulse rounded-xl bg-gray-100 dark:bg-white/8" />
             <div className="h-24 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/8" />
           </div>
+        ) : !authenticated ? (
+          <div className="p-8 text-center">
+            <LockKeyhole className="mx-auto h-6 w-6 text-gray-400" />
+            <h1 className="mt-4 text-lg font-semibold text-gray-950 dark:text-white">Review your agreement</h1>
+            <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
+              Continue with the payer email to open this private agreement.
+            </p>
+            <PrivyConnectButton
+              logoutOnAuthenticated={false}
+              debugLabel="arc-agreement-payer-entry"
+              loginOptions={{ loginMethods: ['email'] }}
+              className="mt-6 flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+            >
+              <span>Continue with email</span>
+              <ArrowRight className="h-4 w-4" />
+            </PrivyConnectButton>
+          </div>
         ) : agreement ? (
           <>
             <div className="p-6 sm:p-8">
