@@ -355,6 +355,7 @@ const PAYER_POLICY_CONFLICTS = [
   'This developer project has reached its Arc Agreement daily-volume limit.',
   'Agreement amount exceeds the configured testnet activation ceiling.',
   'Agreement duration exceeds the configured testnet activation ceiling.',
+  'Agreement recipient must match the project Arc Testnet recipient.',
   'Operator action requires an independent reviewer.',
 ]
 
@@ -367,6 +368,8 @@ function payerFailure(error: unknown) {
       status: 409,
       message: message === 'Arc Agreement activation is disabled.'
         ? 'Agreement activation is currently paused.'
+        : message === 'Agreement recipient must match the project Arc Testnet recipient.'
+          ? "Agreement recipient does not match this project's configured Arc Testnet receiving address. Create a new agreement with the configured recipient."
         : message === 'Operator action requires an independent reviewer.'
           ? 'Use the payer account that funded this agreement to review the delivery.'
         : message,

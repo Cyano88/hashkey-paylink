@@ -445,6 +445,20 @@ const atCapacity = await request(createArcAgreementPayerHandler({
 assert.equal(atCapacity.statusCode, 409)
 assert.equal(atCapacity.body.error, 'This developer project has reached its active Arc Agreement limit.')
 
+const recipientMismatch = await request(createArcAgreementPayerHandler({
+  ...dependencies,
+  prepareAttempt: async () => { throw new Error('Agreement recipient must match the project Arc Testnet recipient.') },
+}), {
+  action: 'prepare',
+  agreementId,
+  circleUserToken: 'circle-user-token',
+}, headers)
+assert.equal(recipientMismatch.statusCode, 409)
+assert.equal(
+  recipientMismatch.body.error,
+  "Agreement recipient does not match this project's configured Arc Testnet receiving address. Create a new agreement with the configured recipient.",
+)
+
 const challenge = await request(handler, {
   action: 'challenge',
   stage: 'approval',

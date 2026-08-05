@@ -497,6 +497,13 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
         return res.status(400).json({ ok: false, error: 'Idempotency-Key must contain at least 8 characters.' })
       }
       const input = requestInput(req.body)
+      const configuredArcRecipient = policy.paymentOptions.find(option => option.network === 'arc')?.recipient ?? ''
+      if (!isAddress(configuredArcRecipient) || getAddress(input.recipient) !== getAddress(configuredArcRecipient)) {
+        throw Object.assign(
+          new Error("Recipient must match this project's configured Arc Testnet receiving address."),
+          { status: 409 },
+        )
+      }
       const requestHash = hashRequest(input)
       const scopedIdempotencyKey = idempotencyScope(policy.partnerId, idempotencyKey)
       const now = dependencies.now().toISOString()

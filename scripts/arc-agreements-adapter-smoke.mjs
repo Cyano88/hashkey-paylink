@@ -65,7 +65,7 @@ const fixed = {
   title: 'Premium research access',
   description: 'Unlock one premium research report.',
   amount: '10.500000',
-  recipient: '0x2222222222222222222222222222222222222222',
+  recipient: arcRoute[0].recipient,
 }
 const headers = { 'x-api-key': 'hpl_test_mock', 'idempotency-key': 'agreement:order-0001' }
 
@@ -80,6 +80,13 @@ assert.equal((await request(handler, 'POST', { body: fixed, headers })).statusCo
 
 policy = humanPolicy
 assert.equal((await request(handler, 'POST', { body: fixed, headers: { 'x-api-key': 'hpl_test_mock' } })).statusCode, 400)
+
+const recipientMismatch = await request(handler, 'POST', {
+  body: { ...fixed, recipient: '0x2222222222222222222222222222222222222222' },
+  headers,
+})
+assert.equal(recipientMismatch.statusCode, 409)
+assert.equal(recipientMismatch.body.error, "Recipient must match this project's configured Arc Testnet receiving address.")
 
 const created = await request(handler, 'POST', { body: fixed, headers })
 assert.equal(created.statusCode, 201)
