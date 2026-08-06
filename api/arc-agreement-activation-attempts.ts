@@ -815,6 +815,15 @@ function renewActivationCommitment(
   }
 }
 
+const ACTIVATION_CALL_VALIDITY_BUFFER_SECONDS = 120n
+
+function activationCommitmentIsFresh(attempt: ArcAgreementActivationAttempt, nowSeconds: number) {
+  const prepared = hydratePrepared(attempt.prepared)
+  const minimumTimestamp = BigInt(nowSeconds) + ACTIVATION_CALL_VALIDITY_BUFFER_SECONDS
+  return prepared.expiresAt > minimumTimestamp
+    && (prepared.cancelUntil === 0n || prepared.cancelUntil > minimumTimestamp)
+}
+
 function activationTransactionCountsForVolume(transaction: ArcAgreementPayerTransaction) {
   return transaction.stage === 'activation' && transaction.failure !== 'transaction_reverted'
 }
@@ -1338,7 +1347,9 @@ export async function prepareArcAgreementAgentPayerCall(input: {
   if (!isAddress(input.payer)) throw new Error('A valid Arc payer address is required.')
   const payer = getAddress(input.payer)
   const payerIdentityHash = arcAgreementPayerIdentityHash(input.payerIdentity)
-  const timestamp = dependencies.now().toISOString()
+  const now = dependencies.now()
+  const timestamp = now.toISOString()
+  const nowSeconds = Math.floor(now.getTime() / 1_000)
   let durableAttempt: ArcAgreementActivationAttempt | undefined
   let preparation: ArcAgreementAgentCallPreparation | undefined
   let replayed = false
@@ -1366,7 +1377,11 @@ export async function prepareArcAgreementAgentPayerCall(input: {
       && latest.deploymentHash === attempt.prepared.deploymentHash
       && (
         (input.stage === 'approval' && attempt.status === 'awaiting_approval')
-        || (input.stage === 'activation' && attempt.status === 'ready_to_activate')
+        || (
+          input.stage === 'activation'
+          && attempt.status === 'ready_to_activate'
+          && activationCommitmentIsFresh(attempt, nowSeconds)
+        )
       ),
     )
     if (canReplay && latest) {
@@ -1381,7 +1396,7 @@ export async function prepareArcAgreementAgentPayerCall(input: {
       ? renewActivationCommitment(
           attempt,
           input.policy,
-          Math.floor(dependencies.now().getTime() / 1_000),
+          nowSeconds,
           input.env ?? process.env,
           timestamp,
         )

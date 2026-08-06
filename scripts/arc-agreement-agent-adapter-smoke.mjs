@@ -473,6 +473,9 @@ function memoryDependencies() {
         store.attempts[ids[0]] = { ...store.attempts[ids[0]], status }
       })()
     },
+    advance: milliseconds => {
+      now = new Date(now.getTime() + milliseconds)
+    },
   }
 }
 
@@ -553,6 +556,17 @@ const replayedActivation = await prepareArcAgreementAgentPayerCall({
   policy, agreementId, payer, payerIdentity: identity, stage: 'activation', env: activationEnv,
 }, memory.dependencies)
 assert.equal(replayedActivation.replayed, true)
+memory.advance(20 * 60 * 1_000)
+const refreshedActivation = await prepareArcAgreementAgentPayerCall({
+  policy, agreementId, payer, payerIdentity: identity, stage: 'activation', env: activationEnv,
+}, memory.dependencies)
+assert.equal(refreshedActivation.replayed, false)
+assert.equal(refreshedActivation.attempt.activationTimestamp, activationCall.attempt.activationTimestamp + (20 * 60))
+assert.equal(
+  BigInt(refreshedActivation.attempt.prepared.cancelUntil),
+  BigInt(refreshedActivation.attempt.activationTimestamp + 900),
+)
+assert.equal(refreshedActivation.attempt.calls.approval.data, activationCall.attempt.calls.approval.data)
 
 await assert.rejects(prepareArcAgreementAgentPayerCall({
   policy,
