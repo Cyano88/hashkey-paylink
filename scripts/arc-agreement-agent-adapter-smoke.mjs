@@ -53,6 +53,7 @@ const executionAbi = parseAbi([
 const policy = {
   partnerId,
   ownerId: 'did:privy:agent-project-owner',
+  ownerEmail: 'agent-owner@example.com',
   merchantName: 'Agent Agreement Pilot',
   allowedOrigins: ['https://hashpaystream.app'],
   defaultNetwork: 'arc',
@@ -245,15 +246,13 @@ const handler = createArcAgreementAgentHandler({
     return { ...delivery, status: 'queued', reviewedBy: input.reviewedBy }
   },
   disputeOperatorAction: async input => ({ ...delivery, status: 'disputed', reviewedBy: input.reviewedBy }),
-  readCircleLink: async () => ({
-    privyUserId: policy.ownerId,
-    email: 'agent-owner@example.com',
-    chain: 'arc',
-    purpose: 'agent',
-    circleWalletId: 'agent:test-wallet',
-    circleWalletAddress: payer,
-    circleBlockchain: 'ARC-TESTNET',
+  readCircleLink: async () => null,
+  readAgentWallet: async () => ({
+    walletAddress: payer,
+    chain: 'ARC-TESTNET',
+    sessionId: 'circle-session',
     updatedAt: Date.now(),
+    source: 'store',
   }),
   executeCircleCall: async input => {
     circleExecutionInput = input

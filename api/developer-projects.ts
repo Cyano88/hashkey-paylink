@@ -90,6 +90,7 @@ type DeveloperStore = { projects: Record<string, DeveloperProject> }
 export type DeveloperCheckoutPolicy = {
   partnerId: string
   ownerId?: string
+  ownerEmail?: string
   merchantName: string
   brandImageUrl?: string
   allowedOrigins: string[]
@@ -901,6 +902,7 @@ function policyForDeveloperProject(
     return {
       partnerId: project.id,
       ownerId: project.ownerId,
+      ownerEmail: project.ownerEmail,
       merchantName: project.name,
       brandImageUrl: project.brandImageUrl,
       allowedOrigins: project.allowedOrigins,
@@ -928,6 +930,7 @@ function policyForDeveloperProject(
   return {
     partnerId: project.id,
     ownerId: project.ownerId,
+    ownerEmail: project.ownerEmail,
     merchantName: project.name,
     brandImageUrl: project.brandImageUrl,
     allowedOrigins: project.allowedOrigins,

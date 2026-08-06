@@ -32,7 +32,7 @@ import {
   resolveDeveloperApiKeyPolicy,
   type DeveloperCheckoutPolicy,
 } from './developer-projects.js'
-import { executeArcAgreementAgentWalletCall } from './agent-wallet.js'
+import { executeArcAgreementAgentWalletCall, getAgentWalletRecord } from './agent-wallet.js'
 import {
   claimCirclePocketAction,
   recordCirclePocketAction,
@@ -64,6 +64,7 @@ type Dependencies = {
   approveOperatorAction: typeof approveArcAgreementOperatorAction
   disputeOperatorAction: typeof disputeArcAgreementOperatorAction
   readCircleLink(key: string): Promise<CircleLinkRecord | null>
+  readAgentWallet(agentSlug: string): ReturnType<typeof getAgentWalletRecord>
   executeCircleCall(input: Parameters<typeof executeArcAgreementAgentWalletCall>[0]): ReturnType<typeof executeArcAgreementAgentWalletCall>
   claimExecution(input: Parameters<typeof claimCirclePocketAction>[0]): ReturnType<typeof claimCirclePocketAction>
   recordExecution(input: Parameters<typeof recordCirclePocketAction>[0]): Promise<CirclePocketActionRecord>
@@ -88,6 +89,7 @@ const defaults: Dependencies = {
   approveOperatorAction: approveArcAgreementOperatorAction,
   disputeOperatorAction: disputeArcAgreementOperatorAction,
   readCircleLink,
+  readAgentWallet: getAgentWalletRecord,
   executeCircleCall: executeArcAgreementAgentWalletCall,
   claimExecution: claimCirclePocketAction,
   recordExecution: recordCirclePocketAction,
@@ -154,8 +156,21 @@ async function circleAgentIdentity(
 ) {
   if (!policy.ownerId) throw fail('This developer project has no wallet owner binding.', 409)
   const link = await dependencies.readCircleLink(circleLinkKey(policy.ownerId, 'arc', 'agent'))
-  if (!link || link.privyUserId !== policy.ownerId || link.chain !== 'arc' || link.purpose !== 'agent') {
-    throw fail('Connect an Arc Circle Agent Wallet to this developer account first.', 409)
+  if (!link) {
+    const agentSlug = circleAgentWalletSlug(policy.ownerEmail ?? '')
+    if (!agentSlug) throw fail('This developer project has no verified wallet owner email.', 409)
+    const wallet = await dependencies.readAgentWallet(agentSlug)
+    if (!wallet?.walletAddress || !wallet.sessionId) {
+      throw fail('Connect an Arc Circle Agent Wallet to this developer account first.', 409)
+    }
+    if (!['ARC-TESTNET', 'ARC_TESTNET', 'ARC'].includes(String(wallet.chain ?? '').trim().toUpperCase())) {
+      throw fail('The connected agent wallet is not configured for Arc Testnet.', 409)
+    }
+    if (wallet.walletAddress.toLowerCase() !== payer.toLowerCase()) throw fail('Agreement not found.', 404)
+    return { ownerId: policy.ownerId, agentSlug, walletAddress: getAddress(wallet.walletAddress) }
+  }
+  if (link.privyUserId !== policy.ownerId || link.chain !== 'arc' || link.purpose !== 'agent') {
+    throw fail('The connected Arc Circle Agent Wallet binding is invalid.', 409)
   }
   if (!['ARC-TESTNET', 'ARC_TESTNET', 'ARC'].includes(link.circleBlockchain.trim().toUpperCase())) {
     throw fail('The connected agent wallet is not configured for Arc Testnet.', 409)
