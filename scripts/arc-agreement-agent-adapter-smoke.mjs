@@ -380,6 +380,8 @@ const recoveredActivation = await request(handler, {
 })
 assert.equal(recoveredActivation.statusCode, 202)
 assert.equal(circleExecutionInput.abiFunctionSignature, 'createAndFund((bytes32,bytes32,address,uint8,uint256,uint64,uint64,uint16[]))')
+assert.equal(circleExecutionInput.abiParameters.length, 0)
+assert.match(circleExecutionInput.callData, /^0x[a-f0-9]+$/i)
 assert.equal(executionRecords.find(record => record.id === 'stale-unknown-activation')?.status, 'failed')
 assert.equal(circleExecutionCount, 2)
 

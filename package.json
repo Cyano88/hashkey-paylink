@@ -8,7 +8,7 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "postinstall": "node scripts/patch-circle-cli-tuple-parameters.mjs",
+    "postinstall": "node scripts/patch-circle-cli-tuple-parameters.mjs && node scripts/patch-circle-cli-call-data.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
     "build:frontend": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
@@ -69,6 +69,7 @@
     "test:arc-agreement-payer": "node --import tsx scripts/arc-agreement-payer-adapter-smoke.mjs",
     "test:arc-agreement-agent": "node --import tsx scripts/arc-agreement-agent-adapter-smoke.mjs",
     "test:circle-cli-tuples": "node scripts/circle-cli-tuple-parameters-smoke.mjs",
+    "test:circle-cli-call-data": "node scripts/circle-cli-call-data-smoke.mjs",
     "test:arc-agreement-payer-lifecycle": "node --import tsx scripts/arc-agreement-payer-lifecycle-smoke.mjs",
     "test:arc-agreement-operations": "node --import tsx scripts/arc-agreement-operations-adapter-smoke.mjs",
     "test:arc-agreement-operator": "node --import tsx scripts/arc-agreement-operator-smoke.mjs",

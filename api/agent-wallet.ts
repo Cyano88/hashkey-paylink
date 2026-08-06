@@ -719,6 +719,7 @@ export async function executeArcAgreementAgentWalletCall(params: {
   contractAddress: string
   abiFunctionSignature: string
   abiParameters: string[]
+  callData?: string
 }) {
   if (!CIRCLE_CLI_ENABLED) {
     throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Agent Wallet contract execution is not enabled on this server.')
@@ -731,6 +732,9 @@ export async function executeArcAgreementAgentWalletCall(params: {
   }
   if (params.abiParameters.length > 8 || params.abiParameters.some(value => typeof value !== 'string' || value.length > 2_000)) {
     throw connectionFailure(400, 'circle_contract_call_invalid', 'The Arc Agreement contract parameters are invalid.')
+  }
+  if (params.callData && (!/^0x(?:[a-fA-F0-9]{2})+$/.test(params.callData) || params.callData.length > 20_000)) {
+    throw connectionFailure(400, 'circle_contract_call_invalid', 'The Arc Agreement contract calldata is invalid.')
   }
 
   const store = await readStore()
@@ -750,6 +754,7 @@ export async function executeArcAgreementAgentWalletCall(params: {
       'execute',
       params.abiFunctionSignature,
       ...params.abiParameters,
+      ...(params.callData ? ['--call-data', params.callData] : []),
       '--contract',
       params.contractAddress,
       '--address',

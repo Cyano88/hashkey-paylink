@@ -194,21 +194,11 @@ function circleCall(call: { to: string; data: string; value: string }) {
     }
   }
   if (decoded.functionName === 'createAndFund') {
-    const [params] = decoded.args
-    const tuple = [
-      params.clientReference,
-      params.termsHash,
-      getAddress(params.recipient),
-      params.template.toString(),
-      params.totalAmount.toString(),
-      params.cancelUntil.toString(),
-      params.expiresAt.toString(),
-      params.cumulativeReleaseBps.map(value => value.toString()),
-    ]
     return {
       contractAddress: getAddress(call.to),
       abiFunctionSignature: 'createAndFund((bytes32,bytes32,address,uint8,uint256,uint64,uint64,uint16[]))',
-      abiParameters: [JSON.stringify(tuple)],
+      abiParameters: [],
+      callData: call.data,
     }
   }
   if (decoded.functionName === 'cancelByPayer' || decoded.functionName === 'refundExpired') {
