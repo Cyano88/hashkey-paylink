@@ -48,6 +48,7 @@ const payerReference = `apr_${'a'.repeat(40)}`
 const identity = `agent:${partnerId}:${payerReference}`
 const executionAbi = parseAbi([
   'function approve(address spender,uint256 amount) returns (bool)',
+  'function createAndFund((bytes32 clientReference,bytes32 termsHash,address recipient,uint8 template,uint256 totalAmount,uint64 cancelUntil,uint64 expiresAt,uint16[] cumulativeReleaseBps) params) returns (address)',
   'function cancelByPayer()',
 ])
 const policy = {
@@ -148,7 +149,25 @@ const attempt = {
       }),
       value: '0',
     },
-    activation: { chainId: 5_042_002, to: REVIEWED_ARC_AGREEMENT_FACTORY, data: '0x5678', value: '0' },
+    activation: {
+      chainId: 5_042_002,
+      to: REVIEWED_ARC_AGREEMENT_FACTORY,
+      data: encodeFunctionData({
+        abi: executionAbi,
+        functionName: 'createAndFund',
+        args: [[
+          agreement.clientReference,
+          agreement.termsHash,
+          recipient,
+          0,
+          1_000_000n,
+          1_785_845_700n,
+          1_785_931_200n,
+          [10_000],
+        ]],
+      }),
+      value: '0',
+    },
   },
   transactions: [],
   agentCallPreparations: [],
@@ -270,6 +289,13 @@ const handler = createArcAgreementAgentHandler({
       && record.action === input.action
     ))
     if (existing) return { record: existing, claimed: false }
+    const conflict = input.dedupe && executionRecords.find(record => (
+      record.ownerId === input.ownerId
+      && record.action === input.action
+      && record.metadata?.[input.dedupe.metadataKey] === input.dedupe.metadataValue
+      && input.dedupe.statuses.includes(record.status)
+    ))
+    if (conflict) return { record: conflict, claimed: false }
     const executionRecord = {
       id: 'journal-entry',
       ownerId: input.ownerId,
@@ -337,6 +363,25 @@ const replayedCircleExecution = await request(handler, {
 assert.equal(replayedCircleExecution.statusCode, 202)
 assert.equal(replayedCircleExecution.body.replayed, true)
 assert.equal(circleExecutionCount, 1)
+
+currentAttempt = { ...attempt, status: 'ready_to_activate' }
+executionRecords.push({
+  id: 'stale-unknown-activation',
+  ownerId: policy.ownerId,
+  idempotencyKey: 'stale-activation-key',
+  action: 'arc-agreement.agent-wallet-execute',
+  status: 'submitted',
+  metadata: { executionKey: `${partnerId}:${agreementId}:activation` },
+  createdAt: Date.now() - 16 * 60_000,
+  updatedAt: Date.now() - 16 * 60_000,
+})
+const recoveredActivation = await request(handler, {
+  action: 'circle-execute', agreementId, payerReference, payerAddress: payer, stage: 'activation',
+})
+assert.equal(recoveredActivation.statusCode, 202)
+assert.equal(circleExecutionInput.abiFunctionSignature, 'createAndFund((bytes32,bytes32,address,uint8,uint256,uint64,uint64,uint16[]))')
+assert.equal(executionRecords.find(record => record.id === 'stale-unknown-activation')?.status, 'failed')
+assert.equal(circleExecutionCount, 2)
 
 currentAttempt = attempt
 const recorded = await request(handler, {

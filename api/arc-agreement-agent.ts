@@ -41,6 +41,7 @@ import {
 import { circleLinkKey, readCircleLink, type CircleLinkRecord } from './privy-circle-link.js'
 
 const AGENT_EXECUTION_ACTION = 'arc-agreement.agent-wallet-execute'
+const UNKNOWN_CIRCLE_EXECUTION_RETRY_AFTER_MS = 15 * 60_000
 const AGENT_EXECUTION_ABI = parseAbi([
   'function approve(address spender,uint256 amount) returns (bool)',
   'function createAndFund((bytes32 clientReference,bytes32 termsHash,address recipient,uint8 template,uint256 totalAmount,uint64 cancelUntil,uint64 expiresAt,uint16[] cumulativeReleaseBps) params) returns (address)',
@@ -239,7 +240,7 @@ async function executePreparedCircleCall<T>(input: {
     operation: input.operation,
     executionKey,
   }
-  const claim = await input.dependencies.claimExecution({
+  const claimInput: Parameters<Dependencies['claimExecution']>[0] = {
     ownerId: wallet.ownerId,
     idempotencyKey: key,
     action: AGENT_EXECUTION_ACTION,
@@ -249,7 +250,24 @@ async function executePreparedCircleCall<T>(input: {
       metadataValue: executionKey,
       statuses: ['started', 'submitted', 'completed'],
     },
-  })
+  }
+  let claim = await input.dependencies.claimExecution(claimInput)
+  if (
+    !claim.claimed
+    && claim.record.idempotencyKey !== key
+    && claim.record.status === 'submitted'
+    && !claim.record.resourceId
+    && claim.record.updatedAt <= Date.now() - UNKNOWN_CIRCLE_EXECUTION_RETRY_AFTER_MS
+  ) {
+    await input.dependencies.recordExecution({
+      ownerId: wallet.ownerId,
+      idempotencyKey: claim.record.idempotencyKey,
+      action: AGENT_EXECUTION_ACTION,
+      status: 'failed',
+      metadata: claim.record.metadata,
+    })
+    claim = await input.dependencies.claimExecution(claimInput)
+  }
   if (!claim.claimed) {
     if (claim.record.metadata?.executionKey !== executionKey) {
       throw fail('This Idempotency-Key was already used for another Circle execution.', 409)
