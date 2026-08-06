@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { getAddress } from 'viem'
+import { encodeFunctionData, getAddress, parseAbi } from 'viem'
 import { createArcAgreementAgentHandler } from '../api/arc-agreement-agent.ts'
 import {
   arcAgreementPayerIdentityHash,
@@ -28,7 +28,15 @@ function responseRecorder() {
 
 async function request(handler, body, method = 'POST') {
   const response = responseRecorder()
-  await handler({ method, body, headers: { 'x-api-key': 'hpl_test_agent_mock' } }, response)
+  const idempotencySuffix = [body?.action, body?.stage, body?.lifecycleAction].filter(Boolean).join('-') || 'request'
+  await handler({
+    method,
+    body,
+    headers: {
+      'x-api-key': 'hpl_test_agent_mock',
+      'idempotency-key': `arc-agent-smoke-${idempotencySuffix}-001`,
+    },
+  }, response)
   return response
 }
 
@@ -38,6 +46,10 @@ const payer = getAddress('0x3333333333333333333333333333333333333333')
 const recipient = getAddress('0x2222222222222222222222222222222222222222')
 const payerReference = `apr_${'a'.repeat(40)}`
 const identity = `agent:${partnerId}:${payerReference}`
+const executionAbi = parseAbi([
+  'function approve(address spender,uint256 amount) returns (bool)',
+  'function cancelByPayer()',
+])
 const policy = {
   partnerId,
   ownerId: 'did:privy:agent-project-owner',
@@ -125,7 +137,16 @@ const attempt = {
     cumulativeReleaseBps: [10_000],
   },
   calls: {
-    approval: { chainId: 5_042_002, to: ARC_AGREEMENT_NETWORK.usdc, data: '0x1234', value: '0' },
+    approval: {
+      chainId: 5_042_002,
+      to: ARC_AGREEMENT_NETWORK.usdc,
+      data: encodeFunctionData({
+        abi: executionAbi,
+        functionName: 'approve',
+        args: [REVIEWED_ARC_AGREEMENT_FACTORY, 1_000_000n],
+      }),
+      value: '0',
+    },
     activation: { chainId: 5_042_002, to: REVIEWED_ARC_AGREEMENT_FACTORY, data: '0x5678', value: '0' },
   },
   transactions: [],
@@ -143,6 +164,9 @@ let recordInput
 let lifecyclePrepareInput
 let lifecycleRecordInput
 let deliveryDecisionInput
+let circleExecutionInput
+let circleExecutionCount = 0
+const executionRecords = []
 const delivery = {
   id: `opa_${'1'.repeat(24)}`,
   partnerId,
@@ -201,7 +225,12 @@ const handler = createArcAgreementAgentHandler({
     lifecyclePrepareInput = input
     return {
       action: { action: input.action, status: 'reserved' },
-      call: { chainId: 5_042_002, to: activeAttempt.escrow, data: '0xabcdef', value: '0' },
+      call: {
+        chainId: 5_042_002,
+        to: activeAttempt.escrow,
+        data: encodeFunctionData({ abi: executionAbi, functionName: 'cancelByPayer' }),
+        value: '0',
+      },
       replayed: false,
     }
   },
@@ -216,6 +245,56 @@ const handler = createArcAgreementAgentHandler({
     return { ...delivery, status: 'queued', reviewedBy: input.reviewedBy }
   },
   disputeOperatorAction: async input => ({ ...delivery, status: 'disputed', reviewedBy: input.reviewedBy }),
+  readCircleLink: async () => ({
+    privyUserId: policy.ownerId,
+    email: 'agent-owner@example.com',
+    chain: 'arc',
+    purpose: 'agent',
+    circleWalletId: 'agent:test-wallet',
+    circleWalletAddress: payer,
+    circleBlockchain: 'ARC-TESTNET',
+    updatedAt: Date.now(),
+  }),
+  executeCircleCall: async input => {
+    circleExecutionInput = input
+    circleExecutionCount += 1
+    return {
+      transactionHash: `0x${'6'.repeat(64)}`,
+      providerTransactionId: 'circle-transaction-id',
+      providerState: 'CONFIRMED',
+    }
+  },
+  claimExecution: async input => {
+    const existing = executionRecords.find(record => (
+      record.ownerId === input.ownerId
+      && record.idempotencyKey === input.idempotencyKey
+      && record.action === input.action
+    ))
+    if (existing) return { record: existing, claimed: false }
+    const executionRecord = {
+      id: 'journal-entry',
+      ownerId: input.ownerId,
+      idempotencyKey: input.idempotencyKey,
+      action: input.action,
+      status: 'started',
+      metadata: input.metadata,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    executionRecords.push(executionRecord)
+    return { record: executionRecord, claimed: true }
+  },
+  recordExecution: async input => {
+    const index = executionRecords.findIndex(record => (
+      record.ownerId === input.ownerId
+      && record.idempotencyKey === input.idempotencyKey
+      && record.action === input.action
+    ))
+    const executionRecord = { ...executionRecords[index], ...input, updatedAt: Date.now() }
+    if (index >= 0) executionRecords[index] = executionRecord
+    else executionRecords.push(executionRecord)
+    return executionRecord
+  },
   client: () => ({}),
   env: () => ({}),
   logError: () => undefined,
@@ -237,6 +316,30 @@ assert.equal(preparedCall.statusCode, 200)
 assert.equal(preparedCall.body.call.to, ARC_AGREEMENT_NETWORK.usdc)
 assert.equal(callInput.payerIdentity, identity)
 
+currentAttempt = attempt
+const circleExecuted = await request(handler, {
+  action: 'circle-execute', agreementId, payerReference, payerAddress: payer, stage: 'approval',
+})
+assert.equal(circleExecuted.statusCode, 202)
+assert.equal(circleExecuted.body.transactionHash, `0x${'6'.repeat(64)}`)
+assert.equal(circleExecutionInput.agentSlug, 'wallet-jk3rxh')
+assert.equal(circleExecutionInput.walletAddress, payer)
+assert.equal(circleExecutionInput.contractAddress, ARC_AGREEMENT_NETWORK.usdc)
+assert.equal(circleExecutionInput.abiFunctionSignature, 'approve(address,uint256)')
+assert.deepEqual(circleExecutionInput.abiParameters, [REVIEWED_ARC_AGREEMENT_FACTORY, '1000000'])
+assert.equal(circleExecutionCount, 1)
+assert.equal(recordInput.requireAgentPreparation, true)
+assert.equal(recordInput.directOnly, true)
+
+currentAttempt = attempt
+const replayedCircleExecution = await request(handler, {
+  action: 'circle-execute', agreementId, payerReference, payerAddress: payer, stage: 'approval',
+})
+assert.equal(replayedCircleExecution.statusCode, 202)
+assert.equal(replayedCircleExecution.body.replayed, true)
+assert.equal(circleExecutionCount, 1)
+
+currentAttempt = attempt
 const recorded = await request(handler, {
   action: 'record', agreementId, payerReference, payerAddress: payer, stage: 'approval', transactionHash: `0x${'9'.repeat(64)}`,
 })
@@ -265,6 +368,20 @@ const lifecycleCall = await request(handler, {
 assert.equal(lifecycleCall.statusCode, 200)
 assert.equal(lifecycleCall.body.call.to, activeAttempt.escrow)
 assert.equal(lifecyclePrepareInput.payerIdentity, identity)
+
+const lifecycleCircleExecuted = await request(handler, {
+  action: 'lifecycle-circle-execute',
+  agreementId,
+  payerReference,
+  payerAddress: payer,
+  lifecycleAction: 'cancel',
+})
+assert.equal(lifecycleCircleExecuted.statusCode, 202)
+assert.equal(circleExecutionInput.contractAddress, activeAttempt.escrow)
+assert.equal(circleExecutionInput.abiFunctionSignature, 'cancelByPayer()')
+assert.deepEqual(circleExecutionInput.abiParameters, [])
+assert.equal(lifecycleRecordInput.requireAgentPreparation, true)
+assert.equal(lifecycleRecordInput.directOnly, true)
 
 const lifecycleRecorded = await request(handler, {
   action: 'lifecycle-record', agreementId, payerReference, payerAddress: payer, transactionHash: `0x${'7'.repeat(64)}`,

@@ -699,6 +699,95 @@ function parseBalance(output: string) {
   return parseBalanceText(cleanOutput)
 }
 
+const ARC_AGREEMENT_AGENT_SIGNATURES = new Set([
+  'approve(address,uint256)',
+  'createAndFund((bytes32,bytes32,address,uint8,uint256,uint64,uint64,uint16[]))',
+  'cancelByPayer()',
+  'refundExpired()',
+])
+
+type CircleContractExecutionResponse = {
+  data?: { id?: unknown; state?: unknown; txHash?: unknown }
+  id?: unknown
+  state?: unknown
+  txHash?: unknown
+}
+
+export async function executeArcAgreementAgentWalletCall(params: {
+  agentSlug: string
+  walletAddress: string
+  contractAddress: string
+  abiFunctionSignature: string
+  abiParameters: string[]
+}) {
+  if (!CIRCLE_CLI_ENABLED) {
+    throw connectionFailure(503, 'circle_provider_unavailable', 'Circle Agent Wallet contract execution is not enabled on this server.')
+  }
+  if (!ARC_AGREEMENT_AGENT_SIGNATURES.has(params.abiFunctionSignature)) {
+    throw connectionFailure(400, 'circle_contract_call_not_allowed', 'This Arc Agreement contract call is not allowed.')
+  }
+  if (!/^0x[a-fA-F0-9]{40}$/.test(params.walletAddress) || !/^0x[a-fA-F0-9]{40}$/.test(params.contractAddress)) {
+    throw connectionFailure(400, 'circle_contract_call_invalid', 'The Arc Agreement contract call is invalid.')
+  }
+  if (params.abiParameters.length > 8 || params.abiParameters.some(value => typeof value !== 'string' || value.length > 2_000)) {
+    throw connectionFailure(400, 'circle_contract_call_invalid', 'The Arc Agreement contract parameters are invalid.')
+  }
+
+  const store = await readStore()
+  const record = resolveAgentRecord(store, params.agentSlug)
+  if (!record?.walletAddress || !record.sessionId) {
+    throw connectionFailure(404, 'circle_wallet_not_ready', 'Agent wallet session not found. Connect the Circle Agent Wallet first.')
+  }
+  if (record.walletAddress.toLowerCase() !== params.walletAddress.toLowerCase()) {
+    throw connectionFailure(403, 'wallet_ownership_mismatch', 'The connected Circle Agent Wallet does not match this agreement payer.')
+  }
+
+  const serviceKey = `${params.agentSlug}_${record.sessionId}`
+  let output: string
+  try {
+    output = await runCircle([
+      'wallet',
+      'execute',
+      params.abiFunctionSignature,
+      ...params.abiParameters,
+      '--contract',
+      params.contractAddress,
+      '--address',
+      record.walletAddress,
+      '--chain',
+      'ARC-TESTNET',
+      '--output',
+      'json',
+    ], serviceKey, 120_000)
+  } catch (cause) {
+    if (isCircleLoginExpired(cause)) {
+      const error = connectionFailure(409, 'circle_session_expired', 'The Circle Agent Wallet session expired. Reconnect it, then retry.') as Error & { code?: string }
+      error.code = 'circle_session_expired'
+      throw error
+    }
+    const error = connectionFailure(409, 'circle_contract_outcome_unknown', 'Circle did not return a final Arc transaction result. Do not retry while the transaction is being reconciled.') as Error & { code?: string; cause?: unknown }
+    error.code = 'circle_contract_outcome_unknown'
+    error.cause = cause
+    throw error
+  }
+
+  const parsed = extractJsonFromCliOutput(output) as CircleContractExecutionResponse | undefined
+  const data = parsed?.data && typeof parsed.data === 'object' ? parsed.data : parsed
+  const transactionHash = typeof data?.txHash === 'string' && /^0x[a-fA-F0-9]{64}$/.test(data.txHash)
+    ? data.txHash
+    : ''
+  if (!transactionHash) {
+    const error = connectionFailure(409, 'circle_contract_outcome_unknown', 'Circle did not return a final Arc transaction hash. Do not retry while the transaction is being reconciled.') as Error & { code?: string }
+    error.code = 'circle_contract_outcome_unknown'
+    throw error
+  }
+  return {
+    transactionHash,
+    providerTransactionId: typeof data?.id === 'string' ? data.id.slice(0, 120) : undefined,
+    providerState: typeof data?.state === 'string' ? data.state.slice(0, 40) : undefined,
+  }
+}
+
 export function parseCircleGatewayBalanceCliOutput(output: string) {
   const cleanOutput = output.replace(/\u001b\[[0-9;]*m/g, '').trim()
   try {

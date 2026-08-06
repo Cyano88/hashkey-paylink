@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { getAddress, isAddress } from 'viem'
+import { decodeFunctionData, getAddress, isAddress, parseAbi } from 'viem'
 import {
   arcAgreementPayerIdentityHash,
   prepareArcAgreementActivationAttempt,
@@ -32,6 +32,21 @@ import {
   resolveDeveloperApiKeyPolicy,
   type DeveloperCheckoutPolicy,
 } from './developer-projects.js'
+import { executeArcAgreementAgentWalletCall } from './agent-wallet.js'
+import {
+  claimCirclePocketAction,
+  recordCirclePocketAction,
+  type CirclePocketActionRecord,
+} from './circle-pocket-action-journal.js'
+import { circleLinkKey, readCircleLink, type CircleLinkRecord } from './privy-circle-link.js'
+
+const AGENT_EXECUTION_ACTION = 'arc-agreement.agent-wallet-execute'
+const AGENT_EXECUTION_ABI = parseAbi([
+  'function approve(address spender,uint256 amount) returns (bool)',
+  'function createAndFund((bytes32 clientReference,bytes32 termsHash,address recipient,uint8 template,uint256 totalAmount,uint64 cancelUntil,uint64 expiresAt,uint16[] cumulativeReleaseBps) params) returns (address)',
+  'function cancelByPayer()',
+  'function refundExpired()',
+])
 
 type Dependencies = {
   policy(req: Pick<Request, 'headers'>): Promise<DeveloperCheckoutPolicy | null>
@@ -48,6 +63,10 @@ type Dependencies = {
   listOperatorActions: typeof listArcAgreementOperatorActions
   approveOperatorAction: typeof approveArcAgreementOperatorAction
   disputeOperatorAction: typeof disputeArcAgreementOperatorAction
+  readCircleLink(key: string): Promise<CircleLinkRecord | null>
+  executeCircleCall(input: Parameters<typeof executeArcAgreementAgentWalletCall>[0]): ReturnType<typeof executeArcAgreementAgentWalletCall>
+  claimExecution(input: Parameters<typeof claimCirclePocketAction>[0]): ReturnType<typeof claimCirclePocketAction>
+  recordExecution(input: Parameters<typeof recordCirclePocketAction>[0]): Promise<CirclePocketActionRecord>
   client(): ArcAgreementActivationClient
   env(): NodeJS.ProcessEnv
   logError(message: string): void
@@ -68,6 +87,10 @@ const defaults: Dependencies = {
   listOperatorActions: listArcAgreementOperatorActions,
   approveOperatorAction: approveArcAgreementOperatorAction,
   disputeOperatorAction: disputeArcAgreementOperatorAction,
+  readCircleLink,
+  executeCircleCall: executeArcAgreementAgentWalletCall,
+  claimExecution: claimCirclePocketAction,
+  recordExecution: recordCirclePocketAction,
   client: createArcAgreementActivationClient,
   env: () => process.env,
   logError: message => console.error('[arc-agreement-agent] request failed:', message),
@@ -104,6 +127,178 @@ function payerAddress(value: unknown) {
   const address = clean(value, 80)
   if (!isAddress(address)) throw fail('A valid Arc payer address is required.', 400)
   return getAddress(address)
+}
+
+function executionIdempotencyKey(req: Pick<Request, 'headers'>) {
+  const value = clean(req.headers['idempotency-key'], 128)
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{15,127}$/.test(value)) {
+    throw fail('A valid Idempotency-Key header is required for Circle execution.', 400)
+  }
+  return value
+}
+
+function circleAgentWalletSlug(email: string) {
+  const normalized = email.trim().toLowerCase()
+  if (!normalized) return ''
+  let hash = 5381
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash = ((hash << 5) + hash + normalized.charCodeAt(index)) >>> 0
+  }
+  return `wallet-${hash.toString(36)}`
+}
+
+async function circleAgentIdentity(
+  dependencies: Dependencies,
+  policy: DeveloperCheckoutPolicy,
+  payer: string,
+) {
+  if (!policy.ownerId) throw fail('This developer project has no wallet owner binding.', 409)
+  const link = await dependencies.readCircleLink(circleLinkKey(policy.ownerId, 'arc', 'agent'))
+  if (!link || link.privyUserId !== policy.ownerId || link.chain !== 'arc' || link.purpose !== 'agent') {
+    throw fail('Connect an Arc Circle Agent Wallet to this developer account first.', 409)
+  }
+  if (!['ARC-TESTNET', 'ARC_TESTNET', 'ARC'].includes(link.circleBlockchain.trim().toUpperCase())) {
+    throw fail('The connected agent wallet is not configured for Arc Testnet.', 409)
+  }
+  if (link.circleWalletAddress.toLowerCase() !== payer.toLowerCase()) throw fail('Agreement not found.', 404)
+  const agentSlug = circleAgentWalletSlug(link.email ?? '')
+  if (!agentSlug) throw fail('Reconnect the Circle Agent Wallet with a verified email.', 409)
+  return { ownerId: policy.ownerId, agentSlug, walletAddress: getAddress(link.circleWalletAddress) }
+}
+
+function circleCall(call: { to: string; data: string; value: string }) {
+  if (call.value !== '0') throw fail('Arc Agreement Circle execution cannot send native value.', 409)
+  const decoded = decodeFunctionData({ abi: AGENT_EXECUTION_ABI, data: call.data as `0x${string}` })
+  if (decoded.functionName === 'approve') {
+    const [spender, amount] = decoded.args
+    return {
+      contractAddress: getAddress(call.to),
+      abiFunctionSignature: 'approve(address,uint256)',
+      abiParameters: [getAddress(spender), amount.toString()],
+    }
+  }
+  if (decoded.functionName === 'createAndFund') {
+    const [params] = decoded.args
+    const tuple = [
+      params.clientReference,
+      params.termsHash,
+      getAddress(params.recipient),
+      params.template.toString(),
+      params.totalAmount.toString(),
+      params.cancelUntil.toString(),
+      params.expiresAt.toString(),
+      params.cumulativeReleaseBps.map(value => value.toString()),
+    ]
+    return {
+      contractAddress: getAddress(call.to),
+      abiFunctionSignature: 'createAndFund((bytes32,bytes32,address,uint8,uint256,uint64,uint64,uint16[]))',
+      abiParameters: [JSON.stringify(tuple)],
+    }
+  }
+  if (decoded.functionName === 'cancelByPayer' || decoded.functionName === 'refundExpired') {
+    return {
+      contractAddress: getAddress(call.to),
+      abiFunctionSignature: `${decoded.functionName}()`,
+      abiParameters: [],
+    }
+  }
+  throw fail('This Arc Agreement contract call is not allowed.', 409)
+}
+
+async function executePreparedCircleCall<T>(input: {
+  req: Pick<Request, 'headers'>
+  dependencies: Dependencies
+  policy: DeveloperCheckoutPolicy
+  agreementId: string
+  operation: string
+  payer: string
+  call: { to: string; data: string; value: string }
+  record(transactionHash: string): Promise<T>
+}) {
+  const key = executionIdempotencyKey(input.req)
+  const wallet = await circleAgentIdentity(input.dependencies, input.policy, input.payer)
+  const command = circleCall(input.call)
+  const executionKey = `${input.policy.partnerId}:${input.agreementId}:${input.operation}`
+  const metadata = {
+    agreementId: input.agreementId,
+    operation: input.operation,
+    executionKey,
+  }
+  const claim = await input.dependencies.claimExecution({
+    ownerId: wallet.ownerId,
+    idempotencyKey: key,
+    action: AGENT_EXECUTION_ACTION,
+    metadata,
+    dedupe: {
+      metadataKey: 'executionKey',
+      metadataValue: executionKey,
+      statuses: ['started', 'submitted', 'completed'],
+    },
+  })
+  if (!claim.claimed) {
+    if (claim.record.metadata?.executionKey !== executionKey) {
+      throw fail('This Idempotency-Key was already used for another Circle execution.', 409)
+    }
+    if (claim.record.resourceId && /^0x[a-fA-F0-9]{64}$/.test(claim.record.resourceId)) {
+      return {
+        replayed: true,
+        pending: true,
+        transactionHash: claim.record.resourceId,
+        recorded: await input.record(claim.record.resourceId),
+      }
+    }
+    if (claim.record.status === 'failed') {
+      throw fail('The previous Circle execution failed. Resolve the wallet issue and retry with a new Idempotency-Key.', 409)
+    }
+    return { replayed: true, pending: true, transactionHash: null, recorded: null }
+  }
+
+  let executed: Awaited<ReturnType<typeof executeArcAgreementAgentWalletCall>>
+  try {
+    executed = await input.dependencies.executeCircleCall({
+      agentSlug: wallet.agentSlug,
+      walletAddress: wallet.walletAddress,
+      ...command,
+    })
+  } catch (error) {
+    const code = (error as Error & { code?: string }).code
+    await input.dependencies.recordExecution({
+      ownerId: wallet.ownerId,
+      idempotencyKey: key,
+      action: AGENT_EXECUTION_ACTION,
+      status: code === 'circle_session_expired' ? 'failed' : 'submitted',
+      metadata,
+    }).catch(() => undefined)
+    throw error
+  }
+
+  await input.dependencies.recordExecution({
+    ownerId: wallet.ownerId,
+    idempotencyKey: key,
+    action: AGENT_EXECUTION_ACTION,
+    status: 'submitted',
+    resourceId: executed.transactionHash,
+    metadata: {
+      ...metadata,
+      ...(executed.providerTransactionId ? { providerTransactionId: executed.providerTransactionId } : {}),
+      ...(executed.providerState ? { providerState: executed.providerState } : {}),
+    },
+  })
+  const recorded = await input.record(executed.transactionHash)
+  await input.dependencies.recordExecution({
+    ownerId: wallet.ownerId,
+    idempotencyKey: key,
+    action: AGENT_EXECUTION_ACTION,
+    status: 'completed',
+    resourceId: executed.transactionHash,
+    metadata,
+  })
+  return {
+    replayed: false,
+    pending: true,
+    transactionHash: executed.transactionHash,
+    recorded,
+  }
 }
 
 function publicAgreement(agreement: ArcAgreement) {
@@ -366,6 +561,49 @@ export function createArcAgreementAgentHandler(overrides: Partial<Dependencies> 
         })
       }
 
+      if (action === 'lifecycle-circle-execute') {
+        if (attempt.status !== 'active') throw fail('This agreement is not active.', 409)
+        const lifecycleAction = clean(req.body?.lifecycleAction, 20)
+        if (lifecycleAction !== 'cancel' && lifecycleAction !== 'refund') {
+          throw fail('Lifecycle action must be cancel or refund.', 400)
+        }
+        const prepared = await dependencies.prepareLifecycleCall({
+          client: dependencies.client(),
+          partnerId: policy.partnerId,
+          agreementId,
+          payerIdentity: identity,
+          walletAddress: payer,
+          action: lifecycleAction,
+          env: dependencies.env(),
+        })
+        const executed = await executePreparedCircleCall({
+          req,
+          dependencies,
+          policy,
+          agreementId,
+          operation: `lifecycle:${lifecycleAction}`,
+          payer,
+          call: prepared.call,
+          record: transactionHash => dependencies.recordLifecycleTransaction({
+            client: dependencies.client(),
+            partnerId: policy.partnerId,
+            agreementId,
+            payerIdentity: identity,
+            transactionHash,
+            requireAgentPreparation: true,
+            directOnly: true,
+          }),
+        })
+        const recorded = executed.recorded
+        return res.status(202).json({
+          ok: true,
+          replayed: executed.replayed || recorded?.replayed === true,
+          pending: true,
+          transactionHash: executed.transactionHash,
+          lifecycleAction: publicLifecycleAction(recorded?.action ?? prepared.action),
+        })
+      }
+
       if (action === 'lifecycle-record') {
         const recorded = await dependencies.recordLifecycleTransaction({
           client: dependencies.client(),
@@ -404,6 +642,46 @@ export function createArcAgreementAgentHandler(overrides: Partial<Dependencies> 
           stage,
           call: prepared.call,
           attempt: publicAttempt(prepared.attempt),
+        })
+      }
+
+      if (action === 'circle-execute') {
+        const prepared = await dependencies.prepareCall({
+          policy,
+          agreementId,
+          payer,
+          payerIdentity: identity,
+          stage,
+          env: dependencies.env(),
+        })
+        const executed = await executePreparedCircleCall({
+          req,
+          dependencies,
+          policy,
+          agreementId,
+          operation: stage,
+          payer,
+          call: prepared.call,
+          record: transactionHash => dependencies.recordTransaction({
+            client: dependencies.client(),
+            policy,
+            agreementId,
+            payer,
+            payerIdentity: identity,
+            stage,
+            transactionHash,
+            requireAgentPreparation: true,
+            directOnly: true,
+            env: dependencies.env(),
+          }),
+        })
+        return res.status(202).json({
+          ok: true,
+          replayed: executed.replayed || executed.recorded?.replayed === true,
+          pending: true,
+          stage,
+          transactionHash: executed.transactionHash,
+          attempt: publicAttempt(executed.recorded?.attempt ?? prepared.attempt),
         })
       }
 
