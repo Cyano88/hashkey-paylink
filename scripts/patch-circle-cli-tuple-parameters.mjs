@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const EXPECTED_VERSION = '0.0.6'
-const ORIGINAL = '  const abiParameters = pos.slice(1);\n  const estimate = args2.includes("--estimate");'
+const ORIGINAL = '  const abiParameters = pos.slice(1);'
 const PATCHED = `  const abiParameters = pos.slice(1).map((value2) => {
     if (!value2.startsWith("[")) return value2;
     try {
@@ -14,8 +14,7 @@ const PATCHED = `  const abiParameters = pos.slice(1).map((value2) => {
     } catch {
       return value2;
     }
-  });
-  const estimate = args2.includes("--estimate");`
+  });`
 
 export function patchCircleCliTupleParameters(source) {
   if (source.includes(PATCHED)) return { source, changed: false }
