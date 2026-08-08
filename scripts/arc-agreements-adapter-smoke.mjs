@@ -219,6 +219,18 @@ assert.equal(completedRead.body.agreement.chain.releasedUsdcUnits, '10500000')
 assert.equal(completedRead.body.receipt.source, 'arc-agreement')
 assert.equal(completedRead.body.receipt.agreementStatus, 'completed')
 assert.equal(completedRead.body.receipt.txHash, completedAction.transactionHash)
+assert.deepEqual(completedRead.body.agreement.deliveryTimeline, [
+  {
+    id: `${completedAction.id}:submitted`,
+    event: 'delivery.submitted',
+    createdAt: completedAction.requestedAt,
+  },
+  {
+    id: `${completedAction.id}:approved`,
+    event: 'delivery.release_approved',
+    createdAt: completedAction.reviewedAt,
+  },
+])
 assert.equal(JSON.stringify(completedRead.body).includes(completedAction.evidenceHash), false)
 
 const apiRotatedToken = `agrp_${'y'.repeat(43)}`

@@ -56,6 +56,27 @@ function transactionForReceipt(
   ))?.transactionHash
 }
 
+function publicDeliveryTimeline(actions: ArcAgreementOperatorAction[]) {
+  const releases = actions
+    .filter(action => action.action === 'release')
+    .sort((left, right) => left.requestedAt.localeCompare(right.requestedAt))
+  return releases.flatMap((action, index) => {
+    const previous = releases[index - 1]
+    const isRevision = previous?.status === 'disputed' && previous.step === action.step
+    const events = [{
+      id: `${action.id}:submitted`,
+      event: isRevision ? 'delivery.updated' : 'delivery.submitted',
+      createdAt: action.requestedAt,
+    }]
+    if (action.status === 'disputed' && action.reviewedAt) {
+      events.push({ id: `${action.id}:disputed`, event: 'delivery.issue_reported', createdAt: action.reviewedAt })
+    } else if (action.reviewedAt && action.status !== 'awaiting_review') {
+      events.push({ id: `${action.id}:approved`, event: 'delivery.release_approved', createdAt: action.reviewedAt })
+    }
+    return events
+  })
+}
+
 export function createArcAgreementDeveloperView(input: {
   draft: AgreementDraft
   attempt?: ArcAgreementActivationAttempt
@@ -95,6 +116,7 @@ export function createArcAgreementDeveloperView(input: {
       })
     : null
   const releaseRequest = publicArcAgreementReleaseRequest(operatorActions.find(action => action.action === 'release'))
+  const deliveryTimeline = publicDeliveryTimeline(operatorActions)
 
   return {
     status,
@@ -113,6 +135,7 @@ export function createArcAgreementDeveloperView(input: {
       observedAt: lifecycle?.observedAt ?? '',
     } : null,
     releaseRequest,
+    deliveryTimeline,
     receipt,
     updatedAt: lifecycle?.observedAt ?? attempt?.updatedAt ?? input.draft.updatedAt,
   }
