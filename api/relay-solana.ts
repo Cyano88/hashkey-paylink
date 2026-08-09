@@ -58,13 +58,13 @@ const DEFAULT_MIN_RECIPIENT_RAW = 100_000n // 0.10 USDC
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getRpc(): string {
+export function getRpc(): string {
   const rpcUrl = process.env.SOLANA_RPC_URL?.trim()
   if (!rpcUrl) throw new Error('SOLANA_RPC_URL not configured')
   return rpcUrl
 }
 
-function loadRelayer(): Keypair {
+export function loadRelayer(): Keypair {
   const raw = process.env.RELAYER_PRIVATE_KEY_SOLANA
   if (!raw) throw new Error('RELAYER_PRIVATE_KEY_SOLANA not configured')
   // Accept three formats:
@@ -76,7 +76,7 @@ function loadRelayer(): Keypair {
   return Keypair.fromSecretKey(Buffer.from(raw, 'base64'))
 }
 
-function parseSolanaAddress(label: string, value?: string): PublicKey {
+export function parseSolanaAddress(label: string, value?: string): PublicKey {
   const normalized = value?.trim()
   if (!normalized) throw new Error(`${label} is required`)
   try {

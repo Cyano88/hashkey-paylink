@@ -21,6 +21,7 @@
     "test:circle-solana-gas-station": "node --import tsx scripts/circle-solana-gas-station-smoke.mjs",
     "test:pocket-checkout-routing": "node --import tsx scripts/pocket-checkout-routing-smoke.mjs",
     "test:pocket-solana-bridge": "node --import tsx scripts/pocket-solana-bridge-smoke.mjs",
+    "test:pocket-solana-cctp-relay": "node --import tsx scripts/pocket-solana-cctp-relay-smoke.mjs",
     "test:pocket-profile": "node --import tsx scripts/local-currency-profile-handler-smoke.mjs",
     "test:pocket-profile-adapter": "node --import tsx scripts/pocket-profile-adapter-smoke.mjs",
     "test:circle-link": "node --import tsx scripts/privy-circle-link-handler-smoke.mjs",

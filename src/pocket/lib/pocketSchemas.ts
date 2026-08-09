@@ -382,6 +382,8 @@ export const POCKET_API = {
   billsRefund: '/api/pocket/bills/refund',
   activity: '/api/pocket/activity',
   bridge: '/api/pocket/bridge',
+  solanaCctpPrepare: '/api/pocket/bridge/solana/prepare',
+  solanaCctpSubmit: '/api/pocket/bridge/solana/submit',
   solanaRpc: '/api/pocket/solana-rpc',
   x402: '/api/pocket/x402',
   x402Connect: '/api/pocket/x402/connect',

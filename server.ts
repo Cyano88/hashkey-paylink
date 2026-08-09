@@ -79,6 +79,10 @@ import {
   pocketSolanaTransferPrepareHandler,
   pocketSolanaTransferSubmitHandler,
 } from './api/pocket/solana-transfers.js'
+import {
+  pocketSolanaCctpPrepareHandler,
+  pocketSolanaCctpSubmitHandler,
+} from './api/pocket/solana-cctp-relay.js'
 import pocketActivityHandler from './api/pocket/activity.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
 import pocketSolanaRpcHandler from './api/pocket/solana-rpc.js'
@@ -315,6 +319,8 @@ app.all('/api/pocket/bank-withdraw',      strictLimiter, pocketBankWithdrawHandl
 app.all('/api/pocket/transfers/evm-status', readLimiter, pocketEvmTransferStatusHandler)
 app.all('/api/pocket/transfers/prepare',  strictLimiter, pocketSolanaTransferPrepareHandler)
 app.all('/api/pocket/transfers/submit',   strictLimiter, pocketSolanaTransferSubmitHandler)
+app.all('/api/pocket/bridge/solana/prepare', strictLimiter, pocketSolanaCctpPrepareHandler)
+app.all('/api/pocket/bridge/solana/submit', strictLimiter, pocketSolanaCctpSubmitHandler)
 app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)
 app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/fx-quote',          readLimiter, pocketFxQuoteHandler)

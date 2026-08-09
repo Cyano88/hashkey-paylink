@@ -66,6 +66,60 @@ export async function bridgeCircleSolanaWallet(input: {
     },
   }
   const adapter = await createSolanaAdapterFromProvider({ provider, connection })
+  const nativePrepare = adapter.prepare.bind(adapter)
+  adapter.prepare = (async (params, context) => {
+    if (!params.instructions?.length || params.serializedTransaction) {
+      return nativePrepare(params, context)
+    }
+    return {
+      type: 'solana' as const,
+      estimate: async () => ({ gas: 0n, gasPrice: 0n, fee: '0' }),
+      execute: async () => {
+        const { blockhash } = await connection.getLatestBlockhash('confirmed')
+        const unsigned = new Transaction({ feePayer: publicKey, recentBlockhash: blockhash }).add(...params.instructions!)
+        const prepareResponse = await fetch(POCKET_API.solanaCctpPrepare, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${input.accessToken}`, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            transaction: bytesToBase64(unsigned.serialize({ requireAllSignatures: false, verifySignatures: false })),
+            destination: input.destination,
+            destinationAddress: input.destinationAddress,
+            amount: input.amount,
+          }),
+        })
+        const prepared = await prepareResponse.json() as {
+          ok?: boolean
+          transaction?: string
+          lastValidBlockHeight?: number
+          error?: { message?: string }
+        }
+        if (!prepareResponse.ok || !prepared.ok || !prepared.transaction || !Number.isSafeInteger(prepared.lastValidBlockHeight)) {
+          throw new Error(prepared.error?.message || 'Hash PayLink could not prepare the sponsored Solana bridge.')
+        }
+        const sponsored = Transaction.from(base64ToBytes(prepared.transaction))
+        if (params.signers?.length) sponsored.partialSign(...params.signers)
+        const signed = await signOne(sponsored)
+        if (!(signed instanceof Transaction)) throw new Error('Circle returned an unsupported sponsored Solana transaction.')
+        const submitResponse = await fetch(POCKET_API.solanaCctpSubmit, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${input.accessToken}`, 'content-type': 'application/json' },
+          body: JSON.stringify({
+            transaction: bytesToBase64(signed.serialize()),
+            lastValidBlockHeight: prepared.lastValidBlockHeight,
+            destination: input.destination,
+            destinationAddress: input.destinationAddress,
+            amount: input.amount,
+          }),
+        })
+        const submitted = await submitResponse.json() as { ok?: boolean; txHash?: string; error?: { message?: string } }
+        if (!submitResponse.ok || !submitted.ok || !submitted.txHash) {
+          throw new Error(submitted.error?.message || 'Hash PayLink could not submit the sponsored Solana bridge.')
+        }
+        signedSourceTxHash = submitted.txHash
+        return submitted.txHash
+      },
+    }
+  }) as typeof adapter.prepare
   const kit = new BridgeKit()
   let sourceTxHash = ''
   kit.on('burn', payload => {
