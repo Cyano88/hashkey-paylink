@@ -205,7 +205,7 @@ export default function usePocketPaymentLiquidityController(input: {
               })
         } catch (reason) {
           const message = reason instanceof Error ? reason.message : ''
-          if (!/submitted and is being reconciled|still moving/i.test(message)) {
+          if (!/submitted and is being reconciled|still moving|without a verifiable source transaction|check activity before retrying/i.test(message)) {
             await input.persistence?.update(inspected.accessToken, { phase: 'failed' }).catch(() => null)
           }
           throw reason
@@ -254,7 +254,7 @@ export default function usePocketPaymentLiquidityController(input: {
       return destinationWallet
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Pocket could not prepare this payment.'
-      const retryBlocked = /submitted and is being reconciled|still moving|destination balance is still refreshing/i.test(message)
+      const retryBlocked = /submitted and is being reconciled|still moving|destination balance is still refreshing|without a verifiable source transaction|check activity before retrying/i.test(message)
       setStatus(retryBlocked ? 'reconciling' : 'idle')
       setError(message)
       throw reason

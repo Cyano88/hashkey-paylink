@@ -1,7 +1,9 @@
 import { Connection, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js'
+import bs58 from 'bs58'
 import { signCircleSolanaTransaction } from '../../lib/circleSolanaEmailWallet'
 import type { PocketSolanaEmailSession } from '../controllers/usePocketWalletController'
 import type { PocketBridgeNetwork } from '../api/pocketBridgeClient'
+import { findPocketBridgeSourceHash } from './pocketBridgeHash'
 import { POCKET_API } from './pocketSchemas'
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -13,21 +15,6 @@ function bytesToBase64(bytes: Uint8Array) {
 function base64ToBytes(value: string) {
   const binary = window.atob(value)
   return Uint8Array.from(binary, character => character.charCodeAt(0))
-}
-
-function findSourceHash(value: unknown): string | null {
-  if (typeof value === 'string' && (/^0x[a-fA-F0-9]{64}$/.test(value) || /^[1-9A-HJ-NP-Za-km-z]{64,96}$/.test(value))) return value
-  if (!value || typeof value !== 'object') return null
-  const record = value as Record<string, unknown>
-  for (const key of ['burnTxHash', 'txHash', 'transactionHash', 'signature']) {
-    const found = findSourceHash(record[key])
-    if (found) return found
-  }
-  for (const nested of Object.values(record)) {
-    const found = findSourceHash(nested)
-    if (found) return found
-  }
-  return null
 }
 
 export async function bridgeCircleSolanaWallet(input: {
@@ -46,6 +33,7 @@ export async function bridgeCircleSolanaWallet(input: {
     httpHeaders: { authorization: `Bearer ${input.accessToken}` },
   })
   const publicKey = new PublicKey(input.session.wallet.address)
+  let signedSourceTxHash = ''
   const signOne = async (transaction: unknown) => {
     const versioned = transaction instanceof VersionedTransaction
     if (!versioned && !(transaction instanceof Transaction)) throw new Error('Circle Bridge Kit returned an unsupported Solana transaction.')
@@ -58,7 +46,12 @@ export async function bridgeCircleSolanaWallet(input: {
       memo: `Circle Pocket bridge ${input.amount} USDC from Solana to ${input.destination === 'base' ? 'Base' : 'Arbitrum'}`,
     })
     const bytes = base64ToBytes(signed)
-    return versioned ? VersionedTransaction.deserialize(bytes) : Transaction.from(bytes)
+    const signedTransaction = versioned ? VersionedTransaction.deserialize(bytes) : Transaction.from(bytes)
+    const signature = signedTransaction instanceof VersionedTransaction
+      ? signedTransaction.signatures[0]
+      : signedTransaction.signatures.find(item => item.publicKey.equals(publicKey))?.signature
+    if (signature?.some(byte => byte !== 0)) signedSourceTxHash = bs58.encode(signature)
+    return signedTransaction
   }
   const provider = {
     isConnected: true,
@@ -76,7 +69,7 @@ export async function bridgeCircleSolanaWallet(input: {
   const kit = new BridgeKit()
   let sourceTxHash = ''
   kit.on('burn', payload => {
-    sourceTxHash = findSourceHash(payload) ?? sourceTxHash
+    sourceTxHash = findPocketBridgeSourceHash(payload) ?? sourceTxHash
   })
   const result = await kit.bridge({
     from: { adapter, chain: 'Solana' },
@@ -84,7 +77,16 @@ export async function bridgeCircleSolanaWallet(input: {
     amount: input.amount,
     token: 'USDC',
   })
-  sourceTxHash ||= findSourceHash(result) ?? ''
-  if (!sourceTxHash) throw new Error('Circle completed the bridge request but did not return the source transaction.')
+  sourceTxHash ||= findPocketBridgeSourceHash(result) ?? ''
+  if (!sourceTxHash && signedSourceTxHash) {
+    const status = await connection.getSignatureStatus(signedSourceTxHash, { searchTransactionHistory: true }).catch(() => null)
+    if (status?.value && !status.value.err) sourceTxHash = signedSourceTxHash
+    if (status?.value?.err) throw new Error('The Solana source transaction failed before USDC could move.')
+  }
+  if (!sourceTxHash) {
+    const failed = result.steps.find(step => step.state === 'error')
+    if (failed) throw new Error(failed.errorMessage || `Circle bridge failed during ${failed.name}.`)
+    throw new Error('Circle returned the bridge request without a verifiable source transaction. Check Activity before retrying.')
+  }
   return sourceTxHash
 }

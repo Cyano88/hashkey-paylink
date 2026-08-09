@@ -2482,7 +2482,7 @@ export default function PaymentPage() {
       else await handleCirclePasskeyPay()
     } catch (reason) {
       const message = readableErrorMsg(reason, 'Move & Pay could not continue.')
-      if (/submitted and is being reconciled|still moving|destination balance is still refreshing/i.test(message)) {
+      if (/submitted and is being reconciled|still moving|destination balance is still refreshing|without a verifiable source transaction|check activity before retrying/i.test(message)) {
         setPocketMovePayRetryBlocked(true)
       }
       setPocketMovePayError(message)
