@@ -51,7 +51,7 @@ export default function PaymentLinks() {
       </Section>
 
       <Section title="Payment amount">
-        <p>Fixed hosted checkout sends the exact recipient amount selected by the payment request. Platform fees and sponsored-gas recovery are accounted for separately and must not be presented as recipient overpayment.</p>
+        <p>Fixed hosted checkout sends the exact recipient amount selected by the payment request. Circle-wallet EVM payments use Circle Gas Station on Base, Arbitrum, and Arc Testnet, so only the standard platform fee is added separately. Legacy external-wallet relays may retain a separately disclosed gas-recovery amount.</p>
         <InfoBox type="info">The older manual-address flow and its underpayment or overpayment handling are inactive and are not part of the current payer experience.</InfoBox>
       </Section>
 

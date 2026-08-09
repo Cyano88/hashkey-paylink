@@ -49,6 +49,7 @@ const wallet = {
   address: '0x1111111111111111111111111111111111111111',
   blockchain: 'BASE',
 }
+const sponsoredWallet = { ...wallet, accountType: 'SCA', state: 'LIVE' }
 const missingSession = await request(handler, { action: 'link', chain: 'base', email: 'ada@example.com', wallet })
 assert.equal(missingSession.statusCode, 400)
 assert.match(missingSession.body.error, /valid Circle wallet session/)
@@ -100,13 +101,13 @@ await verifyCircleLinkWallet({
   userToken: 'owned-token',
   chain: 'base',
   wallet,
-  listWallets: async () => [{ ...wallet, address: wallet.address.toUpperCase() }],
+  listWallets: async () => [sponsoredWallet],
 })
 await verifyCircleLinkWallet({
   userToken: 'arc-alias-token',
   chain: 'arc',
   wallet: { ...wallet, blockchain: 'ARC_TESTNET' },
-  listWallets: async () => [{ ...wallet, blockchain: 'ARC' }],
+  listWallets: async () => [{ ...sponsoredWallet, blockchain: 'ARC' }],
 })
 let transientWalletLists = 0
 await verifyCircleLinkWallet({
@@ -115,7 +116,7 @@ await verifyCircleLinkWallet({
   wallet: { ...wallet, blockchain: 'ARC-TESTNET' },
   listWallets: async () => {
     transientWalletLists += 1
-    return transientWalletLists === 1 ? [] : [{ ...wallet, blockchain: 'ARC-TESTNET' }]
+    return transientWalletLists === 1 ? [] : [{ ...sponsoredWallet, blockchain: 'ARC-TESTNET' }]
   },
   wait: async () => undefined,
 })
@@ -125,7 +126,7 @@ await assert.rejects(
     userToken: 'unowned-token',
     chain: 'base',
     wallet,
-    listWallets: async () => [{ ...wallet, id: 'different-wallet' }],
+    listWallets: async () => [{ ...sponsoredWallet, id: 'different-wallet' }],
     attempts: 1,
   }),
   error => error.status === 403 && /ownership could not be verified/.test(error.message),
@@ -135,10 +136,20 @@ await assert.rejects(
     userToken: 'wrong-blockchain-token',
     chain: 'base',
     wallet: { ...wallet, blockchain: 'ARB' },
-    listWallets: async () => [wallet],
+    listWallets: async () => [sponsoredWallet],
     attempts: 1,
   }),
   error => error.status === 403 && /ownership could not be verified/.test(error.message),
+)
+await assert.rejects(
+  verifyCircleLinkWallet({
+    userToken: 'eoa-token',
+    chain: 'base',
+    wallet,
+    listWallets: async () => [{ ...wallet, accountType: 'EOA', state: 'LIVE' }],
+    attempts: 1,
+  }),
+  error => error.status === 409 && /not eligible for EVM gas sponsorship/.test(error.message),
 )
 
 const linkClientSource = await readFile(new URL('../src/lib/privyCircleLink.ts', import.meta.url), 'utf8')

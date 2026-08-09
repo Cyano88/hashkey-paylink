@@ -1114,12 +1114,22 @@ export default function PaymentPage() {
     return totalUnits + feeUnits + gasRecoveryUnits
   }
 
+  function circleEvmPaymentBreakdown(totalUnits: bigint) {
+    const feeUnits = totalUnits * BigInt(hashPaylinkFeeBps) / 10_000n
+    return {
+      feeUnits,
+      treasuryUnits: feeUnits,
+      recipientUnits: grossUpEvmPlatformCharges ? totalUnits : totalUnits - feeUnits,
+      requiredUnits: grossUpEvmPlatformCharges ? totalUnits + feeUnits : totalUnits,
+    }
+  }
+
   const circleRequiredUnits = (() => {
     if (paycrestNeedsPreparation) return 0n
     try {
       const totalUnits = parseUnits(payableAmt || '0', meta.decimals)
       if (grossUpSolanaPlatformCharges) return solanaPaymentRequiredUnits(totalUnits)
-      return grossUpEvmPlatformCharges ? evmPaymentBreakdown(totalUnits).requiredUnits : totalUnits
+      return grossUpEvmPlatformCharges ? circleEvmPaymentBreakdown(totalUnits).requiredUnits : totalUnits
     } catch {
       return 0n
     }
@@ -1138,7 +1148,7 @@ export default function PaymentPage() {
   const circleEvmEmailMerchantUnits = (() => {
     if (!showCircleEvmEmailPay || circleRequiredUnits <= 0n || (chain !== 'base' && chain !== 'arbitrum')) return null
     const totalUnits = parseUnits(payableAmt || '0', meta.decimals)
-    const merchantUnits = evmPaymentBreakdown(totalUnits).sponsoredRecipientUnits
+    const merchantUnits = circleEvmPaymentBreakdown(totalUnits).recipientUnits
     return merchantUnits > 0n ? merchantUnits : null
   })()
   const circleSolanaHasEnough =

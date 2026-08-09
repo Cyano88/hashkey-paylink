@@ -6,6 +6,7 @@ import { isAddress } from 'viem'
 import { PublicKey } from '@solana/web3.js'
 import { PrivyClient, type User } from '@privy-io/server-auth'
 import { listCircleUserWallets, type CircleUserWallet } from './circle-solana-email.js'
+import { requireCircleGasStationEvmWallet } from './circle-evm-gas-station.js'
 
 const STORE_PATH = process.env.PRIVY_CIRCLE_LINK_STORE ?? './data/privy-circle-links.json'
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
@@ -187,13 +188,26 @@ export async function verifyCircleLinkWallet(input: {
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const wallets = await listWallets(input.userToken, input.chain)
+    if (input.chain !== 'solana' && blockchainMatchesChain(input.chain, input.wallet.blockchain)) {
+      try {
+        requireCircleGasStationEvmWallet({
+          chain: input.chain,
+          walletId: input.wallet.id,
+          walletAddress: input.wallet.address,
+          wallets,
+        })
+        return
+      } catch (error) {
+        if ((error as Error & { status?: number }).status === 409) throw error
+      }
+    }
     const owned = blockchainMatchesChain(input.chain, input.wallet.blockchain)
       && wallets.some(wallet => (
         wallet.id === input.wallet.id
         && sameAddress(input.chain, wallet.address, input.wallet.address)
         && blockchainMatchesChain(input.chain, wallet.blockchain)
       ))
-    if (owned) return
+    if (input.chain === 'solana' && owned) return
     if (attempt + 1 < attempts) await wait(250 * (attempt + 1))
   }
 

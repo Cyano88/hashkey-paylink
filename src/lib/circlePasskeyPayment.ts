@@ -11,7 +11,6 @@ import { createBundlerClient, toWebAuthnAccount } from 'viem/account-abstraction
 import { arbitrum, base } from 'viem/chains'
 import type { ChainKey } from './chains'
 import { CHAIN_META, EVM_TREASURY, PLATFORM_FEE_BPS } from './chains'
-import { getSponsoredGasRecoveryUnits } from './gasRecovery'
 
 type CirclePasskeyChain = Extract<ChainKey, 'base' | 'arbitrum'>
 
@@ -240,8 +239,7 @@ export async function sendCirclePasskeyPayment({
     const meta = CHAIN_META[config.chain]
     const totalUnits = parseUnits(amount || '0', meta.decimals)
     const feeUnits = totalUnits * BigInt(feeBps) / 10_000n
-    const gasRecoveryUnits = feeBps === 0 ? 0n : getSponsoredGasRecoveryUnits(config.chain, totalUnits, feeUnits, meta.decimals)
-    const treasuryUnits = feeUnits + gasRecoveryUnits
+    const treasuryUnits = feeUnits
     const grossFees = feeMode === 'gross'
     const recipientUnits = grossFees ? totalUnits : totalUnits - treasuryUnits
     const requiredUnits = grossFees ? totalUnits + treasuryUnits : totalUnits

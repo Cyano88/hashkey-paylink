@@ -5,6 +5,8 @@ export type CircleEvmWalletRecord = {
   address: `0x${string}`
   blockchain: string
   accountType?: string
+  state?: string
+  scaCore?: string
   createDate?: string
   refId?: string
 }
@@ -39,7 +41,8 @@ function productionChain(blockchain: string): PocketProductionEvmChain | null {
 
 function eligibleWallet(wallet: CircleEvmWalletRecord) {
   return isAddress(wallet.address)
-    && (!wallet.accountType || wallet.accountType.trim().toUpperCase() === 'SCA')
+    && wallet.accountType?.trim().toUpperCase() === 'SCA'
+    && (!wallet.state || wallet.state.trim().toUpperCase() === 'LIVE')
     && productionChain(wallet.blockchain) !== null
 }
 

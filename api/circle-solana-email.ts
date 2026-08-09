@@ -3,6 +3,10 @@ import crypto from 'crypto'
 import { PublicKey } from '@solana/web3.js'
 import { encodeFunctionData, isAddress, parseAbi } from 'viem'
 import { CCTP_DOMAIN, CCTP_FORWARD_HOOK, CCTP_TOKEN_MESSENGER_V2, cctpForwardHookForSolana, cctpMintRecipient, readCctpForwardQuote, solanaRecipient, type PocketBridgeNetwork } from './pocket/cctp.js'
+import {
+  requireCircleGasStationEvmWallet,
+  type CircleGasStationEvmChain,
+} from './circle-evm-gas-station.js'
 
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 const PLATFORM_FEE_BPS = 20n
@@ -12,20 +16,14 @@ const EVM_CHAINS = {
   base: {
     blockchain: 'BASE',
     tokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    gasRecoveryEnv: 'BASE_GAS_RECOVERY_USDC',
-    defaultGasRecoveryUnits: 10_000n,
   },
   arbitrum: {
     blockchain: 'ARB',
     tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
-    gasRecoveryEnv: 'ARBITRUM_GAS_RECOVERY_USDC',
-    defaultGasRecoveryUnits: 30_000n,
   },
   arc: {
     blockchain: 'ARC-TESTNET',
     tokenAddress: '0x3600000000000000000000000000000000000000',
-    gasRecoveryEnv: 'ARC_GAS_RECOVERY_USDC',
-    defaultGasRecoveryUnits: 0n,
   },
 } as const
 
@@ -164,7 +162,7 @@ function solanaWallet(wallets: Array<{ id: string; address: string; blockchain: 
   )
 }
 
-function evmWallet(wallets: Array<{ id: string; address: string; blockchain: string }>, chain: keyof typeof EVM_CHAINS) {
+function evmWallet(wallets: CircleUserWallet[], chain: keyof typeof EVM_CHAINS) {
   const expected = EVM_CHAINS[chain].blockchain
   const aliases: Record<keyof typeof EVM_CHAINS, string[]> = {
     base: ['BASE'],
@@ -173,7 +171,12 @@ function evmWallet(wallets: Array<{ id: string; address: string; blockchain: str
   }
   return wallets.find((wallet) => {
     const blockchain = String(wallet.blockchain ?? '').trim().toUpperCase()
-    return (blockchain === expected || aliases[chain].includes(blockchain) || (chain === 'arbitrum' && blockchain.includes('ARB'))) && isAddress(wallet.address)
+    const accountType = String(wallet.accountType ?? '').trim().toUpperCase()
+    const state = String(wallet.state ?? '').trim().toUpperCase()
+    return (blockchain === expected || aliases[chain].includes(blockchain) || (chain === 'arbitrum' && blockchain.includes('ARB')))
+      && accountType === 'SCA'
+      && (!state || state === 'LIVE')
+      && isAddress(wallet.address)
   })
 }
 
@@ -181,17 +184,69 @@ export type CircleUserWallet = {
   id: string
   address: string
   blockchain: string
+  accountType?: string
+  state?: string
+  scaCore?: string
 }
 
 export async function listCircleUserWallets(userToken: string, chain: string): Promise<CircleUserWallet[]> {
   if (!userToken) throw new Error('Missing Circle user token')
-  const data = await circleJson<{ wallets: CircleUserWallet[] }>('/v1/w3s/wallets', {
+  const data = await circleJson<{ wallets: CircleUserWallet[] }>('/v1/w3s/wallets?pageSize=50', {
     method: 'GET',
     userToken,
     apiKey: circleApiKey({ chain }),
     headers: { accept: 'application/json' },
   })
   return data.wallets ?? []
+}
+
+async function readCircleUserWallet(userToken: string, chain: string, walletId: string) {
+  const data = await circleJson<{ wallet?: CircleUserWallet }>(
+    `/v1/w3s/wallets/${encodeURIComponent(walletId)}`,
+    {
+      method: 'GET',
+      userToken,
+      apiKey: circleApiKey({ chain }),
+      headers: { accept: 'application/json' },
+    },
+  )
+  return data.wallet ?? null
+}
+
+async function createCircleGasStationEvmChallenge(input: {
+  userToken: string
+  walletId: string
+  walletAddress: string
+  chain: CircleGasStationEvmChain
+  callData: string
+  refId: string
+  idempotencyKey?: string
+}) {
+  const ownedWallet = await readCircleUserWallet(input.userToken, input.chain, input.walletId)
+  const wallet = requireCircleGasStationEvmWallet({
+    chain: input.chain,
+    walletId: input.walletId,
+    walletAddress: input.walletAddress,
+    wallets: ownedWallet ? [ownedWallet] : [],
+  })
+  return circleJson<{
+    challengeId?: string
+    id?: string
+    transactionId?: string
+    transaction?: Record<string, unknown>
+  }>('/v1/w3s/user/transactions/contractExecution', {
+    method: 'POST',
+    userToken: input.userToken,
+    apiKey: circleApiKey({ chain: input.chain }),
+    body: JSON.stringify({
+      idempotencyKey: input.idempotencyKey ?? crypto.randomUUID(),
+      walletId: wallet.id,
+      feeLevel: 'HIGH',
+      refId: input.refId,
+      contractAddress: wallet.address,
+      callData: input.callData,
+    }),
+  })
 }
 
 export async function createCircleArcUserContractChallenge(input: {
@@ -213,23 +268,14 @@ export async function createCircleArcUserContractChallenge(input: {
     throw new Error('Prepared Circle Arc call data is invalid.')
   }
   if (!/^[a-zA-Z0-9:_-]{8,120}$/.test(input.refId)) throw new Error('Circle challenge reference is invalid.')
-  return circleJson<{
-    challengeId?: string
-    id?: string
-    transactionId?: string
-    transaction?: Record<string, unknown>
-  }>('/v1/w3s/user/transactions/contractExecution', {
-    method: 'POST',
+  return createCircleGasStationEvmChallenge({
     userToken: input.userToken,
-    apiKey: circleApiKey({ chain: 'arc' }),
-    body: JSON.stringify({
-      idempotencyKey: input.idempotencyKey,
-      walletId: input.walletId,
-      feeLevel: 'HIGH',
-      refId: input.refId,
-      contractAddress: input.walletAddress,
-      callData: input.callData,
-    }),
+    walletId: input.walletId,
+    walletAddress: input.walletAddress,
+    chain: 'arc',
+    callData: input.callData,
+    refId: input.refId,
+    idempotencyKey: input.idempotencyKey,
   })
 }
 
@@ -279,24 +325,6 @@ export async function readCircleArcUserTransaction(input: {
 
 function isBytes32(value: string | undefined): value is `0x${string}` {
   return typeof value === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value)
-}
-
-function parseUsdcUnits(value: string | undefined, fallback: bigint) {
-  if (!value) return fallback
-  const match = value.trim().match(/^(\d+)(?:\.(\d{0,6})?)?$/)
-  if (!match) return fallback
-  const whole = BigInt(match[1])
-  const frac = BigInt((match[2] ?? '').padEnd(6, '0'))
-  return whole * 1_000_000n + frac
-}
-
-function gasRecoveryUnits(chain: keyof typeof EVM_CHAINS, totalUnits: bigint, feeUnits: bigint) {
-  const cfg = EVM_CHAINS[chain]
-  const configured = parseUsdcUnits(process.env[cfg.gasRecoveryEnv], cfg.defaultGasRecoveryUnits)
-  if (configured <= 0n) return 0n
-  const maxRecoverable = totalUnits - feeUnits - 1n
-  if (maxRecoverable <= 0n) return 0n
-  return configured > maxRecoverable ? maxRecoverable : configured
 }
 
 export default async function handler(req: Request, res: Response) {
@@ -420,10 +448,7 @@ export default async function handler(req: Request, res: Response) {
         : PLATFORM_FEE_BPS
       const fee = total * requestedFeeBps / BPS_DENOMINATOR
       const grossFees = params.feeMode === 'gross'
-      const recovery = grossFees
-        ? (requestedFeeBps === 0n ? 0n : parseUsdcUnits(process.env[EVM_CHAINS[chain].gasRecoveryEnv], EVM_CHAINS[chain].defaultGasRecoveryUnits))
-        : (requestedFeeBps === 0n ? 0n : gasRecoveryUnits(chain, total, fee))
-      const treasuryAmount = fee + recovery
+      const treasuryAmount = fee
       const recipientAmount = grossFees ? total : total - treasuryAmount
       if (total <= 0n || recipientAmount <= 0n) {
         return res.status(400).json({ ok: false, error: 'Invalid payment amount' })
@@ -452,18 +477,13 @@ export default async function handler(req: Request, res: Response) {
         args: [batchCalls],
       })
 
-      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
-        method: 'POST',
+      const data = await createCircleGasStationEvmChallenge({
         userToken,
-        apiKey: circleApiKey({ chain }),
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          walletId,
-          feeLevel: 'HIGH',
-          refId: `hashpaylink-${chain}`,
-          contractAddress: walletAddress,
-          callData: batchCallData,
-        }),
+        walletId,
+        walletAddress,
+        chain,
+        refId: `hashpaylink-${chain}`,
+        callData: batchCallData,
       })
       return res.json({ ok: true, ...data })
     }
@@ -499,18 +519,13 @@ export default async function handler(req: Request, res: Response) {
         ]],
       })
 
-      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
-        method: 'POST',
+      const data = await createCircleGasStationEvmChallenge({
         userToken,
-        apiKey: circleApiKey({ chain }),
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          walletId,
-          feeLevel: 'HIGH',
-          refId: `hashpaylink-${chain}-withdraw`,
-          contractAddress: walletAddress,
-          callData: batchCallData,
-        }),
+        walletId,
+        walletAddress,
+        chain,
+        refId: `hashpaylink-${chain}-withdraw`,
+        callData: batchCallData,
       })
       return res.json({ ok: true, ...data })
     }
@@ -567,18 +582,13 @@ export default async function handler(req: Request, res: Response) {
           { target: CCTP_TOKEN_MESSENGER_V2 as `0x${string}`, value: 0n, data: burnData },
         ]],
       })
-      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
-        method: 'POST',
+      const data = await createCircleGasStationEvmChallenge({
         userToken,
-        apiKey: circleApiKey({ chain }),
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          walletId,
-          feeLevel: 'HIGH',
-          refId: `circle-pocket-${chain}-to-${destination}`,
-          contractAddress: walletAddress,
-          callData: batchCallData,
-        }),
+        walletId,
+        walletAddress,
+        chain,
+        refId: `circle-pocket-${chain}-to-${destination}`,
+        callData: batchCallData,
       })
       return res.json({ ok: true, ...data })
     }
@@ -618,18 +628,13 @@ export default async function handler(req: Request, res: Response) {
         ]],
       })
 
-      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
-        method: 'POST',
+      const data = await createCircleGasStationEvmChallenge({
         userToken,
-        apiKey: circleApiKey({ chain: 'arc' }),
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          walletId,
-          feeLevel: 'HIGH',
-          refId: 'hashpaylink-arc-streampay',
-          contractAddress: walletAddress,
-          callData: batchCallData,
-        }),
+        walletId,
+        walletAddress,
+        chain: 'arc',
+        refId: 'hashpaylink-arc-streampay',
+        callData: batchCallData,
       })
       return res.json({ ok: true, vault: predictedVault, ...data })
     }
@@ -667,18 +672,13 @@ export default async function handler(req: Request, res: Response) {
         ]],
       })
 
-      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
-        method: 'POST',
+      const data = await createCircleGasStationEvmChallenge({
         userToken,
-        apiKey: circleApiKey({ chain: 'arc' }),
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          walletId,
-          feeLevel: 'HIGH',
-          refId: 'hashpaystream-arc-checkpoint-escrow',
-          contractAddress: walletAddress,
-          callData: batchCallData,
-        }),
+        walletId,
+        walletAddress,
+        chain: 'arc',
+        refId: 'hashpaystream-arc-checkpoint-escrow',
+        callData: batchCallData,
       })
       return res.json({ ok: true, vault: predictedVault, ...data })
     }
@@ -705,18 +705,13 @@ export default async function handler(req: Request, res: Response) {
         ]],
       })
 
-      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
-        method: 'POST',
+      const data = await createCircleGasStationEvmChallenge({
         userToken,
-        apiKey: circleApiKey({ chain: 'arc' }),
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          walletId,
-          feeLevel: 'HIGH',
-          refId: 'hashpaystream-arc-checkpoint-refund',
-          contractAddress: walletAddress,
-          callData: batchCallData,
-        }),
+        walletId,
+        walletAddress,
+        chain: 'arc',
+        refId: 'hashpaystream-arc-checkpoint-refund',
+        callData: batchCallData,
       })
       return res.json({ ok: true, vaultAddress, ...data })
     }
@@ -755,18 +750,13 @@ export default async function handler(req: Request, res: Response) {
         ]],
       })
 
-      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
-        method: 'POST',
+      const data = await createCircleGasStationEvmChallenge({
         userToken,
-        apiKey: circleApiKey({ chain: 'arc' }),
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          walletId,
-          feeLevel: 'HIGH',
-          refId: 'hashpaylink-arc-arena-join',
-          contractAddress: walletAddress,
-          callData: batchCallData,
-        }),
+        walletId,
+        walletAddress,
+        chain: 'arc',
+        refId: 'hashpaylink-arc-arena-join',
+        callData: batchCallData,
       })
       return res.json({ ok: true, escrowAddress, ...data })
     }
@@ -793,18 +783,13 @@ export default async function handler(req: Request, res: Response) {
         ]],
       })
 
-      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
-        method: 'POST',
+      const data = await createCircleGasStationEvmChallenge({
         userToken,
-        apiKey: circleApiKey({ chain: 'arc' }),
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          walletId,
-          feeLevel: 'HIGH',
-          refId: 'hashpaylink-arc-arena-refund',
-          contractAddress: walletAddress,
-          callData: batchCallData,
-        }),
+        walletId,
+        walletAddress,
+        chain: 'arc',
+        refId: 'hashpaylink-arc-arena-refund',
+        callData: batchCallData,
       })
       return res.json({ ok: true, escrowAddress, ...data })
     }
@@ -835,18 +820,13 @@ export default async function handler(req: Request, res: Response) {
         ]],
       })
 
-      const data = await circleJson('/v1/w3s/user/transactions/contractExecution', {
-        method: 'POST',
+      const data = await createCircleGasStationEvmChallenge({
         userToken,
-        apiKey: circleApiKey({ chain }),
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          walletId,
-          feeLevel: 'HIGH',
-          refId: `hashpaylink-${chain}-wallet-activate`,
-          contractAddress: walletAddress,
-          callData: batchCallData,
-        }),
+        walletId,
+        walletAddress,
+        chain,
+        refId: `hashpaylink-${chain}-wallet-activate`,
+        callData: batchCallData,
       })
       return res.json({ ok: true, ...data })
     }
