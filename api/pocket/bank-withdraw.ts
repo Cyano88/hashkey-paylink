@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { parseUnits } from 'viem'
 import ngPosHandler, { createNgPosBankReceive, listNgPosHistoryForOwner } from '../ng-pos.js'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
 import { isPocketIdempotencyKey } from '../../src/pocket/lib/pocketSchemas.js'
@@ -29,6 +30,16 @@ async function invokeNgPos(req: Request, body: Record<string, unknown>): Promise
 
 function text(value: unknown, max = 180) {
   return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
+}
+
+function usdcUnits(value: unknown) {
+  const amount = text(value, 30)
+  if (!/^\d+(?:\.\d{1,6})?$/.test(amount)) return null
+  try {
+    return parseUnits(amount, 6)
+  } catch {
+    return null
+  }
 }
 
 export function payoutState(status: unknown) {
@@ -161,8 +172,13 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         if ((source !== 'arbitrum' && source !== 'solana') || destination !== 'base') {
           return res.status(400).json({ ok: false, error: 'Bank payout routing supports Arbitrum or Solana to Base.' })
         }
-        if (amount !== text(ownedOrder.amount_usdc, 30)) {
-          return res.status(409).json({ ok: false, error: 'Bank payout routing amount no longer matches the provider order.' })
+        const routeAmountUnits = usdcUnits(amount)
+        const orderAmountUnits = usdcUnits(ownedOrder.amount_usdc)
+        if (routeAmountUnits === null || routeAmountUnits <= 0n) {
+          return res.status(400).json({ ok: false, error: 'Enter a valid bank payout routing amount.' })
+        }
+        if (orderAmountUnits === null || routeAmountUnits > orderAmountUnits) {
+          return res.status(409).json({ ok: false, error: 'Bank payout routing amount exceeds the provider order.' })
         }
         const existing = await ownedRoute(identity, ownedOrder.intent_id, dependencies)
         if (existing && existing.status !== 'failed') {
