@@ -7,8 +7,10 @@ import {
   requireCircleGasStationEvmWallet,
   type CircleGasStationEvmChain,
 } from './circle-evm-gas-station.js'
+import { requireCircleSolanaGasStationWallet } from './circle-solana-gas-station.js'
 
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
+const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 const PLATFORM_FEE_BPS = 20n
 const BPS_DENOMINATOR = 10_000n
 
@@ -428,6 +430,47 @@ export default async function handler(req: Request, res: Response) {
         ? evmWallet(wallets, chain)
         : solanaWallet(wallets)
       return res.json({ ok: true, wallets, wallet })
+    }
+
+    if (action === 'executeSolanaTransfer') {
+      const { userToken, walletId, walletAddress, recipient, amount } = params
+      if (!userToken || !walletId || !walletAddress || !recipient || !amount) {
+        return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, recipient, or amount' })
+      }
+      let destinationAddress: string
+      try {
+        destinationAddress = new PublicKey(recipient).toBase58()
+      } catch {
+        return res.status(400).json({ ok: false, error: 'Enter a valid Solana recipient address.' })
+      }
+      const ownedWallet = await readCircleUserWallet(userToken, 'solana', walletId)
+      const wallet = requireCircleSolanaGasStationWallet({
+        walletId,
+        walletAddress,
+        wallets: ownedWallet ? [ownedWallet] : [],
+      })
+      const transferAmount = normalizeSolanaUsdcAmount(amount)
+      const data = await circleJson<{
+        challengeId?: string
+        id?: string
+        transactionId?: string
+        transaction?: Record<string, unknown>
+      }>('/v1/w3s/user/transactions/transfer', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ chain: 'solana' }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          walletId: wallet.id,
+          destinationAddress,
+          amounts: [transferAmount],
+          feeLevel: 'HIGH',
+          refId: 'hashpaylink-solana-withdraw',
+          tokenAddress: SOLANA_USDC_MINT,
+          blockchain: 'SOL',
+        }),
+      })
+      return res.json({ ok: true, ...data })
     }
 
     if (action === 'executeEvmPayment') {
@@ -917,4 +960,15 @@ export default async function handler(req: Request, res: Response) {
     })
     return circleError(res, err)
   }
+}
+
+function normalizeSolanaUsdcAmount(value: string | undefined) {
+  const match = String(value ?? '').trim().match(/^(\d+)(?:\.(\d{0,6})?)?$/)
+  if (!match) throw Object.assign(new Error('Enter a valid USDC amount with up to 6 decimals.'), { status: 400 })
+  const whole = BigInt(match[1])
+  const fractionText = (match[2] ?? '').replace(/0+$/, '')
+  if (whole === 0n && !/[1-9]/.test(fractionText)) {
+    throw Object.assign(new Error('USDC amount must be greater than zero.'), { status: 400 })
+  }
+  return fractionText ? `${whole}.${fractionText}` : whole.toString()
 }

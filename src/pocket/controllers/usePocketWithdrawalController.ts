@@ -1,17 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Address } from 'viem'
-import { signCircleSolanaTransaction } from '../../lib/circleSolanaEmailWallet'
-import { formatAmount } from '../../lib/utils'
+import { sendCircleSolanaTransfer } from '../../lib/circleSolanaEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
-import { preparePocketSolanaTransfer, submitPocketSolanaTransfer } from '../api/pocketSolanaTransferClient'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { validatePocketWithdrawal } from './pocketWithdrawalValidation'
-
-type PocketAccessTokenReader = () => Promise<string | null>
 
 export default function usePocketWithdrawalController({
   network,
@@ -20,7 +16,6 @@ export default function usePocketWithdrawalController({
   balance,
   resetKey,
   ensureWallet,
-  getAccessToken,
   getEvmSession,
   getSolanaSession,
   refreshBalances,
@@ -33,7 +28,6 @@ export default function usePocketWithdrawalController({
   balance: number
   resetKey: string
   ensureWallet: (network: PocketNetwork) => Promise<CirclePocketWallet | null>
-  getAccessToken: PocketAccessTokenReader
   getEvmSession: (network: Exclude<PocketNetwork, 'solana'>, walletAddress: string) => Promise<CircleEvmEmailSession>
   getSolanaSession: (walletAddress: string) => Promise<PocketSolanaEmailSession>
   refreshBalances: () => Promise<void>
@@ -104,21 +98,13 @@ export default function usePocketWithdrawalController({
       if (!selectedWallet) throw new Error('Circle wallet setup was cancelled.')
       if (network === 'solana') {
         const session = await getSolanaSession(selectedWallet.address)
-        const accessToken = await getAccessToken()
-        if (!accessToken) throw new Error('Sign in again to withdraw from this Solana wallet.')
-        const prepared = await preparePocketSolanaTransfer({ accessToken, recipient, amount })
-        const signedTransaction = await signCircleSolanaTransaction({
+        const solanaTxHash = await sendCircleSolanaTransfer({
           session,
-          rawTransaction: prepared.transaction,
-          memo: `Hash PayLink Circle Pocket withdraw ${formatAmount(amount, 6)} USDC`,
+          recipient,
+          amount: amount.trim(),
         })
-        const submitted = await submitPocketSolanaTransfer({
-          accessToken,
-          transaction: signedTransaction,
-          lastValidBlockHeight: prepared.lastValidBlockHeight,
-        })
-        setTxHash(submitted.txHash)
-        handedOff = Boolean(submitted.txHash)
+        setTxHash(solanaTxHash)
+        handedOff = Boolean(solanaTxHash)
       } else {
         const session = await getEvmSession(network, selectedWallet.address)
         const result = await executePocketEvmTransfer({
@@ -144,7 +130,7 @@ export default function usePocketWithdrawalController({
     } finally {
       setPending(false)
     }
-  }, [address, amount, balance, clearExternalError, ensureWallet, getAccessToken, getEvmSession, getSolanaSession, network, networkLabel, onActivity, refreshBalances, wallet])
+  }, [address, amount, balance, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, networkLabel, onActivity, refreshBalances, wallet])
 
   return {
     address,

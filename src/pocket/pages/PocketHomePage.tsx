@@ -86,7 +86,6 @@ export default function PocketHomePage() {
     balance: selectedBalance,
     resetKey: `${network}:${tab}`,
     ensureWallet: unlockWallet,
-    getAccessToken,
     getEvmSession: walletController.getEvmSession,
     getSolanaSession: walletController.getSolanaSession,
     refreshBalances: wallets.refreshBalances,

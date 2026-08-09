@@ -324,6 +324,110 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
   }
 }
 
+function findCircleString(value: unknown, keys: string[]): string | null {
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  for (const key of keys) {
+    if (typeof record[key] === 'string' && record[key]) return record[key] as string
+  }
+  for (const nested of Object.values(record)) {
+    const found = findCircleString(nested, keys)
+    if (found) return found
+  }
+  return null
+}
+
+function solanaTransactionHash(value: unknown) {
+  const candidate = findCircleString(value, ['txHash', 'transactionHash', 'tx_hash'])
+  return candidate && /^[1-9A-HJ-NP-Za-km-z]{64,100}$/.test(candidate) ? candidate : null
+}
+
+function circleTransactionId(value: unknown) {
+  const candidate = findCircleString(value, ['transactionId', 'transactionID'])
+  return candidate && candidate.length <= 256 ? candidate : null
+}
+
+async function pollCircleSolanaTransaction(userToken: string, transactionId: string, timeoutMs = 180_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const data = await circleSolanaApi<{ transaction?: Record<string, unknown> }>({
+      action: 'getTransaction',
+      userToken,
+      transactionId,
+      chain: 'solana',
+    })
+    const txHash = solanaTransactionHash(data.transaction)
+    if (txHash) return txHash
+    const state = String(data.transaction?.state ?? data.transaction?.status ?? '').toUpperCase()
+    if (state.includes('CANCEL')) throw new Error('Circle wallet confirmation was cancelled.')
+    if (state.includes('FAIL') || state.includes('DENIED')) {
+      throw new Error('Circle Solana transfer failed. Check Activity before trying again.')
+    }
+    await new Promise(resolve => window.setTimeout(resolve, 2_500))
+  }
+  return null
+}
+
+async function pollCircleSolanaChallenge(userToken: string, challengeId: string, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const data = await circleSolanaApi<{ challenge?: Record<string, unknown> }>({
+      action: 'getChallenge',
+      userToken,
+      challengeId,
+      chain: 'solana',
+    })
+    const transactionId = circleTransactionId(data.challenge)
+    if (transactionId) return transactionId
+    await new Promise(resolve => window.setTimeout(resolve, 1_500))
+  }
+  return null
+}
+
+export async function sendCircleSolanaTransfer(params: {
+  session: SolanaEmailSession
+  recipient: string
+  amount: string
+}) {
+  if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
+  const sdk = new W3SSdk({
+    appSettings: { appId: APP_ID },
+    authentication: {
+      userToken: params.session.userToken,
+      encryptionKey: params.session.encryptionKey,
+    },
+  })
+  applyHashPayLinkCircleSolanaUi(sdk)
+  const challenge = await circleSolanaApi<{
+    challengeId?: string
+    transactionId?: string
+    transaction?: Record<string, unknown>
+  }>({
+    action: 'executeSolanaTransfer',
+    userToken: params.session.userToken,
+    walletId: params.session.wallet.id,
+    walletAddress: params.session.wallet.address,
+    recipient: params.recipient,
+    amount: params.amount,
+  })
+  if (!challenge.challengeId) throw new Error('Circle did not return a Solana transfer challenge.')
+  const result = await withTimeout(
+    executeChallenge(sdk, challenge.challengeId),
+    120_000,
+    'Circle Solana confirmation did not finish. Check Activity before trying again.',
+  )
+  const directHash = solanaTransactionHash(result)
+  if (directHash) return directHash
+  const transactionId = circleTransactionId(result)
+    ?? circleTransactionId(challenge)
+    ?? await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId)
+  if (transactionId) {
+    const txHash = await pollCircleSolanaTransaction(params.session.userToken, transactionId)
+    if (txHash) return txHash
+  }
+  throw new Error('Circle accepted the Solana transfer and is reconciling it. Do not retry yet.')
+}
+
 export async function signCircleSolanaTransaction(params: {
   session: SolanaEmailSession
   rawTransaction: string
