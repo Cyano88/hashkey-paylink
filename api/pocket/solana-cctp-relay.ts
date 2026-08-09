@@ -180,11 +180,16 @@ async function validateBridgeInstruction(input: {
     throw fail(400, 'Solana CCTP finality threshold was not the approved fast route.')
   }
   const hookLength = instruction.data.readUInt32LE(96)
-  if (hookLength !== 32 || instruction.data.length !== 100 + hookLength) {
+  if (hookLength !== 32 || instruction.data.length !== 108 + hookLength) {
     throw fail(400, 'Solana CCTP forwarding hook was invalid.')
   }
-  if (instruction.data.subarray(100, 112).toString('utf8') !== 'cctp-forward') {
+  const expectedHook = Buffer.alloc(32)
+  Buffer.from('cctp-forward', 'utf8').copy(expectedHook)
+  if (!instruction.data.subarray(100, 132).equals(expectedHook)) {
     throw fail(400, 'Solana CCTP forwarding hook was invalid.')
+  }
+  if (instruction.data.readBigUInt64LE(132) !== 0n) {
+    throw fail(400, 'Solana CCTP bridging kit fee was not zero.')
   }
 }
 

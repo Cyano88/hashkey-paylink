@@ -31,8 +31,8 @@ function randomMeta({ signer = false, writable = false } = {}) {
   return { pubkey: Keypair.generate().publicKey, isSigner: signer, isWritable: writable }
 }
 
-function bridgeData({ amount = 1_000_000n, domain = 6 } = {}) {
-  const data = Buffer.alloc(132)
+function bridgeData({ amount = 1_000_000n, domain = 6, bridgingKitFee = 0n } = {}) {
+  const data = Buffer.alloc(140)
   Buffer.from('f2113f250ab3a918', 'hex').copy(data, 0)
   data.writeBigUInt64LE(amount, 8)
   data.writeUInt32LE(domain, 16)
@@ -41,6 +41,7 @@ function bridgeData({ amount = 1_000_000n, domain = 6 } = {}) {
   data.writeUInt32LE(1_000, 92)
   data.writeUInt32LE(32, 96)
   Buffer.from('cctp-forward', 'utf8').copy(data, 100)
+  data.writeBigUInt64LE(bridgingKitFee, 132)
   return data
 }
 
@@ -115,5 +116,13 @@ await assert.rejects(() => preparePocketSolanaCctpTransaction({
   expected,
   connection: { getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 123 }) },
 }), /destination domain did not match/)
+
+const unexpectedKitFee = await unsignedBridge({ bridgingKitFee: 1n })
+await assert.rejects(() => preparePocketSolanaCctpTransaction({
+  transaction: unexpectedKitFee,
+  walletAddress: wallet.publicKey.toBase58(),
+  expected,
+  connection: { getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 123 }) },
+}), /bridging kit fee was not zero/)
 
 console.log('Pocket Solana CCTP relay smoke checks passed.')
