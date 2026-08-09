@@ -19,7 +19,9 @@ const handler = createPocketSolanaRpcHandler({
   rpcUrl: () => 'https://rpc.example.test',
   fetcher: async (url, init) => {
     forwarded = { url, init }
-    return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { value: 123 } }), { status: 200 })
+    const request = JSON.parse(init.body)
+    const result = request.method === 'getGenesisHash' ? '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' : { value: 123 }
+    return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }), { status: 200 })
   },
 })
 
@@ -31,8 +33,14 @@ assert.equal(forwarded.url, 'https://rpc.example.test')
 assert.equal(JSON.parse(forwarded.init.body).method, 'getBalance')
 assert.equal(JSON.parse(ok.body).result.value, 123)
 
+const genesis = response()
+await handler({ method: 'POST', body: { jsonrpc: '2.0', id: 2, method: 'getGenesisHash', params: [] } }, genesis)
+assert.equal(genesis.statusCode, 200)
+assert.equal(JSON.parse(genesis.body).result, '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp')
+assert.equal(JSON.parse(forwarded.init.body).method, 'getGenesisHash')
+
 const blocked = response()
-await handler({ method: 'POST', body: { jsonrpc: '2.0', id: 2, method: 'getProgramAccounts', params: [] } }, blocked)
+await handler({ method: 'POST', body: { jsonrpc: '2.0', id: 3, method: 'getProgramAccounts', params: [] } }, blocked)
 assert.equal(blocked.statusCode, 400)
 assert.equal(forwarded.url, 'https://rpc.example.test')
 
