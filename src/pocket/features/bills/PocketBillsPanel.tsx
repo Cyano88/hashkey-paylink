@@ -23,6 +23,11 @@ type PocketBillsPanelProps = {
   baseBalance: number
   walletBusy: boolean
   onOpenWallet: () => void
+  paymentRouting?: {
+    status: 'idle' | 'checking' | 'ready' | 'moving' | 'waiting' | 'reconciling' | 'arrived'
+    notice: string
+    insufficient: boolean
+  }
 }
 
 const billMeta = {
@@ -66,7 +71,7 @@ function SignInCard() {
   )
 }
 
-export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet }: PocketBillsPanelProps) {
+export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet, paymentRouting }: PocketBillsPanelProps) {
   const meta = billMeta[view]
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
@@ -107,6 +112,9 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     billToken: bills.intent.category === 'electricity' ? bills.intent.purchasedCode : undefined,
   } : null
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
+  const paymentRouteBusy = paymentRouting?.status === 'checking' || paymentRouting?.status === 'moving' || paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling'
+  const paymentRouteInsufficient = paymentRouting?.insufficient
+    ?? Boolean(bills.intent && Number(bills.intent.amountUsdc) > baseBalance)
   const catalogNetworks = view === 'airtime'
     ? [...NETWORKS]
     : bills.dataServices
@@ -306,10 +314,25 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                     </div>
                     <PocketSlideAction
                       status={slideStatus}
-                      disabled={bills.status !== 'ready' || Number(bills.intent.amountUsdc) > baseBalance}
+                      disabled={bills.status !== 'ready' || paymentRouteBusy || paymentRouteInsufficient}
                       onConfirm={() => void bills.pay()}
-                      labels={{ disabled: Number(bills.intent.amountUsdc) > baseBalance ? 'Not enough Base USDC' : 'Review payment', idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay', pending: 'Confirm in Circle', submitted: bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`, successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent` }}
+                      labels={{
+                        disabled: paymentRouteInsufficient
+                          ? 'Insufficient across networks'
+                          : paymentRouting?.status === 'moving' || paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling'
+                            ? 'Moving USDC'
+                            : paymentRouting?.status === 'checking'
+                              ? 'Checking balances'
+                              : 'Review payment',
+                        idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay',
+                        pending: 'Confirm in Circle',
+                        submitted: bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`,
+                        successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent`,
+                      }}
                     />
+                    {paymentRouting?.notice && bills.status === 'ready' && (
+                      <p className="px-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">{paymentRouting.notice}</p>
+                    )}
                   </>
                 )}
               </>

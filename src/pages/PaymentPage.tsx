@@ -797,6 +797,7 @@ export default function PaymentPage() {
   const [pocketMovePayBusy, setPocketMovePayBusy] = useState(false)
   const [pocketMovePayError, setPocketMovePayError] = useState('')
   const [pocketMovePayStatus, setPocketMovePayStatus] = useState('')
+  const [pocketMovePayRetryBlocked, setPocketMovePayRetryBlocked] = useState(false)
   const pocketArrivalVerifiedRef = useRef(false)
 
   const disconnectCirclePayWallets = useCallback(() => {
@@ -1159,6 +1160,7 @@ export default function PaymentPage() {
       return
     }
     let cancelled = false
+    setPocketMovePayRetryBlocked(false)
     async function resolvePocketRoute() {
       const destination = chain as PocketCheckoutNetwork
       setPocketCheckoutRouting(true)
@@ -2407,6 +2409,7 @@ export default function PaymentPage() {
   }
 
   async function handlePocketMoveAndPay() {
+    if (pocketMovePayRetryBlocked) return
     const route = pocketCheckoutRoute
     if (!route || route.kind === 'insufficient') return
     if (route.kind === 'direct') {
@@ -2478,7 +2481,11 @@ export default function PaymentPage() {
       if (chain === 'solana') await handleCircleSolanaEmailPay()
       else await handleCirclePasskeyPay()
     } catch (reason) {
-      setPocketMovePayError(readableErrorMsg(reason, 'Move & Pay could not continue.'))
+      const message = readableErrorMsg(reason, 'Move & Pay could not continue.')
+      if (/submitted and is being reconciled|still moving|destination balance is still refreshing/i.test(message)) {
+        setPocketMovePayRetryBlocked(true)
+      }
+      setPocketMovePayError(message)
     } finally {
       pocketArrivalVerifiedRef.current = false
       setPocketMovePayBusy(false)
@@ -3264,7 +3271,9 @@ export default function PaymentPage() {
   const pocketMovePayWaiting = pocketMovePayExpected && !pocketCheckoutRoute
   const checkoutSlideLabels = {
     idle: pocketMovePayReady ? `Move & Pay ${formatAmount(payableAmt, 6)} USDC` : checkoutPresentation.action,
-    disabled: pocketRouteInsufficient
+    disabled: pocketMovePayRetryBlocked
+      ? 'Check payment activity'
+      : pocketRouteInsufficient
       ? 'Insufficient across networks'
       : pocketMovePayWaiting
         ? 'Checking balances'
@@ -5142,7 +5151,7 @@ export default function PaymentPage() {
               {circleSmartAccount && circleEvmWalletUnlocked && (!circleWalletNeedsFunds || pocketMovePayExpected) && (!isNgPosPaycrestOfframp || Boolean(paycrestOrder)) ? (
                 <SlideAction
                   status={checkoutSlideStatus}
-                  disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketRouteInsufficient || circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                  disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                   onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCirclePasskeyPay}
                   labels={checkoutSlideLabels}
                 />
@@ -5252,7 +5261,7 @@ export default function PaymentPage() {
                     {circleSolanaSession && (!circleSolanaNeedsFunds || pocketMovePayExpected) ? (
                       <SlideAction
                         status={checkoutSlideStatus}
-                        disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketRouteInsufficient || circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                        disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketMovePayRetryBlocked || pocketRouteInsufficient || circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
                         onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCircleSolanaEmailPay}
                         labels={checkoutSlideLabels}
                       />
