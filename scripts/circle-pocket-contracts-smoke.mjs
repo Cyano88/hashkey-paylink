@@ -1023,7 +1023,7 @@ assert.doesNotMatch(pocketPaymentLiquidityControllerSource, /\['base', 'arbitrum
 assert.match(pocketPaymentLiquidityControllerSource, /selectPocketCheckoutRoute/)
 assert.match(pocketPaymentLiquidityControllerSource, /readPocketBridgeQuote/)
 assert.match(pocketPaymentLiquidityControllerSource, /readPocketBridgeStatus/)
-assert.match(pocketPaymentLiquidityControllerSource, /Insufficient USDC on every supported source network\./)
+assert.match(pocketPaymentLiquidityControllerSource, /No single supported source can cover the remaining amount and bridge fee\./)
 assert.match(pocketPaymentLiquidityControllerSource, /USDC is still moving\. Do not submit the move again\./)
 assert.match(pocketPaymentLiquidityControllerSource, /setStatus\(retryBlocked \? 'reconciling' : 'idle'\)/)
 assert.match(pocketMobileNumberInputSource, /window\.isSecureContext && picker\?\.select/)

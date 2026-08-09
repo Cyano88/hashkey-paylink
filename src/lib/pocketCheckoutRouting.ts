@@ -24,7 +24,12 @@ export function selectPocketCheckoutRoute(input: {
   if (input.amountUnits > 0n && destinationUnits >= input.amountUnits) {
     return { kind: 'direct', destination: input.destination, amountUnits: input.amountUnits }
   }
-  const bridgeAmountUnits = input.amountUnits
+  // Keep any USDC already available on the destination network and move only
+  // the missing amount. A route still uses exactly one bridge source; balances
+  // from multiple source networks are never combined.
+  const bridgeAmountUnits = input.amountUnits > destinationUnits
+    ? input.amountUnits - destinationUnits
+    : 0n
   const sources = SOURCE_PRIORITY
     .filter(network => network !== input.destination)
     .map(network => ({ network, units: balanceFor(input.balances, network) }))

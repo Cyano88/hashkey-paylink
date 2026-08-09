@@ -144,7 +144,7 @@ export default function usePocketPaymentLiquidityController(input: {
       setRoute(currentRoute)
       setWallets(inspected.wallets)
       if (currentRoute.kind === 'insufficient') {
-        throw new Error('Insufficient USDC on every supported source network.')
+        throw new Error('No single supported source can cover the remaining amount and bridge fee.')
       }
       const destinationWallet = inspected.wallets[currentRoute.destination]
         ?? await input.ensureWallet(currentRoute.destination)
@@ -269,9 +269,9 @@ export default function usePocketPaymentLiquidityController(input: {
         : status === 'waiting' || status === 'reconciling'
           ? 'USDC is moving. Payment will continue after confirmed arrival.'
           : route?.kind === 'bridge'
-            ? networkLabel(route.source) + ' can cover this payment. USDC moves to ' + networkLabel(route.destination) + ' first.'
+            ? 'Moving ' + formatUnits(route.amountUnits, 6) + ' USDC from ' + networkLabel(route.source) + ' to complete the payment on ' + networkLabel(route.destination) + '.'
             : route?.kind === 'insufficient'
-              ? 'Insufficient USDC on every supported source network.'
+              ? 'No single supported source can cover the remaining amount and bridge fee.'
               : route?.kind === 'direct'
                 ? networkLabel(route.destination) + ' can cover this payment.'
                 : '')
