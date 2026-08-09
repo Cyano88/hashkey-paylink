@@ -10,6 +10,12 @@ export type PocketCheckoutRoute =
 
 const SOURCE_PRIORITY: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'solana']
 
+// Automatic Pocket payment routing must remain gas-sponsored end to end.
+// The current Solana CCTP adapter makes the Pocket wallet the transaction fee
+// payer, so Solana remains available for direct payments but cannot be chosen
+// as a bridge source until a sponsored bridge executor is verified.
+const GAS_SPONSORED_BRIDGE_SOURCES = new Set<PocketCheckoutNetwork>(['base', 'arbitrum'])
+
 function balanceFor(balances: PocketCheckoutBalance[], network: PocketCheckoutNetwork) {
   return balances.find(balance => balance.network === network && balance.available)?.units ?? 0n
 }
@@ -31,7 +37,7 @@ export function selectPocketCheckoutRoute(input: {
     ? input.amountUnits - destinationUnits
     : 0n
   const sources = SOURCE_PRIORITY
-    .filter(network => network !== input.destination)
+    .filter(network => network !== input.destination && GAS_SPONSORED_BRIDGE_SOURCES.has(network))
     .map(network => ({ network, units: balanceFor(input.balances, network) }))
     .filter(source => source.units >= bridgeAmountUnits && bridgeAmountUnits > 0n)
     .sort((left, right) => left.units !== right.units

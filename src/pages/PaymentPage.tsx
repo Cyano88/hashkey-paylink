@@ -5442,11 +5442,11 @@ export default function PaymentPage() {
               {pocketMovePayStatus
                 || pocketMovePayError
                 || (pocketCheckoutRouting
-                  ? 'Checking USDC across Base, Arbitrum, and Solana.'
+                  ? 'Checking gas-sponsored USDC routes.'
                   : pocketCheckoutRoute?.kind === 'bridge'
                     ? `Moving ${formatUnits(pocketCheckoutRoute.amountUnits, 6)} USDC from ${CHAIN_META[pocketCheckoutRoute.source].label} to complete the payment on ${CHAIN_META[pocketCheckoutRoute.destination].label}.`
                     : pocketRouteInsufficient
-                      ? 'No single supported source can cover the remaining amount and bridge fee.'
+                      ? 'No single gas-sponsored source can cover the remaining amount and bridge fee.'
                       : pocketCheckoutRoute?.kind === 'direct'
                         ? `${CHAIN_META[pocketCheckoutRoute.destination].label} can cover this payment.`
                         : '')}

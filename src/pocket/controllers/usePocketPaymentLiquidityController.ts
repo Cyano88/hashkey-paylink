@@ -144,7 +144,7 @@ export default function usePocketPaymentLiquidityController(input: {
       setRoute(currentRoute)
       setWallets(inspected.wallets)
       if (currentRoute.kind === 'insufficient') {
-        throw new Error('No single supported source can cover the remaining amount and bridge fee.')
+        throw new Error('No single gas-sponsored source can cover the remaining amount and bridge fee.')
       }
       const destinationWallet = inspected.wallets[currentRoute.destination]
         ?? await input.ensureWallet(currentRoute.destination)
@@ -263,7 +263,7 @@ export default function usePocketPaymentLiquidityController(input: {
 
   const notice = error
     || (status === 'checking'
-      ? 'Checking USDC across Base, Arbitrum, and Solana.'
+      ? 'Checking gas-sponsored USDC routes.'
       : status === 'moving'
         ? 'Moving USDC to ' + networkLabel(input.destination) + '.'
         : status === 'waiting' || status === 'reconciling'
@@ -271,7 +271,7 @@ export default function usePocketPaymentLiquidityController(input: {
           : route?.kind === 'bridge'
             ? 'Moving ' + formatUnits(route.amountUnits, 6) + ' USDC from ' + networkLabel(route.source) + ' to complete the payment on ' + networkLabel(route.destination) + '.'
             : route?.kind === 'insufficient'
-              ? 'No single supported source can cover the remaining amount and bridge fee.'
+              ? 'No single gas-sponsored source can cover the remaining amount and bridge fee.'
               : route?.kind === 'direct'
                 ? networkLabel(route.destination) + ' can cover this payment.'
                 : '')
