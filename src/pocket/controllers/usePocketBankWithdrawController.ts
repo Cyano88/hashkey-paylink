@@ -213,7 +213,7 @@ export default function usePocketBankWithdrawController({
 
   const failRouting = useCallback((reason: unknown) => {
     const message = reason instanceof Error ? reason.message : 'Pocket could not prepare this payout.'
-    const review = /previous payout move needs review|still moving|destination balance is still refreshing|submitted and is being reconciled/i.test(message)
+    const review = /previous payout move needs review|still moving|destination balance is still refreshing|submitted and is being reconciled|without a verifiable source transaction|check activity before retrying/i.test(message)
     setStatus(review ? 'route-review' : 'idle')
     setError(message)
   }, [])
