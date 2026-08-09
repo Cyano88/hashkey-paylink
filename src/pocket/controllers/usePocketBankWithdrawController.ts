@@ -3,6 +3,7 @@ import type { Address } from 'viem'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
 import { confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
+import { readPocketBalances } from '../api/pocketReadClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
 
@@ -134,6 +135,16 @@ export default function usePocketBankWithdrawController({
       reconciliation = { accessToken, intentId: prepared.intentId }
       activeIntentId.current = prepared.intentId
       setResult(prepared)
+      const balances = await readPocketBalances({ accessToken })
+      const baseBalance = balances.rows.find(row => row.key === 'base')?.balance ?? 0
+      const requiredUsdc = Number(prepared.amountUsdc)
+      if (!Number.isFinite(requiredUsdc) || requiredUsdc <= 0) {
+        throw new Error('The bank payout provider returned an invalid USDC amount.')
+      }
+      if (baseBalance + 0.0000001 < requiredUsdc) {
+        const availableUsdc = baseBalance.toFixed(6).replace(/\.?0+$/, '') || '0'
+        throw new Error(`Insufficient Base USDC. This payout needs ${prepared.amountUsdc} USDC; available balance is ${availableUsdc} USDC.`)
+      }
       setStatus('authorizing')
       const session = await getEvmSession(selectedWallet.address)
       const transfer = await executePocketEvmTransfer({

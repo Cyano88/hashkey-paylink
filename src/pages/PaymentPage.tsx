@@ -3256,19 +3256,19 @@ export default function PaymentPage() {
   const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (arbitrumRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isArbitrumRelayConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
   const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!arbitrumRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
-  const checkoutSlideStatus: SlideActionStatus = isConfirmed
-    ? 'successful'
-    : isSendError
-      ? 'error'
-    : isConfirming || Boolean(txHash) || circleEvmAcceptedPending
-      ? 'submitted'
-      : isWalletPending
-        ? 'pending'
-        : 'idle'
   const pocketRouteInsufficient = pocketCheckoutRoute?.kind === 'insufficient'
   const pocketMovePayExpected = privyAuthenticated && smartCheckoutOwnsWalletCta && chain !== 'arc' && circleRequiredUnits > 0n
   const pocketMovePayReady = pocketMovePayExpected && Boolean(pocketCheckoutRoute)
   const pocketMovePayWaiting = pocketMovePayExpected && !pocketCheckoutRoute
+  const checkoutSlideStatus: SlideActionStatus = isConfirmed
+    ? 'successful'
+    : isSendError
+      ? 'error'
+    : pocketMovePayRetryBlocked || isConfirming || Boolean(txHash) || circleEvmAcceptedPending
+      ? 'submitted'
+      : pocketMovePayBusy || isWalletPending
+        ? 'pending'
+        : 'idle'
   const checkoutSlideLabels = {
     idle: pocketMovePayReady ? `Move & Pay ${formatAmount(payableAmt, 6)} USDC` : checkoutPresentation.action,
     disabled: pocketMovePayRetryBlocked

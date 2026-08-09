@@ -229,6 +229,19 @@ function transactionState(value: unknown) {
   return String(record.state ?? record.status ?? '').toUpperCase()
 }
 
+function transactionFailureMessage(value: unknown) {
+  if (!value || typeof value !== 'object') return 'Circle email wallet transaction failed.'
+  const record = value as Record<string, unknown>
+  const detail = [record.errorReason, record.errorDetails, record.errorCode]
+    .map(item => String(item ?? '').replace(/\s+/g, ' ').trim())
+    .find(Boolean)
+  if (!detail) return 'Circle email wallet transaction failed.'
+  if (/insufficient|not enough (?:funds|balance)|balance too low/i.test(detail)) {
+    return 'Insufficient USDC in the selected Circle wallet.'
+  }
+  return `Circle transaction failed (${detail.slice(0, 160)}).`
+}
+
 async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> {
   const action = typeof payload.action === 'string' ? payload.action : 'request'
   const scope = typeof payload.chain === 'string'
@@ -680,6 +693,9 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
         transactionHash?: Hex
         state?: string
         status?: string
+        errorReason?: string
+        errorDetails?: string
+        errorCode?: string
       }
     }>({
       action: 'getTransaction',
@@ -690,7 +706,8 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
     const txHash = findTxHash(data.transaction)
     if (txHash) return txHash
     const state = transactionState(data.transaction)
-    if (state.includes('FAILED') || state.includes('CANCEL')) throw new Error('Circle email wallet transaction failed.')
+    if (state.includes('CANCEL')) throw new Error('Circle wallet confirmation was cancelled.')
+    if (state.includes('FAILED')) throw new Error(transactionFailureMessage(data.transaction))
     await new Promise(resolve => setTimeout(resolve, 2_500))
   }
   return null
