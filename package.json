@@ -17,6 +17,7 @@
     "typecheck": "tsc",
     "test:pocket-contracts": "node --import tsx scripts/circle-pocket-contracts-smoke.mjs",
     "test:pocket-evm-topology": "node --import tsx scripts/circle-pocket-evm-topology-smoke.mjs",
+    "test:pocket-checkout-routing": "node --import tsx scripts/pocket-checkout-routing-smoke.mjs",
     "test:pocket-profile": "node --import tsx scripts/local-currency-profile-handler-smoke.mjs",
     "test:pocket-profile-adapter": "node --import tsx scripts/pocket-profile-adapter-smoke.mjs",
     "test:circle-link": "node --import tsx scripts/privy-circle-link-handler-smoke.mjs",

@@ -95,12 +95,17 @@ export async function ensurePocketWallet({
   const session = await dependencies.connectEvm(email, network)
   if (!shouldContinue()) return null
   onEvmSession?.(session)
-  const linked = await dependencies.linkWallet({
+  const productionWallets = session.productionEvmTopology?.wallets
+  const linkTargets = network !== 'arc' && productionWallets?.base && productionWallets.arbitrum
+    ? ([['base', productionWallets.base], ['arbitrum', productionWallets.arbitrum]] as const)
+    : ([[network, session.wallet]] as const)
+  const linkedRecords = await Promise.all(linkTargets.map(([targetNetwork, wallet]) => dependencies.linkWallet({
     accessToken,
-    network,
+    network: targetNetwork,
     circleUserToken: session.userToken,
-    wallet: session.wallet,
-  })
+    wallet,
+  })))
+  const linked = linkedRecords[linkTargets.findIndex(([targetNetwork]) => targetNetwork === network)] ?? linkedRecords[0]
   return {
     address: session.wallet.address,
     walletId: session.wallet.id,

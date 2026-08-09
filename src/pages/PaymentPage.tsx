@@ -48,7 +48,7 @@ import { getFxMeta, formatLocalAmt, fetchFxRate } from '../lib/fx'
 import { getCirclePaymasterConfig } from '../lib/circlePaymaster'
 import { sendCirclePaymasterPayment } from '../lib/circlePaymasterPayment'
 import { canUseCirclePasskeyPayments, prepareCirclePasskeyWallet, sendCirclePasskeyPayment } from '../lib/circlePasskeyPayment'
-import { canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment } from '../lib/circleEvmEmailWallet'
+import { bridgeCircleEvmEmailWallet, canUseCircleEvmEmailWallet, connectCircleEvmEmailWallet, sendCircleEvmEmailPayment } from '../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet, connectCircleSolanaEmailWallet, signCircleSolanaTransaction } from '../lib/circleSolanaEmailWallet'
 import { getSponsoredGasRecoveryUnits } from '../lib/gasRecovery'
 import { isValidSolanaAddress } from '../lib/solanaAddress'
@@ -64,6 +64,11 @@ import { PocketPillMark } from '../pocket/components/CPurseIcon'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { linkPocketWallet, readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
+import { readPocketBalances, readPocketLinkedWallets } from '../pocket/api/pocketReadClient'
+import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge } from '../pocket/api/pocketBridgeClient'
+import { bridgeCircleSolanaWallet } from '../pocket/lib/pocketSolanaBridge'
+import { selectPocketCheckoutRoute, type PocketCheckoutNetwork, type PocketCheckoutRoute } from '../lib/pocketCheckoutRouting'
+import type { CirclePocketWallets } from '../pocket/models/pocketWallet'
 import { POCKET_ORIGIN, POCKET_ROUTES } from '../pocket/lib/pocketRoutes'
 import { type PaylinkReceipt, type ReceiptLookupResponse } from '../lib/paymentReceiptPdf'
 
@@ -786,6 +791,13 @@ export default function PaymentPage() {
   const circleWalletDetailsRef = useRef<HTMLDetailsElement | null>(null)
   const [privyCircleLinkError, setPrivyCircleLinkError] = useState<string | null>(null)
   const [privyCircleLinkLoading, setPrivyCircleLinkLoading] = useState(false)
+  const [pocketCheckoutRoute, setPocketCheckoutRoute] = useState<PocketCheckoutRoute | null>(null)
+  const [pocketCheckoutWallets, setPocketCheckoutWallets] = useState<CirclePocketWallets>({})
+  const [pocketCheckoutRouting, setPocketCheckoutRouting] = useState(false)
+  const [pocketMovePayBusy, setPocketMovePayBusy] = useState(false)
+  const [pocketMovePayError, setPocketMovePayError] = useState('')
+  const [pocketMovePayStatus, setPocketMovePayStatus] = useState('')
+  const pocketArrivalVerifiedRef = useRef(false)
 
   const disconnectCirclePayWallets = useCallback(() => {
     setCircleSmartAccount(null)
@@ -1138,6 +1150,61 @@ export default function PaymentPage() {
     circleRequiredUnits > 0n &&
     circleSolanaBalance < circleRequiredUnits
   const circleSolanaWalletChecking = !!circleSolanaSession && circleRequiredUnits > 0n && circleSolanaBalance === null && !circleSolanaBalanceError
+
+  useEffect(() => {
+    if (!privyAuthenticated || !smartCheckoutOwnsWalletCta || chain === 'arc' || circleRequiredUnits <= 0n) {
+      setPocketCheckoutRoute(null)
+      setPocketCheckoutWallets({})
+      setPocketCheckoutRouting(false)
+      return
+    }
+    let cancelled = false
+    async function resolvePocketRoute() {
+      const destination = chain as PocketCheckoutNetwork
+      setPocketCheckoutRouting(true)
+      setPocketMovePayError('')
+      try {
+        const accessToken = await getAccessToken()
+        if (!accessToken) throw new Error('Sign in again to check Pocket balances.')
+        const [snapshot, wallets] = await Promise.all([
+          readPocketBalances({ accessToken }),
+          readPocketLinkedWallets({ accessToken }),
+        ])
+        if (cancelled) return
+        setPocketCheckoutWallets(wallets)
+        const balances = (['base', 'arbitrum', 'solana'] as PocketCheckoutNetwork[]).map(network => {
+          const row = snapshot.rows.find(candidate => candidate.key === network)
+          return {
+            network,
+            units: row?.status === 'ok' ? parseUnits(row.balance.toFixed(6), 6) : 0n,
+            available: row?.status === 'ok' && Boolean(wallets[network]),
+          }
+        })
+        const bridgeTotals: Partial<Record<PocketCheckoutNetwork, bigint>> = {}
+        let route = selectPocketCheckoutRoute({ destination, amountUnits: circleRequiredUnits, balances, bridgeTotals })
+        for (let attempt = 0; attempt < 2 && route.kind === 'quote-required'; attempt += 1) {
+          const quote = await readPocketBridgeQuote({
+            accessToken,
+            source: route.source,
+            destination: route.destination,
+            amount: formatUnits(route.amountUnits, 6),
+          })
+          bridgeTotals[route.source] = parseUnits(quote.total, 6)
+          route = selectPocketCheckoutRoute({ destination, amountUnits: circleRequiredUnits, balances, bridgeTotals })
+        }
+        if (!cancelled) setPocketCheckoutRoute(route.kind === 'quote-required' ? null : route)
+      } catch (reason) {
+        if (!cancelled) {
+          setPocketCheckoutRoute(null)
+          setPocketMovePayError(readableErrorMsg(reason, 'Pocket routing is temporarily unavailable.'))
+        }
+      } finally {
+        if (!cancelled) setPocketCheckoutRouting(false)
+      }
+    }
+    void resolvePocketRoute()
+    return () => { cancelled = true }
+  }, [chain, circleRequiredUnits, getAccessToken, privyAuthenticated, smartCheckoutOwnsWalletCta])
 
   function openCircleWalletPanel() {
     window.requestAnimationFrame(() => {
@@ -2291,7 +2358,7 @@ export default function PaymentPage() {
         return
       }
 
-      if (circleSolanaBalance !== null && !circleSolanaHasEnough) {
+      if (!pocketArrivalVerifiedRef.current && circleSolanaBalance !== null && !circleSolanaHasEnough) {
         setCircleSolanaError(SMART_WALLET_FUNDING_ERROR)
         return
       }
@@ -2336,6 +2403,86 @@ export default function PaymentPage() {
       setIsSolanaConfirming(false)
     } finally {
       setCircleSolanaPending(false)
+    }
+  }
+
+  async function handlePocketMoveAndPay() {
+    const route = pocketCheckoutRoute
+    if (!route || route.kind === 'insufficient') return
+    if (route.kind === 'direct') {
+      if (chain === 'solana') await handleCircleSolanaEmailPay()
+      else await handleCirclePasskeyPay()
+      return
+    }
+    const sourceWallet = pocketCheckoutWallets[route.source]
+    const credentials = circleEvmEmailSession ?? circleSolanaSession
+    const destinationAddress = pocketCheckoutWallets[route.destination]?.address
+    if (!sourceWallet?.walletId || !sourceWallet.blockchain || !destinationAddress || !credentials) {
+      setPocketMovePayError('Open your Pocket wallet once before moving and paying.')
+      return
+    }
+    setPocketMovePayBusy(true)
+    setPocketMovePayError('')
+    setPocketMovePayStatus(`Moving ${formatUnits(route.amountUnits, 6)} USDC from ${CHAIN_META[route.source].label}`)
+    try {
+      const accessToken = await getAccessToken()
+      if (!accessToken) throw new Error('Sign in again to move and pay.')
+      const amount = formatUnits(route.amountUnits, 6)
+      const txHash = route.source === 'solana'
+        ? await bridgeCircleSolanaWallet({
+            session: {
+              userToken: credentials.userToken,
+              encryptionKey: credentials.encryptionKey,
+              wallet: { id: sourceWallet.walletId, address: sourceWallet.address, blockchain: sourceWallet.blockchain },
+            },
+            destination: route.destination as 'base' | 'arbitrum',
+            destinationAddress,
+            amount,
+            accessToken,
+          })
+        : await bridgeCircleEvmEmailWallet({
+            session: {
+              userToken: credentials.userToken,
+              encryptionKey: credentials.encryptionKey,
+              wallet: { id: sourceWallet.walletId, address: sourceWallet.address as `0x${string}`, blockchain: sourceWallet.blockchain },
+              chain: route.source,
+              ...('appId' in credentials && credentials.appId ? { appId: credentials.appId } : {}),
+            },
+            destination: route.destination,
+            destinationAddress,
+            amount,
+          })
+      await recordPocketBridge({ accessToken, source: route.source, destination: route.destination, amount, txHash, status: 'submitted' })
+        .catch(() => undefined)
+      setPocketMovePayStatus(`USDC is moving to ${CHAIN_META[route.destination].label}. Payment will continue after arrival.`)
+      let bridgeComplete = false
+      for (let attempt = 0; attempt < 72 && !bridgeComplete; attempt += 1) {
+        if (attempt) await new Promise(resolve => window.setTimeout(resolve, 5_000))
+        const status = await readPocketBridgeStatus({ accessToken, source: route.source, txHash }).catch(() => null)
+        bridgeComplete = status?.status === 'confirmed' || status?.status === 'complete'
+      }
+      if (!bridgeComplete) throw new Error('USDC is still moving. Keep this checkout open; do not submit the move again.')
+      await recordPocketBridge({ accessToken, source: route.source, destination: route.destination, amount, txHash, status: 'completed' })
+        .catch(() => undefined)
+      let arrived = false
+      for (let attempt = 0; attempt < 20 && !arrived; attempt += 1) {
+        const snapshot = await readPocketBalances({ accessToken })
+        const destination = snapshot.rows.find(row => row.key === route.destination)
+        const destinationUnits = destination?.status === 'ok' ? parseUnits(destination.balance.toFixed(6), 6) : 0n
+        arrived = destinationUnits >= circleRequiredUnits
+        if (!arrived) await new Promise(resolve => window.setTimeout(resolve, 3_000))
+      }
+      if (!arrived) throw new Error('The move is confirmed, but the destination balance is still refreshing. Do not move again.')
+      setPocketMovePayStatus('USDC arrived. Confirming payment.')
+      pocketArrivalVerifiedRef.current = true
+      if (chain === 'solana') await handleCircleSolanaEmailPay()
+      else await handleCirclePasskeyPay()
+    } catch (reason) {
+      setPocketMovePayError(readableErrorMsg(reason, 'Move & Pay could not continue.'))
+    } finally {
+      pocketArrivalVerifiedRef.current = false
+      setPocketMovePayBusy(false)
+      setPocketMovePayStatus('')
     }
   }
 
@@ -2664,7 +2811,7 @@ export default function PaymentPage() {
       setCirclePasskeyError(blockedAmountError())
       return
     }
-    if (!paycrestNeedsPreparation && circleEvmWalletUnlocked && (circleWalletNeedsFunds || (circleSmartAccount && typeof circleWalletBalance === 'bigint' && !circleWalletHasEnough))) {
+    if (!pocketArrivalVerifiedRef.current && !paycrestNeedsPreparation && circleEvmWalletUnlocked && (circleWalletNeedsFunds || (circleSmartAccount && typeof circleWalletBalance === 'bigint' && !circleWalletHasEnough))) {
       resetCircleSmartWalletPending()
       setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
       return
@@ -2694,12 +2841,19 @@ export default function PaymentPage() {
             try {
               const token = await getAccessToken()
               if (token) {
-                await linkPocketWallet({
+                const productionWallets = session.productionEvmTopology?.wallets
+                const linkTargets = chain !== 'arc' && productionWallets?.base && productionWallets.arbitrum
+                  ? ([
+                      ['base', productionWallets.base],
+                      ['arbitrum', productionWallets.arbitrum],
+                    ] as const)
+                  : ([[chain, session.wallet]] as const)
+                await Promise.all(linkTargets.map(([network, wallet]) => linkPocketWallet({
                   accessToken: token,
-                  network: chain,
+                  network,
                   circleUserToken: session.userToken,
-                  wallet: session.wallet,
-                })
+                  wallet,
+                })))
                 setPrivyCircleLinkError(null)
               }
             } catch (err) {
@@ -2727,7 +2881,7 @@ export default function PaymentPage() {
           return
         }
 
-        if (circleWalletBalance !== undefined && circleWalletBalance !== null && circleWalletBalance < paymentRequiredUnits) {
+        if (!pocketArrivalVerifiedRef.current && circleWalletBalance !== undefined && circleWalletBalance !== null && circleWalletBalance < paymentRequiredUnits) {
           resetCircleSmartWalletPending()
           setCirclePasskeyError(SMART_WALLET_FUNDING_ERROR)
           return
@@ -3104,10 +3258,20 @@ export default function PaymentPage() {
       : isWalletPending
         ? 'pending'
         : 'idle'
+  const pocketRouteInsufficient = pocketCheckoutRoute?.kind === 'insufficient'
+  const pocketMovePayExpected = privyAuthenticated && smartCheckoutOwnsWalletCta && chain !== 'arc' && circleRequiredUnits > 0n
+  const pocketMovePayReady = pocketMovePayExpected && Boolean(pocketCheckoutRoute)
+  const pocketMovePayWaiting = pocketMovePayExpected && !pocketCheckoutRoute
   const checkoutSlideLabels = {
-    idle: checkoutPresentation.action,
-    disabled: paymentAmountBlocked ? 'Enter payment amount' : 'Complete payment details',
-    pending: checkoutPresentation.pending,
+    idle: pocketMovePayReady ? `Move & Pay ${formatAmount(payableAmt, 6)} USDC` : checkoutPresentation.action,
+    disabled: pocketRouteInsufficient
+      ? 'Insufficient across networks'
+      : pocketMovePayWaiting
+        ? 'Checking balances'
+        : paymentAmountBlocked
+          ? 'Enter payment amount'
+          : 'Complete payment details',
+    pending: pocketMovePayBusy ? 'Moving USDC' : checkoutPresentation.pending,
     submitted: checkoutPresentation.submitted,
     successful: checkoutPresentation.successful,
     error: 'Payment failed',
@@ -4975,11 +5139,11 @@ export default function PaymentPage() {
                   />
                 </div>
               )}
-              {circleSmartAccount && circleEvmWalletUnlocked && !circleWalletNeedsFunds && (!isNgPosPaycrestOfframp || Boolean(paycrestOrder)) ? (
+              {circleSmartAccount && circleEvmWalletUnlocked && (!circleWalletNeedsFunds || pocketMovePayExpected) && (!isNgPosPaycrestOfframp || Boolean(paycrestOrder)) ? (
                 <SlideAction
                   status={checkoutSlideStatus}
-                  disabled={circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
-                  onConfirm={handleCirclePasskeyPay}
+                  disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketRouteInsufficient || circlePasskeyPending || circleEvmPaymentProcessing || circleEvmAcceptedPending || privyCircleLinkLoading || paycrestPreparing || circleEvmWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                  onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCirclePasskeyPay}
                   labels={checkoutSlideLabels}
                 />
               ) : (
@@ -5085,11 +5249,11 @@ export default function PaymentPage() {
                         />
                       </div>
                     )}
-                    {circleSolanaSession && !circleSolanaNeedsFunds ? (
+                    {circleSolanaSession && (!circleSolanaNeedsFunds || pocketMovePayExpected) ? (
                       <SlideAction
                         status={checkoutSlideStatus}
-                        disabled={circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
-                        onConfirm={handleCircleSolanaEmailPay}
+                        disabled={pocketCheckoutRouting || pocketMovePayWaiting || pocketMovePayBusy || pocketRouteInsufficient || circleSolanaPending || isSolanaConfirming || privyCircleLinkLoading || circleSolanaWalletChecking || (requiresAttendeeName && !attendeeName.trim()) || paymentAmountBlocked}
+                        onConfirm={pocketMovePayReady ? handlePocketMoveAndPay : handleCircleSolanaEmailPay}
                         labels={checkoutSlideLabels}
                       />
                     ) : (
@@ -5260,6 +5424,25 @@ export default function PaymentPage() {
               Privy email is signed in, but its embedded wallet is not your Circle Smart Wallet. Add the Circle wallet app id to enable Circle Smart Wallet payments, or connect an external wallet.
             </div>
           ) : null /* direct mode — no CTA button, address panel above handles it */ }
+
+          {payMode === 'wallet' && privyAuthenticated && chain !== 'arc' && (
+            <p className={cn(
+              'mt-2 text-center text-[11px] font-medium',
+              pocketMovePayError || pocketRouteInsufficient ? 'text-amber-600 dark:text-amber-300' : 'text-gray-400 dark:text-gray-500',
+            )}>
+              {pocketMovePayStatus
+                || pocketMovePayError
+                || (pocketCheckoutRouting
+                  ? 'Checking USDC across Base, Arbitrum, and Solana.'
+                  : pocketCheckoutRoute?.kind === 'bridge'
+                    ? `${CHAIN_META[pocketCheckoutRoute.source].label} can cover this payment. USDC moves to ${CHAIN_META[pocketCheckoutRoute.destination].label} first.`
+                    : pocketRouteInsufficient
+                      ? 'Insufficient USDC on every supported source network.'
+                      : pocketCheckoutRoute?.kind === 'direct'
+                        ? `${CHAIN_META[pocketCheckoutRoute.destination].label} can cover this payment.`
+                        : '')}
+            </p>
+          )}
 
         </div>
       </div>

@@ -1073,7 +1073,7 @@ assert.match(pocketWalletsHookSource, /export async function prefetchPocketWalle
 assert.match(pocketHomePageSource, /usePocketIdentity\(\)/)
 assert.match(pocketHomePageSource, /useState<PocketHomeTab>\(\(\) => \{/)
 assert.match(pocketHomePageSource, /action === 'fund' \? 'fund' : action === 'withdraw' \? 'move' : 'balance'/)
-assert.match(pocketHomePageSource, /requested === 'base' \|\| requested === 'arbitrum' \|\| requested === 'arc' \|\| requested === 'solana'/)
+assert.match(pocketHomePageSource, /requested === 'base' \|\| requested === 'arbitrum' \|\| requested === 'solana'/)
 assert.doesNotMatch(pocketHomePageSource, /pocket:home:tab/)
 assert.match(pocketHomePageSource, /usePocketWallets\(\{ authenticated, email, getAccessToken \}\)/)
 assert.match(pocketHomePageSource, /usePocketWalletController\(\{/)
@@ -1096,7 +1096,8 @@ for (const logo of ['base', 'arbitrum', 'arc', 'solana']) {
 }
 assert.match(pocketHomeOverviewSource, /logoCanvas === 'dark'/)
 assert.match(pocketHomeOverviewSource, /grayscale contrast-200 mix-blend-multiply dark:mix-blend-screen/)
-assert.match(pocketHomeOverviewSource, /network\.key === 'arc'[\s\S]*Testnet/)
+assert.match(pocketHomeOverviewSource, /key: 'arc'[\s\S]*comingSoon: true/)
+assert.match(pocketHomeOverviewSource, /Coming soon/)
 assert.doesNotMatch(pocketHomeOverviewSource, /RefreshCw|Refresh Circle Pocket balance|title="Refresh balances"/)
 assert.match(pocketHomeOverviewSource, /POCKET_BALANCE_CURRENCIES.*'USDC'.*'NGN'/)
 assert.match(pocketHomeOverviewSource, /Previous balance currency/)
