@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import ngPosHandler, { createNgPosBankReceive, listNgPosHistoryForOwner } from '../ng-pos.js'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
 import { isPocketIdempotencyKey } from '../../src/pocket/lib/pocketSchemas.js'
+import { claimCirclePocketAction, listCirclePocketActions, recordCirclePocketAction, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
 
 type LegacyResult = { status: number; body: any }
 type BankWithdrawDependencies = {
@@ -9,6 +10,9 @@ type BankWithdrawDependencies = {
   createBankReceive: typeof createNgPosBankReceive
   listHistory: typeof listNgPosHistoryForOwner
   invokeLegacy: typeof invokeNgPos
+  claimAction: typeof claimCirclePocketAction
+  listActions: typeof listCirclePocketActions
+  recordAction: typeof recordCirclePocketAction
 }
 
 async function invokeNgPos(req: Request, body: Record<string, unknown>): Promise<LegacyResult> {
@@ -51,6 +55,35 @@ export function publicOrder(order: any) {
   }
 }
 
+function routeRecord(record: CirclePocketActionRecord | undefined, claimed?: boolean) {
+  if (!record || record.action !== 'bank-withdraw.route') return null
+  const source = record.metadata?.source
+  if (source !== 'arbitrum' && source !== 'solana') return null
+  const phase = record.status
+  if (phase !== 'started' && phase !== 'submitted' && phase !== 'completed' && phase !== 'failed') return null
+  return {
+    intentId: record.metadata?.intentId || '',
+    phase,
+    source,
+    destination: 'base',
+    amount: record.metadata?.amount || '',
+    txHash: record.metadata?.txHash || '',
+    ...(claimed !== undefined ? { claimed } : {}),
+    updatedAt: record.updatedAt,
+  }
+}
+
+function routeKey(intentId: string) {
+  return `pocket:bank-withdraw-route:${intentId}`
+}
+
+async function ownedRoute(identity: VerifiedLinkUser, intentId: string, dependencies: BankWithdrawDependencies) {
+  return (await dependencies.listActions(identity.userId, 100)).find(record => (
+    record.action === 'bank-withdraw.route'
+    && record.idempotencyKey === routeKey(intentId)
+  ))
+}
+
 async function assertOwnedOrder(req: Request, identity: VerifiedLinkUser, id: string, dependencies: BankWithdrawDependencies) {
   const current = await dependencies.invokeLegacy(req, { action: 'offrampStatus', intent_id: id, refresh: false })
   if (current.status !== 200 || !current.body?.order) throw Object.assign(new Error(current.body?.error || 'Bank payout was not found.'), { status: current.status })
@@ -66,6 +99,9 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     createBankReceive: createNgPosBankReceive,
     listHistory: listNgPosHistoryForOwner,
     invokeLegacy: invokeNgPos,
+    claimAction: claimCirclePocketAction,
+    listActions: listCirclePocketActions,
+    recordAction: recordCirclePocketAction,
     ...overrides,
   }
   return async function pocketBankWithdrawHandler(req: Request, res: Response) {
@@ -112,7 +148,71 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
 
       const id = text(req.body?.intent_id || req.body?.order_id)
       if (!id) return res.status(400).json({ ok: false, error: 'Missing bank payout id.' })
-      await assertOwnedOrder(req, identity, id, dependencies)
+      const ownedOrder = await assertOwnedOrder(req, identity, id, dependencies)
+
+      if (action === 'routeStatus') {
+        return res.json({ ok: true, data: routeRecord(await ownedRoute(identity, ownedOrder.intent_id, dependencies)) })
+      }
+
+      if (action === 'routeStart') {
+        const source = text(req.body?.source, 20)
+        const destination = text(req.body?.destination, 20)
+        const amount = text(req.body?.amount, 30)
+        if ((source !== 'arbitrum' && source !== 'solana') || destination !== 'base') {
+          return res.status(400).json({ ok: false, error: 'Bank payout routing supports Arbitrum or Solana to Base.' })
+        }
+        if (amount !== text(ownedOrder.amount_usdc, 30)) {
+          return res.status(409).json({ ok: false, error: 'Bank payout routing amount no longer matches the provider order.' })
+        }
+        const existing = await ownedRoute(identity, ownedOrder.intent_id, dependencies)
+        if (existing && existing.status !== 'failed') {
+          return res.json({ ok: true, data: routeRecord(existing, false) })
+        }
+        if (existing?.status === 'failed') {
+          const restarted = await dependencies.recordAction({
+            ownerId: identity.userId,
+            idempotencyKey: routeKey(ownedOrder.intent_id),
+            action: 'bank-withdraw.route',
+            status: 'started',
+            resourceId: ownedOrder.intent_id,
+            metadata: { intentId: ownedOrder.intent_id, source, destination: 'base', amount, txHash: '', paymentState: 'started' },
+          })
+          return res.json({ ok: true, data: routeRecord(restarted, true) })
+        }
+        const claimed = await dependencies.claimAction({
+          ownerId: identity.userId,
+          idempotencyKey: routeKey(ownedOrder.intent_id),
+          action: 'bank-withdraw.route',
+          metadata: { intentId: ownedOrder.intent_id, source, destination: 'base', amount, txHash: '', paymentState: 'started' },
+        })
+        return res.json({ ok: true, data: routeRecord(claimed.record, claimed.claimed) })
+      }
+
+      if (action === 'routeUpdate') {
+        const existing = await ownedRoute(identity, ownedOrder.intent_id, dependencies)
+        if (!existing) return res.status(409).json({ ok: false, error: 'Bank payout routing has not started.' })
+        const phase = text(req.body?.phase, 20)
+        if (phase !== 'submitted' && phase !== 'completed' && phase !== 'failed') {
+          return res.status(400).json({ ok: false, error: 'Invalid bank payout routing phase.' })
+        }
+        if (phase === existing.status) return res.json({ ok: true, data: routeRecord(existing) })
+        const transitionAllowed = (existing.status === 'started' && (phase === 'submitted' || phase === 'failed'))
+          || (existing.status === 'submitted' && phase === 'completed')
+        if (!transitionAllowed) {
+          return res.status(409).json({ ok: false, error: 'Bank payout routing cannot move backward or skip a confirmed phase.' })
+        }
+        const txHash = text(req.body?.tx_hash, 128) || existing.metadata?.txHash || ''
+        if (phase !== 'failed' && !txHash) return res.status(400).json({ ok: false, error: 'Bank payout routing transaction is required.' })
+        const updated = await dependencies.recordAction({
+          ownerId: identity.userId,
+          idempotencyKey: routeKey(ownedOrder.intent_id),
+          action: 'bank-withdraw.route',
+          status: phase,
+          resourceId: txHash || ownedOrder.intent_id,
+          metadata: { ...(existing.metadata ?? {}), txHash, paymentState: phase },
+        })
+        return res.json({ ok: true, data: routeRecord(updated) })
+      }
 
       if (action === 'confirm') {
         const confirmed = await dependencies.invokeLegacy(req, {

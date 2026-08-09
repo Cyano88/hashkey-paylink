@@ -13,6 +13,19 @@ import type { CirclePocketWallet, CirclePocketWallets } from '../models/pocketWa
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
 
 type LiquidityStatus = 'idle' | 'checking' | 'ready' | 'moving' | 'waiting' | 'reconciling' | 'arrived'
+export type PocketPaymentLiquidityCheckpoint = {
+  phase: 'started' | 'submitted' | 'completed' | 'failed'
+  source: 'arbitrum' | 'solana'
+  destination: 'base'
+  amount: string
+  txHash: string
+  claimed?: boolean
+}
+export type PocketPaymentLiquidityPersistence = {
+  read(accessToken: string): Promise<PocketPaymentLiquidityCheckpoint | null>
+  start(accessToken: string, input: { source: 'arbitrum' | 'solana'; amount: string }): Promise<PocketPaymentLiquidityCheckpoint>
+  update(accessToken: string, input: { phase: 'submitted' | 'completed' | 'failed'; txHash?: string }): Promise<PocketPaymentLiquidityCheckpoint | null>
+}
 const NETWORKS: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'solana']
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 const networkLabel = (network: PocketCheckoutNetwork) => network === 'base' ? 'Base' : network === 'arbitrum' ? 'Arbitrum' : 'Solana'
@@ -69,6 +82,7 @@ export default function usePocketPaymentLiquidityController(input: {
   getEvmSession(network: 'base' | 'arbitrum', walletAddress: string): Promise<CircleEvmEmailSession>
   getSolanaSession(walletAddress: string): Promise<PocketSolanaEmailSession>
   refreshBalances(): Promise<unknown>
+  persistence?: PocketPaymentLiquidityPersistence
 }) {
   const amountUnits = useMemo(() => {
     try {
@@ -135,7 +149,13 @@ export default function usePocketPaymentLiquidityController(input: {
       const destinationWallet = inspected.wallets[currentRoute.destination]
         ?? await input.ensureWallet(currentRoute.destination)
       if (!destinationWallet) throw new Error('Open the destination Pocket wallet before paying.')
+      const checkpoint = await input.persistence?.read(inspected.accessToken) ?? null
       if (currentRoute.kind === 'direct') {
+        if (checkpoint?.phase === 'submitted' || checkpoint?.phase === 'completed') {
+          await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash: checkpoint.txHash })
+        } else if (checkpoint?.phase === 'started') {
+          await input.persistence?.update(inspected.accessToken, { phase: 'failed' })
+        }
         setStatus('ready')
         return destinationWallet
       }
@@ -145,21 +165,53 @@ export default function usePocketPaymentLiquidityController(input: {
         throw new Error('Open both Pocket wallets before moving USDC.')
       }
       const amount = formatUnits(currentRoute.amountUnits, 6)
-      setStatus('moving')
-      const txHash = currentRoute.source === 'solana'
-        ? await bridgeCircleSolanaWallet({
-            session: await input.getSolanaSession(sourceWallet.address),
-            destination: currentRoute.destination as 'base' | 'arbitrum',
-            destinationAddress: destinationWallet.address,
-            amount,
-            accessToken: inspected.accessToken,
-          })
-        : await bridgeCircleEvmEmailWallet({
-            session: await input.getEvmSession(currentRoute.source, sourceWallet.address),
-            destination: currentRoute.destination,
-            destinationAddress: destinationWallet.address,
-            amount,
-          })
+      let txHash = ''
+      let complete = checkpoint?.phase === 'completed'
+      if (checkpoint && checkpoint.phase !== 'failed') {
+        if (checkpoint.source !== currentRoute.source || checkpoint.destination !== currentRoute.destination || checkpoint.amount !== amount) {
+          throw new Error('A previous payout move needs review before another route can start.')
+        }
+        txHash = checkpoint.txHash
+        if (checkpoint.phase === 'started' && !txHash) {
+          throw new Error('A previous payout move needs review before another route can start.')
+        }
+      }
+      if (!txHash) {
+        const started = await input.persistence?.start(inspected.accessToken, { source: currentRoute.source as 'arbitrum' | 'solana', amount })
+        if (started && !started.claimed) {
+          if (started.source !== currentRoute.source || started.amount !== amount || !started.txHash) {
+            throw new Error('A previous payout move needs review before another route can start.')
+          }
+          txHash = started.txHash
+          complete = started.phase === 'completed'
+        }
+      }
+      if (!txHash) {
+        setStatus('moving')
+        try {
+          txHash = currentRoute.source === 'solana'
+            ? await bridgeCircleSolanaWallet({
+                session: await input.getSolanaSession(sourceWallet.address),
+                destination: currentRoute.destination as 'base' | 'arbitrum',
+                destinationAddress: destinationWallet.address,
+                amount,
+                accessToken: inspected.accessToken,
+              })
+            : await bridgeCircleEvmEmailWallet({
+                session: await input.getEvmSession(currentRoute.source, sourceWallet.address),
+                destination: currentRoute.destination,
+                destinationAddress: destinationWallet.address,
+                amount,
+              })
+        } catch (reason) {
+          const message = reason instanceof Error ? reason.message : ''
+          if (!/submitted and is being reconciled|still moving/i.test(message)) {
+            await input.persistence?.update(inspected.accessToken, { phase: 'failed' }).catch(() => null)
+          }
+          throw reason
+        }
+        await input.persistence?.update(inspected.accessToken, { phase: 'submitted', txHash })
+      }
       await recordPocketBridge({
         accessToken: inspected.accessToken,
         source: currentRoute.source,
@@ -169,7 +221,6 @@ export default function usePocketPaymentLiquidityController(input: {
         status: 'submitted',
       }).catch(() => undefined)
       setStatus('waiting')
-      let complete = false
       for (let attempt = 0; attempt < 72 && !complete; attempt += 1) {
         if (attempt) await wait(5_000)
         const next = await readPocketBridgeStatus({
@@ -180,6 +231,7 @@ export default function usePocketPaymentLiquidityController(input: {
         complete = next?.status === 'confirmed' || next?.status === 'complete'
       }
       if (!complete) throw new Error('USDC is still moving. Do not submit the move again.')
+      await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash })
       await recordPocketBridge({
         accessToken: inspected.accessToken,
         source: currentRoute.source,
@@ -207,7 +259,7 @@ export default function usePocketPaymentLiquidityController(input: {
       setError(message)
       throw reason
     }
-  }, [amountUnits, input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.refreshBalances, inspect])
+  }, [amountUnits, input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, input.refreshBalances, inspect])
 
   const notice = error
     || (status === 'checking'

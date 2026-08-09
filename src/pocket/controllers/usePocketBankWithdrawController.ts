@@ -3,13 +3,27 @@ import type { Address } from 'viem'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
 import { confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
-import { readPocketBalances } from '../api/pocketReadClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
 
-export type PocketBankWithdrawStatus = 'idle' | 'preparing' | 'authorizing' | 'processing' | 'sent'
+export type PocketBankWithdrawStatus = 'idle' | 'preparing' | 'routing' | 'route-review' | 'authorizing' | 'processing' | 'sent'
 
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
+const BANK_PAYOUT_OPERATION_KEY = 'pocket:bank-withdraw:operation'
+
+async function operationFingerprint(value: string) {
+  const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function storedOperation(fingerprint: string) {
+  try {
+    const parsed = JSON.parse(window.sessionStorage.getItem(BANK_PAYOUT_OPERATION_KEY) || '{}') as { fingerprint?: string; idempotencyKey?: string }
+    return parsed.fingerprint === fingerprint && parsed.idempotencyKey ? parsed.idempotencyKey : ''
+  } catch {
+    return ''
+  }
+}
 
 export default function usePocketBankWithdrawController({
   authenticated,
@@ -103,7 +117,6 @@ export default function usePocketBankWithdrawController({
 
   const submit = useCallback(async () => {
     if (!canSubmit) return
-    let reconciliation: { accessToken: string; intentId: string } | null = null
     cancelled.current = false
     setError('')
     setResult(null)
@@ -113,8 +126,10 @@ export default function usePocketBankWithdrawController({
       if (!accessToken) throw new Error('Sign in again to withdraw to bank.')
       const selectedWallet = wallet ?? await ensureWallet()
       if (!selectedWallet) throw new Error('Open your Base Circle wallet before withdrawing.')
-      const key = idempotencyKey.current || window.crypto.randomUUID()
+      const fingerprint = await operationFingerprint([email.toLowerCase(), bankCode, accountNumber, amount].join('|'))
+      const key = idempotencyKey.current || storedOperation(fingerprint) || window.crypto.randomUUID()
       idempotencyKey.current = key
+      window.sessionStorage.setItem(BANK_PAYOUT_OPERATION_KEY, JSON.stringify({ fingerprint, idempotencyKey: key }))
       const prepared = await preparePocketBankWithdraw({
         accessToken,
         idempotencyKey: key,
@@ -132,20 +147,30 @@ export default function usePocketBankWithdrawController({
           client_origin: window.location.origin,
         },
       })
-      reconciliation = { accessToken, intentId: prepared.intentId }
       activeIntentId.current = prepared.intentId
       setResult(prepared)
-      const balances = await readPocketBalances({ accessToken })
-      const baseBalance = balances.rows.find(row => row.key === 'base')?.balance ?? 0
       const requiredUsdc = Number(prepared.amountUsdc)
       if (!Number.isFinite(requiredUsdc) || requiredUsdc <= 0) {
         throw new Error('The bank payout provider returned an invalid USDC amount.')
       }
-      if (baseBalance + 0.0000001 < requiredUsdc) {
-        const availableUsdc = baseBalance.toFixed(6).replace(/\.?0+$/, '') || '0'
-        throw new Error(`Insufficient Base USDC. This payout needs ${prepared.amountUsdc} USDC; available balance is ${availableUsdc} USDC.`)
-      }
-      setStatus('authorizing')
+      setStatus('routing')
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Bank payout failed.'
+      setStatus('idle')
+      setError(message)
+    }
+  }, [accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, lastName, memo, wallet])
+
+  const continueAfterRouting = useCallback(async (selectedWallet: CirclePocketWallet) => {
+    const prepared = result
+    if (status !== 'routing' || !prepared || !activeIntentId.current || activeIntentId.current !== prepared.intentId) return
+    let reconciliation: { accessToken: string; intentId: string } | null = null
+    setError('')
+    setStatus('authorizing')
+    try {
+      const accessToken = await getAccessToken()
+      if (!accessToken) throw new Error('Sign in again to continue this bank payout.')
+      reconciliation = { accessToken, intentId: prepared.intentId }
       const session = await getEvmSession(selectedWallet.address)
       const transfer = await executePocketEvmTransfer({
         session,
@@ -160,6 +185,7 @@ export default function usePocketBankWithdrawController({
       setAmountState('')
       setMemoState('')
       idempotencyKey.current = ''
+      window.sessionStorage.removeItem(BANK_PAYOUT_OPERATION_KEY)
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       const confirmed = await confirmPocketBankWithdraw({
         accessToken,
@@ -183,7 +209,14 @@ export default function usePocketBankWithdrawController({
       setStatus('idle')
       setError(message)
     }
-  }, [accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, getEvmSession, lastName, memo, pollUntilSettled, wallet])
+  }, [getAccessToken, getEvmSession, pollUntilSettled, result, status])
 
-  return { amount, memo, status, error, result, canSubmit, setAmount, setMemo, resetResult, submit }
+  const failRouting = useCallback((reason: unknown) => {
+    const message = reason instanceof Error ? reason.message : 'Pocket could not prepare this payout.'
+    const review = /previous payout move needs review|still moving|destination balance is still refreshing|submitted and is being reconciled/i.test(message)
+    setStatus(review ? 'route-review' : 'idle')
+    setError(message)
+  }, [])
+
+  return { amount, memo, status, error, result, canSubmit, setAmount, setMemo, resetResult, submit, continueAfterRouting, failRouting }
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createPocketBankWithdrawHandler, payoutState } from '../api/pocket/bank-withdraw.ts'
-import { confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus } from '../src/pocket/api/pocketBankWithdrawClient.ts'
+import { confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawRoute, readPocketBankWithdrawStatus, startPocketBankWithdrawRoute, updatePocketBankWithdrawRoute } from '../src/pocket/api/pocketBankWithdrawClient.ts'
 
 function responseRecorder() {
   return {
@@ -31,6 +31,7 @@ const processingOrder = {
 }
 const settledOrder = { ...processingOrder, status: 'settled', tx_hash: `0x${'2'.repeat(64)}` }
 const calls = []
+let routeAction
 const handler = createPocketBankWithdrawHandler({
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   createBankReceive: async req => {
@@ -38,6 +39,15 @@ const handler = createPocketBankWithdrawHandler({
     return { ok: true, link: { intent_id: processingOrder.intent_id, merchant_id: processingOrder.merchant_id } }
   },
   listHistory: async () => ({ merchants: [{ merchant_id: processingOrder.merchant_id }], orders: [], bankSendLinks: [], bankSendOrders: [] }),
+  listActions: async () => routeAction ? [routeAction] : [],
+  claimAction: async input => {
+    routeAction = { id: 'route-1', ownerId: input.ownerId, idempotencyKey: input.idempotencyKey, action: input.action, status: 'started', metadata: input.metadata, createdAt: 1, updatedAt: 1 }
+    return { record: routeAction, claimed: true }
+  },
+  recordAction: async input => {
+    routeAction = { id: 'route-1', ownerId: input.ownerId, idempotencyKey: input.idempotencyKey, action: input.action, status: input.status, resourceId: input.resourceId, metadata: input.metadata, createdAt: 1, updatedAt: 2 }
+    return routeAction
+  },
   invokeLegacy: async (_req, body) => {
     calls.push({ kind: 'legacy', body })
     if (body.action === 'offrampStatus') return { status: 200, body: { ok: true, order: body.refresh ? settledOrder : processingOrder } }
@@ -66,6 +76,20 @@ assert.equal(calls[0].body.direct_payout, true)
 assert.equal(calls[0].body.flexible_amount, false)
 assert.equal(calls[0].headers.authorization, 'Bearer privy-token')
 assert.equal(calls[1].body.action, 'createOfframpOrder')
+
+const routeMissing = await request(handler, { action: 'routeStatus', intent_id: processingOrder.intent_id })
+assert.equal(routeMissing.body.data, null)
+const routeStarted = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'arbitrum', destination: 'base', amount: '1' })
+assert.equal(routeStarted.body.data.phase, 'started')
+assert.equal(routeStarted.body.data.claimed, true)
+const routeDuplicate = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'arbitrum', destination: 'base', amount: '1' })
+assert.equal(routeDuplicate.body.data.claimed, false)
+const routeSubmitted = await request(handler, { action: 'routeUpdate', intent_id: processingOrder.intent_id, phase: 'submitted', tx_hash: `0x${'3'.repeat(64)}` })
+assert.equal(routeSubmitted.body.data.phase, 'submitted')
+const routeCompleted = await request(handler, { action: 'routeUpdate', intent_id: processingOrder.intent_id, phase: 'completed', tx_hash: `0x${'3'.repeat(64)}` })
+assert.equal(routeCompleted.body.data.phase, 'completed')
+const routeBackward = await request(handler, { action: 'routeUpdate', intent_id: processingOrder.intent_id, phase: 'failed' })
+assert.equal(routeBackward.statusCode, 409)
 
 const confirmed = await request(handler, {
   action: 'confirm',
@@ -96,16 +120,26 @@ assert.equal(denied.statusCode, 403)
 const clientCalls = []
 const fetcher = async (url, init) => {
   clientCalls.push({ url, init })
-  return { ok: true, json: async () => ({ ok: true, data: prepared.body.data }) }
+  const action = JSON.parse(init.body).action
+  const data = action.startsWith('route')
+    ? { intentId: processingOrder.intent_id, phase: action === 'routeStart' ? 'started' : action === 'routeUpdate' ? JSON.parse(init.body).phase : 'completed', source: 'arbitrum', destination: 'base', amount: '1', txHash: `0x${'3'.repeat(64)}`, updatedAt: 2 }
+    : prepared.body.data
+  return { ok: true, json: async () => ({ ok: true, data }) }
 }
 await preparePocketBankWithdraw({ accessToken: 'privy-token', request: prepareBody, idempotencyKey, fetcher })
 await confirmPocketBankWithdraw({ accessToken: 'privy-token', request: { intent_id: processingOrder.intent_id }, fetcher })
 await readPocketBankWithdrawStatus({ accessToken: 'privy-token', intentId: processingOrder.intent_id, fetcher })
+await readPocketBankWithdrawRoute({ accessToken: 'privy-token', intentId: processingOrder.intent_id, fetcher })
+await startPocketBankWithdrawRoute({ accessToken: 'privy-token', intentId: processingOrder.intent_id, source: 'arbitrum', amount: '1', fetcher })
+await updatePocketBankWithdrawRoute({ accessToken: 'privy-token', intentId: processingOrder.intent_id, phase: 'submitted', txHash: `0x${'3'.repeat(64)}`, fetcher })
 assert.equal(clientCalls[0].url, '/api/pocket/bank-withdraw')
 assert.equal(clientCalls[0].init.headers.authorization, 'Bearer privy-token')
 assert.equal(clientCalls[0].init.headers['idempotency-key'], idempotencyKey)
 assert.equal(JSON.parse(clientCalls[0].init.body).action, 'prepare')
 assert.equal(JSON.parse(clientCalls[1].init.body).action, 'confirm')
 assert.equal(JSON.parse(clientCalls[2].init.body).action, 'status')
+assert.equal(JSON.parse(clientCalls[3].init.body).action, 'routeStatus')
+assert.equal(JSON.parse(clientCalls[4].init.body).action, 'routeStart')
+assert.equal(JSON.parse(clientCalls[5].init.body).action, 'routeUpdate')
 
 console.log('Circle Pocket direct bank-withdraw adapter smoke tests passed.')

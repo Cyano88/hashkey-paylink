@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { ArrowRight, ChevronDown, Landmark, Mail, Send } from 'lucide-react'
 import type { LayoutOutletContext } from '../../Layout'
@@ -12,7 +12,9 @@ import PocketRouteShell from '../components/PocketRouteShell'
 import PocketSlideAction from '../components/PocketSlideAction'
 import usePocketBankReceiveController from '../controllers/usePocketBankReceiveController'
 import usePocketBankWithdrawController from '../controllers/usePocketBankWithdrawController'
+import usePocketPaymentLiquidityController, { type PocketPaymentLiquidityPersistence } from '../controllers/usePocketPaymentLiquidityController'
 import usePocketWalletController from '../controllers/usePocketWalletController'
+import { readPocketBankWithdrawRoute, startPocketBankWithdrawRoute, updatePocketBankWithdrawRoute } from '../api/pocketBankWithdrawClient'
 import {
   PocketFlexibleAmountToggle,
   PocketPaymentAmountField,
@@ -70,16 +72,49 @@ export default function PocketMoveBankPage() {
     getAccessToken,
     onSent: wallets.refreshBalances,
   })
+  const routePersistence = useMemo<PocketPaymentLiquidityPersistence | undefined>(() => {
+    const intentId = direct.result?.intentId
+    if (!intentId) return undefined
+    return {
+      read: accessToken => readPocketBankWithdrawRoute({ accessToken, intentId }),
+      start: (accessToken, route) => startPocketBankWithdrawRoute({ accessToken, intentId, source: route.source, amount: route.amount }),
+      update: (accessToken, route) => updatePocketBankWithdrawRoute({ accessToken, intentId, phase: route.phase, txHash: route.txHash }),
+    }
+  }, [direct.result?.intentId])
+  const bankLiquidity = usePocketPaymentLiquidityController({
+    enabled: direct.status === 'routing' && Boolean(direct.result?.amountUsdc),
+    amount: direct.result?.amountUsdc ?? '',
+    destination: 'base',
+    getAccessToken,
+    ensureWallet: network => walletController.ensureWallet(network),
+    getEvmSession: (network, walletAddress) => walletController.getEvmSession(network, walletAddress),
+    getSolanaSession: walletAddress => walletController.getSolanaSession(walletAddress),
+    refreshBalances: wallets.refreshBalances,
+    persistence: routePersistence,
+  })
+  const routedIntent = useRef('')
+  useEffect(() => {
+    const intentId = direct.result?.intentId ?? ''
+    if (direct.status !== 'routing' || !intentId) {
+      if (direct.status === 'idle') routedIntent.current = ''
+      return
+    }
+    if (routedIntent.current === intentId) return
+    routedIntent.current = intentId
+    void bankLiquidity.ensureLiquidity()
+      .then(wallet => direct.continueAfterRouting(wallet))
+      .catch(direct.failRouting)
+  }, [bankLiquidity.ensureLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
   const directAmountDirty = direct.amount.length > 0
   const directAmountValid = /^\d+(?:\.\d{1,2})?$/.test(direct.amount) && Number(direct.amount) > 0
   const directSlideStatus = direct.status === 'sent'
     ? 'successful'
-    : direct.status === 'processing'
+    : direct.status === 'processing' || direct.status === 'route-review' || (direct.status === 'routing' && (bankLiquidity.status === 'waiting' || bankLiquidity.status === 'reconciling'))
       ? 'submitted'
-      : direct.status === 'preparing' || direct.status === 'authorizing'
+      : direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'authorizing'
         ? 'pending'
         : 'idle'
-  const directLocked = direct.status === 'preparing' || direct.status === 'authorizing' || direct.status === 'processing'
+  const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing' || direct.status === 'processing'
   const bankReceipt = useMemo(() => direct.status === 'sent' && direct.result ? pocketActivityReceipt({
     eventId: `bank-withdraw:${direct.result.intentId}`,
     txHash: direct.result.txHash,
@@ -261,7 +296,7 @@ export default function PocketMoveBankPage() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Withdrawal network</p>
-                    <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Direct bank payouts currently use your Base USDC wallet.</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Bank payouts settle from Base. Pocket can move USDC from another supported balance when needed.</p>
                   </div>
                   <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-900 bg-gray-950 px-3 py-2 text-xs font-bold text-white dark:border-white dark:bg-white dark:text-gray-950">
                     Base
@@ -279,12 +314,13 @@ export default function PocketMoveBankPage() {
                   labels={{
                     idle: 'Slide to confirm',
                     disabled: 'Complete payout details',
-                    pending: direct.status === 'authorizing' ? 'Confirm in Circle' : 'Preparing payout',
-                    submitted: 'Payment processing',
+                    pending: direct.status === 'authorizing' ? 'Confirm payout in Circle' : direct.status === 'routing' && bankLiquidity.status === 'moving' ? 'Moving USDC' : direct.status === 'routing' ? 'Checking balances' : 'Preparing payout',
+                    submitted: direct.status === 'route-review' ? 'Move needs review' : direct.status === 'routing' ? 'USDC moving to Base' : 'Payment processing',
                     successful: 'Sent',
                   }}
                 />
                 {direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
+                {direct.status === 'routing' && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
                 {direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.txHash ? 'USDC is confirmed. Your bank payout is processing.' : 'Circle is reconciling the submitted transfer. Do not retry this payout.'}</p>}
                 {direct.status === 'sent' && direct.result?.amountUsdc && <p className="px-2 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPocketDisplayAmount(direct.result.amountUsdc)} USDC · {bankReceipt ? 'Bank payout completed' : 'Bank delivery processing'}</p>}
                 {direct.error && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
