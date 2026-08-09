@@ -28,7 +28,7 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketRecipient from '../hooks/usePocketRecipient'
 import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
 
-const POCKET_NETWORKS: ChainKey[] = ['base', 'arc', 'solana', 'arbitrum']
+const POCKET_NETWORKS: ChainKey[] = ['base', 'solana', 'arbitrum']
 type ReceiveMode = 'idle' | 'paste' | 'email' | 'bank'
 
 export default function PocketMoveUsdcPage() {
@@ -177,7 +177,7 @@ export default function PocketMoveUsdcPage() {
   ) : undefined
 
   const amountHelperText = draft.multiChain
-    ? 'USDC on Base, Arc Testnet, Solana, or Arbitrum — payer chooses the chain'
+    ? 'USDC on Base, Solana, or Arbitrum — payer chooses the chain'
     : `USDC on ${selectedNet === 'arc' ? 'Arc Testnet' : CHAIN_META[selectedNet].label}`
   const receiveFlowOpen = draft.multiChain || receiveMode === 'paste' || receiveMode === 'email'
 
@@ -337,7 +337,7 @@ export default function PocketMoveUsdcPage() {
           flexible={draft.flexibleAmount}
           localCurrency={false}
           amountLabel={formatAmount(draft.amount, 6)}
-          networkLabel={draft.multiChain ? 'Base · Arc Testnet · Arbitrum' : CHAIN_META[selectedNet].label}
+          networkLabel={draft.multiChain ? 'Base · Arbitrum · Solana' : CHAIN_META[selectedNet].label}
           evmAddress={draft.validation.evmValid ? draft.evmAddress : undefined}
           solanaAddress={draft.validation.solanaValid ? draft.solanaAddress : undefined}
           memo={draft.memo}

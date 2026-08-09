@@ -29,12 +29,13 @@ export type PocketHomeNetwork = {
   label: string
   logo: string
   logoCanvas: 'light' | 'dark'
+  comingSoon?: boolean
 }
 
 export const POCKET_HOME_NETWORKS: PocketHomeNetwork[] = [
   { key: 'base', label: 'Base', logo: '/brand/base-logo.jpeg', logoCanvas: 'light' },
   { key: 'arbitrum', label: 'Arbitrum', logo: '/brand/arbitrum-logo.jpeg', logoCanvas: 'light' },
-  { key: 'arc', label: 'Arc', logo: '/brand/arc-logo.jpeg', logoCanvas: 'dark' },
+  { key: 'arc', label: 'Arc', logo: '/brand/arc-logo.jpeg', logoCanvas: 'dark', comingSoon: true },
   { key: 'solana', label: 'Solana', logo: '/brand/solana-logo.jpeg', logoCanvas: 'dark' },
 ]
 
@@ -147,12 +148,12 @@ export default function PocketHomeOverview({
         <div className="space-y-1 p-2">
           {networks.map(network => {
             const row = rows.find(item => item.key === network.key)
-            const wallet = wallets[network.key]
-            const canOpenWallet = !wallet?.address && authenticated && !walletBusy
+            const wallet = network.comingSoon ? undefined : wallets[network.key]
+            const canOpenWallet = !network.comingSoon && !wallet?.address && authenticated && !walletBusy
             const statusLabel = row?.status === 'error' && wallet?.address
               ? 'Balance unavailable'
               : 'Open wallet'
-            const showStatus = authenticated && (!wallet?.address || row?.status === 'error' || (walletBusy && selectedNetwork === network.key))
+            const showStatus = !network.comingSoon && authenticated && (!wallet?.address || row?.status === 'error' || (walletBusy && selectedNetwork === network.key))
             return (
               <button
                 key={network.key}
@@ -179,9 +180,9 @@ export default function PocketHomeOverview({
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-bold text-gray-950 dark:text-white">{network.label}</p>
-                      {network.key === 'arc' ? (
+                      {network.comingSoon ? (
                         <span className="rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400">
-                          Testnet
+                          Soon
                         </span>
                       ) : null}
                     </div>
@@ -189,7 +190,11 @@ export default function PocketHomeOverview({
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(row?.balance ?? 0)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></p>
+                  {network.comingSoon ? (
+                    <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">Coming soon</p>
+                  ) : (
+                    <p className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(row?.balance ?? 0)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></p>
+                  )}
                   {showStatus ? (
                     <p className={cn('mt-0.5 text-[9px] font-black uppercase tracking-wider', row?.status === 'error' && wallet?.address ? 'text-amber-500' : 'text-blue-500')}>
                       {walletBusy && selectedNetwork === network.key ? 'Opening' : statusLabel}

@@ -20,9 +20,9 @@ const POCKET_HOME_NETWORK_KEY = 'pocket:home:network'
 
 function restoredHomeNetwork(): PocketHomeNetworkKey {
   const requested = new URLSearchParams(window.location.search).get('n')
-  if (requested === 'base' || requested === 'arbitrum' || requested === 'arc' || requested === 'solana') return requested
+  if (requested === 'base' || requested === 'arbitrum' || requested === 'solana') return requested
   const saved = window.sessionStorage.getItem(POCKET_HOME_NETWORK_KEY)
-  return saved === 'arbitrum' || saved === 'arc' || saved === 'solana' ? saved : 'base'
+  return saved === 'arbitrum' || saved === 'solana' ? saved : 'base'
 }
 
 function errorMessage(reason: unknown, fallback: string) {
@@ -43,6 +43,7 @@ export default function PocketHomePage() {
   const [network, setNetworkState] = useState<PocketHomeNetworkKey>(restoredHomeNetwork)
   const [walletBusy, setWalletBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const activeNetworks = POCKET_HOME_NETWORKS.filter(item => !item.comingSoon)
   const activity = usePocketActivity({ authenticated, email, enabled: tab === 'activity', getAccessToken })
 
   const setTab = useCallback((next: PocketHomeTab) => {
@@ -166,7 +167,7 @@ export default function PocketHomePage() {
       ) : (
         <PocketHomeControls
           tab={tab}
-          networks={POCKET_HOME_NETWORKS}
+          networks={activeNetworks}
           selectedNetwork={network}
           selectedNetworkLabel={networkLabel}
           selectedAddress={selectedAddress}

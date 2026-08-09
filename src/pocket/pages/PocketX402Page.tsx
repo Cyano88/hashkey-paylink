@@ -101,8 +101,8 @@ export default function PocketX402Page() {
             </div>
             <PocketSelect
               value={x402.network}
-              options={[{ value: 'base', label: 'Base' }, { value: 'arc', label: 'Arc Testnet' }]}
-              onChange={value => x402.selectNetwork(value === 'arc' ? 'arc' : 'base')}
+              options={[{ value: 'base', label: 'Base' }]}
+              onChange={() => x402.selectNetwork('base')}
               disabled={x402.walletStep === 'otp'}
               ariaLabel="App Pay network"
               className="w-[132px]"
@@ -147,7 +147,7 @@ export default function PocketX402Page() {
             {x402.walletStep === 'otp' ? (
               <div className="space-y-2">
                 <p className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
-                  Circle sent a code to {email || 'your email'} for your {x402.network === 'arc' ? 'Arc Testnet' : 'Base'} wallet.
+                  Circle sent a code to {email || 'your email'} for your Base wallet.
                 </p>
                 <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
                   <input value={x402.otp} onChange={event => x402.setOtp(event.target.value.trim())} placeholder="Enter Circle OTP" disabled={x402.walletBusy} className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none dark:text-white" />

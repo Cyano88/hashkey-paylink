@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronRight, Loader2, LogOut, Pencil, UserRound } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Loader2, LogOut, Pencil, UserRound, Wallet } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { resetPocketSessionSplash } from '../hooks/usePocketSessionSplash'
 import usePocketProfile from '../hooks/usePocketProfile'
 import { POCKET_BASE_PATH } from '../lib/pocketRoutes'
+import { readPocketLinkedWallets } from '../api/pocketReadClient'
+import { linkedPocketEvmStatus } from '../../lib/circleEvmWalletTopology'
 
 type AccountMenuMode = 'menu' | 'view' | 'edit'
+type LinkedEvmStatus = ReturnType<typeof linkedPocketEvmStatus> | 'checking' | 'unavailable'
 
 function initialsFor(name: string, email: string) {
   const words = name.replace(/[^a-z0-9\s-]/gi, ' ').trim().split(/\s+/).filter(Boolean)
@@ -32,6 +35,7 @@ export default function PocketAccountMenu() {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<AccountMenuMode>('menu')
   const [promptProfileAfterLogin, setPromptProfileAfterLogin] = useState(false)
+  const [linkedEvm, setLinkedEvm] = useState<LinkedEvmStatus>('checking')
   const rootRef = useRef<HTMLDivElement>(null)
 
   const fullName = profile.profile
@@ -59,6 +63,28 @@ export default function PocketAccountMenu() {
     setMode(profile.loadError || profile.profile ? 'menu' : 'edit')
     setOpen(true)
   }, [authenticated, profile.busy, profile.loadError, profile.loaded, profile.profile, promptProfileAfterLogin])
+
+  useEffect(() => {
+    if (!open || !authenticated) return
+    let cancelled = false
+    setLinkedEvm('checking')
+    void getAccessToken()
+      .then(accessToken => {
+        if (!accessToken) throw new Error('Pocket session is not ready.')
+        return readPocketLinkedWallets({ accessToken })
+      })
+      .then(wallets => {
+        if (cancelled) return
+        setLinkedEvm(linkedPocketEvmStatus({
+          base: wallets.base?.address,
+          arbitrum: wallets.arbitrum?.address,
+        }))
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedEvm('unavailable')
+      })
+    return () => { cancelled = true }
+  }, [authenticated, getAccessToken, open])
 
   if (!ready) {
     return <span className="pointer-events-none h-9 w-9 animate-pulse rounded-full border border-gray-200 bg-gray-100 dark:border-white/10 dark:bg-white/[0.08]" aria-hidden="true" />
@@ -150,6 +176,24 @@ export default function PocketAccountMenu() {
                   </button>
                 </div>
               )}
+
+              <div className="mt-2 flex items-center gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-xs dark:bg-white/[0.04]">
+                <Wallet className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                <span className="flex-1 font-bold text-gray-700 dark:text-gray-300">EVM wallet</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                  {linkedEvm === 'unified'
+                    ? 'Unified'
+                    : linkedEvm === 'migration-required'
+                      ? 'Migration needed'
+                      : linkedEvm === 'incomplete'
+                        ? 'Setup incomplete'
+                        : linkedEvm === 'not-opened'
+                          ? 'Not opened'
+                          : linkedEvm === 'unavailable'
+                            ? 'Check unavailable'
+                            : 'Checking'}
+                </span>
+              </div>
 
               <button
                 type="button"

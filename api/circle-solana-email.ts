@@ -319,6 +319,26 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...data })
     }
 
+    if (action === 'initializeUnifiedEvmUser') {
+      const { userToken } = params
+      if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
+      const data = await circleJson('/v1/w3s/user/initialize', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ blockchain: 'BASE' }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          accountType: 'SCA',
+          blockchains: ['BASE', 'ARB'],
+          metadata: [
+            { name: 'Pocket Base', refId: 'pocket:canonical-evm:v1' },
+            { name: 'Pocket Arbitrum', refId: 'pocket:canonical-evm:v1' },
+          ],
+        }),
+      })
+      return res.json({ ok: true, ...data })
+    }
+
     if (action === 'initializeUser') {
       const { userToken, blockchain, accountType } = params
       if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
@@ -347,6 +367,26 @@ export default async function handler(req: Request, res: Response) {
           accountType: accountType || 'EOA',
           blockchains: [blockchain || solanaBlockchain()],
           metadata: [{ name: name || 'Hash PayLink Solana' }],
+        }),
+      })
+      return res.json({ ok: true, ...data })
+    }
+
+    if (action === 'createUnifiedEvmWallets') {
+      const { userToken } = params
+      if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
+      const data = await circleJson('/v1/w3s/user/wallets', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ blockchain: 'BASE' }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          accountType: 'SCA',
+          blockchains: ['BASE', 'ARB'],
+          metadata: [
+            { name: 'Pocket Base', refId: 'pocket:canonical-evm:v1' },
+            { name: 'Pocket Arbitrum', refId: 'pocket:canonical-evm:v1' },
+          ],
         }),
       })
       return res.json({ ok: true, ...data })

@@ -2,6 +2,12 @@ import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
 import { parseUnits, type Address, type Hex } from 'viem'
 import type { ChainKey } from './chains'
 import { CHAIN_META } from './chains'
+import {
+  auditPocketProductionEvmWallets,
+  POCKET_CANONICAL_EVM_REF_ID,
+  type CircleEvmWalletRecord,
+  type PocketProductionEvmTopology,
+} from './circleEvmWalletTopology'
 
 type CircleSdkError = {
   message: string
@@ -25,11 +31,7 @@ type CircleEmailLoginResult = {
   refreshToken?: string
 }
 
-type CircleEvmWallet = {
-  id: string
-  address: Address
-  blockchain: string
-}
+type CircleEvmWallet = CircleEvmWalletRecord
 
 export type CircleEvmEmailSession = {
   userToken: string
@@ -37,6 +39,7 @@ export type CircleEvmEmailSession = {
   wallet: CircleEvmWallet
   chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
   appId?: string
+  productionEvmTopology?: PocketProductionEvmTopology
 }
 
 const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
@@ -427,26 +430,26 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
   })
 }
 
-async function getWallet(userToken: string, chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>): Promise<CircleEvmWallet | null> {
-  const data = await circleWalletApi<{ wallet?: CircleEvmWallet | null }>({
+async function getWalletSnapshot(userToken: string, chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>) {
+  const data = await circleWalletApi<{ wallet?: CircleEvmWallet | null; wallets?: CircleEvmWallet[] }>({
     action: 'listWallets',
     userToken,
     chain,
   })
-  return data.wallet ?? null
+  return { wallet: data.wallet ?? null, wallets: data.wallets ?? [] }
 }
 
-async function ensureEvmWallet(
+async function ensureArcTestnetWallet(
   sdk: W3SSdk,
   userToken: string,
   encryptionKey: string,
-  chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>,
+  chain: 'arc',
 ) {
   sdk.setAuthentication({ userToken, encryptionKey })
   const config = CHAIN_CONFIG[chain]
   let wallet: CircleEvmWallet | null
   try {
-    wallet = await getWallet(userToken, chain)
+    wallet = (await getWalletSnapshot(userToken, chain)).wallet
   } catch (err) {
     throw new Error(`${config.label} Circle wallet lookup failed. ${readableError(err)}`)
   }
@@ -465,7 +468,7 @@ async function ensureEvmWallet(
   }
 
   try {
-    wallet = await getWallet(userToken, chain)
+    wallet = (await getWalletSnapshot(userToken, chain)).wallet
   } catch (err) {
     throw new Error(`${config.label} Circle wallet lookup failed after initialization. ${readableError(err)}`)
   }
@@ -487,12 +490,71 @@ async function ensureEvmWallet(
   await executeChallenge(sdk, created.challengeId)
 
   try {
-    wallet = await getWallet(userToken, chain)
+    wallet = (await getWalletSnapshot(userToken, chain)).wallet
   } catch (err) {
     throw new Error(`${config.label} Circle wallet lookup failed after creation. ${readableError(err)}`)
   }
   if (!wallet) throw new Error('Circle EVM smart wallet is not ready yet.')
-  return wallet
+  return { wallet }
+}
+
+async function ensureProductionEvmWallet(
+  sdk: W3SSdk,
+  userToken: string,
+  encryptionKey: string,
+  chain: 'base' | 'arbitrum',
+) {
+  sdk.setAuthentication({ userToken, encryptionKey })
+
+  const readTopology = async () => {
+    const snapshot = await getWalletSnapshot(userToken, chain)
+    return auditPocketProductionEvmWallets(snapshot.wallets)
+  }
+
+  let topology: PocketProductionEvmTopology
+  try {
+    topology = await readTopology()
+  } catch (err) {
+    throw new Error(`${CHAIN_CONFIG[chain].label} Circle wallet lookup failed. ${readableError(err)}`)
+  }
+
+  const selected = () => topology.wallets[chain]
+  if (selected()) return { wallet: selected()!, productionEvmTopology: topology }
+
+  if (topology.status !== 'empty') {
+    throw new Error('Your Pocket EVM wallets need address consolidation before this network can be opened.')
+  }
+
+  try {
+    const init = await circleWalletApi<{ challengeId?: string }>({
+      action: 'initializeUnifiedEvmUser',
+      userToken,
+      accountType: 'SCA',
+      refId: POCKET_CANONICAL_EVM_REF_ID,
+    })
+    if (init.challengeId) await executeChallenge(sdk, init.challengeId)
+  } catch (err) {
+    if (!readableError(err).includes('already_initialized')) throw err
+  }
+
+  topology = await readTopology()
+  if (topology.status === 'empty') {
+    const created = await circleWalletApi<{ challengeId?: string }>({
+      action: 'createUnifiedEvmWallets',
+      userToken,
+      accountType: 'SCA',
+      refId: POCKET_CANONICAL_EVM_REF_ID,
+    })
+    if (!created.challengeId) throw new Error('Circle did not return a unified EVM wallet challenge.')
+    await executeChallenge(sdk, created.challengeId)
+    topology = await readTopology()
+  }
+
+  const wallet = topology.wallets[chain]
+  if (topology.status !== 'unified' || !wallet || !topology.canonicalAddress) {
+    throw new Error('Circle did not create a matching Base and Arbitrum smart-wallet address. No wallet link was changed.')
+  }
+  return { wallet, productionEvmTopology: topology }
 }
 
 export async function connectCircleEvmEmailWallet(
@@ -596,13 +658,16 @@ export async function connectCircleEvmEmailWallet(
     }
   }), CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS, 'Code expired. Request a new code.')
 
-  const wallet = await ensureEvmWallet(sdk, login.userToken, login.encryptionKey, chain)
+  const ensured = chain === 'arc'
+    ? await ensureArcTestnetWallet(sdk, login.userToken, login.encryptionKey, chain)
+    : await ensureProductionEvmWallet(sdk, login.userToken, login.encryptionKey, chain)
   return {
     userToken: login.userToken,
     encryptionKey: login.encryptionKey,
-    wallet,
+    wallet: ensured.wallet,
     chain,
     appId,
+    ...('productionEvmTopology' in ensured ? { productionEvmTopology: ensured.productionEvmTopology } : {}),
   }
 }
 

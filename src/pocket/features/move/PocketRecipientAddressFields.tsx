@@ -43,7 +43,7 @@ export function PocketRecipientAddressFields({
               {bankSend ? 'Recipient wallet address' : multiChain ? 'EVM wallet address' : 'Wallet address'}
             </span>
             <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">
-              {multiChain ? 'Base · Arc Testnet · Arbitrum' : 'Starts with 0x'}
+              {multiChain ? 'Base · Arbitrum' : 'Starts with 0x'}
             </span>
           </label>
           <div className="relative">
@@ -80,7 +80,7 @@ export function PocketRecipientAddressFields({
               )}
             </div>
           )}
-          <p className="text-xs text-gray-400 dark:text-gray-500">{multiChain ? 'EVM address for Base, Arc, or Arbitrum.' : 'Paste EVM address.'}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">{multiChain ? 'EVM address for Base or Arbitrum.' : 'Paste EVM address.'}</p>
         </fieldset>
       )}
 
