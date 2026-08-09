@@ -18,7 +18,7 @@ Until Circle exposes that capability, checkout and CCTP use separately validated
 
 For Pocket Solana-to-EVM CCTP, the client lets Circle Bridge Kit construct the burn instructions, then hands the unsigned transaction to an authenticated Hash PayLink prepare route. The server accepts only the current Circle mainnet Bridge Kit forwarding shape, verifies the linked Circle wallet, USDC mint, amount, recipient, Base or Arbitrum domain, program IDs, fixed event-rent amount, instruction count, and signer set. It replaces only the transaction payer, CCTP event-rent payer, and any idempotent ATA payer with the Hash PayLink relayer. The Bridge Kit message signer and Circle user wallet then sign before the server revalidates every signature and broadcasts.
 
-Solana remains excluded from automatic checkout bridge-source routing until this relay passes a controlled mainnet CCTP test. Normal Circle-managed Solana transfers and the hosted-checkout relay are separate execution paths.
+The relay passed a controlled Solana-to-Base mainnet CCTP test on 10 August 2026. Solana is therefore eligible as a single automatic bridge source in supported Pocket payment-liquidity routes. Routing never combines multiple source networks, and normal Circle-managed Solana transfers and the hosted-checkout relay remain separate execution paths.
 
 ## Production checks
 

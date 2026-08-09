@@ -11,10 +11,9 @@ export type PocketCheckoutRoute =
 const SOURCE_PRIORITY: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'solana']
 
 // Automatic Pocket payment routing must remain gas-sponsored end to end.
-// The current Solana CCTP adapter makes the Pocket wallet the transaction fee
-// payer, so Solana remains available for direct payments but cannot be chosen
-// as a bridge source until a sponsored bridge executor is verified.
-const GAS_SPONSORED_BRIDGE_SOURCES = new Set<PocketCheckoutNetwork>(['base', 'arbitrum'])
+// EVM sources use Circle sponsorship, while Solana CCTP uses the validated
+// Hash PayLink fee-payer relay. Each route still selects exactly one source.
+const GAS_SPONSORED_BRIDGE_SOURCES = new Set<PocketCheckoutNetwork>(['base', 'arbitrum', 'solana'])
 
 function balanceFor(balances: PocketCheckoutBalance[], network: PocketCheckoutNetwork) {
   return balances.find(balance => balance.network === network && balance.available)?.units ?? 0n
