@@ -35,5 +35,11 @@ assert.doesNotMatch(controllerSource, /preparePocketSolanaTransfer|submitPocketS
 
 const bridgeSource = await readFile(new URL('../src/pocket/lib/pocketSolanaBridge.ts', import.meta.url), 'utf8')
 assert.match(bridgeSource, /signCircleSolanaTransaction/)
+assert.match(bridgeSource, /error\?: string \| \{ message\?: string \}/)
+assert.match(bridgeSource, /pocketBridgeApiErrorMessage\(submitted\.error/)
+
+const serverSource = await readFile(new URL('../server.ts', import.meta.url), 'utf8')
+assert.match(serverSource, /bridge\/solana\/prepare', relayLimiter/)
+assert.match(serverSource, /bridge\/solana\/submit', relayLimiter/)
 
 console.log('Circle Solana Gas Station normal-transfer smoke tests passed.')

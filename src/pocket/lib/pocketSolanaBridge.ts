@@ -17,6 +17,15 @@ function base64ToBytes(value: string) {
   return Uint8Array.from(binary, character => character.charCodeAt(0))
 }
 
+export function pocketBridgeApiErrorMessage(value: unknown, fallback: string) {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (value && typeof value === 'object') {
+    const message = (value as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message.trim()
+  }
+  return fallback
+}
+
 export async function bridgeCircleSolanaWallet(input: {
   session: PocketSolanaEmailSession
   destination: Exclude<PocketBridgeNetwork, 'solana'>
@@ -91,10 +100,10 @@ export async function bridgeCircleSolanaWallet(input: {
           ok?: boolean
           transaction?: string
           lastValidBlockHeight?: number
-          error?: { message?: string }
+          error?: string | { message?: string }
         }
         if (!prepareResponse.ok || !prepared.ok || !prepared.transaction || !Number.isSafeInteger(prepared.lastValidBlockHeight)) {
-          throw new Error(prepared.error?.message || 'Hash PayLink could not prepare the sponsored Solana bridge.')
+          throw new Error(pocketBridgeApiErrorMessage(prepared.error, 'Hash PayLink could not prepare the sponsored Solana bridge.'))
         }
         const sponsored = Transaction.from(base64ToBytes(prepared.transaction))
         if (params.signers?.length) sponsored.partialSign(...params.signers)
@@ -111,9 +120,9 @@ export async function bridgeCircleSolanaWallet(input: {
             amount: input.amount,
           }),
         })
-        const submitted = await submitResponse.json() as { ok?: boolean; txHash?: string; error?: { message?: string } }
+        const submitted = await submitResponse.json() as { ok?: boolean; txHash?: string; error?: string | { message?: string } }
         if (!submitResponse.ok || !submitted.ok || !submitted.txHash) {
-          throw new Error(submitted.error?.message || 'Hash PayLink could not submit the sponsored Solana bridge.')
+          throw new Error(pocketBridgeApiErrorMessage(submitted.error, 'Hash PayLink could not submit the sponsored Solana bridge.'))
         }
         signedSourceTxHash = submitted.txHash
         return submitted.txHash
