@@ -173,27 +173,6 @@ export function validatePocketSignedSolanaTransaction(input: { tx: string; requi
   }
 }
 
-function isBlockheightExceeded(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message : String(error ?? '')
-  return msg.toLowerCase().includes('block height exceeded') || msg.toLowerCase().includes('blockheight exceeded')
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Solana confirmation timed out')), ms)
-    promise.then(
-      (value) => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      (error) => {
-        clearTimeout(timer)
-        reject(error)
-      },
-    )
-  })
-}
-
 async function hasLanded(connection: Connection, signature: string): Promise<boolean> {
   const status = await connection.getSignatureStatus(signature, { searchTransactionHistory: true })
   const value = status.value
@@ -339,28 +318,15 @@ export async function relaySolanaTx(req: Request, res: Response): Promise<void> 
       preflightCommitment: 'confirmed',
     })
 
-    try {
-      await withTimeout(
-        connection.confirmTransaction({
-          signature: txHash,
-          blockhash: tx.recentBlockhash,
-          lastValidBlockHeight,
-        }, 'confirmed'),
-        2_500,
-      )
-      res.json({ ok: true, txHash, status: 'confirmed' })
-      return
-    } catch (err) {
-      if (isBlockheightExceeded(err)) {
-        throw err
-      }
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if (attempt) await new Promise(resolve => setTimeout(resolve, 500))
       if (await hasLanded(connection, txHash)) {
         res.json({ ok: true, txHash, status: 'processed' })
         return
       }
-      res.json({ ok: true, txHash, status: 'submitted', warning: (err as Error).message })
-      return
     }
+    res.json({ ok: true, txHash, status: 'submitted' })
+    return
   } catch (err) {
     res.status(400).json({ ok: false, error: (err as Error).message })
   }

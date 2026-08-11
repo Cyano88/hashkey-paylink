@@ -140,7 +140,18 @@ export default function usePocketPaymentLiquidityController(input: {
     setStatus('checking')
     try {
       const inspected = await inspect()
-      const currentRoute = inspected.route
+      const checkpoint = await input.persistence?.read(inspected.accessToken) ?? null
+      let currentRoute = inspected.route
+      if (checkpoint?.phase === 'submitted' && checkpoint.txHash) {
+        const checkpointAmountUnits = parseUnits(checkpoint.amount, 6)
+        currentRoute = {
+          kind: 'bridge',
+          source: checkpoint.source,
+          destination: checkpoint.destination,
+          amountUnits: checkpointAmountUnits,
+          totalSourceUnits: checkpointAmountUnits,
+        }
+      }
       setRoute(currentRoute)
       setWallets(inspected.wallets)
       if (currentRoute.kind === 'insufficient') {
@@ -149,7 +160,6 @@ export default function usePocketPaymentLiquidityController(input: {
       const destinationWallet = inspected.wallets[currentRoute.destination]
         ?? await input.ensureWallet(currentRoute.destination)
       if (!destinationWallet) throw new Error('Open the destination Pocket wallet before paying.')
-      const checkpoint = await input.persistence?.read(inspected.accessToken) ?? null
       if (currentRoute.kind === 'direct') {
         if (checkpoint?.phase === 'submitted' || checkpoint?.phase === 'completed') {
           await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash: checkpoint.txHash })

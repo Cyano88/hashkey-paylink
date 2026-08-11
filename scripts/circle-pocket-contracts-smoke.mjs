@@ -1023,6 +1023,16 @@ assert.doesNotMatch(pocketPaymentLiquidityControllerSource, /\['base', 'arbitrum
 assert.match(pocketPaymentLiquidityControllerSource, /selectPocketCheckoutRoute/)
 assert.match(pocketPaymentLiquidityControllerSource, /readPocketBridgeQuote/)
 assert.match(pocketPaymentLiquidityControllerSource, /readPocketBridgeStatus/)
+const payoutCheckpointRead = pocketPaymentLiquidityControllerSource.indexOf("const checkpoint = await input.persistence?.read(inspected.accessToken) ?? null")
+const insufficientRouteGuard = pocketPaymentLiquidityControllerSource.indexOf("if (currentRoute.kind === 'insufficient')")
+assert.ok(
+  payoutCheckpointRead >= 0 && payoutCheckpointRead < insufficientRouteGuard,
+  'A submitted payout move must be loaded before a newly calculated insufficient route can block reconciliation.',
+)
+assert.match(pocketPaymentLiquidityControllerSource, /checkpoint\?\.phase === 'submitted' && checkpoint\.txHash/)
+assert.match(pocketPaymentLiquidityControllerSource, /source: checkpoint\.source/)
+assert.match(pocketPaymentLiquidityControllerSource, /destination: checkpoint\.destination/)
+assert.match(pocketPaymentLiquidityControllerSource, /amountUnits: checkpointAmountUnits/)
 assert.match(pocketPaymentLiquidityControllerSource, /No single gas-sponsored source can cover the remaining amount and bridge fee\./)
 assert.match(pocketPaymentLiquidityControllerSource, /USDC is still moving\. Do not submit the move again\./)
 assert.match(pocketPaymentLiquidityControllerSource, /setStatus\(retryBlocked \? 'reconciling' : 'idle'\)/)
