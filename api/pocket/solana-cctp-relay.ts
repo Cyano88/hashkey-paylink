@@ -31,8 +31,8 @@ import { readCctpForwardQuote } from './cctp.js'
 
 const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const BRIDGE_KIT_PROGRAM = new PublicKey('DFaauJEjmiHkPs1JG89A4p95hDWi9m9SAEERY1LQJiC3')
-const CCTP_TOKEN_MESSENGER = new PublicKey('CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC')
-const CCTP_MESSAGE_TRANSMITTER = new PublicKey('CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe')
+const CCTP_TOKEN_MESSENGER = new PublicKey('CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe')
+const CCTP_MESSAGE_TRANSMITTER = new PublicKey('CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC')
 const BRIDGE_WITH_HOOK_DISCRIMINATOR = Buffer.from('f2113f250ab3a918', 'hex')
 const CCTP_EVENT_RENT_LAMPORTS = 3_900_000n
 const RELAYER_OPERATIONAL_BUFFER_LAMPORTS = 100_000n

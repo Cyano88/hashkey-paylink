@@ -22,8 +22,8 @@ process.env.RELAYER_PRIVATE_KEY_SOLANA = JSON.stringify([...relayer.secretKey])
 
 const usdcMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const bridgeProgram = new PublicKey('DFaauJEjmiHkPs1JG89A4p95hDWi9m9SAEERY1LQJiC3')
-const tokenMessenger = new PublicKey('CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC')
-const messageTransmitter = new PublicKey('CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe')
+const tokenMessenger = new PublicKey('CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe')
+const messageTransmitter = new PublicKey('CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC')
 const recipient = '0x1111111111111111111111111111111111111111'
 const expected = { destination: 'base', destinationAddress: recipient, amount: '1' }
 
