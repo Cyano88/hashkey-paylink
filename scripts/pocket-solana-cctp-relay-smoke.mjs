@@ -53,11 +53,11 @@ async function bridgeInstructions(overrides = {}) {
   keys[4] = { pubkey: sourceAta, isSigner: false, isWritable: true }
   keys[12] = { pubkey: usdcMint, isSigner: false, isWritable: true }
   keys[13] = { pubkey: messageSender.publicKey, isSigner: true, isWritable: true }
-  keys[14] = { pubkey: tokenMessenger, isSigner: false, isWritable: false }
-  keys[15] = { pubkey: messageTransmitter, isSigner: false, isWritable: false }
+  keys[14] = { pubkey: messageTransmitter, isSigner: false, isWritable: false }
+  keys[15] = { pubkey: tokenMessenger, isSigner: false, isWritable: false }
   keys[16] = { pubkey: SOLANA_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }
   keys[17] = { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }
-  keys[18] = { pubkey: messageTransmitter, isSigner: false, isWritable: false }
+  keys[18] = { pubkey: tokenMessenger, isSigner: false, isWritable: false }
   keys[22] = { pubkey: bridgeProgram, isSigner: false, isWritable: false }
   const transaction = new Transaction({
     feePayer: relayer.publicKey,
