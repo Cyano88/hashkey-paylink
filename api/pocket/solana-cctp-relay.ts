@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
-import { AnchorProvider, BN, Program } from '@coral-xyz/anchor'
+import { AnchorProvider, Program } from '@coral-xyz/anchor'
+import BN from 'bn.js'
 import {
   Connection,
   Keypair,
