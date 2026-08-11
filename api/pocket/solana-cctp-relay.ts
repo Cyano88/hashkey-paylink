@@ -168,7 +168,7 @@ async function buildManualBridge(input: {
   Buffer.from('cctp-forward', 'utf8').copy(hookData)
 
   const bridgeInstruction = await (bridgeKit.methods as any).bridgeWithHook({
-    amount: new BN(amount.toString()),
+    amount: new BN(quote.totalUnits.toString()),
     destinationDomain: DESTINATION_DOMAINS[expected.destination],
     mintRecipient: new PublicKey(parseEvmRecipient(expected.destinationAddress)),
     destinationCaller: PublicKey.default,
@@ -285,7 +285,9 @@ async function validateBridgeInstruction(input: {
     throw fail(400, 'Only Circle CCTP forwarding burns may use the Solana sponsor.')
   }
   const requestedAmount = parseUsdcAmount(expected.amount)
-  if (instruction.data.readBigUInt64LE(8) !== requestedAmount) {
+  const burnAmount = instruction.data.readBigUInt64LE(8)
+  const maxFee = instruction.data.readBigUInt64LE(84)
+  if (burnAmount !== requestedAmount + maxFee) {
     throw fail(400, 'Solana CCTP amount did not match the requested bridge.')
   }
   if (instruction.data.readUInt32LE(16) !== DESTINATION_DOMAINS[expected.destination]) {

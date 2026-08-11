@@ -181,17 +181,25 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           return res.status(409).json({ ok: false, error: 'Bank payout routing amount exceeds the provider order.' })
         }
         const existing = await ownedRoute(identity, ownedOrder.intent_id, dependencies)
-        if (existing && existing.status !== 'failed') {
+        if (existing && existing.status !== 'failed' && existing.status !== 'completed') {
           return res.json({ ok: true, data: routeRecord(existing, false) })
         }
-        if (existing?.status === 'failed') {
+        if (existing?.status === 'failed' || existing?.status === 'completed') {
           const restarted = await dependencies.recordAction({
             ownerId: identity.userId,
             idempotencyKey: routeKey(ownedOrder.intent_id),
             action: 'bank-withdraw.route',
             status: 'started',
             resourceId: ownedOrder.intent_id,
-            metadata: { intentId: ownedOrder.intent_id, source, destination: 'base', amount, txHash: '', paymentState: 'started' },
+            metadata: {
+              intentId: ownedOrder.intent_id,
+              source,
+              destination: 'base',
+              amount,
+              txHash: '',
+              paymentState: 'started',
+              previousTxHash: existing.metadata?.txHash || '',
+            },
           })
           return res.json({ ok: true, data: routeRecord(restarted, true) })
         }

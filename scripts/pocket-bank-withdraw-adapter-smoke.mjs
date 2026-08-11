@@ -95,6 +95,12 @@ const routeCompleted = await request(handler, { action: 'routeUpdate', intent_id
 assert.equal(routeCompleted.body.data.phase, 'completed')
 const routeBackward = await request(handler, { action: 'routeUpdate', intent_id: processingOrder.intent_id, phase: 'failed' })
 assert.equal(routeBackward.statusCode, 409)
+const routeRestarted = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'solana', destination: 'base', amount: '0.1' })
+assert.equal(routeRestarted.body.data.phase, 'started')
+assert.equal(routeRestarted.body.data.claimed, true)
+assert.equal(routeRestarted.body.data.source, 'solana')
+assert.equal(routeRestarted.body.data.amount, '0.1')
+assert.equal(routeAction.metadata.previousTxHash, `0x${'3'.repeat(64)}`)
 
 const confirmed = await request(handler, {
   action: 'confirm',

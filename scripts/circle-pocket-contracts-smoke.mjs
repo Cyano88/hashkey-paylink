@@ -1033,6 +1033,8 @@ assert.match(pocketPaymentLiquidityControllerSource, /checkpoint\?\.phase === 's
 assert.match(pocketPaymentLiquidityControllerSource, /source: checkpoint\.source/)
 assert.match(pocketPaymentLiquidityControllerSource, /destination: checkpoint\.destination/)
 assert.match(pocketPaymentLiquidityControllerSource, /amountUnits: checkpointAmountUnits/)
+assert.match(pocketPaymentLiquidityControllerSource, /const activeCheckpoint = checkpoint\?\.phase === 'completed' \? null : checkpoint/)
+assert.match(pocketPaymentLiquidityControllerSource, /if \(activeCheckpoint && activeCheckpoint\.phase !== 'failed'\)/)
 assert.match(pocketPaymentLiquidityControllerSource, /No single gas-sponsored source can cover the remaining amount and bridge fee\./)
 assert.match(pocketPaymentLiquidityControllerSource, /USDC is still moving\. Do not submit the move again\./)
 assert.match(pocketPaymentLiquidityControllerSource, /setStatus\(retryBlocked \? 'reconciling' : 'idle'\)/)

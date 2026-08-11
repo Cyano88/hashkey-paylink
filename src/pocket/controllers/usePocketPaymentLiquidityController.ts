@@ -169,6 +169,7 @@ export default function usePocketPaymentLiquidityController(input: {
         setStatus('ready')
         return destinationWallet
       }
+      const activeCheckpoint = checkpoint?.phase === 'completed' ? null : checkpoint
       const sourceWallet = inspected.wallets[currentRoute.source]
         ?? await input.ensureWallet(currentRoute.source)
       if (!sourceWallet?.walletId || !sourceWallet.blockchain || !destinationWallet.address) {
@@ -176,13 +177,13 @@ export default function usePocketPaymentLiquidityController(input: {
       }
       const amount = formatUnits(currentRoute.amountUnits, 6)
       let txHash = ''
-      let complete = checkpoint?.phase === 'completed'
-      if (checkpoint && checkpoint.phase !== 'failed') {
-        if (checkpoint.source !== currentRoute.source || checkpoint.destination !== currentRoute.destination || checkpoint.amount !== amount) {
+      let complete = false
+      if (activeCheckpoint && activeCheckpoint.phase !== 'failed') {
+        if (activeCheckpoint.source !== currentRoute.source || activeCheckpoint.destination !== currentRoute.destination || activeCheckpoint.amount !== amount) {
           throw new Error('A previous payout move needs review before another route can start.')
         }
-        txHash = checkpoint.txHash
-        if (checkpoint.phase === 'started' && !txHash) {
+        txHash = activeCheckpoint.txHash
+        if (activeCheckpoint.phase === 'started' && !txHash) {
           throw new Error('A previous payout move needs review before another route can start.')
         }
       }

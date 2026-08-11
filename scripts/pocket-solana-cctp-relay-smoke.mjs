@@ -31,7 +31,7 @@ function randomMeta({ signer = false, writable = false } = {}) {
   return { pubkey: Keypair.generate().publicKey, isSigner: signer, isWritable: writable }
 }
 
-function bridgeData({ amount = 1_000_000n, domain = 6, bridgingKitFee = 0n } = {}) {
+function bridgeData({ amount = 1_053_591n, domain = 6, bridgingKitFee = 0n } = {}) {
   const data = Buffer.alloc(140)
   Buffer.from('f2113f250ab3a918', 'hex').copy(data, 0)
   data.writeBigUInt64LE(amount, 8)
