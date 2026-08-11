@@ -45,11 +45,11 @@ function bridgeData({ amount = 1_000_000n, domain = 6, bridgingKitFee = 0n } = {
   return data
 }
 
-async function unsignedBridge(overrides = {}) {
+async function bridgeInstructions(overrides = {}) {
   const sourceAta = await getAssociatedTokenAddress(usdcMint, wallet.publicKey, true)
   const keys = Array.from({ length: 23 }, () => randomMeta())
   keys[1] = { pubkey: wallet.publicKey, isSigner: true, isWritable: true }
-  keys[2] = { pubkey: wallet.publicKey, isSigner: true, isWritable: true }
+  keys[2] = { pubkey: relayer.publicKey, isSigner: true, isWritable: true }
   keys[4] = { pubkey: sourceAta, isSigner: false, isWritable: true }
   keys[12] = { pubkey: usdcMint, isSigner: false, isWritable: true }
   keys[13] = { pubkey: messageSender.publicKey, isSigner: true, isWritable: true }
@@ -60,11 +60,11 @@ async function unsignedBridge(overrides = {}) {
   keys[18] = { pubkey: messageTransmitter, isSigner: false, isWritable: false }
   keys[22] = { pubkey: bridgeProgram, isSigner: false, isWritable: false }
   const transaction = new Transaction({
-    feePayer: wallet.publicKey,
+    feePayer: relayer.publicKey,
     recentBlockhash: Keypair.generate().publicKey.toBase58(),
   }).add(
     SystemProgram.transfer({
-      fromPubkey: wallet.publicKey,
+      fromPubkey: relayer.publicKey,
       toPubkey: messageSender.publicKey,
       lamports: 3_900_000,
     }),
@@ -74,19 +74,23 @@ async function unsignedBridge(overrides = {}) {
       data: bridgeData(overrides),
     }),
   )
-  return transaction.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64')
+  return { instructions: transaction.instructions, messageSender, additionalRentLamports: 0n }
+}
+
+const healthyConnection = {
+  getLatestBlockhash: async () => ({
+    blockhash: Keypair.generate().publicKey.toBase58(),
+    lastValidBlockHeight: 123,
+  }),
+  getFeeForMessage: async () => ({ value: 5_000 }),
+  getBalance: async () => 10_000_000,
 }
 
 const prepared = await preparePocketSolanaCctpTransaction({
-  transaction: await unsignedBridge(),
   walletAddress: wallet.publicKey.toBase58(),
   expected,
-  connection: {
-    getLatestBlockhash: async () => ({
-      blockhash: Keypair.generate().publicKey.toBase58(),
-      lastValidBlockHeight: 123,
-    }),
-  },
+  connection: healthyConnection,
+  buildBridge: async () => bridgeInstructions(),
 })
 assert.equal(prepared.lastValidBlockHeight, 123)
 const sponsored = Transaction.from(Buffer.from(prepared.transaction, 'base64'))
@@ -94,35 +98,39 @@ assert.ok(sponsored.feePayer?.equals(relayer.publicKey))
 assert.ok(sponsored.instructions[0].keys[0].pubkey.equals(relayer.publicKey))
 assert.ok(sponsored.instructions.at(-1).keys[1].pubkey.equals(wallet.publicKey))
 assert.ok(sponsored.instructions.at(-1).keys[2].pubkey.equals(relayer.publicKey))
-sponsored.partialSign(messageSender, wallet)
+sponsored.partialSign(wallet)
 await assert.doesNotReject(() => validatePocketSolanaCctpSignedTransaction({
   transaction: sponsored.serialize().toString('base64'),
   walletAddress: wallet.publicKey.toBase58(),
   expected,
 }))
 
-const wrongAmount = await unsignedBridge({ amount: 2_000_000n })
 await assert.rejects(() => preparePocketSolanaCctpTransaction({
-  transaction: wrongAmount,
   walletAddress: wallet.publicKey.toBase58(),
   expected,
-  connection: { getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 123 }) },
+  connection: healthyConnection,
+  buildBridge: async () => bridgeInstructions({ amount: 2_000_000n }),
 }), /amount did not match/)
 
-const wrongDomain = await unsignedBridge({ domain: 3 })
 await assert.rejects(() => preparePocketSolanaCctpTransaction({
-  transaction: wrongDomain,
   walletAddress: wallet.publicKey.toBase58(),
   expected,
-  connection: { getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 123 }) },
+  connection: healthyConnection,
+  buildBridge: async () => bridgeInstructions({ domain: 3 }),
 }), /destination domain did not match/)
 
-const unexpectedKitFee = await unsignedBridge({ bridgingKitFee: 1n })
 await assert.rejects(() => preparePocketSolanaCctpTransaction({
-  transaction: unexpectedKitFee,
   walletAddress: wallet.publicKey.toBase58(),
   expected,
-  connection: { getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58(), lastValidBlockHeight: 123 }) },
+  connection: healthyConnection,
+  buildBridge: async () => bridgeInstructions({ bridgingKitFee: 1n }),
 }), /bridging kit fee was not zero/)
+
+await assert.rejects(() => preparePocketSolanaCctpTransaction({
+  walletAddress: wallet.publicKey.toBase58(),
+  expected,
+  connection: { ...healthyConnection, getBalance: async () => 3_081_535 },
+  buildBridge: async () => bridgeInstructions(),
+}), /replenishing its SOL fee wallet/)
 
 console.log('Pocket Solana CCTP relay smoke checks passed.')

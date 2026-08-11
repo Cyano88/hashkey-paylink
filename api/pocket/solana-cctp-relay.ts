@@ -1,12 +1,15 @@
 import type { Request, Response } from 'express'
+import { AnchorProvider, BN, Program } from '@coral-xyz/anchor'
 import {
   Connection,
+  Keypair,
   PublicKey,
   SystemProgram,
   Transaction,
   TransactionInstruction,
 } from '@solana/web3.js'
 import {
+  createAssociatedTokenAccountInstruction,
   getAssociatedTokenAddress,
   SOLANA_ASSOCIATED_TOKEN_PROGRAM_ID,
   SOLANA_TOKEN_PROGRAM_ID,
@@ -23,6 +26,7 @@ import {
   type CircleLinkRecord,
   type VerifiedLinkUser,
 } from '../privy-circle-link.js'
+import { readCctpForwardQuote } from './cctp.js'
 
 const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const BRIDGE_KIT_PROGRAM = new PublicKey('DFaauJEjmiHkPs1JG89A4p95hDWi9m9SAEERY1LQJiC3')
@@ -30,12 +34,17 @@ const CCTP_TOKEN_MESSENGER = new PublicKey('CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFa
 const CCTP_MESSAGE_TRANSMITTER = new PublicKey('CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe')
 const BRIDGE_WITH_HOOK_DISCRIMINATOR = Buffer.from('f2113f250ab3a918', 'hex')
 const CCTP_EVENT_RENT_LAMPORTS = 3_900_000n
+const RELAYER_OPERATIONAL_BUFFER_LAMPORTS = 100_000n
 const MAX_TRANSACTION_BYTES = 16_384
 const DESTINATION_DOMAINS = { arbitrum: 3, base: 6 } as const
 
 type Destination = keyof typeof DESTINATION_DOMAINS
 type ExpectedBridge = { destination: Destination; destinationAddress: string; amount: string }
-type RelayPhase = 'wallet-pays' | 'relayer-pays'
+type BuiltBridge = {
+  instructions: TransactionInstruction[]
+  messageSender: Keypair
+  additionalRentLamports: bigint
+}
 
 type Dependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
@@ -91,12 +100,123 @@ function assertMeta(
   }
 }
 
-function replaceKey(instruction: TransactionInstruction, index: number, pubkey: PublicKey) {
+function derivePda(program: PublicKey, ...seeds: Buffer[]) {
+  return PublicKey.findProgramAddressSync(seeds, program)[0]
+}
+
+function idempotentAtaInstruction(payer: PublicKey, ata: PublicKey, owner: PublicKey) {
+  const instruction = createAssociatedTokenAccountInstruction(payer, ata, owner, USDC_MINT)
   return new TransactionInstruction({
     programId: instruction.programId,
-    data: Buffer.from(instruction.data),
-    keys: instruction.keys.map((meta, keyIndex) => keyIndex === index ? { ...meta, pubkey } : { ...meta }),
+    keys: instruction.keys,
+    data: Buffer.from([1]),
   })
+}
+
+async function buildManualBridge(input: {
+  connection: Connection
+  wallet: PublicKey
+  relayer: Keypair
+  expected: ExpectedBridge
+}): Promise<BuiltBridge> {
+  const { connection, wallet, relayer, expected } = input
+  const amount = parseUsdcAmount(expected.amount)
+  const sourceAta = await getAssociatedTokenAddress(USDC_MINT, wallet, true)
+  const sourceAccount = await connection.getAccountInfo(sourceAta, 'confirmed')
+  if (!sourceAccount) throw fail(400, 'The linked Circle Solana wallet does not have a USDC token account.')
+
+  const quote = await readCctpForwardQuote('solana', expected.destination, amount)
+  const messageSender = Keypair.generate()
+  const providerWallet = {
+    publicKey: relayer.publicKey,
+    signTransaction: async <T>(transaction: T) => transaction,
+    signAllTransactions: async <T>(transactions: T[]) => transactions,
+  }
+  const provider = new AnchorProvider(connection, providerWallet, { commitment: 'confirmed' })
+  const bridgeKit = await Program.at(BRIDGE_KIT_PROGRAM, provider)
+
+  const statePda = derivePda(BRIDGE_KIT_PROGRAM, Buffer.from('state'))
+  const state = await (bridgeKit.account as Record<string, { fetch(address: PublicKey): Promise<Record<string, unknown>> }>).state.fetch(statePda)
+  if (!state?.protocolFeeWallet) throw fail(503, 'Circle bridge configuration is temporarily unavailable.')
+  const protocolFeeWallet = new PublicKey(state.protocolFeeWallet as PublicKey)
+  const developerFeeWallet = PublicKey.default
+  const protocolFeeAta = await getAssociatedTokenAddress(USDC_MINT, protocolFeeWallet, true)
+  const developerFeeAta = await getAssociatedTokenAddress(USDC_MINT, developerFeeWallet, true)
+
+  const ataInstructions: TransactionInstruction[] = []
+  for (const [ata, owner] of [[protocolFeeAta, protocolFeeWallet], [developerFeeAta, developerFeeWallet]] as const) {
+    if (!(await connection.getAccountInfo(ata, 'confirmed'))) {
+      ataInstructions.push(idempotentAtaInstruction(relayer.publicKey, ata, owner))
+    }
+  }
+
+  const senderAuthorityPda = derivePda(CCTP_TOKEN_MESSENGER, Buffer.from('sender_authority'))
+  const tokenMessengerPda = derivePda(CCTP_TOKEN_MESSENGER, Buffer.from('token_messenger'))
+  const tokenMinterPda = derivePda(CCTP_TOKEN_MESSENGER, Buffer.from('token_minter'))
+  const localTokenPda = derivePda(CCTP_TOKEN_MESSENGER, Buffer.from('local_token'), USDC_MINT.toBuffer())
+  const remoteTokenMessengerPda = derivePda(
+    CCTP_TOKEN_MESSENGER,
+    Buffer.from('remote_token_messenger'),
+    Buffer.from(DESTINATION_DOMAINS[expected.destination].toString(), 'utf8'),
+  )
+  const messageTransmitterPda = derivePda(CCTP_MESSAGE_TRANSMITTER, Buffer.from('message_transmitter'))
+  const denylistPda = derivePda(CCTP_TOKEN_MESSENGER, Buffer.from('denylist_account'), wallet.toBuffer())
+  const cctpEventAuthorityPda = derivePda(CCTP_TOKEN_MESSENGER, Buffer.from('__event_authority'))
+  const bridgeEventAuthorityPda = derivePda(BRIDGE_KIT_PROGRAM, Buffer.from('__event_authority'))
+  const hookData = Buffer.alloc(32)
+  Buffer.from('cctp-forward', 'utf8').copy(hookData)
+
+  const bridgeInstruction = await (bridgeKit.methods as any).bridgeWithHook({
+    amount: new BN(amount.toString()),
+    destinationDomain: DESTINATION_DOMAINS[expected.destination],
+    mintRecipient: new PublicKey(parseEvmRecipient(expected.destinationAddress)),
+    destinationCaller: PublicKey.default,
+    maxFee: new BN(quote.maxFeeUnits.toString()),
+    minFinalityThreshold: quote.finalityThreshold,
+    bridgingKitFee: new BN(0),
+    hookData,
+  }).accountsPartial({
+    state: statePda,
+    authority: wallet,
+    eventRentPayer: relayer.publicKey,
+    burnTokenAccount: sourceAta,
+    protocolFeeWalletTokenAccount: protocolFeeAta,
+    developerFeeRecipientTokenAccount: developerFeeAta,
+    senderAuthorityPda,
+    denylistAccount: denylistPda,
+    messageTransmitter: messageTransmitterPda,
+    tokenMessenger: tokenMessengerPda,
+    remoteTokenMessenger: remoteTokenMessengerPda,
+    tokenMinter: tokenMinterPda,
+    localToken: localTokenPda,
+    burnTokenMint: USDC_MINT,
+    messageSentEventData: messageSender.publicKey,
+    messageTransmitterProgram: CCTP_MESSAGE_TRANSMITTER,
+    tokenMessengerMinterProgram: CCTP_TOKEN_MESSENGER,
+    tokenProgram: SOLANA_TOKEN_PROGRAM_ID,
+    systemProgram: SystemProgram.programId,
+    eventAuthority: bridgeEventAuthorityPda,
+    program: BRIDGE_KIT_PROGRAM,
+    cctpEventAuthority: cctpEventAuthorityPda,
+    cctpProgram: CCTP_TOKEN_MESSENGER,
+  }).signers([messageSender]).instruction()
+
+  const ataRent = ataInstructions.length
+    ? BigInt(await connection.getMinimumBalanceForRentExemption(165, 'confirmed')) * BigInt(ataInstructions.length)
+    : 0n
+  return {
+    instructions: [
+      SystemProgram.transfer({
+        fromPubkey: relayer.publicKey,
+        toPubkey: messageSender.publicKey,
+        lamports: Number(CCTP_EVENT_RENT_LAMPORTS),
+      }),
+      ...ataInstructions,
+      bridgeInstruction,
+    ],
+    messageSender,
+    additionalRentLamports: ataRent,
+  }
 }
 
 function validateSystemFunding(
@@ -109,7 +229,7 @@ function validateSystemFunding(
   }
   assertMeta(instruction, 0, payer, true, true, 'event-rent payer')
   const messageSender = instruction.keys[1]?.pubkey
-  if (!messageSender || !instruction.keys[1]?.isSigner || !instruction.keys[1]?.isWritable) {
+  if (!messageSender || !instruction.keys[1]?.isWritable) {
     throw fail(400, 'Solana CCTP message account was invalid.')
   }
   if (instruction.data.readBigUInt64LE(4) !== CCTP_EVENT_RENT_LAMPORTS) {
@@ -193,73 +313,78 @@ async function validateBridgeInstruction(input: {
   }
 }
 
-async function validateAndTransform(input: {
+async function validateSignedTransaction(input: {
   transaction: Transaction
   wallet: PublicKey
   relayer: PublicKey
   expected: ExpectedBridge
-  phase: RelayPhase
+  requireAllSignatures?: boolean
 }) {
-  const { transaction, wallet, relayer, expected, phase } = input
-  const payer = phase === 'wallet-pays' ? wallet : relayer
-  assertKey(transaction.feePayer, payer, 'transaction fee payer')
+  const { transaction, wallet, relayer, expected } = input
+  assertKey(transaction.feePayer, relayer, 'transaction fee payer')
   if (transaction.instructions.length < 2 || transaction.instructions.length > 4) {
     throw fail(400, 'Solana CCTP transaction contained an unexpected instruction count.')
   }
   const funding = transaction.instructions[0]
   const bridge = transaction.instructions.at(-1)
   if (!funding || !bridge) throw fail(400, 'Solana CCTP transaction was incomplete.')
-  const messageSender = validateSystemFunding(funding, payer)
+  const messageSender = validateSystemFunding(funding, relayer)
   for (const instruction of transaction.instructions.slice(1, -1)) {
-    await validateAtaInstruction(instruction, payer)
+    await validateAtaInstruction(instruction, relayer)
   }
   await validateBridgeInstruction({
     instruction: bridge,
     wallet,
-    eventRentPayer: payer,
+    eventRentPayer: relayer,
     messageSender,
     expected,
   })
-  const expectedSignerKeys = new Set([payer.toBase58(), wallet.toBase58(), messageSender.toBase58()])
+  const expectedSignerKeys = new Set([relayer.toBase58(), wallet.toBase58(), messageSender.toBase58()])
   const actualSignerKeys = new Set(transaction.signatures.map(item => item.publicKey.toBase58()))
   if (actualSignerKeys.size !== expectedSignerKeys.size || [...expectedSignerKeys].some(key => !actualSignerKeys.has(key))) {
     throw fail(400, 'Solana CCTP transaction contained an unexpected signer.')
   }
-  if (phase === 'relayer-pays' && !transaction.verifySignatures(true)) {
+  if (input.requireAllSignatures !== false && !transaction.verifySignatures(true)) {
     throw fail(400, 'Solana CCTP transaction signatures were invalid.')
-  }
-  return {
-    messageSender,
-    instructions: phase === 'wallet-pays'
-      ? [
-          replaceKey(funding, 0, relayer),
-          ...transaction.instructions.slice(1, -1).map(instruction => replaceKey(instruction, 0, relayer)),
-          replaceKey(bridge, 2, relayer),
-        ]
-      : transaction.instructions,
   }
 }
 
 export async function preparePocketSolanaCctpTransaction(input: {
-  transaction: string
   walletAddress: string
   expected: ExpectedBridge
   connection?: Connection
+  buildBridge?: typeof buildManualBridge
+  relayer?: Keypair
 }) {
-  const transaction = decodeTransaction(input.transaction)
   const wallet = new PublicKey(input.walletAddress)
-  const relayer = loadRelayer()
-  const { instructions } = await validateAndTransform({
-    transaction,
+  const relayer = input.relayer ?? loadRelayer()
+  const connection = input.connection ?? new Connection(getRpc(), 'confirmed')
+  const built = await (input.buildBridge ?? buildManualBridge)({
+    connection,
+    wallet,
+    relayer,
+    expected: input.expected,
+  })
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
+  const sponsored = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash }).add(...built.instructions)
+  const fee = await connection.getFeeForMessage(sponsored.compileMessage(), 'confirmed')
+  if (fee.value === null) throw fail(503, 'Solana bridge sponsorship is temporarily unavailable.')
+  const requiredLamports = CCTP_EVENT_RENT_LAMPORTS
+    + built.additionalRentLamports
+    + BigInt(fee.value)
+    + RELAYER_OPERATIONAL_BUFFER_LAMPORTS
+  const relayerBalance = BigInt(await connection.getBalance(relayer.publicKey, 'confirmed'))
+  if (relayerBalance < requiredLamports) {
+    throw fail(503, 'Solana bridge sponsorship is temporarily unavailable. Hash PayLink is replenishing its SOL fee wallet.')
+  }
+  sponsored.partialSign(relayer, built.messageSender)
+  await validateSignedTransaction({
+    transaction: sponsored,
     wallet,
     relayer: relayer.publicKey,
     expected: input.expected,
-    phase: 'wallet-pays',
+    requireAllSignatures: false,
   })
-  const connection = input.connection ?? new Connection(getRpc(), 'confirmed')
-  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed')
-  const sponsored = new Transaction({ feePayer: relayer.publicKey, recentBlockhash: blockhash }).add(...instructions)
-  sponsored.partialSign(relayer)
   return {
     transaction: sponsored.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64'),
     lastValidBlockHeight,
@@ -273,20 +398,19 @@ export async function validatePocketSolanaCctpSignedTransaction(input: {
 }) {
   const transaction = decodeTransaction(input.transaction)
   const relayer = loadRelayer()
-  await validateAndTransform({
+  await validateSignedTransaction({
     transaction,
     wallet: new PublicKey(input.walletAddress),
     relayer: relayer.publicKey,
     expected: input.expected,
-    phase: 'relayer-pays',
   })
 }
 
-function parseExpected(body: unknown): ExpectedBridge & { transaction: string; lastValidBlockHeight?: number } {
+function parseExpected(body: unknown): ExpectedBridge & { transaction?: string; lastValidBlockHeight?: number } {
   if (!body || typeof body !== 'object') throw fail(400, 'Solana CCTP bridge request is invalid.')
   const value = body as Record<string, unknown>
   if (value.destination !== 'base' && value.destination !== 'arbitrum') throw fail(400, 'Solana CCTP destination is invalid.')
-  if (typeof value.destinationAddress !== 'string' || typeof value.amount !== 'string' || typeof value.transaction !== 'string') {
+  if (typeof value.destinationAddress !== 'string' || typeof value.amount !== 'string') {
     throw fail(400, 'Solana CCTP bridge request is invalid.')
   }
   parseEvmRecipient(value.destinationAddress)
@@ -295,7 +419,7 @@ function parseExpected(body: unknown): ExpectedBridge & { transaction: string; l
     destination: value.destination,
     destinationAddress: value.destinationAddress,
     amount: value.amount,
-    transaction: value.transaction,
+    ...(typeof value.transaction === 'string' ? { transaction: value.transaction } : {}),
     ...(Number.isSafeInteger(value.lastValidBlockHeight) ? { lastValidBlockHeight: value.lastValidBlockHeight as number } : {}),
   }
 }
@@ -330,7 +454,6 @@ export function createPocketSolanaCctpPrepareHandler(dependencies: Dependencies)
       const body = parseExpected(req.body)
       const walletAddress = await linkedWallet(dependencies, req)
       const prepared = await preparePocketSolanaCctpTransaction({
-        transaction: body.transaction,
         walletAddress,
         expected: body,
       })
@@ -346,6 +469,7 @@ export function createPocketSolanaCctpSubmitHandler(dependencies: Dependencies) 
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Method not allowed.', retryable: false } })
     try {
       const body = parseExpected(req.body)
+      if (!body.transaction) throw fail(400, 'Solana CCTP signed transaction is required.')
       if (!Number.isSafeInteger(body.lastValidBlockHeight)) throw fail(400, 'Solana CCTP block height is required.')
       const walletAddress = await linkedWallet(dependencies, req)
       await validatePocketSolanaCctpSignedTransaction({
