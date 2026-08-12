@@ -5,6 +5,7 @@ import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.j
 import { isPocketIdempotencyKey } from '../../src/pocket/lib/pocketSchemas.js'
 import { claimCirclePocketAction, listCirclePocketActions, recordCirclePocketAction, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
 import { paymentExecutionRepository, type PaymentExecutionIntent, type PaymentExecutionRepository } from './payment-execution-intents.js'
+import { assertBankAccountMatchesPocketName } from './verified-bank-name.js'
 
 type LegacyResult = { status: number; body: any }
 type BankWithdrawDependencies = {
@@ -16,6 +17,7 @@ type BankWithdrawDependencies = {
   listActions: typeof listCirclePocketActions
   recordAction: typeof recordCirclePocketAction
   executions: PaymentExecutionRepository
+  authorizeBankAccount: typeof assertBankAccountMatchesPocketName
 }
 
 async function invokeNgPos(req: Request, body: Record<string, unknown>): Promise<LegacyResult> {
@@ -139,6 +141,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     listActions: listCirclePocketActions,
     recordAction: recordCirclePocketAction,
     executions: paymentExecutionRepository,
+    authorizeBankAccount: assertBankAccountMatchesPocketName,
     ...overrides,
   }
   return async function pocketBankWithdrawHandler(req: Request, res: Response) {
@@ -154,7 +157,8 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         const accountNumber = text(req.body?.account_number, 20).replace(/\D/g, '').slice(0, 10)
         if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) return res.status(400).json({ ok: false, error: 'Enter a valid Naira payout amount.' })
         if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) return res.status(400).json({ ok: false, error: 'Open your Base Circle wallet before withdrawing.' })
-        if (accountNumber.length !== 10 || !text(req.body?.account_name) || !text(req.body?.bank_code)) return res.status(400).json({ ok: false, error: 'Verify the destination bank account first.' })
+        if (accountNumber.length !== 10 || !text(req.body?.account_name) || !text(req.body?.bank_code)) return res.status(400).json({ ok: false, error: 'Enter a valid destination bank account.' })
+        await dependencies.authorizeBankAccount(req, req.body)
 
         const forwardedRequest = {
           ...req,

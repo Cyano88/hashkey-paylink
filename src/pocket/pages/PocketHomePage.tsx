@@ -42,7 +42,7 @@ export default function PocketHomePage() {
   const fx = usePocketFxQuote(1)
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
   const [balanceVisible, setBalanceVisible] = useState(() => window.localStorage.getItem(BALANCE_VISIBLE_KEY) !== 'false')
-  const recent = activity.rows.slice(0, 3)
+  const recent = activity.rows.slice(0, 4)
   const unresolved = authenticated && (!wallets.resolved || !activity.resolved || (!fx.quote && fx.busy))
 
   if (unresolved) return <PocketLoadingState active="home" />
@@ -54,27 +54,26 @@ export default function PocketHomePage() {
   const hidden = '--------'
 
   return <PocketRouteShell active="home" onSelect={tab => open(navPath(tab))}>
-    <section className="overflow-hidden rounded-[28px] bg-gray-950 p-5 text-white shadow-[0_22px_60px_rgba(15,23,42,0.16)] dark:bg-white dark:text-gray-950">
+    <section className="overflow-hidden rounded-[26px] bg-gray-950 px-5 py-4 text-white shadow-[0_18px_48px_rgba(15,23,42,0.14)] dark:bg-white dark:text-gray-950">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50 dark:text-gray-500">Total available</p>
-          <div className="mt-2 flex items-center gap-2">
-            <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-black tabular-nums tracking-[-0.045em]">{balanceVisible ? formatPocketDisplayAmount(wallets.total) : hidden} <span className="text-xs tracking-normal opacity-50">USDC</span></p>
-            <button type="button" onClick={toggleBalance} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white/65 hover:bg-white/10 dark:text-gray-500 dark:hover:bg-gray-950/[0.06]" aria-label={balanceVisible ? 'Hide balances' : 'Show balances'}>{balanceVisible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(wallets.total) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p>
+            <button type="button" onClick={toggleBalance} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/65 hover:bg-white/10 dark:text-gray-500 dark:hover:bg-gray-950/[0.06]" aria-label={balanceVisible ? 'Hide balances' : 'Show balances'}>{balanceVisible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button>
           </div>
           {fx.quote && <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(wallets.total * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p>}
         </div>
         <button type="button" onClick={() => open(POCKET_ROUTES.swap)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><ArrowLeftRight className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Swap</span></button>
       </div>
-      <div className="mt-7 grid grid-cols-4 gap-3">
-        {NETWORKS.map(network => <button key={network.key} type="button" disabled={network.soon} onClick={() => !network.soon && setSelected(network.key)} className={cn('relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl transition', network.soon ? 'cursor-default opacity-35' : selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={network.soon ? network.label + ', coming soon' : 'Show ' + network.label + ' balance'} aria-pressed={!network.soon && selected === network.key}>
-          <img src={network.logo} alt="" className={cn('h-7 w-7 rounded-md object-cover grayscale contrast-200', network.dark ? 'invert dark:invert-0' : 'dark:invert')} />
+      <div className="mt-4 grid grid-cols-4 gap-2">
+        {NETWORKS.map(network => <button key={network.key} type="button" disabled={network.soon} onClick={() => !network.soon && setSelected(network.key)} className={cn('relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl transition', network.soon ? 'cursor-default opacity-35' : selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={network.soon ? network.label + ', coming soon' : 'Show ' + network.label + ' balance'} aria-pressed={!network.soon && selected === network.key}>
+          <img src={network.logo} alt="" className={cn('h-6 w-6 rounded-md object-cover grayscale contrast-200', network.dark ? 'invert dark:invert-0' : 'dark:invert')} />
           {network.soon && <span className="text-[8px] font-black uppercase tracking-wider">Soon</span>}
         </button>)}
       </div>
-      <div className="mt-5 border-t border-white/10 pt-5 text-center dark:border-gray-950/10">
-        <p className="text-[clamp(1.6rem,8vw,2.2rem)] font-black tabular-nums tracking-[-0.04em]">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden}</p>
-        <p className="mt-1 text-[10px] font-black uppercase tracking-[0.2em] opacity-50">USDC</p>
+      <div className="mt-3 border-t border-white/10 pt-3 text-center dark:border-gray-950/10">
+        <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p>
       </div>
     </section>
 

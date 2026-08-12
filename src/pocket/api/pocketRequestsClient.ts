@@ -1,7 +1,14 @@
 import { POCKET_API } from '../lib/pocketSchemas'
 
 export type PocketRequestItem = { id: string; eventId: string; direction: 'incoming' | 'outgoing'; senderPocketId: string; senderName: string; recipientPocketId: string; title: string; amount: string; flexibleAmount: boolean; network: 'base' | 'arbitrum' | 'solana' | 'multi'; paymentUrl: string; status: 'pending' | 'accepted' | 'declined' | 'paid'; createdAt: number; updatedAt: number }
-const message = (data: unknown, fallback: string) => typeof data === 'object' && data && typeof (data as { error?: { message?: unknown } }).error?.message === 'string' ? (data as { error: { message: string } }).error.message : fallback
+const message = (data: unknown, fallback: string) => {
+  if (!data || typeof data !== 'object') return fallback
+  const error = (data as { error?: unknown }).error
+  if (typeof error === 'string') return error
+  return error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string'
+    ? (error as { message: string }).message
+    : fallback
+}
 async function call(accessToken: string, body?: Record<string, unknown>) {
   const response = await fetch(POCKET_API.requests, { method: body ? 'POST' : 'GET', headers: { authorization: 'Bearer ' + accessToken, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) })
   const data = await response.json().catch(() => undefined) as { ok?: boolean; request?: PocketRequestItem; requests?: PocketRequestItem[] } | undefined

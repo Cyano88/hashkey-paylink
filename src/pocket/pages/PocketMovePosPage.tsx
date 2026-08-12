@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { LocalCurrencyProfileCard } from '../components/LocalCurrencyProfileCard'
+import PocketVerifiedNameGate, { PocketVerifiedNameBadge } from '../components/PocketVerifiedNameGate'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -68,23 +68,10 @@ export default function PocketMovePosPage() {
     <PocketRouteShell active="home" onSelect={selectNav}>
       <PocketFlowHeader title="POS" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <PocketPosShell standalone>
-        {authenticated && (
-          <LocalCurrencyProfileCard
-            profile={profile.profile}
-            draft={profile.draft}
-            email={email}
-            busy={profile.busy}
-            error={profile.error}
-            editing={profile.editing}
-            bankAccountName={pos.bankAccountName}
-            onDraftChange={profile.setDraft}
-            onSave={() => void profile.save()}
-            onEdit={profile.edit}
-            onCancel={profile.cancel}
-          />
-        )}
+        {authenticated && !pos.profileVerified && <PocketVerifiedNameGate />}
+        {authenticated && pos.profileVerified && <PocketVerifiedNameBadge name={profile.profile?.resolvedName ?? ''} />}
 
-        {!pos.country ? (
+        {authenticated && pos.profileVerified && (!pos.country ? (
           <PocketPosCountryPanel
             controller={pos.controller}
             countries={POS_COUNTRIES}
@@ -113,7 +100,7 @@ export default function PocketMovePosPage() {
             copied={pos.copied}
             onCopy={() => void pos.copyCustomerUrl()}
           />
-        )}
+        ))}
 
         {!authenticated && <PocketPosSignInCard />}
       </PocketPosShell>

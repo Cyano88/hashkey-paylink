@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom'
 import UnifiedReceipt from '../../../components/UnifiedReceipt'
 import type { PaylinkReceipt } from '../../../lib/paymentReceiptPdf'
 import PocketMobileNumberInput from './PocketMobileNumberInput'
+import PocketResolvedNameRow from '../../components/PocketResolvedNameRow'
 
 export type PocketBillView = 'airtime' | 'data' | 'tv' | 'electricity'
 
@@ -31,10 +32,10 @@ type PocketBillsPanelProps = {
 }
 
 const billMeta = {
-  airtime: { title: 'Airtime', body: 'Top up a Nigerian mobile number from Circle Pocket.', icon: Phone },
-  data: { title: 'Data', body: 'Choose a provider and bundle.', icon: Wifi },
-  tv: { title: 'TV', body: 'Renew a supported decoder or smartcard subscription.', icon: Tv },
-  electricity: { title: 'Electricity', body: 'Validate a meter and pay a supported electricity provider.', icon: Lightbulb },
+  airtime: { title: 'Airtime', icon: Phone },
+  data: { title: 'Data', icon: Wifi },
+  tv: { title: 'TV', icon: Tv },
+  electricity: { title: 'Electricity', icon: Lightbulb },
 } as const
 
 const NETWORKS = [
@@ -60,7 +61,7 @@ function money(value: string) {
 
 function SignInCard() {
   return (
-    <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
+    <div className="overflow-hidden rounded-[22px] bg-white p-2 shadow-sm dark:bg-white/[0.05]">
       <PrivyConnectButton className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]">
         <Mail className="absolute left-5 h-4 w-4" />
         <span>Sign in to Bills</span>
@@ -144,40 +145,23 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-blue-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-blue-500/[0.08]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Bills</p>
-            <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 dark:text-white">{meta.title}</h2>
-            <p className="mt-1 max-w-xs text-xs leading-5 text-gray-500 dark:text-gray-400">{meta.body}</p>
-          </div>
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white/80 text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-[18px] w-[18px]" /></span>
-        </div>
-      </div>
-
       {bills.availability === 'loading' && !preview ? (
-        <div className="flex min-h-36 items-center justify-center rounded-2xl border border-gray-100 bg-white dark:border-white/10 dark:bg-[#111216]"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
+        <div className="flex min-h-36 items-center justify-center rounded-[22px] bg-white shadow-sm dark:bg-white/[0.05]"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
       ) : bills.availability === 'disabled' && !preview ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="rounded-[22px] bg-white p-5 text-center shadow-sm dark:bg-white/[0.05]">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
           <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">Bills pilot is not open</h3>
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">Bill payments remain hidden until the protected provider and refund controls are enabled.</p>
         </div>
       ) : !authenticated && !preview ? <SignInCard /> : !categoryEnabled && !preview ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="rounded-[22px] bg-white p-5 text-center shadow-sm dark:bg-white/[0.05]">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
           <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">{billName} unavailable</h3>
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? `${billName} testing is not enabled yet.` : `${billName} payments are not available yet.`}</p>
         </div>
       ) : (
         <>
-          {bills.environment === 'sandbox' && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
-              <span className="font-black">Sandbox test</span>
-              <span className="block">VTpass simulates {billName} delivery using its official test account. Your Base USDC payment is real; no live service is delivered.</span>
-            </div>
-          )}
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+          <div className="flex items-center justify-between gap-3 rounded-[22px] bg-white px-4 py-3 shadow-sm dark:bg-white/[0.05]">
             <span className="min-w-0">
               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-gray-400">Paying from Base</span>
               <span className="mt-1 block truncate text-xs font-semibold text-gray-700 dark:text-gray-200">{baseAddress ? `${baseAddress.slice(0, 6)}...${baseAddress.slice(-4)}` : 'Wallet not open'}</span>
@@ -191,7 +175,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             )}
           </div>
 
-          <div className="space-y-4 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
+          <div className="space-y-4 rounded-[22px] bg-white p-4 shadow-sm dark:bg-white/[0.05]">
+            {bills.environment === 'sandbox' && <p className="text-center text-[10px] font-medium text-gray-400 dark:text-gray-500">Test mode · USDC payment is real · no live service is delivered</p>}
             {isMobileBill ? (
               <div>
                 <PocketMobileNumberInput
@@ -264,14 +249,9 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {isVerifiedBill && (
               <>
                 {!bills.verification ? (
-                  <button type="button" onClick={() => void bills.verifyCustomer()} disabled={locked || bills.verifyBusy || !bills.serviceId || !bills.phone || (view === 'electricity' && !bills.variationCode)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-45 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:bg-blue-500/10 dark:hover:text-blue-300">
-                    {bills.verifyBusy ? <><Loader2 className="h-4 w-4 animate-spin" />Verifying</> : `Verify ${view === 'tv' ? 'smartcard' : 'meter'}`}
-                  </button>
+                  bills.verifyBusy ? <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-xs font-medium text-gray-500 dark:border-white/10 dark:bg-white/[0.05]"><Loader2 className="h-4 w-4 animate-spin" />Resolving {view === 'tv' ? 'smartcard' : 'meter'}</div> : <p className="text-center text-[10px] font-medium text-gray-400">The customer name resolves automatically when the details are complete.</p>
                 ) : (
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2.5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
-                    <span className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><Check className="h-3.5 w-3.5" />{bills.environment === 'sandbox' ? `${view === 'tv' ? 'Test smartcard' : 'Test meter'} verified` : bills.verification.customerName || `${view === 'tv' ? 'Smartcard' : 'Meter'} verified`}</span>
-                    {bills.environment !== 'sandbox' && bills.verification.customerAddress && <span className="mt-1 block text-[10px] leading-4 text-emerald-700/70 dark:text-emerald-200/70">{bills.verification.customerAddress}</span>}
-                  </div>
+                  <PocketResolvedNameRow label="Customer name" name={bills.environment === 'sandbox' ? `Test ${view === 'tv' ? 'smartcard' : 'meter'}` : bills.verification.customerName || `${view === 'tv' ? 'Smartcard' : 'Meter'} confirmed`} detail={bills.environment !== 'sandbox' ? bills.verification.customerAddress : undefined} />
                 )}
                 <label className="block">
                   <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Contact phone</span>

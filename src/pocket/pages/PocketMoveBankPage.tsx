@@ -6,7 +6,7 @@ import PayLinkShareSheet from '../../components/PayLinkShareSheet'
 import UnifiedReceipt from '../../components/UnifiedReceipt'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import { formatNgnAmount } from '../../lib/utils'
-import { LocalCurrencyProfileCard } from '../components/LocalCurrencyProfileCard'
+import PocketVerifiedNameGate, { PocketVerifiedNameBadge } from '../components/PocketVerifiedNameGate'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -214,21 +214,10 @@ export default function PocketMoveBankPage() {
             </div>
           )}
 
-          {authenticated && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className="space-y-3.5">
-            <LocalCurrencyProfileCard
-              profile={profile.profile}
-              draft={profile.draft}
-              email={email}
-              busy={profile.busy}
-              error={profile.error}
-              editing={profile.editing}
-              bankAccountName={bank.accountName}
-              onDraftChange={profile.setDraft}
-              onSave={() => void profile.save()}
-              onEdit={profile.edit}
-              onCancel={profile.cancel}
-              embedded
-            />
+          {authenticated && !bank.profileVerified && <PocketVerifiedNameGate />}
+
+          {authenticated && bank.profileVerified && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className="space-y-3.5">
+            <PocketVerifiedNameBadge name={profile.profile?.resolvedName ?? ''} />
 
             <PocketVerifiedBankFields
               country={bank.country}
@@ -244,7 +233,6 @@ export default function PocketMoveBankPage() {
               onCountryChange={bank.setCountry}
               onInstitutionChange={bank.setInstitution}
               onAccountChange={bank.setAccount}
-              onVerify={() => void bank.verify()}
               embedded
             />
 
@@ -333,7 +321,7 @@ export default function PocketMoveBankPage() {
                 {direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.txHash ? 'USDC is confirmed. Your bank payout is processing.' : 'Circle is reconciling the submitted transfer. Do not retry this payout.'}</p>}
                 {direct.status === 'sent' && direct.result?.amountUsdc && <p className="px-2 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPocketDisplayAmount(direct.result.amountUsdc)} USDC · {bankReceipt ? 'Bank payout completed' : 'Bank delivery processing'}</p>}
                 {direct.error && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
-                {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Save your profile, verify the bank account, and enter a Naira amount.</p>}
+                {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Enter an account in your verified name and a Naira amount.</p>}
               </div>
             </>}
 

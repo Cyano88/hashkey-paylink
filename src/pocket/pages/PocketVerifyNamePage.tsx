@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Loader2, Lock } from '../components/PocketIcons'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -19,6 +19,7 @@ export default function PocketVerifyNamePage() {
   const [resolvedName, setResolvedName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const lastResolutionKey = useRef('')
   const bankName = institutions.find(item => item.code === bankCode)?.name ?? ''
   const locked = profile.profile?.nameStatus === 'bank_resolved'
   const canResolve = Boolean(bankCode && /^\d{10}$/.test(accountNumber))
@@ -51,6 +52,15 @@ export default function PocketVerifyNamePage() {
     }
   }
 
+  useEffect(() => {
+    if (!canResolve || busy || resolvedName || locked) return
+    const resolutionKey = `${bankCode}:${accountNumber}`
+    if (lastResolutionKey.current === resolutionKey) return
+    lastResolutionKey.current = resolutionKey
+    const timer = window.setTimeout(() => { void resolve() }, 250)
+    return () => window.clearTimeout(timer)
+  }, [accountNumber, bankCode, busy, locked, resolvedName]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const confirm = async () => {
     if (!resolvedName) return
     setBusy(true)
@@ -78,9 +88,9 @@ export default function PocketVerifyNamePage() {
         <p className="mt-4 text-lg font-black">{profile.profile?.resolvedName}</p>
         <p className="mt-2 text-xs leading-5 text-gray-500">Your bank-verified name is locked. Contact support if a legal-name correction is required.</p>
       </section> : <section className="mt-7 space-y-5 rounded-[26px] bg-white p-5 shadow-sm dark:bg-white/[0.05]">
-        <div><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Most-used bank</p><PocketSelect value={bankCode} options={options} onChange={value => { setBankCode(String(value)); setResolvedName(''); setError('') }} ariaLabel="Select bank" /></div>
-        <label className="block"><span className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Account number</span><input value={accountNumber} onChange={event => { setAccountNumber(event.target.value.replace(/\D/g, '').slice(0, 10)); setResolvedName(''); setError('') }} inputMode="numeric" placeholder="10-digit account number" className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base font-bold outline-none focus:border-gray-500 dark:border-white/10 dark:bg-white/[0.04]" /></label>
-        {!resolvedName ? <button type="button" onClick={() => void resolve()} disabled={!canResolve || busy} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}Resolve account name</button> : <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-400/20 dark:bg-emerald-400/10"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Bank-resolved name</p><p className="mt-2 text-base font-black">{resolvedName}</p><p className="mt-3 text-xs leading-5 text-gray-600 dark:text-gray-300">Confirm only if this is your legal name. After confirmation, your verified name is permanently locked and changes require support verification.</p><button type="button" onClick={() => void confirm()} disabled={busy} className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}Confirm and lock</button></div>}
+        <div><p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Most-used bank</p><PocketSelect value={bankCode} options={options} onChange={value => { lastResolutionKey.current = ''; setBankCode(String(value)); setResolvedName(''); setError('') }} ariaLabel="Select bank" /></div>
+        <label className="block"><span className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">Account number</span><input value={accountNumber} onChange={event => { lastResolutionKey.current = ''; setAccountNumber(event.target.value.replace(/\D/g, '').slice(0, 10)); setResolvedName(''); setError('') }} inputMode="numeric" placeholder="10-digit account number" className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base font-bold outline-none focus:border-gray-500 dark:border-white/10 dark:bg-white/[0.04]" /></label>
+        {busy && canResolve && !resolvedName ? <div className="flex items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-xs font-medium text-gray-500 dark:border-white/10 dark:bg-white/[0.04]"><Loader2 className="h-4 w-4 animate-spin" />Resolving account name</div> : resolvedName ? <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-4 shadow-sm dark:border-emerald-400/20 dark:from-emerald-400/10 dark:to-white/[0.03]"><div className="flex items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white"><Check className="h-4 w-4 stroke-[2.5]" /></span><span><span className="block text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-600">Account name</span><span className="mt-0.5 block text-base font-semibold tracking-tight">{resolvedName}</span></span></div><p className="mt-3 text-xs leading-5 text-gray-600 dark:text-gray-300">Confirm only if this is your legal name. After confirmation, your verified name is permanently locked and changes require support verification.</p><button type="button" onClick={() => void confirm()} disabled={busy} className="mt-4 flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}Confirm and lock</button></div> : <p className="text-center text-xs leading-5 text-gray-400">The account name will resolve automatically after you enter all 10 digits.</p>}
         {error && <p className="rounded-2xl bg-red-50 p-3 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{error}</p>}
       </section>}
     </main>

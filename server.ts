@@ -85,6 +85,7 @@ import {
 } from './api/pocket/solana-cctp-relay.js'
 import pocketActivityHandler from './api/pocket/activity.js'
 import pocketPaylinksHandler from './api/pocket/paylinks.js'
+import pocketRequestsHandler from './api/pocket/requests.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
 import pocketSolanaRpcHandler from './api/pocket/solana-rpc.js'
 import pocketBalancesHandler from './api/pocket/balances.js'
@@ -198,9 +199,9 @@ app.use((_req, res, next) => {
     [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https:",
-      "font-src 'self' data:",
+      "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' https: wss:",
       "frame-src 'self' https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
       "child-src 'self' https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
@@ -328,6 +329,7 @@ app.all('/api/pocket/fx-quote',          readLimiter, pocketFxQuoteHandler)
 app.all('/api/pocket/balances/recipient', readLimiter, pocketRecipientBalanceHandler)
 app.all('/api/pocket/activity',          readLimiter, pocketActivityHandler)
 app.all('/api/pocket/paylinks',          strictLimiter, pocketPaylinksHandler)
+app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
 app.post('/api/pocket/solana-rpc',       readLimiter, pocketSolanaRpcHandler)
 app.all('/api/pocket/x402',              readLimiter, pocketX402Handler)

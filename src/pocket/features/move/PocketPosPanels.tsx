@@ -10,6 +10,7 @@ import type {
   PocketPosDraft,
 } from '../../controllers/usePocketMoveControllers'
 import PocketSelect from '../../components/PocketSelect'
+import PocketResolvedNameRow from '../../components/PocketResolvedNameRow'
 
 export type PocketPosNetworkOption = {
   key: string
@@ -202,7 +203,7 @@ export function PocketPosSetupPanel({
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Nigerian bank account</p>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Choose the bank and verify the account name before creating the QR.
+                  Account ownership resolves automatically after the tenth digit.
                 </p>
               </div>
             </div>
@@ -245,21 +246,8 @@ export function PocketPosSetupPanel({
                 />
               </label>
 
-              <button
-                type="button"
-                onClick={controller.actions.verifyBankAccount}
-                disabled={bankVerifyBusy || !bankCode || bankAccount.length !== 10}
-                className="flex min-h-[42px] items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:border-white/20"
-              >
-                {bankVerifyBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                {bankVerified ? 'Account verified' : 'Verify account'}
-              </button>
-
-              {bankAccountName && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300">
-                  {bankAccountName}
-                </div>
-              )}
+              {bankVerifyBusy && <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-xs font-medium text-gray-500 dark:border-white/10 dark:bg-white/[0.05]"><Loader2 className="h-4 w-4 animate-spin" />Resolving account name</div>}
+              {bankVerified && bankAccountName && <PocketResolvedNameRow name={bankAccountName} />}
             </div>
           </div>
         )}

@@ -225,6 +225,9 @@ export default function Layout() {
   const circlePocketMoveView = pocketRoute?.section === 'move' ? pocketRoute.view : ''
   const circlePocketBillView = pocketRoute?.section === 'bills' ? pocketRoute.view : 'airtime'
   const circlePocketActivityView = pocketRoute?.section === 'activity' ? pocketRoute.view : 'all'
+  const isPocketImmersivePage = pocketRoute?.section === 'profile'
+    || pocketRoute?.section === 'notifications'
+    || (pocketRoute?.section === 'home' && pocketRoute.view !== 'overview')
 
   const navigatePocketHeader = (state: PocketRouteState) => {
     navigate(`${POCKET_BASE_PATH}${pocketPathFor(state)}`)
@@ -416,17 +419,17 @@ export default function Layout() {
   }, [navigate])
 
   return (
-    <div className={`${isPocketAppPage ? 'h-[100dvh] min-h-0 overflow-hidden' : 'min-h-screen'} bg-[#F5F5F7] dark:bg-[#111113] font-inter flex flex-col`}>
+    <div className={`${isPocketAppPage ? 'h-[100dvh] min-h-0 overflow-hidden' : 'min-h-screen'} bg-[#F5F5F7] dark:bg-[#0A0A0A] font-sans flex flex-col`}>
       {/* ── Sticky frosted-glass header ─────────────────────────────────── */}
       <header
         data-hashpaylink-top-nav
         style={agentHashComposerFocused && agentHashViewportTop > 0
           ? { transform: `translate3d(0, ${agentHashViewportTop}px, 0)` }
           : undefined}
-        className={isPocketLandingPage
+        className={isPocketLandingPage || isPocketImmersivePage
           ? 'hidden'
           : isPocketAppPage
-          ? 'pointer-events-none fixed inset-x-0 top-0 z-50 border-b border-gray-200/80 bg-white/92 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-[#111114]/92 dark:shadow-[0_10px_30px_rgba(0,0,0,0.24)]'
+          ? 'pointer-events-none fixed inset-x-0 top-0 z-50 border-b border-gray-200/80 bg-[#F5F5F7]/92 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-[#0A0A0A]/92 dark:shadow-[0_10px_30px_rgba(0,0,0,0.24)]'
           : 'sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl transition-transform duration-100 dark:border-white/5 dark:bg-[#111113]/90'}
       >
         <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'flex-col gap-1.5 py-2' : `justify-between ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}`}>

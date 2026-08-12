@@ -413,7 +413,6 @@ function CircleReceiveSelector({
           onCountryChange={bankActions.setBankCountry}
           onInstitutionChange={bankActions.setBankInstitution}
           onAccountChange={bankActions.setBankAccount}
-          onVerify={bankActions.verifyBankAccount}
         />
       ) : undefined}
       onSelectPaste={recipient.selectPaste}
@@ -522,6 +521,7 @@ export default function CreateLink({
   const [posBankAccountName, setPosBankAccountName] = useState('')
   const [posBankVerified, setPosBankVerified] = useState(false)
   const [posBankVerifyBusy, setPosBankVerifyBusy] = useState(false)
+  const posBankVerificationAttemptRef = useRef('')
   const [posMerchant,    setPosMerchant]    = useState<PosMerchant | null>(null)
   const [posBusy,        setPosBusy]        = useState(false)
   const [posError,       setPosError]       = useState('')
@@ -558,6 +558,7 @@ export default function CreateLink({
 
   useEffect(() => {
     if (receiveMode !== 'bank') return
+    posBankVerificationAttemptRef.current = ''
     setPosBankVerified(false)
     setPosBankAccountName('')
     setPosError('')
@@ -1346,6 +1347,15 @@ export default function CreateLink({
       setPosBankVerifyBusy(false)
     }
   }
+
+  useEffect(() => {
+    if ((!posIsPaycrestFlow && receiveMode !== 'bank') || !posBankCode || posBankAccount.length !== 10 || posBankVerifyBusy || posBankVerified) return
+    const verificationKey = `${posBankCode}:${posBankAccount}`
+    if (posBankVerificationAttemptRef.current === verificationKey) return
+    posBankVerificationAttemptRef.current = verificationKey
+    const timer = window.setTimeout(() => { void verifyPosBankAccount() }, 250)
+    return () => window.clearTimeout(timer)
+  }, [posBankAccount, posBankCode, posBankVerified, posBankVerifyBusy, posIsPaycrestFlow, receiveMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function createPosMerchant() {
     if (!privyAuthenticated) {

@@ -77,7 +77,7 @@ export default function PocketRouteShell({
 
   return (
     <div className="h-full min-h-0 w-full max-w-none min-w-0">
-      <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-white dark:bg-[#111114]">
+      <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-[#F5F5F7] dark:bg-[#0A0A0A]">
           <div
             data-pocket-scroller
             ref={scrollerRef}

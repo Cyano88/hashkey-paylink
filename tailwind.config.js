@@ -9,6 +9,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
+        sans: ['Plus Jakarta Sans', '-apple-system', 'BlinkMacSystemFont', 'Inter', 'sans-serif'],
         inter: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {

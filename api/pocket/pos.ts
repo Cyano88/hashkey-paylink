@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { createNgPosMerchant } from '../ng-pos.js'
+import { assertBankAccountMatchesPocketName } from './verified-bank-name.js'
 import {
   isPocketIdempotencyKey,
   isPocketPosCreateRequest,
@@ -15,6 +16,7 @@ type LegacyPosResult = {
 
 type PocketPosHandlerDependencies = {
   createMerchant(req: Request, body: Record<string, unknown>): Promise<LegacyPosResult>
+  authorizeBankAccount?(req: Request, body: Record<string, unknown>): Promise<unknown>
   requestId?: () => string
 }
 
@@ -44,6 +46,7 @@ export function createPocketPosHandler(dependencies: PocketPosHandlerDependencie
     }
 
     try {
+      await dependencies.authorizeBankAccount?.(req, req.body)
       const result = await dependencies.createMerchant(req, req.body)
       if (!isPocketPosMerchant(result.merchant)) {
         throw Object.assign(new Error('POS provider returned an invalid merchant.'), { status: 502 })
@@ -73,4 +76,5 @@ export function createPocketPosHandler(dependencies: PocketPosHandlerDependencie
 
 export default createPocketPosHandler({
   createMerchant: createNgPosMerchant,
+  authorizeBankAccount: assertBankAccountMatchesPocketName,
 })

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { createNgPosBankReceive } from '../ng-pos.js'
+import { assertBankAccountMatchesPocketName } from './verified-bank-name.js'
 import {
   isPocketBankReceiveCreateRequest,
   isPocketBankReceiveLink,
@@ -15,6 +16,7 @@ type LegacyBankReceiveResult = {
 
 type PocketBankReceiveHandlerDependencies = {
   createBankReceive(req: Request, body: Record<string, unknown>): Promise<LegacyBankReceiveResult>
+  authorizeBankAccount?(req: Request, body: Record<string, unknown>): Promise<unknown>
   requestId?: () => string
 }
 
@@ -44,6 +46,7 @@ export function createPocketBankReceiveHandler(dependencies: PocketBankReceiveHa
     }
 
     try {
+      await dependencies.authorizeBankAccount?.(req, req.body)
       const result = await dependencies.createBankReceive(req, req.body)
       if (!isPocketBankReceiveLink(result.link)) {
         throw Object.assign(new Error('Bank receive provider returned an invalid link.'), { status: 502 })
@@ -74,4 +77,5 @@ export function createPocketBankReceiveHandler(dependencies: PocketBankReceiveHa
 
 export default createPocketBankReceiveHandler({
   createBankReceive: createNgPosBankReceive,
+  authorizeBankAccount: assertBankAccountMatchesPocketName,
 })

@@ -41,13 +41,17 @@ export default function usePocketBankReceiveController({
   const [copied, setCopied] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const idempotencyKey = useRef('')
+  const lastVerificationKey = useRef('')
   const qrRef = useRef<HTMLDivElement>(null)
   const qrHiResRef = useRef<HTMLDivElement>(null)
 
   const amountDirty = amount.length > 0
   const amountValid = amountDirty && /^(?:\d+|\d*\.\d+)$/.test(amount) && Number(amount) > 0
   const profileReady = Boolean(profile?.firstName && profile?.lastName && (profile.email || email))
-  const canSubmit = (flexibleAmount || amountValid) && verified && Boolean(bankCode && accountName) && authenticated && profileReady
+  const normalizeName = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '')
+  const profileVerified = profile?.nameStatus === 'bank_resolved' && Boolean(profile.resolvedName)
+  const identityMatches = profileVerified && verified && normalizeName(accountName) === normalizeName(profile?.resolvedName ?? '')
+  const canSubmit = (flexibleAmount || amountValid) && identityMatches && Boolean(bankCode && accountName) && authenticated && profileReady
 
   const invalidateResult = useCallback(() => {
     setGeneratedLink('')
@@ -79,6 +83,7 @@ export default function usePocketBankReceiveController({
   }, [invalidateResult])
 
   const setInstitution = useCallback((code: string, name: string, resetAccount: boolean) => {
+    lastVerificationKey.current = ''
     setBankCode(code)
     setBankName(name)
     if (resetAccount) setAccountNumber('')
@@ -89,6 +94,7 @@ export default function usePocketBankReceiveController({
   }, [invalidateResult])
 
   const setAccount = useCallback((value: string) => {
+    lastVerificationKey.current = ''
     setAccountNumber(value.replace(/\D/g, '').slice(0, 10))
     setVerified(false)
     setAccountName('')
@@ -113,14 +119,28 @@ export default function usePocketBankReceiveController({
         },
       })
       if (data.bank_code) setBankCode(String(data.bank_code).trim())
-      setAccountName(String(data.account_name ?? '').trim())
+      const resolved = String(data.account_name ?? '').trim()
+      setAccountName(resolved)
+      if (profileVerified && normalizeName(resolved) !== normalizeName(profile?.resolvedName ?? '')) {
+        setError('This account belongs to a different verified name. Use an account in your verified name.')
+        return
+      }
       setVerified(true)
     } catch (reason) {
       setError(readablePocketBankPayoutError(reason, 'Account verification failed'))
     } finally {
       setVerifying(false)
     }
-  }, [accountNumber, bankCode, bankName, getAccessToken])
+  }, [accountNumber, bankCode, bankName, getAccessToken, profile?.resolvedName, profileVerified])
+
+  useEffect(() => {
+    if (!authenticated || !bankCode || accountNumber.length !== 10 || verifying || verified) return
+    const verificationKey = `${bankCode}:${accountNumber}`
+    if (lastVerificationKey.current === verificationKey) return
+    lastVerificationKey.current = verificationKey
+    const timer = window.setTimeout(() => { void verify() }, 250)
+    return () => window.clearTimeout(timer)
+  }, [accountNumber, authenticated, bankCode, verified, verify, verifying])
 
   const setAmount = useCallback((value: string) => {
     setAmountState(normalizePocketAmountInput(value))
@@ -248,6 +268,8 @@ export default function usePocketBankReceiveController({
     accountNumber,
     accountName,
     verified,
+    profileVerified,
+    identityMatches,
     verifying,
     amount,
     amountDirty,

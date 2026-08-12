@@ -55,7 +55,7 @@ export default function PocketTopSwitch({
         : activityItems
 
   return (
-    <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full border border-gray-200 bg-gray-100/95 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_12px_36px_rgba(0,0,0,0.35)] ${mode === 'move' ? 'grid-cols-3' : mode === 'activity' ? 'grid-cols-5' : compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
+    <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full bg-white/95 p-1 shadow-sm backdrop-blur-2xl dark:bg-white/[0.05] ${mode === 'move' ? 'grid-cols-3' : mode === 'activity' ? 'grid-cols-5' : compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
       {items.map(({ key, label, icon: Icon }) => {
         const active = mode === 'move'
           ? moveView === key
@@ -79,7 +79,7 @@ export default function PocketTopSwitch({
               'flex min-h-9 min-w-0 items-center justify-center rounded-full font-black transition-all',
               compact ? 'gap-1 px-1 text-[9px]' : 'gap-2 px-3 text-xs',
               active
-                ? 'bg-[#ffffff] text-gray-950 shadow-sm dark:text-gray-950'
+                ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
                 : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white',
             ].join(' ')}
           >

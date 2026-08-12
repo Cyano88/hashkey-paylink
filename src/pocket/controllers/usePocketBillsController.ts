@@ -117,6 +117,7 @@ export default function usePocketBillsController({
   const [errorCode, setErrorCode] = useState('')
   const [notice, setNotice] = useState('')
   const visibleCategory = useRef(category)
+  const lastVerificationKey = useRef('')
   const mounted = useRef(true)
 
   useEffect(() => {
@@ -175,6 +176,7 @@ export default function usePocketBillsController({
   }, [activeBillKey, status])
 
   const setServiceId = useCallback((value: string) => {
+    lastVerificationKey.current = ''
     setServiceIdState(value)
     if (category === 'data' && environment === 'sandbox') setPhoneState(sandboxDataRecipient(value))
     if ((category === 'tv' || category === 'electricity') && environment === 'sandbox') setPhoneState(sandboxBillAccount(category, variationCode, value))
@@ -185,6 +187,7 @@ export default function usePocketBillsController({
     resetResult()
   }, [category, environment, resetResult])
   const setPhone = useCallback((value: string) => {
+    lastVerificationKey.current = ''
     const nextPhone = value.replace(/[^\d+]/g, '').slice(0, 15)
     setPhoneState(nextPhone)
     setVerification(null)
@@ -197,6 +200,7 @@ export default function usePocketBillsController({
   }, [resetResult])
 
   const setVariationCode = useCallback((value: string) => {
+    lastVerificationKey.current = ''
     const plan = dataVariations.find(item => item.variationCode === value)
     const nextCode = category === 'electricity' && (value === 'prepaid' || value === 'postpaid') ? value : plan?.variationCode ?? ''
     setVariationCodeState(nextCode)
@@ -388,6 +392,16 @@ export default function usePocketBillsController({
       setVerifyBusy(false)
     }
   }, [category, phone, serviceId, token, variationCode])
+
+  useEffect(() => {
+    const needsResolution = category === 'electricity' || (category === 'tv' && tvRequiresCustomerVerification(serviceId))
+    if (!authenticated || !needsResolution || !serviceId || !/^\d{8,15}$/.test(phone) || (category === 'electricity' && !variationCode) || verifyBusy || verification) return
+    const verificationKey = `${category}:${serviceId}:${variationCode}:${phone}`
+    if (lastVerificationKey.current === verificationKey) return
+    lastVerificationKey.current = verificationKey
+    const timer = window.setTimeout(() => { void verifyCustomer() }, 250)
+    return () => window.clearTimeout(timer)
+  }, [authenticated, category, phone, serviceId, variationCode, verification, verifyBusy, verifyCustomer])
 
   const review = useCallback(async () => {
     if (availability !== 'enabled' || !authenticated || status === 'quoting') return

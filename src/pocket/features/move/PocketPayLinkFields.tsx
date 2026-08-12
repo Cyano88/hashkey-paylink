@@ -176,7 +176,7 @@ export function PocketPayLinkSubmitPanel({ lane, shellActive, idle, canSubmit, s
       {lane === 'bank' && idle && (
         <div className="space-y-1 px-2 text-center text-xs leading-snug">
           {error && <p className="font-medium text-red-500">{error}</p>}
-          {!canSubmit && !error && <p className="text-gray-400 dark:text-gray-500">Sign in, save your profile, verify bank account, and enter a Naira amount.</p>}
+          {!canSubmit && !error && <p className="text-gray-400 dark:text-gray-500">Enter an account in your Profile name and a Naira amount.</p>}
         </div>
       )}
       {lane === 'bank-send' && idle && <div className="space-y-1 px-2 text-center text-xs leading-snug"><p className="text-gray-400 dark:text-gray-500">Payer checkout will collect refund bank details before creating the bank transfer order.</p></div>}
