@@ -76,9 +76,7 @@ async function readPocketSourceTree(directoryUrl) {
 }
 
 const routeCases = [
-  ['/', { section: 'home', view: 'smart-wallet' }],
-  ['/home/smart-wallet', { section: 'home', view: 'smart-wallet' }],
-  ['/home/x402/', { section: 'home', view: 'x402' }],
+  ['/', { section: 'move', view: 'usdc' }],
   ['/move/usdc?amount=5', { section: 'move', view: 'usdc' }],
   ['/move/bank', { section: 'move', view: 'bank' }],
   ['/move/pos', { section: 'move', view: 'pos' }],
@@ -89,7 +87,7 @@ const routeCases = [
   ['/activity', { section: 'activity', view: 'all' }],
   ['/activity/bank', { section: 'activity', view: 'bank' }],
   ['/activity/pos', { section: 'activity', view: 'pos' }],
-  ['/activity/bills', { section: 'activity', view: 'bills' }],
+  ['/activity/purchases', { section: 'activity', view: 'purchases' }],
   ['/assistant', { section: 'assistant', view: 'circle-pocket' }],
 ]
 
@@ -147,7 +145,7 @@ assert.deepEqual(await readFxQuote('1.309814'), firstFxQuote)
 assert.equal(paycrestRateCalls, 1)
 fxNow += 2
 paycrestRateUnavailable = true
-await assert.rejects(readFxQuote('1.309814'), /Rate unavailable/)
+assert.equal((await readFxQuote('1.309814')).stale, true)
 assert.equal(paycrestRateCalls, 2)
 
 assert.equal(resolvePocketRoute('/unknown'), null)
@@ -253,17 +251,14 @@ assert.ok(Object.values(POCKET_API).every(path => path.startsWith('/api/pocket/'
 assert.equal(new Set(Object.values(POCKET_API)).size, Object.values(POCKET_API).length)
 assert.equal(POCKET_API.profile, '/api/pocket/profile')
 assert.equal(isPocketProfileUpsertRequest({
-  firstName: 'Ada',
-  lastName: 'Lovelace',
-  email: 'ada@example.com',
+  pocketId: '12345678',
 }), true)
 assert.equal(isPocketProfileUpsertRequest({
-  firstName: 'Ada',
-  lastName: 'Lovelace',
-  email: 'ada@example.com',
+  pocketId: '23456789',
   expectedUpdatedAt: '2026-07-15T00:00:00.000Z',
 }), true)
-assert.equal(isPocketProfileUpsertRequest({ firstName: 'Ada', lastName: '', email: 'invalid' }), false)
+assert.equal(isPocketProfileUpsertRequest({ pocketId: '12345' }), false)
+assert.equal(isPocketProfileUpsertRequest({ pocketId: '1234567890123' }), false)
 const walletLinkRequest = {
   action: 'link',
   network: 'base',
@@ -497,13 +492,23 @@ const pocketBaseX402FundUrl = new URL(buildPocketX402FundUrl({
 }), 'https://hashpaylink.com')
 assert.equal(pocketBaseX402FundUrl.searchParams.get('n'), 'base')
 
+const pocketProfile = {
+  firstName: 'Ada',
+  lastName: 'Lovelace',
+  resolvedName: 'ADA LOVELACE',
+  nameStatus: 'bank_resolved',
+  email: 'ada@example.com',
+  pocketNumber: '12345678',
+  pocketId: '23456789',
+  updatedAt: '2026-07-15T00:00:00.000Z',
+}
 assert.deepEqual(parsePocketLocalCurrencyProfileRead({
   ok: true,
   email: 'ada@example.com',
-  profile: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', updatedAt: '2026-07-15T00:00:00.000Z' },
+  profile: pocketProfile,
 }), {
   email: 'ada@example.com',
-  profile: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com', updatedAt: '2026-07-15T00:00:00.000Z' },
+  profile: pocketProfile,
 })
 assert.deepEqual(parsePocketLocalCurrencyProfileRead({ ok: true, email: 'ada@example.com', profile: null }), {
   email: 'ada@example.com',
@@ -530,7 +535,7 @@ const profileSaveEnvelope = {
   idempotencyKey: 'pocket:profile-save:test-request-00000001',
   status: 'completed',
   data: {
-    profile: { firstName: 'Ada', lastName: 'Byron', email: 'ada@example.com', updatedAt: '2026-07-15T00:00:01.000Z' },
+    profile: { ...pocketProfile, pocketId: '34567890', updatedAt: '2026-07-15T00:00:01.000Z' },
     unchanged: false,
   },
 }
@@ -538,7 +543,7 @@ assert.deepEqual(parsePocketLocalCurrencyProfileSave(profileSaveEnvelope), profi
 let profileSaveRequest
 const profileSaveResult = await savePocketLocalCurrencyProfile({
   accessToken: 'test-access-token',
-  profile: { firstName: 'Ada', lastName: 'Byron', email: 'ada@example.com' },
+  pocketId: '34567890',
   expectedUpdatedAt: '2026-07-15T00:00:00.000Z',
   idempotencyKey: profileSaveEnvelope.idempotencyKey,
   fetcher: async (url, init) => {
@@ -550,9 +555,7 @@ assert.deepEqual(profileSaveResult, profileSaveEnvelope.data)
 assert.equal(profileSaveRequest.url, '/api/pocket/profile')
 assert.equal(profileSaveRequest.init.headers['idempotency-key'], profileSaveEnvelope.idempotencyKey)
 assert.deepEqual(JSON.parse(profileSaveRequest.init.body), {
-  firstName: 'Ada',
-  lastName: 'Byron',
-  email: 'ada@example.com',
+  pocketId: '34567890',
   expectedUpdatedAt: '2026-07-15T00:00:00.000Z',
 })
 const walletLinkEnvelope = {
@@ -659,9 +662,9 @@ const activityRow = {
   ts: 1_720_000_000_000,
   source: 'ngpos',
 }
-assert.deepEqual(parsePocketActivityRead({ ok: true, payments: [activityRow] }), { payments: [activityRow] })
-assert.equal(isPocketActivityReadData({ payments: [activityRow] }), true)
-assert.equal(isPocketActivityReadData({ payments: [{ ...activityRow, ts: -1 }] }), false)
+assert.deepEqual(parsePocketActivityRead({ ok: true, payments: [activityRow], merchants: [], collections: [] }), { payments: [activityRow], merchants: [], collections: [] })
+assert.equal(isPocketActivityReadData({ payments: [activityRow], merchants: [], collections: [] }), true)
+assert.equal(isPocketActivityReadData({ payments: [{ ...activityRow, ts: -1 }], merchants: [], collections: [] }), false)
 assert.throws(() => parsePocketActivityRead({ ok: true }), /activity response was invalid/i)
 assert.throws(() => parsePocketActivityRead({ ok: true, payments: [{ eventId: 'missing-fields' }] }), /activity response was invalid/i)
 assert.throws(() => parsePocketActivityRead({ ok: false, error: 'Activity unavailable.' }), /Activity unavailable/)
@@ -670,10 +673,10 @@ const activityReadResult = await readPocketActivity({
   accessToken: 'test-activity-token',
   fetcher: async (url, init) => {
     activityReadRequest = { url, init }
-    return { ok: true, json: async () => ({ ok: true, payments: [activityRow] }) }
+    return { ok: true, json: async () => ({ ok: true, payments: [activityRow], merchants: [], collections: [] }) }
   },
 })
-assert.deepEqual(activityReadResult, { payments: [activityRow] })
+assert.deepEqual(activityReadResult, { payments: [activityRow], merchants: [], collections: [] })
 assert.equal(activityReadRequest.url, '/api/pocket/activity')
 assert.equal(activityReadRequest.init.method, 'GET')
 assert.equal(activityReadRequest.init.headers.authorization, 'Bearer test-activity-token')
@@ -850,7 +853,8 @@ const pocketFxEndpointSource = await readFile(new URL('../api/pocket/fx-quote.ts
 assert.match(pocketFxEndpointSource, /PAYCREST_QUOTE_CACHE_MS = 30_000/)
 assert.match(pocketFxEndpointSource, /\/v2\/rates\/base\/USDC\/\$\{encodeURIComponent\(amount\)\}\/NGN\?side=sell/)
 assert.match(pocketFxEndpointSource, /Cache-Control', 'no-store'/)
-assert.doesNotMatch(pocketFxEndpointSource, /fixer|configured|stale/i)
+assert.match(pocketFxEndpointSource, /PAYCREST_LAST_KNOWN_MAX_AGE_MS/)
+assert.match(pocketFxEndpointSource, /readDurableJson/)
 const serverSource = await readFile(new URL('../server.ts', import.meta.url), 'utf8')
 assert.match(serverSource, /app\.all\('\/api\/pocket\/fx-quote',\s+readLimiter, pocketFxQuoteHandler\)/)
 const pocketActivityHookSource = await readFile(new URL('../src/pocket/hooks/usePocketActivity.ts', import.meta.url), 'utf8')
@@ -863,7 +867,8 @@ const pocketProfileHookSource = await readFile(new URL('../src/pocket/hooks/useP
 assert.match(pocketProfileHookSource, /readPocketLocalCurrencyProfile\(\{ accessToken: token \}\)/)
 assert.match(pocketProfileHookSource, /savePocketLocalCurrencyProfile\(\{/)
 assert.match(pocketProfileHookSource, /expectedUpdatedAt: profile\?\.updatedAt/)
-assert.match(pocketProfileHookSource, /profile: \{ \.\.\.draft, email: email \|\| draft\.email \}/)
+assert.match(pocketProfileHookSource, /pocketId: draft\.pocketId/)
+assert.doesNotMatch(pocketProfileHookSource, /firstName: draft\.firstName|lastName: draft\.lastName|email: email \|\| draft\.email/)
 assert.match(pocketProfileHookSource, /if \(!authenticated\) \{/)
 assert.doesNotMatch(pocketProfileHookSource, /verifyPocket|createPocket|linkPocket|signCircle|executePocket|preparePocket|submitPocket|['"]\/api\//)
 const pocketRecipientHookSource = await readFile(new URL('../src/pocket/hooks/usePocketRecipient.ts', import.meta.url), 'utf8')
@@ -907,7 +912,7 @@ const solanaContextSource = await readFile(new URL('../src/lib/SolanaContext.tsx
 assert.match(layoutSource, /resolvePocketRoute\(isPocketHost \? pathname : pathname\.slice\('\/pocket'\.length\) \|\| '\/'\)/)
 assert.doesNotMatch(layoutSource, /embeddedCirclePocket|circlePocketSurface|hashpaylink-circle-pocket-(?:surface|wallet-view|wallet-select|move-select|bills-select|activity-select)/)
 assert.doesNotMatch(layoutSource, /AgentHashMode|agentHashSurfaceMode|agentHashMode|showAgentHashWidget|agent-hash-mode|TelegramHelperPanel/)
-assert.match(layoutSource, /onWalletChange=\{\(view\) => navigatePocketHeader\(\{ section: 'home'/)
+assert.doesNotMatch(layoutSource, /onWalletChange|section: 'home'/)
 assert.match(layoutSource, /onMoveChange=\{\(view\) => navigatePocketHeader\(\{ section: 'move'/)
 assert.match(layoutSource, /onBillChange=\{\(view\) => navigatePocketHeader\(\{ section: 'bills'/)
 assert.match(layoutSource, /onActivityChange=\{\(view\) => navigatePocketHeader\(\{ section: 'activity'/)
@@ -976,12 +981,10 @@ assert.match(circlePocketAppSource, /<PocketActivityPage view=\{route\.view\} \/
 assert.match(circlePocketAppSource, /import PocketAssistantPage from '.\/pages\/PocketAssistantPage'/)
 assert.match(circlePocketAppSource, /route\.section === 'assistant'/)
 assert.match(circlePocketAppSource, /<PocketAssistantPage \/>/)
-assert.match(circlePocketAppSource, /import PocketHomePage from '.\/pages\/PocketHomePage'/)
+assert.doesNotMatch(circlePocketAppSource, /PocketHomePage|PocketX402Page/)
 assert.match(circlePocketAppSource, /import PocketLandingPage from '.\/pages\/PocketLandingPage'/)
 assert.match(circlePocketAppSource, /usePocketSessionSplash\(landing\)/)
 assert.match(circlePocketAppSource, /if \(landing\) return <PocketLandingPage splashState=\{splashState\} \/>/)
-assert.match(circlePocketAppSource, /route\.section === 'home' && route\.view === 'smart-wallet'/)
-assert.match(circlePocketAppSource, /<PocketHomePage \/>/)
 assert.match(circlePocketAppSource, /import PocketMoveUsdcPage from '.\/pages\/PocketMoveUsdcPage'/)
 assert.match(circlePocketAppSource, /route\.section === 'move' && route\.view === 'usdc'/)
 assert.match(circlePocketAppSource, /<PocketMoveUsdcPage \/>/)
@@ -1144,15 +1147,14 @@ assert.doesNotMatch(pocketHomeOverviewSource, /Wallet not opened|Sign in to open
 const pocketLandingPageSource = await readFile(new URL('../src/pocket/pages/PocketLandingPage.tsx', import.meta.url), 'utf8')
 assert.match(pocketLandingPageSource, /usePocketProfile\(\{ authenticated, email, getAccessToken \}\)/)
 assert.match(pocketLandingPageSource, /profile\.loaded/)
-assert.match(pocketLandingPageSource, /await profile\.save\(\)/)
-assert.match(pocketLandingPageSource, /What is your first name\?/)
-assert.match(pocketLandingPageSource, /And your last name\?/)
-assert.match(pocketLandingPageSource, /Open my Pocket/)
+assert.match(pocketLandingPageSource, /Checking your Pocket/)
+assert.doesNotMatch(pocketLandingPageSource, /profile\.save\(|What is your first name\?|And your last name\?|firstName|lastName/)
 const pocketAccountMenuSource = await readFile(new URL('../src/pocket/components/PocketAccountMenu.tsx', import.meta.url), 'utf8')
 assert.match(pocketAccountMenuSource, /initialsFor\(fullName, email\)/)
 assert.match(pocketAccountMenuSource, /avatarGradient\(`/)
 assert.match(pocketAccountMenuSource, /View profile/)
-assert.match(pocketAccountMenuSource, /Edit profile/)
+assert.match(pocketAccountMenuSource, /Edit Pocket ID/)
+assert.match(pocketAccountMenuSource, /Bank-resolved name/)
 assert.match(pocketAccountMenuSource, /Sign out/)
 const pocketMoveUsdcPageSource = await readFile(new URL('../src/pocket/pages/PocketMoveUsdcPage.tsx', import.meta.url), 'utf8')
 assert.match(pocketMoveUsdcPageSource, /usePocketUsdcDraftController\(selectedNet\)/)
@@ -1228,7 +1230,7 @@ assert.match(pocketPosPageControllerSource, /Sign in and save your payout profil
 assert.match(pocketPosPageControllerSource, /Sign in to create POS and save local currency receipts\./)
 assert.match(pocketPosPageControllerSource, /window\.setTimeout\(\(\) => setCopied\(false\), 1800\)/)
 assert.doesNotMatch(pocketPosPageControllerSource, /['"]\/api\/|KEEP_CRYPTO|createPocketBankReceive|createPocketBankSend|signCircle|executePocket|preparePocket|submitPocket/i)
-assert.match(circlePocketAppSource, /route\.section === 'home' && route\.view === 'x402'\) return <PocketX402Page \/>/)
+assert.doesNotMatch(circlePocketAppSource, /route\.section === 'home'|PocketX402Page/)
 const pocketX402PageSource = await readFile(new URL('../src/pocket/pages/PocketX402Page.tsx', import.meta.url), 'utf8')
 assert.match(pocketX402PageSource, /<PocketRouteShell active="home"/)
 assert.match(pocketX402PageSource, /Available for app payments/)
@@ -1278,7 +1280,7 @@ assert.match(pocketMarketplacePanelSource, /<Check className="h-5 w-5 stroke-\[2
 assert.match(pocketMarketplacePanelSource, /text-\[#0071E3\]/)
 assert.match(pocketMarketplacePanelSource, /aria-pressed=\{selected\?\.resource === item\.resource\}/)
 assert.match(pocketMarketplacePanelSource, /purchase\.status === 'completed' && purchase\.receiptActivityId/)
-assert.match(pocketMarketplacePanelSource, /to=\{`\$\{POCKET_BASE_PATH\}\/activity\/app-pay`\}/)
+assert.match(pocketMarketplacePanelSource, /to=\{`\$\{POCKET_BASE_PATH\}\/activity`\}/)
 assert.doesNotMatch(pocketMarketplacePanelSource, /!snapshot && !loading/)
 assert.match(pocketRouteShellSource, /querySelector<HTMLElement>\('\[data-hashpaylink-top-nav\]'\)/)
 assert.match(pocketRouteShellSource, /new ResizeObserver\(updateHeaderHeight\)/)
@@ -1323,7 +1325,8 @@ assert.match(pocketRecipientSource, /finally \{\s*setReceiveMode\('idle'\)/)
 const agentWalletSource = await readFile(new URL('../api/agent-wallet.ts', import.meta.url), 'utf8')
 assert.match(agentWalletSource, /circle-marketplace-registry', 45_000, 8 \* 1024 \* 1024/)
 const pocketTopSwitchSource = await readFile(new URL('../src/pocket/components/PocketTopSwitch.tsx', import.meta.url), 'utf8')
-assert.match(pocketTopSwitchSource, /\{ key: 'x402', label: 'App Pay'/)
+assert.doesNotMatch(pocketTopSwitchSource, /Smart Wallet|App Pay|x402/)
+assert.match(pocketTopSwitchSource, /from '.\/PocketIcons'/)
 assert.match(pocketTopSwitchSource, /bg-\[#ffffff\]/)
 const pocketBankErrorsSource = await readFile(new URL('../src/pocket/controllers/pocketBankErrors.ts', import.meta.url), 'utf8')
 assert.match(pocketBankErrorsSource, /Bank payouts are temporarily unavailable\. Please try again later\./)
@@ -1438,7 +1441,7 @@ assert.match(pocketActivityPanelSource, /<UnifiedReceipt receipt=\{receipt\}/)
 assert.match(pocketActivityPanelSource, /pocketActivityStatus\(row\)/)
 assert.match(pocketActivityPanelSource, /expandedActivityId/)
 assert.match(pocketActivityPanelSource, /activityKind\(row\) !== 'bank'[\s\S]*?pocketActivityStatus\(row\) !== 'status unavailable'/)
-assert.match(pocketActivityPanelSource, /const collapsible = kind === 'bills' \|\| kind === 'bank'/)
+assert.match(pocketActivityPanelSource, /const collapsible = kind === 'purchases' \|\| kind === 'bank'/)
 assert.match(pocketActivityPanelSource, /aria-expanded=/)
 assert.doesNotMatch(pocketActivityPanelSource, /expandedReceipt|Receipt details/)
 assert.match(dashboardSource, /paymentReceiptView\(/)
@@ -1508,7 +1511,7 @@ assert.match(pocketX402ControllerSource, /refresh\(\{ silent: true \}\)/)
 const telegramPaymentLinksSource = await readFile(new URL('../src/pages/TelegramPaymentLinks.tsx', import.meta.url), 'utf8')
 assert.match(telegramPaymentLinksSource, /readPocketWallet\(\{/)
 assert.doesNotMatch(telegramPaymentLinksSource, /resolvePrivyCircleLink/)
-assert.match(telegramPaymentLinksSource, /actionLink: \{ label: 'Open Circle Pocket', url: 'https:\/\/pocket\.hashpaylink\.com\/home\/smart-wallet' \}/)
+assert.match(telegramPaymentLinksSource, /actionLink: \{ label: 'Open Circle Pocket', url: 'https:\/\/pocket\.hashpaylink\.com\/move\/usdc' \}/)
 assert.doesNotMatch(telegramPaymentLinksSource, /actionLink: \{ label: 'Open Circle Pocket', url: '\/\?product=circle-pocket' \}/)
 const agentWorkspaceSource = await readFile(new URL('../src/pages/AgentWorkspace.tsx', import.meta.url), 'utf8')
 assert.match(agentWorkspaceSource, /savePrivyCircleLink\(\{/)

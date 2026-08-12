@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Cpu, ExternalLink, Landmark, Loader2, Mail, Store } from 'lucide-react'
+import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Landmark, Loader2, Mail, Store, Wallet } from '../../components/PocketIcons'
+import { ArrowTopRightOnSquareIcon as ExternalLink } from '@heroicons/react/24/outline'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
@@ -9,9 +10,9 @@ import { pocketActivityReceipt, pocketActivityStatus } from '../../lib/pocketRec
 
 export type { PocketActivityRow } from '../../models/pocketActivity'
 
-export type PocketActivityView = 'all' | 'bank' | 'pos' | 'bills' | 'app-pay'
+export type PocketActivityView = 'all' | 'purchases' | 'bank' | 'pos' | 'collections'
 
-type ActivityKind = Exclude<PocketActivityView, 'all'> | 'wallet'
+type ActivityKind = 'bank' | 'pos' | 'purchases' | 'collections' | 'wallet'
 
 type PocketActivityPanelProps = {
   view: PocketActivityView
@@ -25,9 +26,9 @@ type PocketActivityPanelProps = {
 function activityKind(row: PocketActivityRow): ActivityKind {
   const source = String(row.source ?? '').toLowerCase()
   const settlement = String(row.settlementType ?? '').toLowerCase()
-  if (source === 'app-pay' || settlement === 'app_pay') return 'app-pay'
+  if (source === 'collection') return 'collections'
   if (source === 'wallet-deposit' || source === 'wallet-withdrawal' || source === 'wallet-bridge' || settlement === 'wallet_transfer' || settlement === 'wallet_bridge') return 'wallet'
-  if (source === 'bills' || settlement === 'bill_payment') return 'bills'
+  if (source === 'purchase' || source === 'bills' || settlement === 'bill_payment' || settlement === 'hosted_checkout' || settlement === 'service_funding') return 'purchases'
   if (source === 'bank-send' || source === 'bank_send' || settlement === 'paycrest_onramp') return 'bank'
   if (source === 'bank-receive' || source === 'bank_receive' || source === 'bank-withdraw' || source === 'bank_withdraw') return 'bank'
   if (source === 'ngpos' || source === 'pos') return 'pos'
@@ -39,8 +40,7 @@ function supportedRows(rows: PocketActivityRow[]) {
   return rows.filter(row => {
     const source = String(row.source ?? '').toLowerCase()
     const settlement = String(row.settlementType ?? '').toLowerCase()
-    return source === 'app-pay'
-      || settlement === 'app_pay'
+    return source === 'collection'
       || source === 'wallet-deposit'
       || source === 'wallet-withdrawal'
       || source === 'wallet-bridge'
@@ -55,9 +55,12 @@ function supportedRows(rows: PocketActivityRow[]) {
       || source === 'bank-send'
       || source === 'bank_send'
       || source === 'bills'
+      || source === 'purchase'
       || settlement === 'instant_fiat'
       || settlement === 'paycrest_onramp'
       || settlement === 'bill_payment'
+      || settlement === 'hosted_checkout'
+      || settlement === 'service_funding'
   })
 }
 
@@ -76,7 +79,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-slate-50 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-white/[0.04]">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Activity</p>
         <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 dark:text-white">
-          {view === 'all' ? 'All activity' : view === 'bank' ? 'Bank activity' : view === 'pos' ? 'POS activity' : view === 'bills' ? 'Bills activity' : 'App Pay activity'}
+          {view === 'all' ? 'All activity' : view === 'bank' ? 'Bank activity' : view === 'pos' ? 'POS activity' : view === 'purchases' ? 'Purchases' : 'Requests'}
         </h2>
         <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
           Receipts, payouts, reversals, and support records stay connected to your Circle Pocket account.
@@ -102,11 +105,11 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const amountNgn = formatNgnAmount(row.amountNgn ?? '')
                 const amountUsdc = Number.parseFloat(row.amount || '')
                 const timestamp = row.ts ? new Date(row.ts) : null
-                const refundIntentId = kind === 'bills' ? row.merchantId || '' : ''
+                const refundIntentId = row.source === 'bills' ? row.merchantId || '' : ''
                 const claimingRefund = refundBusy === refundIntentId
                 const receipt = pocketActivityReceipt(row)
                 const recordId = `${row.txHash || row.eventId}-${row.ts}-${index}`
-                const collapsible = kind === 'bills' || kind === 'bank'
+                const collapsible = kind === 'purchases' || kind === 'bank'
                 const expanded = !collapsible || expandedActivityId === recordId
                 return (
                   <div key={recordId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
@@ -126,11 +129,11 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
                           {kind === 'wallet'
                             ? String(row.source).toLowerCase() === 'wallet-deposit' ? <ArrowDownToLine className="h-4 w-4" /> : String(row.source).toLowerCase() === 'wallet-bridge' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />
-                            : kind === 'bank' ? <Landmark className="h-4 w-4" /> : kind === 'bills' ? <Banknote className="h-4 w-4" /> : kind === 'app-pay' ? <Cpu className="h-4 w-4" /> : <Store className="h-4 w-4" />}
+                            : kind === 'bank' ? <Landmark className="h-4 w-4" /> : kind === 'purchases' ? row.source === 'bills' ? <Banknote className="h-4 w-4" /> : <Wallet className="h-4 w-4" /> : <Store className="h-4 w-4" />}
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">
-                            {row.activityLabel || (kind === 'wallet' ? (String(row.source).toLowerCase() === 'wallet-deposit' ? 'USDC deposit' : String(row.source).toLowerCase() === 'wallet-bridge' ? 'USDC bridge' : 'USDC sent') : kind === 'bank' ? (String(row.source).toLowerCase().includes('withdraw') ? 'Bank payout' : 'Bank receive') : kind === 'bills' ? 'Bill payment' : kind === 'app-pay' ? 'App Pay service' : 'POS payment')}
+                            {row.activityLabel || (kind === 'wallet' ? (String(row.source).toLowerCase() === 'wallet-deposit' ? 'USDC deposit' : String(row.source).toLowerCase() === 'wallet-bridge' ? 'USDC bridge' : 'USDC sent') : kind === 'bank' ? (String(row.source).toLowerCase().includes('withdraw') ? 'Bank payout' : 'Bank receive') : kind === 'purchases' ? 'Purchase' : 'POS payment')}
                           </span>
                           <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-400">
                             {row.contextLabel || row.memo || row.payer || 'Circle Pocket receipt'}
@@ -209,7 +212,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
               </span>
               <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">No activity to show yet</h3>
               <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
-                {view === 'all' ? 'USDC deposits and sends, App Pay, bank receive, POS, and bill records will appear here.' : `Your ${view === 'bank' ? 'bank receive' : view === 'app-pay' ? 'App Pay' : view.toUpperCase()} records will appear here.`}
+                {view === 'all' ? 'Purchases, USDC, bank, POS, and request records will appear here.' : `Your ${view === 'bank' ? 'bank receive' : view} records will appear here.`}
               </p>
             </div>
           ) : null}

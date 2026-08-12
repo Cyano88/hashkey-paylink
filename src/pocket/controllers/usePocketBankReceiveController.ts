@@ -169,12 +169,6 @@ export default function usePocketBankReceiveController({
       const nextDashboardUrl = data.link.dashboard_url || `${hashPayLinkAppOriginForOrigin(window.location.origin)}/dashboard?n=base`
       setGeneratedLink(paymentUrl)
       setDashboardUrl(nextDashboardUrl)
-      localStorage.setItem('hp_last_event', JSON.stringify({
-        dashboardUrl: nextDashboardUrl,
-        paymentUrl,
-        eventName: memo.trim() || 'Bank receive',
-        ts: Date.now(),
-      }))
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not create bank receive link.')
     } finally {

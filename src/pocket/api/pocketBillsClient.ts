@@ -45,6 +45,8 @@ export type PocketBillIntent = {
   failureReason: string
   createdAt: number
   updatedAt: number
+  executionId: string
+  executionState: string
 }
 
 export class PocketBillsApiError extends Error {
@@ -114,6 +116,8 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
     failureReason: text(intent.failureReason),
     createdAt,
     updatedAt,
+    executionId: text(intent.executionId),
+    executionState: text(intent.executionState),
   }
 }
 

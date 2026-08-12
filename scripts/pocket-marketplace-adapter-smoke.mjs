@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { createPocketMarketplaceHandler } from '../api/pocket/marketplace.ts'
 import { classifyCirclePaymentFailure } from '../api/agent-wallet.ts'
+import { createPaymentExecutionRepository } from '../api/pocket/payment-execution-intents.ts'
 
 assert.equal(classifyCirclePaymentFailure(new Error('PAYMENT WAS SUBMITTED - funds may have moved')), 'submitted')
 assert.equal(classifyCirclePaymentFailure(new Error('Error: terminated')), 'unknown')
@@ -63,6 +64,18 @@ let payError
 let actions = []
 let transfers = []
 const recorded = []
+let executionStore
+let executionCounter = 0
+const executions = createPaymentExecutionRepository({
+  durable: true,
+  readDurable: async () => executionStore,
+  mutateDurable: async (_key, update) => {
+    executionStore = structuredClone(await update(executionStore === undefined ? undefined : structuredClone(executionStore)))
+    return structuredClone(executionStore)
+  },
+  createId: () => `pex_marketplace_${++executionCounter}`,
+})
+const actionId = key => `action-${key}`
 const handler = createPocketMarketplaceHandler({
   verifyUser: async () => ({ userId: 'did:privy:user', email: 'pocket@example.com' }),
   search: async ({ query }) => {
@@ -105,11 +118,13 @@ const handler = createPocketMarketplaceHandler({
   listActions: async () => actions,
   walletAddress: async () => '0x0000000000000000000000000000000000000001',
   searchTransfers: async () => transfers,
-  claim: async () => ({ record: action, claimed: true }),
+  claim: async input => ({ record: { ...action, id: actionId(input.idempotencyKey), idempotencyKey: input.idempotencyKey, metadata: input.metadata }, claimed: true }),
   record: async input => {
     recorded.push(input)
-    return { ...action, ...input, updatedAt: Date.now() }
+    const existing = actions.find(item => item.idempotencyKey === input.idempotencyKey)
+    return { ...action, ...existing, ...input, id: existing?.id ?? actionId(input.idempotencyKey), updatedAt: Date.now() }
   },
+  executions,
 })
 
 const getRes = response()
@@ -134,11 +149,17 @@ await handler({
 assert.equal(postRes.statusCode, 200)
 assert.equal(postRes.body.ok, true)
 assert.equal(postRes.body.receiptActivityId, 'receipt-1')
+assert.equal(postRes.body.executionState, 'completed')
 assert.deepEqual(postRes.body.result, { data: [{ id: 'bitcoin' }] })
 assert.equal(paid, 1)
 assert.equal(payInput.paymentChain, 'BASE')
 assert.equal(payInput.maxAmount, 0.008)
 assert.equal(payInput.appendResultActivity, false)
+const completedExecution = await executions.findByResource('did:privy:user', actionId(action.idempotencyKey), 'service_funding')
+assert.ok(completedExecution)
+assert.equal(postRes.body.executionId, completedExecution.id)
+assert.equal(completedExecution.state, 'completed')
+assert.equal(completedExecution.transactionHash, '0xtx')
 
 estimateError = Object.assign(new Error('Server response: Please provide a valid ticker or CIK'), { code: 1 })
 const rejectedEstimateRes = response()
@@ -169,8 +190,12 @@ await handler({
 assert.equal(submittedRes.statusCode, 202)
 assert.equal(submittedRes.body.status, 'processing')
 assert.equal(submittedRes.body.receiptActivityId, 'receipt-pending')
+assert.match(submittedRes.body.executionId, /^pex_marketplace_/)
+assert.equal(submittedRes.body.executionState, 'processing')
 assert.equal(recorded.at(-1).status, 'submitted')
 assert.equal(paid, 2)
+const submittedExecution = await executions.findByResource('did:privy:user', actionId('pocket:marketplace:submitted1'), 'service_funding')
+assert.equal(submittedExecution.state, 'processing')
 
 payError = Object.assign(new Error('Error: terminated'), {
   status: 409,
@@ -254,6 +279,7 @@ assert.match(degradedGetRes.body.activity[0].title, /Paid · result unavailable/
 assert.equal(degradedGetRes.body.activity[0].transaction, 'gateway-transfer-1')
 assert.equal(degradedGetRes.body.latestPurchase.status, 'paid')
 assert.equal(recorded.at(-1).metadata.paymentState, 'completed')
+assert.equal((await executions.get('did:privy:user', submittedExecution.id)).state, 'completed')
 searchError = undefined
 actions = []
 
@@ -274,6 +300,8 @@ assert.equal(needsReviewGetRes.statusCode, 200)
 assert.equal(needsReviewGetRes.body.latestPurchase.status, 'needs_review')
 assert.equal(needsReviewGetRes.body.services.length, 0)
 assert.equal(recorded.at(-1).metadata.paymentState, 'needs_review')
+const reviewExecution = await executions.findByResource('did:privy:user', 'stale-submitted-action', 'service_funding')
+assert.equal(reviewExecution.state, 'needs_review')
 actions = []
 
 const overCapRes = response()

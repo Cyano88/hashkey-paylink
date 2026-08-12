@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown } from 'lucide-react'
+import { Check, ChevronDown } from './PocketIcons'
 import { cn } from '../../lib/utils'
 
 export type PocketSelectOption = {

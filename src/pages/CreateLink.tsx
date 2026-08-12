@@ -6,7 +6,6 @@ import {
   useDisconnect,
 } from 'wagmi'
 import {
-  Copy,
   CheckCheck,
   ArrowRight,
   ChevronDown,
@@ -23,7 +22,6 @@ import {
   DollarSign,
   RefreshCw,
   Bot,
-  Trash2,
   Radio,
   Store,
   UserRound,
@@ -472,7 +470,6 @@ export default function CreateLink({
   const [generatedLink, setGeneratedLink] = useState('')
   const [copied,        setCopied]        = useState(false)
   const [shareOpen,     setShareOpen]     = useState(false)
-  const [savedLinkCopied, setSavedLinkCopied] = useState(false)
   const [eventMode,      setEventMode]      = useState(false)
   const [eventId,        setEventId]        = useState('')
   const [multiChainMode, setMultiChainMode] = useState(false)
@@ -539,12 +536,6 @@ export default function CreateLink({
   const [fxPreviewRate, setFxPreviewRate] = useState<number | null>(null)
   const [fxPreviewLoad, setFxPreviewLoad] = useState(false)
 
-  // Recover last multi-payer dashboard from localStorage
-  type SavedEvent = { dashboardUrl: string; paymentUrl: string; eventName: string; ts: number }
-  const [savedEvent, setSavedEvent] = useState<SavedEvent | null>(() => {
-    try { return JSON.parse(localStorage.getItem('hp_last_event') ?? 'null') }
-    catch { return null }
-  })
   const qrRef       = useRef<HTMLDivElement>(null)
   const qrHiResRef  = useRef<HTMLDivElement>(null)
   // selectedNet is owned by Layout and shared via outlet context for bidirectional sync with the header toolkit
@@ -1561,14 +1552,6 @@ export default function CreateLink({
       bankReceiveIdempotencyRef.current = ''
       setGeneratedLink(link)
       setVaultStep('ready')
-      const entry: SavedEvent = {
-        dashboardUrl: data.link.dashboard_url || buildGlobalDashboardLink(),
-        paymentUrl: link,
-        eventName: memo.trim() || 'Bank receive',
-        ts: Date.now(),
-      }
-      localStorage.setItem('hp_last_event', JSON.stringify(entry))
-      setSavedEvent(entry)
     } catch (error) {
       setPosError(error instanceof Error ? error.message : 'Could not create bank receive link.')
     } finally {
@@ -1604,14 +1587,6 @@ export default function CreateLink({
       bankSendIdempotencyRef.current = ''
       setGeneratedLink(link)
       setVaultStep('ready')
-      const entry: SavedEvent = {
-        dashboardUrl: data.link.dashboard_url || `${window.location.origin}/dashboard?src=ngpos`,
-        paymentUrl: link,
-        eventName: memo.trim() || 'Bank to USDC',
-        ts: Date.now(),
-      }
-      localStorage.setItem('hp_last_event', JSON.stringify(entry))
-      setSavedEvent(entry)
     } catch (error) {
       setPosError(error instanceof Error ? error.message : 'Could not create bank-to-USDC link.')
     } finally {
@@ -1632,16 +1607,6 @@ export default function CreateLink({
     const link = buildLink()
     setGeneratedLink(link)
     setVaultStep('ready')
-    if (effectiveEventMode && eventId) {
-      const entry: SavedEvent = {
-        dashboardUrl: buildDashboardLink(),
-        paymentUrl:   link,
-        eventName:    memo.trim() || (accessMode ? 'My Access Link' : 'My Event'),
-        ts:           Date.now(),
-      }
-      localStorage.setItem('hp_last_event', JSON.stringify(entry))
-      setSavedEvent(entry)
-    }
   }
 
   // ── Deploy vault handler ───────────────────────────────────────────────
@@ -2928,59 +2893,6 @@ export default function CreateLink({
         )}
       </div>
 
-      {/* ── Last event dashboard recovery ────────────────────────────── */}
-      {!generatedLink && !productHubOpen && !posMode && !streamMode && savedEvent && (
-        <div className="mt-6 animate-fade-in">
-          <div className="flex items-center justify-between gap-3">
-            {/* Left — label + event info */}
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold text-gray-500">Last Multi-payer Collection</p>
-              <p className="text-[11px] text-gray-400 truncate">
-                {savedEvent.eventName} · {new Date(savedEvent.ts).toLocaleDateString()}
-              </p>
-            </div>
-
-            {/* Right — three minimal actions */}
-            <div className="flex items-center gap-1 shrink-0">
-              {/* Dashboard link — truncated URL style */}
-              <a
-                href={savedEvent.dashboardUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-500 hover:text-gray-800 hover:border-gray-300 transition-all"
-                title="Open organizer dashboard"
-              >
-                <ExternalLink className="h-3 w-3" />
-                dashboard
-              </a>
-
-              {/* Copy payment link */}
-              <button
-                onClick={async () => {
-                  await copyToClipboard(savedEvent.paymentUrl)
-                  setSavedLinkCopied(true)
-                  setTimeout(() => setSavedLinkCopied(false), 2000)
-                }}
-                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-[10px] font-medium text-gray-500 hover:text-gray-800 hover:border-gray-300 transition-all"
-                title="Copy payment link"
-              >
-                {savedLinkCopied
-                  ? <><CheckCheck className="h-3 w-3 text-emerald-500" /><span className="text-emerald-600">Copied!</span></>
-                  : <><Copy className="h-3 w-3" />copy</>}
-              </button>
-
-              {/* Delete */}
-              <button
-                onClick={() => { localStorage.removeItem('hp_last_event'); setSavedEvent(null) }}
-                className="flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1 text-gray-400 hover:text-red-500 hover:border-red-200 transition-all"
-                title="Remove"
-              >
-                <Trash2 className="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
 
       {/* ── How it works ─────────────────────────────────────────────── */}

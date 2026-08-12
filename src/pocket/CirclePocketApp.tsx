@@ -4,12 +4,10 @@ import { POCKET_BASE_PATH, POCKET_ROUTES, resolvePocketRoute } from './lib/pocke
 import PocketActivityPage from './pages/PocketActivityPage'
 import PocketAssistantPage from './pages/PocketAssistantPage'
 import PocketBillsPage from './pages/PocketBillsPage'
-import PocketHomePage from './pages/PocketHomePage'
 import PocketLandingPage from './pages/PocketLandingPage'
 import PocketMoveBankPage from './pages/PocketMoveBankPage'
 import PocketMovePosPage from './pages/PocketMovePosPage'
 import PocketMoveUsdcPage from './pages/PocketMoveUsdcPage'
-import PocketX402Page from './pages/PocketX402Page'
 import PocketLoadingState from './components/PocketLoadingState'
 import type { PocketNavTab } from './components/PocketBottomNav'
 import usePocketIdentity from './hooks/usePocketIdentity'
@@ -37,7 +35,7 @@ export default function CirclePocketApp() {
 
   useEffect(() => {
     if (landing || route) return
-    navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.smartWallet}`, { replace: true })
+    navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}`, { replace: true })
   }, [landing, navigate, route])
 
   if (!ready) {
@@ -48,7 +46,7 @@ export default function CirclePocketApp() {
         ? 'bills'
         : route?.section === 'activity'
           ? 'activity'
-          : 'home'
+          : 'move'
     return <PocketLoadingState active={active} />
   }
 
@@ -59,8 +57,6 @@ export default function CirclePocketApp() {
   if (route.section === 'bills') return <PocketBillsPage view={route.view} />
   if (route.section === 'activity') return <PocketActivityPage view={route.view} />
   if (route.section === 'assistant') return <PocketAssistantPage />
-  if (route.section === 'home' && route.view === 'smart-wallet') return <PocketHomePage />
-  if (route.section === 'home' && route.view === 'x402') return <PocketX402Page />
   if (route.section === 'move' && route.view === 'usdc') return <PocketMoveUsdcPage />
   if (route.section === 'move' && route.view === 'bank') return <PocketMoveBankPage />
   if (route.section === 'move' && route.view === 'pos') return <PocketMovePosPage />

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { createPocketBankWithdrawHandler, payoutState } from '../api/pocket/bank-withdraw.ts'
-import { confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawRoute, readPocketBankWithdrawStatus, startPocketBankWithdrawRoute, updatePocketBankWithdrawRoute } from '../src/pocket/api/pocketBankWithdrawClient.ts'
+import { createPaymentExecutionRepository } from '../api/pocket/payment-execution-intents.ts'
+import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawRoute, readPocketBankWithdrawStatus, startPocketBankWithdrawRoute, updatePocketBankWithdrawRoute } from '../src/pocket/api/pocketBankWithdrawClient.ts'
 
 function responseRecorder() {
   return {
@@ -17,6 +18,18 @@ async function request(handler, body, headers = {}) {
   return response
 }
 
+let executionStore
+const executions = createPaymentExecutionRepository({
+  durable: true,
+  isRender: false,
+  readDurable: async () => executionStore,
+  mutateDurable: async (_key, mutate) => {
+    executionStore = await mutate(executionStore)
+    return executionStore
+  },
+  createId: () => 'pex_bank_withdraw_test',
+})
+
 const processingOrder = {
   intent_id: 'intent_direct_001',
   paycrest_order_id: 'order_direct_001',
@@ -24,7 +37,8 @@ const processingOrder = {
   amount_ngn: '1600.00',
   amount_usdc: '1',
   receive_address: '0x1111111111111111111111111111111111111111',
-  status: 'pending',
+  status: 'initiated',
+  valid_until: new Date(Date.now() + 5 * 60_000).toISOString(),
   bank_name: 'Test Bank',
   bank_last4: '6789',
   bank_account_name: 'ADA LOVELACE',
@@ -33,6 +47,7 @@ const settledOrder = { ...processingOrder, status: 'settled', tx_hash: `0x${'2'.
 const calls = []
 let routeAction
 const handler = createPocketBankWithdrawHandler({
+  executions,
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   createBankReceive: async req => {
     calls.push({ kind: 'create', body: req.body, headers: req.headers })
@@ -72,10 +87,41 @@ const prepared = await request(handler, prepareBody, { authorization: 'Bearer pr
 assert.equal(prepared.statusCode, 200)
 assert.equal(prepared.body.data.state, 'processing')
 assert.equal(prepared.body.data.amountUsdc, '1')
+assert.equal(prepared.body.data.executionId, 'pex_bank_withdraw_test')
+assert.equal(prepared.body.data.executionState, 'authorized')
 assert.equal(calls[0].body.direct_payout, true)
 assert.equal(calls[0].body.flexible_amount, false)
 assert.equal(calls[0].headers.authorization, 'Bearer privy-token')
 assert.equal(calls[1].body.action, 'createOfframpOrder')
+
+const authorized = await request(handler, {
+  action: 'authorize',
+  intent_id: processingOrder.intent_id,
+  wallet_address: prepareBody.wallet_address,
+  payer_name: 'Ada Lovelace',
+})
+assert.equal(authorized.statusCode, 200)
+assert.equal(authorized.body.data.orderId, processingOrder.paycrest_order_id)
+assert.equal(authorized.body.data.validUntil, processingOrder.valid_until)
+assert.equal(calls.at(-1).body.action, 'createOfframpOrder')
+assert.equal(calls.at(-1).body.ensure_payable, true)
+
+const unsafeWindowHandler = createPocketBankWithdrawHandler({
+  executions,
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  listHistory: async () => ({ merchants: [{ merchant_id: processingOrder.merchant_id }], orders: [], bankSendLinks: [], bankSendOrders: [] }),
+  invokeLegacy: async (_req, body) => ({ status: 200, body: { order: body.action === 'createOfframpOrder'
+    ? { ...processingOrder, valid_until: new Date(Date.now() + 30_000).toISOString() }
+    : processingOrder } }),
+})
+const unsafeWindow = await request(unsafeWindowHandler, {
+  action: 'authorize',
+  intent_id: processingOrder.intent_id,
+  wallet_address: prepareBody.wallet_address,
+  payer_name: 'Ada Lovelace',
+})
+assert.equal(unsafeWindow.statusCode, 409)
+assert.match(unsafeWindow.body.error, /too close to expiry/i)
 
 const routeMissing = await request(handler, { action: 'routeStatus', intent_id: processingOrder.intent_id })
 assert.equal(routeMissing.body.data, null)
@@ -121,6 +167,7 @@ assert.equal(payoutState('deposited'), 'processing')
 assert.equal(payoutState('refunded'), 'refunded')
 
 const forbidden = createPocketBankWithdrawHandler({
+  executions,
   verifyUser: async () => ({ userId: 'other-user', email: 'other@example.com' }),
   listHistory: async () => ({ merchants: [], orders: [], bankSendLinks: [], bankSendOrders: [] }),
   invokeLegacy: async () => ({ status: 200, body: { order: processingOrder } }),
@@ -138,6 +185,7 @@ const fetcher = async (url, init) => {
   return { ok: true, json: async () => ({ ok: true, data }) }
 }
 await preparePocketBankWithdraw({ accessToken: 'privy-token', request: prepareBody, idempotencyKey, fetcher })
+await authorizePocketBankWithdraw({ accessToken: 'privy-token', request: { intent_id: processingOrder.intent_id }, fetcher })
 await confirmPocketBankWithdraw({ accessToken: 'privy-token', request: { intent_id: processingOrder.intent_id }, fetcher })
 await readPocketBankWithdrawStatus({ accessToken: 'privy-token', intentId: processingOrder.intent_id, fetcher })
 await readPocketBankWithdrawRoute({ accessToken: 'privy-token', intentId: processingOrder.intent_id, fetcher })
@@ -147,10 +195,11 @@ assert.equal(clientCalls[0].url, '/api/pocket/bank-withdraw')
 assert.equal(clientCalls[0].init.headers.authorization, 'Bearer privy-token')
 assert.equal(clientCalls[0].init.headers['idempotency-key'], idempotencyKey)
 assert.equal(JSON.parse(clientCalls[0].init.body).action, 'prepare')
-assert.equal(JSON.parse(clientCalls[1].init.body).action, 'confirm')
-assert.equal(JSON.parse(clientCalls[2].init.body).action, 'status')
-assert.equal(JSON.parse(clientCalls[3].init.body).action, 'routeStatus')
-assert.equal(JSON.parse(clientCalls[4].init.body).action, 'routeStart')
-assert.equal(JSON.parse(clientCalls[5].init.body).action, 'routeUpdate')
+assert.equal(JSON.parse(clientCalls[1].init.body).action, 'authorize')
+assert.equal(JSON.parse(clientCalls[2].init.body).action, 'confirm')
+assert.equal(JSON.parse(clientCalls[3].init.body).action, 'status')
+assert.equal(JSON.parse(clientCalls[4].init.body).action, 'routeStatus')
+assert.equal(JSON.parse(clientCalls[5].init.body).action, 'routeStart')
+assert.equal(JSON.parse(clientCalls[6].init.body).action, 'routeUpdate')
 
 console.log('Circle Pocket direct bank-withdraw adapter smoke tests passed.')

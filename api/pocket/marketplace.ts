@@ -19,6 +19,8 @@ import {
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
 import { pocketX402WalletSlug } from '../../src/pocket/lib/pocketX402Identity.js'
 import { isPocketIdempotencyKey, type PocketErrorCode } from '../../src/pocket/lib/pocketSchemas.js'
+import { paymentExecutionRepository, type PaymentExecutionRepository } from './payment-execution-intents.js'
+import { syncMarketplacePaymentExecution } from './marketplace-payment-executions.js'
 
 const ACTION = 'marketplace.service.purchase'
 const BASE_CAIP2 = 'eip155:8453'
@@ -46,6 +48,7 @@ type MarketplaceDependencies = {
     dedupe?: { metadataKey: string; metadataValue: string; statuses: CirclePocketActionRecord['status'][]; startedAfter?: number }
   }): Promise<{ record: CirclePocketActionRecord; claimed: boolean }>
   record(input: { ownerId: string; idempotencyKey: string; action: string; status: 'submitted' | 'completed' | 'failed'; resourceId?: string; metadata: Record<string, string> }): Promise<CirclePocketActionRecord>
+  executions: PaymentExecutionRepository
 }
 
 type PublicService = {
@@ -322,6 +325,7 @@ async function reconcileMarketplaceActions(params: {
         },
       })
       reconciled.set(action.id, updated)
+      await syncMarketplacePaymentExecution(updated, params.dependencies.executions)
       continue
     }
     unused.delete(match.id)
@@ -344,6 +348,7 @@ async function reconcileMarketplaceActions(params: {
       metadata,
     })
     reconciled.set(action.id, updated)
+    await syncMarketplacePaymentExecution(updated, params.dependencies.executions)
   }
   return params.actions.map(item => reconciled.get(item.id) ?? item)
 }
@@ -441,11 +446,14 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
         )
       ))
       if (unresolved) {
+        const execution = await syncMarketplacePaymentExecution(unresolved, dependencies.executions)
         return res.status(202).json({
           ok: true,
           status: 'processing',
           replayed: true,
           receiptActivityId: unresolved.resourceId,
+          executionId: execution?.id,
+          executionState: execution?.state,
           message: 'A previous App Pay payment is still being reconciled. Pull down to refresh before approving another purchase.',
         })
       }
@@ -455,11 +463,14 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
         && (item.status === 'submitted' || (item.status === 'started' && Date.now() - item.updatedAt < 10 * 60_000))
       ))
       if (pending) {
+        const execution = await syncMarketplacePaymentExecution(pending, dependencies.executions)
         return res.status(202).json({
           ok: true,
           status: 'processing',
           replayed: true,
           receiptActivityId: pending.resourceId,
+          executionId: execution?.id,
+          executionState: execution?.state,
           message: pending.status === 'submitted'
             ? pending.metadata?.paymentState === 'needs_review'
               ? 'This service payment needs review. Open Activity before retrying.'
@@ -509,9 +520,10 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
         },
       })
       if (!claim.claimed) {
+        const execution = await syncMarketplacePaymentExecution(claim.record, dependencies.executions)
         if (claim.record.metadata?.resource !== body.resource) return fail(409, 'DUPLICATE_REQUEST', 'This approval key was already used for another service.', false)
         if (claim.record.status === 'completed') {
-          return res.json({ ok: true, status: 'completed', replayed: true, receiptActivityId: claim.record.resourceId })
+          return res.json({ ok: true, status: 'completed', replayed: true, receiptActivityId: claim.record.resourceId, executionId: execution?.id, executionState: execution?.state })
         }
         if (claim.record.status === 'started' || claim.record.status === 'submitted') {
           return res.status(202).json({
@@ -519,6 +531,8 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
             status: 'processing',
             replayed: true,
             receiptActivityId: claim.record.resourceId,
+            executionId: execution?.id,
+            executionState: execution?.state,
             message: claim.record.status === 'submitted'
               ? 'Payment was already submitted and is being reconciled. Do not retry.'
               : 'This purchase is already being processed.',
@@ -526,6 +540,8 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
         }
         return fail(409, 'DUPLICATE_REQUEST', 'This purchase attempt already failed. Refresh before trying again.', false)
       }
+
+      await syncMarketplacePaymentExecution(claim.record, dependencies.executions)
 
       try {
         const paid = await dependencies.pay({
@@ -540,7 +556,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           resultDetail: 'Circle Marketplace service completed.',
           appendResultActivity: false,
         })
-        await dependencies.record({
+        const completedAction = await dependencies.record({
           ownerId: identity.userId,
           idempotencyKey: rawKey,
           action: ACTION,
@@ -548,12 +564,18 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
           resourceId: paid.receiptActivityId,
           metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'circle-gateway-mainnet' },
         })
+        const completedExecution = await syncMarketplacePaymentExecution({
+          ...completedAction,
+          metadata: { ...(completedAction.metadata ?? {}), paymentState: 'completed', paymentTxHash: paid.proof.transaction || '' },
+        }, dependencies.executions)
         return res.json({
           ok: true,
           status: 'completed',
           replayed: false,
           service: { ...service, provider: inspected.provider, description: inspected.description, amount: inspected.amount },
           receiptActivityId: paid.receiptActivityId,
+          executionId: completedExecution?.id,
+          executionState: completedExecution?.state,
           transaction: paid.proof.transaction,
           result: safeResult(paid.response),
         })
@@ -565,7 +587,7 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
         }
         if (normalized.code === 'circle_payment_submitted_response_failed' || normalized.code === 'circle_payment_outcome_unknown') {
           const reconciliation = normalized.reconciliation
-          await dependencies.record({
+          const submittedAction = await dependencies.record({
             ownerId: identity.userId,
             idempotencyKey: rawKey,
             action: ACTION,
@@ -583,23 +605,27 @@ export function createPocketMarketplaceHandler(dependencies: MarketplaceDependen
               ...(normalized.code === 'circle_payment_submitted_response_failed' ? { failureKind: 'service_response_failed' } : {}),
             },
           })
+          const submittedExecution = await syncMarketplacePaymentExecution(submittedAction, dependencies.executions)
           return res.status(202).json({
             ok: true,
             status: 'processing',
             replayed: false,
             receiptActivityId: normalized.receiptActivityId,
+            executionId: submittedExecution?.id,
+            executionState: submittedExecution?.state,
             message: normalized.code === 'circle_payment_submitted_response_failed'
               ? 'Payment was submitted, but the service did not complete. It is being reconciled; do not retry.'
               : 'The payment command ended without a final result. It is being reconciled; do not retry.',
           })
         }
-        await dependencies.record({
+        const failedAction = await dependencies.record({
           ownerId: identity.userId,
           idempotencyKey: rawKey,
           action: ACTION,
           status: 'failed',
           metadata: { resource: body.resource, amount: inspected.amount, provider: inspected.provider, network: 'circle-gateway-mainnet' },
         }).catch(() => undefined)
+        if (failedAction) await syncMarketplacePaymentExecution(failedAction, dependencies.executions)
         throw error
       }
     } catch (error) {
@@ -635,4 +661,5 @@ export default createPocketMarketplaceHandler({
   searchTransfers: searchCircleGatewayX402Transfers,
   claim: claimCirclePocketAction,
   record: recordCirclePocketAction,
+  executions: paymentExecutionRepository,
 })

@@ -4,14 +4,13 @@ import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { isAddress } from 'viem'
 import { PrivyClient, type User } from '@privy-io/server-auth'
-import { getFxRate } from './fx-rate'
+import { readPocketPaycrestQuote } from './pocket/fx-quote.js'
 import { listRegisteredPaymentsForEventIds } from './event-registry.js'
 import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './render-durable-store.js'
 import {
   createPaycrestOfframpOrder,
   createPaycrestOnrampOrder,
   getPaycrestPosOrder,
-  getPaycrestOfframpRate,
   getPaycrestOnrampRate,
   isPaycrestConfigured,
   listPaycrestInstitutions,
@@ -23,6 +22,7 @@ import {
 import { reconcilePaycrestOrderPayment, registerPaycrestBankSendReceipt, schedulePaycrestOrderReconciliation } from './paycrest-reconcile.js'
 import { verifyEvmUsdcTransfer } from './usdc-transfer-verify.js'
 import { recordCirclePocketAction } from './circle-pocket-action-journal.js'
+import { preparePosSettlementExecution, syncPosSettlementExecution } from './pocket/pos-payment-executions.js'
 
 const STORE_PATH = process.env.NG_POS_STORE ?? './data/ng-pos-merchants.json'
 const NG_POS_STORE_KEY = (process.env.NG_POS_STORE_KEY ?? 'hashpaylink:ng-pos-merchants').trim()
@@ -111,6 +111,14 @@ type BankSendLink = {
 
 function cleanText(value: unknown, fallback = '') {
   return String(value ?? fallback).replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT)
+}
+
+async function syncOwnedPosExecution(order: Awaited<ReturnType<typeof getPaycrestPosOrder>>) {
+  if (!order || order.source !== 'ngpos') return undefined
+  const store = await readStore()
+  const ownerId = store.merchants[order.merchant_id]?.owner_id
+  if (!ownerId) return undefined
+  return syncPosSettlementExecution({ ownerId, order })
 }
 
 function creationIdempotencyKey(req: Request, body: Record<string, unknown>) {
@@ -303,20 +311,12 @@ async function publicMerchant(merchant: MerchantProfile) {
 }
 
 async function getNgnRate() {
-  try {
-    return await getFxRate('NGN')
-  } catch (err) {
-    const configured = Number(process.env.NG_POS_USDC_NGN_RATE)
-    if (Number.isFinite(configured) && configured > 0) {
-      return {
-        rate: configured,
-        source: 'configured',
-        cachedAt: Date.now(),
-        stale: true,
-      }
-    }
-
-    throw err
+  const quote = await readPocketPaycrestQuote('1')
+  return {
+    rate: quote.rate,
+    source: quote.source,
+    cachedAt: quote.quotedAt,
+    stale: Boolean(quote.stale),
   }
 }
 
@@ -496,21 +496,25 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
     .filter(link => link.owner_id === privyUserId)
   const merchantIds = merchants.map(merchant => merchant.merchant_id)
   const bankSendLinkIds = bankSendLinks.map(link => link.link_id)
-  const payments = await listRegisteredPaymentsForEventIds([
-    ...merchants.map(merchant => `ngpos-${merchant.merchant_id}`),
-    ...bankSendLinkIds.map(linkId => `bank-send-${linkId}`),
-  ])
-  const existingTxHashes = new Set(payments.map(payment => payment.txHash.toLowerCase()).filter(Boolean))
   const bankSendById = new Map(bankSendLinks.map(link => [link.link_id, link]))
   const merchantById = new Map(merchants.map(merchant => [merchant.merchant_id, merchant]))
   const paycrestOrders = await listPaycrestPosOrdersForMerchants([...merchantIds, ...bankSendLinkIds])
   for (const order of paycrestOrders) {
-    if (order.source !== 'bank-send' && !order.tx_hash && isReconcileablePaycrestStatus(order.status)) {
+    if (order.source !== 'bank-send' && order.tx_hash && /^0x[a-fA-F0-9]{64}$/.test(order.tx_hash)) {
+      // Repair a receipt synchronously when payment was persisted but a browser,
+      // worker, deploy, or provider callback stopped before event registration.
+      await reconcilePaycrestOrderPayment(order.intent_id).catch(() => null)
+    } else if (order.source !== 'bank-send' && isReconcileablePaycrestStatus(order.status)) {
       schedulePaycrestOrderReconciliation(order.intent_id)
     } else if (order.source === 'bank-send' && isSettledPaycrestStatus(order.status)) {
       await registerPaycrestBankSendReceipt(order).catch(() => null)
     }
   }
+  const payments = await listRegisteredPaymentsForEventIds([
+    ...merchants.map(merchant => `ngpos-${merchant.merchant_id}`),
+    ...bankSendLinkIds.map(linkId => `bank-send-${linkId}`),
+  ])
+  const existingTxHashes = new Set(payments.map(payment => payment.txHash.toLowerCase()).filter(Boolean))
   const allPaycrestRows = paycrestOrders
     .filter(order => isVisiblePaycrestHistoryStatus(order.status))
     .map(order => {
@@ -569,6 +573,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
       source: merchant.source,
       bank_name: merchant.bank_name,
       bank_last4: merchant.bank_last4,
+      created_at: merchant.created_at,
     })),
     bankSendLinks: bankSendLinks.map(link => ({
       link_id: link.link_id,
@@ -795,12 +800,6 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   if (!flexibleAmount) {
     let rate: number
     ;({ rate, source } = await getNgnRate())
-    try {
-      rate = await getPaycrestOfframpRate({ network: 'base', token: 'USDC', fiat: 'NGN', amount: '1' })
-      source = 'paycrest'
-    } catch (error) {
-      console.warn('[ng-pos] Paycrest rate unavailable for bank receive; using fallback FX rate.', error instanceof Error ? error.message : String(error))
-    }
     const amountNgn = amount as number
     const amountUsdc = amountNgn / rate
     if (amountUsdc < PAYCREST_MIN_USDC) {
@@ -1023,15 +1022,7 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'EVM payment is not configured for this merchant.' })
       }
 
-      let { rate, source } = await getNgnRate()
-      if (settlementType === 'INSTANT_FIAT' && isPaycrestConfigured()) {
-        try {
-          rate = await getPaycrestOfframpRate({ network: 'base', token: 'USDC', fiat: 'NGN', amount: '1' })
-          source = 'paycrest'
-        } catch (error) {
-          console.warn('[ng-pos] Paycrest rate unavailable; using fallback FX rate.', error instanceof Error ? error.message : String(error))
-        }
-      }
+      const { rate, source } = await getNgnRate()
       const amountNgn = amountCurrency === 'NGN' ? amount : amount * rate
       const amountUsdc = amountCurrency === 'USDC' ? amount : amount / rate
       if (settlementType === 'INSTANT_FIAT' && amountUsdc < PAYCREST_MIN_USDC) {
@@ -1045,6 +1036,7 @@ export default async function handler(req: Request, res: Response) {
       const quoteId = randomBytes(10).toString('base64url')
       const intentId = settlementType === 'INSTANT_FIAT' ? randomBytes(12).toString('base64url') : ''
       let fiatExecutionReady = true
+      let paymentExecutionId = ''
       if (settlementType === 'INSTANT_FIAT') {
         if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for naira settlement yet.' })
         const intentSource = merchant.source === 'bank-withdraw' ? 'bank-withdraw' : merchant.source === 'bank-receive' ? 'bank-receive' : 'pos'
@@ -1058,6 +1050,15 @@ export default async function handler(req: Request, res: Response) {
           source: intentSource,
           created_at: new Date().toISOString(),
           expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+        }
+        if (intentSource === 'pos' && merchant.owner_id) {
+          const execution = await preparePosSettlementExecution({
+            ownerId: merchant.owner_id,
+            merchantId: merchant.merchant_id,
+            intentId,
+            amountUsdc: amountUsdcText,
+          })
+          paymentExecutionId = execution.id
         }
         await writeStore(store)
         fiatExecutionReady = true
@@ -1080,6 +1081,7 @@ export default async function handler(req: Request, res: Response) {
           fiat_execution_ready: fiatExecutionReady,
           offramp_provider: settlementType === 'INSTANT_FIAT' ? 'paycrest' : undefined,
           intent_id: intentId || undefined,
+          payment_execution_id: paymentExecutionId || undefined,
           bank_name: settlementType === 'INSTANT_FIAT' ? merchant.bank_name : undefined,
           bank_last4: settlementType === 'INSTANT_FIAT' ? merchant.bank_last4 : undefined,
           bank_account_name: settlementType === 'INSTANT_FIAT' ? merchant.bank_account_name : undefined,
@@ -1133,12 +1135,31 @@ export default async function handler(req: Request, res: Response) {
       const payerName = cleanText(body.payer_name, '')
       if (!intentId || !isAddress(refundAddress)) return res.status(400).json({ ok: false, error: 'Circle wallet is required before creating naira settlement.' })
       if (!payerName) return res.status(400).json({ ok: false, error: 'Payer name is required before creating naira settlement.' })
-      const existing = await getPaycrestPosOrder(intentId)
-      if (existing) return res.json({ ok: true, order: existing })
+      let existing = await getPaycrestPosOrder(intentId)
+      const ensurePayable = body.ensure_payable === true
+      if (existing && !ensurePayable) {
+        const execution = await syncOwnedPosExecution(existing)
+        return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
+      }
+      if (existing && ensurePayable) {
+        const reconciled = await reconcilePaycrestOrderPayment(existing.intent_id, { allowTerminalScan: true }).catch(() => null)
+        existing = reconciled?.order ?? existing
+        const status = cleanText(existing.status, '').toLowerCase()
+        const validUntil = Date.parse(existing.valid_until || '')
+        const hasSafePaymentWindow = Number.isFinite(validUntil) && validUntil > Date.now() + 90_000
+        const funded = Boolean(existing.tx_hash) || ['deposited', 'pending', 'fulfilling', 'fulfilled', 'validated', 'settling', 'settled', 'refunding', 'refunded'].includes(status)
+        if (funded) {
+          return res.status(409).json({ ok: false, error: 'This payout already has a submitted deposit. Check its status before trying again.' })
+        }
+        if (status === 'initiated' && hasSafePaymentWindow) {
+          const execution = await syncOwnedPosExecution(existing)
+          return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
+        }
+      }
       const store = await readStore()
       const intent = store.intents?.[intentId]
       if (!intent) return res.status(404).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
-      if (new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
+      if (!existing && new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
       if (Number(intent.estimated_amount_usdc) < PAYCREST_MIN_USDC) {
         return res.status(400).json({ ok: false, error: 'Minimum Paycrest payout is 0.50 USDC. Enter a higher Naira amount.' })
       }
@@ -1161,9 +1182,11 @@ export default async function handler(req: Request, res: Response) {
         payerName,
         source: intent.source === 'bank-withdraw' ? 'bank-withdraw' : intent.source === 'bank-receive' ? 'bank-receive' : 'ngpos',
         memo: payerName.slice(0, 40) || 'Hash PayLink',
+        referenceSuffix: existing ? createHash('sha256').update(existing.paycrest_order_id).digest('hex').slice(0, 10) : undefined,
       })
       schedulePaycrestOrderReconciliation(order.intent_id)
-      return res.json({ ok: true, order })
+      const execution = await syncOwnedPosExecution(order)
+      return res.json({ ok: true, order, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
     }
 
     if (action === 'createBankSendOrder') {
@@ -1227,7 +1250,15 @@ export default async function handler(req: Request, res: Response) {
         payerEmail: cleanText(body.payer_email, ''),
         payerWallet: cleanText(body.payer_wallet, ''),
       })
-      return res.json({ ok: true, order })
+      const reconciled = await reconcilePaycrestOrderPayment(id).catch(() => null)
+      const currentOrder = reconciled?.order ?? order
+      const execution = await syncOwnedPosExecution(currentOrder)
+      return res.json({
+        ok: true,
+        order: currentOrder,
+        receipt: reconciled?.receipt ?? undefined,
+        payment_execution: execution ? { id: execution.id, state: execution.state } : undefined,
+      })
     }
 
     if (action === 'offrampStatus') {
@@ -1243,7 +1274,8 @@ export default async function handler(req: Request, res: Response) {
         order = reconciled?.order ?? order
         receipt = reconciled?.receipt
       }
-      return res.json({ ok: true, order, receipt })
+      const execution = await syncOwnedPosExecution(order)
+      return res.json({ ok: true, order, receipt, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
     }
 
     return res.status(400).json({ ok: false, error: 'Unknown action.' })

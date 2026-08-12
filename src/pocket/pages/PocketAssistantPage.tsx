@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CheckCircle2, Copy, Mail } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Copy, Mail } from '../components/PocketIcons'
 import DynamicSendButton from '../../components/DynamicSendButton'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import usePocketAssistantController from '../controllers/usePocketAssistantController'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_ORIGIN } from '../lib/pocketRoutes'
 
-const WELCOME_TEXT = 'Circle Pocket is ready. Ask me to receive USDC, settle to bank, create a POS terminal, manage wallets, fund App Pay, or find a receipt. I only offer actions currently available.'
+const WELCOME_TEXT = 'Circle Pocket is ready. Ask me to receive USDC, settle to bank, create a POS terminal, pay bills, or find a receipt. I only offer actions currently available.'
 
 export default function PocketAssistantPage() {
   const navigate = useNavigate()

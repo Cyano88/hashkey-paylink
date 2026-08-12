@@ -56,6 +56,7 @@ const bankRequest = {
   account_number: '0123456789',
 }
 const verifyCalls = []
+const boundNames = []
 const verifyHandler = createPocketBankVerifyHandler({
   verifyUser: async req => {
     if (req.headers.authorization !== 'Bearer privy-secret') {
@@ -66,6 +67,12 @@ const verifyHandler = createPocketBankVerifyHandler({
   verifyAccount: async body => {
     verifyCalls.push(body)
     return { account_name: 'ADA LOVELACE', bank_code: '001' }
+  },
+  repository: {
+    bindBankResolvedName: async (identity, resolvedName) => {
+      boundNames.push({ identity, resolvedName })
+      return { profile: {}, unchanged: false }
+    },
   },
 })
 
@@ -87,6 +94,10 @@ const verified = await request(verifyHandler, 'POST', bankRequest, {
 assert.equal(verified.statusCode, 200)
 assert.deepEqual(verified.body, { ok: true, account_name: 'ADA LOVELACE', bank_code: '001' })
 assert.deepEqual(verifyCalls, [bankRequest])
+assert.deepEqual(boundNames, [{
+  identity: { userId: 'privy-user-1', email: 'ada@example.com' },
+  resolvedName: 'ADA LOVELACE',
+}])
 assert.deepEqual(parsePocketBankVerification(verified.body), {
   account_name: 'ADA LOVELACE',
   bank_code: '001',
@@ -98,13 +109,25 @@ assert.equal(serializedVerification.includes('ada@example.com'), false)
 assert.equal(serializedVerification.includes('privy-secret'), false)
 
 const providerFailureHandler = createPocketBankVerifyHandler({
-  verifyUser: async () => ({ userId: 'privy-user-1' }),
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   verifyAccount: async () => { throw Object.assign(new Error('Paycrest unavailable.'), { status: 503 }) },
 })
 const providerFailure = await request(providerFailureHandler, 'POST', bankRequest)
 assert.equal(providerFailure.statusCode, 503)
 assert.equal(providerFailure.body.error.code, 'PROVIDER_UNAVAILABLE')
 assert.equal(providerFailure.body.error.retryable, true)
+
+const nameConflictHandler = createPocketBankVerifyHandler({
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  verifyAccount: async () => ({ account_name: 'GRACE HOPPER', bank_code: '001' }),
+  repository: {
+    bindBankResolvedName: async () => { throw Object.assign(new Error('This bank account resolves to a different name.'), { status: 409 }) },
+  },
+})
+const nameConflict = await request(nameConflictHandler, 'POST', bankRequest)
+assert.equal(nameConflict.statusCode, 409)
+assert.equal(nameConflict.body.error.code, 'VERSION_CONFLICT')
+assert.equal(nameConflict.body.error.field, 'bankAccount')
 
 const readCalls = []
 const readResult = await readPocketBankInstitutions(async (url, init) => {

@@ -7,7 +7,15 @@ import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 
 type PocketAccessTokenReader = () => Promise<string | null>
 
-const emptyProfile: LocalCurrencyProfile = { firstName: '', lastName: '', email: '' }
+const emptyProfile: LocalCurrencyProfile = {
+  firstName: '',
+  lastName: '',
+  resolvedName: '',
+  nameStatus: 'unverified',
+  email: '',
+  pocketNumber: '',
+  pocketId: '',
+}
 const pocketProfileCache = new Map<string, LocalCurrencyProfile | null>()
 
 export default function usePocketProfile({
@@ -60,7 +68,11 @@ export default function usePocketProfile({
       setDraft({
         firstName: nextProfile?.firstName ?? '',
         lastName: nextProfile?.lastName ?? '',
+        resolvedName: nextProfile?.resolvedName ?? '',
+        nameStatus: nextProfile?.nameStatus ?? 'unverified',
         email: nextProfile?.email ?? data.email ?? email,
+        pocketNumber: nextProfile?.pocketNumber ?? '',
+        pocketId: nextProfile?.pocketId ?? '',
       })
       setEditing(!nextProfile)
       setLoaded(true)
@@ -85,7 +97,7 @@ export default function usePocketProfile({
       if (!token) throw new Error('Sign in again to save local currency profile.')
       const data = await savePocketLocalCurrencyProfile({
         accessToken: token,
-        profile: { ...draft, email: email || draft.email },
+        pocketId: draft.pocketId,
         expectedUpdatedAt: profile?.updatedAt,
       })
       setProfile(data.profile)

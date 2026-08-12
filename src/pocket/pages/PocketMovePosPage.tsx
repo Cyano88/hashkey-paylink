@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { LocalCurrencyProfileCard } from '../components/LocalCurrencyProfileCard'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
+import PocketLoadingState from '../components/PocketLoadingState'
 import usePocketPosPageController, { type PocketPosRouteStep } from '../controllers/usePocketPosPageController'
 import {
   PocketPosCountryPanel,
@@ -48,14 +49,16 @@ export default function PocketMovePosPage() {
   })
 
   const selectNav = (tab: PocketNavTab) => {
-    const path = tab === 'home'
-      ? pocketPathFor({ section: 'home', view: 'smart-wallet' })
-      : tab === 'bills'
+    const path = tab === 'bills'
         ? pocketPathFor({ section: 'bills', view: 'airtime' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
           : pocketPathFor({ section: 'move', view: 'usdc' })
     navigate(`${POCKET_BASE_PATH}${path}`)
+  }
+
+  if (authenticated && (!profile.loaded || profile.busy || pos.institutionsBusy)) {
+    return <PocketLoadingState active="move" />
   }
 
   return (

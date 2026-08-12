@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
+import PocketLoadingState from '../components/PocketLoadingState'
 import usePocketBillsController from '../controllers/usePocketBillsController'
 import usePocketPaymentLiquidityController from '../controllers/usePocketPaymentLiquidityController'
 import usePocketWalletController from '../controllers/usePocketWalletController'
@@ -72,15 +73,15 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
   }, [ensureBaseWallet, wallets.refreshBalances, wallets.setError])
 
   const selectNav = (tab: PocketNavTab) => {
-    const path = tab === 'home'
-      ? pocketPathFor({ section: 'home', view: 'smart-wallet' })
-      : tab === 'move'
+    const path = tab === 'move'
         ? pocketPathFor({ section: 'move', view: 'usdc' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
           : pocketPathFor({ section: 'bills', view })
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
+
+  if (authenticated && !wallets.resolved) return <PocketLoadingState active="bills" />
 
   const baseBalance = wallets.rows.find(row => row.key === 'base')?.balance ?? 0
   return (

@@ -1,4 +1,4 @@
-import { CheckCheck, ChevronDown, Loader2, Mail, UserRound } from 'lucide-react'
+import { CheckCheck, ChevronDown, Loader2, Mail, UserRound } from './PocketIcons'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import { cn } from '../../lib/utils'
 import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'

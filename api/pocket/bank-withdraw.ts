@@ -4,6 +4,7 @@ import ngPosHandler, { createNgPosBankReceive, listNgPosHistoryForOwner } from '
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
 import { isPocketIdempotencyKey } from '../../src/pocket/lib/pocketSchemas.js'
 import { claimCirclePocketAction, listCirclePocketActions, recordCirclePocketAction, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
+import { paymentExecutionRepository, type PaymentExecutionIntent, type PaymentExecutionRepository } from './payment-execution-intents.js'
 
 type LegacyResult = { status: number; body: any }
 type BankWithdrawDependencies = {
@@ -14,6 +15,7 @@ type BankWithdrawDependencies = {
   claimAction: typeof claimCirclePocketAction
   listActions: typeof listCirclePocketActions
   recordAction: typeof recordCirclePocketAction
+  executions: PaymentExecutionRepository
 }
 
 async function invokeNgPos(req: Request, body: Record<string, unknown>): Promise<LegacyResult> {
@@ -49,7 +51,7 @@ export function payoutState(status: unknown) {
   return 'processing'
 }
 
-export function publicOrder(order: any) {
+export function publicOrder(order: any, execution?: PaymentExecutionIntent) {
   return {
     intentId: text(order?.intent_id),
     orderId: text(order?.paycrest_order_id),
@@ -63,7 +65,30 @@ export function publicOrder(order: any) {
     bankName: text(order?.bank_name),
     bankLast4: text(order?.bank_last4),
     accountName: text(order?.bank_account_name),
+    validUntil: text(order?.valid_until),
+    executionId: execution?.id || '',
+    executionState: execution?.state || '',
   }
+}
+
+async function executionForOrder(ownerId: string, order: any, dependencies: BankWithdrawDependencies) {
+  return dependencies.executions.findByResource(ownerId, text(order?.intent_id), 'bank_payout')
+}
+
+async function syncExecution(ownerId: string, order: any, dependencies: BankWithdrawDependencies) {
+  let execution = await executionForOrder(ownerId, order, dependencies)
+  if (!execution) return undefined
+  const state = payoutState(order?.status)
+  if (state === 'sent') {
+    if (execution.state === 'authorized') execution = await dependencies.executions.update({ ownerId, intentId: execution.id, state: 'submitted', transactionHash: text(order?.tx_hash) })
+    if (execution.state === 'submitted' || execution.state === 'processing') execution = await dependencies.executions.update({ ownerId, intentId: execution.id, state: 'completed', providerReference: text(order?.paycrest_order_id), transactionHash: text(order?.tx_hash) })
+  } else if (state === 'refunded' && !['failed', 'completed', 'expired', 'needs_review'].includes(execution.state)) {
+    execution = await dependencies.executions.update({ ownerId, intentId: execution.id, state: 'failed', failureCode: 'PROVIDER_REFUNDED', providerReference: text(order?.paycrest_order_id) })
+  } else if (state === 'processing') {
+    if (execution.state === 'authorized' && text(order?.tx_hash)) execution = await dependencies.executions.update({ ownerId, intentId: execution.id, state: 'submitted', transactionHash: text(order?.tx_hash) })
+    if (execution.state === 'submitted') execution = await dependencies.executions.update({ ownerId, intentId: execution.id, state: 'processing', providerReference: text(order?.paycrest_order_id) })
+  }
+  return execution
 }
 
 function routeRecord(record: CirclePocketActionRecord | undefined, claimed?: boolean) {
@@ -113,6 +138,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     claimAction: claimCirclePocketAction,
     listActions: listCirclePocketActions,
     recordAction: recordCirclePocketAction,
+    executions: paymentExecutionRepository,
     ...overrides,
   }
   return async function pocketBankWithdrawHandler(req: Request, res: Response) {
@@ -154,7 +180,15 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           payer_name: `${text(req.body?.owner_first_name)} ${text(req.body?.owner_last_name)}`.trim(),
         })
         if (prepared.status !== 200 || !prepared.body?.order) throw Object.assign(new Error(prepared.body?.error || 'Could not prepare bank payout.'), { status: prepared.status })
-        return res.json({ ok: true, data: publicOrder(prepared.body.order) })
+        const execution = await dependencies.executions.create({
+          ownerId: identity.userId, idempotencyKey, kind: 'bank_payout', amount: text(prepared.body.order.amount_usdc),
+          sourceNetwork: 'base', settlementNetwork: 'base', destinationType: 'verified_bank_account',
+          metadata: { bankCode: text(req.body?.bank_code, 20), bankLast4: accountNumber.slice(-4) },
+        })
+        const authorized = execution.intent.state === 'prepared'
+          ? await dependencies.executions.update({ ownerId: identity.userId, intentId: execution.intent.id, state: 'authorized', resourceId: text(prepared.body.order.intent_id), providerReference: text(prepared.body.order.paycrest_order_id) })
+          : execution.intent
+        return res.json({ ok: true, data: publicOrder(prepared.body.order, authorized) })
       }
 
       const id = text(req.body?.intent_id || req.body?.order_id)
@@ -163,6 +197,25 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
 
       if (action === 'routeStatus') {
         return res.json({ ok: true, data: routeRecord(await ownedRoute(identity, ownedOrder.intent_id, dependencies)) })
+      }
+
+      if (action === 'authorize') {
+        const payable = await dependencies.invokeLegacy(req, {
+          action: 'createOfframpOrder',
+          intent_id: id,
+          refund_address: text(req.body?.wallet_address),
+          payer_wallet: text(req.body?.wallet_address),
+          payer_email: identity.email,
+          payer_name: text(req.body?.payer_name),
+          ensure_payable: true,
+        })
+        if (payable.status !== 200 || !payable.body?.order) throw Object.assign(new Error(payable.body?.error || 'Could not open a current payout window.'), { status: payable.status })
+        const validUntil = Date.parse(payable.body.order.valid_until || '')
+        if (!Number.isFinite(validUntil) || validUntil <= Date.now() + 60_000) {
+          throw Object.assign(new Error('The payout window is too close to expiry. Start the payment again.'), { status: 409 })
+        }
+        const execution = await syncExecution(identity.userId, payable.body.order, dependencies)
+        return res.json({ ok: true, data: publicOrder(payable.body.order, execution) })
       }
 
       if (action === 'routeStart') {
@@ -239,6 +292,8 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
       }
 
       if (action === 'confirm') {
+        const existingExecution = await executionForOrder(identity.userId, ownedOrder, dependencies)
+        if (existingExecution?.state === 'authorized') await dependencies.executions.update({ ownerId: identity.userId, intentId: existingExecution.id, state: 'submitted', transactionHash: text(req.body?.tx_hash) })
         const confirmed = await dependencies.invokeLegacy(req, {
           action: 'markOfframpPaid',
           intent_id: id,
@@ -248,13 +303,15 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           payer_email: identity.email,
         })
         if (confirmed.status !== 200 || !confirmed.body?.order) throw Object.assign(new Error(confirmed.body?.error || 'Could not verify bank payout transfer.'), { status: confirmed.status })
-        return res.json({ ok: true, data: publicOrder(confirmed.body.order) })
+        const execution = await syncExecution(identity.userId, confirmed.body.order, dependencies)
+        return res.json({ ok: true, data: publicOrder(confirmed.body.order, execution) })
       }
 
       if (action === 'status') {
         const status = await dependencies.invokeLegacy(req, { action: 'offrampStatus', intent_id: id, refresh: true })
         if (status.status !== 200 || !status.body?.order) throw Object.assign(new Error(status.body?.error || 'Could not refresh bank payout.'), { status: status.status })
-        return res.json({ ok: true, data: publicOrder(status.body.order) })
+        const execution = await syncExecution(identity.userId, status.body.order, dependencies)
+        return res.json({ ok: true, data: publicOrder(status.body.order, execution) })
       }
 
       return res.status(400).json({ ok: false, error: 'Unknown bank payout action.' })

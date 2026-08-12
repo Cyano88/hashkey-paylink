@@ -15,6 +15,8 @@ import {
   isPocketRecipientBalanceReadData,
   isPocketMutationResult,
   type PocketProfileUpsertData,
+  type PocketPosResource,
+  type PocketCollectionResource,
 } from '../lib/pocketSchemas'
 
 type PocketLocalCurrencyProfileReadInput = {
@@ -24,7 +26,7 @@ type PocketLocalCurrencyProfileReadInput = {
 
 type PocketLocalCurrencyProfileSaveInput = {
   accessToken: string
-  profile: LocalCurrencyProfile
+  pocketId: string
   expectedUpdatedAt?: string
   idempotencyKey?: string
   fetcher?: typeof fetch
@@ -37,6 +39,8 @@ export type PocketLocalCurrencyProfileReadResult = {
 
 export type PocketActivityReadResult = {
   payments: PocketActivityRow[]
+  merchants: PocketPosResource[]
+  collections: PocketCollectionResource[]
 }
 
 const POCKET_BALANCE_NETWORKS: UnifiedBalanceChainKey[] = ['base', 'arbitrum', 'arc', 'solana']
@@ -79,7 +83,13 @@ function isLocalCurrencyProfile(value: unknown): value is LocalCurrencyProfile {
   if (!isRecord(value)) return false
   return typeof value.firstName === 'string'
     && typeof value.lastName === 'string'
+    && typeof value.resolvedName === 'string'
+    && (value.nameStatus === 'unverified' || value.nameStatus === 'bank_resolved')
     && typeof value.email === 'string'
+    && typeof value.pocketNumber === 'string'
+    && /^\d{6,12}$/.test(value.pocketNumber)
+    && typeof value.pocketId === 'string'
+    && /^\d{6,12}$/.test(value.pocketId)
     && (value.updatedAt === undefined || (typeof value.updatedAt === 'string' && Number.isFinite(Date.parse(value.updatedAt))))
 }
 
@@ -106,7 +116,7 @@ export function parsePocketActivityRead(value: unknown): PocketActivityReadResul
   if (!isPocketActivityReadData(value)) {
     throw new Error('Circle Pocket activity response was invalid.')
   }
-  return { payments: value.payments }
+  return { payments: value.payments, merchants: value.merchants, collections: value.collections }
 }
 
 export function parsePocketLocalCurrencyProfileSave(value: unknown): PocketProfileUpsertData {
@@ -139,7 +149,7 @@ export async function readPocketLocalCurrencyProfile({
 
 export async function savePocketLocalCurrencyProfile({
   accessToken,
-  profile,
+  pocketId,
   expectedUpdatedAt,
   idempotencyKey = createPocketIdempotencyKey('profile-save'),
   fetcher = fetch,
@@ -152,9 +162,7 @@ export async function savePocketLocalCurrencyProfile({
       'idempotency-key': idempotencyKey,
     },
     body: JSON.stringify({
-      firstName: profile.firstName,
-      lastName: profile.lastName,
-      email: profile.email,
+      pocketId,
       ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
     }),
   })

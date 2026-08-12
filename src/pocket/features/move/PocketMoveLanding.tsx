@@ -1,4 +1,4 @@
-import { ArrowUpDown } from 'lucide-react'
+import { ArrowUpDown } from '../../components/PocketIcons'
 
 export default function PocketMoveLanding() {
   return (

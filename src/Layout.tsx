@@ -12,6 +12,7 @@ import { PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyConnectButton } from './lib/PrivyConnectButton'
 import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
 import PocketAccountMenu from './pocket/components/PocketAccountMenu'
+import PocketHeaderIdentity from './pocket/components/PocketHeaderIdentity'
 import { CPurseIcon } from './pocket/components/CPurseIcon'
 import PocketTopSwitch from './pocket/components/PocketTopSwitch'
 import PocketThemeToggle from './pocket/components/PocketThemeToggle'
@@ -223,14 +224,7 @@ export default function Layout() {
     ? 'move'
     : pocketRoute?.section === 'bills'
       ? 'bills'
-      : pocketRoute?.section === 'activity'
-        ? 'activity'
-        : pocketRoute?.section === 'home'
-          ? 'wallet'
-          : 'wallet'
-  const circlePocketWalletView = pocketRoute?.section === 'home'
-    ? (pocketRoute.view === 'smart-wallet' ? 'smart' : 'x402')
-    : 'smart'
+      : 'activity'
   const circlePocketMoveView = pocketRoute?.section === 'move' ? pocketRoute.view : ''
   const circlePocketBillView = pocketRoute?.section === 'bills' ? pocketRoute.view : 'airtime'
   const circlePocketActivityView = pocketRoute?.section === 'activity' ? pocketRoute.view : 'all'
@@ -442,9 +436,9 @@ export default function Layout() {
           {isPocketAppPage ? (
             <>
               <div className="pointer-events-auto flex h-10 w-full items-center justify-between">
-                <Link to={`${POCKET_BASE_PATH}/home/smart-wallet`} className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
+                <Link to={`${POCKET_BASE_PATH}/move/usdc`} className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
                   <CPurseIcon size={32} title="" className="shrink-0" />
-                  <span className="text-sm font-black tracking-[-0.025em]">Pocket</span>
+                  <PocketHeaderIdentity />
                 </Link>
                 <div className="flex items-center gap-2">
                   <PocketThemeToggle />
@@ -454,11 +448,9 @@ export default function Layout() {
               {pocketRoute?.section !== 'assistant' && (
                 <PocketTopSwitch
                   mode={circlePocketHeaderMode}
-                  walletView={circlePocketWalletView}
                   moveView={circlePocketMoveView}
                   billView={circlePocketBillView}
                   activityView={circlePocketActivityView}
-                  onWalletChange={(view) => navigatePocketHeader({ section: 'home', view: view === 'smart' ? 'smart-wallet' : 'x402' })}
                   onMoveChange={(view) => navigatePocketHeader({ section: 'move', view })}
                   onBillChange={(view) => navigatePocketHeader({ section: 'bills', view })}
                   onActivityChange={(view) => navigatePocketHeader({ section: 'activity', view })}

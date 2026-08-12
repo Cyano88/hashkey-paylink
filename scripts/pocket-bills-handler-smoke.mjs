@@ -3,6 +3,7 @@ import { createPocketBillsCatalogHandler, createPocketBillsQuoteHandler, createP
 import { createPocketBillsStore } from '../api/pocket/bills-store.ts'
 import { VtpassClientError } from '../api/vtpass-client.ts'
 import { readVtpassPhase0Config } from '../api/vtpass-config.ts'
+import { createPaymentExecutionRepository } from '../api/pocket/payment-execution-intents.ts'
 
 const env = {
   VTPASS_ENVIRONMENT: 'sandbox',
@@ -181,6 +182,15 @@ const provider = {
 }
 
 let verifyMode = 'success'
+const executionStorage = memoryStorage()
+let executionCounter = 0
+const executions = createPaymentExecutionRepository({
+  durable: true,
+  mutateDurable: executionStorage.mutate,
+  readDurable: executionStorage.read,
+  now: () => now,
+  createId: () => `pex_bill_${++executionCounter}`,
+})
 const dependencies = {
   config,
   store,
@@ -201,6 +211,7 @@ const dependencies = {
   },
   now: () => now,
   requestId: () => `http-request-${++uuidCounter}`,
+  executions,
 }
 const quoteHandler = createPocketBillsQuoteHandler(dependencies)
 const payHandler = createPocketBillsPayHandler(dependencies)
@@ -328,12 +339,16 @@ assert.equal(quoteReplay.body.data.intent.id, quoted.body.data.intent.id)
 
 const prepared = await request(payHandler, { action: 'prepare', intent_id: quoted.body.data.intent.id })
 assert.equal(prepared.body.data.intent.state, 'awaiting_payment')
+assert.match(prepared.body.data.intent.executionId, /^pex_bill_/)
+assert.equal(prepared.body.data.intent.executionState, 'authorized')
 const txHash = `0x${'a'.repeat(64)}`
 const confirmed = await request(payHandler, { action: 'confirm', intent_id: quoted.body.data.intent.id, tx_hash: txHash })
 assert.equal(confirmed.statusCode, 200)
 assert.equal(Date.parse(lastVerificationInput.notAfter), quoted.body.data.intent.quoteExpiresAt + 5 * 60_000)
 assert.equal(confirmed.body.status, 'completed')
 assert.equal(confirmed.body.data.intent.state, 'delivered')
+assert.equal(confirmed.body.data.intent.executionId, prepared.body.data.intent.executionId)
+assert.equal(confirmed.body.data.intent.executionState, 'completed')
 assert.equal(purchaseCalls, 1)
 
 const confirmedReplay = await request(payHandler, { action: 'confirm', intent_id: quoted.body.data.intent.id, tx_hash: txHash })

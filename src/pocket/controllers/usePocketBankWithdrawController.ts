@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
-import { confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
+import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
 
@@ -102,6 +102,7 @@ export default function usePocketBankWithdrawController({
       const active = activeIntentId.current === intentId
       if (active) setResult(next)
       if (next.state === 'sent') {
+        if (active) setStatus('sent')
         await onSent()
         return
       }
@@ -171,17 +172,27 @@ export default function usePocketBankWithdrawController({
       const accessToken = await getAccessToken()
       if (!accessToken) throw new Error('Sign in again to continue this bank payout.')
       reconciliation = { accessToken, intentId: prepared.intentId }
+      const payable = await authorizePocketBankWithdraw({
+        accessToken,
+        request: {
+          intent_id: prepared.intentId,
+          wallet_address: selectedWallet.address,
+          payer_name: `${firstName} ${lastName}`.trim(),
+        },
+      })
+      if (activeIntentId.current !== prepared.intentId) return
+      setResult(payable)
       const session = await getEvmSession(selectedWallet.address)
       const transfer = await executePocketEvmTransfer({
         session,
         linkedWalletAddress: selectedWallet.address,
-        recipient: prepared.receiveAddress as Address,
-        amount: prepared.amountUsdc,
+        recipient: payable.receiveAddress as Address,
+        amount: payable.amountUsdc,
         confirm: false,
       })
       if (!transfer.txHash) throw new Error('Circle accepted the payout, but no transaction hash was returned. Check Activity before retrying.')
-      setResult({ ...prepared, txHash: transfer.txHash })
-      setStatus('sent')
+      setResult({ ...payable, txHash: transfer.txHash })
+      setStatus('processing')
       setAmountState('')
       setMemoState('')
       idempotencyKey.current = ''
@@ -191,7 +202,7 @@ export default function usePocketBankWithdrawController({
         accessToken,
         request: {
           intent_id: prepared.intentId,
-          order_id: prepared.orderId,
+          order_id: payable.orderId,
           tx_hash: transfer.txHash,
           wallet_address: selectedWallet.address,
         },
@@ -209,7 +220,7 @@ export default function usePocketBankWithdrawController({
       setStatus('idle')
       setError(message)
     }
-  }, [getAccessToken, getEvmSession, pollUntilSettled, result, status])
+  }, [firstName, getAccessToken, getEvmSession, lastName, pollUntilSettled, result, status])
 
   const failRouting = useCallback((reason: unknown) => {
     const message = reason instanceof Error ? reason.message : 'Pocket could not prepare this payout.'

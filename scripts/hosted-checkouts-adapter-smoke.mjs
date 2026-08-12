@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { attachHostedCheckoutReceipt, createHostedCheckoutsHandler, drainHostedCheckoutWebhookOutbox, markHostedCheckoutNairaPayout, markHostedCheckoutPaid, resolveHostedCheckoutPartnerPolicy } from '../api/hosted-checkouts.ts'
+import { createPaymentExecutionRepository } from '../api/pocket/payment-execution-intents.ts'
 
 function responseRecorder() {
   return {
@@ -21,6 +22,18 @@ async function request(handler, method, { body, headers = {}, query = {} } = {})
 let store
 let now = new Date('2026-07-19T12:00:00.000Z')
 let createdCount = 0
+let executionStore
+let executionCount = 0
+const executions = createPaymentExecutionRepository({
+  durable: true,
+  readDurable: async () => executionStore,
+  mutateDurable: async (_key, update) => {
+    executionStore = structuredClone(await update(executionStore === undefined ? undefined : structuredClone(executionStore)))
+    return structuredClone(executionStore)
+  },
+  now: () => now.getTime(),
+  createId: () => `pex_checkout_${++executionCount}`,
+})
 const dependencies = {
   hasStore: () => true,
   read: async () => store,
@@ -36,6 +49,7 @@ const dependencies = {
   signingSecret: () => 'a-secure-test-secret-that-is-longer-than-thirty-two-characters',
   createId: () => createdCount++ === 0 ? 'chk_testcheckout1234' : `chk_testcheckout${createdCount.toString().padStart(4, '0')}`,
   now: () => now,
+  executions,
 }
 const handler = createHostedCheckoutsHandler(dependencies)
 const valid = {
@@ -94,6 +108,9 @@ assert.match(created.body.paymentAttemptId, /^pat_[a-f0-9]{24}$/)
 assert.equal(created.body.agentPaymentUrl, undefined)
 assert.equal(created.body.agentCheckoutUrl, undefined)
 assert.equal(created.body.replayed, false)
+const createdExecution = await executions.findByResource('partner:polydesk', created.body.checkoutId, 'hosted_checkout')
+assert.ok(createdExecution)
+assert.equal(createdExecution.state, 'prepared')
 assert.equal(store.checkouts.chk_stalecheckout123, undefined)
 assert.equal(store.idempotency['polydesk:stale-key'], undefined)
 
@@ -178,6 +195,17 @@ assert.equal((await request(handler, 'POST', {
   query: { id: multiCreated.body.checkoutId, attempt: multiCreated.body.paymentAttemptId, action: 'select-network' },
   body: { network: 'base' },
 })).statusCode, 409)
+await markHostedCheckoutPaid({
+  id: multiCreated.body.checkoutId,
+  txHash: `0x${'d'.repeat(64)}`,
+  payer: '0x2222222222222222222222222222222222222222',
+  amount: '0.024',
+  confirmedAt: '2026-07-19T12:30:00.000Z',
+  network: 'arbitrum',
+}, dependencies)
+const multiExecution = await executions.findByResource('partner:polydesk', multiCreated.body.checkoutId, 'hosted_checkout')
+assert.equal(multiExecution.sourceNetwork, 'multi')
+assert.equal(multiExecution.state, 'completed')
 
 const agenticCreated = await request(handler, 'POST', {
   body: { ...valid, checkoutMode: 'agentic', agenticType: 'creator_earnings' },
@@ -227,6 +255,10 @@ await markHostedCheckoutPaid({
   amount: '0.024',
   confirmedAt: '2026-07-19T12:30:00.000Z',
 }, dependencies)
+const paidExecution = await executions.findByResource('partner:polydesk', created.body.checkoutId, 'hosted_checkout')
+assert.equal(paidExecution.id, createdExecution.id)
+assert.equal(paidExecution.state, 'completed')
+assert.equal(paidExecution.transactionHash, `0x${'a'.repeat(64)}`)
 const paidStatus = await request(handler, 'GET', { headers: { 'x-api-key': 'partner-secret' }, query: { id: created.body.checkoutId, purpose: 'status' } })
 assert.equal(paidStatus.body.status, 'paid')
 assert.equal(paidStatus.body.payment.amount, '0.024')
@@ -412,6 +444,9 @@ assert.equal((await request(nairaHandler, 'POST', { body: { ...nairaBody, flexib
 const nairaCreated = await request(nairaHandler, 'POST', { body: nairaBody, headers: nairaHeaders })
 assert.equal(nairaCreated.statusCode, 201)
 assert.equal(nairaPrepareCalls, 1)
+const nairaExecution = await executions.findByResource('partner:dev_nairaproject', nairaCreated.body.checkoutId, 'hosted_checkout')
+assert.ok(nairaExecution)
+assert.equal(nairaExecution.state, 'prepared')
 assert.equal((await request(nairaHandler, 'POST', { body: nairaBody, headers: nairaHeaders })).statusCode, 200)
 assert.equal(nairaPrepareCalls, 1)
 const nairaLookup = await request(nairaHandler, 'GET', { query: { id: nairaCreated.body.checkoutId } })
@@ -426,6 +461,7 @@ await markHostedCheckoutPaid({
   confirmedAt: '2026-07-19T12:20:00.000Z', network: 'base',
 }, nairaDependencies)
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'processing')
+assert.equal((await executions.get('partner:dev_nairaproject', nairaExecution.id)).state, 'processing')
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].paymentAttempts[0].status, 'processing')
 assert.deepEqual(nairaNotifications.map(item => item.event), ['checkout.created', 'payment.processing'])
 assert.equal((await request(nairaHandler, 'GET', { query: { id: nairaCreated.body.checkoutId } })).body.checkout.status, 'processing')
@@ -433,6 +469,7 @@ await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, st
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'processing')
 await markHostedCheckoutNairaPayout({ intentId: nairaCreated.body.checkoutId, status: 'validated' }, nairaDependencies)
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].payment.status, 'paid')
+assert.equal((await executions.get('partner:dev_nairaproject', nairaExecution.id)).state, 'completed')
 assert.equal(nairaStore.checkouts[nairaCreated.body.checkoutId].paymentAttempts[0].status, 'paid')
 assert.deepEqual(nairaNotifications.map(item => item.event), ['checkout.created', 'payment.processing', 'payment.confirmed'])
 assert.equal((await request(nairaHandler, 'GET', { query: { id: nairaCreated.body.checkoutId } })).body.checkout.status, 'paid')
@@ -497,5 +534,8 @@ store.checkouts[created.body.checkoutId].amount = '0.024'
 
 now = new Date('2026-07-19T14:00:00.000Z')
 assert.equal((await request(handler, 'GET', { query: { id: created.body.checkoutId } })).statusCode, 410)
+assert.equal((await request(handler, 'GET', { query: { id: agenticCreated.body.checkoutId } })).statusCode, 410)
+const expiredExecution = await executions.findByResource('partner:polydesk', agenticCreated.body.checkoutId, 'hosted_checkout')
+assert.equal(expiredExecution.state, 'expired')
 
 console.log('Hosted checkout adapter smoke tests passed.')

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
-import { ArrowRight, ChevronDown, Landmark, Mail, Send } from 'lucide-react'
+import { ArrowRight, ChevronDown, Landmark, Mail, Send } from '../components/PocketIcons'
 import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
 import UnifiedReceipt from '../../components/UnifiedReceipt'
@@ -9,6 +9,7 @@ import { formatNgnAmount } from '../../lib/utils'
 import { LocalCurrencyProfileCard } from '../components/LocalCurrencyProfileCard'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
+import PocketLoadingState from '../components/PocketLoadingState'
 import PocketSlideAction from '../components/PocketSlideAction'
 import usePocketBankReceiveController from '../controllers/usePocketBankReceiveController'
 import usePocketBankWithdrawController from '../controllers/usePocketBankWithdrawController'
@@ -143,14 +144,16 @@ export default function PocketMoveBankPage() {
   }, [onNetworkSelect, selectedNet])
 
   const selectNav = (tab: PocketNavTab) => {
-    const path = tab === 'home'
-      ? pocketPathFor({ section: 'home', view: 'smart-wallet' })
-      : tab === 'bills'
+    const path = tab === 'bills'
         ? pocketPathFor({ section: 'bills', view: 'airtime' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
           : pocketPathFor({ section: 'move', view: 'usdc' })
     navigate(`${POCKET_BASE_PATH}${path}`)
+  }
+
+  if (authenticated && (!profile.loaded || !wallets.resolved || bank.institutionsBusy)) {
+    return <PocketLoadingState active="move" />
   }
 
   return (

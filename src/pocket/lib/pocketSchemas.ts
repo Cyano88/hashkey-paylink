@@ -41,9 +41,7 @@ export type PocketMutationResult<T> = {
 }
 
 export type PocketProfileUpsertRequest = {
-  firstName: string
-  lastName: string
-  email: string
+  pocketId: string
   expectedUpdatedAt?: string
 }
 
@@ -51,7 +49,11 @@ export type PocketProfileUpsertData = {
   profile: {
     firstName: string
     lastName: string
+    resolvedName: string
+    nameStatus: 'unverified' | 'bank_resolved'
     email: string
+    pocketNumber: string
+    pocketId: string
     updatedAt: string
   }
   unchanged: boolean
@@ -179,10 +181,31 @@ export type PocketActivityRow = {
   billReference?: string
   refundAction?: 'claim' | 'check'
   refundTxHash?: string
+  receiptId?: string
+  receiptUrl?: string
 }
 
 export type PocketActivityReadData = {
   payments: PocketActivityRow[]
+  merchants: PocketPosResource[]
+  collections: PocketCollectionResource[]
+}
+
+export type PocketPosResource = {
+  merchant_id: string
+  display_name: string
+  source?: string
+  bank_name?: string
+  bank_last4?: string
+  created_at?: string
+}
+
+export type PocketCollectionResource = {
+  eventId: string
+  title: string
+  paymentUrl: string
+  createdAt: number
+  updatedAt: number
 }
 
 export type PocketPosCreateRequest = {
@@ -410,8 +433,7 @@ export function isPocketIdempotencyKey(value: unknown): value is string {
 
 export function isPocketProfileUpsertRequest(value: unknown): value is PocketProfileUpsertRequest {
   if (!isRecord(value)) return false
-  if (!isNonEmptyString(value.firstName, 64) || !isNonEmptyString(value.lastName, 64)) return false
-  if (!isNonEmptyString(value.email, 320) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email as string)) return false
+  if (typeof value.pocketId !== 'string' || !/^\d{6,12}$/.test(value.pocketId)) return false
   return value.expectedUpdatedAt === undefined
     || (isNonEmptyString(value.expectedUpdatedAt, 80) && Number.isFinite(Date.parse(value.expectedUpdatedAt as string)))
 }
@@ -562,10 +584,29 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.billReference, 160)
     && (value.refundAction === undefined || value.refundAction === 'claim' || value.refundAction === 'check')
     && (value.refundTxHash === undefined || (typeof value.refundTxHash === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value.refundTxHash)))
+    && isOptionalBoundedString(value.receiptId, 256)
+    && isOptionalBoundedString(value.receiptUrl, 500)
 }
 
 export function isPocketActivityReadData(value: unknown): value is PocketActivityReadData {
-  return isRecord(value) && Array.isArray(value.payments) && value.payments.every(isPocketActivityRow)
+  return isRecord(value)
+    && Array.isArray(value.payments)
+    && value.payments.every(isPocketActivityRow)
+    && Array.isArray(value.merchants)
+    && value.merchants.every(item => isRecord(item)
+      && isNonEmptyString(item.merchant_id, 256)
+      && isNonEmptyString(item.display_name, 90)
+      && isOptionalBoundedString(item.source, 40)
+      && isOptionalBoundedString(item.bank_name, 90)
+      && isOptionalBoundedString(item.bank_last4, 8)
+      && isOptionalBoundedString(item.created_at, 64))
+    && Array.isArray(value.collections)
+    && value.collections.every(item => isRecord(item)
+      && isNonEmptyString(item.eventId, 120)
+      && isNonEmptyString(item.title, 90)
+      && isNonEmptyString(item.paymentUrl, 2_000)
+      && typeof item.createdAt === 'number'
+      && typeof item.updatedAt === 'number')
 }
 
 export function isPocketPosCreateRequest(value: unknown): value is PocketPosCreateRequest {

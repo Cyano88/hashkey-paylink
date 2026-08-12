@@ -9,6 +9,7 @@ export type PocketFxQuote = {
   side: 'sell'
   quotedAt: number
   expiresAt: number
+  stale?: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -35,6 +36,7 @@ export function parsePocketFxQuote(value: unknown): PocketFxQuote {
     || typeof quote.quotedAt !== 'number'
     || typeof quote.expiresAt !== 'number'
     || quote.expiresAt <= quote.quotedAt
+    || (quote.stale !== undefined && typeof quote.stale !== 'boolean')
   ) {
     throw new Error('Live FX rate response was invalid.')
   }

@@ -25,8 +25,8 @@ export default function PocketLoadingState({ active }: { active: PocketNavTab })
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-2">
-            {Array.from({ length: 4 }).map((_, index) => (
+          <div className="grid grid-cols-3 gap-2">
+            {Array.from({ length: 3 }).map((_, index) => (
               <div key={index} className="flex flex-col items-center gap-2 rounded-2xl border border-gray-100 bg-white px-2 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
                 <Skeleton className="h-9 w-9 rounded-full" />
                 <Skeleton className="h-2.5 w-10" />

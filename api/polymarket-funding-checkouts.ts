@@ -5,6 +5,7 @@ import { resolveDeveloperApiKeyPolicy, type DeveloperCheckoutPolicy } from './de
 import { createDepositAddress, getDepositStatus, minimumUsdcFor } from './polymarket-bridge.js'
 import { createProviderRoutedHostedCheckout, hostedCheckoutPaymentAttempt, readVerifiedHostedCheckoutRecord, type HostedCheckoutNetwork } from './hosted-checkouts.js'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
+import { syncHostedCheckoutExecution } from './pocket/hosted-checkout-payment-executions.js'
 
 const STORE_KEY = (process.env.POLYMARKET_FUNDING_CHECKOUT_STORE_KEY ?? 'hashpaylink:polymarket-funding-checkouts:v1').trim()
 const NETWORKS = new Set<HostedCheckoutNetwork>(['base', 'arbitrum'])
@@ -38,6 +39,7 @@ type Dependencies = {
   readCheckout: typeof readVerifiedHostedCheckoutRecord
   signingSecret: () => string
   now: () => Date
+  syncExecution?: (checkout: Awaited<ReturnType<typeof readVerifiedHostedCheckoutRecord>>, providerCompleted: boolean) => Promise<unknown>
 }
 
 const defaults: Dependencies = {
@@ -51,6 +53,7 @@ const defaults: Dependencies = {
   readCheckout: readVerifiedHostedCheckoutRecord,
   signingSecret: () => (process.env.HOSTED_CHECKOUT_SIGNING_SECRET ?? '').trim(),
   now: () => new Date(),
+  syncExecution: async (checkout, providerCompleted) => checkout && syncHostedCheckoutExecution(checkout, undefined, { providerCompleted }),
 }
 
 function clean(value: unknown, max: number) {
@@ -157,6 +160,7 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
         const latest = completed ?? transactions[0] ?? null
         const paymentStatus = checkout.payment?.status ?? (dependencies.now().getTime() >= Date.parse(checkout.expiresAt) ? 'expired' : 'pending')
         const fundingStatus = completed ? 'funded' : paymentStatus === 'paid' || paymentStatus === 'processing' ? 'bridging' : paymentStatus === 'expired' ? 'expired' : 'awaiting_payment'
+        if (checkout.payment) await dependencies.syncExecution?.(checkout, Boolean(completed))
         const attempt = hostedCheckoutPaymentAttempt(checkout)
         return res.json({
           ok: true,

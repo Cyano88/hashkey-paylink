@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { isAddress } from 'viem'
 import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './render-durable-store.js'
+import { syncPosSettlementExecutionByResource } from './pocket/pos-payment-executions.js'
 
 const STORE_PATH = process.env.PAYCREST_POS_STORE ?? './data/paycrest-pos-orders.json'
 const STORE_KEY = (process.env.PAYCREST_POS_STORE_KEY ?? 'hashpaylink:paycrest-pos-orders').trim()
@@ -244,9 +245,11 @@ export async function createPaycrestOfframpOrder(input: {
   payerName?: string
   source?: 'ngpos' | 'bank-receive' | 'bank-withdraw' | 'hosted-checkout'
   memo?: string
+  referenceSuffix?: string
 }) {
   if (!isAddress(input.refundAddress)) throw new Error('A valid Circle refund wallet is required.')
-  const reference = `${input.source === 'hosted-checkout' ? 'checkout' : 'ngpos'}-${input.intentId}`.slice(0, 90)
+  const referenceSuffix = String(input.referenceSuffix ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 20)
+  const reference = `${input.source === 'hosted-checkout' ? 'checkout' : 'ngpos'}-${input.intentId}${referenceSuffix ? `-${referenceSuffix}` : ''}`.slice(0, 90)
   const senderFeePercent = process.env.PAYCREST_SENDER_FEE_PERCENT?.trim()
   const payload: Record<string, unknown> = {
     amount: input.amountNgn,
@@ -312,6 +315,7 @@ export async function createPaycrestOfframpOrder(input: {
   store.orders[record.intent_id] = record
   store.orders[record.paycrest_order_id] = record
   await writeStore(store)
+  await syncPosSettlementExecutionByResource(record)
   return record
 }
 
@@ -449,6 +453,7 @@ export async function markPaycrestPosPayment(input: { id: string; txHash: string
   store.orders[updated.intent_id] = updated
   store.orders[updated.paycrest_order_id] = updated
   await writeStore(store)
+  await syncPosSettlementExecutionByResource(updated)
   if (updated.source === 'hosted-checkout') {
     const { markHostedCheckoutNairaPayout } = await import('./hosted-checkouts.js')
     await markHostedCheckoutNairaPayout({ intentId: updated.intent_id, status: updated.status }).catch(error => {
@@ -490,6 +495,7 @@ export async function refreshPaycrestOrderStatus(id: string) {
   store.orders[updated.intent_id] = updated
   store.orders[updated.paycrest_order_id] = updated
   await writeStore(store)
+  await syncPosSettlementExecutionByResource(updated)
   if (updated.source === 'hosted-checkout') {
     const { markHostedCheckoutNairaPayout } = await import('./hosted-checkouts.js')
     await markHostedCheckoutNairaPayout({ intentId: updated.intent_id, status: updated.status }).catch(error => {
@@ -549,11 +555,17 @@ export async function paycrestWebhookHandler(req: Request, res: Response) {
   store.orders[updated.intent_id] = updated
   store.orders[updated.paycrest_order_id] = updated
   await writeStore(store)
+  await syncPosSettlementExecutionByResource(updated)
+  let receipt: unknown
+  if (updated.source !== 'hosted-checkout' && /^0x[a-fA-F0-9]{64}$/.test(updated.tx_hash || '')) {
+    const { reconcilePaycrestOrderPayment } = await import('./paycrest-reconcile.js')
+    receipt = (await reconcilePaycrestOrderPayment(updated.intent_id).catch(() => null))?.receipt
+  }
   if (updated.source === 'hosted-checkout') {
     const { markHostedCheckoutNairaPayout } = await import('./hosted-checkouts.js')
     await markHostedCheckoutNairaPayout({ intentId: updated.intent_id, status: updated.status }).catch(error => {
       console.error('[paycrest-webhook] hosted checkout update failed:', error instanceof Error ? error.message : String(error))
     })
   }
-  return res.json({ ok: true })
+  return res.json({ ok: true, receipt })
 }

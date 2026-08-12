@@ -69,9 +69,9 @@ export default function usePocketUsdcDraftController(network: PocketNetwork) {
     invalidateResult()
   }, [invalidateResult])
 
-  const generate = useCallback(() => {
+  const generate = useCallback((collection?: { eventId: string }) => {
     if (!validation.canGenerate) return
-    setGeneratedLink(buildPocketPayLink({
+    const link = buildPocketPayLink({
       origin: window.location.origin,
       network,
       multiChain,
@@ -80,7 +80,11 @@ export default function usePocketUsdcDraftController(network: PocketNetwork) {
       evmAddress: validation.evmValid ? evmAddress : '',
       solanaAddress: validation.solanaValid ? solanaAddress : '',
       memo,
-    }))
+      eventMode: Boolean(collection?.eventId),
+      eventId: collection?.eventId,
+    })
+    setGeneratedLink(link)
+    return link
   }, [amount, evmAddress, flexibleAmount, memo, multiChain, network, solanaAddress, validation.canGenerate, validation.evmValid, validation.solanaValid])
 
   const reset = useCallback(() => {

@@ -22,6 +22,7 @@ type PocketWalletReadState = {
   rows: UnifiedBalanceBreakdown[]
   total: number
   balanceBusy: boolean
+  resolved: boolean
   error: string
   setError: Dispatch<SetStateAction<string>>
   refreshBalances: () => Promise<void>
@@ -73,6 +74,7 @@ export default function usePocketWallets({
   const [rows, setRows] = useState<UnifiedBalanceBreakdown[]>(() => cached?.rows ?? [])
   const [total, setTotal] = useState(() => cached?.total ?? 0)
   const [balanceBusy, setBalanceBusy] = useState(false)
+  const [resolved, setResolved] = useState(() => !authenticated || Boolean(cached))
   const [error, setError] = useState('')
   const balanceReadInFlight = useRef(false)
   const lastBalanceReadAt = useRef(0)
@@ -107,6 +109,7 @@ export default function usePocketWallets({
       setWallets({})
       setRows([])
       setTotal(0)
+      setResolved(true)
       return
     }
 
@@ -115,6 +118,9 @@ export default function usePocketWallets({
       setWallets(immediate.wallets)
       setRows(immediate.rows)
       setTotal(immediate.total)
+      setResolved(true)
+    } else {
+      setResolved(false)
     }
 
     let cancelled = false
@@ -169,7 +175,10 @@ export default function usePocketWallets({
         }
       } finally {
         balanceReadInFlight.current = false
-        if (!cancelled) setBalanceBusy(false)
+        if (!cancelled) {
+          setBalanceBusy(false)
+          setResolved(true)
+        }
       }
     }
 
@@ -198,5 +207,5 @@ export default function usePocketWallets({
     }
   }, [authenticated, email, refreshBalances])
 
-  return { wallets, setWallets, rows, total, balanceBusy, error, setError, refreshBalances }
+  return { wallets, setWallets, rows, total, balanceBusy, resolved, error, setError, refreshBalances }
 }

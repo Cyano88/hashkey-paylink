@@ -1,8 +1,11 @@
 import type { Request, Response } from 'express'
+import { readDurableJson, writeDurableJson } from '../render-durable-store.js'
 
 const PAYCREST_QUOTE_CACHE_MS = 30_000
 const PAYCREST_QUOTE_VALIDITY_MS = 60_000
 const PAYCREST_QUOTE_TIMEOUT_MS = 5_000
+const PAYCREST_LAST_KNOWN_MAX_AGE_MS = 6 * 60 * 60_000
+const PAYCREST_QUOTE_STORE_KEY = 'hashpaylink:pocket:paycrest-ngn-quote'
 
 export type PocketFxQuote = {
   currency: 'NGN'
@@ -13,25 +16,36 @@ export type PocketFxQuote = {
   side: 'sell'
   quotedAt: number
   expiresAt: number
+  stale?: boolean
 }
 
 type PocketFxQuoteReaderDependencies = {
   fetcher?: typeof fetch
   now?: () => number
   baseUrl?: string
+  readLastKnown?: () => Promise<PocketFxQuote | undefined>
+  writeLastKnown?: (quote: PocketFxQuote) => Promise<void>
 }
 
 export function createPocketFxQuoteReader({
   fetcher = fetch,
   now = Date.now,
   baseUrl = process.env.PAYCREST_API_BASE ?? 'https://api.paycrest.io',
+  readLastKnown = () => readDurableJson<PocketFxQuote>(PAYCREST_QUOTE_STORE_KEY),
+  writeLastKnown = quote => writeDurableJson(PAYCREST_QUOTE_STORE_KEY, quote),
 }: PocketFxQuoteReaderDependencies = {}) {
   let cached: PocketFxQuote | null = null
+  let durableLoaded = false
   let inFlight: { amount: string; promise: Promise<PocketFxQuote> } | null = null
 
   return async function readPocketFxQuote(amount = '1'): Promise<PocketFxQuote> {
     const currentTime = now()
     if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) throw new Error('Enter a valid USDC quote amount.')
+    if (!durableLoaded) {
+      durableLoaded = true
+      const saved = await readLastKnown().catch(() => undefined)
+      if (saved?.source === 'paycrest' && Number.isFinite(saved.rate) && saved.rate > 0) cached = saved
+    }
     if (cached?.amount === amount && currentTime - cached.quotedAt < PAYCREST_QUOTE_CACHE_MS) return cached
     if (inFlight?.amount === amount) return inFlight.promise
 
@@ -45,12 +59,14 @@ export function createPocketFxQuoteReader({
         message?: unknown
         data?: { sell?: { rate?: unknown } }
       } | undefined
-      if (!response.ok || body?.status !== 'success') {
-        const message = typeof body?.message === 'string' ? body.message : 'Paycrest FX quote is unavailable.'
+      const rate = Number(body?.data?.sell?.rate)
+      if (!response.ok || body?.status !== 'success' || !Number.isFinite(rate) || rate <= 0) {
+        if (cached?.amount === amount && currentTime - cached.quotedAt <= PAYCREST_LAST_KNOWN_MAX_AGE_MS) {
+          return { ...cached, stale: true, expiresAt: currentTime + PAYCREST_QUOTE_CACHE_MS }
+        }
+        const message = typeof body?.message === 'string' ? body.message : 'Paycrest FX quote is still resolving.'
         throw new Error(message)
       }
-      const rate = Number(body.data?.sell?.rate)
-      if (!Number.isFinite(rate) || rate <= 0) throw new Error('Paycrest returned an invalid NGN quote.')
 
       const quotedAt = now()
       cached = {
@@ -62,7 +78,9 @@ export function createPocketFxQuoteReader({
         side: 'sell',
         quotedAt,
         expiresAt: quotedAt + PAYCREST_QUOTE_VALIDITY_MS,
+        stale: false,
       }
+      await writeLastKnown(cached).catch(() => undefined)
       return cached
     })().finally(() => {
       if (inFlight?.promise === promise) inFlight = null
@@ -101,5 +119,5 @@ export function createPocketFxQuoteHandler({ readQuote }: PocketFxQuoteHandlerDe
   }
 }
 
-const readQuote = createPocketFxQuoteReader()
-export default createPocketFxQuoteHandler({ readQuote })
+export const readPocketPaycrestQuote = createPocketFxQuoteReader()
+export default createPocketFxQuoteHandler({ readQuote: readPocketPaycrestQuote })

@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
-import { CheckCheck, Download, ExternalLink, LayoutDashboard, Share2, Sliders } from 'lucide-react'
+import { CheckCheck, Download, LayoutDashboard, Share2, Sliders } from '../../components/PocketIcons'
+import { ArrowTopRightOnSquareIcon as ExternalLink } from '@heroicons/react/24/outline'
 import { QRCodeCanvas } from 'qrcode.react'
 import { cn, truncateAddress } from '../../../lib/utils'
 

@@ -84,6 +84,7 @@ import {
   pocketSolanaCctpSubmitHandler,
 } from './api/pocket/solana-cctp-relay.js'
 import pocketActivityHandler from './api/pocket/activity.js'
+import pocketPaylinksHandler from './api/pocket/paylinks.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
 import pocketSolanaRpcHandler from './api/pocket/solana-rpc.js'
 import pocketBalancesHandler from './api/pocket/balances.js'
@@ -326,6 +327,7 @@ app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/fx-quote',          readLimiter, pocketFxQuoteHandler)
 app.all('/api/pocket/balances/recipient', readLimiter, pocketRecipientBalanceHandler)
 app.all('/api/pocket/activity',          readLimiter, pocketActivityHandler)
+app.all('/api/pocket/paylinks',          strictLimiter, pocketPaylinksHandler)
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
 app.post('/api/pocket/solana-rpc',       readLimiter, pocketSolanaRpcHandler)
 app.all('/api/pocket/x402',              readLimiter, pocketX402Handler)

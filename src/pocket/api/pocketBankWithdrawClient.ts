@@ -13,6 +13,9 @@ export type PocketBankWithdrawData = {
   bankName: string
   bankLast4: string
   accountName: string
+  validUntil: string
+  executionId: string
+  executionState: string
 }
 
 export type PocketBankWithdrawRouteData = {
@@ -63,6 +66,10 @@ export function preparePocketBankWithdraw(input: {
 
 export function confirmPocketBankWithdraw(input: { accessToken: string; request: Record<string, unknown>; fetcher?: typeof fetch }) {
   return mutate({ ...input, body: { action: 'confirm', ...input.request } })
+}
+
+export function authorizePocketBankWithdraw(input: { accessToken: string; request: Record<string, unknown>; fetcher?: typeof fetch }) {
+  return mutate({ ...input, body: { action: 'authorize', ...input.request } })
 }
 
 export function readPocketBankWithdrawStatus(input: { accessToken: string; intentId: string; fetcher?: typeof fetch }) {

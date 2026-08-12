@@ -1,4 +1,4 @@
-import { CheckCheck, Info, LogOut, XCircle } from 'lucide-react'
+import { CheckCheck, Info, LogOut, XCircle } from '../../components/PocketIcons'
 import { cn, truncateAddress } from '../../../lib/utils'
 
 type RecipientFieldState = {

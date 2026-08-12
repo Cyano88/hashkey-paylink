@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import {
+  PocketIdUnavailableError,
   ProfileVersionConflictError,
   localCurrencyProfileRepository,
   verifiedPrivyUser,
@@ -19,16 +20,16 @@ type PocketProfileHandlerDependencies = {
   requestId?: () => string
 }
 
-function cleanName(value: string) {
-  return value.replace(/\s+/g, ' ').trim().slice(0, 64)
-}
-
-function profileData(profile: Awaited<ReturnType<ProfileRepository['save']>>['profile'], unchanged: boolean): PocketProfileUpsertData {
+function profileData(profile: Awaited<ReturnType<ProfileRepository['ensure']>>['profile'], unchanged: boolean): PocketProfileUpsertData {
   return {
     profile: {
       firstName: profile.firstName,
       lastName: profile.lastName,
+      resolvedName: profile.resolvedName,
+      nameStatus: profile.nameStatus,
       email: profile.email,
+      pocketNumber: profile.pocketNumber,
+      pocketId: profile.pocketId,
       updatedAt: profile.updatedAt,
     },
     unchanged,
@@ -60,30 +61,19 @@ export function createPocketProfileHandler(dependencies: PocketProfileHandlerDep
       const identity = await dependencies.verifyUser(req)
 
       if (req.method === 'GET') {
-        const profile = await dependencies.repository.get(identity.userId)
-        return res.json({ ok: true, email: identity.email, profile: profile ?? null })
+        const ensured = await dependencies.repository.ensure(identity)
+        return res.json({ ok: true, email: ensured.profile.email, profile: ensured.profile })
       }
 
       if (!isPocketIdempotencyKey(rawIdempotencyKey)) {
         return fail(400, 'VALIDATION_FAILED', 'A valid Idempotency-Key header is required.', false, 'idempotencyKey')
       }
       if (!isPocketProfileUpsertRequest(req.body)) {
-        return fail(400, 'VALIDATION_FAILED', 'Enter a valid first name, last name, and email.', false, 'profile')
+        return fail(400, 'VALIDATION_FAILED', 'Pocket ID must contain 6 to 12 digits.', false, 'pocketId')
       }
 
-      const firstName = cleanName(req.body.firstName)
-      const lastName = cleanName(req.body.lastName)
-      const requestEmail = req.body.email.trim().toLowerCase()
-      if (identity.email && identity.email !== requestEmail) {
-        return fail(403, 'FORBIDDEN', 'Profile email must match the signed-in email.', false, 'email')
-      }
-
-      const saved = await dependencies.repository.save({
-        privyUserId: identity.userId,
-        firstName,
-        lastName,
-        email: identity.email || requestEmail,
-      }, req.body.expectedUpdatedAt)
+      await dependencies.repository.ensure(identity)
+      const saved = await dependencies.repository.updatePocketId(identity.userId, req.body.pocketId, req.body.expectedUpdatedAt)
 
       return res.json({
         ok: true,
@@ -94,6 +84,9 @@ export function createPocketProfileHandler(dependencies: PocketProfileHandlerDep
       })
     } catch (error) {
       const normalized = error as Error & { status?: number }
+      if (normalized instanceof PocketIdUnavailableError) {
+        return fail(409, 'VERSION_CONFLICT', normalized.message, false, 'pocketId')
+      }
       if (normalized instanceof ProfileVersionConflictError || normalized.status === 409) {
         return fail(409, 'VERSION_CONFLICT', normalized.message, false)
       }

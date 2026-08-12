@@ -28,4 +28,6 @@ export type PocketActivityRow = {
   billReference?: string
   refundAction?: 'claim' | 'check'
   refundTxHash?: string
+  receiptId?: string
+  receiptUrl?: string
 }

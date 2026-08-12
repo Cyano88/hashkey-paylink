@@ -1,4 +1,5 @@
-import { ArrowRight, Coins, Info, Landmark, Link2, Loader2, Sliders, Tag } from 'lucide-react'
+import { ArrowRight as PaymentArrowRight } from 'lucide-react'
+import { Coins, Info, Landmark, Link2, Loader2, Sliders, Tag } from '../../components/PocketIcons'
 import { cn } from '../../../lib/utils'
 
 export type PocketPayLinkLane = 'usdc' | 'bank' | 'bank-send'
@@ -67,19 +68,22 @@ export function PocketPaymentAmountField({ lane, flexible, amount, dirty, valid,
 type PocketPaymentNoteFieldProps = {
   value: string
   onChange: (value: string) => void
+  label?: string
+  placeholder?: string
+  optional?: boolean
 }
 
-export function PocketPaymentNoteField({ value, onChange }: PocketPaymentNoteFieldProps) {
+export function PocketPaymentNoteField({ value, onChange, label = 'Payment note', placeholder = 'Coffee or wedding', optional = true }: PocketPaymentNoteFieldProps) {
   return (
     <fieldset className="space-y-1.5">
       <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
         <Tag className="h-3.5 w-3.5 text-gray-400" />
-        Payment note
-        <span className="text-xs font-normal text-gray-400">(optional)</span>
+        {label}
+        {optional ? <span className="text-xs font-normal text-gray-400">(optional)</span> : null}
       </label>
       <input
         type="text"
-        placeholder="Coffee, Invoice #042, Split dinner..."
+        placeholder={placeholder}
         value={value}
         maxLength={100}
         onChange={event => onChange(event.target.value)}
@@ -141,7 +145,7 @@ type PocketPayLinkSubmitPanelProps = {
 
 export function PocketPayLinkSubmitPanel({ lane, shellActive, idle, canSubmit, submitting, error, addressGuidance, onSubmit }: PocketPayLinkSubmitPanelProps) {
   const bankLane = usesNaira(lane)
-  const label = lane === 'bank' ? 'Create Bank PayLink' : lane === 'bank-send' ? 'Create Bank-to-USDC PayLink' : 'Generate Payment Link'
+  const label = lane === 'bank' ? 'Create Bank PayLink' : lane === 'bank-send' ? 'Create Bank-to-USDC PayLink' : 'Create Collection'
   return (
     <div className={cn('space-y-2', shellActive ? 'w-full' : 'p-3 sm:p-4')}>
       {idle && (
@@ -164,8 +168,8 @@ export function PocketPayLinkSubmitPanel({ lane, shellActive, idle, canSubmit, s
             : <Link2 className={cn('h-4 w-4 shrink-0', shellActive && 'absolute left-5')} />}
           <span>{label}</span>
           {canSubmit && !submitting && (shellActive
-            ? <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5"><ArrowRight className="h-4 w-4" /></span>
-            : <ArrowRight className="h-4 w-4 shrink-0" />)}
+            ? <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5"><PaymentArrowRight className="h-4 w-4" /></span>
+            : <PaymentArrowRight className="h-4 w-4 shrink-0" />)}
         </button>
       )}
 

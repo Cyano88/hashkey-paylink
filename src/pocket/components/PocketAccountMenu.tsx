@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronRight, Loader2, LogOut, Pencil, UserRound, Wallet } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ChevronRight, Copy, Loader2, LogOut, Pencil, UserRound, Wallet } from './PocketIcons'
+import { KeyIcon as LockKeyhole } from '@heroicons/react/24/outline'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -9,7 +10,7 @@ import { POCKET_BASE_PATH } from '../lib/pocketRoutes'
 import { readPocketLinkedWallets } from '../api/pocketReadClient'
 import { linkedPocketEvmStatus } from '../../lib/circleEvmWalletTopology'
 
-type AccountMenuMode = 'menu' | 'view' | 'edit'
+type AccountMenuMode = 'menu' | 'view' | 'edit-id'
 type LinkedEvmStatus = ReturnType<typeof linkedPocketEvmStatus> | 'checking' | 'unavailable'
 
 function initialsFor(name: string, email: string) {
@@ -38,9 +39,8 @@ export default function PocketAccountMenu() {
   const [linkedEvm, setLinkedEvm] = useState<LinkedEvmStatus>('checking')
   const rootRef = useRef<HTMLDivElement>(null)
 
-  const fullName = profile.profile
-    ? `${profile.profile.firstName} ${profile.profile.lastName}`.trim()
-    : `${profile.draft.firstName} ${profile.draft.lastName}`.trim()
+  const fullName = profile.profile?.resolvedName || ''
+  const pocketId = profile.profile?.pocketId || profile.draft.pocketId
   const initials = useMemo(() => initialsFor(fullName, email), [email, fullName])
   const gradient = useMemo(() => avatarGradient(`${email}:${fullName}`), [email, fullName])
 
@@ -60,7 +60,7 @@ export default function PocketAccountMenu() {
   useEffect(() => {
     if (!promptProfileAfterLogin || !authenticated || !profile.loaded || profile.busy) return
     setPromptProfileAfterLogin(false)
-    setMode(profile.loadError || profile.profile ? 'menu' : 'edit')
+    setMode('menu')
     setOpen(true)
   }, [authenticated, profile.busy, profile.loadError, profile.loaded, profile.profile, promptProfileAfterLogin])
 
@@ -103,15 +103,15 @@ export default function PocketAccountMenu() {
     )
   }
 
-  const openEdit = () => {
+  const openIdEditor = () => {
     profile.edit()
-    setMode('edit')
+    setMode('edit-id')
     setOpen(true)
   }
 
   const save = async () => {
     const saved = await profile.save()
-    if (saved) setMode('menu')
+    if (saved) setMode('view')
   }
 
   return (
@@ -138,7 +138,7 @@ export default function PocketAccountMenu() {
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/70 text-sm font-black text-white shadow-sm" style={{ background: gradient }}>{initials}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-black text-gray-950 dark:text-white">{fullName || 'Pocket profile'}</span>
-                  <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-400">{email}</span>
+                  <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-400">{pocketId ? 'ID: ' + pocketId : email}</span>
                 </span>
               </div>
 
@@ -167,15 +167,25 @@ export default function PocketAccountMenu() {
                   </button>
                   <button
                     type="button"
-                    onClick={openEdit}
+                    onClick={openIdEditor}
                     className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-xs font-bold text-gray-700 transition hover:bg-white hover:text-gray-950 hover:shadow-sm dark:text-gray-300 dark:hover:bg-white/[0.07] dark:hover:text-white"
                   >
                     <Pencil className="h-4 w-4" />
-                    <span className="flex-1">{profile.profile ? 'Edit profile' : 'Complete profile'}</span>
+                    <span className="flex-1">Edit Pocket ID</span>
                     <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
                   </button>
                 </div>
               )}
+
+              <div className="mt-2 flex items-center gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-xs dark:bg-white/[0.04]">
+                {profile.profile?.nameStatus === 'bank_resolved'
+                  ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  : <LockKeyhole className="h-4 w-4 text-gray-400" />}
+                <span className="flex-1 font-bold text-gray-700 dark:text-gray-300">Bank payouts</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">
+                  {profile.profile?.nameStatus === 'bank_resolved' ? 'Verified' : 'Not set up'}
+                </span>
+              </div>
 
               <div className="mt-2 flex items-center gap-3 rounded-2xl bg-gray-50 px-4 py-3 text-xs dark:bg-white/[0.04]">
                 <Wallet className="h-4 w-4 text-gray-500 dark:text-gray-400" />
@@ -222,58 +232,50 @@ export default function PocketAccountMenu() {
                 <p className="mt-3 text-base font-black text-gray-950 dark:text-white">{fullName || 'Pocket profile'}</p>
                 <p className="mt-1 truncate text-xs font-medium text-gray-400">{email}</p>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <div className="rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">First name</p>
-                  <p className="mt-1 truncate text-xs font-bold text-gray-800 dark:text-gray-200">{profile.profile?.firstName || 'Not set'}</p>
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center gap-3 rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]">
+                  <div className="min-w-0 flex-1"><p className="text-[9px] font-black uppercase tracking-wider text-gray-400">Pocket ID</p><p className="mt-1 truncate text-xs font-bold text-gray-800 dark:text-gray-200">{pocketId || 'Loading'}</p></div>
+                  <button type="button" onClick={() => pocketId && void navigator.clipboard.writeText(pocketId)} className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm dark:bg-white/[0.08]" aria-label="Copy Pocket ID"><Copy className="h-3.5 w-3.5" /></button>
                 </div>
-                <div className="rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">Last name</p>
-                  <p className="mt-1 truncate text-xs font-bold text-gray-800 dark:text-gray-200">{profile.profile?.lastName || 'Not set'}</p>
-                </div>
+                <div className="rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]"><p className="text-[9px] font-black uppercase tracking-wider text-gray-400">Email</p><p className="mt-1 truncate text-xs font-bold text-gray-800 dark:text-gray-200">{email}</p><p className="mt-1 text-[10px] font-medium text-gray-400">Locked to this Pocket account</p></div>
+                <div className="rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]"><p className="text-[9px] font-black uppercase tracking-wider text-gray-400">Bank-resolved name</p><p className="mt-1 truncate text-xs font-bold text-gray-800 dark:text-gray-200">{fullName || 'Verify a payout account'}</p><p className="mt-1 text-[10px] font-medium text-gray-400">{fullName ? 'Locked. Contact support for corrections.' : 'Added when your primary payout account is verified.'}</p></div>
               </div>
-              <button type="button" onClick={openEdit} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-4 py-3 text-xs font-bold text-white dark:bg-white dark:text-gray-950">
+              <button type="button" onClick={openIdEditor} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-4 py-3 text-xs font-bold text-white dark:bg-white dark:text-gray-950">
                 <Pencil className="h-3.5 w-3.5" />
-                Edit profile
+                Edit Pocket ID
               </button>
             </div>
           )}
 
-          {mode === 'edit' && (
+          {mode === 'edit-id' && (
             <div className="p-2">
               <div className="flex items-center gap-3">
                 <button type="button" onClick={() => profile.profile ? setMode('menu') : setOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 dark:bg-white/[0.07] dark:text-gray-300" aria-label="Close profile editor">
                   <ArrowLeft className="h-4 w-4" />
                 </button>
                 <div>
-                  <p className="text-sm font-black text-gray-950 dark:text-white">{profile.profile ? 'Edit profile' : 'Complete profile'}</p>
-                  <p className="text-[10px] font-medium text-gray-400">Payout identity and receipts</p>
+                  <p className="text-sm font-black text-gray-950 dark:text-white">Edit Pocket ID</p>
+                  <p className="text-[10px] font-medium text-gray-400">Choose 6 to 12 digits</p>
                 </div>
               </div>
 
               <div className="mt-4 space-y-2">
                 <input
-                  value={profile.draft.firstName}
-                  onChange={event => profile.setDraft({ ...profile.draft, firstName: event.target.value })}
-                  placeholder="First name"
-                  autoComplete="given-name"
+                  value={profile.draft.pocketId}
+                  onChange={event => profile.setDraft({ ...profile.draft, pocketId: event.target.value.replace(/\D/g, '').slice(0, 12) })}
+                  placeholder="Pocket ID"
+                  inputMode="numeric"
+                  autoComplete="off"
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
                 />
-                <input
-                  value={profile.draft.lastName}
-                  onChange={event => profile.setDraft({ ...profile.draft, lastName: event.target.value })}
-                  placeholder="Last name"
-                  autoComplete="family-name"
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-semibold text-gray-950 outline-none focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-                />
-                <div className="truncate rounded-xl border border-gray-200 bg-gray-100 px-3 py-2.5 text-xs font-medium text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400">{email}</div>
+                <p className="px-1 text-[10px] font-medium leading-relaxed text-gray-400">Your original Pocket number remains permanently reserved to you. Pocket IDs are public payment aliases, never login codes.</p>
               </div>
 
               {profile.error && <p className="mt-3 text-xs font-semibold text-red-600 dark:text-red-300">{profile.error}</p>}
               <button
                 type="button"
                 onClick={() => void save()}
-                disabled={profile.busy || !profile.draft.firstName.trim() || !profile.draft.lastName.trim()}
+                disabled={profile.busy || !/^\d{6,12}$/.test(profile.draft.pocketId)}
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-4 py-3 text-xs font-bold text-white transition active:scale-[0.98] disabled:opacity-50 dark:bg-white dark:text-gray-950"
               >
                 {profile.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}

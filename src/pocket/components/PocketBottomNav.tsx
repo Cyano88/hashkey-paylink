@@ -1,7 +1,7 @@
-import { ArrowUpDown, Banknote, House, TrendingUp } from 'lucide-react'
+import { ArrowUpDown, Banknote, TrendingUp } from './PocketIcons'
 import { cn } from '../../lib/utils'
 
-export type PocketNavTab = 'home' | 'move' | 'bills' | 'activity'
+export type PocketNavTab = 'move' | 'bills' | 'activity'
 
 type PocketBottomNavProps = {
   active: PocketNavTab
@@ -11,7 +11,6 @@ type PocketBottomNavProps = {
 }
 
 const items = [
-  { key: 'home', label: 'Home', icon: House },
   { key: 'move', label: 'Move', icon: ArrowUpDown },
   { key: 'bills', label: 'Bills', icon: Banknote },
   { key: 'activity', label: 'Activity', icon: TrendingUp },
@@ -26,7 +25,7 @@ export default function PocketBottomNav({ active, disabled = false, keyboardOpen
         keyboardOpen && 'translate-y-full',
       )}
     >
-      <div className="pointer-events-auto mx-auto grid w-full max-w-[430px] grid-cols-4 gap-1">
+      <div className="pointer-events-auto mx-auto grid w-full max-w-[430px] grid-cols-3 gap-1">
         {items.map(({ key, label, icon: Icon }) => {
           const selected = active === key
           return (

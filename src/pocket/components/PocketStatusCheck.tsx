@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react'
+import { Check } from './PocketIcons'
 import { cn } from '../../lib/utils'
 
 export default function PocketStatusCheck({ className }: { className?: string }) {

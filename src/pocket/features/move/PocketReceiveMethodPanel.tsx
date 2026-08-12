@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CheckCheck, ChevronDown, Loader2, LogOut, Mail, Wallet } from 'lucide-react'
+import { CheckCheck, ChevronDown, Loader2, LogOut, Mail, Wallet } from '../../components/PocketIcons'
 import { cn } from '../../../lib/utils'
 
 type ReceiveMode = 'idle' | 'paste' | 'email' | 'bank'

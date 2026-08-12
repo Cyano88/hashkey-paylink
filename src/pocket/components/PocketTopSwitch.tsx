@@ -1,27 +1,19 @@
-import { Banknote, Coins, History, Landmark, Lightbulb, Phone, Radio, Store, Tv, Wallet, Wifi } from 'lucide-react'
+import { Coins, History, Landmark, Lightbulb, Phone, Store, Tv, Users, Wallet, Wifi } from './PocketIcons'
 
-export type PocketHeaderMode = 'wallet' | 'move' | 'bills' | 'activity'
-export type PocketWalletSwitchView = 'smart' | 'x402'
+export type PocketHeaderMode = 'move' | 'bills' | 'activity'
 export type PocketMoveSwitchView = 'usdc' | 'bank' | 'pos'
 export type PocketBillSwitchView = 'airtime' | 'data' | 'tv' | 'electricity'
-export type PocketActivitySwitchView = 'all' | 'bank' | 'pos' | 'bills' | 'app-pay'
+export type PocketActivitySwitchView = 'all' | 'purchases' | 'bank' | 'pos' | 'collections'
 
 type PocketTopSwitchProps = {
   mode: PocketHeaderMode
-  walletView: PocketWalletSwitchView
   moveView: PocketMoveSwitchView | ''
   billView: PocketBillSwitchView
   activityView: PocketActivitySwitchView
-  onWalletChange: (view: PocketWalletSwitchView) => void
   onMoveChange: (view: PocketMoveSwitchView) => void
   onBillChange: (view: PocketBillSwitchView) => void
   onActivityChange: (view: PocketActivitySwitchView) => void
 }
-
-const walletItems = [
-  { key: 'smart', label: 'Smart Wallet', icon: Wallet },
-  { key: 'x402', label: 'App Pay', icon: Radio },
-] as const
 
 const moveItems = [
   { key: 'usdc', label: 'USDC', icon: Coins },
@@ -38,19 +30,17 @@ const billItems = [
 
 const activityItems = [
   { key: 'all', label: 'All', icon: History },
+  { key: 'purchases', label: 'Purchases', icon: Wallet },
   { key: 'bank', label: 'Bank receive', icon: Landmark },
   { key: 'pos', label: 'POS', icon: Store },
-  { key: 'bills', label: 'Bills', icon: Banknote },
-  { key: 'app-pay', label: 'App Pay', icon: Radio },
+  { key: 'collections', label: 'Requests', icon: Users },
 ] as const
 
 export default function PocketTopSwitch({
   mode,
-  walletView,
   moveView,
   billView,
   activityView,
-  onWalletChange,
   onMoveChange,
   onBillChange,
   onActivityChange,
@@ -62,7 +52,7 @@ export default function PocketTopSwitch({
       ? billItems
       : mode === 'activity'
         ? activityItems
-        : walletItems
+        : activityItems
 
   return (
     <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full border border-gray-200 bg-gray-100/95 p-1 shadow-[0_10px_30px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_12px_36px_rgba(0,0,0,0.35)] ${mode === 'move' ? 'grid-cols-3' : mode === 'activity' ? 'grid-cols-5' : compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
@@ -73,7 +63,7 @@ export default function PocketTopSwitch({
             ? billView === key
             : mode === 'activity'
               ? activityView === key
-              : walletView === key
+              : activityView === key
         return (
           <button
             key={key}
@@ -83,7 +73,7 @@ export default function PocketTopSwitch({
               if (mode === 'move') onMoveChange(key as PocketMoveSwitchView)
               else if (mode === 'bills') onBillChange(key as PocketBillSwitchView)
               else if (mode === 'activity') onActivityChange(key as PocketActivitySwitchView)
-              else onWalletChange(key as PocketWalletSwitchView)
+              else onActivityChange(key as PocketActivitySwitchView)
             }}
             className={[
               'flex min-h-9 min-w-0 items-center justify-center rounded-full font-black transition-all',

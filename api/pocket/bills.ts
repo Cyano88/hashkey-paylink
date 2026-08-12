@@ -17,6 +17,7 @@ import {
   type PocketBillsIntent,
 } from './bills-store.js'
 import { isPocketIdempotencyKey, type PocketErrorCode } from '../../src/pocket/lib/pocketSchemas.js'
+import { paymentExecutionRepository, type PaymentExecutionIntent, type PaymentExecutionRepository } from './payment-execution-intents.js'
 
 type VtpassClient = ReturnType<typeof createVtpassClient>
 type BillsStore = ReturnType<typeof createPocketBillsStore>
@@ -33,6 +34,7 @@ type BillsDependencies = {
   verifyTransfer(input: Parameters<typeof verifyEvmUsdcTransfer>[0]): ReturnType<typeof verifyEvmUsdcTransfer>
   now(): number
   requestId(): string
+  executions: PaymentExecutionRepository
 }
 
 function cleanText(value: unknown, max = 180) {
@@ -162,6 +164,64 @@ function syntheticFailed(intent: PocketBillsIntent, error: VtpassClientError): V
     retryable: error.retryable,
     requeryRequired: false,
   }
+}
+
+function publicBillIntent(intent: PocketBillsIntent, execution?: PaymentExecutionIntent) {
+  return {
+    ...publicPocketBillsIntent(intent),
+    executionId: execution?.id || '',
+    executionState: execution?.state || '',
+  }
+}
+
+async function syncBillExecution(dependencies: BillsDependencies, intent: PocketBillsIntent) {
+  let execution = await dependencies.executions.findByResource(intent.ownerId, intent.id, 'bill_payment')
+  if (!execution) {
+    const created = await dependencies.executions.create({
+      ownerId: intent.ownerId,
+      idempotencyKey: intent.idempotencyKey,
+      kind: 'bill_payment',
+      amount: intent.amountUsdc,
+      sourceNetwork: 'base',
+      settlementNetwork: 'base',
+      destinationType: 'bill_provider',
+      metadata: { category: intent.category, serviceId: intent.serviceId },
+    })
+    execution = created.intent
+    if (!execution.resourceId) {
+      execution = await dependencies.executions.update({
+        ownerId: intent.ownerId,
+        intentId: execution.id,
+        resourceId: intent.id,
+        providerReference: intent.requestId,
+      })
+    }
+  }
+
+  const reference = { providerReference: intent.requestId, transactionHash: intent.txHash }
+  const afterAuthorization = intent.state !== 'quoted'
+  const afterPayment = ['payment_confirmed', 'vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)
+  const processing = ['vending', 'pending', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted'].includes(intent.state)
+
+  if (afterAuthorization && execution.state === 'prepared') {
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'authorized', ...reference })
+  }
+  if (afterPayment && execution.state === 'authorized') {
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'submitted', ...reference })
+  }
+  if (processing && (execution.state === 'submitted' || execution.state === 'needs_review')) {
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'processing', ...reference })
+  }
+  if (intent.state === 'delivered' && ['submitted', 'processing', 'needs_review'].includes(execution.state)) {
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'completed', ...reference })
+  } else if (intent.state === 'refunded' && !['completed', 'failed', 'expired'].includes(execution.state)) {
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'failed', failureCode: 'PROVIDER_REFUNDED', ...reference })
+  } else if (intent.state === 'failed' && !['completed', 'failed', 'expired'].includes(execution.state)) {
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'failed', failureCode: 'BILL_PAYMENT_FAILED', ...reference })
+  } else if (intent.state === 'needs_review' && !['completed', 'failed', 'expired', 'needs_review'].includes(execution.state)) {
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'needs_review', failureCode: 'BILL_PAYMENT_NEEDS_REVIEW', ...reference })
+  }
+  return execution
 }
 
 function mapError(error: unknown): { status: number; code: PocketErrorCode; message: string; retryable: boolean } {
@@ -327,7 +387,8 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
         // short-lived provider cache timestamp.
         quoteExpiresAt: dependencies.now() + POCKET_BILLS_QUOTE_LIFETIME_MS,
       })
-      return respond.success({ intent: publicPocketBillsIntent(created.intent), replayed: !created.created })
+      const execution = await syncBillExecution(dependencies, created.intent)
+      return respond.success({ intent: publicBillIntent(created.intent, execution), replayed: !created.created })
     } catch (error) {
       return respond.fail(error)
     }
@@ -342,6 +403,10 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
     if (req.method !== 'POST') return respond.fail(new PocketBillsStoreError('BILLS_METHOD_NOT_ALLOWED', 'Method not allowed.', 405))
     try {
       const identity = await dependencies.verifyUser(req)
+      const sendIntent = async (intent: PocketBillsIntent, status: 'processing' | 'completed' = 'processing', extra: Record<string, unknown> = {}) => {
+        const execution = await syncBillExecution(dependencies, intent)
+        return respond.success({ intent: publicBillIntent(intent, execution), ...extra }, status)
+      }
       const action = cleanText(req.body?.action, 30)
       const limit = action === 'status' || action === 'list'
         ? { windowMs: 60_000, max: 30 }
@@ -360,7 +425,7 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
         const current = await dependencies.store.getOwnedIntent(identity.userId, intentId)
         await assertProviderReserve(dependencies, current.amountNgn)
         const intent = await dependencies.store.markAwaitingPayment(identity.userId, intentId)
-        return respond.success({ intent: publicPocketBillsIntent(intent) }, 'processing')
+        return sendIntent(intent)
       }
 
       if (action === 'confirm') {
@@ -386,21 +451,21 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
           }
         }
         const paid = await dependencies.store.recordVerifiedPayment({ ownerId: identity.userId, intentId, txHash, paymentAmountUsdc, confirmedAt })
-        if (paid.state !== 'payment_confirmed') return respond.success({ intent: publicPocketBillsIntent(paid) }, paid.state === 'delivered' ? 'completed' : 'processing')
+        if (paid.state !== 'payment_confirmed') return sendIntent(paid, paid.state === 'delivered' ? 'completed' : 'processing')
         if (!dependencies.config.canVend) {
           const review = await dependencies.store.markNeedsReview(identity.userId, intentId, 'Provider vending was disabled after on-chain payment confirmation.')
-          return respond.success({ intent: publicPocketBillsIntent(review) }, 'processing')
+          return sendIntent(review)
         }
 
         try {
           await assertProviderReserve(dependencies, paid.amountNgn)
         } catch (error) {
           const review = await dependencies.store.markNeedsReview(identity.userId, intentId, error instanceof Error ? error.message : 'Provider reserve could not be verified.')
-          return respond.success({ intent: publicPocketBillsIntent(review) }, 'processing')
+          return sendIntent(review)
         }
 
         const claim = await dependencies.store.claimVending(identity.userId, intentId)
-        if (!claim.claimed) return respond.success({ intent: publicPocketBillsIntent(claim.intent) }, claim.intent.state === 'delivered' ? 'completed' : 'processing')
+        if (!claim.claimed) return sendIntent(claim.intent, claim.intent.state === 'delivered' ? 'completed' : 'processing')
         try {
           const result = claim.intent.category === 'data' ? await dependencies.provider.purchaseData({
                 serviceId: claim.intent.serviceId,
@@ -424,18 +489,18 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
                 requestId: claim.intent.requestId,
               })
           const settled = await dependencies.store.recordProviderResult(identity.userId, intentId, result)
-          return respond.success({ intent: publicPocketBillsIntent(settled) }, settled.state === 'delivered' ? 'completed' : 'processing')
+          return sendIntent(settled, settled.state === 'delivered' ? 'completed' : 'processing')
         } catch (error) {
           if (error instanceof VtpassClientError && error.outcomeUnknown) {
             const pending = await dependencies.store.recordProviderResult(identity.userId, intentId, syntheticPending(claim.intent, error.message))
-            return respond.success({ intent: publicPocketBillsIntent(pending) }, 'processing')
+            return sendIntent(pending)
           }
           if (error instanceof VtpassClientError && error.code === 'VTPASS_ACCESS_DENIED') {
             const failed = await dependencies.store.recordProviderResult(identity.userId, intentId, syntheticFailed(claim.intent, error))
-            return respond.success({ intent: publicPocketBillsIntent(failed) }, 'processing')
+            return sendIntent(failed)
           }
           const review = await dependencies.store.markNeedsReview(identity.userId, intentId, error instanceof Error ? error.message : 'Provider purchase needs reconciliation.')
-          return respond.success({ intent: publicPocketBillsIntent(review) }, 'processing')
+          return sendIntent(review)
         }
       }
 
@@ -455,7 +520,7 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
             intent = await dependencies.store.recordRequeryFailure(identity.userId, intentId, refreshError)
           }
         }
-        return respond.success({ intent: publicPocketBillsIntent(intent), refreshed, ...(refreshError ? { refreshError } : {}) }, intent.state === 'delivered' || intent.state === 'refunded' ? 'completed' : 'processing')
+        return sendIntent(intent, intent.state === 'delivered' || intent.state === 'refunded' ? 'completed' : 'processing', { refreshed, ...(refreshError ? { refreshError } : {}) })
       }
 
       return respond.fail(new PocketBillsStoreError('BILLS_UNKNOWN_ACTION', 'Unknown bill-payment action.'))
@@ -552,6 +617,7 @@ function getDefaultHandlers() {
     verifyTransfer: verifyEvmUsdcTransfer,
     now: Date.now,
     requestId: randomUUID,
+    executions: paymentExecutionRepository,
   }
   defaultHandlers = {
     catalog: createPocketBillsCatalogHandler(dependencies),

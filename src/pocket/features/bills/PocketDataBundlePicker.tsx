@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check } from '../../components/PocketIcons'
 import { cn } from '../../../lib/utils'
 import type { PocketDataVariation } from '../../api/pocketBillsClient'
 import {

@@ -2,7 +2,9 @@ import { useNavigate } from 'react-router-dom'
 import { useCallback } from 'react'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
+import PocketLoadingState from '../components/PocketLoadingState'
 import PocketActivityPanel from '../features/activity/PocketActivityPanel'
+import PocketResourceActivityPanel from '../features/activity/PocketResourceActivityPanel'
 import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_BASE_PATH, pocketPathFor, type PocketActivityView } from '../lib/pocketRoutes'
@@ -30,9 +32,7 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
   }, [activity.refresh, getAccessToken])
 
   const selectNav = (tab: PocketNavTab) => {
-    const path = tab === 'home'
-      ? pocketPathFor({ section: 'home', view: 'smart-wallet' })
-      : tab === 'move'
+    const path = tab === 'move'
         ? pocketPathFor({ section: 'move', view: 'usdc' })
         : tab === 'bills'
           ? pocketPathFor({ section: 'bills', view: 'airtime' })
@@ -40,16 +40,25 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
+  if (authenticated && !activity.resolved) return <PocketLoadingState active="activity" />
+
   return (
     <PocketRouteShell active="activity" onSelect={selectNav}>
-      <PocketActivityPanel
+      {view === 'pos' || view === 'collections' ? <PocketResourceActivityPanel
+        view={view}
+        rows={activity.rows}
+        merchants={activity.merchants}
+        collections={activity.collections}
+        busy={activity.busy}
+        error={activity.error}
+      /> : <PocketActivityPanel
         view={view}
         rows={activity.rows}
         authenticated={authenticated}
         busy={activity.busy}
         error={activity.error}
         onRefund={handleBillsRefund}
-      />
+      />}
     </PocketRouteShell>
   )
 }

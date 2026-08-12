@@ -3,7 +3,7 @@ import { copyToClipboard } from '../../lib/utils'
 import { readPocketBankInstitutions, verifyPocketBankAccount } from '../api/pocketBankClient'
 import { createPocketPos } from '../api/pocketPosClient'
 import type { PocketPosMerchant } from '../lib/pocketSchemas'
-import { hashPayLinkAppOriginForOrigin } from '../lib/pocketRoutes'
+import { hashPayLinkAppOriginForOrigin, POCKET_BASE_PATH } from '../lib/pocketRoutes'
 import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 import { readablePocketBankPayoutError } from './pocketBankErrors'
 import { usePocketPosController } from './usePocketMoveControllers'
@@ -222,12 +222,8 @@ export default function usePocketPosPageController({
   const customerUrl = merchant
     ? `${hashPayLinkAppOriginForOrigin(window.location.origin)}/pos/ng?merchant_id=${encodeURIComponent(merchant.merchant_id)}`
     : ''
-  const merchantNetworks = merchant?.supported_networks?.length ? merchant.supported_networks : ['base']
-  const dashboardNetwork = merchantNetworks.find(network => network !== 'solana') ?? 'solana'
-  const dashboardAddressParam = dashboardNetwork === 'solana' ? 's' : 'e'
-  const dashboardAddress = dashboardNetwork === 'solana' ? merchant?.solana_wallet_address : merchant?.circle_smart_wallet_address
   const dashboardUrl = merchant
-    ? `${hashPayLinkAppOriginForOrigin(window.location.origin)}/dashboard?${dashboardAddressParam}=${encodeURIComponent(dashboardAddress ?? '')}&n=${encodeURIComponent(dashboardNetwork)}&id=${encodeURIComponent(`ngpos-${merchant.merchant_id}`)}&src=ngpos`
+    ? `${POCKET_BASE_PATH}/activity/pos?terminal=${encodeURIComponent(merchant.merchant_id)}`
     : ''
 
   const copyCustomerUrl = useCallback(async () => {

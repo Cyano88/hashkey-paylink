@@ -188,11 +188,9 @@ async function solanaActivity(wallet: string): Promise<PocketActivityRow[]> {
 }
 
 export async function readPocketWalletChainActivity(ownerId: string) {
-  const links = await Promise.all(['base', 'arbitrum', 'arc', 'solana'].map(async network => ({
-    network,
-    link: await readCircleLink(circleLinkKey(ownerId, network, 'payment')),
-  })))
-  const results = await Promise.all(links.map(async ({ network, link }) => {
+  const links = await readPocketLinkedWalletAddresses(ownerId)
+  const results = await Promise.all(links.map(async ({ network, walletAddress }) => {
+    const link = { circleWalletAddress: walletAddress }
     if (!link) return []
     try {
       const read = network === 'solana'
@@ -208,4 +206,12 @@ export async function readPocketWalletChainActivity(ownerId: string) {
     }
   }))
   return results.flat()
+}
+
+export async function readPocketLinkedWalletAddresses(ownerId: string) {
+  const links = await Promise.all(['base', 'arbitrum', 'arc', 'solana'].map(async network => ({
+    network,
+    link: await readCircleLink(circleLinkKey(ownerId, network, 'payment')),
+  })))
+  return links.flatMap(({ network, link }) => link ? [{ network, walletAddress: link.circleWalletAddress }] : [])
 }

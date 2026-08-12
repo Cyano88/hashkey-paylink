@@ -54,6 +54,7 @@ const handler = createPocketActivityHandler({
   readHistory: async ownerId => {
     ownerIds.push(ownerId)
     return {
+      merchants: [{ merchant_id: 'merchant-1', display_name: 'Ada Shop', source: 'pos', created_at: '2026-08-12T00:00:00.000Z' }],
       payments: [
         {
           eventId: 'ngpos-merchant-1',
@@ -87,6 +88,36 @@ const handler = createPocketActivityHandler({
       ],
     }
   },
+  readWalletAddresses: async ownerId => {
+    ownerIds.push(ownerId)
+    return ['0x2222222222222222222222222222222222222222']
+  },
+  readExternalPayments: async wallets => {
+    assert.deepEqual(wallets, ['0x2222222222222222222222222222222222222222'])
+    return [{
+      id: 'pex-polydesk-1', ownerId: 'partner:polydesk', idempotencyKey: 'checkout-polydesk-1', requestHash: 'hash',
+      kind: 'service_funding', state: 'completed', asset: 'USDC', amount: '5', sourceNetwork: 'base', settlementNetwork: 'base',
+      destinationType: 'partner_checkout', resourceId: 'chk_polydesk_1', transactionHash: '0xpolydesk', providerReference: 'pmf_1',
+      metadata: {
+        partnerId: 'polydesk', merchantName: 'PolyDesk', title: 'Fund Polymarket account', memo: 'Polymarket funding',
+        payerWallet: '0x2222222222222222222222222222222222222222', provider: 'polymarket',
+        receiptId: 'r1.test.signature', receiptUrl: '/receipt/r1.test.signature',
+      },
+      createdAt: 1_745_000_000_000, updatedAt: 1_745_000_000_000,
+    }]
+  },
+  readCollections: async ownerId => [{
+    eventId: 'collection_shys_wedding_01', ownerId, title: "Shy's wedding",
+    paymentUrl: 'https://app.hashpaylink.com/pay?v=1&id=collection_shys_wedding_01',
+    createdAt: 1_746_000_000_000, updatedAt: 1_746_000_000_000,
+  }],
+  readCollectionPayments: async eventIds => {
+    assert.deepEqual(eventIds, ['collection_shys_wedding_01'])
+    return [{
+      eventId: 'collection_shys_wedding_01', txHash: '0xwedding', chain: 'base', payer: '0xguest',
+      memo: 'Shy Guest', amount: '2', ts: 1_746_000_000_000,
+    }]
+  },
   readActions: async () => [{
     id: 'marketplace-action-1',
     ownerId: 'privy-user-1',
@@ -101,7 +132,7 @@ const handler = createPocketActivityHandler({
     ownerIds.push(ownerId)
     return [{
       eventId: 'base:0xdeposit:1',
-      txHash: '0xdeposit',
+      txHash: '0xpolydesk',
       chain: 'base',
       payer: '0xpayer',
       memo: 'USDC deposit',
@@ -137,18 +168,24 @@ const loaded = await request(handler)
 assert.equal(loaded.statusCode, 200)
 assert.equal(loaded.body.ok, true)
 assert.equal(isPocketActivityReadData(loaded.body), true)
-assert.deepEqual(ownerIds, ['privy-user-1', 'privy-user-1', 'privy-user-1'])
-assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['pocket-action:marketplace-action-1', '0xbill', '0xdeposit', 'paycrest_intent-2', '0xolder'])
-assert.equal(loaded.body.payments[0].source, 'app-pay')
-assert.equal(loaded.body.payments[0].paycrestStatus, 'needs review')
-assert.equal(loaded.body.payments[0].contextLabel, 'Payment outcome needs review before retrying')
-assert.equal(loaded.body.payments[1].source, 'bills')
-assert.equal(loaded.body.payments[1].amountNgn, '100')
-assert.equal(loaded.body.payments[1].paycrestStatus, 'test complete')
-assert.equal(loaded.body.payments[1].activityLabel, 'Electricity sandbox test')
-assert.equal(loaded.body.payments[1].providerReference, 'provider-bill-1')
-assert.equal(loaded.body.payments[1].billToken, 'Token : 26362054405982757802')
-assert.equal(loaded.body.payments[1].supportReference, 'VTpass 000 · 202607191200bill')
+assert.equal(loaded.body.merchants[0].display_name, 'Ada Shop')
+assert.equal(loaded.body.collections[0].title, "Shy's wedding")
+assert.deepEqual(ownerIds, ['privy-user-1', 'privy-user-1', 'privy-user-1', 'privy-user-1'])
+assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', '0xbill', 'paycrest_intent-2', '0xolder'])
+assert.equal(loaded.body.payments[0].source, 'collection')
+assert.equal(loaded.body.payments[0].activityLabel, "Shy's wedding")
+assert.equal(loaded.body.payments[0].paycrestStatus, 'confirmed')
+assert.match(loaded.body.payments[0].receiptId, /^r1\./)
+assert.equal(loaded.body.payments[1].source, 'purchase')
+assert.equal(loaded.body.payments[1].activityLabel, 'PolyDesk funding')
+assert.equal(loaded.body.payments[1].receiptId, 'r1.test.signature')
+assert.equal(loaded.body.payments[2].source, 'bills')
+assert.equal(loaded.body.payments[2].amountNgn, '100')
+assert.equal(loaded.body.payments[2].paycrestStatus, 'test complete')
+assert.equal(loaded.body.payments[2].activityLabel, 'Electricity sandbox test')
+assert.equal(loaded.body.payments[2].providerReference, 'provider-bill-1')
+assert.equal(loaded.body.payments[2].billToken, 'Token : 26362054405982757802')
+assert.equal(loaded.body.payments[2].supportReference, 'VTpass 000 · 202607191200bill')
 const serialized = JSON.stringify(loaded.body)
 assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)

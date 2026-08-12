@@ -40,6 +40,8 @@ export type PocketMarketplacePurchase = {
   receiptActivityId?: string
   transaction?: string
   result?: unknown
+  executionId?: string
+  executionState?: string
 }
 
 function purchase(value: unknown): PocketMarketplacePurchase | undefined {
@@ -53,6 +55,8 @@ function purchase(value: unknown): PocketMarketplacePurchase | undefined {
     ...(typeof item.receiptActivityId === 'string' ? { receiptActivityId: item.receiptActivityId } : {}),
     ...(typeof item.transaction === 'string' ? { transaction: item.transaction } : {}),
     ...(item.result !== undefined ? { result: item.result } : {}),
+    ...(typeof item.executionId === 'string' ? { executionId: item.executionId } : {}),
+    ...(typeof item.executionState === 'string' ? { executionState: item.executionState } : {}),
   }
 }
 

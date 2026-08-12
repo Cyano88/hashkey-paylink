@@ -49,8 +49,9 @@ export function pocketReceiptKind(row: PocketActivityRow): PocketReceiptKind | n
 
   if (source === 'wallet-bridge' || settlement === 'wallet_bridge') return null
   if (source === 'bills' || settlement === 'bill_payment' || settlement.startsWith('bill_payment:')) return 'bill_purchase'
-  if (source === 'app-pay' || settlement === 'app_pay') return 'app_purchase'
+  if (source === 'purchase' || source === 'app-pay' || settlement === 'app_pay' || settlement === 'hosted_checkout' || settlement === 'service_funding') return 'app_purchase'
   if (source === 'wallet-deposit') return 'money_in'
+  if (source === 'collection') return 'money_in'
   if (source === 'wallet-withdrawal') return 'money_out'
   if (source === 'bank-withdraw') return 'money_out'
   if (source === 'bank-send' || source === 'bank-receive' || source === 'ngpos' || source === 'pos') return 'money_in'
@@ -74,8 +75,9 @@ export function pocketReceiptAvailability(row: PocketActivityRow): PocketReceipt
 
 function receiptTitle(kind: PocketReceiptKind, row: PocketActivityRow) {
   if (kind === 'bill_purchase') return `${row.billCategory === 'tv' ? 'TV' : row.billCategory ? `${row.billCategory[0].toUpperCase()}${row.billCategory.slice(1)}` : 'Bill'} payment`
-  if (kind === 'app_purchase') return 'App Pay purchase'
+  if (kind === 'app_purchase') return row.activityLabel || 'Web purchase'
   if (normalizedSource(row) === 'ngpos' || normalizedSource(row) === 'pos') return 'Retail payment'
+  if (normalizedSource(row) === 'collection') return row.activityLabel || 'Request payment'
   if (normalizedSource(row).startsWith('bank-')) return kind === 'money_out' ? 'Bank payout' : 'Bank funding'
   return kind === 'money_out' ? 'USDC sent' : 'USDC received'
 }
@@ -93,7 +95,7 @@ export function pocketActivityReceipt(row: PocketActivityRow): PaylinkReceipt | 
 
   return {
     type: kind === 'bill_purchase' ? category : kind,
-    receiptId: row.billReference || row.eventId,
+    receiptId: row.receiptId || row.billReference || row.eventId,
     receiptHash: row.txHash || reference,
     title: receiptTitle(kind, row),
     status: pocketActivityStatus(row),

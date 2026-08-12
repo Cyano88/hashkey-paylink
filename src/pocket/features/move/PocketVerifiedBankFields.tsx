@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react'
+import { Loader2 } from '../../components/PocketIcons'
 import { cn } from '../../../lib/utils'
 import PocketSelect from '../../components/PocketSelect'
 

@@ -88,7 +88,7 @@ assert.deepEqual(paymentReceiptView(electricityReceipt).rows.at(-1), { label: 'M
 
 const appPurchase = { ...base, eventId: 'evt_6', source: 'app-pay', settlementType: 'app_pay', paycrestStatus: 'completed', recipient: 'Research service' }
 assert.equal(pocketReceiptKind(appPurchase), 'app_purchase')
-assert.equal(pocketActivityReceipt(appPurchase)?.title, 'App Pay purchase')
+assert.equal(pocketActivityReceipt(appPurchase)?.title, 'Web purchase')
 
 const gatewayFunding = { ...base, eventId: 'evt_7', source: 'gateway-activation', settlementType: 'gateway_funding', paycrestStatus: 'completed' }
 assert.equal(pocketReceiptKind(gatewayFunding), null)

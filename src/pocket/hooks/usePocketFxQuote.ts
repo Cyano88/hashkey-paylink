@@ -4,7 +4,18 @@ import { readPocketFxQuote, type PocketFxQuote } from '../api/pocketFxClient'
 const POCKET_FX_REFRESH_INTERVAL_MS = 30_000
 const POCKET_FX_FOCUS_THROTTLE_MS = 10_000
 
-let cachedQuote: PocketFxQuote | null = null
+const POCKET_FX_STORAGE_KEY = 'pocket:paycrest-ngn-quote'
+
+function storedQuote() {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(POCKET_FX_STORAGE_KEY) || 'null') as PocketFxQuote | null
+    return value?.source === 'paycrest' && Number.isFinite(value.rate) && value.rate > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+let cachedQuote: PocketFxQuote | null = typeof window === 'undefined' ? null : storedQuote()
 
 function quoteAmount(value: number) {
   if (!Number.isFinite(value) || value <= 0) return '1'
@@ -13,7 +24,7 @@ function quoteAmount(value: number) {
 
 export default function usePocketFxQuote(balance: number) {
   const amount = quoteAmount(balance)
-  const initialQuote = cachedQuote?.amount === amount && cachedQuote.expiresAt > Date.now() ? cachedQuote : null
+  const initialQuote = cachedQuote?.amount === amount ? cachedQuote : null
   const [quote, setQuote] = useState<PocketFxQuote | null>(initialQuote)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -28,6 +39,7 @@ export default function usePocketFxQuote(balance: number) {
     try {
       const nextQuote = await readPocketFxQuote(amount)
       cachedQuote = nextQuote
+      window.localStorage.setItem(POCKET_FX_STORAGE_KEY, JSON.stringify(nextQuote))
       setQuote(nextQuote)
       setError('')
     } catch (reason) {
@@ -39,19 +51,17 @@ export default function usePocketFxQuote(balance: number) {
   }, [amount])
 
   useEffect(() => {
-    if (!quote) return
+    if (!quote || quote.stale) return
     const remaining = quote.expiresAt - Date.now()
     if (remaining <= 0) {
-      cachedQuote = null
-      setQuote(null)
+      void refresh()
       return
     }
     const expiry = window.setTimeout(() => {
-      cachedQuote = null
-      setQuote(null)
+      void refresh()
     }, remaining)
     return () => window.clearTimeout(expiry)
-  }, [quote])
+  }, [quote, refresh])
 
   useEffect(() => {
     const refreshVisibleQuote = () => {

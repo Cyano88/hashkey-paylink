@@ -3,6 +3,8 @@ import type { Request, Response } from 'express'
 import { formatUnits, getAddress, isAddress } from 'viem'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
 import { dispatchDeveloperWebhook, prepareDeveloperNairaCheckout, resolveDeveloperApiKeyPolicy, type DeveloperCheckoutPolicy } from './developer-projects.js'
+import { paymentExecutionRepository, type PaymentExecutionRepository } from './pocket/payment-execution-intents.js'
+import { ensureHostedCheckoutExecution, expireHostedCheckoutExecution, syncHostedCheckoutExecution } from './pocket/hosted-checkout-payment-executions.js'
 
 const STORE_KEY = (process.env.HOSTED_CHECKOUT_STORE_KEY ?? 'hashpaylink:hosted-checkouts:v2').trim()
 const NETWORKS = new Set(['base', 'arbitrum', 'arc'])
@@ -131,6 +133,7 @@ type Dependencies = {
   signingSecret: () => string
   createId: () => string
   now: () => Date
+  executions: PaymentExecutionRepository
 }
 
 function clean(value: unknown, max: number) {
@@ -178,6 +181,7 @@ const defaults: Dependencies = {
   signingSecret: () => (process.env.HOSTED_CHECKOUT_SIGNING_SECRET ?? '').trim(),
   createId: () => `chk_${randomUUID().replace(/-/g, '').slice(0, 20)}`,
   now: () => new Date(),
+  executions: paymentExecutionRepository,
 }
 
 function enqueueWebhook(store: CheckoutStore, partnerId: string, event: string, data: Record<string, unknown>, now: Date) {
@@ -534,6 +538,7 @@ export async function markHostedCheckoutPaid(input: {
     return updated
   })
   if (!result) throw new Error('Hosted checkout could not be updated.')
+  await syncHostedCheckoutExecution(result as CheckoutRecord, dependencies.executions)
   if (newlyPaid) startWebhookDrain(dependencies)
   return { ...(result as CheckoutRecord) }
 }
@@ -564,6 +569,7 @@ export async function attachHostedCheckoutReceipt(input: {
     return { ...safe, checkouts: { ...safe.checkouts, [id]: result } }
   })
   if (!result) throw new Error('Hosted checkout receipt could not be attached.')
+  await syncHostedCheckoutExecution(result as CheckoutRecord, dependencies.executions)
   return { ...(result as CheckoutRecord) }
 }
 
@@ -667,6 +673,7 @@ export async function markHostedCheckoutNairaPayout(input: { intentId: string; s
     return updated
   })
   if (newlyDelivered || newlyFailed) startWebhookDrain(dependencies)
+  if (result) await syncHostedCheckoutExecution(result as CheckoutRecord, dependencies.executions)
   return result
 }
 
@@ -868,6 +875,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         const policy = await dependencies.policy(req)
         if (!policy || policy.partnerId !== record.partnerId) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
         const expired = dependencies.now().getTime() >= Date.parse(record.expiresAt)
+        if (expired && !record.payment) await expireHostedCheckoutExecution(record, dependencies.executions)
         return res.json({
           ok: true,
           checkoutId: record.id,
@@ -884,7 +892,10 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
           ...(record.payment ? { payment: record.payment } : {}),
         })
       }
-      if (dependencies.now().getTime() >= Date.parse(record.expiresAt)) return res.status(410).json({ ok: false, error: 'Checkout expired.' })
+      if (dependencies.now().getTime() >= Date.parse(record.expiresAt)) {
+        await expireHostedCheckoutExecution(record, dependencies.executions)
+        return res.status(410).json({ ok: false, error: 'Checkout expired.' })
+      }
       return res.json({
         ok: true,
           checkout: {
@@ -1017,6 +1028,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if (existingRecord) {
       if (!integrityValid(existingRecord, secret)) return res.status(409).json({ ok: false, error: 'Checkout integrity verification failed.' })
       if (existingRecord.requestHash !== requestHash) return res.status(409).json({ ok: false, error: 'Idempotency-Key was already used for a different checkout request.' })
+      await ensureHostedCheckoutExecution(existingRecord, dependencies.executions)
       return res.status(200).json({
         ok: true,
         replayed: true,
@@ -1107,6 +1119,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     })
     if (idempotencyConflict) return res.status(409).json({ ok: false, error: 'Idempotency-Key was already used for a different checkout request.' })
     const record = store.checkouts[createdId]
+    await ensureHostedCheckoutExecution(record, dependencies.executions)
     if (!replayed) startWebhookDrain(dependencies)
     return res.status(replayed ? 200 : 201).json({
       ok: true,

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
+import { randomInt } from 'crypto'
 import { PrivyClient, type User } from '@privy-io/server-auth'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
 
@@ -13,20 +14,23 @@ export type LocalCurrencyProfile = {
   privyUserId: string
   firstName: string
   lastName: string
+  resolvedName: string
+  nameStatus: 'unverified' | 'bank_resolved'
   email: string
+  pocketNumber: string
+  pocketId: string
   updatedAt: string
 }
 
 type Store = {
   profiles: Record<string, LocalCurrencyProfile>
+  pocketIds: Record<string, string>
 }
 
 export type VerifiedProfileUser = {
   userId: string
   email: string
 }
-
-export type ProfileDraft = Omit<LocalCurrencyProfile, 'updatedAt'>
 
 export type ProfileSaveResult = {
   profile: LocalCurrencyProfile
@@ -35,7 +39,9 @@ export type ProfileSaveResult = {
 
 export type ProfileRepository = {
   get(userId: string): Promise<LocalCurrencyProfile | undefined>
-  save(draft: ProfileDraft, expectedUpdatedAt?: string): Promise<ProfileSaveResult>
+  ensure(identity: VerifiedProfileUser): Promise<ProfileSaveResult>
+  updatePocketId(userId: string, pocketId: string, expectedUpdatedAt?: string): Promise<ProfileSaveResult>
+  bindBankResolvedName(identity: VerifiedProfileUser, resolvedName: string): Promise<ProfileSaveResult>
 }
 
 export type HandlerDependencies = {
@@ -51,6 +57,7 @@ type RepositoryOptions = {
   now?: () => string
   readDurable?: typeof readDurableJson
   mutateDurable?: typeof mutateDurableJson
+  generatePocketNumber?: () => string
 }
 
 export class ProfileVersionConflictError extends Error {
@@ -58,6 +65,22 @@ export class ProfileVersionConflictError extends Error {
 
   constructor() {
     super('Payout profile changed since it was loaded. Refresh and try again.')
+  }
+}
+
+export class PocketIdUnavailableError extends Error {
+  status = 409
+
+  constructor() {
+    super('That Pocket ID is unavailable. Choose another one.')
+  }
+}
+
+export class ProfileNameConflictError extends Error {
+  status = 409
+
+  constructor() {
+    super('This bank account resolves to a different name. Contact support before changing your payout identity.')
   }
 }
 
@@ -75,8 +98,8 @@ function linkedEmail(user: User) {
   return ''
 }
 
-function cleanName(value: unknown) {
-  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 64)
+function cleanResolvedName(value: unknown) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 160)
 }
 
 export async function verifiedPrivyUser(req: Request) {
@@ -99,24 +122,43 @@ export async function verifiedPrivyUser(req: Request) {
   return { userId: claims.userId, email: linkedEmail(user) }
 }
 
-function normalizedStore(value: Partial<Store> | undefined): Store {
-  return { profiles: value?.profiles ?? {} }
+function normalizedPocketId(value: unknown) {
+  const pocketId = String(value ?? '').trim()
+  return /^\d{6,12}$/.test(pocketId) ? pocketId : ''
 }
 
-function applyProfileSave(store: Store, draft: ProfileDraft, expectedUpdatedAt: string | undefined, now: () => string): ProfileSaveResult {
-  const existing = store.profiles[draft.privyUserId]
-  if (expectedUpdatedAt && existing?.updatedAt !== expectedUpdatedAt) throw new ProfileVersionConflictError()
-  if (
-    existing
-    && existing.firstName === draft.firstName
-    && existing.lastName === draft.lastName
-    && existing.email === draft.email
-  ) {
-    return { profile: existing, unchanged: true }
+function requiredIdentity(identity: VerifiedProfileUser) {
+  const userId = String(identity.userId ?? '').trim()
+  const email = String(identity.email ?? '').trim().toLowerCase()
+  if (!userId) throw Object.assign(new Error('Pocket identity is unavailable. Sign in again.'), { status: 401 })
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw Object.assign(new Error('Pocket requires a verified email address.'), { status: 403 })
   }
-  const profile = { ...draft, updatedAt: now() }
-  store.profiles[draft.privyUserId] = profile
-  return { profile, unchanged: false }
+  return { userId, email }
+}
+
+function normalizedName(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function nameParts(resolvedName: string) {
+  const parts = resolvedName.split(/\s+/).filter(Boolean)
+  return {
+    firstName: parts[0] ?? '',
+    lastName: parts.slice(1).join(' '),
+  }
+}
+
+function normalizedStore(value: Partial<Store> | undefined): Store {
+  const profiles = value?.profiles ?? {}
+  const pocketIds = { ...(value?.pocketIds ?? {}) }
+  for (const [userId, profile] of Object.entries(profiles)) {
+    const currentId = normalizedPocketId(profile.pocketId)
+    const permanentNumber = normalizedPocketId(profile.pocketNumber)
+    if (currentId) pocketIds[currentId] = userId
+    if (permanentNumber) pocketIds[permanentNumber] = userId
+  }
+  return { profiles, pocketIds }
 }
 
 export function createLocalCurrencyProfileRepository(options: RepositoryOptions = {}): ProfileRepository {
@@ -127,6 +169,7 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
   const now = options.now ?? (() => new Date().toISOString())
   const readRemote = options.readDurable ?? readDurableJson
   const mutateRemote = options.mutateDurable ?? mutateDurableJson
+  const generatePocketNumber = options.generatePocketNumber ?? (() => String(randomInt(10_000_000, 100_000_000)))
   let localMutationQueue: Promise<void> = Promise.resolve()
 
   async function readLocalStore() {
@@ -148,43 +191,154 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
     return readLocalStore()
   }
 
+  function allocatePocketNumber(store: Store) {
+    for (let attempt = 0; attempt < 64; attempt += 1) {
+      const candidate = normalizedPocketId(generatePocketNumber())
+      if (candidate && !store.pocketIds[candidate]) return candidate
+    }
+    throw new Error('Pocket could not allocate a unique ID. Try again.')
+  }
+
+  function normalizeExistingProfile(profile: LocalCurrencyProfile, userId: string, email: string, store: Store) {
+    let changed = false
+    let pocketNumber = normalizedPocketId(profile.pocketNumber)
+    if (!pocketNumber) {
+      pocketNumber = allocatePocketNumber(store)
+      changed = true
+    }
+    let pocketId = normalizedPocketId(profile.pocketId)
+    if (!pocketId) {
+      pocketId = pocketNumber
+      changed = true
+    }
+    const resolvedName = cleanResolvedName(profile.resolvedName)
+    const nameStatus = profile.nameStatus === 'bank_resolved' && resolvedName ? 'bank_resolved' : 'unverified'
+    if (profile.resolvedName !== resolvedName || profile.nameStatus !== nameStatus) changed = true
+    const immutableEmail = profile.email || email.toLowerCase()
+    if (profile.email !== immutableEmail) changed = true
+    const normalized: LocalCurrencyProfile = {
+      ...profile,
+      privyUserId: userId,
+      email: immutableEmail,
+      resolvedName,
+      nameStatus,
+      pocketNumber,
+      pocketId,
+      updatedAt: changed ? now() : profile.updatedAt,
+    }
+    store.pocketIds[pocketNumber] = userId
+    store.pocketIds[pocketId] = userId
+    return { profile: normalized, changed }
+  }
+
+  async function mutateStore<T>(mutation: (store: Store) => T) {
+    if (durable) {
+      let result: T | undefined
+      try {
+        await mutateRemote<Store>(storeKey, current => {
+          const store = normalizedStore(current)
+          result = mutation(store)
+          return store
+        })
+      } catch (error) {
+        if (error instanceof ProfileVersionConflictError || error instanceof PocketIdUnavailableError || error instanceof ProfileNameConflictError) throw error
+        if (isRender) throw new Error('Durable profile storage failed. Check DATABASE_URL on Render before saving payout profiles.')
+        throw error
+      }
+      if (result === undefined) throw new Error('Durable profile storage did not return a result.')
+      return result
+    }
+    if (isRender) throw new Error('Durable profile storage is not configured. Add DATABASE_URL on Render before saving payout profiles.')
+    let result: T | undefined
+    const queued = localMutationQueue.then(async () => {
+      const store = await readLocalStore()
+      result = mutation(store)
+      await writeLocalStore(store)
+    })
+    localMutationQueue = queued.catch(() => undefined)
+    await queued
+    return result as T
+  }
+
   return {
     async get(userId) {
       return (await readStore()).profiles[userId]
     },
-    async save(draft, expectedUpdatedAt) {
-      if (durable) {
-        let result: ProfileSaveResult | undefined
-        try {
-          await mutateRemote<Store>(storeKey, current => {
-            const store = normalizedStore(current)
-            result = applyProfileSave(store, draft, expectedUpdatedAt, now)
-            return store
-          })
-        } catch (error) {
-          if (error instanceof ProfileVersionConflictError) throw error
-          if (isRender) {
-            throw new Error('Durable profile storage failed. Check DATABASE_URL on Render before saving payout profiles.')
-          }
-          throw error
+    async ensure(identity) {
+      const verified = requiredIdentity(identity)
+      return mutateStore(store => {
+        const existing = store.profiles[verified.userId]
+        if (existing) {
+          const normalized = normalizeExistingProfile(existing, verified.userId, verified.email, store)
+          store.profiles[verified.userId] = normalized.profile
+          return { profile: normalized.profile, unchanged: !normalized.changed }
         }
-        if (!result) throw new Error('Durable profile storage did not return a save result.')
-        return result
-      }
-      if (isRender) {
-        throw new Error('Durable profile storage is not configured. Add DATABASE_URL on Render before saving payout profiles.')
-      }
-
-      let result: ProfileSaveResult | undefined
-      const mutation = localMutationQueue.then(async () => {
-        const store = await readLocalStore()
-        result = applyProfileSave(store, draft, expectedUpdatedAt, now)
-        if (!result.unchanged) await writeLocalStore(store)
+        const pocketNumber = allocatePocketNumber(store)
+        const profile: LocalCurrencyProfile = {
+          privyUserId: verified.userId,
+          firstName: '',
+          lastName: '',
+          resolvedName: '',
+          nameStatus: 'unverified',
+          email: verified.email,
+          pocketNumber,
+          pocketId: pocketNumber,
+          updatedAt: now(),
+        }
+        store.profiles[verified.userId] = profile
+        store.pocketIds[pocketNumber] = verified.userId
+        return { profile, unchanged: false }
       })
-      localMutationQueue = mutation.catch(() => undefined)
-      await mutation
-      if (!result) throw new Error('Local profile storage did not return a save result.')
-      return result
+    },
+    async updatePocketId(userId, pocketId, expectedUpdatedAt) {
+      const cleanPocketId = normalizedPocketId(pocketId)
+      if (!cleanPocketId) throw Object.assign(new Error('Pocket ID must contain 6 to 12 digits.'), { status: 400 })
+      return mutateStore(store => {
+        const existing = store.profiles[userId]
+        if (!existing) throw Object.assign(new Error('Pocket profile was not found.'), { status: 404 })
+        if (expectedUpdatedAt && existing.updatedAt !== expectedUpdatedAt) throw new ProfileVersionConflictError()
+        const owner = store.pocketIds[cleanPocketId]
+        if (owner && owner !== userId) throw new PocketIdUnavailableError()
+        if (existing.pocketId === cleanPocketId) return { profile: existing, unchanged: true }
+        store.pocketIds[existing.pocketId] = userId
+        store.pocketIds[cleanPocketId] = userId
+        const profile = { ...existing, pocketId: cleanPocketId, updatedAt: now() }
+        store.profiles[userId] = profile
+        return { profile, unchanged: false }
+      })
+    },
+    async bindBankResolvedName(identity, value) {
+      const verified = requiredIdentity(identity)
+      const resolvedName = cleanResolvedName(value)
+      if (!resolvedName) throw Object.assign(new Error('Bank provider did not return an account name.'), { status: 502 })
+      return mutateStore(store => {
+        let existing = store.profiles[verified.userId]
+        if (!existing) {
+          const pocketNumber = allocatePocketNumber(store)
+          existing = {
+            privyUserId: verified.userId,
+            firstName: '', lastName: '', resolvedName: '', nameStatus: 'unverified',
+            email: verified.email, pocketNumber, pocketId: pocketNumber, updatedAt: now(),
+          }
+          store.pocketIds[pocketNumber] = verified.userId
+        }
+        if (existing.nameStatus === 'bank_resolved') {
+          if (normalizedName(existing.resolvedName) !== normalizedName(resolvedName)) throw new ProfileNameConflictError()
+          store.profiles[verified.userId] = existing
+          return { profile: existing, unchanged: true }
+        }
+        const parts = nameParts(resolvedName)
+        const profile: LocalCurrencyProfile = {
+          ...existing,
+          firstName: parts.firstName,
+          lastName: parts.lastName,
+          resolvedName,
+          nameStatus: 'bank_resolved',
+          updatedAt: now(),
+        }
+        store.profiles[verified.userId] = profile
+        return { profile, unchanged: false }
+      })
     },
   }
 }
@@ -201,31 +355,19 @@ export function createLocalCurrencyProfileHandler(dependencies: HandlerDependenc
       if (!action) return res.status(400).json({ ok: false, error: 'Missing action.' })
 
       if (action === 'get') {
-        const existing = await dependencies.repository.get(userId)
-        return res.json({ ok: true, email: verifiedEmail, profile: existing ?? null })
+        const existing = await dependencies.repository.ensure({ userId, email: verifiedEmail })
+        return res.json({ ok: true, email: existing.profile.email, profile: existing.profile })
       }
 
       if (action === 'save') {
-        const firstName = cleanName(req.body?.first_name)
-        const lastName = cleanName(req.body?.last_name)
-        const requestEmail = String(req.body?.email ?? '').trim().toLowerCase()
-        const email = verifiedEmail || requestEmail
-        if (!firstName || !lastName) return res.status(400).json({ ok: false, error: 'Enter your first and last name.' })
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ ok: false, error: 'Sign in with a valid email.' })
-        if (verifiedEmail && requestEmail && verifiedEmail !== requestEmail) {
-          return res.status(403).json({ ok: false, error: 'Profile email must match the signed-in email.' })
-        }
-
+        const pocketId = normalizedPocketId(req.body?.pocket_id)
+        if (!pocketId) return res.status(400).json({ ok: false, error: 'Pocket ID must contain 6 to 12 digits.' })
         const expectedUpdatedAt = String(req.body?.expected_updated_at ?? '').trim() || undefined
         if (expectedUpdatedAt && !Number.isFinite(Date.parse(expectedUpdatedAt))) {
           return res.status(400).json({ ok: false, error: 'Profile version must be a valid timestamp.' })
         }
-        const saved = await dependencies.repository.save({
-          privyUserId: userId,
-          firstName,
-          lastName,
-          email,
-        }, expectedUpdatedAt)
+        await dependencies.repository.ensure({ userId, email: verifiedEmail })
+        const saved = await dependencies.repository.updatePocketId(userId, pocketId, expectedUpdatedAt)
         return res.json({ ok: true, profile: saved.profile, unchanged: saved.unchanged })
       }
 

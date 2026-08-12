@@ -1,4 +1,5 @@
-import { ArrowRight, Copy, LayoutDashboard, Loader2, Mail, Store } from 'lucide-react'
+import { Store as PaymentStore } from 'lucide-react'
+import { ArrowRight, Copy, LayoutDashboard, Loader2, Mail } from '../../components/PocketIcons'
 import { QRCodeCanvas } from 'qrcode.react'
 import { cn, truncateAddress } from '../../../lib/utils'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
@@ -276,7 +277,7 @@ export function PocketPosSetupPanel({
         disabled={!controller.canSubmit || controller.submitting}
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
       >
-        {controller.submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
+        {controller.submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <PaymentStore className="h-4 w-4" />}
         Generate Naira POS QR
       </button>
     </div>

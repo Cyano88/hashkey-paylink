@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
-import { ArrowRight, ChevronDown, Mail } from 'lucide-react'
+import { ArrowRight, ChevronDown, Mail } from '../components/PocketIcons'
 import { useAccount, useDisconnect } from 'wagmi'
 import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
@@ -27,6 +27,7 @@ import { PocketRecipientAddressFields } from '../features/move/PocketRecipientAd
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketRecipient from '../hooks/usePocketRecipient'
 import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
+import { savePocketCollection } from '../api/pocketPaylinksClient'
 
 const POCKET_NETWORKS: ChainKey[] = ['base', 'solana', 'arbitrum']
 type ReceiveMode = 'idle' | 'paste' | 'email' | 'bank'
@@ -39,6 +40,7 @@ export default function PocketMoveUsdcPage() {
   const { disconnect: disconnectEvm } = useDisconnect()
   const { address: connectedSolana, disconnect: disconnectSolana } = useSolana()
   const [receiveMode, setReceiveMode] = useState<ReceiveMode>('idle')
+  const [collectionId, setCollectionId] = useState('')
   const chainSwitchMounted = useRef(false)
   const manualEvmAddress = useRef('')
   const manualSolanaAddress = useRef('')
@@ -144,15 +146,39 @@ export default function PocketMoveUsdcPage() {
   }, [authenticated, collapseReceiveMethod, draft.setEvmAddress, draft.setSolanaAddress, receiveMode, recipient.connect, recipient.deferEmailSignIn, selectedNet])
 
   const selectNav = (tab: PocketNavTab) => {
-    const path = tab === 'home'
-      ? pocketPathFor({ section: 'home', view: 'smart-wallet' })
-      : tab === 'bills'
+    const path = tab === 'bills'
         ? pocketPathFor({ section: 'bills', view: 'airtime' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
           : pocketPathFor({ section: 'move', view: 'usdc' })
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
+
+  const createCollection = useCallback(async () => {
+    if (!authenticated) {
+      window.alert('Sign in to save this Collection in Pocket Activity.')
+      return
+    }
+    if (!draft.memo.trim()) {
+      window.alert('Add a Collection name, such as Shy\'s wedding.')
+      return
+    }
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      window.alert('Sign in again to create this Collection.')
+      return
+    }
+    const eventId = window.crypto.randomUUID().replace(/-/g, '')
+    const paymentUrl = draft.generate({ eventId })
+    if (!paymentUrl) return
+    try {
+      await savePocketCollection({ accessToken, eventId, title: draft.memo.trim(), paymentUrl })
+      setCollectionId(eventId)
+    } catch (reason) {
+      draft.invalidateResult()
+      window.alert(reason instanceof Error ? reason.message : 'Could not save this Collection.')
+    }
+  }, [authenticated, draft, getAccessToken])
 
   const emailSignInControl = canReceiveWithEmail && !authenticated ? (
     <button
@@ -308,7 +334,7 @@ export default function PocketMoveUsdcPage() {
               onAmountChange={draft.setAmount}
             />
 
-            <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} />
+            <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} label="Collection name" placeholder="Wedding, team dues, donations..." optional={false} />
 
             <PocketFlexibleAmountToggle
               lane="usdc"
@@ -320,10 +346,10 @@ export default function PocketMoveUsdcPage() {
               lane="usdc"
               shellActive
               idle={!draft.generatedLink}
-              canSubmit={draft.validation.canGenerate}
+              canSubmit={draft.validation.canGenerate && authenticated && Boolean(draft.memo.trim())}
               submitting={false}
               addressGuidance={draft.validation.addressGuidance}
-              onSubmit={draft.generate}
+              onSubmit={() => { void createCollection() }}
             />
             </>}
           </div>
@@ -341,12 +367,12 @@ export default function PocketMoveUsdcPage() {
           evmAddress={draft.validation.evmValid ? draft.evmAddress : undefined}
           solanaAddress={draft.validation.solanaValid ? draft.solanaAddress : undefined}
           memo={draft.memo}
-          eventMode={false}
+          eventMode={Boolean(collectionId)}
           accessMode={false}
-          dashboardUrl={draft.dashboardUrl}
+          dashboardUrl={collectionId ? `${POCKET_BASE_PATH}/activity/collections?collection=${encodeURIComponent(collectionId)}` : draft.dashboardUrl}
           qrRef={draft.qrRef}
           qrHiResRef={draft.qrHiResRef}
-          onReset={draft.reset}
+          onReset={() => { setCollectionId(''); draft.reset() }}
           onDownloadQr={draft.downloadQr}
           onShare={() => void draft.share()}
         />
