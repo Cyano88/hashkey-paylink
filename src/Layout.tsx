@@ -11,7 +11,7 @@ import { getPaylinkParam, hasPaylinkFlag } from './lib/paylinkParams'
 import { PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyConnectButton } from './lib/PrivyConnectButton'
 import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
-import PocketAccountMenu from './pocket/components/PocketAccountMenu'
+import PocketNotificationButton from './pocket/components/PocketNotificationButton'
 import PocketHeaderIdentity from './pocket/components/PocketHeaderIdentity'
 import { CPurseIcon } from './pocket/components/CPurseIcon'
 import PocketTopSwitch from './pocket/components/PocketTopSwitch'
@@ -219,9 +219,7 @@ export default function Layout() {
   const pocketRoute = isPocketAppPage
     ? resolvePocketRoute(isPocketHost ? pathname : pathname.slice('/pocket'.length) || '/')
     : null
-  const circlePocketHeaderMode = pocketRoute?.section === 'move'
-    ? 'move'
-    : pocketRoute?.section === 'bills'
+  const circlePocketHeaderMode = pocketRoute?.section === 'bills'
       ? 'bills'
       : 'activity'
   const circlePocketMoveView = pocketRoute?.section === 'move' ? pocketRoute.view : ''
@@ -439,11 +437,9 @@ export default function Layout() {
                   <CPurseIcon size={32} title="" className="shrink-0" />
                   <PocketHeaderIdentity />
                 </Link>
-                <div className="flex items-center gap-2">
-                  <PocketAccountMenu />
-                </div>
+                <PocketNotificationButton />
               </div>
-              {pocketRoute?.section !== 'assistant' && pocketRoute?.section !== 'home' && pocketRoute?.section !== 'profile' && (
+              {(pocketRoute?.section === 'bills' || pocketRoute?.section === 'activity') && (
                 <PocketTopSwitch
                   mode={circlePocketHeaderMode}
                   moveView={circlePocketMoveView}

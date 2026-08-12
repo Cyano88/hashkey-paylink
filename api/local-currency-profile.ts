@@ -40,6 +40,7 @@ export type ProfileSaveResult = {
 
 export type ProfileRepository = {
   get(userId: string): Promise<LocalCurrencyProfile | undefined>
+  getByPocketId(pocketId: string): Promise<LocalCurrencyProfile | undefined>
   ensure(identity: VerifiedProfileUser): Promise<ProfileSaveResult>
   updateProfile(userId: string, pocketId: string, avatarId: number, expectedUpdatedAt?: string): Promise<ProfileSaveResult>
   bindBankResolvedName(identity: VerifiedProfileUser, resolvedName: string): Promise<ProfileSaveResult>
@@ -267,6 +268,11 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
   return {
     async get(userId) {
       return (await readStore()).profiles[userId]
+    },
+    async getByPocketId(pocketId) {
+      const store = await readStore()
+      const userId = store.pocketIds[normalizedPocketId(pocketId)]
+      return userId ? store.profiles[userId] : undefined
     },
     async ensure(identity) {
       const verified = requiredIdentity(identity)

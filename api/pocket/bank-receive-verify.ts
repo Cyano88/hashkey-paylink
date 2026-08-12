@@ -39,7 +39,11 @@ export function createPocketBankVerifyHandler(dependencies: PocketBankVerifyHand
       if (!isPocketBankVerifyData(data)) {
         throw Object.assign(new Error('Bank provider returned an invalid verification result.'), { status: 502 })
       }
-      await dependencies.repository?.bindBankResolvedName(identity, data.account_name)
+      // Resolving a payout account is not consent to lock the user's identity.
+      // Profile enrollment repeats provider verification with an explicit flag.
+      if (req.body.confirm_profile_name === true) {
+        await dependencies.repository?.bindBankResolvedName(identity, data.account_name)
+      }
       return res.json({ ok: true, ...data })
     } catch (error) {
       const normalized = error as Error & { status?: number }

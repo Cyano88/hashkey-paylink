@@ -94,6 +94,11 @@ const verified = await request(verifyHandler, 'POST', bankRequest, {
 assert.equal(verified.statusCode, 200)
 assert.deepEqual(verified.body, { ok: true, account_name: 'ADA LOVELACE', bank_code: '001' })
 assert.deepEqual(verifyCalls, [bankRequest])
+assert.deepEqual(boundNames, [])
+const confirmed = await request(verifyHandler, 'POST', { ...bankRequest, confirm_profile_name: true }, {
+  authorization: 'Bearer privy-secret',
+})
+assert.equal(confirmed.statusCode, 200)
 assert.deepEqual(boundNames, [{
   identity: { userId: 'privy-user-1', email: 'ada@example.com' },
   resolvedName: 'ADA LOVELACE',
@@ -124,7 +129,7 @@ const nameConflictHandler = createPocketBankVerifyHandler({
     bindBankResolvedName: async () => { throw Object.assign(new Error('This bank account resolves to a different name.'), { status: 409 }) },
   },
 })
-const nameConflict = await request(nameConflictHandler, 'POST', bankRequest)
+const nameConflict = await request(nameConflictHandler, 'POST', { ...bankRequest, confirm_profile_name: true })
 assert.equal(nameConflict.statusCode, 409)
 assert.equal(nameConflict.body.error.code, 'VERSION_CONFLICT')
 assert.equal(nameConflict.body.error.field, 'bankAccount')

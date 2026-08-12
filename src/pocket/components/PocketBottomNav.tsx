@@ -1,7 +1,7 @@
-import { Activity, ArrowUpDown, Banknote, TrendingUp } from './PocketIcons'
+import { Activity, Banknote, TrendingUp, UserRound } from './PocketIcons'
 import { cn } from '../../lib/utils'
 
-export type PocketNavTab = 'home' | 'move' | 'bills' | 'activity'
+export type PocketNavTab = 'home' | 'bills' | 'activity' | 'profile'
 
 type PocketBottomNavProps = {
   active: PocketNavTab
@@ -12,9 +12,9 @@ type PocketBottomNavProps = {
 
 const items = [
   { key: 'home', label: 'Home', icon: Activity },
-  { key: 'move', label: 'Move', icon: ArrowUpDown },
   { key: 'bills', label: 'Bills', icon: Banknote },
   { key: 'activity', label: 'Activity', icon: TrendingUp },
+  { key: 'profile', label: 'Profile', icon: UserRound },
 ] as const
 
 export default function PocketBottomNav({ active, disabled = false, keyboardOpen = false, onSelect }: PocketBottomNavProps) {

@@ -7,6 +7,10 @@ import PocketBillsPage from './pages/PocketBillsPage'
 import PocketLandingPage from './pages/PocketLandingPage'
 import PocketHomePage from './pages/PocketHomePage'
 import PocketProfilePage from './pages/PocketProfilePage'
+import PocketVerifyNamePage from './pages/PocketVerifyNamePage'
+import PocketDepositPage from './pages/PocketDepositPage'
+import PocketSwapPage from './pages/PocketSwapPage'
+import PocketNotificationsPage from './pages/PocketNotificationsPage'
 import PocketMoveBankPage from './pages/PocketMoveBankPage'
 import PocketMovePosPage from './pages/PocketMovePosPage'
 import PocketMoveUsdcPage from './pages/PocketMoveUsdcPage'
@@ -44,29 +48,33 @@ export default function CirclePocketApp() {
 
   if (!ready) {
     if (landing) return <PocketLandingPage splashState={splashState} />
-    const active: PocketNavTab = route?.section === 'home' || route?.section === 'profile'
+    const active: PocketNavTab = route?.section === 'home'
       ? 'home'
-      : route?.section === 'move'
-      ? 'move'
+      : route?.section === 'profile'
+      ? 'profile'
       : route?.section === 'bills'
         ? 'bills'
         : route?.section === 'activity'
           ? 'activity'
-          : 'move'
+          : 'home'
     return <PocketLoadingState active={active} />
   }
 
   if (landing) return <PocketLandingPage splashState={splashState} />
 
   if (authenticated && (!profile.loaded || profile.busy && !profile.profile)) {
-    const active: PocketNavTab = route?.section === 'home' || route?.section === 'profile' ? 'home' : route?.section === 'bills' ? 'bills' : route?.section === 'activity' ? 'activity' : 'move'
+    const active: PocketNavTab = route?.section === 'profile' ? 'profile' : route?.section === 'bills' ? 'bills' : route?.section === 'activity' ? 'activity' : 'home'
     return <PocketLoadingState active={active} />
   }
 
   if (!route) return null
 
+  if (route.section === 'home' && route.view === 'deposit') return <PocketDepositPage />
+  if (route.section === 'home' && route.view === 'swap') return <PocketSwapPage />
   if (route.section === 'home') return <PocketHomePage />
+  if (route.section === 'profile' && route.view === 'verify-name') return <PocketVerifyNamePage />
   if (route.section === 'profile') return <PocketProfilePage />
+  if (route.section === 'notifications') return <PocketNotificationsPage />
   if (route.section === 'bills') return <PocketBillsPage view={route.view} />
   if (route.section === 'activity') return <PocketActivityPage view={route.view} />
   if (route.section === 'assistant') return <PocketAssistantPage />

@@ -30,8 +30,9 @@ export function hashPayLinkAppOriginForOrigin(origin: string) {
 export const POCKET_BASE_PATH = pocketBasePathForHostname(typeof window === 'undefined' ? '' : window.location.hostname)
 
 export type PocketRouteState =
-  | { section: 'home'; view: 'overview' }
-  | { section: 'profile'; view: 'details' }
+  | { section: 'home'; view: 'overview' | 'deposit' | 'swap' }
+  | { section: 'profile'; view: 'details' | 'verify-name' }
+  | { section: 'notifications'; view: 'inbox' }
   | { section: 'move'; view: PocketMoveView }
   | { section: 'bills'; view: PocketBillView }
   | { section: 'activity'; view: PocketActivityView }
@@ -40,7 +41,11 @@ export type PocketRouteState =
 export const POCKET_ROUTES = {
   root: '/',
   home: '/home',
+  deposit: '/home/deposit',
+  swap: '/home/swap',
   profile: '/profile',
+  verifyName: '/profile/verify-name',
+  notifications: '/notifications',
   usdc: '/move/usdc',
   bank: '/move/bank',
   pos: '/move/pos',
@@ -66,7 +71,11 @@ function cleanPathname(pathname: string) {
 export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   const path = cleanPathname(pathname)
   if (path === POCKET_ROUTES.home) return { section: 'home', view: 'overview' }
+  if (path === POCKET_ROUTES.deposit) return { section: 'home', view: 'deposit' }
+  if (path === POCKET_ROUTES.swap) return { section: 'home', view: 'swap' }
   if (path === POCKET_ROUTES.profile) return { section: 'profile', view: 'details' }
+  if (path === POCKET_ROUTES.verifyName) return { section: 'profile', view: 'verify-name' }
+  if (path === POCKET_ROUTES.notifications) return { section: 'notifications', view: 'inbox' }
   if (path === POCKET_ROUTES.usdc) return { section: 'move', view: 'usdc' }
   if (path === POCKET_ROUTES.bank) return { section: 'move', view: 'bank' }
   if (path === POCKET_ROUTES.pos) return { section: 'move', view: 'pos' }
@@ -84,8 +93,9 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
 }
 
 export function pocketPathFor(state: PocketRouteState) {
-  if (state.section === 'home') return POCKET_ROUTES.home
-  if (state.section === 'profile') return POCKET_ROUTES.profile
+  if (state.section === 'home') return state.view === 'deposit' ? POCKET_ROUTES.deposit : state.view === 'swap' ? POCKET_ROUTES.swap : POCKET_ROUTES.home
+  if (state.section === 'profile') return state.view === 'verify-name' ? POCKET_ROUTES.verifyName : POCKET_ROUTES.profile
+  if (state.section === 'notifications') return POCKET_ROUTES.notifications
   if (state.section === 'move') return POCKET_ROUTES[state.view]
   if (state.section === 'bills') return POCKET_ROUTES[state.view]
   if (state.section === 'assistant') return POCKET_ROUTES.assistant
@@ -108,6 +118,7 @@ export function pocketLegacyEntryUrl(state: PocketRouteState) {
   const params = new URLSearchParams({ product: 'circle-pocket' })
   if (state.section === 'home') params.set('pocket', 'home')
   if (state.section === 'profile') params.set('pocket', 'profile')
+  if (state.section === 'notifications') params.set('pocket', 'notifications')
   if (state.section === 'move') params.set('pocket', `move:${state.view}`)
   if (state.section === 'bills') params.set('pocket', `bills:${state.view}`)
   if (state.section === 'activity') params.set('pocket', `activity:${state.view}`)

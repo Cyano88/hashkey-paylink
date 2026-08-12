@@ -13,6 +13,7 @@ import { useSolana } from '../../lib/SolanaContext'
 import { cn, formatAmount } from '../../lib/utils'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
+import PocketFlowHeader from '../components/PocketFlowHeader'
 import usePocketUsdcDraftController from '../controllers/usePocketUsdcDraftController'
 import { PocketPayerNetworkPanel } from '../features/move/PocketPayerNetworkPanel'
 import {
@@ -26,8 +27,9 @@ import { PocketEmailWalletDetails, PocketReceiveMethodPanel } from '../features/
 import { PocketRecipientAddressFields } from '../features/move/PocketRecipientAddressFields'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketRecipient from '../hooks/usePocketRecipient'
-import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 import { savePocketCollection } from '../api/pocketPaylinksClient'
+import { createPocketUserRequest } from '../api/pocketRequestsClient'
 
 const POCKET_NETWORKS: ChainKey[] = ['base', 'solana', 'arbitrum']
 type ReceiveMode = 'idle' | 'paste' | 'email' | 'bank'
@@ -41,6 +43,8 @@ export default function PocketMoveUsdcPage() {
   const { address: connectedSolana, disconnect: disconnectSolana } = useSolana()
   const [receiveMode, setReceiveMode] = useState<ReceiveMode>('idle')
   const [collectionId, setCollectionId] = useState('')
+  const [recipientPocketId, setRecipientPocketId] = useState('')
+  const [requestBusy, setRequestBusy] = useState(false)
   const chainSwitchMounted = useRef(false)
   const manualEvmAddress = useRef('')
   const manualSolanaAddress = useRef('')
@@ -152,7 +156,7 @@ export default function PocketMoveUsdcPage() {
         ? pocketPathFor({ section: 'bills', view: 'airtime' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
-          : pocketPathFor({ section: 'move', view: 'usdc' })
+          : pocketPathFor({ section: 'profile', view: 'details' })
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
@@ -173,14 +177,29 @@ export default function PocketMoveUsdcPage() {
     const eventId = window.crypto.randomUUID().replace(/-/g, '')
     const paymentUrl = draft.generate({ eventId })
     if (!paymentUrl) return
+    setRequestBusy(true)
     try {
+      if (recipientPocketId) {
+        await createPocketUserRequest({
+          accessToken,
+          recipientPocketId,
+          eventId,
+          title: draft.memo.trim(),
+          amount: draft.amount,
+          flexibleAmount: draft.flexibleAmount,
+          network: draft.multiChain ? 'multi' : selectedNet === 'solana' ? 'solana' : selectedNet === 'arbitrum' ? 'arbitrum' : 'base',
+          paymentUrl,
+        })
+      }
       await savePocketCollection({ accessToken, eventId, title: draft.memo.trim(), paymentUrl })
       setCollectionId(eventId)
     } catch (reason) {
       draft.invalidateResult()
       window.alert(reason instanceof Error ? reason.message : 'Could not save this Collection.')
+    } finally {
+      setRequestBusy(false)
     }
-  }, [authenticated, draft, getAccessToken])
+  }, [authenticated, draft, getAccessToken, recipientPocketId, selectedNet])
 
   const emailSignInControl = canReceiveWithEmail && !authenticated ? (
     <button
@@ -210,7 +229,8 @@ export default function PocketMoveUsdcPage() {
   const receiveFlowOpen = draft.multiChain || receiveMode === 'paste' || receiveMode === 'email'
 
   return (
-    <PocketRouteShell active="move" onSelect={selectNav}>
+    <PocketRouteShell active="home" onSelect={selectNav}>
+      <PocketFlowHeader title="Request money" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <div className="space-y-3.5">
         {!draft.multiChain && (
           <PocketReceiveMethodPanel
@@ -338,6 +358,12 @@ export default function PocketMoveUsdcPage() {
 
             <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} label="Collection name" placeholder="Wedding, team dues, donations..." optional={false} />
 
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Pocket ID <span className="text-xs font-normal text-gray-400">(optional)</span></span>
+              <input type="text" inputMode="numeric" value={recipientPocketId} onChange={event => setRecipientPocketId(event.target.value.replace(/[^0-9]/g, '').slice(0, 12))} placeholder="Send directly to a Pocket user" className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-2.5 text-sm tabular-nums outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />
+              <span className="block text-[11px] text-gray-400">{recipientPocketId ? 'This user will receive a request notification.' : 'Leave blank to create a general shareable link.'}</span>
+            </label>
+
             <PocketFlexibleAmountToggle
               lane="usdc"
               enabled={draft.flexibleAmount}
@@ -348,8 +374,8 @@ export default function PocketMoveUsdcPage() {
               lane="usdc"
               shellActive
               idle={!draft.generatedLink}
-              canSubmit={draft.validation.canGenerate && authenticated && Boolean(draft.memo.trim())}
-              submitting={false}
+              canSubmit={draft.validation.canGenerate && authenticated && Boolean(draft.memo.trim()) && (!recipientPocketId || /^[0-9]{6,12}$/.test(recipientPocketId))}
+              submitting={requestBusy}
               addressGuidance={draft.validation.addressGuidance}
               onSubmit={() => { void createCollection() }}
             />

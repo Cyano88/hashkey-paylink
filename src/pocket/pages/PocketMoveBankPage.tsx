@@ -9,6 +9,7 @@ import { formatNgnAmount } from '../../lib/utils'
 import { LocalCurrencyProfileCard } from '../components/LocalCurrencyProfileCard'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
+import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketLoadingState from '../components/PocketLoadingState'
 import PocketSlideAction from '../components/PocketSlideAction'
 import usePocketBankReceiveController from '../controllers/usePocketBankReceiveController'
@@ -29,7 +30,7 @@ import usePocketProfile from '../hooks/usePocketProfile'
 import usePocketWallets from '../hooks/usePocketWallets'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 import { pocketActivityReceipt } from '../lib/pocketReceipt'
-import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 
 export default function PocketMoveBankPage() {
   const navigate = useNavigate()
@@ -37,7 +38,9 @@ export default function PocketMoveBankPage() {
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
+  const directPayout = new URLSearchParams(window.location.search).get('mode') === 'withdraw'
   const [mode, setModeState] = useState<'idle' | 'request' | 'withdraw'>(() => {
+    if (new URLSearchParams(window.location.search).get('mode') === 'withdraw') return 'withdraw'
     const saved = window.sessionStorage.getItem('pocket:bank:mode')
     return saved === 'request' || saved === 'withdraw' ? saved : 'idle'
   })
@@ -150,18 +153,19 @@ export default function PocketMoveBankPage() {
         ? pocketPathFor({ section: 'bills', view: 'airtime' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
-          : pocketPathFor({ section: 'move', view: 'usdc' })
+          : pocketPathFor({ section: 'profile', view: 'details' })
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
   if (authenticated && (!profile.loaded || !wallets.resolved || bank.institutionsBusy)) {
-    return <PocketLoadingState active="move" />
+    return <PocketLoadingState active="home" />
   }
 
   return (
-    <PocketRouteShell active="move" onSelect={selectNav}>
+    <PocketRouteShell active="home" onSelect={selectNav}>
+      <PocketFlowHeader title="Bank payout" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <div className="space-y-3.5">
-        <div className="grid grid-cols-1 gap-2">
+        {!directPayout && <div className="grid grid-cols-1 gap-2">
           {([
             { key: 'request', label: 'Payment Request', icon: Landmark, body: 'Create a link for someone to pay you.' },
             { key: 'withdraw', label: 'Direct Bank Payout', icon: Send, body: 'Withdraw Circle wallet USDC to your bank.' },
@@ -185,7 +189,7 @@ export default function PocketMoveBankPage() {
               </button>
             )
           })}
-        </div>
+        </div>}
 
         {mode !== 'idle' && <div className="space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/[0.035] dark:shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">{mode === 'request' ? 'Payment request' : 'Direct bank payout'}</p>

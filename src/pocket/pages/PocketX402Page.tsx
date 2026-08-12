@@ -48,13 +48,13 @@ export default function PocketX402Page() {
   }, [x402.network, x402.snapshot?.walletAddress])
 
   const selectNav = (tab: PocketNavTab) => {
-    const path = tab === 'move'
-      ? pocketPathFor({ section: 'move', view: 'usdc' })
+    const path = tab === 'profile'
+      ? pocketPathFor({ section: 'profile', view: 'details' })
       : tab === 'bills'
         ? pocketPathFor({ section: 'bills', view: 'airtime' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
-          : pocketPathFor({ section: 'home', view: 'smart-wallet' })
+          : pocketPathFor({ section: 'home', view: 'overview' })
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 

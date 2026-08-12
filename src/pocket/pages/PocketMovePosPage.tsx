@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { LocalCurrencyProfileCard } from '../components/LocalCurrencyProfileCard'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
+import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketLoadingState from '../components/PocketLoadingState'
 import usePocketPosPageController, { type PocketPosRouteStep } from '../controllers/usePocketPosPageController'
 import {
@@ -14,7 +15,7 @@ import {
 } from '../features/move/PocketPosPanels'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
-import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 
 const POS_COUNTRIES = [
   { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live' as const, copy: 'Payers use Base USDC. You receive Naira to a verified bank account.' },
@@ -55,16 +56,17 @@ export default function PocketMovePosPage() {
         ? pocketPathFor({ section: 'bills', view: 'airtime' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
-          : pocketPathFor({ section: 'move', view: 'usdc' })
+          : pocketPathFor({ section: 'profile', view: 'details' })
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
   if (authenticated && (!profile.loaded || profile.busy || pos.institutionsBusy)) {
-    return <PocketLoadingState active="move" />
+    return <PocketLoadingState active="home" />
   }
 
   return (
-    <PocketRouteShell active="move" onSelect={selectNav}>
+    <PocketRouteShell active="home" onSelect={selectNav}>
+      <PocketFlowHeader title="POS" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <PocketPosShell standalone>
         {authenticated && (
           <LocalCurrencyProfileCard

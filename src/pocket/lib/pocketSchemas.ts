@@ -294,6 +294,7 @@ export type PocketBankVerifyRequest = {
   bank_code: string
   bank_name: string
   account_number: string
+  confirm_profile_name?: boolean
 }
 
 export type PocketBankVerifyData = {
@@ -393,6 +394,7 @@ export const POCKET_API = {
   transferPrepare: '/api/pocket/transfers/prepare',
   transferSubmit: '/api/pocket/transfers/submit',
   paylinks: '/api/pocket/paylinks',
+  requests: '/api/pocket/requests',
   bankReceive: '/api/pocket/bank-receive',
   bankInstitutions: '/api/pocket/bank-receive/institutions',
   bankVerify: '/api/pocket/bank-receive/verify',
@@ -695,6 +697,7 @@ export function isPocketBankVerifyRequest(value: unknown): value is PocketBankVe
     && value.bank_name.length <= 160
     && typeof value.account_number === 'string'
     && /^\d{10}$/.test(value.account_number.replace(/\D/g, '').slice(0, 10))
+    && (value.confirm_profile_name === undefined || typeof value.confirm_profile_name === 'boolean')
 }
 
 export function isPocketBankVerifyData(value: unknown): value is PocketBankVerifyData {

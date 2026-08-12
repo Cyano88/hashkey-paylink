@@ -83,12 +83,12 @@ export async function ensurePocketWallet({
       network,
       circleUserToken: session.userToken,
       wallet: session.wallet,
-    })
+    }).catch(() => null)
     return {
       address: session.wallet.address,
       walletId: session.wallet.id,
       blockchain: session.wallet.blockchain,
-      updatedAt: linked.link?.updatedAt,
+      updatedAt: linked?.link?.updatedAt,
     }
   }
 
@@ -104,13 +104,13 @@ export async function ensurePocketWallet({
     network: targetNetwork,
     circleUserToken: session.userToken,
     wallet,
-  })))
-  const linked = linkedRecords[linkTargets.findIndex(([targetNetwork]) => targetNetwork === network)] ?? linkedRecords[0]
+  }).catch(() => null)))
+  const linked = linkedRecords[linkTargets.findIndex(([targetNetwork]) => targetNetwork === network)] ?? linkedRecords.find(Boolean)
   return {
     address: session.wallet.address,
     walletId: session.wallet.id,
     blockchain: session.wallet.blockchain,
-    updatedAt: linked.link?.updatedAt,
+    updatedAt: linked?.link?.updatedAt,
   }
 }
 

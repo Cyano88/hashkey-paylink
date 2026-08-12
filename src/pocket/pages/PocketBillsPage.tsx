@@ -75,8 +75,8 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
   const selectNav = (tab: PocketNavTab) => {
     const path = tab === 'home'
         ? pocketPathFor({ section: 'home', view: 'overview' })
-        : tab === 'move'
-        ? pocketPathFor({ section: 'move', view: 'usdc' })
+        : tab === 'profile'
+        ? pocketPathFor({ section: 'profile', view: 'details' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
           : pocketPathFor({ section: 'bills', view })
