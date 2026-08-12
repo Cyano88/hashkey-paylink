@@ -144,7 +144,9 @@ export default function PocketMoveBankPage() {
   }, [onNetworkSelect, selectedNet])
 
   const selectNav = (tab: PocketNavTab) => {
-    const path = tab === 'bills'
+    const path = tab === 'home'
+        ? pocketPathFor({ section: 'home', view: 'overview' })
+        : tab === 'bills'
         ? pocketPathFor({ section: 'bills', view: 'airtime' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })

@@ -15,6 +15,7 @@ const emptyProfile: LocalCurrencyProfile = {
   email: '',
   pocketNumber: '',
   pocketId: '',
+  avatarId: 1,
 }
 const pocketProfileCache = new Map<string, LocalCurrencyProfile | null>()
 
@@ -73,6 +74,7 @@ export default function usePocketProfile({
         email: nextProfile?.email ?? data.email ?? email,
         pocketNumber: nextProfile?.pocketNumber ?? '',
         pocketId: nextProfile?.pocketId ?? '',
+        avatarId: nextProfile?.avatarId ?? 1,
       })
       setEditing(!nextProfile)
       setLoaded(true)
@@ -98,6 +100,7 @@ export default function usePocketProfile({
       const data = await savePocketLocalCurrencyProfile({
         accessToken: token,
         pocketId: draft.pocketId,
+        avatarId: draft.avatarId,
         expectedUpdatedAt: profile?.updatedAt,
       })
       setProfile(data.profile)

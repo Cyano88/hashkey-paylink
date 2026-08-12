@@ -15,7 +15,6 @@ import PocketAccountMenu from './pocket/components/PocketAccountMenu'
 import PocketHeaderIdentity from './pocket/components/PocketHeaderIdentity'
 import { CPurseIcon } from './pocket/components/CPurseIcon'
 import PocketTopSwitch from './pocket/components/PocketTopSwitch'
-import PocketThemeToggle from './pocket/components/PocketThemeToggle'
 import { isPocketHostname, POCKET_BASE_PATH, pocketPathFor, resolvePocketRoute, type PocketRouteState } from './pocket/lib/pocketRoutes'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
@@ -436,16 +435,15 @@ export default function Layout() {
           {isPocketAppPage ? (
             <>
               <div className="pointer-events-auto flex h-10 w-full items-center justify-between">
-                <Link to={`${POCKET_BASE_PATH}/move/usdc`} className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
+                <Link to={`${POCKET_BASE_PATH}/home`} className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
                   <CPurseIcon size={32} title="" className="shrink-0" />
                   <PocketHeaderIdentity />
                 </Link>
                 <div className="flex items-center gap-2">
-                  <PocketThemeToggle />
                   <PocketAccountMenu />
                 </div>
               </div>
-              {pocketRoute?.section !== 'assistant' && (
+              {pocketRoute?.section !== 'assistant' && pocketRoute?.section !== 'home' && pocketRoute?.section !== 'profile' && (
                 <PocketTopSwitch
                   mode={circlePocketHeaderMode}
                   moveView={circlePocketMoveView}

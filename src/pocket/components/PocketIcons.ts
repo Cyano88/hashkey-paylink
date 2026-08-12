@@ -1,8 +1,17 @@
+import { createElement, type HTMLAttributes } from 'react'
+
+export function Loader2({ className = '', ...props }: HTMLAttributes<HTMLSpanElement>) {
+  return createElement('span', {
+    ...props,
+    className: `inline-block shrink-0 rounded-full border-2 border-current border-t-transparent ${className}`,
+    role: props.role ?? 'status',
+  })
+}
+
 export {
   ArrowDownIcon as ArrowDownToLine,
   ArrowLeftIcon as ArrowLeft,
   ArrowLongRightIcon as ArrowRight,
-  ArrowPathIcon as Loader2,
   ArrowRightStartOnRectangleIcon as LogOut,
   ArrowTrendingUpIcon as TrendingUp,
   ArrowUpIcon as ArrowUpFromLine,

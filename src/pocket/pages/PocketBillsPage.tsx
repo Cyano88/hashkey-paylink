@@ -73,7 +73,9 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
   }, [ensureBaseWallet, wallets.refreshBalances, wallets.setError])
 
   const selectNav = (tab: PocketNavTab) => {
-    const path = tab === 'move'
+    const path = tab === 'home'
+        ? pocketPathFor({ section: 'home', view: 'overview' })
+        : tab === 'move'
         ? pocketPathFor({ section: 'move', view: 'usdc' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })

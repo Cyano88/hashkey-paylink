@@ -30,6 +30,7 @@ function profileData(profile: Awaited<ReturnType<ProfileRepository['ensure']>>['
       email: profile.email,
       pocketNumber: profile.pocketNumber,
       pocketId: profile.pocketId,
+      avatarId: profile.avatarId,
       updatedAt: profile.updatedAt,
     },
     unchanged,
@@ -72,8 +73,8 @@ export function createPocketProfileHandler(dependencies: PocketProfileHandlerDep
         return fail(400, 'VALIDATION_FAILED', 'Pocket ID must contain 6 to 12 digits.', false, 'pocketId')
       }
 
-      await dependencies.repository.ensure(identity)
-      const saved = await dependencies.repository.updatePocketId(identity.userId, req.body.pocketId, req.body.expectedUpdatedAt)
+      const current = await dependencies.repository.ensure(identity)
+      const saved = await dependencies.repository.updateProfile(identity.userId, req.body.pocketId, req.body.avatarId ?? current.profile.avatarId, req.body.expectedUpdatedAt)
 
       return res.json({
         ok: true,

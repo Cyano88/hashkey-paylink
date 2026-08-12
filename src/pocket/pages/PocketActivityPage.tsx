@@ -32,7 +32,9 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
   }, [activity.refresh, getAccessToken])
 
   const selectNav = (tab: PocketNavTab) => {
-    const path = tab === 'move'
+    const path = tab === 'home'
+        ? pocketPathFor({ section: 'home', view: 'overview' })
+        : tab === 'move'
         ? pocketPathFor({ section: 'move', view: 'usdc' })
         : tab === 'bills'
           ? pocketPathFor({ section: 'bills', view: 'airtime' })

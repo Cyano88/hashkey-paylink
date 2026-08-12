@@ -87,7 +87,7 @@ try {
 
   const secondIdentity = await repository.ensure({ userId: 'privy-user-2', email: 'grace@example.com' })
   assert.equal(secondIdentity.profile.pocketNumber, '87654321')
-  await assert.rejects(repository.updatePocketId('privy-user-2', '12345678'), /unavailable/i)
+  await assert.rejects(repository.updateProfile('privy-user-2', '12345678', 1), /unavailable/i)
   const emailRetry = await repository.ensure({ userId: 'privy-user-1', email: 'changed@example.com' })
   assert.equal(emailRetry.profile.email, 'ada@example.com')
 

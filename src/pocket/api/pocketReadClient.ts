@@ -27,6 +27,7 @@ type PocketLocalCurrencyProfileReadInput = {
 type PocketLocalCurrencyProfileSaveInput = {
   accessToken: string
   pocketId: string
+  avatarId?: number
   expectedUpdatedAt?: string
   idempotencyKey?: string
   fetcher?: typeof fetch
@@ -90,6 +91,9 @@ function isLocalCurrencyProfile(value: unknown): value is LocalCurrencyProfile {
     && /^\d{6,12}$/.test(value.pocketNumber)
     && typeof value.pocketId === 'string'
     && /^\d{6,12}$/.test(value.pocketId)
+    && Number.isInteger(value.avatarId)
+    && Number(value.avatarId) >= 1
+    && Number(value.avatarId) <= 4
     && (value.updatedAt === undefined || (typeof value.updatedAt === 'string' && Number.isFinite(Date.parse(value.updatedAt))))
 }
 
@@ -150,6 +154,7 @@ export async function readPocketLocalCurrencyProfile({
 export async function savePocketLocalCurrencyProfile({
   accessToken,
   pocketId,
+  avatarId,
   expectedUpdatedAt,
   idempotencyKey = createPocketIdempotencyKey('profile-save'),
   fetcher = fetch,
@@ -163,6 +168,7 @@ export async function savePocketLocalCurrencyProfile({
     },
     body: JSON.stringify({
       pocketId,
+      ...(avatarId !== undefined ? { avatarId } : {}),
       ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
     }),
   })

@@ -22,7 +22,7 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
   const splashLaunching = splashState === 'launching'
   const splashLogoVisible = splashState === 'holding' || splashLaunching
 
-  const enterPocket = () => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}`)
+  const enterPocket = () => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.home}`)
 
   useEffect(() => {
     if (!authenticated || !enterAfterLogin || !profile.loaded || profile.busy || profile.loadError || !profile.profile) return

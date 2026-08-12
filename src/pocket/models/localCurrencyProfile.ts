@@ -6,5 +6,6 @@ export type LocalCurrencyProfile = {
   email: string
   pocketNumber: string
   pocketId: string
+  avatarId: number
   updatedAt?: string
 }

@@ -42,6 +42,7 @@ export type PocketMutationResult<T> = {
 
 export type PocketProfileUpsertRequest = {
   pocketId: string
+  avatarId?: number
   expectedUpdatedAt?: string
 }
 
@@ -54,6 +55,7 @@ export type PocketProfileUpsertData = {
     email: string
     pocketNumber: string
     pocketId: string
+    avatarId: number
     updatedAt: string
   }
   unchanged: boolean
@@ -434,6 +436,7 @@ export function isPocketIdempotencyKey(value: unknown): value is string {
 export function isPocketProfileUpsertRequest(value: unknown): value is PocketProfileUpsertRequest {
   if (!isRecord(value)) return false
   if (typeof value.pocketId !== 'string' || !/^\d{6,12}$/.test(value.pocketId)) return false
+  if (value.avatarId !== undefined && (!Number.isInteger(value.avatarId) || Number(value.avatarId) < 1 || Number(value.avatarId) > 4)) return false
   return value.expectedUpdatedAt === undefined
     || (isNonEmptyString(value.expectedUpdatedAt, 80) && Number.isFinite(Date.parse(value.expectedUpdatedAt as string)))
 }
