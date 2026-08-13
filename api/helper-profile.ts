@@ -372,7 +372,12 @@ export async function readHelperProfileMemory(identity: CirclePocketIdentity) {
 
 async function checkpointMemory(profile: HelperProfile) {
   const ts = Date.now()
-  const memoryHash = crypto.createHash('sha256').update(JSON.stringify({
+  const commitmentSecret = (process.env.OG_MEMORY_COMMITMENT_SECRET || process.env.DEVELOPER_PORTAL_SECRET || '').trim()
+  if (!commitmentSecret) {
+    console.warn('[helper-profile] skipping public 0G memory commitment because OG_MEMORY_COMMITMENT_SECRET is not configured.')
+    return undefined
+  }
+  const memoryHash = crypto.createHmac('sha256', commitmentSecret).update(JSON.stringify({
     payer: profile.payer,
     displayName: profile.displayName,
     preferences: profile.preferences ?? [],
@@ -381,21 +386,17 @@ async function checkpointMemory(profile: HelperProfile) {
   })).digest('hex')
 
   const result = await archivePayment({
-    eventId: `helper-memory-${profile.id}-${ts.toString(36)}`,
+    eventId: `helper-memory-${crypto.randomBytes(12).toString('hex')}`,
     txHash: `memory_${memoryHash}`,
     chain: '0G Memory',
-    payer: profile.displayName || profile.payer,
+    payer: 'private-pocket-memory',
     amount: '0',
     ts,
     source: 'helper-memory',
     metadata: {
       type: 'hashpaylink_helper_memory_checkpoint',
-      profileId: profile.id,
-      payerHash: profile.id,
-      displayName: profile.displayName,
-      preferences: profile.preferences ?? [],
-      memorySummary: profile.memorySummary ?? '',
       memoryHash,
+      privacy: 'non_correlatable_content_hash_only',
     },
   })
 
@@ -525,12 +526,28 @@ export default async function handler(req: Request, res: Response) {
   if (pool) {
     await writePgProfile(next)
     const saved = await readPgProfile(id, requestThreadId)
+    if (action === 'save' && memorySummary && memorySummary !== existing?.memorySummary) {
+      void checkpointMemory(next).then(async proof => {
+        if (!proof) return
+        await writePgProfile({ ...next, memoryProof: proof })
+      }).catch(error => console.warn('[helper-profile] background 0G memory checkpoint failed.', error instanceof Error ? error.message : String(error)))
+    }
     return res.json({ ok: true, profile: publicProfile(saved ?? next), checkpointed: action === 'checkpoint' && !!next.memoryProof })
   }
 
   if (!store) store = await readStore()
   store.profiles[id] = next
   await writeStore(store)
+  if (action === 'save' && memorySummary && memorySummary !== existing?.memorySummary) {
+    void checkpointMemory(next).then(async proof => {
+      if (!proof) return
+      const latest = await readStore()
+      const found = latest.profiles[id]
+      if (!found) return
+      latest.profiles[id] = { ...found, memoryProof: proof }
+      await writeStore(latest)
+    }).catch(error => console.warn('[helper-profile] background 0G memory checkpoint failed.', error instanceof Error ? error.message : String(error)))
+  }
   return res.json({ ok: true, profile: publicProfile(next), checkpointed: action === 'checkpoint' && !!next.memoryProof, cleared: clearedThread })
 }
 

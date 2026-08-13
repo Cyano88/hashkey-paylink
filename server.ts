@@ -96,6 +96,7 @@ import pocketX402ConnectHandler from './api/pocket/x402-connect.js'
 import pocketX402ActivateHandler from './api/pocket/x402-activate.js'
 import pocketMarketplaceHandler from './api/pocket/marketplace.js'
 import pocketAgentAskHandler from './api/pocket/agent-ask.js'
+import pocketSupportCasesHandler from './api/pocket/support-cases.js'
 import pocketWalletsHandler from './api/pocket/wallets/index.js'
 import pocketWalletLinkHandler from './api/pocket/wallets/link.js'
 import { paycrestWebhookHandler } from './api/paycrest-pos.js'
@@ -337,6 +338,7 @@ app.all('/api/pocket/x402/connect',      strictLimiter, pocketX402ConnectHandler
 app.all('/api/pocket/x402/activate',     strictLimiter, pocketX402ActivateHandler)
 app.all('/api/pocket/marketplace',       strictLimiter, pocketMarketplaceHandler)
 app.all('/api/pocket/agent/ask',         strictLimiter, pocketAgentAskHandler)
+app.all('/api/pocket/support/cases',      strictLimiter, pocketSupportCasesHandler)
 app.all('/api/pocket/wallets/link',      strictLimiter, pocketWalletLinkHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)

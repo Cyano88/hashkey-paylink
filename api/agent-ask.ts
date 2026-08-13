@@ -753,7 +753,7 @@ async function verifyPayment(eventId: string, payer: string) {
 // ─── AI response ──────────────────────────────────────────────────────────────
 
 function isNameQuestion(question: string) {
-  return /\b(what'?s|what is|who am i|do you know)\b/i.test(question)
+  return /\b(what'?s|what is|who am i|do you know|do you (?:still )?remember|can you remember)\b/i.test(question)
     && /\b(my name|me as|call me|who i am)\b/i.test(question)
 }
 
@@ -873,7 +873,7 @@ function fallbackHelperAnswer(question: string) {
     return 'Circle wallet balance is the USDC in your wallet. x402 service balance is the amount activated for paid services. Fund the wallet first, then activate x402 before using paid services.'
   }
   if (/\b(paylink|pay link|payment link|request link|checkout link|request|invoice|bill|collect|charge|raise|receive (?:a )?payment|get paid)\b/i.test(question)) {
-    return 'Tell me the payer, amount, purpose, and network, then choose your connected Circle Pocket wallet or another receive wallet. I can create the PayLink after you confirm those details.'
+    return 'Tell me the payer, amount, purpose, and network, then choose your verified Pocket wallet or another receive wallet. I can create the request after you confirm those details.'
   }
   if (/\b(what can you do|help me|how can you help|what do you help with)\b/i.test(question)) {
     return 'I can help with PayLinks, payment receipts, wallet funding, x402 activation, PolyDesk, HashpayStream, setup questions, and everyday planning.'
@@ -1234,7 +1234,7 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
 
   const newName = introducedName(question)
   if (newName) {
-    if (helperMode === 'circle-pocket') return `Got it, ${newName}. I will remember your name across this Circle Pocket chat.`
+    if (helperMode === 'circle-pocket') return 'Got it, ' + newName + '. I will remember your name across Pocket Support.'
     if (helperMode === 'streampay') return `Got it, ${newName}. I will use your name naturally when it helps this HashpayStream workflow.`
     return `Got it, ${newName}. I will use your name naturally when it helps.`
   }
@@ -1245,7 +1245,7 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
       return `Hey${knownName ? ` ${knownName}` : ''}. I am Agent Hash for HashpayStream. I can help with creator posts, HashWatch, books, World Cup news, live scores, x402 unlocks, pay-as-you-read/watch checkpoints, receipts, earnings, and unlocked-content summaries.`
     }
     if (helperMode === 'circle-pocket') {
-      return `Hey${knownName ? ` ${knownName}` : ''}. I can help across Circle Pocket: smart wallets, receiving USDC, bank payout, Retail POS, bills, x402 funding, and receipts.`
+      return 'Hey' + (knownName ? ' ' + knownName : '') + '. I can help across Pocket: balances, sending and receiving USDC, requests, bank payouts, Retail POS, bills, activity, and receipts.'
     }
     return `Hey${knownName ? ` ${knownName}` : ''}. I can help you create a PayLink, check a receipt, set up wallets, use HashpayStream, or research PolyDesk and Polymarket flows.`
   }

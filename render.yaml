@@ -146,6 +146,8 @@ services:
         sync: false                   # comma-separated Privy email allowlist for /admin/developers
       - key: DEVELOPER_ADMIN_USER_IDS
         sync: false                   # optional comma-separated Privy user-id allowlist
+      - key: POCKET_SUPPORT_STORE_KEY
+        value: "hashpaylink:pocket-support:v1"
       - key: DEVELOPER_PROJECT_STORE_KEY
         value: "hashpaylink:developer-projects:v1"
       - key: HASH_PAYLINK_BASE_URL
@@ -232,6 +234,8 @@ services:
         sync: false                   # Preferred private 0G EVM RPC endpoint; app falls back to public 0G RPC when unset
       - key: OG_INDEXER_RPC_URL
         sync: false                   # Preferred private 0G storage indexer endpoint; app falls back to public 0G indexer when unset
+      - key: OG_MEMORY_COMMITMENT_SECRET
+        sync: false                   # private HMAC key for non-reversible memory commitments; never expose with VITE_
 
       # ── V2 relayer (api/relay-v2.ts) ──────────────────────────────────────
       - key: PAYLINK_FACTORY_V2

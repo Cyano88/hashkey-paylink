@@ -93,7 +93,10 @@ export default function App() {
       <Route path="pay/a/:checkoutId" element={<AgentCheckoutPage />} />
       <Route path="agreements/:agreementId" element={<ArcAgreementPayerPage />} />
       <Route path="developers" element={<DeveloperPortalPage />} />
-      <Route path="admin/developers" element={<DeveloperOperationsPage />} />
+      <Route path="admin" element={<Navigate to="/admin/developers" replace />} />
+      <Route path="admin/developers" element={<DeveloperOperationsPage surface="projects" />} />
+      <Route path="admin/agreements" element={<DeveloperOperationsPage surface="agreements" />} />
+      <Route path="admin/support" element={<DeveloperOperationsPage surface="support" />} />
       <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />
       <Route path="dashboard" element={<Dashboard />} />
       <Route path="event" element={<EventDashboard />} />

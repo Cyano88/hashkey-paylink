@@ -610,8 +610,8 @@ function extractTarget(text: string, mode: RequestMode) {
 const helperModes: Array<{ id: HelperMode; label: string; intro: string; available?: boolean }> = [
   {
     id: 'circle-pocket',
-    label: 'Circle Pocket',
-    intro: 'I can help with smart wallets, receiving USDC, bank payout, Retail POS, bills, x402 funding, receipts, and account support. What do you want to do?',
+    label: 'Pocket Support',
+    intro: 'I can help with Pocket balances, sending and receiving USDC, payment requests, bank payouts, Retail POS, bills, activity, receipts, and account support. What do you want to do?',
   },
   {
     id: 'daily',
@@ -772,6 +772,13 @@ function wantsSavedWallet(text: string) {
   return isSavedWalletChoiceIntent(text)
 }
 
+type PocketSupportCase = {
+  id: string
+  status: 'open' | 'assigned' | 'waiting_user' | 'resolved'
+  customer?: { fullName: string; email: string; pocketId: string }
+  messages: Array<{ id: string; author: 'user' | 'agent' | 'staff'; text: string; createdAt: number }>
+}
+
 function wantsNewWallet(text: string) {
   const normalized = text.trim().toLowerCase().replace(/[.!?]+$/g, '')
   if (/^(use\s+)?(?:a\s+)?(?:new|another|different)(?:\s+(?:wallet|account|address|one))?$/.test(normalized)) return true
@@ -856,6 +863,15 @@ function isSignedInStatusMessage(text: string) {
   return /\b(i am|i'm|im|already|currently)\s+(?:signed|logged)\s+in\b|\bmy account is (?:signed|logged) in\b/i.test(text)
 }
 
+function pocketSupportEscalation(text: string) {
+  const value = text.toLowerCase()
+  if (/\b(change|correct|update|unlock)\b.*\b(bank|verified)\b.*\b(name|identity)\b|\b(bank|verified)\b.*\b(name|identity)\b.*\b(change|wrong|incorrect)\b/.test(value)) return { category: 'bank_identity', priority: 'high' } as const
+  if (/\b(bank payment|bank payout|bank transfer|withdrawal|settlement)\b.*\b(stuck|pending|missing|failed|not received|taking too long)\b|\b(stuck|pending|missing|failed)\b.*\b(bank payment|bank payout|bank transfer|withdrawal|settlement)\b/.test(value)) return { category: 'bank_payment', priority: 'high' } as const
+  if (/\b(transaction|payment|transfer|receipt)\b.*\b(stuck|pending|missing|failed|not showing|not received)\b|\b(stuck|pending|missing|failed)\b.*\b(transaction|payment|transfer|receipt)\b/.test(value)) return { category: 'stuck_transaction', priority: 'high' } as const
+  if (/\b(human|human support|support agent|talk to someone|speak to someone|contact support)\b/.test(value)) return { category: 'other', priority: 'normal' } as const
+  return null
+}
+
 function compactSavedWallet(wallet: string) {
   return wallet ? shortAddress(wallet).replace('...', '..') : ''
 }
@@ -931,7 +947,7 @@ function isMoodNameMemoryLine(line: string) {
 }
 
 function isAskingUserName(text: string) {
-  return /\b(what'?s|what is|tell me)\s+my\s+name\b|\bdo you know my name\b|\bwho am i\b|\bwhat do you call me\b/i.test(text)
+  return /\b(what'?s|what is|tell me)\s+my\s+name\b|\bdo you (?:still )?(?:know|remember) my name\b|\b(?:can|will) you remember my name\b|\bwho am i\b|\bwhat do you call me\b/i.test(text)
 }
 
 function extractRememberedName(text: string) {
@@ -1814,6 +1830,8 @@ export function TelegramHelperPanel({
   const [posTerminalDraft, setPosTerminalDraft] = useState<PosTerminalDraft | null>(() => storedPaymentConversation?.posTerminalDraft ?? null)
   const [polyPortfolioFundingDraft, setPolyPortfolioFundingDraft] = useState<PolyPortfolioFundingDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
+  const [supportReplyCaseId, setSupportReplyCaseId] = useState('')
+  const [humanSupportBusy, setHumanSupportBusy] = useState(false)
   const helperScrollRef = useRef<HTMLDivElement | null>(null)
   const helperAbortRef = useRef<AbortController | null>(null)
   const initialRouteAppliedRef = useRef(Boolean(initialNotice || initialHelperMode || initialPolyDeskSubMode))
@@ -1821,6 +1839,7 @@ export function TelegramHelperPanel({
   const helperIdentityResetMountedRef = useRef(false)
   const suppressThreadHydrationRef = useRef(false)
   const freshThreadIdsRef = useRef<Set<string>>(new Set())
+  const seenSupportMessageIdsRef = useRef<Set<string>>(new Set())
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
   const agentRequestPayer = payer.trim() || helperName || cleanTelegramName || ownerKey || fallbackOwner || 'anonymous-helper'
   const activeHelperThreadId = `mode:${helperMode || 'general'}${helperMode === 'polydesk' && polyDeskSubMode ? `:${polyDeskSubMode}` : ''}`
@@ -2040,6 +2059,32 @@ export function TelegramHelperPanel({
     return () => { cancelled = true }
   }, [activeHelperThreadId, helperAuthReady, helperAuthenticated]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (lockedHelperMode !== 'circle-pocket' || !helperAuthReady || !helperAuthenticated) return
+    let cancelled = false
+    const syncSupport = async () => {
+      try {
+        const response = await fetch('/api/pocket/support/cases?action=list-mine', {
+          cache: 'no-store', headers: await helperProfileHeaders(),
+        })
+        const data = await response.json() as { ok?: boolean; cases?: PocketSupportCase[] }
+        if (cancelled || !response.ok || !data.ok) return
+        const rows = data.cases || []
+        setSupportReplyCaseId(rows.find(item => item.status !== 'resolved')?.id || '')
+        const incoming = rows.flatMap(item => item.messages
+          .filter(message => message.author === 'staff' && !seenSupportMessageIdsRef.current.has(message.id))
+          .map(message => ({ id: `support-${message.id}`, answer: `Pocket Support · ${item.id}\n${message.text}` })))
+        rows.forEach(item => item.messages.forEach(message => {
+          if (message.author === 'staff') seenSupportMessageIdsRef.current.add(message.id)
+        }))
+        if (incoming.length) setMessages(current => [...current, ...incoming])
+      } catch { /* The next background sync retries without interrupting chat. */ }
+    }
+    void syncSupport()
+    const timer = window.setInterval(() => void syncSupport(), 12000)
+    return () => { cancelled = true; window.clearInterval(timer) }
+  }, [helperAuthReady, helperAuthenticated, lockedHelperMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function startHelper() {
     setStarted(true)
     if (helperName && !payer.trim()) setPayer(helperName)
@@ -2179,6 +2224,67 @@ export function TelegramHelperPanel({
     setPolyPortfolioFundingDraft(null)
     setQuestion('')
     setAskError('')
+  }
+
+  async function createPocketSupportCase(nextQuestion: string, escalation: { category: string; priority: string }) {
+    const transcript = messages.slice(-8).flatMap(message => [
+      ...(message.question ? [{ author: 'user', text: message.question }] : []),
+      ...(message.answer ? [{ author: 'agent', text: message.answer }] : []),
+    ])
+    const response = await fetch('/api/pocket/support/cases', {
+      method: 'POST',
+      headers: await helperProfileHeaders(true),
+      body: JSON.stringify({
+        action: 'create',
+        category: escalation.category,
+        priority: escalation.priority,
+        summary: nextQuestion,
+        messages: [...transcript, { author: 'user', text: nextQuestion }],
+      }),
+    })
+    const data = await response.json() as { ok?: boolean; case?: { id?: string }; error?: string }
+    if (!response.ok || !data.ok || !data.case?.id) throw new Error(data.error || 'Could not open a support case.')
+    return data.case.id
+  }
+
+  async function replyToPocketSupport(caseId: string, text: string) {
+    const response = await fetch('/api/pocket/support/cases', {
+      method: 'POST', headers: await helperProfileHeaders(true),
+      body: JSON.stringify({ action: 'reply', caseId, message: text }),
+    })
+    const data = await response.json() as { ok?: boolean; error?: string }
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Could not send your reply to Pocket Support.')
+  }
+
+  async function startHumanSupport() {
+    if (humanSupportBusy || !helperAuthReady) return
+    if (!helperAuthenticated) {
+      setAskError('Sign in to Pocket before starting a private human-support chat.')
+      return
+    }
+    setHumanSupportBusy(true)
+    setAskError('')
+    try {
+      const response = await fetch('/api/pocket/support/cases', {
+        method: 'POST', headers: await helperProfileHeaders(true),
+        body: JSON.stringify({ action: 'create', entrypoint: 'human_chat', category: 'account', priority: 'normal', summary: 'Human support requested' }),
+      })
+      const data = await response.json() as { ok?: boolean; case?: PocketSupportCase; error?: string }
+      if (!response.ok || !data.ok || !data.case?.id) throw new Error(data.error || 'Could not start human support.')
+      setSupportReplyCaseId(data.case.id)
+      const customer = data.case.customer
+      const identityLines = [
+        'Private support details',
+        `Full name: ${customer?.fullName || 'Not verified yet'}`,
+        `Email: ${customer?.email || 'Unavailable'}`,
+        `Pocket ID: ${customer?.pocketId || 'Unavailable'}`,
+        '',
+        `A human support specialist will join you shortly. Case ${data.case.id}.`,
+      ]
+      setMessages(current => [...current, { id: `human-support-${data.case!.id}`, answer: identityLines.join('\n') }])
+    } catch (error) {
+      setAskError(error instanceof Error ? error.message : 'Could not start human support.')
+    } finally { setHumanSupportBusy(false) }
   }
 
   function resetHelperMode() {
@@ -3694,19 +3800,45 @@ export function TelegramHelperPanel({
         })
         return
       }
+      if (helperMode === 'circle-pocket' && supportReplyCaseId) {
+        setAgentStatus('Sending your reply to Pocket Support...')
+        try {
+          await replyToPocketSupport(supportReplyCaseId, nextQuestion)
+          finishHelperMessage(nextQuestion, { answer: 'Sent to Pocket Support. A human specialist will reply in this conversation.' })
+        } catch (error) {
+          finishHelperMessage(nextQuestion, { answer: error instanceof Error ? error.message : 'Your support reply could not be sent just now.' })
+        }
+        return
+      }
+      const supportEscalation = helperMode === 'circle-pocket' ? pocketSupportEscalation(nextQuestion) : null
+      if (supportEscalation) {
+        setAgentStatus('Opening a secure support case...')
+        try {
+          const caseId = await createPocketSupportCase(nextQuestion, supportEscalation)
+          setSupportReplyCaseId(caseId)
+          finishHelperMessage(nextQuestion, {
+            answer: 'I have handed this to Pocket Support as case ' + caseId + '. A human can review the account and payment context and reply here. Do not send another payment while a stuck transaction is under review.',
+          })
+        } catch (error) {
+          finishHelperMessage(nextQuestion, {
+            answer: error instanceof Error ? error.message : 'I could not open the support case just now. Please try again shortly.',
+          })
+        }
+        return
+      }
       if (helperMode === 'circle-pocket' && isSignedInStatusMessage(nextQuestion)) {
         const answer = !helperAuthReady
           ? 'I am still checking your account session. Try that request again in a moment.'
           : helperAuthenticated
-            ? 'You are signed in. I can use your connected Circle Pocket context for wallet and PayLink actions.'
-            : 'I cannot confirm an active sign-in on this session yet. Sign in here, then I can use your connected Circle Pocket context.'
+            ? 'You are signed in. I can use your verified Pocket context for wallet and payment actions.'
+            : 'I cannot confirm an active sign-in on this session yet. Sign in here, then I can use your verified Pocket context.'
         finishHelperMessage(nextQuestion, { answer })
         return
       }
       if (helperMode === 'circle-pocket' && await handleCirclePocketBalanceQuestion(nextQuestion)) return
       if (helperMode !== 'circle-pocket' && isPaymentRequestIntent(nextQuestion)) {
         finishHelperMessage(nextQuestion, {
-          answer: 'That sounds like a Circle Pocket request. Switch to Circle Pocket and I will prepare it cleanly.',
+          answer: 'That sounds like a Pocket request. Open Pocket Support and I will prepare it cleanly.',
         })
         return
       }
@@ -3786,7 +3918,7 @@ export function TelegramHelperPanel({
     <div className={cn(fillAvailableHeight && 'flex min-h-0 flex-1 flex-col')}>
       <div className={cn('space-y-3', fillAvailableHeight && 'flex min-h-0 flex-1 flex-col space-y-0')}>
         <div className={cn('overflow-hidden', fillAvailableHeight && 'flex min-h-0 flex-1 flex-col')}>
-              {helperMode && (
+              {helperMode && !lockedHelperMode && (
                 <div className="shrink-0 px-3 pb-2">
                   <div className="flex items-center justify-between gap-3 rounded-full border border-gray-200/90 bg-gray-50/95 px-3 py-2 shadow-[0_4px_16px_rgba(15,23,42,0.05)] dark:border-white/10 dark:bg-white/[0.06] dark:shadow-none">
                     <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold text-gray-800 dark:text-gray-100">
@@ -3823,6 +3955,7 @@ export function TelegramHelperPanel({
                   <p>
                     {welcomeText ?? `Welcome back, ${helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, HashpayStream, agent setup, research, planning, or daily questions.`}
                   </p>
+                  {lockedHelperMode === 'circle-pocket' && <button type="button" onClick={() => void startHumanSupport()} disabled={humanSupportBusy} className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-700 transition hover:border-gray-300 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-200"><MessageCircle className="h-3 w-3" />{humanSupportBusy ? 'Opening support…' : 'Chat with a human'}</button>}
                   <div className="mt-1.5">
                     <ZeroScoutPowerBadge compact />
                   </div>

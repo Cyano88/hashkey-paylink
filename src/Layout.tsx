@@ -431,8 +431,8 @@ export default function Layout() {
         className={isPocketLandingPage || isPocketImmersivePage || isCheckoutPage
           ? 'hidden'
           : isPocketAppPage
-          ? 'pointer-events-none fixed inset-x-0 top-0 z-50 border-b border-gray-200/80 bg-[#F5F5F7]/92 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-[#0A0A0A]/92 dark:shadow-[0_10px_30px_rgba(0,0,0,0.24)]'
-          : 'sticky top-0 z-50 border-b border-white/60 bg-white/80 backdrop-blur-xl transition-transform duration-100 dark:border-white/5 dark:bg-[#111113]/90'}
+          ? 'pointer-events-none fixed inset-x-0 top-0 z-50 border-b border-gray-200 bg-[#F5F5F7] shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:border-white/[0.08] dark:bg-[#0A0A0A] dark:shadow-[0_10px_30px_rgba(0,0,0,0.24)]'
+          : 'sticky top-0 z-50 border-b border-gray-200 bg-white transition-transform duration-100 dark:border-white/5 dark:bg-[#111113]'}
       >
         <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'flex-col gap-1.5 py-2' : `justify-between ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}`}>
           {isPocketAppPage ? (
@@ -639,7 +639,7 @@ export default function Layout() {
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer
         data-hashpaylink-bottom-bar
-        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 dark:border-white/5 dark:bg-[#111113]/90 ${agentHashComposerFocused || isPocketAppPage || isCheckoutPage ? 'hidden' : 'flex'}`}
+        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white py-0 dark:border-white/5 dark:bg-[#111113] ${agentHashComposerFocused || isPocketAppPage || isCheckoutPage ? 'hidden' : 'flex'}`}
       >
           <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">

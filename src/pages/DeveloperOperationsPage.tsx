@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import {
   AlertTriangle,
@@ -18,6 +18,7 @@ import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn } from '../lib/utils'
 import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
+import PocketSupportOperationsPanel from '../components/PocketSupportOperationsPanel'
 
 type Network = 'base' | 'arbitrum' | 'arc'
 type Operation = {
@@ -91,7 +92,15 @@ function formatDate(value?: string) {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-export default function DeveloperOperationsPage() {
+type OperationsSurface = 'projects' | 'agreements' | 'support'
+
+const OPERATIONS_SECTIONS: Array<{ id: OperationsSurface; label: string; description: string; path: string }> = [
+  { id: 'projects', label: 'Developer projects', description: 'Integrations, API access and settlement routing', path: '/admin/developers' },
+  { id: 'agreements', label: 'Arc agreements', description: 'Agreement lifecycle and controlled operations', path: '/admin/agreements' },
+  { id: 'support', label: 'Pocket Support', description: 'Agent Hash handoffs and customer conversations', path: '/admin/support' },
+]
+
+export default function DeveloperOperationsPage({ surface }: { surface: OperationsSurface }) {
   const { ready, authenticated, getAccessToken, logout } = usePrivy()
   const [projects, setProjects] = useState<Project[]>([])
   const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY)
@@ -104,7 +113,6 @@ export default function DeveloperOperationsPage() {
   const [suspensionReason, setSuspensionReason] = useState('')
   const [pilotReason, setPilotReason] = useState('')
   const [pilotLimits, setPilotLimits] = useState({ maxAgreementUsdc: '1', dailyVolumeUsdc: '1', maxActiveAgreements: '1', maxDurationSeconds: '604800' })
-  const [surface, setSurface] = useState<'projects' | 'agreements'>('projects')
 
   async function api(method: string, body?: Record<string, unknown>) {
     const token = await getAccessToken()
@@ -147,12 +155,12 @@ export default function DeveloperOperationsPage() {
   }
 
   useEffect(() => {
-    if (!ready || !authenticated) {
+    if (!ready || !authenticated || surface !== 'projects') {
       setProjects([])
       return
     }
     void loadProjects()
-  }, [ready, authenticated]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, authenticated, surface]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => projects.filter(project => {
     if (filter === 'active') return projectState(project) === 'Active'
@@ -229,27 +237,8 @@ export default function DeveloperOperationsPage() {
   return (
     <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-6xl px-4 py-8 sm:py-10">
       <OperationsTop onLogout={logout} />
-      <div className="mt-6 inline-grid grid-cols-2 rounded-full bg-gray-100 p-1 dark:bg-white/8">
-        {([
-          ['projects', 'Projects'],
-          ['agreements', 'Arc Agreements'],
-        ] as const).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setSurface(value)}
-            className={cn(
-              'h-9 rounded-full px-5 text-xs font-semibold transition',
-              surface === value
-                ? 'bg-white text-gray-950 shadow-sm dark:bg-white dark:text-gray-950'
-                : 'text-gray-500 dark:text-gray-400',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {surface === 'agreements' ? <ArcAgreementOperationsPanel /> : <>
+      <OperationsSectionNav active={surface} />
+      {surface === 'agreements' ? <ArcAgreementOperationsPanel /> : surface === 'support' ? <PocketSupportOperationsPanel /> : <>
       <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="Projects" value={summary.total} />
         <SummaryCard label="Active" value={summary.active} tone="success" />
@@ -323,6 +312,25 @@ export default function DeveloperOperationsPage() {
       </>}
     </main>
   )
+}
+
+function OperationsSectionNav({ active }: { active: OperationsSurface }) {
+  return <nav aria-label="Operations sections" className="mt-6 grid gap-3 md:grid-cols-3">
+    {OPERATIONS_SECTIONS.map(section => <NavLink
+      key={section.id}
+      to={section.path}
+      aria-current={active === section.id ? 'page' : undefined}
+      className={({ isActive }) => cn(
+        'rounded-2xl border p-4 transition',
+        isActive
+          ? 'border-gray-950 bg-gray-950 text-white shadow-sm dark:border-white dark:bg-white dark:text-gray-950'
+          : 'border-gray-200 bg-white text-gray-950 hover:border-gray-300 dark:border-white/10 dark:bg-[#111216] dark:text-white dark:hover:border-white/20',
+      )}
+    >
+      <p className="text-sm font-semibold tracking-[-0.01em]">{section.label}</p>
+      <p className={cn('mt-1 text-[11px] leading-4', active === section.id ? 'text-white/65 dark:text-gray-950/60' : 'text-gray-500 dark:text-gray-400')}>{section.description}</p>
+    </NavLink>)}
+  </nav>
 }
 
 function ProjectOperations({ project, busy, reason, setReason, onOperate, pilotLimits, setPilotLimits, pilotReason, setPilotReason, onOperateArcPilot }: {

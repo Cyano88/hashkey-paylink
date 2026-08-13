@@ -4276,7 +4276,7 @@ export default function PaymentPage() {
         )}
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
-        <div className={cn('mt-3 border-b border-gray-100 bg-gradient-to-br p-5 text-center dark:border-white/10', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
+        <div className={cn('border-b border-gray-100 bg-gradient-to-br text-center dark:border-white/10', isNgPosPaycrestOfframp ? 'mt-2 p-4' : 'mt-3 p-5', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
           {isWalletManagerFunding && isConfirmed ? (
             <div className="flex min-h-[190px] flex-col items-center justify-center py-2">
               <div className="flex h-24 w-24 items-center justify-center rounded-full border border-emerald-200/80 bg-white shadow-[0_16px_40px_-18px_rgba(16,185,129,0.7)] animate-bounce-in dark:border-emerald-400/20 dark:bg-white/[0.08]">
@@ -4553,7 +4553,7 @@ export default function PaymentPage() {
           </div>
         )}
 
-        <div className="space-y-4 p-5">
+        <div className={cn(isNgPosPaycrestOfframp ? 'space-y-3 p-4' : 'space-y-4 p-5')}>
           {/* Payment details */}
           {isHostedCheckout ? (
             (feeAmount > 0 && effectiveAmt) || showArbitrumRelayCost ? (
@@ -5520,7 +5520,7 @@ export default function PaymentPage() {
         </div>
       )}
 
-      <CheckoutSteps steps={compactCheckoutSteps} className="mt-10 animate-fade-in" />
+      <CheckoutSteps steps={compactCheckoutSteps} className={cn(isNgPosPaycrestOfframp ? 'mt-6' : 'mt-10', 'animate-fade-in')} />
       <CheckoutPoweredByLine />
     </div>
   )

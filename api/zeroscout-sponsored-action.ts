@@ -299,11 +299,11 @@ function helperModeInstructions(input: ZeroScoutHelperGuidanceInput) {
   }
   if (mode === 'circle-pocket') {
     return [
-      'Circle Pocket mode covers the complete wallet service: smart-wallet overview and activity, funding addresses, supported transfers and withdrawals, Receive USDC and PayLinks, bank payout, Retail POS, bills, x402 service-balance funding, receipts, and account support.',
+      'Pocket Support covers balances and activity, deposits, sends to Pocket IDs or wallet addresses, cross-network USDC swaps, USDC requests, bank payouts, Retail POS, bills, receipts, profile verification, notifications, and account support.',
       'Hash PayLink backend context is the deterministic source of truth for balances, wallet addresses, networks, validation, account verification, PayLink creation, bank settlement, POS, bills, x402 activation, receipts, transaction state, and proof checks. ZeroScout only enriches the supplied request and wording.',
-      'Never call, recommend, or imply LP Scout, Polymarket, market-intelligence, trading, or liquidity endpoints from Circle Pocket mode.',
+      'Never call, recommend, or imply LP Scout, Polymarket, market-intelligence, trading, or liquidity endpoints from Pocket Support.',
       'Preserve every supplied deterministic result, field, supported flag, capability, and action exactly. Never invent balances, addresses, verification, providers, links, receipts, transaction state, or completed actions.',
-      'When circlePocketContext marks a request unsupported, use its closest-assistance answer and action. Do not answer the unsupported request as though Circle Pocket can perform it.',
+      'When circlePocketContext marks a request unsupported, use its closest-assistance answer and action. Do not answer the unsupported request as though Pocket can perform it.',
       'Keep the answer direct, useful, and short enough for a mobile chat card.',
     ]
   }
@@ -394,7 +394,7 @@ export async function getZeroScoutHelperGuidance(input: ZeroScoutHelperGuidanceI
       partner: 'Hash PayLink',
       productType: 'agentic-service',
       analysisType: 'zeroscout-helper-context-guidance',
-      objective: 'Return a concise, consumer-friendly Agent Hash chat answer. Be direct, human, and useful. Follow helperModeInstructions strictly. Answer ordinary everyday questions cleanly. For live schedules, prices, current events, restaurants, or other freshness-sensitive requests, answer only if verified data is available in the request or ZeroScout can verify it; otherwise say plainly that live verification is not available from this chat. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Circle Pocket requests must stay within the backend-routed wallet, receiving, bank payout, POS, bills, x402, receipts, and account capabilities. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
+      objective: 'Return a concise, consumer-friendly Agent Hash chat answer. Be direct, human, and useful. Follow helperModeInstructions strictly. Answer ordinary everyday questions cleanly. For live schedules, prices, current events, restaurants, or other freshness-sensitive requests, answer only if verified data is available in the request or ZeroScout can verify it; otherwise say plainly that live verification is not available from this chat. Personal identity questions should be answered only from supplied memory/profile context; if unknown, say that naturally. Pocket Support requests must stay within the backend-routed balance, deposit, send, swap, request, bank payout, POS, bills, activity, receipt, profile, notification, and account-support capabilities. Respect payment, wallet, LP Scout, and x402 proof boundaries.',
       outputStyle: 'consumer-helper-answer-guidance',
       data: {
         proofClass: 'zeroscout_helper_context_guidance',
