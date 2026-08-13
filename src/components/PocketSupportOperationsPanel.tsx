@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { Check, Loader2, RefreshCw, Send } from 'lucide-react'
 
-type SupportMessage = { id: string; author: 'user' | 'agent' | 'staff'; text: string; createdAt: number }
+type SupportMessage = { id: string; author: 'user' | 'agent' | 'staff'; kind?: 'automatic_reminder' | 'automatic_resolution'; text: string; createdAt: number }
 type SupportCase = {
   id: string
   status: 'open' | 'assigned' | 'waiting_user' | 'resolved'
@@ -18,6 +18,20 @@ type SupportCase = {
 
 function when(value: number) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
+async function readSupportResponse(response: Response) {
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error(response.status >= 500
+      ? 'Pocket Support is reconnecting. Your loaded conversation is safe; try again in a moment.'
+      : 'Pocket Support returned an unexpected response. Please refresh and try again.')
+  }
+  try {
+    return await response.json() as { ok?: boolean; cases?: SupportCase[]; case?: SupportCase; error?: string }
+  } catch {
+    throw new Error('Pocket Support returned an incomplete response. Please try again.')
+  }
 }
 
 export default function PocketSupportOperationsPanel() {
@@ -37,21 +51,22 @@ export default function PocketSupportOperationsPanel() {
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
-    const data = await response.json() as { ok?: boolean; cases?: SupportCase[]; case?: SupportCase; error?: string }
+    const data = await readSupportResponse(response)
     if (!response.ok || !data.ok) throw new Error(data.error || 'Support request failed.')
     return data
   }, [getAccessToken])
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true)
-    setError('')
+    if (!quiet) setError('')
     try {
       const data = await call({ action: 'staff-list' })
       const next = data.cases || []
       setCases(next)
       setActiveId(current => current && next.some(item => item.id === current) ? current : next[0]?.id || '')
+      setError('')
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Support cases could not be loaded.')
+      if (!quiet) setError(reason instanceof Error ? reason.message : 'Support cases could not be loaded.')
     } finally { if (!quiet) setLoading(false) }
   }, [call])
 

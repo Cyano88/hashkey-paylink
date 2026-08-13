@@ -776,7 +776,21 @@ type PocketSupportCase = {
   id: string
   status: 'open' | 'assigned' | 'waiting_user' | 'resolved'
   customer?: { fullName: string; email: string; pocketId: string }
-  messages: Array<{ id: string; author: 'user' | 'agent' | 'staff'; text: string; createdAt: number }>
+  messages: Array<{ id: string; author: 'user' | 'agent' | 'staff'; kind?: 'automatic_reminder' | 'automatic_resolution'; text: string; createdAt: number }>
+}
+
+async function readPocketSupportResponse<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error(response.status >= 500
+      ? 'Pocket Support is reconnecting. Please try again in a moment.'
+      : 'Pocket Support returned an unexpected response. Please try again.')
+  }
+  try {
+    return await response.json() as T
+  } catch {
+    throw new Error('Pocket Support returned an incomplete response. Please try again.')
+  }
 }
 
 function wantsNewWallet(text: string) {
@@ -2067,15 +2081,15 @@ export function TelegramHelperPanel({
         const response = await fetch('/api/pocket/support/cases?action=list-mine', {
           cache: 'no-store', headers: await helperProfileHeaders(),
         })
-        const data = await response.json() as { ok?: boolean; cases?: PocketSupportCase[] }
+        const data = await readPocketSupportResponse<{ ok?: boolean; cases?: PocketSupportCase[] }>(response)
         if (cancelled || !response.ok || !data.ok) return
         const rows = data.cases || []
         setSupportReplyCaseId(rows.find(item => item.status !== 'resolved')?.id || '')
         const incoming = rows.flatMap(item => item.messages
-          .filter(message => message.author === 'staff' && !seenSupportMessageIdsRef.current.has(message.id))
+          .filter(message => (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution') && !seenSupportMessageIdsRef.current.has(message.id))
           .map(message => ({ id: `support-${message.id}`, answer: `Pocket Support · ${item.id}\n${message.text}` })))
         rows.forEach(item => item.messages.forEach(message => {
-          if (message.author === 'staff') seenSupportMessageIdsRef.current.add(message.id)
+          if (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution') seenSupportMessageIdsRef.current.add(message.id)
         }))
         if (incoming.length) setMessages(current => [...current, ...incoming])
       } catch { /* The next background sync retries without interrupting chat. */ }
@@ -2242,7 +2256,7 @@ export function TelegramHelperPanel({
         messages: [...transcript, { author: 'user', text: nextQuestion }],
       }),
     })
-    const data = await response.json() as { ok?: boolean; case?: { id?: string }; error?: string }
+    const data = await readPocketSupportResponse<{ ok?: boolean; case?: { id?: string }; error?: string }>(response)
     if (!response.ok || !data.ok || !data.case?.id) throw new Error(data.error || 'Could not open a support case.')
     return data.case.id
   }
@@ -2252,7 +2266,7 @@ export function TelegramHelperPanel({
       method: 'POST', headers: await helperProfileHeaders(true),
       body: JSON.stringify({ action: 'reply', caseId, message: text }),
     })
-    const data = await response.json() as { ok?: boolean; error?: string }
+    const data = await readPocketSupportResponse<{ ok?: boolean; error?: string }>(response)
     if (!response.ok || !data.ok) throw new Error(data.error || 'Could not send your reply to Pocket Support.')
   }
 
@@ -2269,7 +2283,7 @@ export function TelegramHelperPanel({
         method: 'POST', headers: await helperProfileHeaders(true),
         body: JSON.stringify({ action: 'create', entrypoint: 'human_chat', category: 'account', priority: 'normal', summary: 'Human support requested' }),
       })
-      const data = await response.json() as { ok?: boolean; case?: PocketSupportCase; error?: string }
+      const data = await readPocketSupportResponse<{ ok?: boolean; case?: PocketSupportCase; error?: string }>(response)
       if (!response.ok || !data.ok || !data.case?.id) throw new Error(data.error || 'Could not start human support.')
       setSupportReplyCaseId(data.case.id)
       const customer = data.case.customer

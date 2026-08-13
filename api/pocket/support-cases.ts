@@ -5,8 +5,9 @@ import { archivePayment } from '../og-storage.js'
 import { mutateDurableJson, readDurableJson } from '../render-durable-store.js'
 import { circlePocketIdentityErrorStatus, circlePocketIdentityId, resolveCirclePocketIdentity } from '../circle-pocket-identity.js'
 import { localCurrencyProfileRepository } from '../local-currency-profile.js'
+import { advancePocketSupportLifecycle, type PocketSupportLifecycleMessage } from './support-case-lifecycle.js'
 
-type SupportMessage = { id: string; author: 'user' | 'agent' | 'staff'; text: string; createdAt: number }
+type SupportMessage = PocketSupportLifecycleMessage
 type SupportCase = {
   id: string
   profileId: string
@@ -21,6 +22,9 @@ type SupportCase = {
   proof?: { rootHash: string; ogTxHash: string; ogExplorer: string }
   createdAt: number
   updatedAt: number
+  waitingSince?: number
+  reminderSentAt?: number
+  resolvedAt?: number
 }
 type SupportStore = { cases: Record<string, SupportCase> }
 
@@ -47,6 +51,15 @@ async function verifiedStaff(req: Request) {
   return { email: email || claims.userId }
 }
 async function store() { return (await readDurableJson<SupportStore>(STORE_KEY)) || { cases: {} } }
+async function currentStore() {
+  const current = await store()
+  if (!advancePocketSupportLifecycle(current.cases, Date.now(), () => crypto.randomUUID())) return current
+  return mutateDurableJson<SupportStore>(STORE_KEY, stored => {
+    const next = stored || { cases: {} }
+    advancePocketSupportLifecycle(next.cases, Date.now(), () => crypto.randomUUID())
+    return next
+  })
+}
 function publicCase(item: SupportCase) {
   const { profileId: _profileId, ...safe } = item
   return safe
@@ -67,7 +80,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
     if (action.startsWith('staff-')) {
       const staff = await verifiedStaff(req)
       if (action === 'staff-list') {
-        const rows = Object.values((await store()).cases).sort((a, b) => b.updatedAt - a.updatedAt)
+        const rows = Object.values((await currentStore()).cases).sort((a, b) => b.updatedAt - a.updatedAt)
         return res.json({ ok: true, cases: rows })
       }
       const caseId = clean(req.body?.caseId, 80)
@@ -82,9 +95,20 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
           if (!text) throw Object.assign(new Error('Reply is required.'), { status: 400 })
           item.messages = [...item.messages, { id: crypto.randomUUID(), author: 'staff', text, createdAt: now }].slice(-80)
           item.status = req.body?.resolve === true ? 'resolved' : 'waiting_user'
+          item.waitingSince = req.body?.resolve === true ? undefined : now
+          item.reminderSentAt = undefined
+          item.resolvedAt = req.body?.resolve === true ? now : undefined
         } else if (action === 'staff-assign') {
           item.status = 'assigned'
-        } else if (action === 'staff-resolve') item.status = 'resolved'
+          item.waitingSince = undefined
+          item.reminderSentAt = undefined
+          item.resolvedAt = undefined
+        } else if (action === 'staff-resolve') {
+          item.status = 'resolved'
+          item.waitingSince = undefined
+          item.reminderSentAt = undefined
+          item.resolvedAt = now
+        }
         item.assignedTo = staff.email
         item.updatedAt = now
         saved = item
@@ -96,12 +120,13 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
     const identity = await resolveCirclePocketIdentity(req)
     const profileId = circlePocketIdentityId(identity)
     if (req.method === 'GET' || action === 'list-mine') {
-      const rows = Object.values((await store()).cases).filter(item => item.profileId === profileId).sort((a, b) => b.updatedAt - a.updatedAt)
+      const rows = Object.values((await currentStore()).cases).filter(item => item.profileId === profileId).sort((a, b) => b.updatedAt - a.updatedAt)
       return res.json({ ok: true, cases: rows.map(publicCase) })
     }
     if (action === 'reply') {
       const caseId = clean(req.body?.caseId, 80)
       const text = clean(req.body?.message, 1500)
+      if (!text) return res.status(400).json({ ok: false, error: 'Reply is required.' })
       let saved: SupportCase | undefined
       await mutateDurableJson<SupportStore>(STORE_KEY, current => {
         const next = current || { cases: {} }
@@ -110,6 +135,9 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         const now = Date.now()
         item.messages = [...item.messages, { id: crypto.randomUUID(), author: 'user', text, createdAt: now }].slice(-80)
         item.status = item.assignedTo ? 'assigned' : 'open'
+        item.waitingSince = undefined
+        item.reminderSentAt = undefined
+        item.resolvedAt = undefined
         item.updatedAt = now
         saved = item
         return next
@@ -122,10 +150,26 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
     if (!summary) return res.status(400).json({ ok: false, error: 'Support summary is required.' })
     const entrypoint = clean(req.body?.entrypoint, 40)
     if (entrypoint === 'human_chat') {
-      const existing = Object.values((await store()).cases)
-        .filter(row => row.profileId === profileId && row.status !== 'resolved')
+      const existing = Object.values((await currentStore()).cases)
+        .filter(row => row.profileId === profileId)
         .sort((a, b) => b.updatedAt - a.updatedAt)[0]
-      if (existing) return res.json({ ok: true, case: publicCase(existing), reused: true })
+      if (existing && existing.status !== 'resolved') return res.json({ ok: true, case: publicCase(existing), reused: true })
+      if (existing) {
+        let reopened: SupportCase | undefined
+        await mutateDurableJson<SupportStore>(STORE_KEY, current => {
+          const next = current || { cases: {} }
+          const item = next.cases[existing.id]
+          if (!item || item.profileId !== profileId) return next
+          item.status = item.assignedTo ? 'assigned' : 'open'
+          item.waitingSince = undefined
+          item.reminderSentAt = undefined
+          item.resolvedAt = undefined
+          item.updatedAt = Date.now()
+          reopened = item
+          return next
+        })
+        if (reopened) return res.json({ ok: true, case: publicCase(reopened), reused: true, reopened: true })
+      }
     }
     const now = Date.now()
     const customer = await privateCustomerIdentity(identity)
