@@ -24,7 +24,7 @@ export default function SecurityDocs() {
           <li>- <Code>RELAYER_PRIVATE_KEY_ARC</Code> - Arc relayer</li>
           <li>- <Code>RELAYER_PRIVATE_KEY_ARB</Code> - Arbitrum relayer</li>
           <li>- <Code>RELAYER_PRIVATE_KEY_SOLANA</Code> - Solana relayer</li>
-          <li>- <Code>ARENA_RELAYER_PRIVATE_KEY</Code> - Arena escrow actions</li>
+          <li>- <Code>ARENA_RELAYER_PRIVATE_KEY</Code> - legacy Arena test actions only</li>
           <li>- <Code>OG_STORAGE_KEY</Code> - 0G proof archiving</li>
         </ul>
       </Section>
@@ -34,9 +34,9 @@ export default function SecurityDocs() {
         <ul className="list-none space-y-1 mt-2">
           <li>- <Code>PayLinkFactoryV2.sol</Code> - CREATE2 vault factory</li>
           <li>- <Code>PayLinkArchive.sol</Code> - 0G payment proof registry</li>
-          <li>- <Code>StreamVault.sol</Code> and <Code>StreamVaultFactory.sol</Code> - HashpayStream payroll</li>
-          <li>- <Code>ArenaRoomEscrow.sol</Code> and <Code>ArenaRoomEscrowFactory.sol</Code> - HashpayStream Arena escrow settlement</li>
+          <li>- <Code>ArcAgreementEscrow.sol</Code> and <Code>ArcAgreementFactory.sol</Code> - HashpayStream fixed, progressive, and milestone agreements</li>
         </ul>
+        <InfoBox type="warning"><Code>StreamVault</Code> and <Code>ArenaRoomEscrow</Code> contracts are retained compatibility or experimental assets. They are not approved HashpayStream public-fund paths.</InfoBox>
       </Section>
 
       <Section title="0G proof layer">
@@ -45,7 +45,7 @@ export default function SecurityDocs() {
 
       <Section title="Operational controls">
         <SubSection title="Postgres durability">
-          <p>Receipts, agent/helper state, POS profiles, PolyDesk, Privy/Circle mappings, and Arena room state use Render Postgres instead of ephemeral local files.</p>
+          <p>Receipts, agreement projections, agent/helper state, POS profiles, PolyDesk, and Privy/Circle mappings use Render Postgres instead of ephemeral local files.</p>
         </SubSection>
         <SubSection title="Email alerts">
           <p>Portfolio and report emails use Resend. Delivery secrets remain server-side.</p>

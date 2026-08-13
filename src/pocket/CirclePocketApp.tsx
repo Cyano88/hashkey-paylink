@@ -21,6 +21,9 @@ import usePocketIdentity from './hooks/usePocketIdentity'
 import usePocketSessionSplash from './hooks/usePocketSessionSplash'
 import usePocketProfile from './hooks/usePocketProfile'
 import { prefetchPocketWalletSnapshot } from './hooks/usePocketWallets'
+import { prefetchPocketActivity } from './hooks/usePocketActivity'
+import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
+import { clearActivePocketBankPayout, readActivePocketBankPayout } from './lib/pocketBankPayoutState'
 
 function pocketRelativePath(pathname: string) {
   if (!POCKET_BASE_PATH || !pathname.startsWith(POCKET_BASE_PATH)) return pathname
@@ -39,8 +42,41 @@ export default function CirclePocketApp() {
 
   useEffect(() => {
     if (!ready || !authenticated || !email) return
-    void prefetchPocketWalletSnapshot({ email, getAccessToken }).catch(() => undefined)
+    void Promise.allSettled([
+      prefetchPocketWalletSnapshot({ email, getAccessToken }),
+      prefetchPocketActivity({ email, getAccessToken }),
+    ])
   }, [authenticated, email, getAccessToken, ready])
+
+  useEffect(() => {
+    if (!ready || !authenticated) return
+    let checking = false
+    const reconcile = async () => {
+      const intentId = readActivePocketBankPayout()
+      if (!intentId || checking || document.visibilityState !== 'visible') return
+      checking = true
+      try {
+        const accessToken = await getAccessToken()
+        if (!accessToken) return
+        const payout = await readPocketBankWithdrawStatus({ accessToken, intentId })
+        if (payout.state === 'sent' || payout.state === 'refunded' || payout.state === 'failed') clearActivePocketBankPayout(intentId)
+      } catch {
+        // Keep the active payout for the next quiet reconciliation attempt.
+      } finally {
+        checking = false
+      }
+    }
+    void reconcile()
+    const interval = window.setInterval(reconcile, 15_000)
+    const refreshVisible = () => { if (document.visibilityState === 'visible') void reconcile() }
+    window.addEventListener('focus', refreshVisible)
+    document.addEventListener('visibilitychange', refreshVisible)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshVisible)
+      document.removeEventListener('visibilitychange', refreshVisible)
+    }
+  }, [authenticated, getAccessToken, ready])
 
   useEffect(() => {
     if (landing || route) return

@@ -30,7 +30,7 @@ const cards = [
   {
     icon: Radio,
     title: 'HashpayStream',
-    description: 'Creator checkout for USDC-paid content, checkpoint payouts, receipts, and Agent Hash on Arc.',
+    description: 'Protected fixed, progressive, and milestone USDC agreements on Arc.',
     path: '/hashpaystream/docs',
     color: 'text-indigo-500',
     bg: 'bg-indigo-50 dark:bg-indigo-950/40',
@@ -104,7 +104,7 @@ export default function DocsHome() {
           <li>- <strong className="text-gray-800 dark:text-gray-200">Payment archive:</strong> confirmed multi-payer records are uploaded to 0G Storage and anchored on 0G Mainnet.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Agent verification:</strong> paid AI services call <code className="rounded bg-white px-1 py-0.5 font-mono text-xs dark:bg-gray-900">/api/agent-verify</code> before responding.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Telegram paid access:</strong> Photon requests use Hash PayLink payments, then unlock answers only after the 0G proof exists.</li>
-          <li>- <strong className="text-gray-800 dark:text-gray-200">HashpayStream extension:</strong> payroll, agentic stream, and Arena settlement receipts follow the same durable proof pattern.</li>
+          <li>- <strong className="text-gray-800 dark:text-gray-200">Arc Agreements:</strong> confirmed agreement outcomes use the shared durable receipt and proof pattern.</li>
         </ul>
       </div>
 
@@ -135,7 +135,6 @@ export default function DocsHome() {
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">Key facts</h2>
         <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
           <li>- <strong className="text-gray-800 dark:text-gray-200">Payment fee:</strong> 0.2% standard platform fee; sponsored EVM payments may include gas recovery.</li>
-          <li>- <strong className="text-gray-800 dark:text-gray-200">Arena fee:</strong> 0.5% on completed HashpayStream Arena rooms.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Identity:</strong> Privy email sign-in plus Circle wallet mapping on the app surfaces that need user sessions.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Archive contract:</strong> <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs dark:bg-gray-800">0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a</code> on 0G Mainnet.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">SDK:</strong> <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs dark:bg-gray-800">@hashpaylink/sdk</code> for hosted checkout URLs and buttons.</li>

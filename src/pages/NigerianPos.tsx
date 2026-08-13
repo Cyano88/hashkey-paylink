@@ -31,6 +31,30 @@ function formatUsdc(value: number) {
   return `${value.toLocaleString('en-US', { maximumFractionDigits: 6 })} USDC`
 }
 
+function publicPosCheckoutUrl(merchant: PublicMerchant, origin = window.location.origin) {
+  const network = merchant.bank_configured ? 'base' : supportedMerchantNetworks(merchant.supported_networks)[0]
+  const url = new URL('/pay', origin)
+  url.searchParams.set('f', '1')
+  url.searchParams.set('n', network)
+  url.searchParams.set('m', merchant.display_name)
+  url.searchParams.set('src', 'ngpos')
+  url.searchParams.set('merchant', merchant.merchant_id)
+  url.searchParams.set('settlement', merchant.payout_preference.toLowerCase())
+  if (merchant.payout_preference === 'INSTANT_FIAT') {
+    url.searchParams.set('offramp', 'paycrest')
+    url.searchParams.set('fx', 'NGN')
+    url.searchParams.set('fs', '1')
+    if (merchant.bank_name) url.searchParams.set('bank', merchant.bank_name)
+    if (merchant.bank_last4) url.searchParams.set('acct', `****${merchant.bank_last4}`)
+    if (merchant.bank_account_name) url.searchParams.set('acctName', merchant.bank_account_name)
+  } else if (network === 'solana' && merchant.solana_wallet_address) {
+    url.searchParams.set('s', merchant.solana_wallet_address)
+  } else {
+    url.searchParams.set('e', merchant.circle_smart_wallet_address)
+  }
+  return url.toString()
+}
+
 type PublicMerchant = {
   merchant_id: string
   display_name: string
@@ -103,11 +127,9 @@ export default function NigerianPos() {
   const [quoteError, setQuoteError] = useState('')
 
   const posUrl = useMemo(() => {
-    if (!merchantId) return ''
-    const url = new URL('/pos/ng', window.location.origin)
-    url.searchParams.set('merchant_id', merchantId)
-    return url.toString()
-  }, [merchantId])
+    if (!merchant) return ''
+    return publicPosCheckoutUrl(merchant)
+  }, [merchant])
 
   const dashboardUrl = useMemo(() => {
     if (!merchant?.merchant_id) return ''
@@ -146,6 +168,10 @@ export default function NigerianPos() {
         const data = await res.json()
         if (!res.ok || !data.ok) throw new Error(data.error ?? 'Merchant not found')
         if (!ignore) {
+          if (!initialManageMode) {
+            window.location.replace(publicPosCheckoutUrl(data.merchant))
+            return
+          }
           setMerchant(data.merchant)
           setSelectedNetwork(supportedMerchantNetworks(data.merchant.supported_networks)[0])
           const bankConfigured = Boolean(data.merchant.bank_configured)
@@ -317,6 +343,15 @@ export default function NigerianPos() {
   }
 
   if (!merchant) {
+    if (initialMerchantId && !initialManageMode) {
+      return (
+        <div className="flex min-h-[70vh] items-center justify-center">
+          {setupError
+            ? <ErrorNote message={setupError} />
+            : <span className="h-7 w-7 animate-spin rounded-full border-2 border-gray-200 border-t-gray-900 dark:border-white/15 dark:border-t-white" aria-label="Opening checkout" />}
+        </div>
+      )
+    }
     return (
       <PosShell eyebrow="Nigerian Retail Mode" title="Loading POS" body="Fetching payout options.">
         {setupError ? <ErrorNote message={setupError} /> : <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>}
@@ -369,8 +404,7 @@ export default function NigerianPos() {
             <button
               type="button"
               onClick={() => {
-                setShowMerchantQr(false)
-                window.history.replaceState(null, '', `/pos/ng?merchant_id=${encodeURIComponent(merchant.merchant_id)}`)
+                window.location.assign(posUrl)
               }}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100 dark:hover:bg-white/[0.1]"
             >

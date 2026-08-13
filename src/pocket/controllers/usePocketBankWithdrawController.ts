@@ -4,12 +4,14 @@ import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
 import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
+import { clearActivePocketBankPayout, readActivePocketBankPayout, saveActivePocketBankPayout } from '../lib/pocketBankPayoutState'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
 
 export type PocketBankWithdrawStatus = 'idle' | 'preparing' | 'routing' | 'route-review' | 'authorizing' | 'processing' | 'sent'
 
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 const BANK_PAYOUT_OPERATION_KEY = 'pocket:bank-withdraw:operation'
+const BANK_PAYOUT_FAST_POLL_ATTEMPTS = 12
 
 async function operationFingerprint(value: string) {
   const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
@@ -62,8 +64,9 @@ export default function usePocketBankWithdrawController({
   const [error, setError] = useState('')
   const [result, setResult] = useState<PocketBankWithdrawData | null>(null)
   const idempotencyKey = useRef('')
-  const activeIntentId = useRef('')
+  const activeIntentId = useRef(readActivePocketBankPayout())
   const cancelled = useRef(false)
+  const polling = useRef(false)
 
   useEffect(() => () => { cancelled.current = true }, [])
 
@@ -94,27 +97,60 @@ export default function usePocketBankWithdrawController({
     && Number(amount) > 0
     && status === 'idle'
 
-  const pollUntilSettled = useCallback(async (accessToken: string, intentId: string) => {
-    for (let attempt = 0; !cancelled.current; attempt += 1) {
-      if (attempt > 0) await wait(attempt <= 40 ? 3_000 : 12_000)
+  const pollUntilSettled = useCallback(async (accessToken: string, intentId: string, maxAttempts = BANK_PAYOUT_FAST_POLL_ATTEMPTS) => {
+    if (polling.current) return
+    polling.current = true
+    try { for (let attempt = 0; !cancelled.current && attempt < maxAttempts; attempt += 1) {
+      if (attempt > 0) await wait(attempt <= 5 ? 2_000 : 5_000)
       const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
       if (!next) continue
       const active = activeIntentId.current === intentId
       if (active) setResult(next)
       if (next.state === 'sent') {
-        if (active) setStatus('sent')
+        clearActivePocketBankPayout(intentId)
+        if (active) { setStatus('sent'); setError('') }
         await onSent()
         return
       }
       if (next.state === 'refunded') {
+        clearActivePocketBankPayout(intentId)
         if (active) {
           setStatus('idle')
           setError('The payout was refunded. Your USDC should return to the Circle wallet.')
         }
         return
       }
-    }
+      if (next.state === 'failed') {
+        clearActivePocketBankPayout(intentId)
+        if (active) {
+          setStatus('idle')
+          setError('The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
+        }
+        return
+      }
+    } } finally { polling.current = false }
   }, [onSent])
+
+  useEffect(() => {
+    const intentId = activeIntentId.current
+    if (!authenticated || !intentId) return
+    cancelled.current = false
+    setStatus('processing')
+    const reconcile = async () => {
+      const accessToken = await getAccessToken()
+      if (accessToken) await pollUntilSettled(accessToken, intentId, 1)
+    }
+    void reconcile()
+    const refreshVisible = () => { if (document.visibilityState === 'visible') void reconcile() }
+    const interval = window.setInterval(refreshVisible, 15_000)
+    window.addEventListener('focus', refreshVisible)
+    document.addEventListener('visibilitychange', refreshVisible)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshVisible)
+      document.removeEventListener('visibilitychange', refreshVisible)
+    }
+  }, [authenticated, getAccessToken, pollUntilSettled])
 
   const submit = useCallback(async () => {
     if (!canSubmit) return
@@ -193,6 +229,7 @@ export default function usePocketBankWithdrawController({
       if (!transfer.txHash) throw new Error('Circle accepted the payout, but no transaction hash was returned. Check Activity before retrying.')
       setResult({ ...payable, txHash: transfer.txHash })
       setStatus('processing')
+      saveActivePocketBankPayout(prepared.intentId)
       setAmountState('')
       setMemoState('')
       idempotencyKey.current = ''

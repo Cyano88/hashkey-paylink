@@ -1,8 +1,8 @@
 # Hash PayStream compatibility boundary
 
-This embedded application is frozen as a compatibility source while the
-standalone Hash PayStream client is rebuilt against Hash PayLink's public Arc
-Agreements API.
+The old creator, timed-stream, payroll, x402-unlock, and Arena surfaces are
+frozen as compatibility sources while the agreements-first HashpayStream
+client reaches full public-API and deployment parity.
 
 ## Preserve
 
@@ -15,6 +15,9 @@ Agreements API.
 ## Do not extend
 
 - Arena and unrelated marketplace surfaces.
+- Creator discovery, social feeds, publishing, and new content categories.
+- Payroll or timed-stream product navigation.
+- HashpayStream-specific x402 wallet management or new creator x402 modes.
 - The broad embedded social/feed product.
 - New public infrastructure based on `StreamVault`, `StreamVaultFactory`,
   precomputed vault addresses, or direct wallet-address deposits.
@@ -22,11 +25,19 @@ Agreements API.
 The old contracts remain historical compatibility assets. They are not the
 funding model for Arc Agreements.
 
+Agentic x402 remains supported by Hash PayLink as its own project type and API
+product. This boundary removes it only from HashpayStream's product surface.
+
+Arena may be evaluated as a separately branded application, but it must not be
+reintroduced into HashpayStream. Its current contracts and relayer model are
+not approved for public funds.
+
 ## Removal gate
 
 Do not delete this module until the standalone client:
 
-1. Uses only documented Hash PayLink APIs.
+1. Uses only documented Hash PayLink integration contracts.
 2. Preserves required content and receipt lookup behavior.
-3. Passes fixed-unlock and progressive-release parity tests.
+3. Passes fixed, progressive, milestone, cancellation, refund, and receipt
+   parity tests across independent deployments.
 4. Has a verified data migration and rollback plan.

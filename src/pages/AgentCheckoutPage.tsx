@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import CheckoutSteps from '../components/CheckoutSteps'
+import { CheckoutTrustLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
 import UnifiedReceipt from '../components/UnifiedReceipt'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
@@ -74,20 +75,13 @@ function CheckoutShell({ children, footer }: { children: ReactNode; footer?: Rea
   return (
     <div className="w-full">
       <div className="mx-auto w-full max-w-md">
+        <HashPayLinkCheckoutBrand />
         <section className="overflow-hidden rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] dark:border-white/10 dark:bg-[#101114]">
           {children}
         </section>
         {footer}
+        <CheckoutTrustLine />
       </div>
-    </div>
-  )
-}
-
-function CheckoutBrand() {
-  return (
-    <div className="flex items-center gap-2">
-      <PocketPillMark size="sm" tone="subtle" />
-      <span className="text-[11px] font-bold tracking-[-0.01em] text-gray-800 dark:text-gray-100">Hash PayLink Checkout</span>
     </div>
   )
 }
@@ -309,7 +303,6 @@ export default function AgentCheckoutPage() {
     return (
       <CheckoutShell>
         <div className="px-6 pb-6 pt-5">
-          <CheckoutBrand />
           <div className="py-8 text-center">
             <PocketStatusCheck className="mx-auto h-12 w-12" />
             <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-300">Payment confirmed</p>
@@ -334,9 +327,8 @@ export default function AgentCheckoutPage() {
   }
 
   return (
-    <CheckoutShell footer={<CheckoutSteps steps={['Sign in', 'Fund App Pay', 'Slide to pay']} />}>
+    <CheckoutShell footer={<CheckoutSteps steps={['Sign in', 'Review payment', 'Slide to pay']} />}>
       <div className="px-5 pb-5 pt-4">
-        <CheckoutBrand />
         <div className="pb-5 pt-5 text-center">
           <div className="flex items-center justify-center gap-2">
             {checkout.brandImageUrl && <img src={checkout.brandImageUrl} alt="" className="h-8 w-8 rounded-lg object-contain" />}

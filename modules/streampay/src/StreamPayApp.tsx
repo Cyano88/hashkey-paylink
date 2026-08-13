@@ -1,18 +1,26 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { StreamPayLayout } from './components/StreamPayLayout'
 import { CreatorAdminPage, CreatorPage } from './components/creator/CreatorPage'
 import { StreamGate } from './components/creator/StreamGate'
 import AgreementDashboard from './components/agreements/AgreementDashboard'
 import FixedAgreementForm from './components/agreements/FixedAgreementForm'
+import StreamPayLanding from './components/StreamPayLanding'
+import StreamPayDocs from './components/StreamPayDocs'
 import X402Receipt from '../../../src/pages/X402Receipt'
 
 export default function StreamPayApp() {
+  useEffect(() => {
+    document.title = 'HashPayStream'
+  }, [])
+
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<StreamPayLayout />}>
           {/* Arc Agreements is the standalone product. Legacy creator routes remain compatibility-only. */}
-          <Route index element={<AgreementDashboard />} />
+          <Route index element={<StreamPayLanding />} />
+          <Route path="docs" element={<StreamPayDocs />} />
           <Route path="agreements" element={<AgreementDashboard />} />
           <Route path="agreements/new" element={<FixedAgreementForm />} />
           <Route path="stream" element={<Navigate to="/creator" replace />} />

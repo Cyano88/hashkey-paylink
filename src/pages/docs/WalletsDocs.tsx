@@ -11,8 +11,8 @@ export default function WalletsDocs() {
       <InfoBox type="tip">Hash PayLink keeps wallet execution inside the current Circle-aligned hosted checkout instead of asking payers to use a manual deposit address.</InfoBox>
 
       <Section title="Privy + Circle">
-        <SubSection title="HashpayStream and Arena">
-          <p>HashpayStream and Arena use Privy for email-first sign-in and Circle wallet sessions for Arc wallet actions. This keeps the experience simple for consumers while preserving wallet-based settlement.</p>
+        <SubSection title="HashpayStream">
+          <p>HashpayStream uses Privy for email-first identity and Circle wallet sessions for payer Arc actions. The authenticated wallet that funds an agreement becomes its payer authority.</p>
         </SubSection>
         <SubSection title="Agent and PolyDesk flows">
           <p>Agentic flows use selected paying agents, Circle wallet sessions, and x402-style service receipts where applicable. PolyDesk stores user preferences and alert settings server-side so Telegram sessions can persist.</p>

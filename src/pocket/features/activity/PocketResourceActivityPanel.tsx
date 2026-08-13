@@ -97,7 +97,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
           </div>
         </div>
 
-        {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{error}</p> : null}
+        {error && !payments.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">{error}</p> : null}
         {payments.length ? (
           <div className="space-y-2">
             {payments.map((row, index) => {
@@ -134,7 +134,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
 
   return (
     <div className="space-y-4">
-      {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{error}</p> : null}
+      {error && !resources.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">{error}</p> : null}
       {resources.length ? (
         <div className="space-y-2">
           {resources.map(resource => {

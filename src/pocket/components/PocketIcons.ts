@@ -25,6 +25,7 @@ export {
   BellIcon as Bell,
   CheckCircleIcon as CheckCircle2,
   CheckIcon as Check,
+  ChatBubbleLeftRightIcon as MessageCircle,
   ChevronDownIcon as ChevronDown,
   ChevronLeftIcon as ChevronLeft,
   ChevronRightIcon as ChevronRight,

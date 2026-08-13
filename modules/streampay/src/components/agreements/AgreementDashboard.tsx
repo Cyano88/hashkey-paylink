@@ -5,6 +5,9 @@ import { Link } from 'react-router-dom'
 import { PrivyConnectButton } from '../../../../../src/lib/PrivyConnectButton'
 import UnifiedReceipt from '../../../../../src/components/UnifiedReceipt'
 import type { PaylinkReceipt } from '../../../../../src/lib/paymentReceiptPdf'
+import { useStreamPayPath } from '../../lib/useStreamPayPath'
+
+const AGREEMENTS_API = '/api/hashpaystream/v2/agreements'
 
 type AgreementStatus = 'awaiting_start' | 'active' | 'expired' | 'completed' | 'cancelled' | 'refunded'
 
@@ -29,14 +32,14 @@ type Agreement = {
     releaseSteps: number
     observedBlockNumber: string
   }
-  timeline: Array<{
+  timeline?: Array<{
     id: string
     event: string
     createdAt: string
     receivedAt: string
     observedBlockNumber: string
   }>
-  deliveryTimeline: Array<{
+  deliveryTimeline?: Array<{
     id: string
     event: string
     createdAt: string
@@ -60,8 +63,6 @@ type Agreement = {
 
 type DashboardResponse = {
   ok: boolean
-  project?: { id: string; name: string }
-  summary?: { total: number; active: number; awaitingStart: number; closed: number }
   agreements?: Agreement[]
   error?: string
 }
@@ -139,7 +140,6 @@ function StatusBadge({ status }: { status: AgreementStatus }) {
 export default function AgreementDashboard() {
   const { ready, authenticated, getAccessToken } = usePrivy()
   const [agreements, setAgreements] = useState<Agreement[]>([])
-  const [projectName, setProjectName] = useState('Hash PayStream')
   const [activeId, setActiveId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -150,6 +150,7 @@ export default function AgreementDashboard() {
   const [deliveryNote, setDeliveryNote] = useState('')
   const [evidenceReference, setEvidenceReference] = useState('')
   const [requestingRelease, setRequestingRelease] = useState(false)
+  const newAgreementTo = useStreamPayPath('/agreements/new')
 
   const load = useCallback(async (quiet = false) => {
     if (!authenticated) {
@@ -160,7 +161,7 @@ export default function AgreementDashboard() {
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to view agreements.')
-      const response = await fetch('/api/hashpaystream/arc-agreements', {
+      const response = await fetch(AGREEMENTS_API, {
         cache: 'no-store',
         headers: { authorization: `Bearer ${token}` },
       })
@@ -168,7 +169,6 @@ export default function AgreementDashboard() {
       if (!response.ok || !data?.ok) throw new Error(data?.error || 'Agreements could not be loaded.')
       const next = data.agreements ?? []
       setAgreements(next)
-      setProjectName(data.project?.name || 'Hash PayStream')
       setActiveId(current => current && next.some(item => item.id === current) ? current : next[0]?.id ?? '')
       setError('')
     } catch (reason) {
@@ -199,7 +199,7 @@ export default function AgreementDashboard() {
   const activity = useMemo(() => {
     if (!active) return []
     return [
-      ...active.timeline.map(event => ({ ...event, occurredAt: event.createdAt || event.receivedAt })),
+      ...(active.timeline ?? []).map(event => ({ ...event, occurredAt: event.createdAt || event.receivedAt })),
       ...(active.deliveryTimeline ?? []).map(event => ({ ...event, receivedAt: '', observedBlockNumber: '', occurredAt: event.createdAt })),
     ].filter(event => event.occurredAt).sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
   }, [active])
@@ -225,7 +225,7 @@ export default function AgreementDashboard() {
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to generate a payer link.')
-      const response = await fetch('/api/hashpaystream/arc-agreements', {
+      const response = await fetch(AGREEMENTS_API, {
         method: 'POST',
         cache: 'no-store',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
@@ -257,7 +257,7 @@ export default function AgreementDashboard() {
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to request this release.')
-      const response = await fetch('/api/hashpaystream/arc-agreements', {
+      const response = await fetch(AGREEMENTS_API, {
         method: 'POST',
         cache: 'no-store',
         headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
@@ -306,7 +306,7 @@ export default function AgreementDashboard() {
         <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Arc Agreements</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">Your protected payments.</h1>
         <p className="mt-3 max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">
-          Sign in with the developer identity that owns this Hash PayStream project.
+          Sign in to view and manage your agreements.
         </p>
         <PrivyConnectButton
           debugLabel="hashpaystream-agreements"
@@ -324,11 +324,11 @@ export default function AgreementDashboard() {
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Arc Testnet</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">Agreements</h1>
-          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{projectName} · confirmed from signed lifecycle events</p>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Protected USDC agreements on Arc.</p>
         </div>
         <div className="flex items-center gap-3">
           {agreements.length > 0 && <p className="text-xs text-gray-400 dark:text-gray-500">Updates automatically</p>}
-          <Link to="/agreements/new" className="rounded-xl bg-gray-950 px-3.5 py-2.5 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
+          <Link to={newAgreementTo} className="rounded-xl bg-gray-950 px-3.5 py-2.5 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">
             New agreement
           </Link>
         </div>

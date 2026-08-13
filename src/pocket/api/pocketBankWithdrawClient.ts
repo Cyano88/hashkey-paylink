@@ -9,7 +9,7 @@ export type PocketBankWithdrawData = {
   receiveAddress: string
   txHash: string
   providerStatus: string
-  state: 'processing' | 'sent' | 'refunded'
+  state: 'processing' | 'sent' | 'refunded' | 'failed'
   bankName: string
   bankLast4: string
   accountName: string
@@ -34,7 +34,7 @@ function parseData(value: unknown): PocketBankWithdrawData {
     throw new Error(typeof (value as any)?.error === 'string' ? (value as any).error : 'Bank payout failed.')
   }
   const data = (value as any).data
-  if (!data.intentId || !data.orderId || !data.amountUsdc || !data.receiveAddress || !['processing', 'sent', 'refunded'].includes(data.state)) {
+  if (!data.intentId || !data.orderId || !data.amountUsdc || !data.receiveAddress || !['processing', 'sent', 'refunded', 'failed'].includes(data.state)) {
     throw new Error('Bank payout response was invalid.')
   }
   return data as PocketBankWithdrawData

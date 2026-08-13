@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
+import { CheckoutTrustLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 
 type HostedCheckoutLookup = {
   ok?: boolean
@@ -32,8 +33,9 @@ export default function HostedCheckoutEntry() {
   }, [attemptId, checkoutId])
 
   return (
-    <main className="flex min-h-[60vh] items-center justify-center px-4">
-      <section className="w-full max-w-sm rounded-[1.75rem] border border-gray-200 bg-white p-6 text-center shadow-[0_24px_70px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-[#111216]">
+    <div className="mx-auto w-full max-w-sm">
+      <HashPayLinkCheckoutBrand />
+      <section className="rounded-[1.35rem] border border-gray-200/80 bg-white p-6 text-center shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] dark:border-white/10 dark:bg-[#101114]">
         {error ? (
           <>
             <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-500 dark:bg-red-400/10"><AlertCircle className="h-5 w-5" /></span>
@@ -49,6 +51,7 @@ export default function HostedCheckoutEntry() {
           </>
         )}
       </section>
-    </main>
+      <CheckoutTrustLine />
+    </div>
   )
 }

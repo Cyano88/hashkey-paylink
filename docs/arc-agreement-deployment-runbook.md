@@ -1,9 +1,16 @@
 # Arc Agreements testnet deployment runbook
 
-## Current state
+## Document status
 
-Arc Agreements is inactive. The API returns `contract_unavailable` and the
-repository contains no public payer activation command.
+This runbook records the original deployment gate. Arc Agreements now has a
+guarded Arc Testnet private-pilot payer flow controlled by stored project
+approval and runtime ceilings. Public and mainnet activation remain outside
+this runbook and are not authorized by it.
+
+## State at the time of the original gate
+
+Arc Agreements was inactive. The API returned `contract_unavailable` and the
+repository did not contain a public payer activation command.
 
 The Arc Testnet factory has been deployed and verified, a controlled agreement
 completed release and cancellation, and the signed webhook outbox passed a

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createPocketActivityHandler } from '../api/pocket/activity.ts'
-import { mergeRegisteredPaycrestActivity } from '../api/ng-pos.ts'
+import { mergeRegisteredPaycrestActivity, paycrestActivityTimestamp } from '../api/ng-pos.ts'
 import { isPocketActivityReadData } from '../src/pocket/lib/pocketSchemas.ts'
 
 const registeredPayout = {
@@ -26,6 +26,14 @@ assert.equal(enrichedPayout.direction, 'out')
 assert.equal(enrichedPayout.bankName, 'Moniepoint MFB')
 assert.equal(enrichedPayout.receiptId, 'signed-receipt-id')
 assert.equal(enrichedPayout.ts, registeredPayout.ts)
+
+assert.equal(paycrestActivityTimestamp({
+  created_at: '2026-08-10T10:00:00.000Z',
+  updated_at: '2026-08-13T10:00:00.000Z',
+}), Date.parse('2026-08-10T10:00:00.000Z'))
+assert.equal(paycrestActivityTimestamp({
+  updated_at: '2026-08-13T10:00:00.000Z',
+}), Date.parse('2026-08-13T10:00:00.000Z'))
 
 function responseRecorder() {
   return {

@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowUpRight, Check, Copy, Loader2, LockKeyhole } from 'luci
 import { Link } from 'react-router-dom'
 import { isAddress } from 'viem'
 import { PrivyConnectButton } from '../../../../../src/lib/PrivyConnectButton'
+import { useStreamPayPath } from '../../lib/useStreamPayPath'
 
 type CreatedAgreement = {
   agreement: { id: string; title: string; amount: string; recipient: string; template?: AgreementTemplate }
@@ -14,6 +15,7 @@ type AgreementTemplate = 'fixed_unlock' | 'progressive_release' | 'milestone'
 type MilestoneDraft = { label: string; percentage: string }
 
 const APP_ORIGIN = 'https://app.hashpaylink.com'
+const AGREEMENTS_API = '/api/hashpaystream/v2/agreements'
 
 function newIdempotencyKey() {
   const suffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -48,6 +50,7 @@ export default function FixedAgreementForm() {
     { label: '', percentage: '50' },
     { label: '', percentage: '50' },
   ])
+  const agreementsTo = useStreamPayPath('/agreements')
 
   const payerUrl = created?.payerReviewPath ? `${APP_ORIGIN}${created.payerReviewPath}` : ''
   const milestoneShares = milestones.map(item => Number(item.percentage))
@@ -111,7 +114,7 @@ export default function FixedAgreementForm() {
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to create this agreement.')
-      const response = await fetch('/api/hashpaystream/arc-agreements', {
+      const response = await fetch(AGREEMENTS_API, {
         method: 'POST',
         cache: 'no-store',
         headers: {
@@ -161,7 +164,7 @@ export default function FixedAgreementForm() {
           <LockKeyhole className="h-5 w-5" />
         </div>
         <h1 className="mt-6 text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">Create an agreement.</h1>
-        <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">Sign in with the identity that owns this Hash PayStream project.</p>
+        <p className="mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400">Sign in to create and manage your agreements.</p>
         <PrivyConnectButton
           debugLabel="hashpaystream-create-agreement"
           className="mt-7 w-full rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white dark:bg-white dark:text-gray-950"
@@ -210,7 +213,7 @@ export default function FixedAgreementForm() {
               <ArrowUpRight className="h-4 w-4" />
             </a>
           </div>
-          <Link to="/" className="mt-3 flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-medium text-gray-500 hover:text-gray-950 dark:text-gray-400 dark:hover:text-white">
+          <Link to={agreementsTo} className="mt-3 flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-medium text-gray-500 hover:text-gray-950 dark:text-gray-400 dark:hover:text-white">
             View agreements
           </Link>
         </div>
@@ -220,7 +223,7 @@ export default function FixedAgreementForm() {
 
   return (
     <section className="w-full max-w-xl py-8 sm:py-12">
-      <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-950 dark:text-gray-400 dark:hover:text-white">
+      <Link to={agreementsTo} className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-950 dark:text-gray-400 dark:hover:text-white">
         <ArrowLeft className="h-4 w-4" />
         Agreements
       </Link>

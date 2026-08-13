@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, ChevronRight, Copy, Loader2, Lock, LogOut, Pencil } from '../components/PocketIcons'
+import { ArrowLeft, Check, ChevronRight, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil } from '../components/PocketIcons'
 import PocketAvatar, { POCKET_AVATARS } from '../components/PocketAvatar'
 import PocketBottomNav, { type PocketNavTab } from '../components/PocketBottomNav'
 import PocketLoadingState from '../components/PocketLoadingState'
@@ -38,6 +38,11 @@ export default function PocketProfilePage() {
           <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.verifyName)} className="flex w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-white/[0.05]"><span className="min-w-0 flex-1"><span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Verified name{current?.nameStatus === 'bank_resolved' && <Lock className="h-3 w-3" />}</span><span className="mt-1 block text-sm font-bold">{current?.resolvedName || 'Add your bank-verified name'}</span></span><ChevronRight className="h-4 w-4 text-gray-400" /></button>
           <div className="rounded-[22px] bg-white p-4 shadow-sm dark:bg-white/[0.05]"><p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Email<Lock className="h-3 w-3" /></p><p className="mt-1 truncate text-sm font-bold">{email}</p></div>
           <div className="flex min-h-16 items-center gap-3 rounded-[22px] bg-white p-4 shadow-sm dark:bg-white/[0.05]"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Appearance</span><span className="mt-1 block text-sm font-bold">Light or dark theme</span></span><PocketThemeToggle /></div>
+          <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.assistant)} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-white/[0.05]">
+            <MessageCircle className="h-5 w-5 text-gray-500 dark:text-gray-300" />
+            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Support</span><span className="mt-1 block text-sm font-bold">Chat with Agent Hash</span></span>
+            <ChevronRight className="h-4 w-4 text-gray-400" />
+          </button>
           <button type="button" onClick={() => { profile.edit(); setEditing(true) }} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-bold text-white dark:bg-white dark:text-gray-950"><Pencil className="h-4 w-4" />Edit profile</button>
         </div>}
         {!editing && <button type="button" onClick={() => { resetPocketSessionSplash(); void logout().then(() => navigate(POCKET_BASE_PATH || POCKET_ROUTES.root)) }} className="mt-auto flex min-h-14 w-full items-center justify-center gap-2 pt-10 text-sm font-bold text-red-600 dark:text-red-300"><LogOut className="h-4 w-4" />Sign out</button>}

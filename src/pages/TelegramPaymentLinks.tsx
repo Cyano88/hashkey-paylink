@@ -2355,7 +2355,7 @@ export function TelegramHelperPanel({
       return true
     }
     if (!helperAuthenticated) {
-      finishHelperMessage(text, { answer: 'Sign in to Circle Pocket so I can verify and read your live smart-wallet balance.' })
+      finishHelperMessage(text, { answer: 'Sign in to Circle Pocket so I can verify and read your live USDC balance.' })
       return true
     }
 
@@ -2369,7 +2369,7 @@ export function TelegramHelperPanel({
     const wallet = preferredWalletFor(network) || await linkedCircleReceiveWallet(network)
     if (!wallet) {
       finishHelperMessage(text, {
-        answer: `No ${requestNetworkLabels[network]} Circle smart wallet is connected to this signed-in account yet. Open Circle Pocket to create or connect it.`,
+        answer: `No ${requestNetworkLabels[network]} Pocket wallet is connected to this signed-in account yet. Open Pocket to create or connect it.`,
         actionLink: { label: 'Open Circle Pocket', url: 'https://pocket.hashpaylink.com/move/usdc' },
       })
       return true
@@ -2392,13 +2392,13 @@ export function TelegramHelperPanel({
         : Number(data.balance)
       const formatted = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 6 }).format(amount)
       finishHelperMessage(text, {
-        answer: `Your ${requestNetworkLabels[network]} Circle smart-wallet balance is ${formatted} USDC.`,
+        answer: `Your ${requestNetworkLabels[network]} Pocket balance is ${formatted} USDC.`,
       })
     } catch (error) {
       finishHelperMessage(text, {
         answer: error instanceof Error && error.message
           ? error.message
-          : 'I could not read the live smart-wallet balance right now. Try again shortly.',
+          : 'I could not read the live Pocket balance right now. Try again shortly.',
       })
     }
     return true
@@ -2648,7 +2648,7 @@ export function TelegramHelperPanel({
     if (!hasOpenPaymentFlow && isOutboundTransferIntent(nextQuestion)) {
       finishHelperMessage(nextQuestion, {
         answer: 'Are you trying to send money from your wallet, or request that person to pay you? I will not create a receive PayLink until you confirm.',
-        actionLink: { label: 'Open Circle Pocket', url: 'https://pocket.hashpaylink.com/home/smart-wallet' },
+        actionLink: { label: 'Open Circle Pocket', url: 'https://pocket.hashpaylink.com/move/usdc' },
       })
       return true
     }

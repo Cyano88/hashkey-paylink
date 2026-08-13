@@ -305,6 +305,9 @@ async function publicMerchant(merchant: MerchantProfile) {
     solana_wallet_address: merchant.solana_wallet_address,
     supported_networks: merchantNetworks(merchant),
     bank_configured: Boolean(merchant.encrypted_bank_details),
+    bank_name: merchant.bank_name,
+    bank_last4: merchant.bank_last4,
+    bank_account_name: merchant.bank_account_name,
     fx_rate_ngn_per_usdc: rate.toFixed(2),
     fx_source: source,
   }
@@ -488,6 +491,13 @@ export function mergeRegisteredPaycrestActivity<
   })
 }
 
+export function paycrestActivityTimestamp(order: { created_at?: string; updated_at?: string }) {
+  const createdAt = Date.parse(order.created_at || '')
+  if (Number.isFinite(createdAt)) return createdAt
+  const updatedAt = Date.parse(order.updated_at || '')
+  return Number.isFinite(updatedAt) ? updatedAt : 0
+}
+
 export async function listNgPosHistoryForOwner(privyUserId: string) {
   const store = await readStore()
   const merchants = Object.values(store.merchants ?? {})
@@ -538,7 +548,9 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
             ? 'Bank receive payment'
             : 'Retail POS payment',
         amount: order.amount_usdc,
-        ts: new Date(order.updated_at || order.created_at).getTime(),
+        // Provider status refreshes must not move an older payment to the top.
+        // A registered receipt keeps its confirmation time in mergeRegisteredPaycrestActivity.
+        ts: paycrestActivityTimestamp(order),
         source: isBankSendOrder ? 'bank-send' : isBankWithdrawOrder ? 'bank-withdraw' : isBankReceiveOrder ? 'bank-receive' : 'ngpos',
         merchantId: order.merchant_id,
         contextLabel: isBankSendOrder

@@ -1,8 +1,15 @@
 # Arc Agreements activation audit
 
-## Audit result
+## Document status
 
-Arc Agreements remains inactive and draft-only.
+This is the historical pre-activation gate audit. Arc Agreements has since
+entered an approved, per-project Arc Testnet private pilot with guarded payer
+activation and lifecycle execution. It is not a statement that the current
+pilot is draft-only, and it does not authorize public or mainnet activation.
+
+## Audit result at the time of review
+
+Arc Agreements was inactive and draft-only when this gate was written.
 
 The reviewed Arc Testnet factory, controlled lifecycle, confirmed-chain
 reconciliation, operator ownership, and durable signed-webhook retry path have

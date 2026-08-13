@@ -15,6 +15,10 @@ import {
 import { createArcAgreementActivationClient } from './arc-agreement-activation-client.js'
 import { readConfirmedArcAgreementSnapshot } from './arc-agreement-confirmed-snapshot.js'
 import {
+  publicArcAgreementReleaseRequest,
+  requestArcAgreementRelease,
+} from './arc-agreement-creator-actions.js'
+import {
   createArcAgreementOperatorActionRequest,
   listArcAgreementOperatorActions,
   type ArcAgreementOperatorAction,
@@ -132,31 +136,6 @@ function safeHash(value: unknown) {
   return /^0x[a-f0-9]{64}$/i.test(text) ? text : ''
 }
 
-function createRequestIdempotencyKey(seed: string) {
-  const bytes = Buffer.from(createHash('sha256').update(seed).digest())
-  bytes[6] = (bytes[6] & 0x0f) | 0x40
-  bytes[8] = (bytes[8] & 0x3f) | 0x80
-  const hex = bytes.subarray(0, 16).toString('hex')
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
-}
-
-function publicReleaseRequest(action?: ArcAgreementOperatorAction) {
-  if (!action || action.action !== 'release') return null
-  return {
-    id: action.id,
-    step: action.step ?? 0,
-    status: action.status,
-    deliveryNote: action.deliveryNote ?? '',
-    evidenceReference: action.evidenceReference,
-    requestedAt: action.requestedAt,
-    reviewedAt: action.reviewedAt,
-    reviewNote: action.reviewNote,
-    completedAt: action.completedAt,
-    transactionHash: action.transactionHash,
-    updatedAt: action.updatedAt,
-  }
-}
-
 function publicDeliveryTimeline(actions: ArcAgreementOperatorAction[]) {
   const releases = actions
     .filter(action => action.action === 'release')
@@ -176,20 +155,6 @@ function publicDeliveryTimeline(actions: ArcAgreementOperatorAction[]) {
     }
     return events
   }).filter(event => event.createdAt)
-}
-
-function deliveryEvidenceUrl(value: unknown) {
-  const candidate = String(value ?? '').trim().slice(0, 240)
-  let parsed: URL
-  try {
-    parsed = new URL(candidate)
-  } catch {
-    throw Object.assign(new Error('Add a complete HTTPS delivery link.'), { status: 400 })
-  }
-  if (parsed.protocol !== 'https:' || !parsed.hostname || parsed.username || parsed.password) {
-    throw Object.assign(new Error('Delivery proof must use a secure HTTPS link.'), { status: 400 })
-  }
-  return parsed.toString()
 }
 
 function blockNumber(event: StoredEvent) {
@@ -290,76 +255,35 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
         const action = String(body.action ?? '').trim()
         if (action === 'request_release') {
           const agreementId = String(body.agreementId ?? '').trim()
-          const deliveryNote = String(body.deliveryNote ?? '').replace(/\s+/g, ' ').trim().slice(0, 500)
-          const evidenceReference = deliveryEvidenceUrl(body.evidenceReference)
           if (!/^agr_[a-z0-9]{12,64}$/i.test(agreementId)) {
             throw Object.assign(new Error('A valid agreement id is required.'), { status: 400 })
-          }
-          if (deliveryNote.length < 12) {
-            throw Object.assign(new Error('Briefly describe what was delivered.'), { status: 400 })
           }
           const agreement = (await dependencies.listAgreements({ partnerId: projectId, limit: 250 }))
             .find(item => item.id === agreementId)
           if (!agreement || !['fixed_unlock', 'progressive_release', 'milestone'].includes(agreement.template)) {
             throw Object.assign(new Error('Only an owned Arc agreement can request this release.'), { status: 404 })
           }
-          const binding = await dependencies.binding(projectId, agreementId)
-          const confirmed = await dependencies.confirmed(dependencies.chainClient(), binding.escrow)
-          const step = agreement.template === 'fixed_unlock' ? 0 : confirmed.snapshot.nextStep
-          const releaseSteps = binding.prepared.cumulativeReleaseBps.length
-          if (confirmed.snapshot.status !== 1 || step !== confirmed.snapshot.nextStep || step >= releaseSteps) {
-            throw Object.assign(new Error('This agreement has no release ready for review.'), { status: 409 })
-          }
-          const priorActions = (await dependencies.listOperatorActions({ partnerId: projectId, limit: 250 }))
-            .filter(item => item.agreementId === agreementId && item.action === 'release' && item.step === step)
-          const existing = priorActions[0]
-          if (existing && existing.status !== 'disputed') {
-            return res.json({ ok: true, replayed: true, releaseRequest: publicReleaseRequest(existing) })
-          }
-          const operatorWallet = await dependencies.operatorClient().operatorWallet(confirmed.snapshot.operator)
-          const evidenceHash = `0x${createHash('sha256').update(JSON.stringify({
-            domain: 'hashpaystream.agreement-release.evidence',
-            projectId,
+          const result = await requestArcAgreementRelease({
+            partnerId: projectId,
             agreementId,
             template: agreement.template,
-            step,
-            evidenceReference,
-            deliveryNote,
-            reviewPolicy: 'payer',
             requestedBy: project.ownerId,
-          })).digest('hex')}`
-          const requestKey = createRequestIdempotencyKey([
-            'hashpaystream.agreement-release.request',
-            projectId,
-            agreementId,
-            String(step),
-            project.ownerId,
-            existing?.id ?? 'initial',
-          ].join('\0'))
-          const preparedCall = dependencies.prepareRelease({
-            operatorWallet,
-            idempotencyKey: requestKey,
-            partnerId: projectId,
-            agreementId,
-            prepared: binding.prepared,
-            confirmed,
-            step,
-            evidenceHash,
+            deliveryNote: body.deliveryNote,
+            evidenceReference: body.evidenceReference,
+          }, {
+            listOperatorActions: dependencies.listOperatorActions,
+            binding: dependencies.binding,
+            confirmed: dependencies.confirmed,
+            prepareRelease: dependencies.prepareRelease,
+            createOperatorAction: dependencies.createOperatorAction,
+            operatorClient: dependencies.operatorClient,
+            chainClient: dependencies.chainClient,
           })
-          const created = await dependencies.createOperatorAction({
-            partnerId: projectId,
-            agreementId,
-            action: 'release',
-            step,
-            evidenceHash,
-            evidenceReference,
-            deliveryNote,
-            reviewPolicy: 'payer',
-            requestedBy: project.ownerId,
-            idempotencyKey: requestKey,
-            preparedCall,
+          return res.status(result.replayed ? 200 : 201).json({
+            ok: true,
+            replayed: result.replayed,
+            releaseRequest: publicArcAgreementReleaseRequest(result.action),
           })
-          return res.status(201).json({ ok: true, replayed: false, releaseRequest: publicReleaseRequest(created) })
         }
         if (action === 'rotate_payer_link') {
           const agreementId = String(body.agreementId ?? '').trim()
@@ -492,7 +416,7 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
             : null
           return {
             ...agreement,
-            releaseRequest: publicReleaseRequest(currentRelease),
+            releaseRequest: publicArcAgreementReleaseRequest(currentRelease),
             deliveryTimeline: publicDeliveryTimeline(releaseActions),
             receipt,
           }

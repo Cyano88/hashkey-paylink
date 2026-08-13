@@ -166,6 +166,9 @@ assert.equal(status.body.data.state, 'sent')
 assert.equal(payoutState('validated'), 'sent')
 assert.equal(payoutState('deposited'), 'processing')
 assert.equal(payoutState('refunded'), 'refunded')
+assert.equal(payoutState('failed'), 'failed')
+assert.equal(payoutState('expired'), 'failed')
+assert.equal(payoutState('cancelled'), 'failed')
 
 const forbidden = createPocketBankWithdrawHandler({
   executions,

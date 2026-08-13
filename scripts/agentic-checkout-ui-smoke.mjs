@@ -15,11 +15,11 @@ for (const required of [
   'App Pay balance',
   'Copy deposit address',
   'Continue to {checkout.merchantName}',
-  'Fund App Pay',
+  'Review payment',
   'Slide to pay',
   'connectionAttempts < 3',
   'Hash PayLink could not reach secure checkout',
-  "footer={<CheckoutSteps steps={['Sign in', 'Fund App Pay', 'Slide to pay']} />}",
+  "footer={<CheckoutSteps steps={['Sign in', 'Review payment', 'Slide to pay']} />}",
   "Circle's minimum App Pay transfer is 0.5 USDC.",
   '<span>Secure</span>',
   '<Lock className="h-2.5 w-2.5"',
@@ -55,7 +55,9 @@ assert.doesNotMatch(controllerSource, /if \(next\.connected\)[\s\S]{0,120}setWal
 assert.equal(controllerSource.includes('Pull down to check'), false)
 assert.ok(controllerSource.includes('Check the balance before starting another transfer.'))
 assert.match(layoutSource, /const isAgentCheckoutPage = pathname\.startsWith\('\/pay\/a\/'\)/)
-assert.match(layoutSource, /const isPayPage = pathname === '\/pay' \|\| isAgentCheckoutPage/)
+assert.match(layoutSource, /const isCheckoutPage = pathname === '\/pay' \|\| isAgentCheckoutPage \|\| isHostedCheckoutEntryPage/)
+assert.match(layoutSource, /isPocketLandingPage \|\| isPocketImmersivePage \|\| isCheckoutPage/)
+assert.match(layoutSource, /agentHashComposerFocused \|\| isPocketAppPage \|\| isCheckoutPage/)
 assert.match(layoutSource, /\(isAgentProfilePage \|\| isAgentCheckoutPage\)[\s\S]{0,100}privyAuthenticated/)
 
 console.log('Agent checkout UI source smoke checks passed.')

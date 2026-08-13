@@ -121,7 +121,7 @@ export default function PocketMoveBankPage() {
       : direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'authorizing'
         ? 'pending'
         : 'idle'
-  const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing' || direct.status === 'processing'
+  const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing'
   const bankReceipt = useMemo(() => direct.status === 'sent' && direct.result ? pocketActivityReceipt({
     eventId: `bank-withdraw:${direct.result.intentId}`,
     txHash: direct.result.txHash,
@@ -325,7 +325,7 @@ export default function PocketMoveBankPage() {
                 />
                 {direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
                 {direct.status === 'routing' && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
-                {direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.txHash ? 'USDC is confirmed. Your bank payout is processing.' : 'Circle is reconciling the submitted transfer. Do not retry this payout.'}</p>}
+                {direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.providerStatus === 'fulfilled' ? 'Your bank transfer was delivered and is being verified.' : direct.result?.providerStatus === 'fulfilling' ? 'The provider is sending Naira to your bank.' : direct.result?.providerStatus === 'settling' ? 'Bank delivery is confirmed. Final settlement is completing.' : direct.result?.txHash ? 'Payout submitted. You can leave this page; Pocket will update Activity automatically.' : 'Circle is reconciling the submitted transfer. Check Activity before retrying.'}</p>}
                 {direct.status === 'sent' && direct.result?.amountUsdc && <p className="px-2 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPocketDisplayAmount(direct.result.amountUsdc)} USDC · {bankReceipt ? 'Bank payout completed' : 'Bank delivery processing'}</p>}
                 {direct.error && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
                 {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Enter an account in your verified name and a Naira amount.</p>}

@@ -89,8 +89,27 @@ export default function ApiReference() {
   }'`}</CodeBlock>
           <p>Progressive checkpoints must increase and end at 100 percent. Milestone percentages must total 100. Timing defaults to 24 hours with a 15-minute payer cancellation window. The response includes a domain-separated <code>termsHash</code>, project-scoped <code>clientReference</code>, normalized onchain schedule, one-time <code>payerReviewPath</code>, and <code>activationStatus: "private_pilot"</code>. Creating a draft never proves that funds moved.</p>
         </SubSection>
-        <SubSection title="GET /api/v2/agreements?id=agr_...">
-          <p>Returns the durable agreement only when it belongs to the project selected by the test API key. The payer-access token is never returned again. Live keys, projects without the capability, non-USDC settlement, and projects without an Arc Testnet route are rejected.</p>
+        <SubSection title="GET /api/v2/agreements">
+          <p>Lists the project&apos;s agreements with their authoritative Arc lifecycle, confirmed chain totals, current payer-review request, and unified terminal receipt when confirmation data is complete. Add <code>?id=agr_...</code> to read one agreement, <code>?ids=agr_...,agr_...</code> to read up to 100 known project agreements, or <code>?limit=50</code> to bound the newest-first list. Internal request hashes, evidence hashes, prepared operator calls, and payer-access hashes are never returned.</p>
+        </SubSection>
+        <SubSection title="Rotate an unused payer link">
+          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
+  -H "X-API-Key: YOUR_TEST_SERVER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"rotate_payer_link","agreementId":"agr_..."}'`}</CodeBlock>
+          <p>The prior private link is invalidated and a new one is returned. Rotation is rejected as soon as agreement activation has started. Keep this server-side; never place the project API key in browser code.</p>
+        </SubSection>
+        <SubSection title="Request payer review for a release">
+          <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
+  -H "X-API-Key: YOUR_TEST_SERVER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "request_release",
+    "agreementId": "agr_...",
+    "deliveryNote": "Completed the agreed delivery.",
+    "evidenceReference": "https://yourplatform.com/deliveries/1042"
+  }'`}</CodeBlock>
+          <p>Hash PayLink verifies project ownership, reconciles the confirmed Arc escrow, derives the next release step, and creates a payer-reviewed release request. This does not release USDC by itself. Repeating the request returns the existing pending review instead of creating a second action.</p>
         </SubSection>
         <SubSection title="Agreement webhooks">
           <p>Authorized pilot projects receive <code>agreement.activated</code>, <code>agreement.step_released</code>, <code>agreement.completed</code>, <code>agreement.cancelled</code>, and <code>agreement.refunded</code>. Each signed event is derived from an exactly reconciled snapshot at a confirmed Arc block. Draft creation alone emits no lifecycle event and must never trigger fulfillment.</p>
@@ -160,14 +179,14 @@ export default function ApiReference() {
         />
       </Section>
 
-      <Section title="HashpayStream and Arena">
+      <Section title="Legacy compatibility endpoints">
         <Table
           headers={['Endpoint', 'Purpose']}
           rows={[
             ['/api/privy-circle-link', 'Privy to Circle wallet mapping'],
-            ['/api/stream-create', 'Create HashpayStream streams'],
-            ['/api/stream-status', 'Read stream state'],
-            ['/api/arena-room', 'Create and manage Arena room state'],
+            ['/api/stream-create', 'Legacy timed-stream compatibility'],
+            ['/api/stream-status', 'Legacy timed-stream state'],
+            ['/api/arena-room', 'Experimental Arena test-room state; not a public HashpayStream API'],
           ]}
         />
       </Section>

@@ -199,8 +199,10 @@ export default function Layout() {
   const isPocketLandingPage = isPocketHost ? pathname === '/' : pathname === '/pocket' || pathname === '/pocket/'
   const isCreatePage = pathname === '/' || pathname === '/app' || pathname === '/create' || pathname === '/polymarket' || isPocketAppPage
   const isAgentCheckoutPage = pathname.startsWith('/pay/a/')
+  const isHostedCheckoutEntryPage = pathname.startsWith('/pay/c/')
   const isAgreementPayerPage = pathname.startsWith('/agreements/')
-  const isPayPage = pathname === '/pay' || isAgentCheckoutPage || isAgreementPayerPage
+  const isCheckoutPage = pathname === '/pay' || isAgentCheckoutPage || isHostedCheckoutEntryPage
+  const isPayPage = isCheckoutPage || isAgreementPayerPage
   const isNgPosPage = pathname === '/pos/ng'
   const isTelegramPaymentLinksPage = pathname === '/telegram/payment-links'
   const isReceiptPage = pathname.startsWith('/receipt/')
@@ -426,7 +428,7 @@ export default function Layout() {
         style={agentHashComposerFocused && agentHashViewportTop > 0
           ? { transform: `translate3d(0, ${agentHashViewportTop}px, 0)` }
           : undefined}
-        className={isPocketLandingPage || isPocketImmersivePage
+        className={isPocketLandingPage || isPocketImmersivePage || isCheckoutPage
           ? 'hidden'
           : isPocketAppPage
           ? 'pointer-events-none fixed inset-x-0 top-0 z-50 border-b border-gray-200/80 bg-[#F5F5F7]/92 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-[#0A0A0A]/92 dark:shadow-[0_10px_30px_rgba(0,0,0,0.24)]'
@@ -622,6 +624,8 @@ export default function Layout() {
         ? 'h-full min-h-0 w-full flex-1 overflow-hidden p-0'
         : isPocketAppPage
         ? 'h-full min-h-0 w-full flex-1 overflow-hidden p-0'
+        : isCheckoutPage
+        ? 'mx-auto w-full max-w-5xl flex-1 px-4 pb-8 pt-8 sm:px-6 sm:pt-10'
         : 'mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6'}>
         <Outlet context={{
           selectedNet: selectedNet ?? 'base',
@@ -635,7 +639,7 @@ export default function Layout() {
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer
         data-hashpaylink-bottom-bar
-        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 dark:border-white/5 dark:bg-[#111113]/90 ${agentHashComposerFocused || isPocketAppPage ? 'hidden' : 'flex'}`}
+        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white/90 py-0 dark:border-white/5 dark:bg-[#111113]/90 ${agentHashComposerFocused || isPocketAppPage || isCheckoutPage ? 'hidden' : 'flex'}`}
       >
           <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">

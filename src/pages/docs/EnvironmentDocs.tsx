@@ -14,7 +14,7 @@ export default function EnvironmentDocs() {
         <Table
           headers={['Variable', 'Required', 'Description']}
           rows={[
-            ['DATABASE_URL', 'Yes', 'Render Postgres URL for receipts, agent/helper state, POS profiles, PolyDesk profiles, Privy/Circle mappings, and Arena rooms.'],
+            ['DATABASE_URL', 'Yes', 'Render Postgres URL for receipts, agreement projections, agent/helper state, POS profiles, PolyDesk profiles, and Privy/Circle mappings.'],
             ['ADMIN_SECRET', 'Yes', 'Long random secret for protected maintenance endpoints.'],
             ['CRON_SECRET', 'Optional', 'Secret for authenticated cron or background jobs.'],
             ['TREASURY_ADDRESS', 'Optional', 'EVM treasury wallet for platform fees.'],
@@ -110,15 +110,16 @@ export default function EnvironmentDocs() {
         />
       </Section>
 
-      <Section title="HashpayStream and Arena">
+      <Section title="Legacy compatibility">
+        <InfoBox type="warning">These variables support frozen timed-stream or Arena test surfaces. They are not required by the agreements-first HashpayStream product and must not be treated as Arc Agreement configuration.</InfoBox>
         <Table
           headers={['Variable', 'Required', 'Description']}
           rows={[
-            ['STREAM_FACTORY_ADDRESS', 'HashpayStream', 'StreamVaultFactory contract on Arc.'],
-            ['VITE_STREAM_FACTORY_ADDRESS', 'HashpayStream', 'Browser-visible StreamVaultFactory address.'],
-            ['ARENA_ESCROW_FACTORY_ADDRESS', 'Arena', 'Arena escrow factory address.'],
-            ['VITE_ARENA_ESCROW_FACTORY_ADDRESS', 'Arena', 'Browser-visible Arena escrow factory address.'],
-            ['ARENA_RELAYER_PRIVATE_KEY', 'Arena', 'Server-side relayer key for Arena escrow actions.'],
+            ['STREAM_FACTORY_ADDRESS', 'Legacy stream', 'Compatibility StreamVaultFactory contract on Arc.'],
+            ['VITE_STREAM_FACTORY_ADDRESS', 'Legacy stream', 'Browser-visible compatibility StreamVaultFactory address.'],
+            ['ARENA_ESCROW_FACTORY_ADDRESS', 'Arena test only', 'Experimental Arena escrow factory address.'],
+            ['VITE_ARENA_ESCROW_FACTORY_ADDRESS', 'Arena test only', 'Browser-visible experimental Arena factory address.'],
+            ['ARENA_RELAYER_PRIVATE_KEY', 'Arena test only', 'Privileged experimental Arena relayer. Never use for public funds.'],
           ]}
         />
       </Section>

@@ -5,32 +5,32 @@ export default function StreamPayDocs() {
     <DocPage>
       <DocHeader
         badge="HashpayStream"
-        title="HashpayStream"
-        description="Creator checkout for USDC-paid content on Arc: unlock articles, books, private links, videos, and live routes with receipts, refunds, checkpoint payouts, and Agent Hash guidance."
+        title="Protected USDC agreements on Arc"
+        description="Create a fixed, progressive, or milestone agreement, send one private payer link, and release protected USDC only after delivery review."
       />
 
       <InfoBox type="tip">
-        HashpayStream is the creator-focused product inside Hash PayLink. It is built for the Lepton thesis: make the smallest unit of creator content sellable, from one article to one reading checkpoint or watch checkpoint, settled in USDC on Arc.
+        HashpayStream is the standalone proof of what developers can build with Hash PayLink&apos;s Arc Agreements API. Hash PayLink provides the infrastructure; HashpayStream provides the focused agreement experience.
       </InfoBox>
 
-      <Section title="What HashpayStream is">
+      <Section title="What HashpayStream does">
         <p>
-          HashpayStream lets creators publish gated content and lets readers unlock access with USDC. The current product supports fixed x402 unlocks, pay-as-you-read checkpoints, a public HashWatch demo, creator earnings, receipts, reactions, comments, shareable gate links, and Agent Hash as a product-aware assistant.
+          HashpayStream protects a USDC payment on Arc Testnet while two parties complete an agreed piece of work. The creator defines the delivery, amount, recipient, duration, cancellation window, and release structure. The payer reviews the exact terms, funds the escrow, and approves a release only after reviewing delivery evidence.
         </p>
         <p>
-          The launch surface is intentionally creator-first: readers discover content, unlock with a wallet-backed flow, consume the content, receive a receipt, and creators see earnings update from fixed unlocks or checkpoint releases.
+          The product is intentionally narrow: create an agreement, fund it, submit work, review delivery, release or return funds, and keep a durable receipt of the final outcome.
         </p>
       </Section>
 
-      <Section title="Judge test path">
+      <Section title="Current private-pilot flow">
         <ol className="list-none space-y-3">
           {[
-            ['1', 'Open Discover', 'Browse paid posts, ebooks, HashWatch, World Cup news, and live-score route cards.'],
-            ['2', 'Open a gate', 'Use a content card or shared gate link to reach the HashpayStream checkout.'],
-            ['3', 'Unlock access', 'Use fixed x402 unlock for full access or pay-as-you-read when the content renders inside the reader.'],
-            ['4', 'Watch checkpoint state', 'For checkpoint flows, released and refundable USDC update as progress milestones are reached.'],
-            ['5', 'View receipt and earnings', 'Confirm the reader receipt and creator earnings state after unlock or checkpoint release.'],
-            ['6', 'Ask Agent Hash', 'Ask how HashpayStream works, what payment modes exist, what content is latest, or to summarize unlocked content.'],
+            ['1', 'Create terms', 'Choose one release, progressive release, or milestones and enter the delivery terms.'],
+            ['2', 'Send the private link', 'The payer link carries a rotatable capability and should be shared only with the intended payer.'],
+            ['3', 'Fund on Arc', 'A different authenticated payer reviews the terms and funds the Arc Testnet USDC escrow.'],
+            ['4', 'Submit delivery', 'The recipient submits a short delivery note and an HTTPS evidence link for the current release.'],
+            ['5', 'Review and release', 'The bound payer approves the current release or reports an issue.'],
+            ['6', 'Close with proof', 'Completed, cancelled, and refunded agreements expose the shared Hash PayLink receipt actions.'],
           ].map(([num, title, desc]) => (
             <li key={num} className="flex gap-4">
               <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600 dark:bg-blue-950/50 dark:text-blue-400">{num}</span>
@@ -43,167 +43,82 @@ export default function StreamPayDocs() {
         </ol>
       </Section>
 
-      <Section title="Core product flows">
-        <SubSection title="Discover">
-          <p>
-            The Discover feed presents approved creator content and official drops across developer guides, ebooks, HashWatch, World Cup news, live scores, crypto, and creator posts. Cards carry stable content IDs and can route directly to the gate flow.
-          </p>
-        </SubSection>
-
-        <SubSection title="Creator publishing">
-          <p>
-            Creators can publish article text, private links, or HashWatch videos with title, short description, category, author, social handle, price, and cover metadata. Approved posts appear in the creator library and can be shared externally.
-          </p>
-        </SubSection>
-
-        <SubSection title="Fixed x402 unlock">
-          <p>
-            Fixed unlock is the simplest checkout path. A reader pays once with the x402/Gateway flow, receives access for the active reader wallet, and HashpayStream records the unlock and receipt state.
-          </p>
-        </SubSection>
-
-        <SubSection title="Pay-as-you-read">
-          <p>
-            Pay-as-you-read lets a reader prepay the content price, then creator earnings release at reading checkpoints such as 25%, 50%, 75%, and 100%. Unread balance remains refundable until the reader consumes the content.
-          </p>
-        </SubSection>
-
-        <SubSection title="HashWatch">
-          <p>
-            HashWatch is the video surface. The public launch path includes a free short demo for testing watch-based checkpoints, receipts, and refundable balance. Long video frame-by-frame analysis is not marketed as a live guarantee; longer media belongs on the async ZeroScout/0G compute path.
-          </p>
-        </SubSection>
-
-        <SubSection title="Live scores and market-aware routes">
-          <p>
-            Live-score and sports route cards are shown only from verified app context. Agent Hash must not invent scores, odds, routes, or Polymarket context when verified data is unavailable.
-          </p>
-        </SubSection>
-      </Section>
-
-      <Section title="Payment modes">
+      <Section title="Agreement structures">
         <Table
-          headers={['Mode', 'What it does', 'Launch status']}
+          headers={['Structure', 'Best fit', 'Release behavior']}
           rows={[
-            ['Fixed x402 unlock', 'Reader pays once in USDC and keeps access for the verified reader wallet/session.', 'Primary public flow'],
-            ['Pay-as-you-read', 'Reader prepays; creator earnings release as reading milestones are reached; unread balance stays refundable.', 'Primary public flow'],
-            ['Pay-as-you-watch demo', 'Short HashWatch demo exercises watch checkpoints and receipt behavior without requiring a paid unlock.', 'Public demo path'],
-            ['Timed streaming', 'Timed stream vault contracts remain available for stream settlement and recovery flows.', 'Kept narrow for public launch'],
-            ['Live sports routes', 'Market-aware sports content cards can route users to unlockable context when verified data exists.', 'Visible with verified context only'],
+            ['One release', 'A single deliverable or purchase', 'The full protected amount releases after payer approval.'],
+            ['Progressive release', 'Work measured by completion progress', 'The agreed cumulative checkpoints release in order.'],
+            ['Milestones', 'Named delivery stages', 'Each named percentage releases only after its own review.'],
           ]}
         />
+      </Section>
+
+      <Section title="Roles and controls">
+        <Table
+          headers={['Role', 'Authority']}
+          rows={[
+            ['Creator', 'Creates the terms, shares the payer link, submits delivery evidence, and requests the next release.'],
+            ['Payer', 'Funds the escrow, reviews delivery, approves releases, reports issues, and uses eligible cancellation or refund actions.'],
+            ['Hash PayLink', 'Validates project policy, prepares Circle wallet actions, reconciles confirmed Arc state, signs lifecycle webhooks, and generates terminal receipts.'],
+            ['HashpayStream', 'Presents the creator dashboard and consumes authoritative agreement events. It does not replace Arc as the settlement record.'],
+          ]}
+        />
+        <InfoBox type="warning">The agreement creator cannot fund or approve their own delivery. Payer authority is bound to the authenticated wallet that starts the agreement.</InfoBox>
       </Section>
 
       <Section title="Circle and Arc infrastructure">
-        <p>
-          HashpayStream uses Hash PayLink payment infrastructure with Arc as the settlement network for creator checkpoint flows and Circle-backed wallet sessions for simple reader and creator onboarding.
-        </p>
-        <Table
-          headers={['Layer', 'Current role']}
-          rows={[
-            ['Arc Testnet', 'USDC settlement network for checkpoint escrow, stream vaults, receipts, and creator testing.'],
-            ['Circle wallets', 'Email-first reader and creator wallet sessions for USDC access without forcing advanced wallet setup.'],
-            ['x402 / Gateway', 'Fixed unlock checkout path for paid content and API-style access.'],
-            ['USDC', 'Settlement asset for creator unlocks, reading checkpoint releases, refunds, and earnings.'],
-            ['Hash PayLink receipts', 'Durable receipt layer for fixed unlocks, checkpoint releases, refunds, and creator settlement records.'],
-          ]}
-        />
-      </Section>
-
-      <Section title="Smart contracts">
-        <Table
-          headers={['Contract', 'Purpose', 'Network']}
-          rows={[
-            ['CheckpointVaultFactory', 'CREATE2 factory for pay-as-you-read checkpoint escrow vaults.', 'Arc Testnet'],
-            ['CheckpointVault', 'Per-reader prepaid vault with milestone release and unread refund support.', 'Arc Testnet'],
-            ['StreamVaultFactory', 'Timed stream factory retained for live/video meter flows and recovery paths.', 'Arc Testnet'],
-            ['StreamVault', 'Per-recipient stream vault with claim and cancel support.', 'Arc Testnet'],
-          ]}
-        />
-        <InfoBox type="warning">Public testing currently uses Arc Testnet contracts and test USDC. Production funds are not used in the Lepton demo flow.</InfoBox>
-      </Section>
-
-      <Section title="Receipt and proof state">
-        <p>
-          The product is built around extended receipt state. A user should be able to tell what was unlocked, what was released, what remains refundable, and which wallet or vault is tied to the action.
-        </p>
-        <Table
-          headers={['Event', 'Receipt/proof state']}
-          rows={[
-            ['Fixed unlock', 'Content ID, reader wallet, creator wallet, amount, x402/Gateway receipt reference, access status.'],
-            ['Checkpoint release', 'Content ID, checkpoint vault, reader wallet, creator wallet, released amount, progress milestone.'],
-            ['Refund', 'Vault address, reader wallet, consumed amount, refunded amount, Arc transaction hash when available.'],
-            ['Creator earnings', 'Fixed unlock total, reading/checkpoint total, creator wallet, and claim/recovery state.'],
-            ['0G archive', 'Shown as proof when available, not as an endless progress promise. If archive proof is delayed, the app continues to show usable receipt state.'],
-          ]}
-        />
-      </Section>
-
-      <Section title="Agent Hash">
-        <p>
-          Agent Hash is the in-product HashpayStream assistant powered by ZeroScout. It is scoped to the creator and reader workflow: content discovery, payment modes, receipts, earnings, unlocked-content summaries, HashWatch, books, World Cup news, live scores, and creator publishing guidance.
-        </p>
-        <Table
-          headers={['Request type', 'Expected behavior']}
-          rows={[
-            ['How to use HashpayStream', 'Return a concise guide covering Discover, unlocks, checkpoints, receipts, creator earnings, and Agent Hash.'],
-            ['Latest HashWatch / latest book / top viewed', 'Answer from verified HashpayStream context and include clean gate/open links when available.'],
-            ['Unlocked book or article summary', 'Use verified unlocked text or metadata; never ask the same wallet to unlock again when access is verified.'],
-            ['Unlocked HashWatch explanation', 'Use verified metadata and media URL. Deeper media analysis routes to ZeroScout/0G when available.'],
-            ['Live scores or Polymarket route', 'Answer only from verified context; otherwise clearly say live context is not verified.'],
-            ['Unsupported request', 'Give a product-aware honest fallback instead of pretending live data or media analysis exists.'],
-          ]}
-        />
-      </Section>
-
-      <Section title="Hash PayLink API services for creators">
-        <p>
-          Hash PayLink also supports creators and developers who want to sell content or services through API access patterns. Today, API-style creator integrations are handled through support so we can configure the safest checkout and access flow for each use case.
-        </p>
-        <InfoBox type="info">
-          Direct self-serve API integrations for HashpayStream creators are coming soon. For now, teams that want to sell content, datasets, media, or API services through Hash PayLink can contact <a href="mailto:support@hashpaylink.com" className="font-semibold underline">support@hashpaylink.com</a>.
-        </InfoBox>
-      </Section>
-
-      <Section title="Durable app state">
-        <p>
-          HashpayStream stores creator content, unlocks, checkpoint reads, reactions, comments, views, and recent meter recovery state in durable backend storage when <Code>DATABASE_URL</Code> is configured. This protects the launch flow from Render redeploys and lets Agent Hash answer from verified app context.
-        </p>
         <Table
           headers={['Layer', 'Role']}
           rows={[
-            ['Postgres', 'Creator posts, unlock records, checkpoint reads, comments, reactions, content views, and recovery state.'],
-            ['Arc vaults', 'USDC escrow, checkpoint release, timed stream claim, and refund state.'],
-            ['0G extension', 'Receipt and creator activity archive records when proof is available.'],
-            ['ZeroScout', 'Agent Hash intelligence, unlocked-content guidance, and media/URL analysis when compute is available.'],
+            ['Arc Testnet', 'Runs the agreement factory and per-agreement USDC escrow contracts.'],
+            ['Circle wallets', 'Provides email-first payer wallet access and submitted Arc wallet operations.'],
+            ['USDC', 'The only protected and released asset in the current pilot.'],
+            ['Hash PayLink webhooks', 'Deliver signed agreement lifecycle events to the HashpayStream backend.'],
+            ['Hash PayLink receipts', 'Provide one consistent terminal receipt for completion, cancellation, or refund.'],
           ]}
         />
       </Section>
 
-      <Section title="Known launch limits">
-        <ul className="space-y-2">
-          <li>- Long HashWatch video analysis can exceed the live chat window and should use an async/background ZeroScout media path.</li>
-          <li>- Live sports, scores, and Polymarket routes must come from verified context. The app should not guess current events.</li>
-          <li>- 0G archive proof is displayed when available. It is not shown as an endless archiving promise.</li>
-          <li>- Public testing uses Arc Testnet and test USDC.</li>
-          <li>- Self-serve API integrations for creator services are coming soon; support-assisted setup is available now.</li>
-        </ul>
+      <Section title="Developer integration">
+        <SubSection title="Project setup">
+          <p>
+            Create a human checkout project in the Hash PayLink developer portal, enable Arc Agreements, configure an Arc Testnet recipient and webhook, then create an Arc sandbox key. Project approval and stored limits control whether payer activation is available.
+          </p>
+        </SubSection>
+        <SubSection title="Create an agreement">
+          <p>
+            A backend creates terms with <Code>POST /api/v2/agreements</Code> and sends the returned one-time <Code>payerReviewPath</Code> to the payer. API keys must remain server-side. Draft creation is not proof of funding.
+          </p>
+        </SubSection>
+        <SubSection title="Fulfil from signed state">
+          <p>
+            Applications should update their product state from verified lifecycle events such as <Code>agreement.activated</Code>, <Code>agreement.step_released</Code>, <Code>agreement.completed</Code>, <Code>agreement.cancelled</Code>, and <Code>agreement.refunded</Code>. A browser redirect alone is not fulfillment authority.
+          </p>
+        </SubSection>
       </Section>
 
-      <Section title="Environment variables">
+      <Section title="Product boundary">
         <Table
-          headers={['Variable', 'Description']}
+          headers={['Surface', 'Decision']}
           rows={[
-            ['CHECKPOINT_FACTORY_ADDRESS', 'Server-side CheckpointVaultFactory address on Arc.'],
-            ['VITE_CHECKPOINT_FACTORY_ADDRESS', 'Browser-accessible checkpoint factory address.'],
-            ['STREAM_FACTORY_ADDRESS', 'Server-side StreamVaultFactory address on Arc.'],
-            ['VITE_STREAM_FACTORY_ADDRESS', 'Browser-accessible stream factory address.'],
-            ['DATABASE_URL', 'Durable creator content, unlocks, social activity, receipts, and recovery state.'],
-            ['ZEROSCOUT_API_URL', 'ZeroScout intelligence endpoint for Agent Hash guidance.'],
-            ['ZEROSCOUT_INTEGRATION_SECRET', 'Server-side ZeroScout integration secret.'],
-            ['ZEROSCOUT_HASHWATCH_MEDIA_MODEL', 'Optional media model hint for short HashWatch analysis requests.'],
+            ['Arc Agreements', 'Primary HashpayStream product and the only first-level navigation surface.'],
+            ['Creator content', 'Compatibility-only while existing posts, unlocks, earnings, and receipts are preserved.'],
+            ['Payroll and timed streams', 'Legacy contract and recovery paths; not part of the agreements-first public product.'],
+            ['x402 creator unlocks', 'Compatibility-only in HashpayStream. Agentic x402 remains a separate Hash PayLink API product.'],
+            ['Arena', 'Separate experimental game product. It is not an Arc Agreements feature or a HashpayStream navigation surface.'],
           ]}
         />
+      </Section>
+
+      <Section title="Pilot status">
+        <ul className="space-y-2">
+          <li>- Arc Agreements currently uses Arc Testnet and test USDC.</li>
+          <li>- Activation is limited by per-project approval and stored amount, volume, duration, and active-agreement ceilings.</li>
+          <li>- Agreement state is reconciled from confirmed Arc snapshots before lifecycle events are emitted.</li>
+          <li>- Public mainnet activation requires a completed contract and operational security review.</li>
+          <li>- The standalone HashpayStream client still shares the current Hash PayLink runtime while public-API parity and deployment separation are completed.</li>
+        </ul>
       </Section>
 
       <NavFooter

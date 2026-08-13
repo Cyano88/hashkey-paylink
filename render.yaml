@@ -41,7 +41,7 @@ services:
       - key: VITE_CLIENT_URL
         sync: false                   # Circle Modular Wallet client URL
       - key: VITE_CIRCLE_EVM_EMAIL_ENABLED
-        value: "true"                 # Base/Arbitrum Circle User-Controlled SCA email wallet payments
+        value: "true"                 # Base/Arbitrum/Arc Circle User-Controlled SCA payments; Gas Station policy required
       - key: VITE_CIRCLE_USER_WALLET_APP_ID
         sync: false                   # Circle User-Controlled Wallet Web SDK app id
       - key: VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET
@@ -66,12 +66,6 @@ services:
         sync: false                   # Browser-visible Arena escrow factory after deploy
       - key: ARENA_RELAYER_PRIVATE_KEY
         sync: false                   # Server-side Arena relayer key; must match deployed Arena factory relayer
-      - key: BASE_GAS_RECOVERY_USDC
-        value: "0.01"
-      - key: ARBITRUM_GAS_RECOVERY_USDC
-        value: "0.03"
-      - key: ARC_GAS_RECOVERY_USDC
-        value: "0"
       - key: CIRCLE_API_KEY
         sync: false                   # Circle server API key for wallet OTP/signing
       - key: CIRCLE_TEST_API_KEY
@@ -156,6 +150,20 @@ services:
         value: "hashpaylink:developer-projects:v1"
       - key: HASH_PAYLINK_BASE_URL
         value: "https://hashpaylink.com"
+      - key: HASHPAYSTREAM_ARC_API_KEY
+        sync: false                   # server-only Arc sandbox project key; never expose with VITE_
+      - key: HASHPAYSTREAM_ARC_PROJECT_ID
+        sync: false                   # HashPayStream developer project receiving signed lifecycle events
+      - key: HASHPAYSTREAM_ARC_WEBHOOK_SECRET
+        sync: false                   # project-specific whsec_ signing secret
+      - key: HASHPAYSTREAM_ARC_WEBHOOK_STORE_KEY
+        value: "hashpaylink:hashpaystream-arc-webhooks:v1"
+      - key: HASHPAYSTREAM_APP_OWNERSHIP_SECRET
+        sync: false                   # stable 32+ character HMAC secret for standalone user ownership
+      - key: HASHPAYSTREAM_APP_OWNERSHIP_STORE_KEY
+        value: "hashpaystream:standalone-agreement-owners:v1"
+      - key: HASHPAYSTREAM_HASH_PAYLINK_BASE_URL
+        value: "https://app.hashpaylink.com"
       - key: PUBLIC_APP_URL
         value: "https://hashpaylink.com"
       - key: CREATOR_ADMIN_KEY

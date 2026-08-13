@@ -58,6 +58,7 @@ import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { PrivyConnectButton } from '../lib/PrivyConnectButton'
 import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import CheckoutSteps from '../components/CheckoutSteps'
+import { CheckoutTrustLine as CheckoutPoweredByLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 import UnifiedReceipt from '../components/UnifiedReceipt'
 import SlideAction, { type SlideActionStatus } from '../components/SlideAction'
 import { PocketPillMark } from '../pocket/components/CPurseIcon'
@@ -346,7 +347,9 @@ export default function PaymentPage() {
   const isTelegramSource = isTelegramSourceParam(searchParams)
   const isNgPosSource = searchParams.get('src') === 'ngpos' || searchParams.get('src') === 'bank-receive' || searchParams.get('src') === 'bank-send'
   const ngPosBackMerchantId = searchParams.get('merchant') ?? ''
-  const ngPosBackUrl = ngPosBackMerchantId ? `/pos/ng?merchant_id=${encodeURIComponent(ngPosBackMerchantId)}` : '/'
+  const ngPosBackUrl = searchParams.get('src') === 'ngpos'
+    ? '/'
+    : ngPosBackMerchantId ? `/pos/ng?merchant_id=${encodeURIComponent(ngPosBackMerchantId)}` : '/'
   const isPolymarketFunding = searchParams.get('brand') === 'polymarket' || searchParams.get('pm') === '1'
   const polymarketBridgeParam = searchParams.get('bridge') ?? ''
   const polymarketWalletParam = (searchParams.get('pmw') || '').trim()
@@ -656,8 +659,8 @@ export default function PaymentPage() {
   }, [hostedAttemptId, hostedCheckoutId, isHostedCheckout, isHostedService])
 
   useEffect(() => {
-    if (isFlex && isBankReceivePayment && isNgPosPaycrestOfframp) setFxInputMode('local')
-  }, [isFlex, isBankReceivePayment, isNgPosPaycrestOfframp])
+    if (isFlex && isNgPosPaycrestOfframp) setFxInputMode('local')
+  }, [isFlex, isNgPosPaycrestOfframp])
 
   useEffect(() => {
     if (!isBankSendPayment) return
@@ -693,11 +696,20 @@ export default function PaymentPage() {
     if (!fxCurrency || fxSrc === 'custom') return
     setFxLoading(true)
     try {
+      if (isNgPosPaycrestOfframp && ngPosMerchantId) {
+        const response = await fetch(`/api/ng-pos?merchant_id=${encodeURIComponent(ngPosMerchantId)}`)
+        const value = await response.json().catch(() => ({})) as { ok?: boolean; merchant?: { fx_rate_ngn_per_usdc?: string } }
+        const rate = Number(value.merchant?.fx_rate_ngn_per_usdc)
+        if (!response.ok || !value.ok || !Number.isFinite(rate) || rate <= 0) throw new Error('POS quote is not ready.')
+        setFxRate(rate)
+        setFxStale(false)
+        return
+      }
       const d = await fetchFxRate(fxCurrency)
       if (d.ok && d.rate) { setFxRate(d.rate); setFxStale(d.stale ?? false) }
     } catch { /* ignore */ }
     finally { setFxLoading(false) }
-  }, [fxCurrency, fxSrc])
+  }, [fxCurrency, fxSrc, isNgPosPaycrestOfframp, ngPosMerchantId])
 
   useEffect(() => { if (fxShow && fxSrc === 'live') refreshFxRate() }, [fxShow, fxSrc, refreshFxRate])
 
@@ -711,11 +723,11 @@ export default function PaymentPage() {
   const payableAmt = isNgPosPaycrestOfframp && paycrestOrder?.amount_usdc ? paycrestOrder.amount_usdc : effectiveAmt
   const paycrestNeedsPreparation = isNgPosPaycrestOfframp && !paycrestOrder
   const effectiveAmtNumber = parseFloat(effectiveAmt || '0') || 0
-  const flexLocalCurrencyLabel = isNgPosPaycrestOfframp && isBankReceivePayment ? 'NGN' : (getFxMeta(fxCurrency)?.symbol ?? fxCurrency)
+  const flexLocalCurrencyLabel = isNgPosPaycrestOfframp ? 'NGN' : (getFxMeta(fxCurrency)?.symbol ?? fxCurrency)
 
   // flexPayDisabled: accounts for USDC and local-currency input modes
   const flexPayDisabled = isFlex && (
-    isNgPosPaycrestOfframp && isBankReceivePayment
+    isNgPosPaycrestOfframp
       ? (!localAmt || parseFloat(localAmt) <= 0)
       : fxInputMode === 'local'
       ? (!localAmt || parseFloat(localAmt) <= 0 || !fxRate)
@@ -3470,7 +3482,7 @@ export default function PaymentPage() {
       merchantId: ngPosMerchantId,
       contextLabel: memo || (isBankReceivePayment ? 'Bank receive' : ngPosMerchantId),
       settlementType: ngPosSettlement,
-      amountNgn: ngPosAmountNgn,
+      amountNgn: paycrestOrder?.amount_ngn || ngPosAmountNgn || localAmt,
       requestedAmount: expectedSettlementAmt,
       intentId: paycrestOrder?.intent_id ?? ngPosPaycrestIntentId,
     }
@@ -3781,7 +3793,9 @@ export default function PaymentPage() {
     return () => window.clearTimeout(timer)
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
-  const compactCheckoutSteps: readonly [string, string, string] = isHelperAccess
+  const compactCheckoutSteps: readonly [string, string, string] = isNgPosPaycrestOfframp
+    ? ['Enter amount', 'Pay with Pocket', 'Naira delivered']
+    : isHelperAccess
     ? ['Open request', 'Slide to pay', 'Open access']
     : isPolymarketFunding
       ? ['Review', 'Fund', 'Return']
@@ -3798,6 +3812,8 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   if (!isValidParams) {
     return (
+      <>
+      <HashPayLinkCheckoutBrand />
       <div className="mx-auto max-w-md animate-fade-in">
         <div className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-card">
           <div className="bg-red-50 p-8 text-center">
@@ -3820,7 +3836,9 @@ export default function PaymentPage() {
             </Link>
           </div>
         </div>
+        <CheckoutPoweredByLine />
       </div>
+      </>
     )
   }
 
@@ -3880,6 +3898,8 @@ export default function PaymentPage() {
       && !isHelperAccess
 
     return (
+      <>
+      <HashPayLinkCheckoutBrand />
       <div className="mx-auto max-w-md animate-scale-in">
         {showNativePocketBack && (
           <a
@@ -4207,6 +4227,8 @@ export default function PaymentPage() {
           </div>
         </div>
       </div>
+      <CheckoutPoweredByLine />
+      </>
     )
   }
 
@@ -4215,26 +4237,27 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
-      {isNgPosSource || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess || isHostedService ? (
-        <button
-          type="button"
-          onClick={goBackFromCheckout}
-          className="mb-5 inline-flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          {isPolyDeskCheckout ? 'Back to PolyDesk' : 'Back'}
-        </button>
-      ) : !isHostedCheckout ? (
-        <a href={`${POCKET_ORIGIN}${POCKET_ROUTES.usdc}`} className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors dark:text-gray-400 dark:hover:text-white">
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Move USDC with Pocket
-        </a>
-      ) : null}
-
+      <HashPayLinkCheckoutBrand />
       <div
         className="overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"
         style={{ boxShadow: `0 18px 60px -32px rgba(15,23,42,0.42), ${meta.glowStyle}`, borderColor: meta.accentColor + '24' }}
       >
+        {isNgPosSource || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess || isHostedService ? (
+          <button
+            type="button"
+            onClick={goBackFromCheckout}
+            className="mx-4 mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {isPolyDeskCheckout ? 'Back to PolyDesk' : 'Back'}
+          </button>
+        ) : !isHostedCheckout ? (
+          <a href={`${POCKET_ORIGIN}${POCKET_ROUTES.usdc}`} className="mx-4 mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-gray-400 transition-colors hover:text-gray-800 dark:text-gray-500 dark:hover:text-white">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Move USDC with Pocket
+          </a>
+        ) : null}
+
         {/* ── Payment network ──────────────────────────────────────────── */}
         {!isBankSendPayment && (
           <div className="px-4 pb-0 pt-4">
@@ -4308,7 +4331,7 @@ export default function PaymentPage() {
                   )}
                 </div>
               ) : (
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">Enter Amount</p>
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-300">{isNgPosPaycrestOfframp ? 'POS payment' : 'Enter Amount'}</p>
               )}
 
               {/* Input centered exactly under label; asset label floats right via absolute */}
@@ -4328,7 +4351,7 @@ export default function PaymentPage() {
               </div>
 
               {/* Swap button — only when FX rate is ready */}
-              {fxShow && fxRate ? (
+              {fxShow && fxRate && !isNgPosPaycrestOfframp ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -4451,9 +4474,9 @@ export default function PaymentPage() {
               )}
             </>
           )}
-          {isFlex && memo && isPolymarketFunding && (
+          {isFlex && memo && (isPolymarketFunding || isNgPosPaycrestOfframp) && (
             <div className="mt-2.5 flex justify-center">
-              <span className="text-sm font-medium text-gray-500 dark:text-gray-300">{polymarketFundingLabel}</span>
+              <span className="text-sm font-medium text-gray-500 dark:text-gray-300">{isNgPosPaycrestOfframp ? `For ${memo}` : polymarketFundingLabel}</span>
             </div>
           )}
 
@@ -4597,26 +4620,29 @@ export default function PaymentPage() {
 
           {/* ── Attendee name (event mode) ───────────────────────────────── */}
           {isNgPosPaycrestOfframp && (
-            <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Naira payout</p>
-                  <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            <div className="rounded-xl border border-gray-200 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm dark:bg-white/[0.07] dark:text-gray-300">
+                  <Banknote className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">Naira payout</p>
+                  <p className="mt-0.5 truncate text-xs font-semibold text-gray-800 dark:text-gray-100">
                     {paycrestOrder?.bank_account_name || ngPosBankAccountName || 'Verified merchant bank'}
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                  <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">
                     {paycrestOrder?.bank_name || ngPosBankName || 'Nigerian bank'} {paycrestOrder?.bank_last4 ? `****${paycrestOrder.bank_last4}` : ngPosBankAccount}
                   </p>
                 </div>
-                <Banknote className="h-4 w-4 shrink-0 text-gray-400" />
-              </div>
-              <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
-                {paycrestOrder
-                  ? <>Ready: pay {formatAmount(paycrestOrder.amount_usdc, meta.decimals)} Base USDC from your Circle wallet.</>
-                  : <>Open Circle Pocket, enter your name, then pay from your Circle wallet.</>}
+                {paycrestOrder?.amount_usdc && (
+                  <span className="shrink-0 text-right">
+                    <span className="block text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-200">{formatAmount(paycrestOrder.amount_usdc, meta.decimals)} USDC</span>
+                    <span className="mt-0.5 block text-[10px] text-gray-400">Ready to pay</span>
+                  </span>
+                )}
               </div>
               {paycrestStatusText && (
-                <p className="mt-2 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">{paycrestStatusText}</p>
+                <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">{paycrestStatusText}</p>
               )}
             </div>
           )}
@@ -5194,7 +5220,7 @@ export default function PaymentPage() {
                       : privyCircleLinkLoading
                         ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking Smart wallet</>
                         : circleSmartAccount && isNgPosPaycrestOfframp && !paycrestOrder
-                          ? <span>Prepare Naira payout</span>
+                          ? <span>Continue to pay</span>
                           : circleSmartAccount && circleEvmWalletChecking
                             ? <><Loader2 className="h-4 w-4 animate-spin" /> Checking wallet</>
                             : circleSmartAccount && circleEvmWalletUnlocked && circleWalletNeedsFunds
@@ -5494,9 +5520,8 @@ export default function PaymentPage() {
         </div>
       )}
 
-      {!isNgPosPaycrestOfframp && (
-        <CheckoutSteps steps={compactCheckoutSteps} className="mt-10 animate-fade-in" />
-      )}
+      <CheckoutSteps steps={compactCheckoutSteps} className="mt-10 animate-fade-in" />
+      <CheckoutPoweredByLine />
     </div>
   )
 }

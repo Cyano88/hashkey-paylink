@@ -1,9 +1,15 @@
-import { Outlet } from 'react-router-dom'
-import { ExternalLink, Mail, X } from 'lucide-react'
+import { Outlet, useLocation } from 'react-router-dom'
+import { Mail, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { StreamPayHeader } from './StreamPayHeader'
 import { StreamAgentHash } from './StreamAgentHash'
+import { useStreamPayPath } from '../lib/useStreamPayPath'
 
 export function StreamPayLayout() {
+  const { pathname } = useLocation()
+  const showLegacyCreatorAgent = pathname.startsWith('/creator') || pathname.startsWith('/gate')
+  const docsTo = useStreamPayPath('/docs')
+
   return (
     <div className="min-h-screen w-full bg-gray-50 dark:bg-[#111113] font-inter flex flex-col">
       <StreamPayHeader />
@@ -30,15 +36,12 @@ export function StreamPayLayout() {
             <X className="h-3.5 w-3.5 shrink-0" />
             DM us
           </a>
-          <a
-            href="https://hashpaylink.com/hashpaystream/docs"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            to={docsTo}
             className="flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-900 dark:hover:text-gray-200"
           >
-            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
             Docs
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -50,11 +53,11 @@ export function StreamPayLayout() {
             rel="noopener noreferrer"
             className="transition-colors hover:text-gray-500 dark:hover:text-gray-400"
           >
-            Streaming on Arc
+            USDC agreements on Arc
           </a>
         </p>
       </footer>
-      <StreamAgentHash />
+      {showLegacyCreatorAgent && <StreamAgentHash />}
     </div>
   )
 }

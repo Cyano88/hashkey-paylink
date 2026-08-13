@@ -72,7 +72,9 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
     activityKind(row) !== 'bank'
     || pocketActivityStatus(row) !== 'status unavailable'
   ))
-  const visibleRows = view === 'all' ? supported : supported.filter(row => activityKind(row) === view)
+  const visibleRows = (view === 'all' ? supported : supported.filter(row => activityKind(row) === view))
+    .slice()
+    .sort((a, b) => b.ts - a.ts)
 
   return (
     <div className="space-y-5">
@@ -80,11 +82,15 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
         <div className="space-y-3">
           <div className="px-1">
             <p className="text-[11px] font-bold text-gray-400">
-              {busy ? 'Loading activity...' : `${visibleRows.length} record${visibleRows.length === 1 ? '' : 's'}`}
+              {busy && !visibleRows.length
+                ? 'Loading activity...'
+                : error && !visibleRows.length
+                  ? 'Updating activity...'
+                  : `${visibleRows.length} record${visibleRows.length === 1 ? '' : 's'}`}
             </p>
           </div>
 
-          {error ? (
+          {error && !visibleRows.length ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
               {error}
             </div>
