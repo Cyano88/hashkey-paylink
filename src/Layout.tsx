@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Outlet, Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAccount, useDisconnect, useSwitchChain } from 'wagmi'
-import { usePrivy } from '@privy-io/react-auth'
 import { ChevronDown, LogOut, Sun, Moon, History } from 'lucide-react'
 import { useSolana }   from './lib/SolanaContext'
 import { useTheme }    from './lib/ThemeContext'
@@ -9,7 +8,6 @@ import { CHAIN_META } from './lib/chains'
 import type { ChainKey } from './lib/chains'
 import { getPaylinkParam, hasPaylinkFlag } from './lib/paylinkParams'
 import { PRIVY_AUTH_ENABLED } from './lib/authMode'
-import { PrivyConnectButton } from './lib/PrivyConnectButton'
 import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
 import PocketNotificationButton from './pocket/components/PocketNotificationButton'
 import PocketHeaderIdentity from './pocket/components/PocketHeaderIdentity'
@@ -340,12 +338,9 @@ export default function Layout() {
   const { isConnected: evmConnected, chainId: evmChainId } = useAccount()
   const { disconnect: disconnectEvm } = useDisconnect()
   const { switchChain }               = useSwitchChain()
-  const { address: solanaAddress, connect: connectSolana,   disconnect: disconnectSolana    } = useSolana()
-  const { authenticated: privyAuthenticated } = usePrivy()
+  const { address: solanaAddress, disconnect: disconnectSolana } = useSolana()
 
   const anyConnected = evmConnected || !!solanaAddress
-  const agentEmailConnected = Boolean((isAgentProfilePage || isAgentCheckoutPage) && PRIVY_AUTH_ENABLED && privyAuthenticated)
-  const headerControlConnected = anyConnected || agentEmailConnected
   const evmNetKey    = evmConnected
     ? ([CHAIN_META.base, CHAIN_META.arc, CHAIN_META.arbitrum] as const).find(n => n.chainId === evmChainId)?.key ?? null
     : null
@@ -358,7 +353,7 @@ export default function Layout() {
   const [payWalletConnected, setPayWalletConnected] = useState(false)
   const [payWalletDisconnect, setPayWalletDisconnect] = useState<(() => void) | null>(null)
   const [paySuccessVisible, setPaySuccessVisible] = useState(false)
-  const headerWalletConnected = headerControlConnected || (isPayPage && payWalletConnected)
+  const headerWalletConnected = anyConnected || (isPayPage && payWalletConnected)
 
   // Sync selectedNet when a wallet actually connects / chain changes.
   // Guard: never override an explicit Solana selection — that would cause a
@@ -383,15 +378,6 @@ export default function Layout() {
       if (id) switchChain({ chainId: id })
     }
     // Fully disconnected: just update intent, Connect Wallet will act on it
-  }
-
-  // ── Connect Wallet handler (action depends on selectedNet intent) ─────────
-  function handleConnectWallet() {
-    if (selectedNet === 'solana') {
-      connectSolana({ includeEmail: true })
-    } else {
-      // EVM wallet connection is handled by PrivyConnectButton in production.
-    }
   }
 
   const handlePayWalletStateChange = useCallback((state: { connected: boolean; disconnect?: () => void }) => {
@@ -526,50 +512,6 @@ export default function Layout() {
                   <LogOut className="h-4 w-4" />
                 </button>
               )
-            )}
-
-            {/* Wallet controls — hidden on pay page and organizer dashboard (read-only pages) */}
-            {!isPolyDeskSurface && !isCreatePage && !isPayPage && !isDashPage && !isNgPosPage && !isTelegramPaymentLinksPage && !isReceiptPage && (
-              <>
-                {/* Connect Wallet — when disconnected */}
-                {!headerControlConnected && !isAgentProfilePage && (
-                  PRIVY_AUTH_ENABLED && selectedNet !== 'solana' ? (
-                    <PrivyConnectButton className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-60">
-                      <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="hidden sm:inline">Sign in</span>
-                    </PrivyConnectButton>
-                  ) : (
-                    <button
-                      onClick={handleConnectWallet}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-full border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1c1c20] px-3 text-[13px] font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-                    >
-                      <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="hidden sm:inline">
-                        Sign in
-                      </span>
-                    </button>
-                  )
-                )}
-
-                {/* Disconnect all */}
-                {headerControlConnected && !isAgentProfilePage && (
-                  PRIVY_AUTH_ENABLED ? (
-                    <PrivyDisconnectButton
-                      onDisconnectWallets={disconnectAll}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15 disabled:opacity-60"
-                    >
-                      <LogOut className="h-4 w-4" />
-                    </PrivyDisconnectButton>
-                  ) : (
-                    <button
-                      onClick={disconnectAll}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15"
-                    >
-                      <LogOut className="h-4 w-4" />
-                    </button>
-                  )
-                )}
-              </>
             )}
 
             {showPaymentHistoryShortcut && !isPayPage && !isDashPage && (
