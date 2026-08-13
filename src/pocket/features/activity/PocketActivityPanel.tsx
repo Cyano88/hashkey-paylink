@@ -76,16 +76,6 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
 
   return (
     <div className="space-y-5">
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-slate-50 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-white/[0.04]">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Activity</p>
-        <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 dark:text-white">
-          {view === 'all' ? 'All activity' : view === 'bank' ? 'Bank activity' : view === 'pos' ? 'POS activity' : view === 'purchases' ? 'Purchases' : 'Requests'}
-        </h2>
-        <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">
-          Receipts, payouts, reversals, and support records stay connected to your Circle Pocket account.
-        </p>
-      </div>
-
       {authenticated && (
         <div className="space-y-3">
           <div className="px-1">
@@ -109,8 +99,8 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const claimingRefund = refundBusy === refundIntentId
                 const receipt = pocketActivityReceipt(row)
                 const recordId = `${row.txHash || row.eventId}-${row.ts}-${index}`
-                const collapsible = kind === 'purchases' || kind === 'bank'
-                const expanded = !collapsible || expandedActivityId === recordId
+                const collapsible = Boolean(receipt)
+                const expanded = collapsible && expandedActivityId === recordId
                 return (
                   <div key={recordId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
                     <div

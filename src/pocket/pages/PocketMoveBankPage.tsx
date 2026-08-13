@@ -38,9 +38,12 @@ export default function PocketMoveBankPage() {
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const directPayout = new URLSearchParams(window.location.search).get('mode') === 'withdraw'
+  const routeMode = (() => {
+    const value = new URLSearchParams(window.location.search).get('mode')
+    return value === 'request' || value === 'withdraw' ? value : ''
+  })()
   const [mode, setModeState] = useState<'idle' | 'request' | 'withdraw'>(() => {
-    if (new URLSearchParams(window.location.search).get('mode') === 'withdraw') return 'withdraw'
+    if (routeMode) return routeMode
     const saved = window.sessionStorage.getItem('pocket:bank:mode')
     return saved === 'request' || saved === 'withdraw' ? saved : 'idle'
   })
@@ -163,9 +166,13 @@ export default function PocketMoveBankPage() {
 
   return (
     <PocketRouteShell active="home" onSelect={selectNav}>
-      <PocketFlowHeader title="Bank payout" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
+      <PocketFlowHeader title={routeMode === 'request' ? 'Receive' : 'Bank payout'} onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <div className="space-y-3.5">
-        {!directPayout && <div className="grid grid-cols-1 gap-2">
+        {routeMode === 'request' && <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
+          <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc)} className="min-h-10 rounded-full px-3 text-xs font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Receive USDC</button>
+          <button type="button" className="min-h-10 rounded-full bg-gray-950 px-3 text-xs font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">Receive Naira</button>
+        </div>}
+        {!routeMode && <div className="grid grid-cols-1 gap-2">
           {([
             { key: 'request', label: 'Payment Request', icon: Landmark, body: 'Create a link for someone to pay you.' },
             { key: 'withdraw', label: 'Direct Bank Payout', icon: Send, body: 'Withdraw Circle wallet USDC to your bank.' },

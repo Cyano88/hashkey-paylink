@@ -94,11 +94,11 @@ export function PocketReceiveMethodPanel({
             <span className="flex items-center justify-between gap-2 text-sm font-semibold">
               <span className="flex min-w-0 items-center gap-2">
                 {recipientPending ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Mail className="h-4 w-4 shrink-0 text-blue-500" />}
-                <span className="leading-tight">Receive with email</span>
+                <span className="leading-tight">Pocket wallet</span>
               </span>
               <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', receiveMode === 'email' && 'rotate-180')} />
             </span>
-            {receiveMode === 'email' && <span className="mt-1 block pl-6 text-[11px] text-white/60 dark:text-gray-500">Circle Pocket wallet</span>}
+            {receiveMode === 'email' && <span className="mt-1 block pl-6 text-[11px] text-white/60 dark:text-gray-500">Your Pocket wallet</span>}
           </button>
         )}
       </div>}

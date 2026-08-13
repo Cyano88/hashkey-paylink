@@ -215,7 +215,7 @@ export default function PocketMoveUsdcPage() {
       <span className="flex items-center justify-between gap-2 text-sm font-semibold">
         <span className="flex min-w-0 items-center gap-2">
           <Mail className="h-4 w-4 shrink-0 text-blue-500" />
-          <span className="leading-tight">Receive with email</span>
+          <span className="leading-tight">Pocket wallet</span>
         </span>
         <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', receiveMode === 'email' && 'rotate-180')} />
       </span>
@@ -230,8 +230,12 @@ export default function PocketMoveUsdcPage() {
 
   return (
     <PocketRouteShell active="home" onSelect={selectNav}>
-      <PocketFlowHeader title="Request money" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
+      <PocketFlowHeader title="Receive" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <div className="space-y-3.5">
+        <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
+          <button type="button" className="min-h-10 rounded-full bg-gray-950 px-3 text-xs font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">Receive USDC</button>
+          <button type="button" onClick={() => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.bank}?mode=request`)} className="min-h-10 rounded-full px-3 text-xs font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Receive Naira</button>
+        </div>
         {!draft.multiChain && (
           <PocketReceiveMethodPanel
             receiveMode={receiveMode}
@@ -286,7 +290,7 @@ export default function PocketMoveUsdcPage() {
                   </span>
                 </PrivyConnectButton>
                 <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                  Secure access creates your email-backed Circle wallet and keeps payment receipts connected.
+                  Secure access connects your Pocket wallet and keeps payment receipts together.
                 </p>
               </div>
             )}

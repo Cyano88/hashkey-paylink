@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
-import { Check, ChevronRight, Lock } from './PocketIcons'
+import { ChevronRight, Lock } from './PocketIcons'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
+import PocketResolvedNameRow from './PocketResolvedNameRow'
 
 export default function PocketVerifiedNameGate() {
   const navigate = useNavigate()
@@ -12,8 +13,5 @@ export default function PocketVerifiedNameGate() {
 }
 
 export function PocketVerifiedNameBadge({ name }: { name: string }) {
-  return <div className="flex items-center gap-3 rounded-[20px] border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-3.5 shadow-sm dark:border-emerald-400/20 dark:from-emerald-400/10 dark:to-white/[0.03]">
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white"><Check className="h-4 w-4 stroke-[2.5]" /></span>
-    <span className="min-w-0"><span className="block text-[9px] font-semibold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400">Verified name</span><span className="mt-0.5 block truncate text-sm font-semibold tracking-tight text-gray-950 dark:text-white">{name}</span></span>
-  </div>
+  return <PocketResolvedNameRow label="Verified name" name={name} />
 }

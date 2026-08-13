@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, CheckCheck, Copy, Store, Users } from '../../components/PocketIcons'
+import { ArrowLeft, CheckCheck, ChevronDown, Copy, Store, Users } from '../../components/PocketIcons'
 import { ArrowTopRightOnSquareIcon as ExternalLink } from '@heroicons/react/24/outline'
 import { useSearchParams } from 'react-router-dom'
 import { copyToClipboard, formatNgnAmount } from '../../../lib/utils'
@@ -106,7 +106,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
               const receipt = pocketActivityReceipt(row)
               return (
                 <div key={paymentId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
-                  <button type="button" aria-expanded={expanded} onClick={() => setExpandedPaymentId(current => current === paymentId ? '' : paymentId)} className="flex w-full items-center justify-between gap-3 text-left">
+                  <button type="button" aria-expanded={receipt ? expanded : undefined} onClick={() => { if (receipt) setExpandedPaymentId(current => current === paymentId ? '' : paymentId) }} className="flex w-full items-center justify-between gap-3 text-left">
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">{view === 'collections' ? row.memo || row.payer || 'Payer' : row.payer || row.memo || 'Payer'}</span>
                       <span className="mt-0.5 block text-[11px] font-medium text-gray-400">{new Date(row.ts).toLocaleDateString()} at {new Date(row.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -114,6 +114,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
                     <span className="shrink-0 text-right">
                       <span className="block text-xs font-bold tabular-nums text-gray-900 dark:text-gray-100">{displayAmount(row)}</span>
                       <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{row.paycrestStatus || 'confirmed'}</span>
+                      {receipt ? <ChevronDown className={`ml-auto mt-1 h-3.5 w-3.5 text-gray-300 transition-transform ${expanded ? 'rotate-180' : ''}`} /> : null}
                     </span>
                   </button>
                   {expanded && receipt ? <UnifiedReceipt receipt={receipt} compact className="mt-3 border-t border-gray-100 pt-3 dark:border-white/10" /> : null}
@@ -133,11 +134,6 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-slate-50 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-white/[0.04]">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Activity</p>
-        <h2 className="mt-1 text-xl font-black tracking-tight text-gray-950 dark:text-white">{view === 'pos' ? 'POS terminals' : 'Payment requests'}</h2>
-        <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{view === 'pos' ? 'Each terminal keeps its own customer payment history.' : 'Shared payment links and every contribution stay together.'}</p>
-      </div>
       {error ? <p className="rounded-2xl bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{error}</p> : null}
       {resources.length ? (
         <div className="space-y-2">

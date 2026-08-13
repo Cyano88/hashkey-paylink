@@ -435,13 +435,15 @@ export default function Layout() {
         <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'flex-col gap-1.5 py-2' : `justify-between ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}`}>
           {isPocketAppPage ? (
             <>
-              <div className="pointer-events-auto flex h-10 w-full items-center justify-between">
-                <Link to={`${POCKET_BASE_PATH}/home`} className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
-                  <CPurseIcon size={32} title="" className="shrink-0" />
-                  <PocketHeaderIdentity />
-                </Link>
-                <PocketNotificationButton />
-              </div>
+              {pocketRoute?.section !== 'bills' && pocketRoute?.section !== 'activity' && (
+                <div className="pointer-events-auto flex h-10 w-full items-center justify-between">
+                  <Link to={`${POCKET_BASE_PATH}/home`} className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
+                    <CPurseIcon size={32} title="" className="shrink-0" />
+                    <PocketHeaderIdentity />
+                  </Link>
+                  <PocketNotificationButton />
+                </div>
+              )}
               {(pocketRoute?.section === 'bills' || pocketRoute?.section === 'activity') && (
                 <PocketTopSwitch
                   mode={circlePocketHeaderMode}
