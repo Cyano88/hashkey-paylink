@@ -18,3 +18,11 @@ async function call(accessToken: string, body?: Record<string, unknown>) {
 export async function createPocketUserRequest(input: { accessToken: string; recipientPocketId: string; eventId: string; title: string; amount: string; flexibleAmount: boolean; network: PocketRequestItem['network']; paymentUrl: string }) { const data = await call(input.accessToken, { action: 'create', recipientPocketId: input.recipientPocketId, eventId: input.eventId, title: input.title, amount: input.amount, flexibleAmount: input.flexibleAmount, network: input.network, paymentUrl: input.paymentUrl }); if (!data.request) throw new Error('Pocket request response was invalid.'); return data.request }
 export async function readPocketRequests(accessToken: string) { const data = await call(accessToken); return data.requests ?? [] }
 export async function decidePocketRequest(accessToken: string, id: string, decision: 'accept' | 'decline') { const data = await call(accessToken, { action: decision, id }); if (!data.request) throw new Error('Pocket request response was invalid.'); return data.request }
+
+export type PocketResolvedRecipient = { pocketId: string; name: string; network: 'base' | 'arbitrum' | 'solana'; address: string }
+export async function resolvePocketRecipient(accessToken: string, pocketId: string, network: PocketResolvedRecipient['network']) {
+  const response = await fetch(POCKET_API.requests, { method: 'POST', headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'resolve-recipient', pocketId, network }) })
+  const data = await response.json().catch(() => undefined) as { ok?: boolean; recipient?: PocketResolvedRecipient } | undefined
+  if (!response.ok || !data?.ok || !data.recipient) throw new Error(message(data, 'Pocket user could not be resolved.'))
+  return data.recipient
+}

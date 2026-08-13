@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
-import { ArrowRight, ChevronDown, Mail } from '../components/PocketIcons'
+import { ArrowRight, Mail } from '../components/PocketIcons'
 import { useAccount, useDisconnect } from 'wagmi'
 import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
@@ -10,7 +10,7 @@ import { canUseCircleSolanaEmailWallet } from '../../lib/circleSolanaEmailWallet
 import { CHAIN_META, type ChainKey } from '../../lib/chains'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import { useSolana } from '../../lib/SolanaContext'
-import { cn, formatAmount } from '../../lib/utils'
+import { formatAmount } from '../../lib/utils'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -23,7 +23,6 @@ import {
   PocketPayLinkSubmitPanel,
 } from '../features/move/PocketPayLinkFields'
 import { PocketPayLinkReadyPanel } from '../features/move/PocketPayLinkReadyPanel'
-import { PocketEmailWalletDetails, PocketReceiveMethodPanel } from '../features/move/PocketReceiveMethodPanel'
 import { PocketRecipientAddressFields } from '../features/move/PocketRecipientAddressFields'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketRecipient from '../hooks/usePocketRecipient'
@@ -41,7 +40,7 @@ export default function PocketMoveUsdcPage() {
   const { address: connectedEvm } = useAccount()
   const { disconnect: disconnectEvm } = useDisconnect()
   const { address: connectedSolana, disconnect: disconnectSolana } = useSolana()
-  const [receiveMode, setReceiveMode] = useState<ReceiveMode>('idle')
+  const [receiveMode, setReceiveMode] = useState<ReceiveMode>('email')
   const [collectionId, setCollectionId] = useState('')
   const [recipientPocketId, setRecipientPocketId] = useState('')
   const [requestBusy, setRequestBusy] = useState(false)
@@ -123,32 +122,6 @@ export default function PocketMoveUsdcPage() {
     draft.setMultiChain(enabled)
   }, [authenticated, draft, logout, receiveMode, selectedNet])
 
-  const collapseReceiveMethod = useCallback(() => {
-    setReceiveMode('idle')
-    draft.invalidateResult()
-  }, [draft.invalidateResult])
-
-  const toggleAddressReceive = useCallback(() => {
-    if (receiveMode === 'paste') {
-      collapseReceiveMethod()
-      return
-    }
-    draft.setEvmAddress(manualEvmAddress.current)
-    draft.setSolanaAddress(manualSolanaAddress.current)
-    recipient.selectPaste()
-  }, [collapseReceiveMethod, draft.setEvmAddress, draft.setSolanaAddress, receiveMode, recipient.selectPaste])
-
-  const toggleEmailReceive = useCallback(() => {
-    if (receiveMode === 'email') {
-      collapseReceiveMethod()
-      return
-    }
-    if (selectedNet === 'solana') draft.setSolanaAddress('')
-    else draft.setEvmAddress('')
-    if (authenticated) void recipient.connect()
-    else recipient.deferEmailSignIn()
-  }, [authenticated, collapseReceiveMethod, draft.setEvmAddress, draft.setSolanaAddress, receiveMode, recipient.connect, recipient.deferEmailSignIn, selectedNet])
-
   const selectNav = (tab: PocketNavTab) => {
     const path = tab === 'home'
         ? pocketPathFor({ section: 'home', view: 'overview' })
@@ -201,28 +174,6 @@ export default function PocketMoveUsdcPage() {
     }
   }, [authenticated, draft, getAccessToken, recipientPocketId, selectedNet])
 
-  const emailSignInControl = canReceiveWithEmail && !authenticated ? (
-    <button
-      type="button"
-      onClick={toggleEmailReceive}
-      className={cn(
-        'min-h-[54px] rounded-full border px-4 py-2.5 text-left transition-all active:scale-[0.98]',
-        receiveMode === 'email'
-          ? 'border-gray-950 bg-gray-950 text-white shadow-sm dark:border-white dark:bg-white dark:text-gray-950'
-          : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
-      )}
-    >
-      <span className="flex items-center justify-between gap-2 text-sm font-semibold">
-        <span className="flex min-w-0 items-center gap-2">
-          <Mail className="h-4 w-4 shrink-0 text-blue-500" />
-          <span className="leading-tight">Pocket wallet</span>
-        </span>
-        <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', receiveMode === 'email' && 'rotate-180')} />
-      </span>
-      {receiveMode === 'email' && <span className="mt-1 block pl-6 text-[11px] text-white/60 dark:text-gray-500">Sign in to Circle Pocket</span>}
-    </button>
-  ) : undefined
-
   const amountHelperText = draft.multiChain
     ? 'USDC on Base, Solana, or Arbitrum — payer chooses the chain'
     : `USDC on ${selectedNet === 'arc' ? 'Arc Testnet' : CHAIN_META[selectedNet].label}`
@@ -236,43 +187,9 @@ export default function PocketMoveUsdcPage() {
           <button type="button" className="min-h-10 rounded-full bg-gray-950 px-3 text-xs font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">Receive USDC</button>
           <button type="button" onClick={() => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.bank}?mode=request`)} className="min-h-10 rounded-full px-3 text-xs font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Receive Naira</button>
         </div>
-        {!draft.multiChain && (
-          <PocketReceiveMethodPanel
-            receiveMode={receiveMode}
-            canReceiveWithEmail={canReceiveWithEmail}
-            selectedNetwork={selectedNet}
-            networkLabel={CHAIN_META[selectedNet].label}
-            recipientPending={recipient.pending}
-            recipientError={recipient.error}
-            recipientAddressLabel={recipient.recipientAddressLabel}
-            walletBalance={recipient.walletBalance}
-            walletReady={recipient.walletReady}
-            hideLabel
-            showEmailDetails={false}
-            emailSignInControl={emailSignInControl}
-            onSelectPaste={toggleAddressReceive}
-            onSelectEmail={toggleEmailReceive}
-            onDisconnectEmail={() => void recipient.disconnect()}
-          />
-        )}
-
         {receiveFlowOpen && (
           <div className="space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/[0.035] dark:shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Payment request</p>
-
-            {receiveMode === 'email' && (
-              <PocketEmailWalletDetails
-                selectedNetwork={selectedNet}
-                networkLabel={CHAIN_META[selectedNet].label}
-                recipientPending={recipient.pending}
-                recipientError={recipient.error}
-                recipientAddressLabel={recipient.recipientAddressLabel}
-                walletBalance={recipient.walletBalance}
-                walletReady={recipient.walletReady}
-                onDisconnectEmail={() => void recipient.disconnect()}
-                embedded
-              />
-            )}
 
             {receiveMode === 'email' && !authenticated && (
               <div className="overflow-hidden rounded-[22px] bg-[#F5F5F7]/95 p-2 dark:bg-[#151518]/95">
@@ -290,7 +207,7 @@ export default function PocketMoveUsdcPage() {
                   </span>
                 </PrivyConnectButton>
                 <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-                  Secure access connects your Pocket wallet and keeps payment receipts together.
+                  Secure access keeps your requests and payment receipts together.
                 </p>
               </div>
             )}

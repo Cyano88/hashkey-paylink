@@ -30,7 +30,7 @@ export function hashPayLinkAppOriginForOrigin(origin: string) {
 export const POCKET_BASE_PATH = pocketBasePathForHostname(typeof window === 'undefined' ? '' : window.location.hostname)
 
 export type PocketRouteState =
-  | { section: 'home'; view: 'overview' | 'deposit' | 'swap' }
+  | { section: 'home'; view: 'overview' | 'deposit' | 'send' | 'swap' }
   | { section: 'profile'; view: 'details' | 'verify-name' }
   | { section: 'notifications'; view: 'inbox' }
   | { section: 'move'; view: PocketMoveView }
@@ -42,6 +42,7 @@ export const POCKET_ROUTES = {
   root: '/',
   home: '/home',
   deposit: '/home/deposit',
+  send: '/home/send',
   swap: '/home/swap',
   profile: '/profile',
   verifyName: '/profile/verify-name',
@@ -72,6 +73,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   const path = cleanPathname(pathname)
   if (path === POCKET_ROUTES.home) return { section: 'home', view: 'overview' }
   if (path === POCKET_ROUTES.deposit) return { section: 'home', view: 'deposit' }
+  if (path === POCKET_ROUTES.send) return { section: 'home', view: 'send' }
   if (path === POCKET_ROUTES.swap) return { section: 'home', view: 'swap' }
   if (path === POCKET_ROUTES.profile) return { section: 'profile', view: 'details' }
   if (path === POCKET_ROUTES.verifyName) return { section: 'profile', view: 'verify-name' }
@@ -93,7 +95,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
 }
 
 export function pocketPathFor(state: PocketRouteState) {
-  if (state.section === 'home') return state.view === 'deposit' ? POCKET_ROUTES.deposit : state.view === 'swap' ? POCKET_ROUTES.swap : POCKET_ROUTES.home
+  if (state.section === 'home') return state.view === 'deposit' ? POCKET_ROUTES.deposit : state.view === 'send' ? POCKET_ROUTES.send : state.view === 'swap' ? POCKET_ROUTES.swap : POCKET_ROUTES.home
   if (state.section === 'profile') return state.view === 'verify-name' ? POCKET_ROUTES.verifyName : POCKET_ROUTES.profile
   if (state.section === 'notifications') return POCKET_ROUTES.notifications
   if (state.section === 'move') return POCKET_ROUTES[state.view]

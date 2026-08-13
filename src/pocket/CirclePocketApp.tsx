@@ -10,6 +10,7 @@ import PocketProfilePage from './pages/PocketProfilePage'
 import PocketVerifyNamePage from './pages/PocketVerifyNamePage'
 import PocketDepositPage from './pages/PocketDepositPage'
 import PocketSwapPage from './pages/PocketSwapPage'
+import PocketSendPage from './pages/PocketSendPage'
 import PocketNotificationsPage from './pages/PocketNotificationsPage'
 import PocketMoveBankPage from './pages/PocketMoveBankPage'
 import PocketMovePosPage from './pages/PocketMovePosPage'
@@ -70,6 +71,7 @@ export default function CirclePocketApp() {
   if (!route) return null
 
   if (route.section === 'home' && route.view === 'deposit') return <PocketDepositPage />
+  if (route.section === 'home' && route.view === 'send') return <PocketSendPage />
   if (route.section === 'home' && route.view === 'swap') return <PocketSwapPage />
   if (route.section === 'home') return <PocketHomePage />
   if (route.section === 'profile' && route.view === 'verify-name') return <PocketVerifyNamePage />

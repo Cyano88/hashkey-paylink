@@ -23,7 +23,16 @@ try {
     profiles,
     repository,
     listPayments: async ids => ids.includes(eventId) && identity.current === 'sender' ? [] : [],
+    readWallet: async key => key === 'recipient:base' ? { privyUserId: 'recipient', chain: 'base', circleWalletId: 'wallet-1', circleWalletAddress: '0x2222222222222222222222222222222222222222', circleBlockchain: 'ETH', updatedAt: 1 } : null,
   })
+  const resolved = await call(handler, 'POST', { action: 'resolve-recipient', pocketId: '22222222', network: 'base' })
+  assert.equal(resolved.statusCode, 200, JSON.stringify(resolved.body))
+  assert.equal(resolved.body.recipient.address, '0x2222222222222222222222222222222222222222')
+  assert.equal(resolved.body.recipient.name, 'Pocket 22222222')
+  const self = await call(handler, 'POST', { action: 'resolve-recipient', pocketId: '11111111', network: 'base' })
+  assert.equal(self.statusCode, 400)
+  const unopened = await call(handler, 'POST', { action: 'resolve-recipient', pocketId: '22222222', network: 'solana' })
+  assert.equal(unopened.statusCode, 409)
   const created = await call(handler, 'POST', { action: 'create', recipientPocketId: '22222222', eventId, title: 'Dinner', amount: '5', network: 'base', paymentUrl })
   assert.equal(created.statusCode, 201, JSON.stringify(created.body))
   assert.equal(created.body.request.direction, 'outgoing')
