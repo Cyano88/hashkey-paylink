@@ -37,17 +37,15 @@ Pocket remains a controlled pilot until every required gate below has recorded e
 - Operations: transaction limits, manual-review triggers, prohibited-use escalation and support response targets approved.
 - Pilot: named cohort, transaction matrix, daily reconciliation sign-off and rollback owner recorded.
 
-## Initial pilot limits
+## Money-movement boundaries
 
-Keep provider-specific lower limits when configured. Until compliance review approves otherwise, recommended platform ceilings are:
+- Pocket sends and swaps have no Hash PayLink financial ceiling. Authentication, balance, route liquidity, chain availability, idempotency and required compliance controls still apply.
+- Fixed commercial USDC checkouts reserve capacity per project across a rolling 24-hour window. The default is 500,000 USDC across supported networks; expired unpaid checkouts release their reservation.
+- Paycrest-backed Naira checkout, POS and bank payout amounts are validated against a live quote for the exact requested notional. No static Pocket Naira ceiling substitutes for provider availability.
+- Bills use the current VTpass service minimum/maximum, fixed variation amount and verified meter boundaries. Pocket does not impose a separate generic Bills amount or daily ceiling.
+- A quote is never a completed transaction. Revalidate provider availability when creating the provider order, and never reuse a stale quote to authorize movement.
 
-- Bank payout: NGN 100,000 per transaction; NGN 300,000 per user per day.
-- Bills: existing configured ceilings remain authoritative.
-- POS: NGN 100,000 per transaction; NGN 500,000 per merchant per day during pilot.
-- Wallet send/bridge: 250 USDC per transaction; 500 USDC per user per day during pilot.
-- Any threshold breach returns a clear limit error and creates no provider intent.
-
-These are operational pilot controls, not regulatory approval. Country expansion requires local legal/compliance review before enabling fiat settlement.
+These are product and provider boundaries, not regulatory approval. Country expansion and higher-risk activity still require the applicable legal, compliance and operational review.
 
 ## Incident and recovery sequence
 

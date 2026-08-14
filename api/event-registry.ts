@@ -23,6 +23,8 @@ type PaymentEntry = {
   contextLabel?: string
   settlementType?: string
   amountNgn?:  string
+  brandName?: string
+  brandImageUrl?: string
   ogRootHash?: string
   ogTxHash?:   string
 }
@@ -226,6 +228,8 @@ function receiptHash(entry: PaymentEntry) {
     merchantId: entry.merchantId,
     contextLabel: entry.contextLabel,
     settlementType: entry.settlementType,
+    brandName: entry.brandName,
+    brandImageUrl: entry.brandImageUrl,
   })).digest('hex')
 }
 
@@ -418,6 +422,8 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   let amountNgn = ''
   let intentId = ''
   let hostedCheckoutIdForReceipt = ''
+  let brandName = ''
+  let brandImageUrl = ''
 
   try {
     eventId = cleanString(input?.eventId, 'eventId', MAX_EVENT_ID_LENGTH)
@@ -450,6 +456,8 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
       throw paymentError('This checkout only accepts agentic payment.', 409)
     }
     hostedCheckoutIdForReceipt = checkout.id
+    brandName = checkout.merchantName
+    brandImageUrl = checkout.brandImageUrl || ''
     if (eventId !== `hosted-${checkout.id}`) {
       throw paymentError('Hosted checkout reference does not match.', 400)
     }
@@ -546,6 +554,8 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         contextLabel: contextLabel || entries[manualIndex].contextLabel,
         settlementType: settlementType || entries[manualIndex].settlementType,
         amountNgn: amountNgn || entries[manualIndex].amountNgn,
+        brandName: brandName || entries[manualIndex].brandName,
+        brandImageUrl: brandImageUrl || entries[manualIndex].brandImageUrl,
       }
       registry.set(eventId, entries)
       await persistRegistry()
@@ -585,6 +595,8 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   if (contextLabel) entry.contextLabel = contextLabel
   if (settlementType) entry.settlementType = settlementType
   if (amountNgn) entry.amountNgn = amountNgn
+  if (brandName) entry.brandName = brandName
+  if (brandImageUrl) entry.brandImageUrl = brandImageUrl
   entries.push(entry)
   registry.set(eventId, entries)
   await persistRegistry()

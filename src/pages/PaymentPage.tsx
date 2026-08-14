@@ -4290,7 +4290,7 @@ export default function PaymentPage() {
         )}
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
-        <div className={cn('border-b border-gray-100 bg-gradient-to-br p-4 text-center dark:border-white/10', isNgPosPaycrestOfframp ? 'mt-2' : 'mt-3', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
+        <div className={cn('border-b border-gray-100 bg-gradient-to-br text-center dark:border-white/10', isNgPosPaycrestOfframp ? 'mt-2 p-3' : 'mt-3 p-4', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
           {isWalletManagerFunding && isConfirmed ? (
             <div className="flex min-h-[190px] flex-col items-center justify-center py-2">
               <div className="flex h-24 w-24 items-center justify-center rounded-full border border-emerald-200/80 bg-white shadow-[0_16px_40px_-18px_rgba(16,185,129,0.7)] animate-bounce-in dark:border-emerald-400/20 dark:bg-white/[0.08]">
@@ -4558,7 +4558,7 @@ export default function PaymentPage() {
         </div>
 
         {/* ── Live rates banner ─────────────────────────────────────────── */}
-        {fxShow && fxCurrency && (
+        {fxShow && fxCurrency && !isNgPosPaycrestOfframp && (
           <div className="px-5 pt-3">
             <p className="text-center text-[10px] text-gray-400 leading-relaxed">
               Pricing in {meta.asset} · Shown in {getFxMeta(fxCurrency)?.name ?? fxCurrency} at live market rates
@@ -4567,7 +4567,7 @@ export default function PaymentPage() {
           </div>
         )}
 
-        <div className="space-y-3 p-4">
+        <div className={cn(isNgPosPaycrestOfframp ? 'space-y-2 px-4 pb-4 pt-3' : 'space-y-3 p-4')}>
           {/* Payment details */}
           {isHostedCheckout ? (
             (feeAmount > 0 && effectiveAmt) || showArbitrumRelayCost ? (
@@ -4578,7 +4578,7 @@ export default function PaymentPage() {
                 )}
               </div>
             ) : null
-          ) : <div className="space-y-1.5 text-center">
+          ) : <div className={cn('space-y-1.5 text-center', isNgPosPaycrestOfframp && 'hidden')}>
             <div className="flex items-center justify-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-100">
               <span>
                 {isBankSendPayment
@@ -4634,9 +4634,9 @@ export default function PaymentPage() {
 
           {/* ── Attendee name (event mode) ───────────────────────────────── */}
           {isNgPosPaycrestOfframp && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <div className="flex items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-gray-500 shadow-sm dark:bg-white/[0.07] dark:text-gray-300">
+            <div className="rounded-xl border border-gray-200 bg-gray-50/70 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm dark:bg-white/[0.07] dark:text-gray-300">
                   <Banknote className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -5534,7 +5534,7 @@ export default function PaymentPage() {
         </div>
       )}
 
-      <CheckoutSteps steps={compactCheckoutSteps} className={cn(isNgPosPaycrestOfframp ? 'mt-6' : 'mt-10', 'animate-fade-in')} />
+      <CheckoutSteps steps={compactCheckoutSteps} className={cn(isNgPosPaycrestOfframp ? 'mt-4' : 'mt-10', 'animate-fade-in')} />
       <CheckoutPoweredByLine />
     </div>
   )

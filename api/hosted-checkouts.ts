@@ -695,6 +695,38 @@ function normalizePositiveUsdc(value: unknown) {
   return units > 0n ? formatUnits(units, 6) : ''
 }
 
+const HOSTED_CHECKOUT_WINDOW_MS = 24 * 60 * 60_000
+
+function hostedCheckoutDailyLimitUnits() {
+  const normalized = normalizePositiveUsdc(process.env.HOSTED_CHECKOUT_DAILY_USDC || '500000')
+  if (!normalized) throw new Error('HOSTED_CHECKOUT_DAILY_USDC must be a positive USDC amount.')
+  const [whole, fraction = ''] = normalized.split('.')
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'))
+}
+
+function hostedCheckoutAmountUnits(value: string) {
+  const normalized = normalizePositiveUsdc(value)
+  if (!normalized) return 0n
+  const [whole, fraction = ''] = normalized.split('.')
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'))
+}
+
+function reservedCheckoutUnits(store: CheckoutStore, partnerId: string, nowMs: number) {
+  const windowStart = nowMs - HOSTED_CHECKOUT_WINDOW_MS
+  return Object.values(store.checkouts).reduce((total, record) => {
+    if (record.partnerId !== partnerId || record.flexible || record.settlement?.mode === 'ngn') return total
+    const confirmedAt = Date.parse(record.payment?.confirmedAt ?? '')
+    if (Number.isFinite(confirmedAt)) return confirmedAt >= windowStart ? total + hostedCheckoutAmountUnits(record.payment?.amount ?? record.amount) : total
+    const createdAt = Date.parse(record.createdAt)
+    const expiresAt = Date.parse(record.expiresAt)
+    return createdAt >= windowStart && expiresAt > nowMs ? total + hostedCheckoutAmountUnits(record.amount) : total
+  }, 0n)
+}
+
+function checkoutCapacityError() {
+  return Object.assign(new Error('This project has reached its 24-hour USDC checkout capacity.'), { status: 409, code: 'HOSTED_CHECKOUT_DAILY_CAPACITY' })
+}
+
 function pruneCheckoutStore(store: CheckoutStore, nowMs: number) {
   const retained = Object.values(store.checkouts)
     .filter(record => Date.parse(record.expiresAt) >= nowMs - CHECKOUT_RETENTION_MS)
@@ -1059,6 +1091,13 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         replayed = true
         return safe
       }
+      if (!isNairaProject && !flexible) {
+        const requestedUnits = hostedCheckoutAmountUnits(amount)
+        const dailyLimitUnits = hostedCheckoutDailyLimitUnits()
+        if (requestedUnits > dailyLimitUnits || reservedCheckoutUnits(safe, policy.partnerId, now.getTime()) + requestedUnits > dailyLimitUnits) {
+          throw checkoutCapacityError()
+        }
+      }
       if (!createdId) createdId = dependencies.createId()
       const routedNetwork = nairaOrder ? 'base' : network
       const routedRecipient = nairaOrder?.receiveAddress ?? recipient
@@ -1136,6 +1175,8 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     })
     } catch (error) {
       console.error('[hosted-checkouts] request failed:', error instanceof Error ? error.message : String(error))
+      const failure = error as Error & { status?: number; code?: string }
+      if (failure.status && failure.status < 500) return res.status(failure.status).json({ ok: false, error: failure.message, code: failure.code })
       return res.status(503).json({ ok: false, error: 'Hosted checkout is temporarily unavailable.' })
     }
   }

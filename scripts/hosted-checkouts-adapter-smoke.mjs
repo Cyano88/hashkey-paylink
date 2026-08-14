@@ -87,6 +87,30 @@ assert.equal((await request(handler, 'POST', { body: { ...valid, checkoutMode: '
 assert.equal((await request(handler, 'POST', { body: { ...valid, checkoutMode: 'agentic' }, headers: { ...headers, 'idempotency-key': 'partner:agentic:no-type' } })).statusCode, 400)
 assert.equal((await request(handler, 'POST', { body: { ...valid, agenticType: 'creator_earnings' }, headers: { ...headers, 'idempotency-key': 'partner:human:agent-type' } })).statusCode, 400)
 
+let capacityStore
+let capacityNow = new Date('2026-07-19T12:00:00.000Z')
+let capacityId = 0
+const capacityHandler = createHostedCheckoutsHandler({
+  ...dependencies,
+  read: async () => capacityStore,
+  mutate: async (_key, update) => {
+    capacityStore = update(capacityStore)
+    return capacityStore
+  },
+  createId: () => `chk_capacity${String(++capacityId).padStart(10, '0')}`,
+  now: () => capacityNow,
+})
+const capacityFirst = await request(capacityHandler, 'POST', { body: { ...valid, amount: '300000', expiresInMinutes: 5 }, headers: { ...headers, 'idempotency-key': 'partner:capacity:000001' } })
+assert.equal(capacityFirst.statusCode, 201)
+const capacitySecond = await request(capacityHandler, 'POST', { body: { ...valid, amount: '200000', expiresInMinutes: 5 }, headers: { ...headers, 'idempotency-key': 'partner:capacity:000002' } })
+assert.equal(capacitySecond.statusCode, 201)
+const capacityExceeded = await request(capacityHandler, 'POST', { body: { ...valid, amount: '0.000001', expiresInMinutes: 5 }, headers: { ...headers, 'idempotency-key': 'partner:capacity:000003' } })
+assert.equal(capacityExceeded.statusCode, 409)
+assert.equal(capacityExceeded.body.code, 'HOSTED_CHECKOUT_DAILY_CAPACITY')
+capacityNow = new Date(capacityNow.getTime() + 6 * 60_000)
+const capacityReleased = await request(capacityHandler, 'POST', { body: { ...valid, amount: '500000', expiresInMinutes: 5 }, headers: { ...headers, 'idempotency-key': 'partner:capacity:000004' } })
+assert.equal(capacityReleased.statusCode, 201)
+
 store = {
   checkouts: {
     chk_stalecheckout123: {

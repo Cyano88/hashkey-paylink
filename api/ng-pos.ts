@@ -13,10 +13,12 @@ import {
   getPaycrestPosOrder,
   getPaycrestOnrampRate,
   isPaycrestConfigured,
+  isPaycrestAmountUnavailable,
   listPaycrestInstitutions,
   listPaycrestPosOrdersForMerchants,
   markPaycrestPosPayment,
   refreshPaycrestOrderStatus,
+  resolvePaycrestOfframpAvailability,
   verifyPaycrestAccount,
 } from './paycrest-pos.js'
 import { reconcilePaycrestOrderPayment, registerPaycrestBankSendReceipt, schedulePaycrestOrderReconciliation } from './paycrest-reconcile.js'
@@ -30,7 +32,6 @@ const MAX_TEXT = 90
 const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
 const HAS_DURABLE_STORE = hasRenderDurableStore()
 const INTERNAL_EVM_RECIPIENT = (process.env.PAYCREST_POS_EVM_ADDRESS ?? process.env.TREASURY_ADDRESS ?? '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753').trim()
-const PAYCREST_MIN_USDC = 0.5
 
 type PayoutPreference = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
 type SettlementType = 'INSTANT_FIAT' | 'KEEP_CRYPTO'
@@ -320,6 +321,36 @@ async function getNgnRate() {
     source: quote.source,
     cachedAt: quote.quotedAt,
     stale: Boolean(quote.stale),
+  }
+}
+
+async function resolveNgnPayoutQuote(amount: number, amountCurrency: 'NGN' | 'USDC') {
+  let amountUsdc = amountCurrency === 'USDC' ? amount : amount / (await getNgnRate()).rate
+  let rate = 0
+  for (let attempt = 0; attempt < (amountCurrency === 'NGN' ? 2 : 1); attempt += 1) {
+    const requested = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
+    let availability: Awaited<ReturnType<typeof resolvePaycrestOfframpAvailability>>
+    try {
+      availability = await resolvePaycrestOfframpAvailability({ amount: requested, network: 'base', token: 'USDC', fiat: 'NGN' })
+    } catch (reason) {
+      if (isPaycrestAmountUnavailable(reason)) throw ngPosRequestError(503, 'Bank payout is temporarily unavailable. Your money has not moved.')
+      throw reason
+    }
+    if (!availability.exact) {
+      const availableNgn = Math.floor(Number(availability.availableUsdc) * availability.rate * 100) / 100
+      throw ngPosRequestError(409, `Up to NGN ${availableNgn.toLocaleString('en-NG', { maximumFractionDigits: 2 })} is available now. Enter this amount or less.`)
+    }
+    rate = availability.rate
+    amountUsdc = amountCurrency === 'USDC' ? amount : amount / rate
+  }
+  if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(amountUsdc) || amountUsdc <= 0) {
+    throw ngPosRequestError(503, 'Bank payout is temporarily unavailable. Your money has not moved.')
+  }
+  return {
+    rate,
+    source: 'paycrest',
+    amountNgn: amountCurrency === 'NGN' ? amount : amount * rate,
+    amountUsdc,
   }
 }
 
@@ -810,14 +841,10 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   let rateText = ''
   let source = 'paycrest'
   if (!flexibleAmount) {
-    let rate: number
-    ;({ rate, source } = await getNgnRate())
     const amountNgn = amount as number
-    const amountUsdc = amountNgn / rate
-    if (amountUsdc < PAYCREST_MIN_USDC) {
-      const minimumNgn = Math.ceil(rate * PAYCREST_MIN_USDC)
-      throw ngPosRequestError(400, `Minimum Naira payout is about NGN ${minimumNgn.toLocaleString('en-NG')}.`)
-    }
+    const payoutQuote = await resolveNgnPayoutQuote(amountNgn, 'NGN')
+    const { rate, amountUsdc } = payoutQuote
+    source = payoutQuote.source
     amountNgnText = amountNgn.toFixed(2)
     amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
     rateText = rate.toFixed(2)
@@ -1034,24 +1061,20 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'EVM payment is not configured for this merchant.' })
       }
 
-      const { rate, source } = await getNgnRate()
+      const payoutQuote = settlementType === 'INSTANT_FIAT'
+        ? await resolveNgnPayoutQuote(amount, amountCurrency)
+        : { ...(await getNgnRate()), amountNgn: amountCurrency === 'NGN' ? amount : 0, amountUsdc: amountCurrency === 'USDC' ? amount : 0 }
+      const { rate, source } = payoutQuote
       const amountNgn = amountCurrency === 'NGN' ? amount : amount * rate
       const amountUsdc = amountCurrency === 'USDC' ? amount : amount / rate
-      if (settlementType === 'INSTANT_FIAT' && amountUsdc < PAYCREST_MIN_USDC) {
-        const minimumNgn = Math.ceil(rate * PAYCREST_MIN_USDC)
-        return res.status(400).json({
-          ok: false,
-          error: `Minimum Naira payout is about NGN ${minimumNgn.toLocaleString('en-NG')}.`,
-        })
-      }
       const amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
       const quoteId = randomBytes(10).toString('base64url')
       const intentId = settlementType === 'INSTANT_FIAT' ? randomBytes(12).toString('base64url') : ''
+      const intentSource = merchant.source === 'bank-withdraw' ? 'bank-withdraw' : merchant.source === 'bank-receive' ? 'bank-receive' : 'pos'
       let fiatExecutionReady = true
       let paymentExecutionId = ''
       if (settlementType === 'INSTANT_FIAT') {
         if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for naira settlement yet.' })
-        const intentSource = merchant.source === 'bank-withdraw' ? 'bank-withdraw' : merchant.source === 'bank-receive' ? 'bank-receive' : 'pos'
         store.intents ??= {}
         store.intents[intentId] = {
           intent_id: intentId,
@@ -1172,9 +1195,6 @@ export default async function handler(req: Request, res: Response) {
       const intent = store.intents?.[intentId]
       if (!intent) return res.status(404).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
       if (!existing && new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
-      if (Number(intent.estimated_amount_usdc) < PAYCREST_MIN_USDC) {
-        return res.status(400).json({ ok: false, error: 'Minimum Paycrest payout is 0.50 USDC. Enter a higher Naira amount.' })
-      }
       const merchant = store.merchants[intent.merchant_id]
       if (!merchant?.encrypted_bank_details) return res.status(404).json({ ok: false, error: 'Merchant bank payout is not available.' })
       const bank = decryptBankDetails(merchant.encrypted_bank_details)
@@ -1293,7 +1313,8 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'Unknown action.' })
   } catch (err) {
     const error = err as Error & { status?: number }
-    const message = error.message || 'Nigerian POS request failed'
-    return res.status(error.status ?? 500).json({ ok: false, error: message.slice(0, 220) })
+    const providerUnavailable = isPaycrestAmountUnavailable(error)
+    const message = providerUnavailable ? 'Bank payout is temporarily unavailable. Your money has not moved.' : error.message || 'Nigerian POS request failed'
+    return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220) })
   }
 }

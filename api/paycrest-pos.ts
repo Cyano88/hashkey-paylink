@@ -70,6 +70,19 @@ export type PaycrestInstitution = {
   type?: string
 }
 
+export class PaycrestRequestError extends Error {
+  constructor(message: string, public readonly status: number, public readonly code = 'PAYCREST_REQUEST_FAILED') {
+    super(message)
+    this.name = 'PaycrestRequestError'
+  }
+}
+
+export function isPaycrestAmountUnavailable(reason: unknown) {
+  if (!(reason instanceof PaycrestRequestError)) return false
+  return reason.status === 404
+    || ((reason.status === 400 || reason.status === 503) && /amount|limit|liquidity|no provider|provider.*available/i.test(reason.message))
+}
+
 function unwrapData<T = any>(body: any): T {
   if (body && typeof body === 'object' && 'data' in body && body.data != null) return body.data as T
   return body as T
@@ -136,7 +149,7 @@ async function paycrestFetch<T>(path: string, init: RequestInit = {}): Promise<T
       ? (body as any).errors.map((item: any) => firstText(item?.message, item?.msg, item)).filter(Boolean).join('; ')
       : firstText((body as any).details, (body as any).detail)
     const message = firstText(validation, (body as any).error, (body as any).message, 'Paycrest request failed.')
-    throw new Error(message)
+    throw new PaycrestRequestError(message, response.status, response.status === 404 || response.status === 503 ? 'PAYCREST_ROUTE_UNAVAILABLE' : 'PAYCREST_REQUEST_FAILED')
   }
   return unwrapData<T>(body)
 }
@@ -217,6 +230,85 @@ export async function getPaycrestOfframpRate(input: { network?: string; token?: 
   const rate = Number(firstText(data?.sell?.rate, data?.rate, data?.sellRate, data?.sell_rate))
   if (!Number.isFinite(rate) || rate <= 0) throw new Error('Paycrest did not return a valid NGN rate.')
   return rate
+}
+
+export type PaycrestOfframpAvailability = {
+  requestedUsdc: string
+  availableUsdc: string
+  rate: number
+  exact: boolean
+}
+
+function usdcUnits(value: string) {
+  const normalized = decimalText(value)
+  if (!normalized) return 0n
+  const [whole, fraction = ''] = normalized.split('.')
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0').slice(0, 6))
+}
+
+function unitsToUsdc(value: bigint) {
+  const whole = value / 1_000_000n
+  const fraction = (value % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '')
+  return fraction ? `${whole}.${fraction}` : whole.toString()
+}
+
+export async function resolvePaycrestOfframpAvailability(input: {
+  amount: string
+  network?: string
+  token?: string
+  fiat?: string
+  maxProbes?: number
+  quote?: typeof getPaycrestOfframpRate
+}): Promise<PaycrestOfframpAvailability> {
+  const requestedUnits = usdcUnits(input.amount)
+  if (requestedUnits <= 0n) throw new Error('Enter a valid USDC payout amount.')
+  const requestedUsdc = unitsToUsdc(requestedUnits)
+  const quote = input.quote ?? getPaycrestOfframpRate
+  const quoteAmount = (amount: string) => quote({ network: input.network, token: input.token, fiat: input.fiat, amount })
+  try {
+    return { requestedUsdc, availableUsdc: requestedUsdc, rate: await quoteAmount(requestedUsdc), exact: true }
+  } catch (reason) {
+    if (!isPaycrestAmountUnavailable(reason)) throw reason
+  }
+
+  const minimumUnits = 500_000n
+  if (requestedUnits <= minimumUnits) throw new PaycrestRequestError('No provider is available for this payout amount.', 404, 'PAYCREST_ROUTE_UNAVAILABLE')
+  let unavailableUnits = requestedUnits
+  let availableUnits = 0n
+  let availableRate = 0
+  let probes = 0
+  const maxProbes = Math.max(3, Math.min(10, input.maxProbes ?? 8))
+
+  while (probes < maxProbes && unavailableUnits > minimumUnits && availableUnits === 0n) {
+    const candidateUnits = unavailableUnits / 2n < minimumUnits ? minimumUnits : unavailableUnits / 2n
+    probes += 1
+    try {
+      availableRate = await quoteAmount(unitsToUsdc(candidateUnits))
+      availableUnits = candidateUnits
+    } catch (reason) {
+      if (!isPaycrestAmountUnavailable(reason)) throw reason
+      unavailableUnits = candidateUnits
+      if (candidateUnits === minimumUnits) break
+    }
+  }
+  if (availableUnits === 0n) throw new PaycrestRequestError('No provider is available for this payout amount.', 404, 'PAYCREST_ROUTE_UNAVAILABLE')
+
+  while (probes < maxProbes && unavailableUnits - availableUnits > 1_000_000n) {
+    const candidateUnits = availableUnits + (unavailableUnits - availableUnits) / 2n
+    probes += 1
+    try {
+      availableRate = await quoteAmount(unitsToUsdc(candidateUnits))
+      availableUnits = candidateUnits
+    } catch (reason) {
+      if (!isPaycrestAmountUnavailable(reason)) throw reason
+      unavailableUnits = candidateUnits
+    }
+  }
+
+  const conservativeUnits = availableUnits >= 1_000_000n ? (availableUnits / 1_000_000n) * 1_000_000n : availableUnits
+  const availableUsdc = unitsToUsdc(conservativeUnits)
+  if (conservativeUnits !== availableUnits) availableRate = await quoteAmount(availableUsdc)
+  return { requestedUsdc, availableUsdc, rate: availableRate, exact: false }
 }
 
 export async function getPaycrestOnrampRate(input: { network?: string; token?: string; fiat?: string; amount?: string } = {}) {

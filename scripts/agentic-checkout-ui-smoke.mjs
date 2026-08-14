@@ -59,6 +59,6 @@ assert.match(layoutSource, /const isCheckoutPage = pathname === '\/pay' \|\| isA
 assert.match(layoutSource, /isPocketLandingPage \|\| isPocketImmersivePage \|\| isCheckoutPage/)
 assert.match(layoutSource, /agentHashComposerFocused \|\| isPocketAppPage \|\| isCheckoutPage/)
 assert.match(layoutSource, /className=\{isPocketLandingPage \|\| isPocketImmersivePage \|\| isCheckoutPage[\s\S]{0,40}\? 'hidden'/)
-assert.match(layoutSource, /agentHashComposerFocused \|\| isPocketAppPage \|\| isCheckoutPage \? 'hidden' : 'flex'/)
+assert.match(layoutSource, /agentHashComposerFocused \|\| isPocketAppPage \|\| isCheckoutPage \|\| isNgPosPage \? 'hidden' : 'flex'/)
 
 console.log('Agent checkout UI source smoke checks passed.')

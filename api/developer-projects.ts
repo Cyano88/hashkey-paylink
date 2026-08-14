@@ -6,7 +6,7 @@ import type { Request, Response } from 'express'
 import { PrivyClient, type User } from '@privy-io/server-auth'
 import { getAddress, isAddress } from 'viem'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
-import { createPaycrestOfframpOrder, getPaycrestOfframpRate, isPaycrestConfigured, listPaycrestInstitutions, verifyPaycrestAccount, type PaycrestInstitution } from './paycrest-pos.js'
+import { createPaycrestOfframpOrder, isPaycrestConfigured, listPaycrestInstitutions, resolvePaycrestOfframpAvailability, verifyPaycrestAccount, type PaycrestInstitution } from './paycrest-pos.js'
 
 const STORE_KEY = (process.env.DEVELOPER_PROJECT_STORE_KEY ?? 'hashpaylink:developer-projects:v1').trim()
 const NETWORKS = ['base', 'arbitrum', 'arc'] as const
@@ -997,8 +997,12 @@ export async function prepareDeveloperNairaCheckout(policy: DeveloperCheckoutPol
   const settlement = policy.nairaSettlement
   const amount = Number(requestedUsdc)
   if (policy.settlementMode !== 'ngn' || !settlement) throw new Error('Naira settlement is not configured for this project.')
-  if (!Number.isFinite(amount) || amount < 0.5 || amount > 1_000_000) throw new Error('Naira checkouts must be between 0.50 and 1,000,000 USDC.')
-  const rate = await getPaycrestOfframpRate({ network: 'base', token: 'USDC', fiat: 'NGN', amount: requestedUsdc })
+  if (!Number.isFinite(amount) || amount <= 0) throw Object.assign(new Error('Enter a positive USDC checkout amount.'), { status: 400 })
+  const availability = await resolvePaycrestOfframpAvailability({ amount: requestedUsdc, network: 'base', token: 'USDC', fiat: 'NGN' })
+  if (!availability.exact) {
+    throw Object.assign(new Error(`Up to ${availability.availableUsdc} USDC is available now. Enter this amount or less.`), { status: 409, code: 'PAYCREST_AMOUNT_UNAVAILABLE' })
+  }
+  const rate = availability.rate
   const amountNgn = (amount * rate).toFixed(2)
   const order = await createPaycrestOfframpOrder({
     intentId: checkoutId,

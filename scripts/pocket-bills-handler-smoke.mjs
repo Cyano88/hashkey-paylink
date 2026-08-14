@@ -281,6 +281,32 @@ assert.equal(showmaxVerify.body.error.reason, 'BILLS_VERIFY_NOT_REQUIRED')
 const verifiedMeter = await request(verifyHandler, { category: 'electricity', service_id: 'ikeja-electric', billers_code: '1111111111111', variation_code: 'prepaid' })
 assert.equal(verifiedMeter.body.data.verification.customerName, 'TEST CUSTOMER')
 
+const airtimeBelowProviderMinimum = await request(quoteHandler, {
+  service_id: 'mtn', phone: '08011111111', amount_ngn: '49', payer_wallet: '0x2222222222222222222222222222222222222222',
+}, { idempotencyKey: 'bill:provider:min:airtime' })
+assert.equal(airtimeBelowProviderMinimum.statusCode, 400)
+assert.equal(airtimeBelowProviderMinimum.body.error.reason, 'BILLS_AMOUNT_BELOW_PROVIDER_LIMIT')
+assert.match(airtimeBelowProviderMinimum.body.error.message, /NGN 50/)
+
+const airtimeAboveProviderMaximum = await request(quoteHandler, {
+  service_id: 'mtn', phone: '08011111111', amount_ngn: '5001', payer_wallet: '0x2222222222222222222222222222222222222222',
+}, { idempotencyKey: 'bill:provider:max:airtime' })
+assert.equal(airtimeAboveProviderMaximum.statusCode, 400)
+assert.equal(airtimeAboveProviderMaximum.body.error.reason, 'BILLS_AMOUNT_ABOVE_PROVIDER_LIMIT')
+assert.match(airtimeAboveProviderMaximum.body.error.message, /NGN 5000/)
+
+const meterBelowProviderMinimum = await request(quoteHandler, {
+  category: 'electricity', service_id: 'ikeja-electric', variation_code: 'prepaid', phone: '1111111111111', contact_phone: '08011111111', amount_ngn: '99', payer_wallet: '0x2222222222222222222222222222222222222222',
+}, { idempotencyKey: 'bill:provider:min:meter' })
+assert.equal(meterBelowProviderMinimum.statusCode, 400)
+assert.equal(meterBelowProviderMinimum.body.error.reason, 'BILLS_AMOUNT_BELOW_PROVIDER_LIMIT')
+
+const meterAboveProviderMaximum = await request(quoteHandler, {
+  category: 'electricity', service_id: 'ikeja-electric', variation_code: 'prepaid', phone: '1111111111111', contact_phone: '08011111111', amount_ngn: '1001', payer_wallet: '0x2222222222222222222222222222222222222222',
+}, { idempotencyKey: 'bill:provider:max:meter' })
+assert.equal(meterAboveProviderMaximum.statusCode, 400)
+assert.equal(meterAboveProviderMaximum.body.error.reason, 'BILLS_AMOUNT_ABOVE_PROVIDER_LIMIT')
+
 const badDataPlan = await createDataQuote('bill:handler:data:bad-plan', 'invented-plan')
 assert.equal(badDataPlan.statusCode, 400)
 assert.equal(badDataPlan.body.error.field, 'variationCode')

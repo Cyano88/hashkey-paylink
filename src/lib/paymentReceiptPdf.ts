@@ -34,6 +34,9 @@ export type PaylinkReceipt = {
   escrowAddress?: string
   releasedAmount?: string
   returnedAmount?: string
+  brandName?: string
+  brandImageUrl?: string
+  brandKind?: 'pocket' | 'partner' | 'hashpaylink'
   proof?: {
     receiptHash?: string
     ogRootHash?: string
@@ -77,6 +80,9 @@ export type X402ReceiptLike = {
   settlementType?: string
   detail?: string
   createdAt?: number
+  brandName?: string
+  brandImageUrl?: string
+  brandKind?: 'pocket' | 'partner' | 'hashpaylink'
   proof?: Record<string, unknown>
   og?: {
     rootHash?: string
@@ -111,6 +117,9 @@ export function createX402PaylinkReceipt(receipt: X402ReceiptLike, activityId: s
     source,
     merchantId: creator,
     settlementType,
+    brandName: receipt.brandName,
+    brandImageUrl: receipt.brandImageUrl,
+    brandKind: receipt.brandKind,
     proof: {
       receiptHash: proofHash,
       ogRootHash: receipt.og?.rootHash ? String(receipt.og.rootHash) : String(proof.ogRootHash ?? ''),
@@ -167,7 +176,28 @@ export function paymentReceiptFileName(receipt?: PaylinkReceipt) {
     : receipt?.source === 'polymarket-funding' ? 'polymarket-funding'
     : receipt?.source === 'x402' ? 'hashpaystream'
     : 'paylink'
-  return `hashpaylink-${prefix}-receipt-${receipt?.receiptId.slice(0, 10) || 'receipt'}.pdf`
+  const brand = receipt?.brandKind === 'pocket' ? 'pocket' : 'hashpaylink'
+  return `${brand}-${prefix}-receipt-${receipt?.receiptId.slice(0, 10) || 'receipt'}.pdf`
+}
+
+export function paymentReceiptImageFileName(receipt?: PaylinkReceipt) {
+  return paymentReceiptFileName(receipt).replace(/\.pdf$/i, '.jpg')
+}
+
+export type PaymentReceiptBrand = {
+  kind: 'pocket' | 'partner' | 'hashpaylink'
+  name: string
+  imageUrl: string
+}
+
+export function paymentReceiptBrand(receipt?: PaylinkReceipt): PaymentReceiptBrand {
+  if (receipt?.brandKind === 'pocket' || receipt?.brandName === 'Pocket') {
+    return { kind: 'pocket', name: 'Pocket', imageUrl: '' }
+  }
+  if (receipt?.brandName) {
+    return { kind: 'partner', name: receipt.brandName, imageUrl: receipt.brandImageUrl || '' }
+  }
+  return { kind: 'hashpaylink', name: 'Hash PayLink', imageUrl: '/hash-logo-transparent.png' }
 }
 
 function fmtTime(value?: number) {
@@ -282,7 +312,9 @@ export async function createPaymentReceiptImage(receipt: PaylinkReceipt) {
   if (!ctx) return ''
   ctx.scale(scale, scale)
 
-  const logo = await loadImage('/hash-logo-transparent.png')
+  await document.fonts?.load('700 16px "Plus Jakarta Sans"').catch(() => undefined)
+  const brand = paymentReceiptBrand(receipt)
+  const logo = brand.imageUrl ? await loadImage(brand.imageUrl) : null
   drawReceiptCanvas(ctx, receipt, width, height, logo)
   return new Promise<string>((resolve) => canvas.toBlob(blob => {
     if (!blob) return resolve('')
@@ -302,6 +334,7 @@ export async function createPaymentReceiptPdf(receipt: PaylinkReceipt) {
 function loadImage(src: string) {
   return new Promise<HTMLImageElement | null>((resolve) => {
     const img = new Image()
+    if (/^https?:\/\//i.test(src)) img.crossOrigin = 'anonymous'
     img.onload = () => resolve(img)
     img.onerror = () => resolve(null)
     img.src = src
@@ -316,79 +349,103 @@ function drawReceiptCanvas(
   logo: HTMLImageElement | null,
 ) {
   const view = paymentReceiptView(receipt)
-  ctx.fillStyle = '#111111'
+  const brand = paymentReceiptBrand(receipt)
+  const sans = '"Plus Jakarta Sans", Inter, Arial, sans-serif'
+  ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
-  roundRect(ctx, 34, 32, width - 68, height - 64, 28, '#000000')
 
   if (logo) {
-    ctx.drawImage(logo, 62, 58, 34, 34)
+    drawContainedImage(ctx, logo, 52, 48, 38, 38)
+  } else if (brand.kind === 'pocket') {
+    drawPocketMark(ctx, 52, 48, 38)
   } else {
-    roundRect(ctx, 62, 58, 34, 34, 10, '#ffffff')
-    ctx.fillStyle = '#000000'
-    ctx.font = '800 11px Arial'
-    ctx.fillText('HP', 72, 80)
+    roundRect(ctx, 52, 48, 38, 38, 12, '#111827')
+    ctx.fillStyle = '#ffffff'
+    ctx.font = `700 11px ${sans}`
+    ctx.fillText(brand.name.slice(0, 2).toUpperCase(), 62, 72)
   }
 
-  ctx.fillStyle = '#ffffff'
-  ctx.font = '800 17px Arial'
-  ctx.fillText('Hash_PayLink', 108, 80)
-  drawBadge(ctx, view.badge.toUpperCase(), '#171717', '#f5f5f5', 418, 62)
+  ctx.fillStyle = '#111827'
+  ctx.font = `700 17px ${sans}`
+  ctx.fillText(clipCanvasText(ctx, brand.name, 320), 104, 72)
+  drawBadge(ctx, view.badge.toUpperCase(), '#f3f4f6', '#374151', 438, 54, sans)
 
-  ctx.fillStyle = '#ffffff'
-  ctx.font = '800 36px Arial'
-  drawText(ctx, view.amount, 62, 158, 488, 42)
-  ctx.fillStyle = '#8c8c8c'
-  ctx.font = '600 12px Arial'
-  ctx.fillText(view.timestamp, 62, 184)
-
-  ctx.strokeStyle = '#2f2f2f'
-  ctx.setLineDash([2, 6])
+  ctx.fillStyle = '#16a34a'
   ctx.beginPath()
-  ctx.moveTo(62, 218)
-  ctx.lineTo(550, 218)
+  ctx.arc(72, 151, 20, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 3
+  ctx.beginPath()
+  ctx.moveTo(63, 151)
+  ctx.lineTo(69, 157)
+  ctx.lineTo(81, 144)
   ctx.stroke()
 
-  let y = 254
+  ctx.fillStyle = '#111827'
+  ctx.font = `700 15px ${sans}`
+  ctx.fillText('Payment successful', 104, 148)
+  ctx.fillStyle = '#6b7280'
+  ctx.font = `500 11px ${sans}`
+  ctx.fillText(view.timestamp, 104, 168)
+
+  ctx.fillStyle = '#111827'
+  ctx.font = `700 36px ${sans}`
+  drawText(ctx, view.amount, 52, 238, 508, 42)
+
+  ctx.strokeStyle = '#e5e7eb'
+  ctx.setLineDash([])
+  ctx.beginPath()
+  ctx.moveTo(52, 278)
+  ctx.lineTo(560, 278)
+  ctx.stroke()
+
+  let y = 320
   for (const row of view.rows) {
-    ctx.fillStyle = '#8c8c8c'
-    ctx.font = '600 11px Arial'
-    ctx.fillText(row.label.toUpperCase(), 62, y)
-    ctx.fillStyle = '#ffffff'
-    ctx.font = row.mono ? '700 12px Courier New' : '700 13px Arial'
-    drawRightText(ctx, shortPdfValue(row.value || '-'), 550, y, 320)
-    ctx.strokeStyle = '#2f2f2f'
-    ctx.setLineDash([2, 6])
-    ctx.beginPath()
-    ctx.moveTo(62, y + 24)
-    ctx.lineTo(550, y + 24)
-    ctx.stroke()
-    y += 57
+    ctx.fillStyle = '#9ca3af'
+    ctx.font = `600 10px ${sans}`
+    ctx.fillText(row.label.toUpperCase(), 52, y)
+    ctx.fillStyle = '#1f2937'
+    ctx.font = row.mono ? '600 11px "Courier New", monospace' : `600 12px ${sans}`
+    drawRightText(ctx, shortPdfValue(row.value || '-'), 560, y, 326)
+    y += 48
   }
 
-  ctx.fillStyle = '#8c8c8c'
-  ctx.font = '600 11px Arial'
-  ctx.fillText('REFERENCE ID', 62, y + 2)
-  ctx.fillStyle = '#ffffff'
-  ctx.font = '700 12px Courier New'
-  drawRightText(ctx, shortPdfValue(view.reference), 550, y + 2, 320)
-
-  if (view.variant === 'bills') {
-    ctx.fillStyle = '#111111'
-    for (let x = 34; x < width - 34; x += 18) {
-      ctx.beginPath()
-      ctx.moveTo(x, height - 32)
-      ctx.lineTo(x + 9, height - 43)
-      ctx.lineTo(x + 18, height - 32)
-      ctx.closePath()
-      ctx.fill()
-    }
-  }
+  ctx.strokeStyle = '#e5e7eb'
+  ctx.beginPath()
+  ctx.moveTo(52, y + 2)
+  ctx.lineTo(560, y + 2)
+  ctx.stroke()
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = `600 10px ${sans}`
+  ctx.fillText('REFERENCE ID', 52, y + 36)
+  ctx.fillStyle = '#374151'
+  ctx.font = '600 11px "Courier New", monospace'
+  drawRightText(ctx, shortPdfValue(view.reference), 560, y + 36, 326)
 
   ctx.setLineDash([])
-  ctx.fillStyle = '#707070'
-  ctx.font = '700 10px Arial'
-  const footer = 'VERIFIED PAYMENT RECORD · HASH PAYLINK'
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = `600 10px ${sans}`
+  const footer = 'Powered by Hash PayLink'
   ctx.fillText(footer, (width - ctx.measureText(footer).width) / 2, 746)
+}
+
+function drawContainedImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, width: number, height: number) {
+  const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight)
+  const drawWidth = image.naturalWidth * scale
+  const drawHeight = image.naturalHeight * scale
+  ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight)
+}
+
+function drawPocketMark(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
+  roundRect(ctx, x, y, size, size, 12, '#111827')
+  ctx.fillStyle = '#ffffff'
+  const inset = size * 0.24
+  const top = y + inset
+  const height = size - inset * 2
+  ctx.fillRect(x + inset, top, size * 0.33, height)
+  ctx.fillRect(x + size * 0.64, top, size * 0.06, height)
+  ctx.fillRect(x + size * 0.76, top, size * 0.1, height)
 }
 
 function shortPdfValue(value: string) {
@@ -414,10 +471,10 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.fill()
 }
 
-function drawBadge(ctx: CanvasRenderingContext2D, text: string, bg: string, fg: string, x: number, y: number) {
+function drawBadge(ctx: CanvasRenderingContext2D, text: string, bg: string, fg: string, x: number, y: number, sans: string) {
   roundRect(ctx, x, y, 108, 26, 13, bg)
   ctx.fillStyle = fg
-  ctx.font = '800 9px Arial'
+  ctx.font = `700 9px ${sans}`
   ctx.fillText(clipCanvasText(ctx, text, 88), x + 10, y + 17)
 }
 

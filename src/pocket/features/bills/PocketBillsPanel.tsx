@@ -8,7 +8,7 @@ import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
 import { POCKET_BASE_PATH } from '../../lib/pocketRoutes'
 import PocketDataBundlePicker from './PocketDataBundlePicker'
 import { Link } from 'react-router-dom'
-import UnifiedReceipt from '../../../components/UnifiedReceipt'
+import PocketPaymentSuccess from '../../components/PocketPaymentSuccess'
 import type { PaylinkReceipt } from '../../../lib/paymentReceiptPdf'
 import PocketMobileNumberInput from './PocketMobileNumberInput'
 import PocketResolvedNameRow from '../../components/PocketResolvedNameRow'
@@ -111,6 +111,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     targetValue: bills.intent.phone,
     referenceId: bills.intent.requestId,
     billToken: bills.intent.category === 'electricity' ? bills.intent.purchasedCode : undefined,
+    brandName: 'Pocket',
+    brandKind: 'pocket',
   } : null
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
   const paymentRouteBusy = paymentRouting?.status === 'checking' || paymentRouting?.status === 'moving' || paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling'
@@ -279,7 +281,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {showPayment && bills.intent && (
               <>
                 {bills.status === 'successful' && billReceipt ? (
-                  <UnifiedReceipt receipt={billReceipt} />
+                  null
                 ) : (
                   <>
                     {bills.status === 'ready' && (
@@ -336,6 +338,9 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             })()}
           </div>
         </>
+      )}
+      {bills.status === 'successful' && billReceipt && (
+        <PocketPaymentSuccess receipt={billReceipt} title={billName} onDone={bills.resetResult} />
       )}
     </div>
   )

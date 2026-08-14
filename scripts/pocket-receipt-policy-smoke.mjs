@@ -5,7 +5,7 @@ import {
   pocketReceiptAvailability,
   pocketReceiptKind,
 } from '../src/pocket/lib/pocketReceipt.ts'
-import { paymentReceiptView } from '../src/lib/paymentReceiptPdf.ts'
+import { paymentReceiptBrand, paymentReceiptFileName, paymentReceiptView } from '../src/lib/paymentReceiptPdf.ts'
 import { evmLogBlockRanges, evmTransferTouchesTopic, solanaUsdcTransferParties } from '../api/pocket/wallet-chain-activity.ts'
 
 const base = {
@@ -22,6 +22,8 @@ const incoming = { ...base, source: 'wallet-deposit', settlementType: 'wallet_tr
 assert.equal(pocketReceiptKind(incoming), 'money_in')
 assert.equal(pocketReceiptAvailability(incoming), 'ready')
 assert.equal(pocketActivityReceipt(incoming)?.title, 'USDC received')
+assert.deepEqual(paymentReceiptBrand(pocketActivityReceipt(incoming)), { kind: 'pocket', name: 'Pocket', imageUrl: '' })
+assert.match(paymentReceiptFileName(pocketActivityReceipt(incoming)), /^pocket-/)
 
 const outgoing = { ...base, eventId: 'evt_2', source: 'wallet-withdrawal', settlementType: 'wallet_transfer', paycrestStatus: 'confirmed', direction: 'out', recipient: `0x${'3'.repeat(40)}` }
 assert.equal(pocketReceiptKind(outgoing), 'money_out')
@@ -89,6 +91,19 @@ assert.deepEqual(paymentReceiptView(electricityReceipt).rows.at(-1), { label: 'M
 const appPurchase = { ...base, eventId: 'evt_6', source: 'app-pay', settlementType: 'app_pay', paycrestStatus: 'completed', recipient: 'Research service' }
 assert.equal(pocketReceiptKind(appPurchase), 'app_purchase')
 assert.equal(pocketActivityReceipt(appPurchase)?.title, 'Web purchase')
+
+const partnerReceipt = {
+  ...pocketActivityReceipt(appPurchase),
+  brandName: 'Partner Platform',
+  brandImageUrl: 'https://partner.example/brand.png',
+  brandKind: 'partner',
+}
+assert.deepEqual(paymentReceiptBrand(partnerReceipt), {
+  kind: 'partner',
+  name: 'Partner Platform',
+  imageUrl: 'https://partner.example/brand.png',
+})
+assert.match(paymentReceiptFileName(partnerReceipt), /^hashpaylink-/)
 
 const gatewayFunding = { ...base, eventId: 'evt_7', source: 'gateway-activation', settlementType: 'gateway_funding', paycrestStatus: 'completed' }
 assert.equal(pocketReceiptKind(gatewayFunding), null)

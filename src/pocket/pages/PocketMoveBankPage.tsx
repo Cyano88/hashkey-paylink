@@ -3,7 +3,6 @@ import { useNavigate, useOutletContext } from 'react-router-dom'
 import { ArrowRight, ChevronDown, Landmark, Mail, Send } from '../components/PocketIcons'
 import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
-import UnifiedReceipt from '../../components/UnifiedReceipt'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import { formatNgnAmount } from '../../lib/utils'
 import PocketVerifiedNameGate, { PocketVerifiedNameBadge } from '../components/PocketVerifiedNameGate'
@@ -11,6 +10,7 @@ import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketLoadingState from '../components/PocketLoadingState'
+import PocketPaymentSuccess from '../components/PocketPaymentSuccess'
 import PocketSlideAction from '../components/PocketSlideAction'
 import usePocketBankReceiveController from '../controllers/usePocketBankReceiveController'
 import usePocketBankWithdrawController from '../controllers/usePocketBankWithdrawController'
@@ -135,7 +135,7 @@ export default function PocketMoveBankPage() {
     merchantId: direct.result.merchantId,
     contextLabel: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
     settlementType: 'INSTANT_FIAT',
-    paycrestStatus: direct.result.providerStatus,
+    paycrestStatus: direct.result.providerStatus || 'settled',
     direction: 'out',
     recipient: direct.result.accountName,
     destination: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
@@ -334,7 +334,6 @@ export default function PocketMoveBankPage() {
 
           </fieldset>}
 
-          {mode === 'withdraw' && bankReceipt && <UnifiedReceipt receipt={bankReceipt} />}
         </div>}
       </div>
 
@@ -366,6 +365,15 @@ export default function PocketMoveBankPage() {
         onCopy={bank.copy}
         onClose={bank.closeShare}
       />
+      {mode === 'withdraw' && bankReceipt && (
+        <PocketPaymentSuccess
+          receipt={bankReceipt}
+          onDone={() => {
+            direct.resetResult()
+            navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)
+          }}
+        />
+      )}
     </PocketRouteShell>
   )
 }

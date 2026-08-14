@@ -118,12 +118,8 @@ services:
         sync: false                   # Circle developer-controlled Base SCA wallet
       - key: POCKET_BILLS_TREASURY_ADDRESS
         sync: false                   # must exactly match the verified Circle Base SCA wallet
-      - key: POCKET_BILLS_MIN_NGN
-        value: "100"
-      - key: POCKET_BILLS_MAX_NGN
-        value: "1000"
-      - key: POCKET_BILLS_DAILY_LIMIT_NGN
-        value: "10000"
+      - key: HOSTED_CHECKOUT_DAILY_USDC
+        value: "500000"
       - key: VTPASS_MINIMUM_WALLET_BALANCE_NGN
         value: "5000"
       - key: POCKET_BILLS_STORE_KEY

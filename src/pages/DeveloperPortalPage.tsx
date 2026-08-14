@@ -376,7 +376,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-gray-900 dark:text-white">Checkout brand mark</p>
-          <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">A square PNG, WebP, or JPG shown beside your platform name on checkout. Host it on the same origin as your website.</p>
+          <p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">A square PNG, WebP, or JPG shown beside your platform name on checkout and receipts. Host it on the same origin as your website.</p>
         </div>
       </div>
       <Field label="Brand mark URL" className="mt-3"><input className={fieldClass()} value={draft.brandImageUrl} onChange={event => setDraft({ ...draft, brandImageUrl: event.target.value })} placeholder="https://yourplatform.com/brand/mark.png" /></Field>

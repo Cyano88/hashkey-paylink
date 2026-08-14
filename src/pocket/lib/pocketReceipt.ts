@@ -120,5 +120,7 @@ export function pocketActivityReceipt(row: PocketActivityRow): PaylinkReceipt | 
     narration: row.memo,
     referenceId: reference,
     billToken: kind === 'bill_purchase' ? row.billToken : undefined,
+    brandName: 'Pocket',
+    brandKind: 'pocket',
   }
 }

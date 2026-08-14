@@ -58,6 +58,9 @@ export default async function handler(req: Request, res: Response) {
         merchantId: receipt.merchantId,
         settlementType: receipt.settlementType,
         amountNgn: receipt.amountNgn,
+        brandName: receipt.brandName,
+        brandImageUrl: receipt.brandImageUrl,
+        brandKind: receipt.brandName ? 'partner' : 'hashpaylink',
         proof: {
           receiptHash: receipt.receiptHash,
           ogRootHash: receipt.ogRootHash,

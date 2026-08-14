@@ -414,7 +414,7 @@ export default function Layout() {
         style={agentHashComposerFocused && agentHashViewportTop > 0
           ? { transform: `translate3d(0, ${agentHashViewportTop}px, 0)` }
           : undefined}
-        className={isPocketLandingPage || isPocketImmersivePage || isCheckoutPage
+        className={isPocketLandingPage || isPocketImmersivePage || isCheckoutPage || isNgPosPage
           ? 'hidden'
           : isPocketAppPage
           ? 'pointer-events-none fixed inset-x-0 top-0 z-50 border-b border-gray-200 bg-[#F5F5F7] shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:border-white/[0.08] dark:bg-[#0A0A0A] dark:shadow-[0_10px_30px_rgba(0,0,0,0.24)]'
@@ -566,7 +566,7 @@ export default function Layout() {
         ? 'h-full min-h-0 w-full flex-1 overflow-hidden p-0'
         : isPocketAppPage
         ? 'h-full min-h-0 w-full flex-1 overflow-hidden p-0'
-        : isCheckoutPage
+        : isCheckoutPage || isNgPosPage
         ? 'mx-auto w-full max-w-5xl flex-1 px-4 pb-8 pt-8 sm:px-6 sm:pt-10'
         : 'mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6'}>
         <Outlet context={{
@@ -581,7 +581,7 @@ export default function Layout() {
       {/* ── Footer ───────────────────────────────────────────────────────── */}
       <footer
         data-hashpaylink-bottom-bar
-        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white py-0 dark:border-white/5 dark:bg-[#111113] ${agentHashComposerFocused || isPocketAppPage || isCheckoutPage ? 'hidden' : 'flex'}`}
+        className={`h-[60px] shrink-0 items-center border-t border-gray-100 bg-white py-0 dark:border-white/5 dark:bg-[#111113] ${agentHashComposerFocused || isPocketAppPage || isCheckoutPage || isNgPosPage ? 'hidden' : 'flex'}`}
       >
           <div className="mx-auto w-full max-w-5xl px-4 sm:px-6">
             <p className="text-center text-xs text-gray-400">
