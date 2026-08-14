@@ -82,9 +82,10 @@ function receiptTitle(kind: PocketReceiptKind, row: PocketActivityRow) {
   return kind === 'money_out' ? 'USDC sent' : 'USDC received'
 }
 
-export function pocketActivityReceipt(row: PocketActivityRow): PaylinkReceipt | null {
+export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPending?: boolean } = {}): PaylinkReceipt | null {
   const kind = pocketReceiptKind(row)
-  if (!kind || pocketReceiptAvailability(row) !== 'ready') return null
+  const availability = pocketReceiptAvailability(row)
+  if (!kind || (availability !== 'ready' && !(options.allowPending && availability === 'pending'))) return null
 
   const source = normalizedSource(row)
   const category = row.billCategory || 'airtime'

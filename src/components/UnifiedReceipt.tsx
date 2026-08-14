@@ -52,7 +52,7 @@ function BrandMark({ receipt, className = '' }: { receipt: PaylinkReceipt; class
   const brand = paymentReceiptBrand(receipt)
   const [failed, setFailed] = useState(false)
   if (brand.kind === 'pocket') {
-    return <span className={`flex items-center justify-center rounded-xl bg-gray-950 text-white ${className}`}><CPurseIcon size="68%" title="" /></span>
+    return <CPurseIcon size="100%" title="" className={`text-gray-950 ${className}`} />
   }
   if (brand.imageUrl && !failed) {
     return <img src={brand.imageUrl} alt="" onError={() => setFailed(true)} className={`object-contain ${className}`} />
@@ -68,39 +68,39 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
   const view = useMemo(() => paymentReceiptView(receipt), [receipt])
   const brand = paymentReceiptBrand(receipt)
   return (
-    <article className="mx-auto flex min-h-[640px] w-full max-w-md flex-col bg-white px-7 pb-7 pt-8 font-sans text-gray-950 sm:min-h-[680px] sm:px-9">
+    <article className="mx-auto flex h-full min-h-0 w-full max-w-md flex-col bg-white px-7 pb-4 pt-4 font-sans text-gray-950 sm:px-9">
       <header className="flex items-center justify-between gap-4">
         <span className="flex min-w-0 items-center gap-3">
-          <BrandMark receipt={receipt} className="h-10 w-10 shrink-0" />
-          <span className="truncate text-[15px] font-bold tracking-[-0.02em]">{brand.name}</span>
+          <BrandMark receipt={receipt} className="h-9 w-9 shrink-0" />
+          <span className="truncate text-sm font-bold tracking-[-0.02em]">{brand.name}</span>
         </span>
         <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-500">{view.badge}</span>
       </header>
 
-      <section className="mt-14">
-        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-white">
+      <section className="mt-3">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white">
           <Check className="h-5 w-5" strokeWidth={2.5} />
         </span>
-        <h2 className="mt-5 text-[15px] font-semibold tracking-[-0.02em]">Payment successful</h2>
+        <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.02em]">Payment successful</h2>
         <p className="mt-1 text-[11px] font-medium text-gray-400">{view.timestamp}</p>
-        <p className="mt-7 break-words text-[34px] font-bold tracking-[-0.045em]">{view.amount}</p>
+        <p className="mt-3 break-words text-[30px] font-bold tracking-[-0.045em]">{view.amount}</p>
       </section>
 
-      <dl className="mt-9 border-t border-gray-100 pt-3">
+      <dl className="mt-3 border-t border-gray-100 pt-0.5">
         {view.rows.map(row => (
-          <div key={row.label} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-5 py-3">
+          <div key={row.label} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-5 py-1.5">
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">{row.label}</dt>
             <dd className={`min-w-0 break-words text-right text-[11px] font-semibold leading-5 text-gray-700 ${row.mono ? 'font-mono' : ''}`}>{row.value || '-'}</dd>
           </div>
         ))}
       </dl>
 
-      <div className="mt-4 border-t border-gray-100 pt-5">
+      <div className="mt-1.5 border-t border-gray-100 pt-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">Reference ID</p>
-        <p className="mt-2 break-all font-mono text-[10px] font-semibold leading-5 text-gray-600">{view.reference}</p>
+        <p className="mt-1 break-all font-mono text-[10px] font-semibold leading-5 text-gray-600">{view.reference}</p>
       </div>
 
-      <footer className="mt-auto pt-14 text-center text-[10px] font-semibold text-gray-400">Powered by Hash PayLink</footer>
+      <footer className="mt-auto pt-2 text-center text-[10px] font-semibold text-gray-400">Powered by Hash PayLink</footer>
     </article>
   )
 }
@@ -159,6 +159,13 @@ async function shareFile(file: File, title: string) {
   downloadBlob(file, file.name)
 }
 
+function receiptDataUrlBlob(dataUrl: string) {
+  const match = /^data:([^;,]+);base64,(.+)$/s.exec(dataUrl)
+  if (!match) throw new Error('Receipt image could not be prepared.')
+  const bytes = Uint8Array.from(atob(match[2]), character => character.charCodeAt(0))
+  return new Blob([bytes], { type: match[1] })
+}
+
 function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: PaylinkReceipt; surface: Exclude<ReceiptSurface, null>; onClose: () => void }) {
   const [sharing, setSharing] = useState<'image' | 'pdf' | ''>('')
   const [copied, setCopied] = useState(false)
@@ -179,7 +186,7 @@ function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: Payl
     try {
       if (kind === 'image') {
         const dataUrl = await createPaymentReceiptImage(receipt)
-        const blob = await fetch(dataUrl).then(response => response.blob())
+        const blob = receiptDataUrlBlob(dataUrl)
         await shareFile(new File([blob], paymentReceiptImageFileName(receipt), { type: 'image/jpeg' }), `${brand.name} receipt`)
       } else {
         const blob = await createPaymentReceiptPdf(receipt)
@@ -194,7 +201,7 @@ function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: Payl
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[140] overflow-y-auto bg-[#F5F5F7] font-sans text-gray-950 dark:bg-[#0A0A0A] dark:text-white" role="dialog" aria-modal="true" aria-label={surface === 'details' ? 'Transaction details' : 'Receipt preview'}>
+    <div className={`fixed inset-0 z-[140] bg-[#F5F5F7] font-sans text-gray-950 dark:bg-[#0A0A0A] dark:text-white ${surface === 'receipt' ? 'overflow-hidden' : 'overflow-y-auto'}`} role="dialog" aria-modal="true" aria-label={surface === 'details' ? 'Transaction details' : 'Receipt preview'}>
       <div className="sticky top-0 z-10 border-b border-gray-200/80 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:border-white/10 dark:bg-[#0A0A0A]/95">
         <div className="mx-auto grid h-14 max-w-lg grid-cols-[48px_1fr_48px] items-center">
           <span className="h-10 w-12" />
@@ -204,9 +211,9 @@ function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: Payl
       </div>
 
       {surface === 'details' ? <TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /> : (
-        <div className="mx-auto w-full max-w-lg px-3 pb-8 pt-4">
-          <div className="overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm"><ReceiptDocument receipt={receipt} /></div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mx-auto flex h-[calc(100dvh-56px)] w-full max-w-lg flex-col px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+          <div className="min-h-0 flex-1 overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm"><ReceiptDocument receipt={receipt} /></div>
+          <div className="mt-2 grid shrink-0 grid-cols-2 gap-2">
             <button type="button" disabled={Boolean(sharing)} onClick={() => void share('image')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-950 disabled:opacity-60">
               {sharing === 'image' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}Share as image
             </button>

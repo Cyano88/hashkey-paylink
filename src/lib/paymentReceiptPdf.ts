@@ -438,14 +438,15 @@ function drawContainedImage(ctx: CanvasRenderingContext2D, image: HTMLImageEleme
 }
 
 function drawPocketMark(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
-  roundRect(ctx, x, y, size, size, 12, '#111827')
-  ctx.fillStyle = '#ffffff'
-  const inset = size * 0.24
-  const top = y + inset
-  const height = size - inset * 2
-  ctx.fillRect(x + inset, top, size * 0.33, height)
-  ctx.fillRect(x + size * 0.64, top, size * 0.06, height)
-  ctx.fillRect(x + size * 0.76, top, size * 0.1, height)
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(x + size / 2, y + size / 2, size * 0.40625, 0, Math.PI * 2)
+  ctx.clip()
+  ctx.fillStyle = '#111827'
+  ctx.fillRect(x + size * 0.09375, y + size * 0.09375, size * 0.4921875, size * 0.8125)
+  ctx.fillRect(x + size * 0.625, y + size * 0.09375, size * 0.046875, size * 0.8125)
+  ctx.fillRect(x + size * 0.7109375, y + size * 0.09375, size * 0.1953125, size * 0.8125)
+  ctx.restore()
 }
 
 function shortPdfValue(value: string) {

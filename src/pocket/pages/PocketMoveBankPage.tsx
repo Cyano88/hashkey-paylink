@@ -122,7 +122,7 @@ export default function PocketMoveBankPage() {
         ? 'pending'
         : 'idle'
   const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing'
-  const bankReceipt = useMemo(() => direct.status === 'sent' && direct.result ? pocketActivityReceipt({
+  const bankReceipt = useMemo(() => (direct.status === 'sent' || (direct.status === 'processing' && Boolean(direct.result?.txHash))) && direct.result ? pocketActivityReceipt({
     eventId: `bank-withdraw:${direct.result.intentId}`,
     txHash: direct.result.txHash,
     chain: 'base',
@@ -135,7 +135,7 @@ export default function PocketMoveBankPage() {
     merchantId: direct.result.merchantId,
     contextLabel: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
     settlementType: 'INSTANT_FIAT',
-    paycrestStatus: direct.result.providerStatus || 'settled',
+    paycrestStatus: direct.status === 'sent' ? direct.result.providerStatus || 'settled' : 'processing',
     direction: 'out',
     recipient: direct.result.accountName,
     destination: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
@@ -143,7 +143,7 @@ export default function PocketMoveBankPage() {
     bankLast4: direct.result.bankLast4,
     accountName: direct.result.accountName,
     providerReference: direct.result.orderId,
-  }) : null, [direct.result, direct.status, email, wallets.wallets.base?.address])
+  }, { allowPending: true }) : null, [direct.result, direct.status, email, wallets.wallets.base?.address])
 
   useEffect(() => {
     if (selectedNet !== 'base') onNetworkSelect('base')

@@ -75,6 +75,7 @@ assert.equal(pocketActivityReceipt(bridge), null)
 const bankPending = { ...base, eventId: 'evt_4', source: 'bank-withdraw', settlementType: 'INSTANT_FIAT', paycrestStatus: 'processing', direction: 'out' }
 assert.equal(pocketReceiptAvailability(bankPending), 'pending')
 assert.equal(pocketActivityReceipt(bankPending), null)
+assert.equal(pocketActivityReceipt(bankPending, { allowPending: true })?.status, 'processing')
 
 const bankSettled = { ...bankPending, paycrestStatus: 'settled', bankName: 'Example Bank', bankLast4: '1234', accountName: 'Pocket User' }
 assert.equal(pocketActivityReceipt(bankSettled)?.title, 'Bank payout')
