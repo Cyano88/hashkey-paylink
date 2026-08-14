@@ -1375,6 +1375,8 @@ const ngPosSource = await readFile(new URL('../api/ng-pos.ts', import.meta.url),
 assert.match(ngPosSource, /createNgPosBankSend\(req, body, \{ allowServiceRequest: true \}\)/)
 assert.match(ngPosSource, /hostname\.toLowerCase\(\) === 'pocket\.hashpaylink\.com'/)
 assert.match(ngPosSource, /return paymentSurfaceOrigin\(`\$\{proto\}:\/\/\$\{host\}`\)/)
+assert.match(ngPosSource, /readPocketPaycrestQuote\('0\.5'\)/)
+assert.match(ngPosSource, /if \(!directPayout\) \{\s*const payoutQuote = await resolveNgnPayoutQuote/)
 const pocketSolanaTransferClientSource = await readFile(new URL('../src/pocket/api/pocketSolanaTransferClient.ts', import.meta.url), 'utf8')
 assert.match(pocketSolanaTransferClientSource, /POCKET_API\.transferPrepare/)
 assert.match(pocketSolanaTransferClientSource, /POCKET_API\.transferSubmit/)

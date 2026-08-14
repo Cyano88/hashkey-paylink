@@ -315,7 +315,7 @@ async function publicMerchant(merchant: MerchantProfile) {
 }
 
 async function getNgnRate() {
-  const quote = await readPocketPaycrestQuote('1')
+  const quote = await readPocketPaycrestQuote('0.5')
   return {
     rate: quote.rate,
     source: quote.source,
@@ -842,12 +842,14 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   let source = 'paycrest'
   if (!flexibleAmount) {
     const amountNgn = amount as number
-    const payoutQuote = await resolveNgnPayoutQuote(amountNgn, 'NGN')
-    const { rate, amountUsdc } = payoutQuote
-    source = payoutQuote.source
     amountNgnText = amountNgn.toFixed(2)
-    amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
-    rateText = rate.toFixed(2)
+    if (!directPayout) {
+      const payoutQuote = await resolveNgnPayoutQuote(amountNgn, 'NGN')
+      const { rate, amountUsdc } = payoutQuote
+      source = payoutQuote.source
+      amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
+      rateText = rate.toFixed(2)
+    }
     intentId = idempotentResourceId('intent', ownerId, idempotencyKey)
     store.intents ??= {}
     store.intents[intentId] = {

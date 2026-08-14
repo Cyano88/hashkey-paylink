@@ -345,7 +345,10 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
       return res.status(400).json({ ok: false, error: 'Unknown bank payout action.' })
     } catch (reason) {
       const error = reason as Error & { status?: number }
-      return res.status(error.status ?? 500).json({ ok: false, error: error.message || 'Bank payout failed.' })
+      const message = /no provider available|provider.*amount|conversion with amount/i.test(error.message || '')
+        ? 'This Naira amount is unavailable right now. Try another amount.'
+        : error.message || 'Bank payout failed.'
+      return res.status(error.status ?? 500).json({ ok: false, error: message })
     }
   }
 }

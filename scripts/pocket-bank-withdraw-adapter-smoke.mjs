@@ -96,6 +96,18 @@ assert.equal(calls[0].body.flexible_amount, false)
 assert.equal(calls[0].headers.authorization, 'Bearer privy-token')
 assert.equal(calls[1].body.action, 'createOfframpOrder')
 
+const unavailableHandler = createPocketBankWithdrawHandler({
+  executions,
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  authorizeBankAccount: async () => undefined,
+  createBankReceive: async () => {
+    throw Object.assign(new Error('no provider available for USDC to NGN conversion with amount 1 on base'), { status: 503 })
+  },
+})
+const unavailablePayout = await request(unavailableHandler, prepareBody, { authorization: 'Bearer privy-token', 'idempotency-key': 'pocket:bank-withdraw:test-request-0002' })
+assert.equal(unavailablePayout.statusCode, 503)
+assert.equal(unavailablePayout.body.error, 'This Naira amount is unavailable right now. Try another amount.')
+
 const authorized = await request(handler, {
   action: 'authorize',
   intent_id: processingOrder.intent_id,
