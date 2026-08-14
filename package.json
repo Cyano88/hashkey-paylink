@@ -29,6 +29,7 @@
     "test:pocket-ledger": "node --import tsx scripts/pocket-ledger-smoke.mjs",
       "test:pocket-load": "node --import tsx scripts/pocket-load-smoke.mjs",
       "test:pocket-reconciliation": "node --import tsx scripts/pocket-reconciliation-worker-smoke.mjs",
+      "ops:pocket-reconcile": "node --import tsx scripts/pocket-reconcile-once.mjs",
     "test:pocket-backup": "node scripts/pocket-backup-verify.mjs",
     "test:pocket-release": "node scripts/pocket-release-gate.mjs",
     "test:circle-link": "node --import tsx scripts/privy-circle-link-handler-smoke.mjs",
