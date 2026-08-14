@@ -22,7 +22,7 @@ function quoteAmount(value: number) {
   return value.toFixed(6).replace(/\.?0+$/, '')
 }
 
-export default function usePocketFxQuote(balance: number) {
+export default function usePocketFxQuote(balance: number, enabled = true) {
   const amount = quoteAmount(balance)
   const initialQuote = cachedQuote?.amount === amount ? cachedQuote : null
   const [quote, setQuote] = useState<PocketFxQuote | null>(initialQuote)
@@ -32,6 +32,7 @@ export default function usePocketFxQuote(balance: number) {
   const lastRequestAt = useRef(0)
 
   const refresh = useCallback(async () => {
+    if (!enabled) return
     if (requestInFlight.current) return
     requestInFlight.current = true
     lastRequestAt.current = Date.now()
@@ -48,10 +49,10 @@ export default function usePocketFxQuote(balance: number) {
       requestInFlight.current = false
       setBusy(false)
     }
-  }, [amount])
+  }, [amount, enabled])
 
   useEffect(() => {
-    if (!quote || quote.stale) return
+    if (!enabled || !quote || quote.stale) return
     const remaining = quote.expiresAt - Date.now()
     if (remaining <= 0) {
       void refresh()
@@ -61,7 +62,7 @@ export default function usePocketFxQuote(balance: number) {
       void refresh()
     }, remaining)
     return () => window.clearTimeout(expiry)
-  }, [quote, refresh])
+  }, [enabled, quote, refresh])
 
   useEffect(() => {
     const refreshVisibleQuote = () => {
@@ -70,6 +71,7 @@ export default function usePocketFxQuote(balance: number) {
       void refresh()
     }
 
+    if (!enabled) return
     if (!initialQuote) void refresh()
     const interval = window.setInterval(refreshVisibleQuote, POCKET_FX_REFRESH_INTERVAL_MS)
     window.addEventListener('focus', refreshVisibleQuote)
@@ -79,7 +81,7 @@ export default function usePocketFxQuote(balance: number) {
       window.removeEventListener('focus', refreshVisibleQuote)
       document.removeEventListener('visibilitychange', refreshVisibleQuote)
     }
-  }, [initialQuote, refresh])
+  }, [enabled, initialQuote, refresh])
 
   return { quote: quote?.amount === amount ? quote : null, busy, error, refresh }
 }

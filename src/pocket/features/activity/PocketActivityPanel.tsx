@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, Check, ChevronDown, Copy, Landmark, Loader2, Mail, Store, Wallet } from '../../components/PocketIcons'
+import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, Check, ChevronDown, Copy, Filter, Landmark, Loader2, Mail, Store, Wallet } from '../../components/PocketIcons'
 import { ArrowTopRightOnSquareIcon as ExternalLink } from '@heroicons/react/24/outline'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
@@ -64,11 +64,25 @@ function supportedRows(rows: PocketActivityRow[]) {
   })
 }
 
+function activityMonth(row: PocketActivityRow) {
+  const date = new Date(row.ts)
+  return Number.isFinite(date.getTime()) ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` : 'unknown'
+}
+
+function monthLabel(key: string) {
+  const [year, month] = key.split('-').map(Number)
+  return Number.isFinite(year) && Number.isFinite(month)
+    ? new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    : 'Earlier activity'
+}
+
 export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefund }: PocketActivityPanelProps) {
   const [expandedActivityId, setExpandedActivityId] = useState('')
   const [refundBusy, setRefundBusy] = useState('')
   const [refundMessage, setRefundMessage] = useState<Record<string, string>>({})
   const [copiedReference, setCopiedReference] = useState('')
+  const [monthFilter, setMonthFilter] = useState('')
+  const [filterOpen, setFilterOpen] = useState(false)
   const supported = supportedRows(rows).filter(row => (
     activityKind(row) !== 'bank'
     || pocketActivityStatus(row) !== 'status unavailable'
@@ -76,28 +90,37 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
   const visibleRows = (view === 'all' ? supported : supported.filter(row => activityKind(row) === view))
     .slice()
     .sort((a, b) => b.ts - a.ts)
+  const months = [...new Set(visibleRows.map(activityMonth))]
+  const filteredRows = monthFilter ? visibleRows.filter(row => activityMonth(row) === monthFilter) : visibleRows
+  const monthGroups = [...new Set(filteredRows.map(activityMonth))].map(month => ({ month, rows: filteredRows.filter(row => activityMonth(row) === month) }))
 
   return (
     <div className="space-y-5">
       {authenticated && (
         <div className="space-y-3">
-          <div className="px-1">
+          <div className="flex items-center justify-between px-1">
             <p className="text-[11px] font-bold text-gray-400">
-              {busy && !visibleRows.length
+              {busy && !filteredRows.length
                 ? 'Loading activity...'
-                : error && !visibleRows.length
+                : error && !filteredRows.length
                   ? 'Updating activity...'
-                  : `${visibleRows.length} record${visibleRows.length === 1 ? '' : 's'}`}
+                  : `${filteredRows.length} record${filteredRows.length === 1 ? '' : 's'}`}
             </p>
+            {!!visibleRows.length && <button type="button" onClick={() => setFilterOpen(current => !current)} className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06]" aria-label="Filter activity by month" aria-expanded={filterOpen}><Filter className="h-4 w-4" /></button>}
           </div>
+
+          {filterOpen && <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#111216]"><label className="text-[10px] font-bold uppercase tracking-wider text-gray-400" htmlFor="pocket-activity-month">Month and year</label><select id="pocket-activity-month" value={monthFilter} onChange={event => { setMonthFilter(event.target.value); setFilterOpen(false) }} className="mt-2 min-h-11 w-full rounded-xl bg-gray-50 px-3 text-xs font-semibold outline-none dark:bg-white/[0.06]"><option value="">All history</option>{months.map(month => <option key={month} value={month}>{monthLabel(month)}</option>)}</select></div>}
 
           {error && !visibleRows.length ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
               {error}
             </div>
-          ) : visibleRows.length ? (
-            <div className="space-y-2">
-              {visibleRows.map((row, index) => {
+          ) : filteredRows.length ? (
+            <div className="space-y-5">
+              {monthGroups.map(group => <section key={group.month}>
+                <p className="px-1 text-[11px] font-bold text-gray-500 dark:text-gray-400">{monthLabel(group.month)}</p>
+                <div className="mt-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
+              {group.rows.map((row, index) => {
                 const kind = activityKind(row)
                 const amountNgn = formatNgnAmount(row.amountNgn ?? '')
                 const amountUsdc = Number.parseFloat(row.amount || '')
@@ -110,7 +133,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const expanded = collapsible && expandedActivityId === recordId
                 const supportReference = row.supportReference || row.providerReference || row.billReference || row.receiptId || row.txHash || row.eventId
                 return (
-                  <div key={recordId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                  <div key={recordId} className="border-b border-gray-100 p-3.5 last:border-0 dark:border-white/10">
                     <div
                       className={cn('flex items-start justify-between gap-3', collapsible && 'cursor-pointer')}
                       role={collapsible ? 'button' : undefined}
@@ -155,7 +178,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                     {receipt && expanded && (
                       <div className="mt-2 space-y-3">
                         <UnifiedReceipt receipt={receipt} />
-                            {row.supportReference && kind !== 'bills' && (
+                            {row.supportReference && row.source !== 'bills' && (
                               <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 text-[10px] dark:border-white/10">
                                 <span className="font-semibold text-gray-400">Support reference</span>
                                 <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.supportReference}</span>
@@ -202,7 +225,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                     )}
                   </div>
                 )
-              })}
+              })}</div></section>)}
             </div>
           ) : !busy ? (
             <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white px-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">

@@ -31,6 +31,7 @@ function profileData(profile: Awaited<ReturnType<ProfileRepository['ensure']>>['
       pocketNumber: profile.pocketNumber,
       pocketId: profile.pocketId,
       avatarId: profile.avatarId,
+      displayCurrency: profile.displayCurrency,
       updatedAt: profile.updatedAt,
     },
     unchanged,
@@ -74,7 +75,7 @@ export function createPocketProfileHandler(dependencies: PocketProfileHandlerDep
       }
 
       const current = await dependencies.repository.ensure(identity)
-      const saved = await dependencies.repository.updateProfile(identity.userId, req.body.pocketId, req.body.avatarId ?? current.profile.avatarId, req.body.expectedUpdatedAt)
+      const saved = await dependencies.repository.updateProfile(identity.userId, req.body.pocketId, req.body.avatarId ?? current.profile.avatarId, req.body.expectedUpdatedAt, req.body.displayCurrency ?? current.profile.displayCurrency)
 
       return res.json({
         ok: true,

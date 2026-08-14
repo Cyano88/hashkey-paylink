@@ -16,6 +16,7 @@ const emptyProfile: LocalCurrencyProfile = {
   pocketNumber: '',
   pocketId: '',
   avatarId: 1,
+  displayCurrency: 'USDC',
 }
 const pocketProfileCache = new Map<string, LocalCurrencyProfile | null>()
 
@@ -75,6 +76,7 @@ export default function usePocketProfile({
         pocketNumber: nextProfile?.pocketNumber ?? '',
         pocketId: nextProfile?.pocketId ?? '',
         avatarId: nextProfile?.avatarId ?? 1,
+        displayCurrency: nextProfile?.displayCurrency ?? 'USDC',
       })
       setEditing(!nextProfile)
       setLoaded(true)
@@ -101,6 +103,7 @@ export default function usePocketProfile({
         accessToken: token,
         pocketId: draft.pocketId,
         avatarId: draft.avatarId,
+        displayCurrency: draft.displayCurrency,
         expectedUpdatedAt: profile?.updatedAt,
       })
       setProfile(data.profile)
@@ -115,6 +118,32 @@ export default function usePocketProfile({
       setBusy(false)
     }
   }, [draft, email, getAccessToken, profile?.updatedAt])
+
+  const saveDisplayCurrency = useCallback(async (displayCurrency: LocalCurrencyProfile['displayCurrency']) => {
+    if (!profile) return null
+    setBusy(true)
+    setError('')
+    try {
+      const token = await getAccessToken()
+      if (!token) throw new Error('Sign in again to save your display currency.')
+      const data = await savePocketLocalCurrencyProfile({
+        accessToken: token,
+        pocketId: profile.pocketId,
+        avatarId: profile.avatarId,
+        displayCurrency,
+        expectedUpdatedAt: profile.updatedAt,
+      })
+      setProfile(data.profile)
+      setDraft(data.profile)
+      pocketProfileCache.set(email, data.profile)
+      return data.profile
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not save display currency.')
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }, [email, getAccessToken, profile])
 
   const edit = useCallback(() => {
     if (profile) setDraft(profile)
@@ -148,6 +177,7 @@ export default function usePocketProfile({
     error,
     loadError,
     save,
+    saveDisplayCurrency,
     edit,
     cancel,
     reload: () => load(),

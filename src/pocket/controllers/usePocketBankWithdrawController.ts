@@ -27,6 +27,13 @@ function storedOperation(fingerprint: string) {
   }
 }
 
+function payoutError(reason: unknown, fallback: string) {
+  const message = reason instanceof Error ? reason.message : fallback
+  return /failed to fetch|networkerror|network request failed/i.test(message)
+    ? 'Pocket lost connection while preparing this payout. Check Activity before trying again.'
+    : message
+}
+
 export default function usePocketBankWithdrawController({
   authenticated,
   email,
@@ -202,7 +209,7 @@ export default function usePocketBankWithdrawController({
       }
       setStatus('routing')
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Bank payout failed.'
+      const message = payoutError(reason, 'Bank payout failed.')
       setStatus('idle')
       setError(message)
     }
@@ -257,10 +264,16 @@ export default function usePocketBankWithdrawController({
       if (confirmed && activeIntentId.current === prepared.intentId) setResult(confirmed)
       void pollUntilSettled(accessToken, prepared.intentId)
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Bank payout failed.'
+      const message = payoutError(reason, 'Bank payout failed.')
       if (message.includes('submitted and is being reconciled')) {
         setStatus('processing')
         setError('')
+        if (reconciliation) void pollUntilSettled(reconciliation.accessToken, reconciliation.intentId)
+        return
+      }
+      if (message.includes('lost connection')) {
+        setStatus('route-review')
+        setError(message)
         if (reconciliation) void pollUntilSettled(reconciliation.accessToken, reconciliation.intentId)
         return
       }
@@ -270,8 +283,8 @@ export default function usePocketBankWithdrawController({
   }, [firstName, getAccessToken, getEvmSession, lastName, pollUntilSettled, result, status])
 
   const failRouting = useCallback((reason: unknown) => {
-    const message = reason instanceof Error ? reason.message : 'Pocket could not prepare this payout.'
-    const review = /previous payout move needs review|still moving|destination balance is still refreshing|submitted and is being reconciled|without a verifiable source transaction|check activity before retrying/i.test(message)
+    const message = payoutError(reason, 'Pocket could not prepare this payout.')
+    const review = /previous payout move needs review|still moving|destination balance is still refreshing|submitted and is being reconciled|without a verifiable source transaction|check activity before retrying|lost connection/i.test(message)
     setStatus(review ? 'route-review' : 'idle')
     setError(message)
   }, [])

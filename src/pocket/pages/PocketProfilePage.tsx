@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, ChevronRight, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil } from '../components/PocketIcons'
+import { ArrowLeft, Check, ChevronRight, Coins, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil } from '../components/PocketIcons'
 import PocketAvatar, { POCKET_AVATARS } from '../components/PocketAvatar'
 import PocketBottomNav, { type PocketNavTab } from '../components/PocketBottomNav'
 import PocketLoadingState from '../components/PocketLoadingState'
 import PocketThemeToggle from '../components/PocketThemeToggle'
+import PocketDisplayCurrencyPicker from '../components/PocketDisplayCurrencyPicker'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
 import { resetPocketSessionSplash } from '../hooks/usePocketSessionSplash'
@@ -16,6 +17,7 @@ export default function PocketProfilePage() {
   const { authenticated, email, getAccessToken, logout } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const [editing, setEditing] = useState(() => new URLSearchParams(window.location.search).get('edit') === 'id')
+  const [currencyOpen, setCurrencyOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   useEffect(() => { if (profile.loaded && editing) profile.edit() }, [profile.loaded]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!profile.loaded || profile.busy && !profile.profile) return <PocketLoadingState active="home" />
@@ -23,6 +25,7 @@ export default function PocketProfilePage() {
   const copyId = async () => { if (!current?.pocketId) return; await navigator.clipboard.writeText(current.pocketId); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }
   const save = async () => { if (await profile.save()) setEditing(false) }
   const selectNav = (tab: PocketNavTab) => navigate(POCKET_BASE_PATH + (tab === 'profile' ? POCKET_ROUTES.profile : tab === 'bills' ? pocketPathFor({ section: 'bills', view: 'airtime' }) : tab === 'activity' ? POCKET_ROUTES.activity : POCKET_ROUTES.home))
+  if (currencyOpen) return <PocketDisplayCurrencyPicker current={current?.displayCurrency ?? 'USDC'} busy={profile.busy} error={profile.error} onBack={() => setCurrencyOpen(false)} onSelect={async currency => Boolean(await profile.saveDisplayCurrency(currency))} />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
     <main className="mx-auto flex min-h-full w-full max-w-[480px] flex-col px-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
       <header className="flex h-12 items-center justify-between"><button type="button" onClick={() => editing ? setEditing(false) : navigate(-1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]" aria-label="Back"><ArrowLeft className="h-4 w-4" /></button><p className="text-sm font-black">Profile</p><span className="h-10 w-10" /></header>
@@ -38,6 +41,11 @@ export default function PocketProfilePage() {
           <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.verifyName)} className="flex w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-white/[0.05]"><span className="min-w-0 flex-1"><span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Verified name{current?.nameStatus === 'bank_resolved' && <Lock className="h-3 w-3" />}</span><span className="mt-1 block text-sm font-bold">{current?.resolvedName || 'Add your bank-verified name'}</span></span><ChevronRight className="h-4 w-4 text-gray-400" /></button>
           <div className="rounded-[22px] bg-white p-4 shadow-sm dark:bg-white/[0.05]"><p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Email<Lock className="h-3 w-3" /></p><p className="mt-1 truncate text-sm font-bold">{email}</p></div>
           <div className="flex min-h-16 items-center gap-3 rounded-[22px] bg-white p-4 shadow-sm dark:bg-white/[0.05]"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Appearance</span><span className="mt-1 block text-sm font-bold">Light or dark theme</span></span><PocketThemeToggle /></div>
+          <button type="button" onClick={() => setCurrencyOpen(true)} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-white/[0.05]">
+            <Coins className="h-5 w-5 text-gray-500 dark:text-gray-300" />
+            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Display currency</span><span className="mt-1 block text-sm font-bold">{current?.displayCurrency === 'NGN' ? 'Nigeria (NGN)' : 'Default (USDC)'}</span></span>
+            <ChevronRight className="h-4 w-4 text-gray-400" />
+          </button>
           <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.assistant)} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-white/[0.05]">
             <MessageCircle className="h-5 w-5 text-gray-500 dark:text-gray-300" />
             <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Support</span><span className="mt-1 block text-sm font-bold">Chat with Agent Hash</span></span>

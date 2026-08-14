@@ -8,6 +8,7 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketWallets from '../hooks/usePocketWallets'
 import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
+import usePocketProfile from '../hooks/usePocketProfile'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 import { cn } from '../../lib/utils'
@@ -38,12 +39,14 @@ export default function PocketHomePage() {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
+  const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const activity = usePocketActivity({ authenticated, email, enabled: true, getAccessToken })
-  const fx = usePocketFxQuote(1)
+  const showNgn = profile.profile?.displayCurrency === 'NGN'
+  const fx = usePocketFxQuote(1, showNgn)
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
   const [balanceVisible, setBalanceVisible] = useState(() => window.localStorage.getItem(BALANCE_VISIBLE_KEY) !== 'false')
   const recent = activity.rows.slice(0, 4)
-  const unresolved = authenticated && (!wallets.resolved || !activity.resolved || (!fx.quote && fx.busy))
+  const unresolved = authenticated && (!wallets.resolved || !activity.resolved || !profile.loaded || (showNgn && !fx.quote && fx.busy))
 
   if (unresolved) return <PocketLoadingState active="home" />
 
@@ -66,7 +69,7 @@ export default function PocketHomePage() {
           <div className="mt-1.5">
             <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(wallets.total) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p>
           </div>
-          {fx.quote && <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(wallets.total * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p>}
+          {showNgn && fx.quote && <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(wallets.total * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p>}
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => open(POCKET_ROUTES.send)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><Send className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Send</span></button>

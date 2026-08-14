@@ -28,6 +28,7 @@ type PocketLocalCurrencyProfileSaveInput = {
   accessToken: string
   pocketId: string
   avatarId?: number
+  displayCurrency?: LocalCurrencyProfile['displayCurrency']
   expectedUpdatedAt?: string
   idempotencyKey?: string
   fetcher?: typeof fetch
@@ -80,7 +81,9 @@ function pocketErrorMessage(value: unknown, fallback: string) {
   return fallback
 }
 
-function isLocalCurrencyProfile(value: unknown): value is LocalCurrencyProfile {
+type CompatibleLocalCurrencyProfile = Omit<LocalCurrencyProfile, 'displayCurrency'> & { displayCurrency?: LocalCurrencyProfile['displayCurrency'] }
+
+function isLocalCurrencyProfile(value: unknown): value is CompatibleLocalCurrencyProfile {
   if (!isRecord(value)) return false
   return typeof value.firstName === 'string'
     && typeof value.lastName === 'string'
@@ -94,6 +97,7 @@ function isLocalCurrencyProfile(value: unknown): value is LocalCurrencyProfile {
     && Number.isInteger(value.avatarId)
     && Number(value.avatarId) >= 1
     && Number(value.avatarId) <= 4
+    && (value.displayCurrency === undefined || value.displayCurrency === 'USDC' || value.displayCurrency === 'NGN' || value.displayCurrency === 'GHS' || value.displayCurrency === 'KES')
     && (value.updatedAt === undefined || (typeof value.updatedAt === 'string' && Number.isFinite(Date.parse(value.updatedAt))))
 }
 
@@ -109,7 +113,7 @@ export function parsePocketLocalCurrencyProfileRead(value: unknown): PocketLocal
   }
   return {
     email: typeof value.email === 'string' ? value.email : '',
-    profile: value.profile ?? null,
+    profile: value.profile ? { ...value.profile, displayCurrency: value.profile.displayCurrency ?? 'USDC' } : null,
   }
 }
 
@@ -155,6 +159,7 @@ export async function savePocketLocalCurrencyProfile({
   accessToken,
   pocketId,
   avatarId,
+  displayCurrency,
   expectedUpdatedAt,
   idempotencyKey = createPocketIdempotencyKey('profile-save'),
   fetcher = fetch,
@@ -169,6 +174,7 @@ export async function savePocketLocalCurrencyProfile({
     body: JSON.stringify({
       pocketId,
       ...(avatarId !== undefined ? { avatarId } : {}),
+      ...(displayCurrency !== undefined ? { displayCurrency } : {}),
       ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
     }),
   })

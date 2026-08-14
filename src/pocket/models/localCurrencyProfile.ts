@@ -7,5 +7,6 @@ export type LocalCurrencyProfile = {
   pocketNumber: string
   pocketId: string
   avatarId: number
+  displayCurrency: 'USDC' | 'NGN' | 'GHS' | 'KES'
   updatedAt?: string
 }

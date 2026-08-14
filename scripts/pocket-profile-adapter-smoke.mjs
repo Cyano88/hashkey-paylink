@@ -52,6 +52,7 @@ try {
   assert.equal(emptyRead.body.profile.pocketId, '12345678')
   assert.equal(emptyRead.body.profile.nameStatus, 'unverified')
   assert.equal(emptyRead.body.profile.resolvedName, '')
+  assert.equal(emptyRead.body.profile.displayCurrency, 'USDC')
 
   const missingKey = await request(handler, 'POST', { pocketId: '23456789' })
   assert.equal(missingKey.statusCode, 400)
@@ -63,17 +64,20 @@ try {
   assert.equal(invalidBody.statusCode, 400)
   assert.equal(invalidBody.body.error.code, 'VALIDATION_FAILED')
 
-  const firstSave = await request(handler, 'POST', { pocketId: '23456789' }, { 'idempotency-key': key })
+  const firstSave = await request(handler, 'POST', { pocketId: '23456789', displayCurrency: 'NGN' }, { 'idempotency-key': key })
   assert.equal(firstSave.statusCode, 200)
   assert.equal(isPocketMutationResult(firstSave.body), true)
   assert.equal(firstSave.body.data.profile.pocketId, '23456789')
   assert.equal(firstSave.body.data.profile.pocketNumber, '12345678')
+  assert.equal(firstSave.body.data.profile.displayCurrency, 'NGN')
   assert.equal(firstSave.body.data.unchanged, false)
 
-  const retry = await request(handler, 'POST', { pocketId: '23456789' }, { 'idempotency-key': key })
+  const retry = await request(handler, 'POST', { pocketId: '23456789', displayCurrency: 'NGN' }, { 'idempotency-key': key })
   assert.equal(retry.statusCode, 200)
   assert.equal(retry.body.data.unchanged, true)
   assert.equal(retry.body.data.profile.updatedAt, firstSave.body.data.profile.updatedAt)
+  const legacySave = await repository.updateProfile('privy-user-1', '23456789', 1, firstSave.body.data.profile.updatedAt)
+  assert.equal(legacySave.profile.displayCurrency, 'NGN')
 
   const stale = await request(handler, 'POST', {
     pocketId: '34567890', expectedUpdatedAt: '2026-07-14T00:00:00.000Z',

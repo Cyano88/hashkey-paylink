@@ -135,14 +135,21 @@ function payableCryptoAmount(data: any) {
 async function paycrestFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const apiKey = paycrestApiKey()
   if (!apiKey) throw new Error('PAYCREST_API_KEY is required for Paycrest POS off-ramp.')
-  const response = await fetch(`${paycrestBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      'API-Key': apiKey,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  })
+  let response: Response
+  try {
+    response = await fetch(`${paycrestBaseUrl()}${path}`, {
+      ...init,
+      signal: init.signal ?? AbortSignal.timeout(20_000),
+      headers: {
+        'API-Key': apiKey,
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+    })
+  } catch (reason) {
+    const timedOut = reason instanceof Error && /abort|timeout/i.test(`${reason.name} ${reason.message}`)
+    throw new PaycrestRequestError(timedOut ? 'Paycrest did not respond in time.' : 'Paycrest is temporarily unreachable.', 503, 'PAYCREST_UNAVAILABLE')
+  }
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
     const validation = Array.isArray((body as any).errors)

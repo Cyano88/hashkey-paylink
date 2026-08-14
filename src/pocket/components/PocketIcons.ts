@@ -37,6 +37,7 @@ export {
   EnvelopeIcon as Mail,
   EyeIcon as Eye,
   EyeSlashIcon as EyeOff,
+  FunnelIcon as Filter,
   ExclamationCircleIcon as AlertCircle,
   ExclamationTriangleIcon as AlertTriangle,
   ArrowTopRightOnSquareIcon as ExternalLink,

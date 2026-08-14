@@ -218,5 +218,9 @@ assert.equal(JSON.parse(clientCalls[3].init.body).action, 'status')
 assert.equal(JSON.parse(clientCalls[4].init.body).action, 'routeStatus')
 assert.equal(JSON.parse(clientCalls[5].init.body).action, 'routeStart')
 assert.equal(JSON.parse(clientCalls[6].init.body).action, 'routeUpdate')
+await assert.rejects(
+  preparePocketBankWithdraw({ accessToken: 'privy-token', request: prepareBody, idempotencyKey, fetcher: async () => { throw new TypeError('Failed to fetch') } }),
+  /could not reach the bank payout service/i,
+)
 
 console.log('Circle Pocket direct bank-withdraw adapter smoke tests passed.')

@@ -260,6 +260,8 @@ assert.equal(isPocketProfileUpsertRequest({
 }), true)
 assert.equal(isPocketProfileUpsertRequest({ pocketId: '12345' }), false)
 assert.equal(isPocketProfileUpsertRequest({ pocketId: '1234567890123' }), false)
+assert.equal(isPocketProfileUpsertRequest({ pocketId: '12345678', displayCurrency: 'NGN' }), true)
+assert.equal(isPocketProfileUpsertRequest({ pocketId: '12345678', displayCurrency: 'EUR' }), false)
 const walletLinkRequest = {
   action: 'link',
   network: 'base',
@@ -510,7 +512,7 @@ assert.deepEqual(parsePocketLocalCurrencyProfileRead({
   profile: pocketProfile,
 }), {
   email: 'ada@example.com',
-  profile: pocketProfile,
+  profile: { ...pocketProfile, displayCurrency: 'USDC' },
 })
 assert.deepEqual(parsePocketLocalCurrencyProfileRead({ ok: true, email: 'ada@example.com', profile: null }), {
   email: 'ada@example.com',
@@ -1134,7 +1136,7 @@ assert.match(pocketWalletsHookSource, /export async function prefetchPocketWalle
 assert.match(pocketHomePageSource, /usePocketIdentity\(\)/)
 assert.match(pocketHomePageSource, /usePocketWallets\(\{ authenticated, email, getAccessToken \}\)/)
 assert.match(pocketHomePageSource, /usePocketActivity\(\{ authenticated, email, enabled: true, getAccessToken \}\)/)
-assert.match(pocketHomePageSource, /usePocketFxQuote\(1\)/)
+assert.match(pocketHomePageSource, /usePocketFxQuote\(1, showNgn\)/)
 assert.match(pocketHomePageSource, /Recent activity/)
 assert.match(pocketHomePageSource, /label: 'Bank'/)
 assert.match(pocketHomePageSource, /label: 'Deposit'/)
@@ -1182,6 +1184,8 @@ assert.match(pocketProfilePageSource, /navigator\.clipboard\.writeText\(current\
 assert.match(pocketProfilePageSource, /Sign out/)
 assert.match(pocketProfilePageSource, /POCKET_AVATARS/)
 assert.match(pocketProfilePageSource, /<PocketAvatar/)
+assert.match(pocketProfilePageSource, /Display currency/)
+assert.match(pocketProfilePageSource, /PocketDisplayCurrencyPicker/)
 const pocketMoveUsdcPageSource = await readFile(new URL('../src/pocket/pages/PocketMoveUsdcPage.tsx', import.meta.url), 'utf8')
 assert.match(pocketMoveUsdcPageSource, /usePocketUsdcDraftController\(selectedNet\)/)
 assert.match(pocketMoveUsdcPageSource, /usePocketRecipient\(\{/)
@@ -1399,6 +1403,8 @@ const receiptApiSource = await readFile(new URL('../api/receipt.ts', import.meta
 const streamPayAppSource = await readFile(new URL('../modules/streampay/src/StreamPayApp.tsx', import.meta.url), 'utf8')
 const createStreamFormSource = await readFile(new URL('../modules/streampay/src/components/CreateStreamForm.tsx', import.meta.url), 'utf8')
 const pocketActivityPanelSource = await readFile(new URL('../src/pocket/features/activity/PocketActivityPanel.tsx', import.meta.url), 'utf8')
+assert.match(pocketActivityPanelSource, /Filter activity by month/)
+assert.match(pocketActivityPanelSource, /monthGroups\.map/)
 const dashboardSource = await readFile(new URL('../src/pages/Dashboard.tsx', import.meta.url), 'utf8')
 const hostedCheckoutSource = await readFile(new URL('../src/lib/hostedCheckout.ts', import.meta.url), 'utf8')
 const slideActionSource = await readFile(new URL('../src/components/SlideAction.tsx', import.meta.url), 'utf8')

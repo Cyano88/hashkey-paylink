@@ -43,6 +43,7 @@ export type PocketMutationResult<T> = {
 export type PocketProfileUpsertRequest = {
   pocketId: string
   avatarId?: number
+  displayCurrency?: 'USDC' | 'NGN' | 'GHS' | 'KES'
   expectedUpdatedAt?: string
 }
 
@@ -56,6 +57,7 @@ export type PocketProfileUpsertData = {
     pocketNumber: string
     pocketId: string
     avatarId: number
+    displayCurrency: 'USDC' | 'NGN' | 'GHS' | 'KES'
     updatedAt: string
   }
   unchanged: boolean
@@ -441,6 +443,7 @@ export function isPocketProfileUpsertRequest(value: unknown): value is PocketPro
   if (!isRecord(value)) return false
   if (typeof value.pocketId !== 'string' || !/^\d{6,12}$/.test(value.pocketId)) return false
   if (value.avatarId !== undefined && (!Number.isInteger(value.avatarId) || Number(value.avatarId) < 1 || Number(value.avatarId) > 4)) return false
+  if (value.displayCurrency !== undefined && !['USDC', 'NGN', 'GHS', 'KES'].includes(String(value.displayCurrency))) return false
   return value.expectedUpdatedAt === undefined
     || (isNonEmptyString(value.expectedUpdatedAt, 80) && Number.isFinite(Date.parse(value.expectedUpdatedAt as string)))
 }

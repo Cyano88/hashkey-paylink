@@ -41,15 +41,20 @@ function parseData(value: unknown): PocketBankWithdrawData {
 }
 
 async function mutate({ accessToken, body, idempotencyKey, fetcher = fetch }: { accessToken: string; body: Record<string, unknown>; idempotencyKey?: string; fetcher?: typeof fetch }) {
-  const response = await fetcher(POCKET_API.bankWithdraw, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${accessToken}`,
-      ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
-    },
-    body: JSON.stringify(body),
-  })
+  let response: Response
+  try {
+    response = await fetcher(POCKET_API.bankWithdraw, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+        ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
+      },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new Error('Pocket could not reach the bank payout service. Check your connection and try again.')
+  }
   const data = await response.json().catch(() => undefined)
   if (!response.ok) throw new Error(typeof (data as any)?.error === 'string' ? (data as any).error : 'Bank payout failed.')
   return parseData(data)

@@ -20,6 +20,7 @@ export type LocalCurrencyProfile = {
   pocketNumber: string
   pocketId: string
   avatarId: number
+  displayCurrency: 'USDC' | 'NGN' | 'GHS' | 'KES'
   updatedAt: string
 }
 
@@ -42,7 +43,7 @@ export type ProfileRepository = {
   get(userId: string): Promise<LocalCurrencyProfile | undefined>
   getByPocketId(pocketId: string): Promise<LocalCurrencyProfile | undefined>
   ensure(identity: VerifiedProfileUser): Promise<ProfileSaveResult>
-  updateProfile(userId: string, pocketId: string, avatarId: number, expectedUpdatedAt?: string): Promise<ProfileSaveResult>
+  updateProfile(userId: string, pocketId: string, avatarId: number, expectedUpdatedAt?: string, displayCurrency?: LocalCurrencyProfile['displayCurrency']): Promise<ProfileSaveResult>
   bindBankResolvedName(identity: VerifiedProfileUser, resolvedName: string): Promise<ProfileSaveResult>
 }
 
@@ -143,6 +144,10 @@ function normalizedName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
+function normalizedDisplayCurrency(value: unknown): LocalCurrencyProfile['displayCurrency'] {
+  return value === 'NGN' || value === 'GHS' || value === 'KES' ? value : 'USDC'
+}
+
 function nameParts(resolvedName: string) {
   const parts = resolvedName.split(/\s+/).filter(Boolean)
   return {
@@ -220,6 +225,8 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
     if (profile.email !== immutableEmail) changed = true
     const avatarId = Number.isInteger(profile.avatarId) && profile.avatarId >= 1 && profile.avatarId <= 4 ? profile.avatarId : 1
     if (profile.avatarId !== avatarId) changed = true
+    const displayCurrency = normalizedDisplayCurrency(profile.displayCurrency)
+    if (profile.displayCurrency !== displayCurrency) changed = true
     const normalized: LocalCurrencyProfile = {
       ...profile,
       privyUserId: userId,
@@ -229,6 +236,7 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
       pocketNumber,
       pocketId,
       avatarId,
+      displayCurrency,
       updatedAt: changed ? now() : profile.updatedAt,
     }
     store.pocketIds[pocketNumber] = userId
@@ -294,6 +302,7 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
           pocketNumber,
           pocketId: pocketNumber,
           avatarId: 1,
+          displayCurrency: 'USDC',
           updatedAt: now(),
         }
         store.profiles[verified.userId] = profile
@@ -301,20 +310,22 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
         return { profile, unchanged: false }
       })
     },
-    async updateProfile(userId, pocketId, avatarId, expectedUpdatedAt) {
+    async updateProfile(userId, pocketId, avatarId, expectedUpdatedAt, requestedDisplayCurrency) {
       const cleanPocketId = normalizedPocketId(pocketId)
       if (!cleanPocketId) throw Object.assign(new Error('Pocket ID must contain 6 to 12 digits.'), { status: 400 })
       if (!Number.isInteger(avatarId) || avatarId < 1 || avatarId > 4) throw Object.assign(new Error('Choose a valid Pocket avatar.'), { status: 400 })
+      const requestedCurrency = requestedDisplayCurrency === undefined ? undefined : normalizedDisplayCurrency(requestedDisplayCurrency)
       return mutateStore(store => {
         const existing = store.profiles[userId]
         if (!existing) throw Object.assign(new Error('Pocket profile was not found.'), { status: 404 })
+        const displayCurrency = requestedCurrency ?? normalizedDisplayCurrency(existing.displayCurrency)
         if (expectedUpdatedAt && existing.updatedAt !== expectedUpdatedAt) throw new ProfileVersionConflictError()
         const owner = store.pocketIds[cleanPocketId]
         if (owner && owner !== userId) throw new PocketIdUnavailableError()
-        if (existing.pocketId === cleanPocketId && existing.avatarId === avatarId) return { profile: existing, unchanged: true }
+        if (existing.pocketId === cleanPocketId && existing.avatarId === avatarId && existing.displayCurrency === displayCurrency) return { profile: existing, unchanged: true }
         store.pocketIds[existing.pocketId] = userId
         store.pocketIds[cleanPocketId] = userId
-        const profile = { ...existing, pocketId: cleanPocketId, avatarId, updatedAt: now() }
+        const profile = { ...existing, pocketId: cleanPocketId, avatarId, displayCurrency, updatedAt: now() }
         store.profiles[userId] = profile
         return { profile, unchanged: false }
       })
@@ -330,7 +341,7 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
           existing = {
             privyUserId: verified.userId,
             firstName: '', lastName: '', resolvedName: '', nameStatus: 'unverified',
-            email: verified.email, pocketNumber, pocketId: pocketNumber, avatarId: 1, updatedAt: now(),
+            email: verified.email, pocketNumber, pocketId: pocketNumber, avatarId: 1, displayCurrency: 'USDC', updatedAt: now(),
           }
           store.pocketIds[pocketNumber] = verified.userId
         }
@@ -380,7 +391,7 @@ export function createLocalCurrencyProfileHandler(dependencies: HandlerDependenc
         }
         const current = await dependencies.repository.ensure({ userId, email: verifiedEmail })
         const avatarId = Number(req.body?.avatar_id ?? current.profile.avatarId)
-        const saved = await dependencies.repository.updateProfile(userId, pocketId, avatarId, expectedUpdatedAt)
+        const saved = await dependencies.repository.updateProfile(userId, pocketId, avatarId, expectedUpdatedAt, req.body?.display_currency === undefined ? current.profile.displayCurrency : normalizedDisplayCurrency(req.body.display_currency))
         return res.json({ ok: true, profile: saved.profile, unchanged: saved.unchanged })
       }
 
