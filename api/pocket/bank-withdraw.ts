@@ -6,6 +6,7 @@ import { isPocketIdempotencyKey } from '../../src/pocket/lib/pocketSchemas.js'
 import { claimCirclePocketAction, listCirclePocketActions, recordCirclePocketAction, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
 import { paymentExecutionRepository, type PaymentExecutionIntent, type PaymentExecutionRepository } from './payment-execution-intents.js'
 import { assertBankAccountMatchesPocketName } from './verified-bank-name.js'
+import { isCircleBridgeComplete, readCircleBridgeStatus } from './circle-bridge-status.js'
 
 type LegacyResult = { status: number; body: any }
 type BankWithdrawDependencies = {
@@ -18,6 +19,7 @@ type BankWithdrawDependencies = {
   recordAction: typeof recordCirclePocketAction
   executions: PaymentExecutionRepository
   authorizeBankAccount: typeof assertBankAccountMatchesPocketName
+  readBridgeStatus: typeof readCircleBridgeStatus
 }
 
 async function invokeNgPos(req: Request, body: Record<string, unknown>): Promise<LegacyResult> {
@@ -143,6 +145,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     recordAction: recordCirclePocketAction,
     executions: paymentExecutionRepository,
     authorizeBankAccount: assertBankAccountMatchesPocketName,
+    readBridgeStatus: readCircleBridgeStatus,
     ...overrides,
   }
   return async function pocketBankWithdrawHandler(req: Request, res: Response) {
@@ -150,6 +153,20 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     try {
       const identity = await dependencies.verifyUser(req)
       const action = text(req.body?.action, 30)
+      if (action === 'recover') {
+        const unresolved = await dependencies.executions.listOwned(
+          identity.userId,
+          ['bank_payout'],
+          ['prepared', 'authorized', 'submitted', 'processing', 'needs_review'],
+        )
+        return res.json({
+          ok: true,
+          data: unresolved
+            .filter(intent => intent.resourceId)
+            .slice(0, 10)
+            .map(intent => ({ intentId: intent.resourceId, executionId: intent.id, state: intent.state, updatedAt: intent.updatedAt })),
+        })
+      }
       if (action === 'prepare') {
         const idempotencyKey = text(req.headers['idempotency-key'], 128)
         if (!isPocketIdempotencyKey(idempotencyKey)) return res.status(400).json({ ok: false, error: 'A valid idempotency key is required.' })
@@ -285,6 +302,12 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         }
         const txHash = text(req.body?.tx_hash, 128) || existing.metadata?.txHash || ''
         if (phase !== 'failed' && !txHash) return res.status(400).json({ ok: false, error: 'Bank payout routing transaction is required.' })
+        if (phase === 'completed') {
+          const provider = await dependencies.readBridgeStatus(existing.metadata?.source as 'arbitrum' | 'solana', txHash)
+          if (!isCircleBridgeComplete(provider.status)) {
+            return res.status(409).json({ ok: false, error: 'Circle has not confirmed this bank payout route yet.' })
+          }
+        }
         const updated = await dependencies.recordAction({
           ownerId: identity.userId,
           idempotencyKey: routeKey(ownedOrder.intent_id),

@@ -15,6 +15,7 @@ import { readVtpassPhase0Config } from '../vtpass-config.js'
 import { listRegisteredPaymentsForEventIds, paymentReceiptId } from '../event-registry.js'
 import { pocketPaylinkRepository, type PocketCollectionLink } from './paylink-store.js'
 import { paymentExecutionRepository, type PaymentExecutionIntent } from './payment-execution-intents.js'
+import { listCirclePocketActions, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
 
 type PocketPosResource = {
   merchant_id: string
@@ -35,6 +36,32 @@ type PocketActivityHandlerDependencies = {
   readCollectionPayments?(eventIds: string[]): Promise<unknown[]>
   readExternalPayments?(walletAddresses: string[]): Promise<PaymentExecutionIntent[]>
   readWalletAddresses?(ownerId: string): Promise<string[]>
+  readActions?(ownerId: string): Promise<CirclePocketActionRecord[]>
+}
+
+function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
+  if (record.action !== 'wallet.bridge' || !record.metadata?.txHash) return undefined
+  const source = record.metadata.source || 'USDC'
+  const destination = record.metadata.destination || 'destination'
+  return {
+    eventId: `pocket-bridge:${record.id}`,
+    txHash: record.metadata.txHash,
+    chain: source,
+    payer: 'Pocket wallet',
+    memo: `${source} to ${destination}`,
+    amount: record.metadata.amount || '0',
+    ts: record.updatedAt,
+    source: 'wallet-bridge',
+    merchantId: record.id,
+    contextLabel: `${source} to ${destination}`,
+    settlementType: 'wallet_bridge',
+    paycrestStatus: record.status === 'completed' ? 'completed' : record.status === 'failed' ? 'failed' : 'processing',
+    activityLabel: 'USDC moved',
+    direction: 'out',
+    recipient: destination,
+    destination,
+    providerReference: record.resourceId || record.metadata.txHash,
+  }
 }
 
 function externalPaymentActivityRow(intent: PaymentExecutionIntent): PocketActivityRow | undefined {
@@ -194,6 +221,10 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
           receiptUrl: `/receipt/${paymentReceiptId(row.eventId, row.txHash)}`,
         }))
       const walletHistory = await dependencies.readWalletHistory?.(identity.userId) ?? []
+      const durableBridges = (await dependencies.readActions?.(identity.userId) ?? []).flatMap(record => {
+        const row = bridgeActivityRow(record)
+        return row ? [row] : []
+      })
       const walletAddresses = await dependencies.readWalletAddresses?.(identity.userId) ?? []
       const externalPayments = (await dependencies.readExternalPayments?.(walletAddresses) ?? [])
         .flatMap(intent => {
@@ -206,7 +237,7 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
         return row ? [row] : []
       })
       const contextualTxHashes = new Set(externalPayments.map(row => row.txHash.toLowerCase()))
-      const payments = [...externalPayments, ...bills, ...collectionPayments, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
+      const payments = [...externalPayments, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
         .filter(row => row.source === 'purchase' || !contextualTxHashes.has(row.txHash.toLowerCase()))
         .filter((row, index, rows) => rows.findIndex(candidate => candidate.txHash === row.txHash && (
           candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
@@ -241,6 +272,7 @@ export default createPocketActivityHandler({
   readCollections: ownerId => pocketPaylinkRepository.listOwned(ownerId),
   readCollectionPayments: listRegisteredPaymentsForEventIds,
   readWalletHistory: readPocketWalletChainActivity,
+  readActions: ownerId => listCirclePocketActions(ownerId, 500),
   readWalletAddresses: async ownerId => (await readPocketLinkedWalletAddresses(ownerId)).map(item => item.walletAddress),
   readExternalPayments: async walletAddresses => {
     const matches = await Promise.all(walletAddresses.map(walletAddress =>

@@ -11,6 +11,7 @@ import {
 const JOURNAL_PATH = process.env.CIRCLE_POCKET_ACTION_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/circle-pocket-actions.json` : './data/circle-pocket-actions.json')
 const JOURNAL_STORE_KEY = (process.env.CIRCLE_POCKET_ACTION_STORE_KEY ?? 'hashpaylink:circle-pocket-actions').trim()
+const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
 
 export type CirclePocketActionStatus = 'started' | 'submitted' | 'completed' | 'failed'
 export type CirclePocketActionRecord = {
@@ -29,12 +30,15 @@ type ActionStore = { actions: Record<string, CirclePocketActionRecord> }
 let mutationQueue: Promise<void> = Promise.resolve()
 
 async function readStore(): Promise<ActionStore> {
-  try {
-    const durable = await readDurableJson<Partial<ActionStore>>(JOURNAL_STORE_KEY)
-    if (durable) return { actions: durable.actions ?? {} }
-  } catch {
-    // File fallback remains available in local and degraded environments.
+  if (hasRenderDurableStore()) {
+    try {
+      const durable = await readDurableJson<Partial<ActionStore>>(JOURNAL_STORE_KEY)
+      return { actions: durable?.actions ?? {} }
+    } catch {
+      if (IS_RENDER) throw new Error('Durable Pocket action storage failed.')
+    }
   }
+  if (IS_RENDER) throw new Error('Durable Pocket action storage is not configured.')
   try {
     return JSON.parse(await readFile(JOURNAL_PATH, 'utf8')) as ActionStore
   } catch {
@@ -159,5 +163,13 @@ export async function listCirclePocketActions(ownerId: string, limit = 50) {
   return Object.values(store.actions)
     .filter(record => record.ownerId === ownerId)
     .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, Math.max(1, Math.min(limit, 100)))
+    .slice(0, Math.max(1, Math.min(limit, 500)))
+}
+
+export async function listUnresolvedCirclePocketActions(action: string, limit = 250) {
+  const store = await readStore()
+  return Object.values(store.actions)
+    .filter(record => record.action === action && (record.status === 'started' || record.status === 'submitted'))
+    .sort((a, b) => a.updatedAt - b.updatedAt)
+    .slice(0, Math.max(1, Math.min(limit, 1000)))
 }

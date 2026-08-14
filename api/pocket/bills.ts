@@ -174,7 +174,7 @@ function publicBillIntent(intent: PocketBillsIntent, execution?: PaymentExecutio
   }
 }
 
-async function syncBillExecution(dependencies: BillsDependencies, intent: PocketBillsIntent) {
+export async function syncBillExecution(dependencies: BillsDependencies, intent: PocketBillsIntent) {
   let execution = await dependencies.executions.findByResource(intent.ownerId, intent.id, 'bill_payment')
   if (!execution) {
     const created = await dependencies.executions.create({
@@ -204,16 +204,16 @@ async function syncBillExecution(dependencies: BillsDependencies, intent: Pocket
   const processing = ['vending', 'pending', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted'].includes(intent.state)
 
   if (afterAuthorization && execution.state === 'prepared') {
-    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'authorized', ...reference })
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'authorized', expectedState: execution.state, ...reference })
   }
   if (afterPayment && execution.state === 'authorized') {
-    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'submitted', ...reference })
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'submitted', expectedState: execution.state, ...reference })
   }
   if (processing && (execution.state === 'submitted' || execution.state === 'needs_review')) {
-    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'processing', ...reference })
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'processing', expectedState: execution.state, ...reference })
   }
   if (intent.state === 'delivered' && ['submitted', 'processing', 'needs_review'].includes(execution.state)) {
-    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'completed', ...reference })
+    execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'completed', expectedState: execution.state, ...reference })
   } else if (intent.state === 'refunded' && !['completed', 'failed', 'expired'].includes(execution.state)) {
     execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'failed', failureCode: 'PROVIDER_REFUNDED', ...reference })
   } else if (intent.state === 'failed' && !['completed', 'failed', 'expired'].includes(execution.state)) {
@@ -600,6 +600,7 @@ let defaultHandlers: {
   quote: ReturnType<typeof createPocketBillsQuoteHandler>
   pay: ReturnType<typeof createPocketBillsPayHandler>
   verify: ReturnType<typeof createPocketBillsVerifyHandler>
+  dependencies: BillsDependencies
 } | null = null
 
 function getDefaultHandlers() {
@@ -624,8 +625,26 @@ function getDefaultHandlers() {
     quote: createPocketBillsQuoteHandler(dependencies),
     pay: createPocketBillsPayHandler(dependencies),
     verify: createPocketBillsVerifyHandler(dependencies),
+    dependencies,
   }
   return defaultHandlers
+}
+
+export async function reconcilePocketBillExecutionByResource(intentId: string) {
+  const dependencies = getDefaultHandlers().dependencies
+  let intent = await dependencies.store.getIntentById(intentId)
+  const canRequery = Boolean(intent.providerAttemptedAt)
+    && ['vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_eligible', 'needs_review'].includes(intent.state)
+  if (canRequery) {
+    try {
+      const result = await dependencies.provider.requeryTransaction(intent.requestId)
+      intent = await dependencies.store.recordProviderResult(intent.ownerId, intent.id, result, { requery: true })
+    } catch (error) {
+      await dependencies.store.recordRequeryFailure(intent.ownerId, intent.id, error instanceof Error ? error.message : 'Provider status is temporarily unavailable.')
+      throw error
+    }
+  }
+  return { intent, execution: await syncBillExecution(dependencies, intent), requeried: canRequery }
 }
 
 export async function pocketBillsCatalogHandler(req: Request, res: Response) {

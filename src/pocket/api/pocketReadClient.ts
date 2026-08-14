@@ -212,7 +212,7 @@ export async function readPocketBalances({
   if (!response.ok) throw new Error(pocketErrorMessage(data, 'Circle Pocket balance refresh failed.'))
   if (!isRecord(data) || data.ok !== true) throw new Error(pocketErrorMessage(data, 'Circle Pocket balance refresh failed.'))
   if (!isPocketBalancesReadData(data)) throw new Error('Circle Pocket balance response was invalid.')
-  return { total: data.total, rows: data.rows }
+  return { total: data.total, rows: data.rows, totalComplete: data.totalComplete, unavailableNetworks: data.unavailableNetworks }
 }
 
 export async function readPocketLinkedWallets({

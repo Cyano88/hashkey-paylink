@@ -126,3 +126,7 @@ export async function mutateDurableJson<T>(key: string, mutate: (current: T | un
     client.release()
   }
 }
+
+export async function queryDurablePostgres<T extends pg.QueryResultRow = pg.QueryResultRow>(text: string, values: unknown[] = []) {
+  return requirePool().query<T>(text, values)
+}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, ChevronDown, Landmark, Loader2, Mail, Store, Wallet } from '../../components/PocketIcons'
+import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, Banknote, Check, ChevronDown, Copy, Landmark, Loader2, Mail, Store, Wallet } from '../../components/PocketIcons'
 import { ArrowTopRightOnSquareIcon as ExternalLink } from '@heroicons/react/24/outline'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
@@ -68,6 +68,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
   const [expandedActivityId, setExpandedActivityId] = useState('')
   const [refundBusy, setRefundBusy] = useState('')
   const [refundMessage, setRefundMessage] = useState<Record<string, string>>({})
+  const [copiedReference, setCopiedReference] = useState('')
   const supported = supportedRows(rows).filter(row => (
     activityKind(row) !== 'bank'
     || pocketActivityStatus(row) !== 'status unavailable'
@@ -107,6 +108,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const recordId = `${row.txHash || row.eventId}-${row.ts}-${index}`
                 const collapsible = Boolean(receipt)
                 const expanded = collapsible && expandedActivityId === recordId
+                const supportReference = row.supportReference || row.providerReference || row.billReference || row.receiptId || row.txHash || row.eventId
                 return (
                   <div key={recordId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
                     <div
@@ -141,6 +143,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                           {amountNgn ? `NGN ${amountNgn}` : Number.isFinite(amountUsdc) ? `${formatPocketDisplayAmount(amountUsdc)} USDC` : 'Receipt'}
                         </span>
                         <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{pocketActivityStatus(row)}</span>
+                        {supportReference && <button type="button" onClick={event => { event.stopPropagation(); void navigator.clipboard.writeText(supportReference).then(() => { setCopiedReference(recordId); window.setTimeout(() => setCopiedReference(''), 1200) }) }} className="ml-auto mt-1 inline-flex items-center gap-1 font-mono text-[9px] font-semibold text-gray-400" aria-label="Copy full support reference">{supportReference.length > 10 ? `${supportReference.slice(0, 3)}…${supportReference.slice(-3)}` : supportReference}{copiedReference === recordId ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}</button>}
                         {collapsible && <ChevronDown className={cn('ml-auto mt-1 h-3.5 w-3.5 text-gray-300 transition-transform', expanded && 'rotate-180')} />}
                       </span>
                     </div>

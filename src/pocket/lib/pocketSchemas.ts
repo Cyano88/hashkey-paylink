@@ -102,6 +102,8 @@ export type PocketBalanceRow = {
 
 export type PocketBalancesReadData = {
   total: number
+  totalComplete: boolean
+  unavailableNetworks: PocketNetwork[]
   rows: PocketBalanceRow[]
 }
 
@@ -488,6 +490,8 @@ export function isPocketWalletsReadData(value: unknown): value is PocketWalletsR
 export function isPocketBalancesReadData(value: unknown): value is PocketBalancesReadData {
   if (!isRecord(value) || !Array.isArray(value.rows)) return false
   if (typeof value.total !== 'number' || !Number.isFinite(value.total) || value.total < 0) return false
+  if (typeof value.totalComplete !== 'boolean' || !Array.isArray(value.unavailableNetworks)) return false
+  if (!value.unavailableNetworks.every(network => POCKET_NETWORKS.includes(network as PocketNetwork))) return false
   if (value.rows.length !== POCKET_NETWORKS.length) return false
   const validRows = value.rows.every((row, index) => {
     if (!isRecord(row) || row.key !== POCKET_NETWORKS[index]) return false

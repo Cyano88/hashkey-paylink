@@ -50,6 +50,7 @@ const handler = createPocketBankWithdrawHandler({
   executions,
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   authorizeBankAccount: async () => ({ verification: { account_name: 'ADA LOVELACE' } }),
+  readBridgeStatus: async () => ({ status: 'confirmed' }),
   createBankReceive: async req => {
     calls.push({ kind: 'create', body: req.body, headers: req.headers })
     return { ok: true, link: { intent_id: processingOrder.intent_id, merchant_id: processingOrder.merchant_id } }

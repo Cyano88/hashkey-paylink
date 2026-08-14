@@ -75,6 +75,8 @@ assert.deepEqual(loaded.body.rows, [
   { key: 'solana', label: 'Solana', balance: 3.25, status: 'ok' },
 ])
 assert.equal(loaded.body.total, 5.75)
+assert.equal(loaded.body.totalComplete, false)
+assert.deepEqual(loaded.body.unavailableNetworks, ['arc'])
 const serialized = JSON.stringify(loaded.body)
 assert.equal(serialized.includes('wallet-address'), false)
 assert.equal(serialized.includes('privy-user-1'), false)
@@ -99,6 +101,7 @@ const testnetBalanceHandler = createPocketBalancesHandler({
 const testnetBalance = await request(testnetBalanceHandler)
 assert.equal(testnetBalance.body.rows.find(row => row.key === 'arc').balance, 66)
 assert.equal(testnetBalance.body.total, 3)
+assert.equal(testnetBalance.body.totalComplete, true)
 assert.equal(isPocketBalancesReadData(testnetBalance.body), true)
 
 const invalidTestnetTotal = structuredClone(testnetBalance.body)

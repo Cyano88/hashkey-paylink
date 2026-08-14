@@ -2,11 +2,9 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowRight,
-  CheckCircle2,
-  Loader2,
-  Mail,
   Wallet,
 } from 'lucide-react'
+import { CheckCircle2, Loader2, Mail } from '../components/PocketIcons'
 import { cn } from '../../lib/utils'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import type { PocketNavTab } from '../components/PocketBottomNav'

@@ -26,6 +26,8 @@ export interface UnifiedBalanceQuery {
 export interface UnifiedBalanceResult {
   total: number
   rows: UnifiedBalanceBreakdown[]
+  totalComplete?: boolean
+  unavailableNetworks?: string[]
 }
 
 const context = createUnifiedBalanceKitContext()

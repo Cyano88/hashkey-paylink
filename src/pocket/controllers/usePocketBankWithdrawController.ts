@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
-import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
+import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, recoverPocketBankWithdrawals, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import { clearActivePocketBankPayout, readActivePocketBankPayout, saveActivePocketBankPayout } from '../lib/pocketBankPayoutState'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
@@ -132,13 +132,23 @@ export default function usePocketBankWithdrawController({
   }, [onSent])
 
   useEffect(() => {
-    const intentId = activeIntentId.current
-    if (!authenticated || !intentId) return
+    if (!authenticated) return
     cancelled.current = false
     setStatus('processing')
     const reconcile = async () => {
       const accessToken = await getAccessToken()
-      if (accessToken) await pollUntilSettled(accessToken, intentId, 1)
+      if (!accessToken) return
+      let intentId = activeIntentId.current
+      if (!intentId) {
+        const unresolved = await recoverPocketBankWithdrawals({ accessToken }).catch(() => [])
+        intentId = unresolved[0]?.intentId ?? ''
+        if (intentId) {
+          activeIntentId.current = intentId
+          saveActivePocketBankPayout(intentId)
+        }
+      }
+      if (intentId) await pollUntilSettled(accessToken, intentId, 1)
+      else setStatus('idle')
     }
     void reconcile()
     const refreshVisible = () => { if (document.visibilityState === 'visible') void reconcile() }

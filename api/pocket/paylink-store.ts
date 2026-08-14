@@ -41,7 +41,10 @@ function validatePaymentUrl(value: unknown, eventId: string) {
   const raw = clean(value, 2_000)
   let parsed: URL
   try { parsed = new URL(raw) } catch { throw Object.assign(new Error('Collection payment link is invalid.'), { status: 400 }) }
-  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.pathname !== '/pay') {
+  const checkoutHost = parsed.hostname.toLowerCase()
+  const trustedCheckout = parsed.protocol === 'https:' && (checkoutHost === 'app.hashpaylink.com' || checkoutHost === 'pocket.hashpaylink.com')
+  const localCheckout = parsed.protocol === 'http:' && (checkoutHost === 'localhost' || checkoutHost === '127.0.0.1')
+  if ((!trustedCheckout && !localCheckout) || parsed.username || parsed.password || parsed.pathname !== '/pay') {
     throw Object.assign(new Error('Collection payment link is invalid.'), { status: 400 })
   }
   if (parsed.searchParams.get('v') !== '1' || parsed.searchParams.get('id') !== eventId) {

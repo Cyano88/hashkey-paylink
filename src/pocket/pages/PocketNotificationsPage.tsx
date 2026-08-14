@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import { AlertCircle, Bell, Check, Loader2, XCircle } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import { decidePocketRequest, readPocketRequests, type PocketRequestItem } from '../api/pocketRequestsClient'
+import { decidePocketRequest, markPocketRequestsRead, readPocketRequests, type PocketRequestItem } from '../api/pocketRequestsClient'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 
 export default function PocketNotificationsPage() {
@@ -16,7 +16,7 @@ export default function PocketNotificationsPage() {
   const load = async () => {
     if (!authenticated) { setBusy(false); return }
     setBusy(true); setError('')
-    try { const token = await getAccessToken(); if (!token) throw new Error('Sign in again to read requests.'); setItems(await readPocketRequests(token)) }
+    try { const token = await getAccessToken(); if (!token) throw new Error('Sign in again to read requests.'); setItems(await readPocketRequests(token)); await markPocketRequestsRead(token) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load requests.') }
     finally { setBusy(false) }
   }

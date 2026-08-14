@@ -686,6 +686,8 @@ assert.equal(activityReadRequest.init.body, undefined)
 const balancesEnvelope = {
   ok: true,
   total: 5,
+  totalComplete: false,
+  unavailableNetworks: ['arc'],
   rows: [
     { key: 'base', label: 'Base', balance: 2, status: 'ok' },
     { key: 'arbitrum', label: 'Arbitrum', balance: 0, status: 'ok' },
@@ -705,7 +707,7 @@ const pocketBalanceResult = await readPocketBalances({
     return { ok: true, json: async () => balancesEnvelope }
   },
 })
-assert.deepEqual(pocketBalanceResult, { total: balancesEnvelope.total, rows: balancesEnvelope.rows })
+assert.deepEqual(pocketBalanceResult, { total: balancesEnvelope.total, rows: balancesEnvelope.rows, totalComplete: false, unavailableNetworks: ['arc'] })
 assert.equal(pocketBalancesRequest.url, '/api/pocket/balances')
 assert.equal(pocketBalancesRequest.init.method, 'GET')
 assert.equal(pocketBalancesRequest.init.headers.authorization, 'Bearer balance-read-token')
@@ -1403,7 +1405,7 @@ assert.ok(
   'human checkout network options must only reference hosted state initialized earlier in the component',
 )
 assert.match(paymentPageSource, /\{ value: 'solana' as const, label: 'Solana Soon', disabled: true \}/)
-assert.match(paymentPageSource, /!isBankSendPayment && \(\s*<div[^>]*>[\s\S]*?Payment network[\s\S]*?<PocketSelect/)
+assert.match(paymentPageSource, /!isBankSendPayment && !isNgPosPaycrestOfframp && \(\s*<div[^>]*>[\s\S]*?Payment network[\s\S]*?<PocketSelect/)
 assert.match(paymentPageSource, /options=\{humanCheckoutNetworkOptions\}/)
 assert.match(paymentPageSource, /disabled=\{netLocked \|\| availableChains\.length <= 1\}/)
 assert.doesNotMatch(paymentPageSource, /!isHostedCheckout && <div className="flex justify-center px-4 pb-0 pt-4">/)

@@ -93,7 +93,7 @@ export async function readPocketNetworkBalance(network: PocketNetwork, address: 
   } catch (directError) {
     try {
       const fallback = await readCircleFallback(network, address)
-      if (fallback > 0) return fallback
+      if (Number.isFinite(fallback) && fallback >= 0) return fallback
     } catch {
       // Preserve the direct reader failure just like the existing browser balance boundary.
     }
@@ -111,12 +111,10 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
 
     try {
       const identity = await dependencies.verifyUser(req)
-      const rows: PocketBalanceRow[] = []
-      for (const network of POCKET_NETWORKS) {
+      const rows = await Promise.all(POCKET_NETWORKS.map(async (network): Promise<PocketBalanceRow> => {
         const link = await dependencies.readLink(circleLinkKey(identity.userId, network, 'payment'))
         if (!link) {
-          rows.push({ key: network, label: LABELS[network], balance: 0, status: 'ok' })
-          continue
+          return { key: network, label: LABELS[network], balance: 0, status: 'ok' }
         }
         if (link.chain !== network || (link.purpose ?? 'payment') !== 'payment') {
           throw Object.assign(new Error('Stored Circle wallet link did not match its payment network.'), { status: 500 })
@@ -124,19 +122,20 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
         try {
           const balance = await dependencies.readBalance(network, link.circleWalletAddress)
           if (!Number.isFinite(balance) || balance < 0) throw new Error('Balance reader returned an invalid amount.')
-          rows.push({ key: network, label: LABELS[network], balance, status: 'ok' })
+          return { key: network, label: LABELS[network], balance, status: 'ok' }
         } catch {
-          rows.push({
+          return {
             key: network,
             label: LABELS[network],
             balance: 0,
             status: 'error',
             error: `${LABELS[network]} balance is temporarily unavailable.`,
-          })
+          }
         }
-      }
+      }))
       const mainnetTotal = rows.reduce((sum, row) => row.key === 'arc' ? sum : sum + row.balance, 0)
-      return res.json({ ok: true, total: mainnetTotal, rows })
+      const unavailableNetworks = rows.filter(row => row.status === 'error').map(row => row.key)
+      return res.json({ ok: true, total: mainnetTotal, totalComplete: unavailableNetworks.length === 0, unavailableNetworks, rows })
     } catch (error) {
       const normalized = error as Error & { status?: number }
       if (normalized.status === 401) return fail(401, 'AUTH_REQUIRED', normalized.message, false)

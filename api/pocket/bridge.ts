@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express'
 import { circleLinkKey, readCircleLink } from '../privy-circle-link.js'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
-import { CCTP_DOMAIN, formatUsdcUnits, parseUsdcAmount, readCctpForwardQuote, solanaRecipient, type PocketBridgeNetwork } from './cctp.js'
+import { formatUsdcUnits, parseUsdcAmount, readCctpForwardQuote, solanaRecipient, type PocketBridgeNetwork } from './cctp.js'
+import { isCircleBridgeComplete, readCircleBridgeStatus } from './circle-bridge-status.js'
+import { appendPocketMoneyLedgerEvent } from './money-ledger.js'
 import { recordCirclePocketAction } from '../circle-pocket-action-journal.js'
 
 type Dependencies = {
@@ -11,6 +13,7 @@ type Dependencies = {
   readSolanaRecipient: typeof solanaRecipient
   record: typeof recordCirclePocketAction
   fetcher: typeof fetch
+  appendLedger: typeof appendPocketMoneyLedgerEvent
 }
 
 function network(value: unknown): PocketBridgeNetwork {
@@ -19,7 +22,7 @@ function network(value: unknown): PocketBridgeNetwork {
 }
 
 export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {}) {
-  const dependencies: Dependencies = { verifyUser: verifiedPrivyUser, readLink: readCircleLink, quote: readCctpForwardQuote, readSolanaRecipient: solanaRecipient, record: recordCirclePocketAction, fetcher: fetch, ...overrides }
+  const dependencies: Dependencies = { verifyUser: verifiedPrivyUser, readLink: readCircleLink, quote: readCctpForwardQuote, readSolanaRecipient: solanaRecipient, record: recordCirclePocketAction, fetcher: fetch, appendLedger: appendPocketMoneyLedgerEvent, ...overrides }
   return async function pocketBridgeHandler(req: Request, res: Response) {
     if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Method not allowed.', retryable: false } })
     try {
@@ -29,14 +32,11 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
         const source = network(req.query.source)
         const txHash = String(req.query.txHash ?? '').trim()
         if (!txHash || txHash.length > 128) throw Object.assign(new Error('A valid source transaction is required.'), { status: 400 })
-        const response = await dependencies.fetcher(`https://iris-api.circle.com/v2/messages/${CCTP_DOMAIN[source]}?transactionHash=${encodeURIComponent(txHash)}`)
-        const data = await response.json().catch(() => ({})) as { messages?: Array<Record<string, unknown>> }
-        if (!response.ok && response.status !== 404) throw new Error('Circle bridge status is temporarily unavailable.')
-        const message = data.messages?.[0]
+        const bridge = await readCircleBridgeStatus(source, txHash, dependencies.fetcher)
         return res.json({
           ok: true,
-          status: String(message?.forwardState ?? message?.status ?? 'pending').toLowerCase(),
-          destinationTxHash: typeof message?.forwardTxHash === 'string' ? message.forwardTxHash : undefined,
+          status: bridge.status,
+          destinationTxHash: bridge.destinationTxHash,
         })
       }
       if (action === 'record') {
@@ -46,7 +46,13 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
         parseUsdcAmount(amount)
         const txHash = String(req.body?.txHash ?? '').trim()
         if (!txHash || txHash.length > 128) throw Object.assign(new Error('A valid source transaction is required.'), { status: 400 })
-        const complete = req.body?.status === 'completed'
+        const requestedComplete = req.body?.status === 'completed'
+        let complete = false
+        if (requestedComplete) {
+          const provider = await readCircleBridgeStatus(source, txHash, dependencies.fetcher)
+          complete = isCircleBridgeComplete(provider.status)
+          if (!complete) throw Object.assign(new Error('Circle has not confirmed this bridge yet.'), { status: 409 })
+        }
         const record = await dependencies.record({
           ownerId: identity.userId,
           idempotencyKey: `pocket:bridge:${source}:${txHash}`,
@@ -54,6 +60,21 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
           status: complete ? 'completed' : 'submitted',
           resourceId: txHash,
           metadata: { source, destination, amount, paymentState: complete ? 'confirmed' : 'submitted', txHash },
+        })
+        await dependencies.appendLedger({
+          eventKey: `wallet-bridge:${record.id}:${record.status}:${record.updatedAt}`,
+          ownerId: identity.userId,
+          executionId: record.id,
+          rail: 'wallet_bridge',
+          state: record.status,
+          asset: 'USDC',
+          amount,
+          sourceNetwork: source,
+          settlementNetwork: destination,
+          resourceId: record.id,
+          transactionHash: txHash,
+          metadata: { source, destination, paymentState: complete ? 'confirmed' : 'submitted' },
+          recordedAt: record.updatedAt,
         })
         return res.json({ ok: true, id: record.id })
       }

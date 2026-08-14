@@ -25,6 +25,7 @@ type SupportCase = {
   waitingSince?: number
   reminderSentAt?: number
   resolvedAt?: number
+  customerReadAt?: number
 }
 type SupportStore = { cases: Record<string, SupportCase> }
 
@@ -62,7 +63,12 @@ async function currentStore() {
 }
 function publicCase(item: SupportCase) {
   const { profileId: _profileId, ...safe } = item
-  return safe
+  const lastReadAt = item.customerReadAt || 0
+  const unreadCount = item.messages.filter(message => (
+    (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution')
+    && message.createdAt > lastReadAt
+  )).length
+  return { ...safe, unreadCount }
 }
 
 async function privateCustomerIdentity(identity: Awaited<ReturnType<typeof resolveCirclePocketIdentity>>) {
@@ -139,6 +145,19 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         item.reminderSentAt = undefined
         item.resolvedAt = undefined
         item.updatedAt = now
+        saved = item
+        return next
+      })
+      return res.json({ ok: true, case: saved && publicCase(saved) })
+    }
+    if (action === 'mark-read') {
+      const caseId = clean(req.body?.caseId, 80)
+      let saved: SupportCase | undefined
+      await mutateDurableJson<SupportStore>(STORE_KEY, current => {
+        const next = current || { cases: {} }
+        const item = next.cases[caseId]
+        if (!item || item.profileId !== profileId) throw Object.assign(new Error('Support case not found.'), { status: 404 })
+        item.customerReadAt = Date.now()
         saved = item
         return next
       })

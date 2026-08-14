@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowRight, ArrowUpFromLine, CheckCheck, Copy, Download, LayoutDashboard, Loader2, Mail, Send, Wallet } from 'lucide-react'
+import { ArrowRight, Wallet } from 'lucide-react'
+import { Activity, ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, CheckCheck, Copy, Download, LayoutDashboard, Loader2, Mail, Send } from '../../components/PocketIcons'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn } from '../../../lib/utils'
 import type { PocketHomeNetwork, PocketHomeNetworkKey } from './PocketHomeOverview'

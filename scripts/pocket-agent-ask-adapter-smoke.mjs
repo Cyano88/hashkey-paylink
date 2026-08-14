@@ -53,7 +53,7 @@ assert.match(mutation.payload.error.message, /read-only/i)
 assert.equal(verified, 0)
 
 const cases = [
-  ['show my wallet balance', 'circle-pocket-wallet-overview', 'https://pocket.hashpaylink.com/move/usdc'],
+['show my wallet balance', 'circle-pocket-wallet-overview', 'https://pocket.hashpaylink.com/home'],
   ['create a USDC payment link', 'circle-pocket-receive-usdc', 'https://pocket.hashpaylink.com/move/usdc'],
   ['receive into my bank account', 'circle-pocket-bank-payout', 'https://pocket.hashpaylink.com/move/bank'],
   ['open a POS terminal', 'circle-pocket-retail-pos', 'https://pocket.hashpaylink.com/move/pos'],

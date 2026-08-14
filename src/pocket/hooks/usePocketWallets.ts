@@ -9,6 +9,7 @@ type PocketWalletCacheEntry = {
   wallets: CirclePocketWallets
   rows: UnifiedBalanceBreakdown[]
   total: number
+  totalComplete: boolean
 }
 
 const pocketWalletCache = new Map<string, PocketWalletCacheEntry>()
@@ -21,6 +22,7 @@ type PocketWalletReadState = {
   setWallets: Dispatch<SetStateAction<CirclePocketWallets>>
   rows: UnifiedBalanceBreakdown[]
   total: number
+  totalComplete: boolean
   balanceBusy: boolean
   resolved: boolean
   error: string
@@ -50,8 +52,8 @@ export async function prefetchPocketWalletSnapshot({
     ])
     const previous = pocketWalletCache.get(email)
     pocketWalletCache.set(email, 'result' in balanceOutcome
-      ? { wallets, rows: balanceOutcome.result.rows, total: balanceOutcome.result.total }
-      : { wallets, rows: previous?.rows ?? [], total: previous?.total ?? 0 })
+      ? { wallets, rows: balanceOutcome.result.rows, total: balanceOutcome.result.total, totalComplete: balanceOutcome.result.totalComplete !== false }
+      : { wallets, rows: previous?.rows ?? [], total: previous?.total ?? 0, totalComplete: previous?.totalComplete ?? false })
   })().finally(() => {
     pocketWalletPrefetches.delete(email)
   })
@@ -73,6 +75,7 @@ export default function usePocketWallets({
   const [wallets, setWallets] = useState<CirclePocketWallets>(() => cached?.wallets ?? {})
   const [rows, setRows] = useState<UnifiedBalanceBreakdown[]>(() => cached?.rows ?? [])
   const [total, setTotal] = useState(() => cached?.total ?? 0)
+  const [totalComplete, setTotalComplete] = useState(() => cached?.totalComplete ?? true)
   const [balanceBusy, setBalanceBusy] = useState(false)
   const [resolved, setResolved] = useState(() => !authenticated || Boolean(cached))
   const [error, setError] = useState('')
@@ -90,11 +93,13 @@ export default function usePocketWallets({
       const result = await readPocketBalances({ accessToken: token })
       setRows(result.rows)
       setTotal(result.total)
+      setTotalComplete(result.totalComplete !== false)
       lastBalanceReadAt.current = Date.now()
       pocketWalletCache.set(email, {
         wallets,
         rows: result.rows,
         total: result.total,
+        totalComplete: result.totalComplete !== false,
       })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Circle Pocket balance refresh failed.')
@@ -109,6 +114,7 @@ export default function usePocketWallets({
       setWallets({})
       setRows([])
       setTotal(0)
+      setTotalComplete(true)
       setResolved(true)
       return
     }
@@ -118,6 +124,7 @@ export default function usePocketWallets({
       setWallets(immediate.wallets)
       setRows(immediate.rows)
       setTotal(immediate.total)
+      setTotalComplete(immediate.totalComplete)
       setResolved(true)
     } else {
       setResolved(false)
@@ -144,17 +151,19 @@ export default function usePocketWallets({
         if ('result' in balanceOutcome) {
           setRows(balanceOutcome.result.rows)
           setTotal(balanceOutcome.result.total)
+          setTotalComplete(balanceOutcome.result.totalComplete !== false)
           lastBalanceReadAt.current = Date.now()
           pocketWalletCache.set(email, {
             wallets: nextWallets,
             rows: balanceOutcome.result.rows,
             total: balanceOutcome.result.total,
+            totalComplete: balanceOutcome.result.totalComplete !== false,
           })
         } else if (!Object.keys(nextWallets).length) {
           setRows([])
           setTotal(0)
           lastBalanceReadAt.current = Date.now()
-          pocketWalletCache.set(email, { wallets: nextWallets, rows: [], total: 0 })
+          pocketWalletCache.set(email, { wallets: nextWallets, rows: [], total: 0, totalComplete: true })
         } else {
           setError(balanceOutcome.reason instanceof Error ? balanceOutcome.reason.message : 'Circle Pocket balance refresh failed.')
           const previous = pocketWalletCache.get(email)
@@ -162,6 +171,7 @@ export default function usePocketWallets({
             wallets: nextWallets,
             rows: previous?.rows ?? [],
             total: previous?.total ?? 0,
+            totalComplete: previous?.totalComplete ?? false,
           })
         }
       } catch {
@@ -207,5 +217,5 @@ export default function usePocketWallets({
     }
   }, [authenticated, email, refreshBalances])
 
-  return { wallets, setWallets, rows, total, balanceBusy, resolved, error, setError, refreshBalances }
+  return { wallets, setWallets, rows, total, totalComplete, balanceBusy, resolved, error, setError, refreshBalances }
 }

@@ -777,6 +777,7 @@ type PocketSupportCase = {
   status: 'open' | 'assigned' | 'waiting_user' | 'resolved'
   customer?: { fullName: string; email: string; pocketId: string }
   messages: Array<{ id: string; author: 'user' | 'agent' | 'staff'; kind?: 'automatic_reminder' | 'automatic_resolution'; text: string; createdAt: number }>
+  unreadCount?: number
 }
 
 async function readPocketSupportResponse<T>(response: Response): Promise<T> {
@@ -1845,6 +1846,9 @@ export function TelegramHelperPanel({
   const [polyPortfolioFundingDraft, setPolyPortfolioFundingDraft] = useState<PolyPortfolioFundingDraft | null>(null)
   const [checkpointBusy, setCheckpointBusy] = useState(false)
   const [supportReplyCaseId, setSupportReplyCaseId] = useState('')
+  const [humanSupportOpen, setHumanSupportOpen] = useState(false)
+  const [humanSupportMessages, setHumanSupportMessages] = useState<HelperMessage[]>([])
+  const [supportUnreadCount, setSupportUnreadCount] = useState(0)
   const [humanSupportBusy, setHumanSupportBusy] = useState(false)
   const helperScrollRef = useRef<HTMLDivElement | null>(null)
   const helperAbortRef = useRef<AbortController | null>(null)
@@ -1853,7 +1857,6 @@ export function TelegramHelperPanel({
   const helperIdentityResetMountedRef = useRef(false)
   const suppressThreadHydrationRef = useRef(false)
   const freshThreadIdsRef = useRef<Set<string>>(new Set())
-  const seenSupportMessageIdsRef = useRef<Set<string>>(new Set())
   const helperIdentityKey = (ownerKey || telegramId || payer || cleanTelegramName || 'local-helper').trim().toLowerCase()
   const agentRequestPayer = payer.trim() || helperName || cleanTelegramName || ownerKey || fallbackOwner || 'anonymous-helper'
   const activeHelperThreadId = `mode:${helperMode || 'general'}${helperMode === 'polydesk' && polyDeskSubMode ? `:${polyDeskSubMode}` : ''}`
@@ -2084,20 +2087,26 @@ export function TelegramHelperPanel({
         const data = await readPocketSupportResponse<{ ok?: boolean; cases?: PocketSupportCase[] }>(response)
         if (cancelled || !response.ok || !data.ok) return
         const rows = data.cases || []
-        setSupportReplyCaseId(rows.find(item => item.status !== 'resolved')?.id || '')
-        const incoming = rows.flatMap(item => item.messages
-          .filter(message => (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution') && !seenSupportMessageIdsRef.current.has(message.id))
-          .map(message => ({ id: `support-${message.id}`, answer: `Pocket Support · ${item.id}\n${message.text}` })))
-        rows.forEach(item => item.messages.forEach(message => {
-          if (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution') seenSupportMessageIdsRef.current.add(message.id)
-        }))
-        if (incoming.length) setMessages(current => [...current, ...incoming])
+        const active = rows.find(item => item.status !== 'resolved') || rows[0]
+        setSupportReplyCaseId(active?.id || '')
+        const unreadCount = rows.reduce((total, item) => total + Number(item.unreadCount || 0), 0)
+        setSupportUnreadCount(humanSupportOpen ? 0 : unreadCount)
+        if (humanSupportOpen && active) {
+          setHumanSupportMessages(active.messages
+            .filter(message => message.author === 'user' || message.author === 'staff' || message.kind)
+            .map(message => message.author === 'user'
+              ? { id: `support-${message.id}`, question: message.text }
+              : { id: `support-${message.id}`, answer: message.text }))
+          if (Number(active.unreadCount || 0) > 0) {
+            await markPocketSupportRead(active.id).catch(() => undefined)
+          }
+        }
       } catch { /* The next background sync retries without interrupting chat. */ }
     }
     void syncSupport()
     const timer = window.setInterval(() => void syncSupport(), 12000)
     return () => { cancelled = true; window.clearInterval(timer) }
-  }, [helperAuthReady, helperAuthenticated, lockedHelperMode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [helperAuthReady, helperAuthenticated, humanSupportOpen, lockedHelperMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function startHelper() {
     setStarted(true)
@@ -2270,6 +2279,15 @@ export function TelegramHelperPanel({
     if (!response.ok || !data.ok) throw new Error(data.error || 'Could not send your reply to Pocket Support.')
   }
 
+  async function markPocketSupportRead(caseId: string) {
+    const response = await fetch('/api/pocket/support/cases', {
+      method: 'POST', headers: await helperProfileHeaders(true),
+      body: JSON.stringify({ action: 'mark-read', caseId }),
+    })
+    const data = await readPocketSupportResponse<{ ok?: boolean; error?: string }>(response)
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Could not update support messages.')
+  }
+
   async function startHumanSupport() {
     if (humanSupportBusy || !helperAuthReady) return
     if (!helperAuthenticated) {
@@ -2286,16 +2304,14 @@ export function TelegramHelperPanel({
       const data = await readPocketSupportResponse<{ ok?: boolean; case?: PocketSupportCase; error?: string }>(response)
       if (!response.ok || !data.ok || !data.case?.id) throw new Error(data.error || 'Could not start human support.')
       setSupportReplyCaseId(data.case.id)
-      const customer = data.case.customer
-      const identityLines = [
-        'Private support details',
-        `Full name: ${customer?.fullName || 'Not verified yet'}`,
-        `Email: ${customer?.email || 'Unavailable'}`,
-        `Pocket ID: ${customer?.pocketId || 'Unavailable'}`,
-        '',
-        `A human support specialist will join you shortly. Case ${data.case.id}.`,
-      ]
-      setMessages(current => [...current, { id: `human-support-${data.case!.id}`, answer: identityLines.join('\n') }])
+      setHumanSupportMessages(data.case.messages
+        .filter(message => message.author === 'user' || message.author === 'staff' || message.kind)
+        .map(message => message.author === 'user'
+          ? { id: `support-${message.id}`, question: message.text }
+          : { id: `support-${message.id}`, answer: message.text }))
+      setHumanSupportOpen(true)
+      setSupportUnreadCount(0)
+      await markPocketSupportRead(data.case.id).catch(() => undefined)
     } catch (error) {
       setAskError(error instanceof Error ? error.message : 'Could not start human support.')
     } finally { setHumanSupportBusy(false) }
@@ -3693,6 +3709,19 @@ export function TelegramHelperPanel({
     setQuestion('')
     setAskError('')
 
+    if (humanSupportOpen && supportReplyCaseId) {
+      setAsking(true)
+      setHumanSupportMessages(current => [...current, { id: `support-local-${Date.now()}`, question: nextQuestion }])
+      try {
+        await replyToPocketSupport(supportReplyCaseId, nextQuestion)
+      } catch (error) {
+        setAskError(error instanceof Error ? error.message : 'Your support reply could not be sent just now.')
+      } finally {
+        setAsking(false)
+      }
+      return
+    }
+
     if (isClearAgentHashChatCommand(nextQuestion)) {
       const clearedRemotely = await clearCurrentHelperThread()
       setPaylinkDraft(null)
@@ -3812,16 +3841,6 @@ export function TelegramHelperPanel({
         finishHelperMessage(nextQuestion, {
           answer,
         })
-        return
-      }
-      if (helperMode === 'circle-pocket' && supportReplyCaseId) {
-        setAgentStatus('Sending your reply to Pocket Support...')
-        try {
-          await replyToPocketSupport(supportReplyCaseId, nextQuestion)
-          finishHelperMessage(nextQuestion, { answer: 'Sent to Pocket Support. A human specialist will reply in this conversation.' })
-        } catch (error) {
-          finishHelperMessage(nextQuestion, { answer: error instanceof Error ? error.message : 'Your support reply could not be sent just now.' })
-        }
         return
       }
       const supportEscalation = helperMode === 'circle-pocket' ? pocketSupportEscalation(nextQuestion) : null
@@ -3966,13 +3985,11 @@ export function TelegramHelperPanel({
                   : undefined}
               >
                 <div className="max-w-[86%] break-words rounded-[20px] rounded-bl-[6px] bg-[#f3f3f4] px-3 py-2 text-[13px] leading-[1.45] text-gray-900 shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:bg-white/[0.075] dark:text-gray-100 dark:shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
-                  <p>
-                    {welcomeText ?? `Welcome back, ${helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, HashpayStream, agent setup, research, planning, or daily questions.`}
-                  </p>
-                  {lockedHelperMode === 'circle-pocket' && <button type="button" onClick={() => void startHumanSupport()} disabled={humanSupportBusy} className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-700 transition hover:border-gray-300 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-200"><MessageCircle className="h-3 w-3" />{humanSupportBusy ? 'Opening support…' : 'Chat with a human'}</button>}
-                  <div className="mt-1.5">
-                    <ZeroScoutPowerBadge compact />
-                  </div>
+                  <p>{humanSupportOpen ? 'Human Support' : welcomeText ?? `Welcome back, ${helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, HashpayStream, agent setup, research, planning, or daily questions.`}</p>
+                  {lockedHelperMode === 'circle-pocket' && (humanSupportOpen
+                    ? <button type="button" onClick={() => { setHumanSupportOpen(false); setAskError('') }} className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-700 dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-200">Back to Agent Hash</button>
+                    : <div className="mt-2 flex flex-wrap items-center gap-1.5"><button type="button" onClick={() => void startHumanSupport()} disabled={humanSupportBusy} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-700 transition hover:border-gray-300 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-200"><MessageCircle className="h-3 w-3" />{humanSupportBusy ? 'Opening support…' : 'Chat with a human'}</button>{supportUnreadCount > 0 && <button type="button" onClick={() => void startHumanSupport()} className="rounded-full bg-red-600 px-2.5 py-1 text-[10px] font-bold text-white">{supportUnreadCount} support {supportUnreadCount === 1 ? 'reply' : 'replies'}</button>}</div>)}
+                  {!humanSupportOpen && <div className="mt-1.5"><ZeroScoutPowerBadge compact /></div>}
                 </div>
 
                 {!helperMode && !lockedHelperMode && (
@@ -4038,7 +4055,7 @@ export function TelegramHelperPanel({
                   </div>
                 )}
 
-                {messages.map((message, index) => (
+                {(humanSupportOpen ? humanSupportMessages : messages).map((message, index) => (
                   <div key={index} className="space-y-2.5">
                     {message.question && (
                       <div className="flex justify-end">
@@ -4092,7 +4109,7 @@ export function TelegramHelperPanel({
                   </div>
                 ))}
 
-                {asking && <HelperThinkingIndicator statusText={agentStatus} state={thinkingState} />}
+                {asking && !humanSupportOpen && <HelperThinkingIndicator statusText={agentStatus} state={thinkingState} />}
                 {helperToast && (
                   <p className="w-fit rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/[0.08] dark:text-gray-200">{helperToast}</p>
                 )}
@@ -4116,7 +4133,7 @@ export function TelegramHelperPanel({
                       })
                     }}
                     onBlur={() => onComposerFocusChange?.(false)}
-                    placeholder={helperMode === 'polydesk' && !polyDeskSubMode ? 'Choose a Desk Agent lane' : helperMode ? inputPlaceholder ?? 'Ask Hash...' : 'Choose a mode to start'}
+                    placeholder={humanSupportOpen ? 'Message Pocket Support…' : helperMode === 'polydesk' && !polyDeskSubMode ? 'Choose a Desk Agent lane' : helperMode ? inputPlaceholder ?? 'Ask Hash...' : 'Choose a mode to start'}
                     disabled={!helperMode || (helperMode === 'polydesk' && !polyDeskSubMode)}
                     className="h-14 w-full min-w-0 rounded-[28px] border border-gray-200 bg-gray-50 py-3 pl-4 pr-[4.25rem] text-sm text-gray-900 outline-none transition-shadow placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-200/80 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:focus:border-white/20 dark:focus:ring-white/10"
                   />

@@ -29,10 +29,15 @@ import {
 const BASE_BUILDER_CODE = '0x62635f3871746237746e79' as `0x${string}`
 const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | undefined
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
-  RefreshCw, Copy, CheckCheck, Wallet, ChevronDown,
-  AlertTriangle, Radio, Bot, Banknote, Lock,
+  ArrowRight as PaymentArrowRight,
+  Wallet as PaymentWallet,
 } from 'lucide-react'
+import {
+  ArrowLeft, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
+  Copy, CheckCheck, ChevronDown,
+  AlertTriangle, Radio, Bot, Banknote, Lock,
+} from '../pocket/components/PocketIcons'
+import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import {
   CHAIN_META, PLATFORM_FEE_BPS, EVM_TREASURY, type ChainKey,
 } from '../lib/chains'
@@ -72,6 +77,12 @@ import { selectPocketCheckoutRoute, type PocketCheckoutNetwork, type PocketCheck
 import type { CirclePocketWallets } from '../pocket/models/pocketWallet'
 import { POCKET_ORIGIN, POCKET_ROUTES } from '../pocket/lib/pocketRoutes'
 import { type PaylinkReceipt, type ReceiptLookupResponse } from '../lib/paymentReceiptPdf'
+
+// Payment CTA marks are intentionally preserved while surrounding checkout
+// chrome uses the shared Pocket Heroicons layer.
+const ArrowRight = PaymentArrowRight
+const Wallet = PaymentWallet
+const RefreshCw = ArrowPathIcon
 
 type CircleSolanaSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWallet>>
@@ -2448,7 +2459,7 @@ export default function PaymentPage() {
     }
     setPocketMovePayBusy(true)
     setPocketMovePayError('')
-    setPocketMovePayStatus(`Moving ${formatUnits(route.amountUnits, 6)} USDC from ${CHAIN_META[route.source].label}`)
+    setPocketMovePayStatus('Unlock Pocket and approve this route to continue.')
     try {
       const accessToken = await getAccessToken()
       if (!accessToken) throw new Error('Sign in again to move and pay.')
@@ -2477,9 +2488,10 @@ export default function PaymentPage() {
             destinationAddress,
             amount,
           })
+      if (!txHash) throw new Error('Pocket did not submit a transfer. Unlock Pocket and approve the route to try again.')
+      setPocketMovePayStatus(`USDC is moving to ${CHAIN_META[route.destination].label}. Payment will continue after arrival.`)
       await recordPocketBridge({ accessToken, source: route.source, destination: route.destination, amount, txHash, status: 'submitted' })
         .catch(() => undefined)
-      setPocketMovePayStatus(`USDC is moving to ${CHAIN_META[route.destination].label}. Payment will continue after arrival.`)
       let bridgeComplete = false
       for (let attempt = 0; attempt < 72 && !bridgeComplete; attempt += 1) {
         if (attempt) await new Promise(resolve => window.setTimeout(resolve, 5_000))
@@ -3302,7 +3314,9 @@ export default function PaymentPage() {
         : paymentAmountBlocked
           ? 'Enter payment amount'
           : 'Complete payment details',
-    pending: pocketMovePayBusy ? 'Moving USDC' : checkoutPresentation.pending,
+    pending: pocketMovePayBusy
+      ? (pocketMovePayStatus.startsWith('USDC is moving') ? 'Moving USDC' : 'Approve in Pocket')
+      : checkoutPresentation.pending,
     submitted: checkoutPresentation.submitted,
     successful: checkoutPresentation.successful,
     error: 'Payment failed',
@@ -4259,8 +4273,8 @@ export default function PaymentPage() {
         ) : null}
 
         {/* ── Payment network ──────────────────────────────────────────── */}
-        {!isBankSendPayment && (
-          <div className="px-4 pb-0 pt-4">
+        {!isBankSendPayment && !isNgPosPaycrestOfframp && (
+          <div className="px-4 pb-0 pt-3">
             <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
               Payment network
             </p>
@@ -4276,7 +4290,7 @@ export default function PaymentPage() {
         )}
 
         {/* ── Amount header ─────────────────────────────────────────────── */}
-        <div className={cn('border-b border-gray-100 bg-gradient-to-br text-center dark:border-white/10', isNgPosPaycrestOfframp ? 'mt-2 p-4' : 'mt-3 p-5', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
+        <div className={cn('border-b border-gray-100 bg-gradient-to-br p-4 text-center dark:border-white/10', isNgPosPaycrestOfframp ? 'mt-2' : 'mt-3', meta.headerBg, 'dark:from-gray-800 dark:to-gray-900')}>
           {isWalletManagerFunding && isConfirmed ? (
             <div className="flex min-h-[190px] flex-col items-center justify-center py-2">
               <div className="flex h-24 w-24 items-center justify-center rounded-full border border-emerald-200/80 bg-white shadow-[0_16px_40px_-18px_rgba(16,185,129,0.7)] animate-bounce-in dark:border-emerald-400/20 dark:bg-white/[0.08]">
@@ -4553,7 +4567,7 @@ export default function PaymentPage() {
           </div>
         )}
 
-        <div className={cn(isNgPosPaycrestOfframp ? 'space-y-3 p-4' : 'space-y-4 p-5')}>
+        <div className="space-y-3 p-4">
           {/* Payment details */}
           {isHostedCheckout ? (
             (feeAmount > 0 && effectiveAmt) || showArbitrumRelayCost ? (
@@ -4888,7 +4902,7 @@ export default function PaymentPage() {
                       : 'border-gray-200 bg-gray-50/60 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100'
                   }`}
                 />
-                {!paid && (
+                {!paid && !isNgPosPayment && (
                   <p className="text-[11px] text-gray-400 transition-opacity duration-300" style={{ opacity: attendeeName.trim() ? 0.5 : 1 }}>
                     {attendeeName.trim()
                       ? isNgPosPayment ? 'Shown on the merchant receipt.' : 'Shown beside your payment on the organizer dashboard.'
@@ -5480,7 +5494,7 @@ export default function PaymentPage() {
                 || (pocketCheckoutRouting
                   ? 'Checking gas-sponsored USDC routes.'
                   : pocketCheckoutRoute?.kind === 'bridge'
-                    ? `Moving ${formatUnits(pocketCheckoutRoute.amountUnits, 6)} USDC from ${CHAIN_META[pocketCheckoutRoute.source].label} to complete the payment on ${CHAIN_META[pocketCheckoutRoute.destination].label}.`
+                    ? `Pocket can route the required USDC after you unlock and approve.`
                     : pocketRouteInsufficient
                       ? 'No single gas-sponsored source can cover the remaining amount and bridge fee.'
                       : pocketCheckoutRoute?.kind === 'direct'

@@ -58,7 +58,7 @@ export function PocketPayLinkReadyPanel({
           </button>
         </div>
 
-        <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04] sm:flex-row sm:items-start">
+        <div className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
           <div className="min-w-0 flex-1 space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
             <div className="flex items-baseline gap-1.5">
@@ -88,27 +88,28 @@ export function PocketPayLinkReadyPanel({
             </div>
           </div>
 
-          {!eventMode && (
-            <div className="flex shrink-0 flex-col items-center gap-1.5 self-center sm:self-auto">
-              <div ref={qrRef} className="relative rounded-xl border border-gray-100 bg-white p-1.5 shadow-sm">
-                <QRCodeCanvas value={url} size={112} level="H" includeMargin />
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <div className="rounded-sm bg-white p-0.5">
-                    <img src="/hash-logo.png" alt="" className="h-4 w-4 object-contain" />
+          <div className="relative shrink-0">
+              <div ref={qrRef}>
+                <a href={url} target="_blank" rel="noopener noreferrer" aria-label="Preview checkout" className="relative block rounded-xl border border-gray-100 bg-white p-1 shadow-sm">
+                  <QRCodeCanvas value={url} size={88} level="H" includeMargin />
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="rounded-sm bg-white p-0.5">
+                      <img src="/hash-logo.png" alt="" className="h-4 w-4 object-contain" />
+                    </div>
                   </div>
-                </div>
+                </a>
               </div>
               <button
                 onClick={onDownloadQr}
-                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-medium text-gray-500 transition-all hover:bg-gray-50 hover:text-gray-700 active:scale-[0.98]"
+                aria-label="Download QR code"
+                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-all hover:text-gray-800 active:scale-[0.96]"
               >
-                <Download className="h-3 w-3" /> Save
+                <Download className="h-3.5 w-3.5" />
               </button>
             </div>
-          )}
         </div>
 
-        <div className="grid gap-2.5 sm:grid-cols-[1fr_auto]">
+        <div className="grid gap-2.5 sm:grid-cols-2">
           <button
             onClick={onShare}
             className={cn(
@@ -120,14 +121,9 @@ export function PocketPayLinkReadyPanel({
           >
             {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Share2 className="h-4 w-4" /> Share</>}
           </button>
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
-          >
+          <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]">
             <ExternalLink className="h-4 w-4" />
-            Test
+            Preview
           </a>
         </div>
 

@@ -8,9 +8,10 @@ const root = await mkdtemp(join(tmpdir(), 'pocket-payment-execution-'))
 try {
   let clock = 100
   let sequence = 0
+  const ledgerEvents = []
   const repository = createPaymentExecutionRepository({
     storePath: join(root, 'intents.json'), durable: false, isRender: false,
-    now: () => ++clock, createId: () => `pex_test_${++sequence}`,
+    now: () => ++clock, createId: () => `pex_test_${++sequence}`, appendLedger: async event => { ledgerEvents.push(event); return event },
   })
   const request = {
     ownerId: 'privy-user-1', idempotencyKey: 'pocket:bank-payout:test-0001', kind: 'bank_payout',
@@ -21,6 +22,7 @@ try {
   assert.equal(created.replayed, false)
   assert.equal(created.intent.state, 'prepared')
   assert.equal(created.intent.asset, 'USDC')
+  assert.equal(ledgerEvents[0].state, 'prepared')
   const replay = await repository.create({ ...request, metadata: { bankLast4: '6789', bankCode: '001' } })
   assert.equal(replay.replayed, true)
   assert.equal(replay.intent.id, created.intent.id)
@@ -34,6 +36,7 @@ try {
   assert.equal(processing.state, 'processing')
   const completed = await repository.update({ ownerId: request.ownerId, intentId: created.intent.id, state: 'completed', providerReference: 'order-1' })
   assert.equal(completed.state, 'completed')
+  assert.deepEqual(ledgerEvents.slice(0, 6).map(event => event.state), ['prepared', 'authorized', 'submitted', 'processing', 'completed'])
   await assert.rejects(repository.update({ ownerId: request.ownerId, intentId: created.intent.id, state: 'submitted' }), /cannot move/i)
   await assert.rejects(repository.update({ ownerId: 'another-user', intentId: created.intent.id, state: 'completed' }), /not found/i)
   const reviewCreated = await repository.create({ ...request, idempotencyKey: 'pocket:bill-payment:test-review-0001', kind: 'bill_payment' })

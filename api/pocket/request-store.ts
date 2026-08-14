@@ -9,13 +9,13 @@ export type PocketMoneyRequest = {
   network: 'base' | 'arbitrum' | 'solana' | 'multi'; paymentUrl: string; status: PocketRequestStatus
   createdAt: number; updatedAt: number
 }
-type Store = { requests: Record<string, PocketMoneyRequest> }
+type Store = { requests: Record<string, PocketMoneyRequest>; notificationReads: Record<string, number> }
 type Options = { storePath?: string; storeKey?: string; durable?: boolean; isRender?: boolean; now?: () => number; mutateDurable?: typeof mutateDurableJson; readDurable?: typeof readDurableJson }
 const STORE_PATH = process.env.POCKET_REQUEST_STORE ?? './data/pocket-requests.json'
 const STORE_KEY = (process.env.POCKET_REQUEST_STORE_KEY ?? 'hashpaylink:pocket-requests:v1').trim()
 const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
 const clean = (value: unknown, max: number) => String(value ?? '').trim().slice(0, max)
-const normalizedStore = (value?: Partial<Store> | null): Store => ({ requests: value?.requests ?? {} })
+const normalizedStore = (value?: Partial<Store> | null): Store => ({ requests: value?.requests ?? {}, notificationReads: value?.notificationReads ?? {} })
 
 export function createPocketRequestRepository(options: Options = {}) {
   const storePath = resolve(options.storePath ?? STORE_PATH), storeKey = options.storeKey ?? STORE_KEY
@@ -60,10 +60,18 @@ export function createPocketRequestRepository(options: Options = {}) {
         const title = paymentUrl.searchParams.get('m')?.trim().slice(0, 100) || input.title
         const request: PocketMoneyRequest = { ...input, eventId, title, amount, flexibleAmount, network, id: 'preq_' + eventId, paymentUrl: paymentUrl.toString(), status: 'pending', createdAt: timestamp, updatedAt: timestamp }
         store.requests[request.id] = request
+        store.notificationReads[input.senderId] = timestamp
         return { request, replayed: false }
       })
     },
     async listFor(userId: string) { return Object.values((await readStore()).requests).filter(item => item.senderId === userId || item.recipientId === userId).sort((a, b) => b.updatedAt - a.updatedAt) },
+    async unreadCount(userId: string) {
+      const store = await readStore()
+      const lastRead = store.notificationReads[userId] ?? 0
+      return Object.values(store.requests).filter(item => (item.senderId === userId || item.recipientId === userId) && item.updatedAt > lastRead).length
+    },
+    async lastRead(userId: string) { return (await readStore()).notificationReads[userId] ?? 0 },
+    async markRead(userId: string) { return mutate(store => { store.notificationReads[userId] = now(); return store.notificationReads[userId] }) },
     async decide(userId: string, id: string, decision: 'accept' | 'decline') {
       return mutate(store => {
         const request = store.requests[clean(id, 160)]
@@ -74,6 +82,7 @@ export function createPocketRequestRepository(options: Options = {}) {
         if (request.status !== 'pending') throw Object.assign(new Error('This request already has a response.'), { status: 409 })
         const updated: PocketMoneyRequest = { ...request, status, updatedAt: now() }
         store.requests[id] = updated
+        store.notificationReads[userId] = updated.updatedAt
         return updated
       })
     },

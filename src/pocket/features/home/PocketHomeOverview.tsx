@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from '../../components/PocketIcons'
 import { cn, truncateAddress } from '../../../lib/utils'
 import type { PocketFxQuote } from '../../api/pocketFxClient'
 import { formatPocketDisplayAmount } from '../../lib/pocketMoney'

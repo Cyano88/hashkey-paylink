@@ -37,6 +37,13 @@ try {
   assert.equal(listed.body.payments[0].payer, 'Ada')
   assert.equal(JSON.stringify(listed.body).includes('owner@example.com'), false)
 
+  const untrusted = await request(handler, 'POST', {
+    eventId: 'collection_untrusted_host_01',
+    title: 'Untrusted',
+    paymentUrl: 'https://example.com/pay?v=1&id=collection_untrusted_host_01',
+  })
+  assert.equal(untrusted.statusCode, 400)
+
   const foreign = createPocketPaylinksHandler({
     verifyUser: async () => ({ userId: 'did:privy:owner-2' }),
     repository,

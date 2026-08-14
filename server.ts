@@ -84,6 +84,7 @@ import {
   pocketSolanaCctpSubmitHandler,
 } from './api/pocket/solana-cctp-relay.js'
 import pocketActivityHandler from './api/pocket/activity.js'
+import pocketLedgerHandler from './api/pocket/ledger.js'
 import pocketPaylinksHandler from './api/pocket/paylinks.js'
 import pocketRequestsHandler from './api/pocket/requests.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
@@ -97,6 +98,8 @@ import pocketX402ActivateHandler from './api/pocket/x402-activate.js'
 import pocketMarketplaceHandler from './api/pocket/marketplace.js'
 import pocketAgentAskHandler from './api/pocket/agent-ask.js'
 import pocketSupportCasesHandler from './api/pocket/support-cases.js'
+import { readPocketOperationsHealth } from './api/pocket/operations-health.js'
+import { drainPocketReconciliation, pocketReconciliationHandler } from './api/pocket/reconciliation-worker.js'
 import pocketWalletsHandler from './api/pocket/wallets/index.js'
 import pocketWalletLinkHandler from './api/pocket/wallets/link.js'
 import { paycrestWebhookHandler } from './api/paycrest-pos.js'
@@ -329,6 +332,7 @@ app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/fx-quote',          readLimiter, pocketFxQuoteHandler)
 app.all('/api/pocket/balances/recipient', readLimiter, pocketRecipientBalanceHandler)
 app.all('/api/pocket/activity',          readLimiter, pocketActivityHandler)
+app.get('/api/pocket/ledger',            readLimiter, pocketLedgerHandler)
 app.all('/api/pocket/paylinks',          strictLimiter, pocketPaylinksHandler)
 app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
@@ -387,7 +391,15 @@ app.post('/api/pocket/bills/verify',   billsQuoteLimiter, billsBrowserBoundary, 
 app.all('/api/pocket/bills/pay',       billsPayLimiter, billsBrowserBoundary, pocketBillsPayHandler)
 app.post('/api/pocket/bills/refund',   billsRefundLimiter, billsBrowserBoundary, pocketBillsUserRefundHandler)
 app.post('/api/admin/pocket/bills/refunds/process', strictLimiter, pocketBillsRefundHandler)
-app.get('/api/health',                 (_req, res) => res.json({ ok: true, ts: Date.now() }))
+app.post('/api/admin/pocket/reconciliation/run', strictLimiter, pocketReconciliationHandler)
+app.get('/api/health', async (_req, res) => {
+  try {
+    const pocket = await readPocketOperationsHealth()
+    return res.status(pocket.configured && pocket.database ? 200 : 503).json({ ok: pocket.configured && pocket.database, ts: Date.now(), pocket })
+  } catch {
+    return res.status(503).json({ ok: false, ts: Date.now(), pocket: { configured: true, healthy: false, database: false } })
+  }
+})
 // OG tag injection — must be before the SPA catch-all
 app.get('/stream/:vaultAddress',       streamOgHandler)
 app.get('/stream',                     streamOgHandler)
@@ -428,6 +440,16 @@ const hostedCheckoutOutboxTimer = setInterval(() => {
 hostedCheckoutOutboxTimer.unref()
 void drainHostedCheckoutWebhookOutbox().catch(error => {
   console.error('[developer-webhook] startup outbox drain failed:', error instanceof Error ? error.message : String(error))
+})
+
+const pocketReconciliationTimer = setInterval(() => {
+  void drainPocketReconciliation().catch(error => {
+    console.error('[pocket-reconciliation] scheduled run failed:', error instanceof Error ? error.message : String(error))
+  })
+}, Math.max(30_000, Number(process.env.POCKET_RECONCILIATION_INTERVAL_MS ?? 60_000)))
+pocketReconciliationTimer.unref()
+void drainPocketReconciliation().catch(error => {
+  console.error('[pocket-reconciliation] startup run failed:', error instanceof Error ? error.message : String(error))
 })
 
 const arcAgreementOutboxTimer = setInterval(() => {

@@ -42,10 +42,13 @@ try {
 
   identity.current = 'recipient'
   const incoming = await call(handler, 'GET')
+  assert.equal(incoming.body.unreadCount, 1)
   assert.equal(incoming.body.requests[0].direction, 'incoming')
   assert.equal(incoming.body.requests[0].status, 'pending')
   const accepted = await call(handler, 'POST', { action: 'accept', id: incoming.body.requests[0].id })
   assert.equal(accepted.body.request.status, 'accepted')
+  const marked = await call(handler, 'POST', { action: 'mark-read' })
+  assert.equal(marked.statusCode, 200)
 
   identity.current = 'sender'
   const senderView = await call(handler, 'GET')

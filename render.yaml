@@ -148,6 +148,20 @@ services:
         sync: false                   # optional comma-separated Privy user-id allowlist
       - key: POCKET_SUPPORT_STORE_KEY
         value: "hashpaylink:pocket-support:v1"
+      - key: POCKET_MONEY_LEDGER_STORE_KEY
+        value: "hashpaylink:pocket-money-ledger:v1"
+      - key: POCKET_MAX_UNRESOLVED_AGE_MS
+        value: "900000"
+      - key: POCKET_RECONCILIATION_INTERVAL_MS
+        value: "60000"
+      - key: POCKET_RECONCILIATION_BATCH_SIZE
+        value: "100"
+      - key: POCKET_RECONCILIATION_ALERT_COOLDOWN_MS
+        value: "900000"
+      - key: POCKET_RECONCILIATION_ALERT_STORE_KEY
+        value: "hashpaylink:pocket-reconciliation-alerts:v1"
+      - key: POCKET_OPERATIONS_ALERT_EMAIL
+        sync: false                   # operations mailbox for stale payment alerts
       - key: DEVELOPER_PROJECT_STORE_KEY
         value: "hashpaylink:developer-projects:v1"
       - key: HASH_PAYLINK_BASE_URL

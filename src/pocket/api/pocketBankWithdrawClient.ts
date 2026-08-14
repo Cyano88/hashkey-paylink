@@ -76,6 +76,19 @@ export function readPocketBankWithdrawStatus(input: { accessToken: string; inten
   return mutate({ ...input, body: { action: 'status', intent_id: input.intentId } })
 }
 
+export async function recoverPocketBankWithdrawals({ accessToken, fetcher = fetch }: { accessToken: string; fetcher?: typeof fetch }) {
+  const response = await fetcher(POCKET_API.bankWithdraw, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ action: 'recover' }),
+  })
+  const value = await response.json().catch(() => undefined) as any
+  if (!response.ok || value?.ok !== true || !Array.isArray(value?.data)) {
+    throw new Error(typeof value?.error === 'string' ? value.error : 'Could not recover bank payouts.')
+  }
+  return value.data as Array<{ intentId: string; executionId: string; state: string; updatedAt: number }>
+}
+
 async function routeRequest({ accessToken, body, fetcher = fetch }: { accessToken: string; body: Record<string, unknown>; fetcher?: typeof fetch }) {
   const response = await fetcher(POCKET_API.bankWithdraw, {
     method: 'POST',
