@@ -1049,6 +1049,9 @@ assert.doesNotMatch(pocketPaymentLiquidityControllerSource, /\['base', 'arbitrum
 assert.match(pocketPaymentLiquidityControllerSource, /selectPocketCheckoutRoute/)
 assert.match(pocketPaymentLiquidityControllerSource, /readPocketBridgeQuote/)
 assert.match(pocketPaymentLiquidityControllerSource, /readPocketBridgeStatus/)
+assert.match(pocketPaymentLiquidityControllerSource, /pocketBridgePollDelay = \(attempt: number\) => attempt < 12 \? 1_500 : attempt < 32 \? 3_000 : 5_000/)
+assert.match(pocketPaymentLiquidityControllerSource, /Circle forward confirmation is provider truth/)
+assert.doesNotMatch(pocketPaymentLiquidityControllerSource, /destination balance is still refreshing/)
 const payoutCheckpointRead = pocketPaymentLiquidityControllerSource.indexOf("const checkpoint = await input.persistence?.read(inspected.accessToken) ?? null")
 const insufficientRouteGuard = pocketPaymentLiquidityControllerSource.indexOf("if (currentRoute.kind === 'insufficient')")
 assert.ok(

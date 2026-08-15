@@ -56,6 +56,13 @@ const unconfirmed = await request(pendingHandler, { body: { action: 'record', so
 assert.equal(unconfirmed.statusCode, 409)
 assert.equal(records.length, 2)
 
+const attestedOnlyHandler = createPocketBridgeHandler({
+  verifyUser: async () => ({ userId: 'privy-bridge-user' }),
+  fetcher: async () => new Response(JSON.stringify({ messages: [{ status: 'complete' }] }), { status: 200 }),
+})
+const attestedOnly = await request(attestedOnlyHandler, { method: 'GET', query: { action: 'status', source: 'base', txHash: '0xattested' } })
+assert.equal(attestedOnly.body.status, 'attested')
+
 const status = await request(handler, { method: 'GET', query: { action: 'status', source: 'base', txHash: '0xsource' } })
 assert.equal(status.body.status, 'confirmed')
 assert.equal(status.body.destinationTxHash, '0xdestination')

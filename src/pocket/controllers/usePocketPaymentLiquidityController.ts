@@ -29,6 +29,7 @@ export type PocketPaymentLiquidityPersistence = {
 const NETWORKS: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'solana']
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 const networkLabel = (network: PocketCheckoutNetwork) => network === 'base' ? 'Base' : network === 'arbitrum' ? 'Arbitrum' : 'Solana'
+export const pocketBridgePollDelay = (attempt: number) => attempt < 12 ? 1_500 : attempt < 32 ? 3_000 : 5_000
 
 async function inspectLiquidity(input: {
   accessToken: string
@@ -233,7 +234,7 @@ export default function usePocketPaymentLiquidityController(input: {
       }).catch(() => undefined)
       setStatus('waiting')
       for (let attempt = 0; attempt < 72 && !complete; attempt += 1) {
-        if (attempt) await wait(5_000)
+        if (attempt) await wait(pocketBridgePollDelay(attempt))
         const next = await readPocketBridgeStatus({
           accessToken: inspected.accessToken,
           source: currentRoute.source,
@@ -243,7 +244,7 @@ export default function usePocketPaymentLiquidityController(input: {
       }
       if (!complete) throw new Error('USDC is still moving. Do not submit the move again.')
       await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash })
-      await recordPocketBridge({
+      void recordPocketBridge({
         accessToken: inspected.accessToken,
         source: currentRoute.source,
         destination: currentRoute.destination,
@@ -251,21 +252,15 @@ export default function usePocketPaymentLiquidityController(input: {
         txHash,
         status: 'completed',
       }).catch(() => undefined)
-      let arrived = false
-      for (let attempt = 0; attempt < 20 && !arrived; attempt += 1) {
-        const snapshot = await readPocketBalances({ accessToken: inspected.accessToken })
-        const destination = snapshot.rows.find(row => row.key === currentRoute.destination)
-        const destinationUnits = destination?.status === 'ok' ? parseUnits(destination.balance.toFixed(6), 6) : 0n
-        arrived = destinationUnits >= amountUnits
-        if (!arrived) await wait(3_000)
-      }
-      if (!arrived) throw new Error('The move is confirmed, but the destination balance is still refreshing. Do not move again.')
-      await input.refreshBalances().catch(() => undefined)
+      // Circle forward confirmation is provider truth that the destination
+      // transaction completed. Do not block the payment on a lagging balance
+      // index after that confirmation.
+      void input.refreshBalances().catch(() => undefined)
       setStatus('arrived')
       return destinationWallet
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : 'Pocket could not prepare this payment.'
-      const retryBlocked = /submitted and is being reconciled|still moving|destination balance is still refreshing|without a verifiable source transaction|check activity before retrying/i.test(message)
+      const retryBlocked = /submitted and is being reconciled|still moving|without a verifiable source transaction|check activity before retrying/i.test(message)
       setStatus(retryBlocked ? 'reconciling' : 'idle')
       setError(message)
       throw reason

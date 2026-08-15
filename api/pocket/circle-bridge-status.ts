@@ -14,8 +14,16 @@ export async function readCircleBridgeStatus(
   const data = await response.json().catch(() => ({})) as { messages?: Array<Record<string, unknown>> }
   if (!response.ok && response.status !== 404) throw new Error('Circle bridge status is temporarily unavailable.')
   const message = data.messages?.[0]
+  const forwardState = typeof message?.forwardState === 'string'
+    ? message.forwardState.toLowerCase()
+    : ''
+  const attestationState = typeof message?.status === 'string'
+    ? message.status.toLowerCase()
+    : 'pending'
   return {
-    status: String(message?.forwardState ?? message?.status ?? 'pending').toLowerCase(),
+    // Pocket uses Circle's forwarding hook. Attestation completion alone does
+    // not prove that USDC reached the destination wallet.
+    status: forwardState || (attestationState === 'complete' ? 'attested' : attestationState),
     destinationTxHash: typeof message?.forwardTxHash === 'string' ? message.forwardTxHash : undefined,
   }
 }
