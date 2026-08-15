@@ -95,6 +95,7 @@ assert.equal(calls[0].body.direct_payout, true)
 assert.equal(calls[0].body.flexible_amount, false)
 assert.equal(calls[0].headers.authorization, 'Bearer privy-token')
 assert.equal(calls[1].body.action, 'createOfframpOrder')
+assert.equal(calls[1].body.ensure_payable, true)
 
 const unavailableHandler = createPocketBankWithdrawHandler({
   executions,

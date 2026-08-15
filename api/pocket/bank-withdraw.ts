@@ -200,6 +200,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           payer_wallet: walletAddress,
           payer_email: identity.email || text(req.body?.owner_email),
           payer_name: `${text(req.body?.owner_first_name)} ${text(req.body?.owner_last_name)}`.trim(),
+          ensure_payable: true,
         })
         if (prepared.status !== 200 || !prepared.body?.order) throw Object.assign(new Error(prepared.body?.error || 'Could not prepare bank payout.'), { status: prepared.status })
         const execution = await dependencies.executions.create({

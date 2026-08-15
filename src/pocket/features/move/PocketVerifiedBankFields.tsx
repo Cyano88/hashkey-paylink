@@ -100,7 +100,7 @@ export function PocketVerifiedBankFields({
                 placeholder="0123456789"
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 pr-10 text-sm font-medium tabular-nums text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-gray-600"
               />
-              {verifying && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />}
+              {verifying && <span className="absolute right-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-gray-400"><Loader2 className="h-4 w-4" /></span>}
             </div>
           </label>
           {verified && accountName && <PocketResolvedNameRow name={accountName} />}

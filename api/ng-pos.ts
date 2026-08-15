@@ -774,7 +774,39 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   const existingMerchant = Object.values(store.merchants).find(merchant => (
     merchant.owner_id === ownerId && merchant.source === merchantSource && merchant.idempotency_key === idempotencyKey
   ))
-  if (existingMerchant?.creation_response) return { ...existingMerchant.creation_response, replayed: true }
+  const flexibleAmount = body.flexible_amount === true || body.flexible_amount === 'true'
+  const amount = cleanAmount(body.amount)
+  if (existingMerchant?.creation_response) {
+    const replayLink = (existingMerchant.creation_response as any)?.link
+    const replayIntentId = cleanText(replayLink?.intent_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
+    const replayIntent = replayIntentId ? store.intents?.[replayIntentId] : undefined
+    const replayExpiry = Date.parse(replayIntent?.expires_at || '')
+    const expiredDirectPayout = directPayout && (!Number.isFinite(replayExpiry) || replayExpiry <= Date.now())
+    if (!expiredDirectPayout) return { ...existingMerchant.creation_response, replayed: true }
+    if (replayIntentId && !flexibleAmount && amount) {
+      const now = new Date().toISOString()
+      const amountNgnText = amount.toFixed(2)
+      store.intents ??= {}
+      store.intents[replayIntentId] = {
+        ...(replayIntent ?? {}),
+        intent_id: replayIntentId,
+        merchant_id: existingMerchant.merchant_id,
+        amount_ngn: amountNgnText,
+        estimated_amount_usdc: '',
+        fx_rate_ngn_per_usdc: '',
+        source: merchantSource,
+        created_at: now,
+        expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+      }
+      existingMerchant.updated_at = now
+      existingMerchant.creation_response = {
+        ...existingMerchant.creation_response,
+        link: { ...replayLink, intent_id: replayIntentId, amount_ngn: amountNgnText },
+      }
+      await writeStore(store)
+      return { ...existingMerchant.creation_response, replayed: true, renewed: true }
+    }
+  }
   const suppliedOwnerEmail = cleanText(body.owner_email, '').toLowerCase()
   if (session.email && suppliedOwnerEmail && session.email !== suppliedOwnerEmail) {
     throw ngPosRequestError(403, 'Signed-in email does not match this payout profile.')
@@ -783,8 +815,6 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   const ownerFirstName = cleanText(body.owner_first_name, '')
   const ownerLastName = cleanText(body.owner_last_name, '')
   const displayName = cleanText(body.display_name || body.memo, directPayout ? 'Direct bank payout' : 'Bank receive')
-  const flexibleAmount = body.flexible_amount === true || body.flexible_amount === 'true'
-  const amount = cleanAmount(body.amount)
   const useSavedBank = body.use_saved_bank === true || body.use_saved_bank === 'true'
   const savedBankMerchant = useSavedBank
     ? Object.values(store.merchants ?? {})
