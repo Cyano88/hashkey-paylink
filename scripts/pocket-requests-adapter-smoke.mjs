@@ -16,6 +16,7 @@ async function call(handler, method, body = {}) { const res = response(); await 
 const identity = { current: 'sender' }
 const eventId = 'request_event_0001'
 const txHash = '0x' + 'a'.repeat(64)
+let bridgeStatus = 'pending'
 
 try {
   const handler = createPocketRequestsHandler({
@@ -29,6 +30,7 @@ try {
         ? { privyUserId: 'sender', chain: 'base', circleWalletId: 'wallet-1', circleWalletAddress: '0x1111111111111111111111111111111111111111', circleBlockchain: 'ETH', updatedAt: 1 }
         : null,
     verifyEvm: async input => { assert.equal(input.payer, '0x2222222222222222222222222222222222222222'); assert.equal(input.recipient, '0x1111111111111111111111111111111111111111'); assert.equal(input.minAmount, '5'); return { transactionHash: input.txHash } },
+    readBridgeStatus: async () => ({ status: bridgeStatus }),
   })
   const requestUser = await call(handler, 'POST', { action: 'resolve-request-user', pocketId: '22222222' })
   assert.equal(requestUser.statusCode, 200, JSON.stringify(requestUser.body))
@@ -58,6 +60,31 @@ try {
   assert.equal(incoming.body.requests[0].status, 'pending')
   const accepted = await call(handler, 'POST', { action: 'accept', id: incoming.body.requests[0].id })
   assert.equal(accepted.body.request.status, 'accepted')
+  const emptyRoute = await call(handler, 'POST', { action: 'route-status', id: incoming.body.requests[0].id })
+  assert.equal(emptyRoute.statusCode, 200, JSON.stringify(emptyRoute.body))
+  assert.equal(emptyRoute.body.route, null)
+  const invalidRoute = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'solana', amount: '4' })
+  assert.equal(invalidRoute.statusCode, 400)
+  const excessiveRoute = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '6' })
+  assert.equal(excessiveRoute.statusCode, 400)
+  const routeStarted = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '4' })
+  assert.equal(routeStarted.statusCode, 200, JSON.stringify(routeStarted.body))
+  assert.equal(routeStarted.body.route.phase, 'started')
+  assert.equal(routeStarted.body.route.claimed, true)
+  const routeReplay = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '4' })
+  assert.equal(routeReplay.body.route.claimed, false)
+  const bridgeHash = '0x' + 'b'.repeat(64)
+  const routeSubmitted = await call(handler, 'POST', { action: 'route-update', id: incoming.body.requests[0].id, phase: 'submitted', transactionHash: bridgeHash })
+  assert.equal(routeSubmitted.body.route.phase, 'submitted')
+  const changedRouteHash = await call(handler, 'POST', { action: 'route-update', id: incoming.body.requests[0].id, phase: 'submitted', transactionHash: '0x' + 'c'.repeat(64) })
+  assert.equal(changedRouteHash.statusCode, 409)
+  const routeStillMoving = await call(handler, 'POST', { action: 'route-update', id: incoming.body.requests[0].id, phase: 'completed', transactionHash: bridgeHash })
+  assert.equal(routeStillMoving.statusCode, 409)
+  bridgeStatus = 'confirmed'
+  const routeCompleted = await call(handler, 'POST', { action: 'route-update', id: incoming.body.requests[0].id, phase: 'completed', transactionHash: bridgeHash })
+  assert.equal(routeCompleted.body.route.phase, 'completed')
+  const routeBackward = await call(handler, 'POST', { action: 'route-update', id: incoming.body.requests[0].id, phase: 'failed' })
+  assert.equal(routeBackward.body.route.phase, 'completed')
   const completed = await call(handler, 'POST', { action: 'complete', id: incoming.body.requests[0].id, transactionHash: txHash })
   assert.equal(completed.statusCode, 200, JSON.stringify(completed.body))
   assert.equal(completed.body.request.status, 'paid')
@@ -78,6 +105,8 @@ try {
   assert.equal(paidRequest.status, 'paid')
   const forbidden = await call(handler, 'POST', { action: 'decline', id: paidRequest.id })
   assert.equal(forbidden.statusCode, 403)
+  const forbiddenRoute = await call(handler, 'POST', { action: 'route-status', id: paidRequest.id })
+  assert.equal(forbiddenRoute.statusCode, 403)
   const missing = await call(handler, 'POST', { action: 'create', recipientPocketId: '99999999', eventId: 'request_event_0004', title: 'Missing', amount: '1', network: 'base' })
   assert.equal(missing.statusCode, 404)
 } finally {

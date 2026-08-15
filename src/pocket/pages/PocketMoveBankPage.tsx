@@ -84,7 +84,10 @@ export default function PocketMoveBankPage() {
     if (!intentId) return undefined
     return {
       read: accessToken => readPocketBankWithdrawRoute({ accessToken, intentId }),
-      start: (accessToken, route) => startPocketBankWithdrawRoute({ accessToken, intentId, source: route.source, amount: route.amount }),
+      start: (accessToken, route) => {
+        if (route.destination !== 'base' || route.source === 'base') throw new Error('Bank payout route is invalid.')
+        return startPocketBankWithdrawRoute({ accessToken, intentId, source: route.source, amount: route.amount })
+      },
       update: (accessToken, route) => updatePocketBankWithdrawRoute({ accessToken, intentId, phase: route.phase, txHash: route.txHash }),
     }
   }, [direct.result?.intentId])

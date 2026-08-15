@@ -76,7 +76,7 @@ export default function usePocketWithdrawalController({
     }
   }, [pending])
 
-  const withdraw = useCallback(async () => {
+  const withdraw = useCallback(async (options?: { balanceOverride?: number; walletOverride?: CirclePocketWallet }) => {
     clearExternalError()
     setError('')
     setNotice('')
@@ -84,7 +84,7 @@ export default function usePocketWithdrawalController({
     setStatus('idle')
     let recipient: string
     try {
-      recipient = validatePocketWithdrawal({ network, address, amount, balance }).recipient
+      recipient = validatePocketWithdrawal({ network, address, amount, balance: options?.balanceOverride ?? balance }).recipient
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Withdraw failed.')
       return
@@ -94,7 +94,7 @@ export default function usePocketWithdrawalController({
     setStatus('pending')
     try {
       let handedOff = false
-      const selectedWallet = wallet ?? await ensureWallet(network)
+      const selectedWallet = options?.walletOverride ?? wallet ?? await ensureWallet(network)
       if (!selectedWallet) throw new Error('Circle wallet setup was cancelled.')
       if (network === 'solana') {
         const session = await getSolanaSession(selectedWallet.address)

@@ -15,15 +15,15 @@ import type { PocketSolanaEmailSession } from './usePocketWalletController'
 type LiquidityStatus = 'idle' | 'checking' | 'ready' | 'moving' | 'waiting' | 'reconciling' | 'arrived'
 export type PocketPaymentLiquidityCheckpoint = {
   phase: 'started' | 'submitted' | 'completed' | 'failed'
-  source: 'arbitrum' | 'solana'
-  destination: 'base'
+  source: PocketCheckoutNetwork
+  destination: PocketCheckoutNetwork
   amount: string
   txHash: string
   claimed?: boolean
 }
 export type PocketPaymentLiquidityPersistence = {
   read(accessToken: string): Promise<PocketPaymentLiquidityCheckpoint | null>
-  start(accessToken: string, input: { source: 'arbitrum' | 'solana'; amount: string }): Promise<PocketPaymentLiquidityCheckpoint>
+  start(accessToken: string, input: { source: PocketCheckoutNetwork; destination: PocketCheckoutNetwork; amount: string }): Promise<PocketPaymentLiquidityCheckpoint>
   update(accessToken: string, input: { phase: 'submitted' | 'completed' | 'failed'; txHash?: string }): Promise<PocketPaymentLiquidityCheckpoint | null>
 }
 const NETWORKS: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'solana']
@@ -143,7 +143,7 @@ export default function usePocketPaymentLiquidityController(input: {
       const inspected = await inspect()
       const checkpoint = await input.persistence?.read(inspected.accessToken) ?? null
       let currentRoute = inspected.route
-      if (checkpoint?.phase === 'submitted' && checkpoint.txHash) {
+      if ((checkpoint?.phase === 'submitted' || checkpoint?.phase === 'completed') && checkpoint.txHash) {
         const checkpointAmountUnits = parseUnits(checkpoint.amount, 6)
         currentRoute = {
           kind: 'bridge',
@@ -186,18 +186,18 @@ export default function usePocketPaymentLiquidityController(input: {
       let complete = false
       if (activeCheckpoint && activeCheckpoint.phase !== 'failed') {
         if (activeCheckpoint.source !== currentRoute.source || activeCheckpoint.destination !== currentRoute.destination || activeCheckpoint.amount !== amount) {
-          throw new Error('A previous payout move needs review before another route can start.')
+          throw new Error('A previous payment move needs review before another route can start.')
         }
         txHash = activeCheckpoint.txHash
         if (activeCheckpoint.phase === 'started' && !txHash) {
-          throw new Error('A previous payout move needs review before another route can start.')
+          throw new Error('A previous payment move needs review before another route can start.')
         }
       }
       if (!txHash) {
-        const started = await input.persistence?.start(inspected.accessToken, { source: currentRoute.source as 'arbitrum' | 'solana', amount })
+        const started = await input.persistence?.start(inspected.accessToken, { source: currentRoute.source, destination: currentRoute.destination, amount })
         if (started && !started.claimed) {
           if (started.source !== currentRoute.source || started.amount !== amount || !started.txHash) {
-            throw new Error('A previous payout move needs review before another route can start.')
+            throw new Error('A previous payment move needs review before another route can start.')
           }
           txHash = started.txHash
           complete = started.phase === 'completed'
@@ -282,7 +282,7 @@ export default function usePocketPaymentLiquidityController(input: {
           : route?.kind === 'bridge'
             ? 'Moving ' + formatUnits(route.amountUnits, 6) + ' USDC from ' + networkLabel(route.source) + ' to complete the payment on ' + networkLabel(route.destination) + '.'
             : route?.kind === 'insufficient'
-              ? 'No single gas-sponsored source can cover the remaining amount and bridge fee.'
+              ? 'Your available USDC cannot cover this payment and the network move.'
               : route?.kind === 'direct'
                 ? networkLabel(route.destination) + ' can cover this payment.'
                 : '')

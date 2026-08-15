@@ -5,8 +5,9 @@ import { circleLinkKey, readCircleLink, type CircleLinkRecord } from '../privy-c
 import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from '../usdc-transfer-verify.js'
 import { solanaUsdcTransferParties } from './wallet-chain-activity.js'
 import { pocketRequestRepository, type PocketRequestRepository } from './request-store.js'
+import { isCircleBridgeComplete, readCircleBridgeStatus } from './circle-bridge-status.js'
 
-type Dependencies = { verifyUser(req: Request): ReturnType<typeof verifiedPrivyUser>; profiles: ProfileRepository; repository: PocketRequestRepository; readWallet?: (key: string) => Promise<CircleLinkRecord | null>; verifyEvm?: typeof verifyEvmUsdcTransfer; solanaConnection?: () => Connection }
+type Dependencies = { verifyUser(req: Request): ReturnType<typeof verifiedPrivyUser>; profiles: ProfileRepository; repository: PocketRequestRepository; readWallet?: (key: string) => Promise<CircleLinkRecord | null>; verifyEvm?: typeof verifyEvmUsdcTransfer; solanaConnection?: () => Connection; readBridgeStatus?: typeof readCircleBridgeStatus }
 const fail = (res: Response, status: number, message: string) => res.status(status).json({ ok: false, error: { message } })
 const maskedEmail = (email: string) => {
   const [local, domain] = email.toLowerCase().split('@')
@@ -59,6 +60,33 @@ export function createPocketRequestsHandler(deps: Dependencies) {
       if (req.method === 'POST' && (req.body?.action === 'accept' || req.body?.action === 'decline')) {
         const decided = await deps.repository.decide(identity.userId, req.body?.id, req.body.action)
         return res.json({ ok: true, request: publicRequest(decided, identity.userId) })
+      }
+      if (req.method === 'POST' && req.body?.action === 'route-status') {
+        const route = await deps.repository.readRoute(identity.userId, String(req.body?.id ?? ''))
+        return res.json({ ok: true, route })
+      }
+      if (req.method === 'POST' && req.body?.action === 'route-start') {
+        const result = await deps.repository.startRoute(identity.userId, String(req.body?.id ?? ''), {
+          source: String(req.body?.source ?? ''),
+          destination: String(req.body?.destination ?? ''),
+          amount: String(req.body?.amount ?? ''),
+        })
+        return res.json({ ok: true, route: { ...result.route, claimed: result.claimed } })
+      }
+      if (req.method === 'POST' && req.body?.action === 'route-update') {
+        const phase = String(req.body?.phase ?? '')
+        const txHash = String(req.body?.transactionHash ?? '')
+        if (phase === 'completed') {
+          const current = await deps.repository.readRoute(identity.userId, String(req.body?.id ?? ''))
+          if (!current || !txHash || current.txHash !== txHash) return fail(res, 409, 'Pocket payment route is not ready to complete.')
+          const provider = await (deps.readBridgeStatus ?? readCircleBridgeStatus)(current.source, txHash)
+          if (!isCircleBridgeComplete(provider.status)) return fail(res, 409, 'USDC is still moving. Pocket will continue after confirmed arrival.')
+        }
+        const route = await deps.repository.updateRoute(identity.userId, String(req.body?.id ?? ''), {
+          phase,
+          txHash,
+        })
+        return res.json({ ok: true, route })
       }
       if (req.method === 'POST' && req.body?.action === 'complete') {
         const request = await deps.repository.getFor(identity.userId, String(req.body?.id ?? ''))

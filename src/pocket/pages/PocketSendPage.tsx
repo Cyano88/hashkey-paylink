@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Check, Loader2 } from '../components/PocketIcons'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -12,7 +12,8 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketWallets from '../hooks/usePocketWallets'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import usePocketWithdrawalController from '../controllers/usePocketWithdrawalController'
-import { completePocketRequest, readPocketRequests, resolvePocketRecipient, type PocketRequestItem, type PocketResolvedRecipient } from '../api/pocketRequestsClient'
+import usePocketPaymentLiquidityController, { type PocketPaymentLiquidityPersistence } from '../controllers/usePocketPaymentLiquidityController'
+import { completePocketRequest, readPocketRequestRoute, readPocketRequests, resolvePocketRecipient, startPocketRequestRoute, updatePocketRequestRoute, type PocketRequestItem, type PocketResolvedRecipient } from '../api/pocketRequestsClient'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
@@ -44,6 +45,22 @@ export default function PocketSendPage() {
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
   const balance = wallets.rows.find(row => row.key === network)?.balance ?? 0
   const send = usePocketWithdrawalController({ network, networkLabel: networkLabel(network), wallet: wallets.wallets[network], balance, resetKey: `${network}:${mode}`, ensureWallet: walletController.ensureWallet, getEvmSession: walletController.getEvmSession, getSolanaSession: walletController.getSolanaSession, refreshBalances: wallets.refreshBalances, clearExternalError: () => { wallets.setError(''); setResolveError('') }, onActivity: () => void activity.refresh() })
+  const routePersistence = useMemo<PocketPaymentLiquidityPersistence | undefined>(() => requestId ? ({
+    read: accessToken => readPocketRequestRoute(accessToken, requestId),
+    start: (accessToken, route) => startPocketRequestRoute(accessToken, requestId, route),
+    update: (accessToken, route) => updatePocketRequestRoute(accessToken, requestId, { phase: route.phase, txHash: route.txHash }),
+  }) : undefined, [requestId])
+  const requestLiquidity = usePocketPaymentLiquidityController({
+    enabled: Boolean(paymentRequest?.status === 'accepted' && resolved && !requestConfirmed && !paymentTxHash),
+    amount: paymentRequest?.amount ?? '',
+    destination: network,
+    getAccessToken,
+    ensureWallet: walletController.ensureWallet,
+    getEvmSession: walletController.getEvmSession,
+    getSolanaSession: walletController.getSolanaSession,
+    refreshBalances: wallets.refreshBalances,
+    persistence: routePersistence,
+  })
   const setNetwork = (next: SendNetwork) => { window.localStorage.setItem('pocket.home.network', next); setNetworkState(next); setResolved(null); setResolveError('') }
 
   useEffect(() => {
@@ -112,6 +129,20 @@ export default function PocketSendPage() {
     return () => { cancelled = true }
   }, [getAccessToken, paymentRequest, paymentTxHash, requestConfirmed])
 
+  const submitPayment = useCallback(async () => {
+    if (!paymentRequest) {
+      await send.withdraw()
+      return
+    }
+    try {
+      const destinationWallet = await requestLiquidity.ensureLiquidity()
+      await send.withdraw({ balanceOverride: Number(paymentRequest.amount), walletOverride: destinationWallet })
+    } catch {
+      // The liquidity controller owns the durable progress and user-facing
+      // error. A confirmed bridge is resumed rather than submitted twice.
+    }
+  }, [paymentRequest, requestLiquidity.ensureLiquidity, send.withdraw])
+
   if (authenticated && (!wallets.resolved || requestLoading)) return <PocketLoadingState active="home" />
   const recipientReady = mode === 'pocket' ? Boolean(resolved) : Boolean(send.address.trim())
   return <PocketRouteShell active="home" onSelect={tab => navigate(POCKET_BASE_PATH + navPath(tab))}>
@@ -126,9 +157,10 @@ export default function PocketSendPage() {
       {resolved && <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-gray-900 dark:bg-blue-400/10 dark:text-white"><Check className="h-3.5 w-3.5 text-blue-500" /><span className="truncate">{resolved.name}</span><span className="ml-auto text-[10px] text-gray-400">Pocket {resolved.pocketId}</span></div>}
       {resolveError && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{resolveError}</p>}
       <label className="block"><span className="flex items-center justify-between text-[11px] font-bold text-gray-500"><span>Amount</span>{!paymentRequest && <button type="button" onClick={send.setMax} className="text-blue-500">Max</button>}</span><span className="mt-2 flex items-center rounded-2xl border border-gray-200 px-4 dark:border-white/10"><input type="text" inputMode="decimal" value={send.amount} readOnly={Boolean(paymentRequest)} onChange={event => send.setAmount(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 bg-transparent py-4 text-base font-bold outline-none" /><b className="text-xs text-gray-400">USDC</b></span></label>
-      {requestConfirmed ? <div className="rounded-2xl bg-blue-50 px-4 py-4 text-center dark:bg-blue-400/10"><Check className="mx-auto h-5 w-5 text-blue-500" /><p className="mt-2 text-sm font-bold">Request paid</p><p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">The sender has been notified and this transfer will appear in Activity.</p></div> : <PocketSlideAction status={send.status} disabled={!recipientReady || !send.amount || resolving || Boolean(paymentTxHash)} onConfirm={() => void send.withdraw()} labels={{ disabled: paymentTxHash ? 'Confirming payment' : recipientReady ? 'Enter amount' : 'Choose recipient', idle: paymentRequest ? 'Slide to pay' : 'Slide to send', pending: 'Confirm in Circle', submitted: 'Sending', successful: 'Sent' }} />}
+      {requestConfirmed ? <div className="rounded-2xl bg-blue-50 px-4 py-4 text-center dark:bg-blue-400/10"><Check className="mx-auto h-5 w-5 text-blue-500" /><p className="mt-2 text-sm font-bold">Request paid</p><p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">The sender has been notified and this transfer will appear in Activity.</p></div> : <PocketSlideAction status={paymentRequest && requestLiquidity.busy ? (requestLiquidity.status === 'waiting' || requestLiquidity.status === 'reconciling' ? 'submitted' : 'pending') : send.status} disabled={!recipientReady || !send.amount || resolving || Boolean(paymentTxHash) || Boolean(paymentRequest && (requestLiquidity.checking || requestLiquidity.insufficient))} onConfirm={() => void submitPayment()} labels={{ disabled: paymentTxHash ? 'Confirming payment' : paymentRequest && requestLiquidity.checking ? 'Checking balance' : paymentRequest && requestLiquidity.insufficient ? 'Insufficient USDC' : recipientReady ? 'Enter amount' : 'Choose recipient', idle: paymentRequest ? 'Slide to pay' : 'Slide to send', pending: requestLiquidity.status === 'moving' ? 'Confirm move in Circle' : 'Confirm in Circle', submitted: requestLiquidity.busy ? 'USDC moving' : 'Sending', successful: 'Sent' }} />}
+      {paymentRequest && !requestLiquidity.error && requestLiquidity.notice && (requestLiquidity.route?.kind === 'bridge' || requestLiquidity.busy || requestLiquidity.insufficient) && <p className="rounded-xl bg-blue-50 px-3 py-2 text-center text-xs font-semibold leading-5 text-blue-700 dark:bg-blue-400/10 dark:text-blue-200">{requestLiquidity.notice}</p>}
       {send.notice && <p className="text-center text-xs font-semibold text-emerald-600">{send.notice}</p>}
-      {(requestError || send.error || wallets.error) && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{requestError || send.error || wallets.error}</p>}
+      {(requestError || send.error || wallets.error || requestLiquidity.error) && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{requestError || send.error || wallets.error || requestLiquidity.error}</p>}
       <p className="text-center text-[10px] leading-4 text-gray-400">{paymentRequest ? 'The recipient, network, and amount are fixed by the accepted request. Network fees may apply.' : 'Pocket resolves the recipient on the selected network before sending. Network fees may apply.'}</p>
     </section>}
   </PocketRouteShell>

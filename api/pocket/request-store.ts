@@ -3,11 +3,20 @@ import { dirname, resolve } from 'node:path'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
 
 export type PocketRequestStatus = 'pending' | 'accepted' | 'declined' | 'paid'
+export type PocketRequestRoute = {
+  phase: 'started' | 'submitted' | 'completed' | 'failed'
+  source: 'base' | 'arbitrum' | 'solana'
+  destination: 'base' | 'arbitrum' | 'solana'
+  amount: string
+  txHash: string
+  updatedAt: number
+}
 export type PocketMoneyRequest = {
   id: string; eventId: string; senderId: string; senderPocketId: string; senderName: string
   senderAddress?: string; recipientId: string; recipientPocketId: string; recipientName?: string
   title: string; amount: string; flexibleAmount: boolean
   network: 'base' | 'arbitrum' | 'solana' | 'multi'; paymentPath?: string
+  route?: PocketRequestRoute
   transactionHash?: string; paidAt?: number; status: PocketRequestStatus; createdAt: number; updatedAt: number
 }
 type Store = { requests: Record<string, PocketMoneyRequest>; notificationReads: Record<string, number>; transactionHashes: Record<string, string> }
@@ -107,6 +116,78 @@ export function createPocketRequestRepository(options: Options = {}) {
         store.requests[id] = updated
         store.transactionHashes[normalizedHash] = request.id
         return updated
+      })
+    },
+    async readRoute(userId: string, id: string) {
+      const request = (await readStore()).requests[clean(id, 160)]
+      if (!request) throw Object.assign(new Error('Payment request was not found.'), { status: 404 })
+      if (request.recipientId !== userId) throw Object.assign(new Error('Only the requested Pocket user can route this payment.'), { status: 403 })
+      return request.route ?? null
+    },
+    async startRoute(userId: string, id: string, input: { source: string; destination: string; amount: string }) {
+      return mutate(store => {
+        const request = store.requests[clean(id, 160)]
+        if (!request) throw Object.assign(new Error('Payment request was not found.'), { status: 404 })
+        if (request.recipientId !== userId) throw Object.assign(new Error('Only the requested Pocket user can route this payment.'), { status: 403 })
+        if (request.status !== 'accepted') throw Object.assign(new Error('Accept this request before preparing payment.'), { status: 409 })
+        const source = clean(input.source, 20)
+        const destination = clean(input.destination, 20)
+        const amount = clean(input.amount, 30)
+        const networks = new Set(['base', 'arbitrum', 'solana'])
+        if (!networks.has(source) || !networks.has(destination) || source === destination || destination !== request.network) {
+          throw Object.assign(new Error('Pocket payment route is invalid.'), { status: 400 })
+        }
+        if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0 || Number(amount) > Number(request.amount)) {
+          throw Object.assign(new Error('Pocket payment route amount is invalid.'), { status: 400 })
+        }
+        const existing = request.route
+        if (existing && existing.phase !== 'failed') {
+          if (existing.source !== source || existing.destination !== destination || existing.amount !== amount) {
+            throw Object.assign(new Error('A previous payment move needs review before another route can start.'), { status: 409 })
+          }
+          return { route: existing, claimed: false }
+        }
+        const route: PocketRequestRoute = {
+          phase: 'started',
+          source: source as PocketRequestRoute['source'],
+          destination: destination as PocketRequestRoute['destination'],
+          amount,
+          txHash: '',
+          updatedAt: now(),
+        }
+        store.requests[request.id] = { ...request, route }
+        return { route, claimed: true }
+      })
+    },
+    async updateRoute(userId: string, id: string, input: { phase: string; txHash?: string }) {
+      return mutate(store => {
+        const request = store.requests[clean(id, 160)]
+        if (!request) throw Object.assign(new Error('Payment request was not found.'), { status: 404 })
+        if (request.recipientId !== userId) throw Object.assign(new Error('Only the requested Pocket user can route this payment.'), { status: 403 })
+        const current = request.route
+        if (!current) throw Object.assign(new Error('Pocket payment route was not started.'), { status: 409 })
+        const phase = clean(input.phase, 20)
+        if (phase !== 'submitted' && phase !== 'completed' && phase !== 'failed') {
+          throw Object.assign(new Error('Pocket payment route update is invalid.'), { status: 400 })
+        }
+        if (current.phase === 'completed') return current
+        const txHash = clean(input.txHash || current.txHash, 120)
+        if (phase === current.phase) {
+          if (txHash && current.txHash && txHash !== current.txHash) throw Object.assign(new Error('Pocket payment route already has another transaction.'), { status: 409 })
+          return current
+        }
+        const transitionAllowed = (current.phase === 'started' && (phase === 'submitted' || phase === 'failed'))
+          || (current.phase === 'submitted' && phase === 'completed')
+        if (!transitionAllowed) throw Object.assign(new Error('Pocket payment route cannot move backward or skip a confirmed phase.'), { status: 409 })
+        if ((phase === 'submitted' || phase === 'completed') && !txHash) {
+          throw Object.assign(new Error('A bridge transaction is required.'), { status: 400 })
+        }
+        if (txHash && (current.source === 'solana' ? !/^[1-9A-HJ-NP-Za-km-z]{64,120}$/.test(txHash) : !/^0x[a-fA-F0-9]{64}$/.test(txHash))) {
+          throw Object.assign(new Error('Bridge transaction identity is invalid.'), { status: 400 })
+        }
+        const route: PocketRequestRoute = { ...current, phase, txHash, updatedAt: now() }
+        store.requests[request.id] = { ...request, route }
+        return route
       })
     },
   }
