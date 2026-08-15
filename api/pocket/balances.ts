@@ -43,16 +43,17 @@ const CIRCLE_CHAINS: Record<PocketNetwork, UnifiedBalanceChainIdentifier> = {
   solana: 'Solana',
 }
 
-const BALANCE_TIMEOUT_MS = 10_000
+const DIRECT_BALANCE_TIMEOUT_MS = 2_000
+const FALLBACK_BALANCE_TIMEOUT_MS = 1_500
 const circleContext = createUnifiedBalanceKitContext()
 
-async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(`${label} balance lookup timed out`)), BALANCE_TIMEOUT_MS)
+        timeoutId = setTimeout(() => reject(new Error(`${label} balance lookup timed out`)), timeoutMs)
       }),
     ])
   } finally {
@@ -79,17 +80,17 @@ async function readCircleFallback(network: PocketNetwork, address: string) {
     token: 'USDC',
     sources: { address, chains: chain },
     includePending: false,
-  }), `${LABELS[network]} Circle`)
+  }), `${LABELS[network]} Circle`, FALLBACK_BALANCE_TIMEOUT_MS)
   return circleAmount(result, chain)
 }
 
 export async function readPocketNetworkBalance(network: PocketNetwork, address: string) {
   try {
     if (network === 'solana') {
-      const result = await withTimeout(readSolanaUsdcBalance(address), LABELS[network])
+      const result = await withTimeout(readSolanaUsdcBalance(address), LABELS[network], DIRECT_BALANCE_TIMEOUT_MS)
       return Number(result.balance) / 1_000_000
     }
-    return await withTimeout(readEvmUsdcBalance(network, address as `0x${string}`), LABELS[network])
+    return await withTimeout(readEvmUsdcBalance(network, address as `0x${string}`), LABELS[network], DIRECT_BALANCE_TIMEOUT_MS)
   } catch (directError) {
     try {
       const fallback = await readCircleFallback(network, address)

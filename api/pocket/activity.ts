@@ -204,10 +204,20 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
 
     try {
       const identity = await dependencies.verifyUser(req)
-      const history = await dependencies.readHistory(identity.userId)
-      const collections = await dependencies.readCollections?.(identity.userId) ?? []
+      const [history, collections, walletHistory, durableActionRecords, walletAddresses, billsIntents] = await Promise.all([
+        dependencies.readHistory(identity.userId),
+        dependencies.readCollections?.(identity.userId) ?? Promise.resolve([]),
+        dependencies.readWalletHistory?.(identity.userId) ?? Promise.resolve([]),
+        dependencies.readActions?.(identity.userId) ?? Promise.resolve([]),
+        dependencies.readWalletAddresses?.(identity.userId) ?? Promise.resolve([]),
+        dependencies.readBills?.(identity.userId) ?? Promise.resolve([]),
+      ])
       const collectionTitles = new Map(collections.map(link => [link.eventId, link.title]))
-      const collectionPayments = (await dependencies.readCollectionPayments?.(collections.map(link => link.eventId)) ?? [])
+      const [collectionPaymentRecords, externalPaymentIntents] = await Promise.all([
+        dependencies.readCollectionPayments?.(collections.map(link => link.eventId)) ?? Promise.resolve([]),
+        dependencies.readExternalPayments?.(walletAddresses) ?? Promise.resolve([]),
+      ])
+      const collectionPayments = collectionPaymentRecords
         .map(sanitizedActivityRow)
         .map(row => ({
           ...row,
@@ -220,19 +230,17 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
           receiptId: paymentReceiptId(row.eventId, row.txHash),
           receiptUrl: `/receipt/${paymentReceiptId(row.eventId, row.txHash)}`,
         }))
-      const walletHistory = await dependencies.readWalletHistory?.(identity.userId) ?? []
-      const durableBridges = (await dependencies.readActions?.(identity.userId) ?? []).flatMap(record => {
+      const durableBridges = durableActionRecords.flatMap(record => {
         const row = bridgeActivityRow(record)
         return row ? [row] : []
       })
-      const walletAddresses = await dependencies.readWalletAddresses?.(identity.userId) ?? []
-      const externalPayments = (await dependencies.readExternalPayments?.(walletAddresses) ?? [])
+      const externalPayments = externalPaymentIntents
         .flatMap(intent => {
           const row = externalPaymentActivityRow(intent)
           return row ? [row] : []
         })
       const refundPolicy = dependencies.readBillsRefundPolicy?.() ?? { enabled: false, treasuryAddress: '' }
-      const bills = (await dependencies.readBills?.(identity.userId) ?? []).flatMap(intent => {
+      const bills = billsIntents.flatMap(intent => {
         const row = billActivityRow(intent, refundPolicy)
         return row ? [row] : []
       })

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeftRight, Banknote, ChevronRight, Eye, EyeOff, Send, Store, TrendingUp, Users, Wallet } from '../components/PocketIcons'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
-import PocketLoadingState from '../components/PocketLoadingState'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketWallets from '../hooks/usePocketWallets'
 import usePocketActivity from '../hooks/usePocketActivity'
@@ -46,9 +45,9 @@ export default function PocketHomePage() {
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
   const [balanceVisible, setBalanceVisible] = useState(() => window.localStorage.getItem(BALANCE_VISIBLE_KEY) !== 'false')
   const recent = activity.rows.slice(0, 4)
-  const unresolved = authenticated && (!wallets.resolved || !activity.resolved || !profile.loaded || (showNgn && !fx.quote && fx.busy))
-
-  if (unresolved) return <PocketLoadingState active="home" />
+  const balancesReady = !authenticated || wallets.resolved
+  const balancesVisible = balancesReady && (!wallets.error || wallets.rows.length > 0)
+  const activityReady = !authenticated || activity.resolved
 
   const open = (path: string) => navigate(POCKET_BASE_PATH + path)
   const selectedBalance = wallets.rows.find(row => row.key === selected)?.balance ?? 0
@@ -67,9 +66,10 @@ export default function PocketHomePage() {
             </button>
           </div>
           <div className="mt-1.5">
-            <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(wallets.total) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p>
+            {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(wallets.total) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p> : <span aria-label="Loading balances" className="block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
           </div>
-          {showNgn && fx.quote && <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(wallets.total * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p>}
+          {showNgn && (fx.quote ? <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(wallets.total * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p> : fx.busy ? <span aria-label="Loading Naira equivalent" className="mt-2 block h-3 w-24 animate-pulse rounded bg-white/10 dark:bg-gray-950/[0.08]" /> : null)}
+          {balancesReady && (!wallets.totalComplete || wallets.error) && <p className="mt-1 text-[10px] font-medium text-white/45 dark:text-gray-500">Some network balances are updating.</p>}
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => open(POCKET_ROUTES.send)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><Send className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Send</span></button>
@@ -83,7 +83,7 @@ export default function PocketHomePage() {
         </button>)}
       </div>
       <div className="mt-3 border-t border-white/10 pt-3 text-center dark:border-gray-950/10">
-        <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p>
+        {balancesVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p> : <span className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
       </div>
     </section>
 
@@ -98,7 +98,7 @@ export default function PocketHomePage() {
 
     <section className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]">
       <div className="flex items-center justify-between"><div><p className="text-sm font-black text-gray-950 dark:text-white">Recent activity</p><p className="mt-0.5 text-[11px] text-gray-400">Your latest money movement</p></div><button type="button" onClick={() => open(POCKET_ROUTES.activity)} className="flex items-center gap-1 text-[11px] font-bold text-gray-500">View all<ChevronRight className="h-3.5 w-3.5" /></button></div>
-      <div className="mt-4 space-y-1">{recent.length ? recent.map(row => <button key={row.eventId + ':' + row.txHash} type="button" onClick={() => open(POCKET_ROUTES.activity)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 dark:bg-white/[0.07]"><TrendingUp className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-gray-900 dark:text-white">{row.activityLabel || row.memo || 'Payment'}</span><span className="mt-0.5 block text-[10px] text-gray-400">{new Date(row.ts).toLocaleDateString()}</span></span><span className="text-xs font-black tabular-nums text-gray-900 dark:text-white">{row.direction === 'out' ? '-' : '+'}{row.amount} USDC</span></button>) : <p className="py-8 text-center text-xs font-medium text-gray-400">Your completed payments will appear here.</p>}</div>
+      <div className="mt-4 space-y-1">{!activityReady ? Array.from({ length: 4 }).map((_, index) => <div key={index} aria-hidden="true" className="flex items-center gap-3 rounded-2xl px-2 py-3"><span className="h-9 w-9 shrink-0 animate-pulse rounded-full bg-gray-100 dark:bg-white/[0.07]" /><span className="min-w-0 flex-1 space-y-2"><span className="block h-3 w-28 animate-pulse rounded bg-gray-100 dark:bg-white/[0.07]" /><span className="block h-2.5 w-16 animate-pulse rounded bg-gray-100 dark:bg-white/[0.07]" /></span><span className="h-3 w-16 animate-pulse rounded bg-gray-100 dark:bg-white/[0.07]" /></div>) : recent.length ? recent.map(row => <button key={row.eventId + ':' + row.txHash} type="button" onClick={() => open(POCKET_ROUTES.activity)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 dark:bg-white/[0.07]"><TrendingUp className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-gray-900 dark:text-white">{row.activityLabel || row.memo || 'Payment'}</span><span className="mt-0.5 block text-[10px] text-gray-400">{new Date(row.ts).toLocaleDateString()}</span></span><span className="text-xs font-black tabular-nums text-gray-900 dark:text-white">{row.direction === 'out' ? '-' : '+'}{row.amount} USDC</span></button>) : <p className="py-8 text-center text-xs font-medium text-gray-400">{activity.error ? 'Activity is updating in the background.' : 'Your completed payments will appear here.'}</p>}</div>
     </section>
   </PocketRouteShell>
 }

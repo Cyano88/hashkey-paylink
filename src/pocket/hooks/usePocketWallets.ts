@@ -175,14 +175,16 @@ export default function usePocketWallets({
             totalComplete: previous?.totalComplete ?? false,
           })
         }
-      } catch {
+      } catch (reason) {
         if (!cancelled) {
           const previous = pocketWalletCache.get(email)
           if (!previous) {
             setWallets({})
             setRows([])
             setTotal(0)
+            setTotalComplete(false)
           }
+          setError(reason instanceof Error ? reason.message : 'Pocket balances are updating in the background.')
         }
       } finally {
         balanceReadInFlight.current = false
