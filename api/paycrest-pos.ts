@@ -152,8 +152,17 @@ async function paycrestFetch<T>(path: string, init: RequestInit = {}): Promise<T
   }
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const validation = Array.isArray((body as any).errors)
-      ? (body as any).errors.map((item: any) => firstText(item?.message, item?.msg, item)).filter(Boolean).join('; ')
+    const validationRows = Array.isArray((body as any).errors)
+      ? (body as any).errors
+      : Array.isArray((body as any).data)
+        ? (body as any).data
+        : []
+    const validation = validationRows.length
+      ? validationRows.map((item: any) => {
+          const field = firstText(item?.field, item?.path)
+          const detail = firstText(item?.message, item?.msg, item)
+          return field && detail ? `${field}: ${detail}` : detail
+        }).filter(Boolean).join('; ')
       : firstText((body as any).details, (body as any).detail)
     const message = firstText(validation, (body as any).error, (body as any).message, 'Paycrest request failed.')
     throw new PaycrestRequestError(message, response.status, response.status === 404 || response.status === 503 ? 'PAYCREST_ROUTE_UNAVAILABLE' : 'PAYCREST_REQUEST_FAILED')
@@ -202,6 +211,7 @@ export async function verifyPaycrestAccount(input: { institution: string; accoun
     body: JSON.stringify({
       institution: input.institution,
       accountIdentifier: input.accountIdentifier,
+      currency: 'NGN',
     }),
   })
   return firstText(data?.accountName, data?.account_name, data?.name, data)

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { readPocketFxQuote, type PocketFxQuote } from '../api/pocketFxClient'
+import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
 const POCKET_FX_REFRESH_INTERVAL_MS = 30_000
 const POCKET_FX_FOCUS_THROTTLE_MS = 10_000
@@ -82,6 +83,11 @@ export default function usePocketFxQuote(balance: number, enabled = true) {
       document.removeEventListener('visibilitychange', refreshVisibleQuote)
     }
   }, [enabled, initialQuote, refresh])
+
+  useEffect(() => {
+    if (!enabled) return
+    return registerPocketRefreshHandler(refresh)
+  }, [enabled, refresh])
 
   return { quote: quote?.amount === amount ? quote : null, busy, error, refresh }
 }

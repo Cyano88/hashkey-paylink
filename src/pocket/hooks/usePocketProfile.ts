@@ -180,6 +180,6 @@ export default function usePocketProfile({
     saveDisplayCurrency,
     edit,
     cancel,
-    reload: () => load(),
+    reload: load,
   }
 }

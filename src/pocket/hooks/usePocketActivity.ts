@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { readPocketActivity } from '../api/pocketReadClient'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import type { PocketCollectionResource, PocketPosResource } from '../lib/pocketSchemas'
+import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
 type PocketAccessTokenReader = () => Promise<string | null>
 const pocketActivityCache = new Map<string, PocketActivityRow[]>()
@@ -108,6 +109,11 @@ export default function usePocketActivity({
       window.removeEventListener('focus', refreshVisible)
       document.removeEventListener('visibilitychange', refreshVisible)
     }
+  }, [authenticated, enabled, refresh])
+
+  useEffect(() => {
+    if (!authenticated || !enabled) return
+    return registerPocketRefreshHandler(refresh)
   }, [authenticated, enabled, refresh])
 
   return { rows, merchants, collections, busy, resolved, error, refresh }

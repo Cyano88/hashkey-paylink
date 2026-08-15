@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 import type { UnifiedBalanceBreakdown } from '../../lib/unifiedBalance'
 import { readPocketBalances, readPocketLinkedWallets } from '../api/pocketReadClient'
 import type { CirclePocketWallets } from '../models/pocketWallet'
+import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
 type PocketAccessTokenReader = () => Promise<string | null>
 
@@ -215,6 +216,11 @@ export default function usePocketWallets({
       window.removeEventListener('focus', refreshVisibleBalance)
       document.removeEventListener('visibilitychange', refreshVisibleBalance)
     }
+  }, [authenticated, email, refreshBalances])
+
+  useEffect(() => {
+    if (!authenticated || !email) return
+    return registerPocketRefreshHandler(refreshBalances)
   }, [authenticated, email, refreshBalances])
 
   return { wallets, setWallets, rows, total, totalComplete, balanceBusy, resolved, error, setError, refreshBalances }

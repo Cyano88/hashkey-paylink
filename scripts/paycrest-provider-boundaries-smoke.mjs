@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { PaycrestRequestError, resolvePaycrestOfframpAvailability } from '../api/paycrest-pos.ts'
+import { PaycrestRequestError, resolvePaycrestOfframpAvailability, verifyPaycrestAccount } from '../api/paycrest-pos.ts'
 
 const unavailable = amount => {
   throw new PaycrestRequestError(`No provider available for ${amount}`, 404, 'PAYCREST_ROUTE_UNAVAILABLE')
@@ -44,5 +44,32 @@ await assert.rejects(
   resolvePaycrestOfframpAvailability({ amount: '0.5', quote: async ({ amount }) => unavailable(amount) }),
   error => error instanceof PaycrestRequestError && error.code === 'PAYCREST_ROUTE_UNAVAILABLE',
 )
+
+const originalFetch = globalThis.fetch
+const originalApiKey = process.env.PAYCREST_API_KEY
+process.env.PAYCREST_API_KEY = 'test-paycrest-key'
+let verificationBody
+globalThis.fetch = async (_url, init) => {
+  verificationBody = JSON.parse(String(init?.body || '{}'))
+  return new Response(JSON.stringify({ status: 'success', data: { accountName: 'TEST CUSTOMER' } }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+assert.equal(await verifyPaycrestAccount({ institution: 'OPAY', accountIdentifier: '0123456789' }), 'TEST CUSTOMER')
+assert.deepEqual(verificationBody, { institution: 'OPAY', accountIdentifier: '0123456789', currency: 'NGN' })
+
+globalThis.fetch = async () => new Response(JSON.stringify({
+  status: 'error',
+  message: 'Failed to validate payload',
+  data: [{ field: 'currency', message: 'Currency is required' }],
+}), { status: 400, headers: { 'content-type': 'application/json' } })
+await assert.rejects(
+  verifyPaycrestAccount({ institution: 'OPAY', accountIdentifier: '0123456789' }),
+  /currency: Currency is required/,
+)
+globalThis.fetch = originalFetch
+if (originalApiKey === undefined) delete process.env.PAYCREST_API_KEY
+else process.env.PAYCREST_API_KEY = originalApiKey
 
 console.log('Paycrest provider-boundary smoke tests passed: exact quotes, conservative available amounts, and service failures stay distinct.')

@@ -3,7 +3,7 @@ import { createElement, type HTMLAttributes } from 'react'
 export function Loader2({ className = '', ...props }: HTMLAttributes<HTMLSpanElement>) {
   return createElement('span', {
     ...props,
-    className: `inline-block shrink-0 rounded-full border-2 border-current border-t-transparent ${className}`,
+    className: `inline-block shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none ${className}`,
     role: props.role ?? 'status',
   })
 }

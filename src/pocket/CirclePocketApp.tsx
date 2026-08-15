@@ -24,6 +24,7 @@ import { prefetchPocketWalletSnapshot } from './hooks/usePocketWallets'
 import { prefetchPocketActivity } from './hooks/usePocketActivity'
 import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
 import { clearActivePocketBankPayout, readActivePocketBankPayout } from './lib/pocketBankPayoutState'
+import { registerPocketRefreshHandler } from './lib/pocketRefresh'
 
 function pocketRelativePath(pathname: string) {
   if (!POCKET_BASE_PATH || !pathname.startsWith(POCKET_BASE_PATH)) return pathname
@@ -39,6 +40,11 @@ export default function CirclePocketApp() {
   const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const splashState = usePocketSessionSplash(landing)
+
+  useEffect(() => {
+    if (!authenticated || !email) return
+    return registerPocketRefreshHandler(profile.reload)
+  }, [authenticated, email, profile.reload])
 
   useEffect(() => {
     if (!ready || !authenticated || !email) return
