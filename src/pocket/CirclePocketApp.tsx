@@ -1,20 +1,6 @@
-import { useEffect, useMemo } from 'react'
+import { lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { POCKET_BASE_PATH, POCKET_ROUTES, resolvePocketRoute } from './lib/pocketRoutes'
-import PocketActivityPage from './pages/PocketActivityPage'
-import PocketAssistantPage from './pages/PocketAssistantPage'
-import PocketBillsPage from './pages/PocketBillsPage'
-import PocketLandingPage from './pages/PocketLandingPage'
-import PocketHomePage from './pages/PocketHomePage'
-import PocketProfilePage from './pages/PocketProfilePage'
-import PocketVerifyNamePage from './pages/PocketVerifyNamePage'
-import PocketDepositPage from './pages/PocketDepositPage'
-import PocketSwapPage from './pages/PocketSwapPage'
-import PocketSendPage from './pages/PocketSendPage'
-import PocketNotificationsPage from './pages/PocketNotificationsPage'
-import PocketMoveBankPage from './pages/PocketMoveBankPage'
-import PocketMovePosPage from './pages/PocketMovePosPage'
-import PocketMoveUsdcPage from './pages/PocketMoveUsdcPage'
 import PocketLoadingState from './components/PocketLoadingState'
 import type { PocketNavTab } from './components/PocketBottomNav'
 import usePocketIdentity from './hooks/usePocketIdentity'
@@ -25,6 +11,25 @@ import { prefetchPocketActivity } from './hooks/usePocketActivity'
 import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
 import { clearActivePocketBankPayout, readActivePocketBankPayout } from './lib/pocketBankPayoutState'
 import { registerPocketRefreshHandler } from './lib/pocketRefresh'
+
+const PocketActivityPage = lazy(() => import('./pages/PocketActivityPage'))
+const PocketAssistantPage = lazy(() => import('./pages/PocketAssistantPage'))
+const PocketBillsPage = lazy(() => import('./pages/PocketBillsPage'))
+const PocketLandingPage = lazy(() => import('./pages/PocketLandingPage'))
+const PocketHomePage = lazy(() => import('./pages/PocketHomePage'))
+const PocketProfilePage = lazy(() => import('./pages/PocketProfilePage'))
+const PocketVerifyNamePage = lazy(() => import('./pages/PocketVerifyNamePage'))
+const PocketDepositPage = lazy(() => import('./pages/PocketDepositPage'))
+const PocketSwapPage = lazy(() => import('./pages/PocketSwapPage'))
+const PocketSendPage = lazy(() => import('./pages/PocketSendPage'))
+const PocketNotificationsPage = lazy(() => import('./pages/PocketNotificationsPage'))
+const PocketMoveBankPage = lazy(() => import('./pages/PocketMoveBankPage'))
+const PocketMovePosPage = lazy(() => import('./pages/PocketMovePosPage'))
+const PocketMoveUsdcPage = lazy(() => import('./pages/PocketMoveUsdcPage'))
+
+function PocketPageBoundary({ active, children }: { active: PocketNavTab; children: ReactNode }) {
+  return <Suspense fallback={<PocketLoadingState active={active} />}>{children}</Suspense>
+}
 
 function pocketRelativePath(pathname: string) {
   if (!POCKET_BASE_PATH || !pathname.startsWith(POCKET_BASE_PATH)) return pathname
@@ -90,7 +95,7 @@ export default function CirclePocketApp() {
   }, [landing, navigate, route])
 
   if (!ready) {
-    if (landing) return <PocketLandingPage splashState={splashState} />
+    if (landing) return <PocketPageBoundary active="home"><PocketLandingPage splashState={splashState} /></PocketPageBoundary>
     const active: PocketNavTab = route?.section === 'home'
       ? 'home'
       : route?.section === 'profile'
@@ -103,28 +108,23 @@ export default function CirclePocketApp() {
     return <PocketLoadingState active={active} />
   }
 
-  if (landing) return <PocketLandingPage splashState={splashState} />
-
-  if (authenticated && (!profile.loaded || profile.busy && !profile.profile)) {
-    const active: PocketNavTab = route?.section === 'profile' ? 'profile' : route?.section === 'bills' ? 'bills' : route?.section === 'activity' ? 'activity' : 'home'
-    return <PocketLoadingState active={active} />
-  }
+  if (landing) return <PocketPageBoundary active="home"><PocketLandingPage splashState={splashState} /></PocketPageBoundary>
 
   if (!route) return null
 
-  if (route.section === 'home' && route.view === 'deposit') return <PocketDepositPage />
-  if (route.section === 'home' && route.view === 'send') return <PocketSendPage />
-  if (route.section === 'home' && route.view === 'swap') return <PocketSwapPage />
-  if (route.section === 'home') return <PocketHomePage />
-  if (route.section === 'profile' && route.view === 'verify-name') return <PocketVerifyNamePage />
-  if (route.section === 'profile') return <PocketProfilePage />
-  if (route.section === 'notifications') return <PocketNotificationsPage />
-  if (route.section === 'bills') return <PocketBillsPage view={route.view} />
-  if (route.section === 'activity') return <PocketActivityPage view={route.view} />
-  if (route.section === 'assistant') return <PocketAssistantPage />
-  if (route.section === 'move' && route.view === 'usdc') return <PocketMoveUsdcPage />
-  if (route.section === 'move' && route.view === 'bank') return <PocketMoveBankPage />
-  if (route.section === 'move' && route.view === 'pos') return <PocketMovePosPage />
+  if (route.section === 'home' && route.view === 'deposit') return <PocketPageBoundary active="home"><PocketDepositPage /></PocketPageBoundary>
+  if (route.section === 'home' && route.view === 'send') return <PocketPageBoundary active="home"><PocketSendPage /></PocketPageBoundary>
+  if (route.section === 'home' && route.view === 'swap') return <PocketPageBoundary active="home"><PocketSwapPage /></PocketPageBoundary>
+  if (route.section === 'home') return <PocketPageBoundary active="home"><PocketHomePage /></PocketPageBoundary>
+  if (route.section === 'profile' && route.view === 'verify-name') return <PocketPageBoundary active="profile"><PocketVerifyNamePage /></PocketPageBoundary>
+  if (route.section === 'profile') return <PocketPageBoundary active="profile"><PocketProfilePage /></PocketPageBoundary>
+  if (route.section === 'notifications') return <PocketPageBoundary active="home"><PocketNotificationsPage /></PocketPageBoundary>
+  if (route.section === 'bills') return <PocketPageBoundary active="bills"><PocketBillsPage view={route.view} /></PocketPageBoundary>
+  if (route.section === 'activity') return <PocketPageBoundary active="activity"><PocketActivityPage view={route.view} /></PocketPageBoundary>
+  if (route.section === 'assistant') return <PocketPageBoundary active="home"><PocketAssistantPage /></PocketPageBoundary>
+  if (route.section === 'move' && route.view === 'usdc') return <PocketPageBoundary active="home"><PocketMoveUsdcPage /></PocketPageBoundary>
+  if (route.section === 'move' && route.view === 'bank') return <PocketPageBoundary active="home"><PocketMoveBankPage /></PocketPageBoundary>
+  if (route.section === 'move' && route.view === 'pos') return <PocketPageBoundary active="home"><PocketMovePosPage /></PocketPageBoundary>
 
   return null
 }

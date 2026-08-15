@@ -1,4 +1,4 @@
-import React, { useMemo, type ReactNode } from 'react'
+import React, { lazy, Suspense, useMemo, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { WagmiProvider } from 'wagmi'
 import { WagmiProvider as PrivyWagmiProvider } from '@privy-io/wagmi'
@@ -8,15 +8,23 @@ import '@fontsource/inter/latin.css'
 
 import './index.css'
 
-import App from './App'
 import { privyWagmiConfig } from './lib/privyWagmi'
 import { ThemeProvider, useTheme } from './lib/ThemeContext'
 import { arcChain, baseMainnet } from './lib/chains'
 import { arbitrum, polygon } from 'viem/chains'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyLoginProvider } from './lib/PrivyLoginProvider'
+import { isPocketHostname } from './pocket/lib/pocketRoutes'
 
 const BRAND_ORIGIN = 'https://hashpaylink.com'
+const rootAppModule = isPocketHostname(window.location.hostname)
+  ? import('./pocket/PocketHostApp')
+  : import('./App')
+const RootApp = lazy(() => rootAppModule)
+
+function AppBootFallback() {
+  return <main aria-label="Opening app" className="min-h-screen bg-[#F5F5F7] dark:bg-[#0A0A0A]" />
+}
 
 class AppErrorBoundary extends React.Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null }
@@ -86,7 +94,7 @@ function AppProviders() {
     },
   }), [theme])
 
-  const app = <App />
+  const app = <Suspense fallback={<AppBootFallback />}><RootApp /></Suspense>
 
   if (!PRIVY_AUTH_ENABLED) {
     return (

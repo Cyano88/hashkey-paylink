@@ -13,7 +13,7 @@ import type { NextFunction, Request, Response } from 'express'
 import { config as loadEnv } from 'dotenv'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import { dirname, join, sep } from 'path'
 import relayV2Handler         from './api/relay-v2.js'
 import txStatusHandler        from './api/tx-status.js'
 import solanaBalanceHandler   from './api/solana-balance.js'
@@ -188,6 +188,7 @@ function runtimePublicConfigScript() {
 function sendSpaIndex(res: Response) {
   const indexPath = join(__dirname, 'dist', 'index.html')
   const html = readFileSync(indexPath, 'utf8')
+  res.setHeader('Cache-Control', 'no-cache')
   res.type('html').send(html.replace('</head>', `${runtimePublicConfigScript()}</head>`))
 }
 
@@ -421,7 +422,16 @@ app.use('/api', (req, res) => {
   res.status(404).json({ ok: false, error: `API route not found: ${req.method} ${req.originalUrl}` })
 })
 
-app.use(express.static(join(__dirname, 'dist'), { index: false }))
+app.use(express.static(join(__dirname, 'dist'), {
+  index: false,
+  setHeaders(res, filePath) {
+    if (filePath.includes(`${sep}assets${sep}`)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      return
+    }
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+  },
+}))
 
 // ── SPA fallback — send index.html for all non-API routes ────────────────────
 app.get('*', (_req, res) => {
