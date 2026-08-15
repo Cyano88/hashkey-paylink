@@ -184,7 +184,7 @@ export default function PocketMoveUsdcPage() {
   const requestCanSubmit = authenticated && Boolean(resolvedPayer) && draft.validation.amountValid && !draft.flexibleAmount
 
   return <PocketRouteShell active="home" onSelect={selectNav}>
-    <PocketFlowHeader title="Receive" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
+    <PocketFlowHeader title="Request" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
     <div className="space-y-3.5">
       <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
         {(['request', 'collection'] as ReceiveFlow[]).map(value => <button key={value} type="button" onClick={() => { setFlow(value); setFormError(''); setRequestNotice(''); if (value === 'request' && draft.multiChain) draft.setMultiChain(false) }} className={`min-h-10 rounded-full px-3 text-xs font-semibold transition ${flow === value ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}`}>{value === 'request' ? 'Request' : 'Collection'}</button>)}

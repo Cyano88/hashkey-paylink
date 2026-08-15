@@ -166,7 +166,7 @@ export default function PocketMoveBankPage() {
 
   return (
     <PocketRouteShell active="home" onSelect={selectNav}>
-      <PocketFlowHeader title={routeMode === 'request' ? 'Receive' : 'Bank payout'} onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
+      <PocketFlowHeader title={routeMode === 'request' ? 'Request' : 'Bank payout'} onBack={() => navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <div className="space-y-3.5">
         {routeMode === 'request' && <>
           <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
