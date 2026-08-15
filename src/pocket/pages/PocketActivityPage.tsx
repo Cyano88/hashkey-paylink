@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketLoadingState from '../components/PocketLoadingState'
@@ -9,11 +9,30 @@ import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_BASE_PATH, pocketPathFor, type PocketActivityView } from '../lib/pocketRoutes'
 import { processPocketBillRefund } from '../api/pocketBillsClient'
+import { readPocketRequests, type PocketRequestItem } from '../api/pocketRequestsClient'
 
 export default function PocketActivityPage({ view }: { view: PocketActivityView }) {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const activity = usePocketActivity({ authenticated, email, enabled: true, getAccessToken })
+  const [requests, setRequests] = useState<PocketRequestItem[]>([])
+  const [requestsError, setRequestsError] = useState('')
+
+  useEffect(() => {
+    if (!authenticated) { setRequests([]); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const accessToken = await getAccessToken()
+        if (!accessToken) throw new Error('Sign in again to load requests.')
+        const next = await readPocketRequests(accessToken)
+        if (!cancelled) { setRequests(next); setRequestsError('') }
+      } catch (reason) {
+        if (!cancelled) setRequestsError(reason instanceof Error ? reason.message : 'Requests could not load.')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [authenticated, getAccessToken])
 
   const handleBillsRefund = useCallback(async (intentId: string) => {
     const accessToken = await getAccessToken()
@@ -51,8 +70,9 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
         rows={activity.rows}
         merchants={activity.merchants}
         collections={activity.collections}
+        requests={requests}
         busy={activity.busy}
-        error={activity.error}
+        error={view === 'collections' ? activity.error || requestsError : activity.error}
       /> : <PocketActivityPanel
         view={view}
         rows={activity.rows}

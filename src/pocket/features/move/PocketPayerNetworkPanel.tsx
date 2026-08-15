@@ -15,6 +15,7 @@ type PocketPayerNetworkPanelProps = {
   emailReceive: boolean
   onNetworkSelect: (network: string) => void
   onMultiChainToggle: () => void
+  showMultiChainToggle?: boolean
   embedded?: boolean
 }
 
@@ -27,6 +28,7 @@ export function PocketPayerNetworkPanel({
   emailReceive,
   onNetworkSelect,
   onMultiChainToggle,
+  showMultiChainToggle = true,
   embedded = false,
 }: PocketPayerNetworkPanelProps) {
   return (
@@ -55,7 +57,7 @@ export function PocketPayerNetworkPanel({
           />
         </div>
 
-        <button
+        {showMultiChainToggle && <button
           type="button"
           onClick={onMultiChainToggle}
           disabled={emailReceive}
@@ -65,7 +67,7 @@ export function PocketPayerNetworkPanel({
             <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer choose network</span>
             <span className="block text-[11px] font-medium text-gray-400 dark:text-gray-500">
               {emailReceive
-                ? 'Circle Pocket uses the selected network.'
+                ? 'Pocket uses the selected network.'
                 : multiChain
                   ? 'Add addresses per network.'
                   : 'Use one selected network.'}
@@ -80,7 +82,7 @@ export function PocketPayerNetworkPanel({
               multiChain ? 'translate-x-4' : 'translate-x-0',
             )} />
           </span>
-        </button>
+        </button>}
       </div>}
 
       {multiChain && (

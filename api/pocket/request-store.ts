@@ -2,20 +2,28 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
 
-export type PocketRequestStatus = 'pending' | 'accepted' | 'declined'
+export type PocketRequestStatus = 'pending' | 'accepted' | 'declined' | 'paid'
 export type PocketMoneyRequest = {
   id: string; eventId: string; senderId: string; senderPocketId: string; senderName: string
-  recipientId: string; recipientPocketId: string; title: string; amount: string; flexibleAmount: boolean
-  network: 'base' | 'arbitrum' | 'solana' | 'multi'; paymentUrl: string; status: PocketRequestStatus
-  createdAt: number; updatedAt: number
+  senderAddress?: string; recipientId: string; recipientPocketId: string; recipientName?: string
+  title: string; amount: string; flexibleAmount: boolean
+  network: 'base' | 'arbitrum' | 'solana' | 'multi'; paymentPath?: string
+  transactionHash?: string; paidAt?: number; status: PocketRequestStatus; createdAt: number; updatedAt: number
 }
-type Store = { requests: Record<string, PocketMoneyRequest>; notificationReads: Record<string, number> }
+type Store = { requests: Record<string, PocketMoneyRequest>; notificationReads: Record<string, number>; transactionHashes: Record<string, string> }
 type Options = { storePath?: string; storeKey?: string; durable?: boolean; isRender?: boolean; now?: () => number; mutateDurable?: typeof mutateDurableJson; readDurable?: typeof readDurableJson }
 const STORE_PATH = process.env.POCKET_REQUEST_STORE ?? './data/pocket-requests.json'
 const STORE_KEY = (process.env.POCKET_REQUEST_STORE_KEY ?? 'hashpaylink:pocket-requests:v1').trim()
 const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
 const clean = (value: unknown, max: number) => String(value ?? '').trim().slice(0, max)
-const normalizedStore = (value?: Partial<Store> | null): Store => ({ requests: value?.requests ?? {}, notificationReads: value?.notificationReads ?? {} })
+const normalizedStore = (value?: Partial<Store> | null): Store => {
+  const requests = value?.requests ?? {}
+  const transactionHashes = { ...(value?.transactionHashes ?? {}) }
+  for (const request of Object.values(requests)) {
+    if (request.status === 'paid' && request.transactionHash) transactionHashes[request.transactionHash.toLowerCase()] = request.id
+  }
+  return { requests, notificationReads: value?.notificationReads ?? {}, transactionHashes }
+}
 
 export function createPocketRequestRepository(options: Options = {}) {
   const storePath = resolve(options.storePath ?? STORE_PATH), storeKey = options.storeKey ?? STORE_KEY
@@ -37,34 +45,31 @@ export function createPocketRequestRepository(options: Options = {}) {
       const eventId = clean(input.eventId, 120)
       if (!/^[a-zA-Z0-9:_-]{8,120}$/.test(eventId)) throw Object.assign(new Error('Request identity is invalid.'), { status: 400 })
       if (input.senderId === input.recipientId) throw Object.assign(new Error('Choose another Pocket user.'), { status: 400 })
-      let paymentUrl: URL
-      try { paymentUrl = new URL(input.paymentUrl) } catch { throw Object.assign(new Error('Payment link is invalid.'), { status: 400 }) }
-      const checkoutHost = paymentUrl.hostname.toLowerCase()
-      const trustedCheckout = paymentUrl.protocol === 'https:' && (checkoutHost === 'app.hashpaylink.com' || checkoutHost === 'pocket.hashpaylink.com')
-      const localCheckout = paymentUrl.protocol === 'http:' && (checkoutHost === 'localhost' || checkoutHost === '127.0.0.1')
-      if (!trustedCheckout && !localCheckout) throw Object.assign(new Error('Payment link must use Hash PayLink.'), { status: 400 })
-      if (paymentUrl.pathname !== '/pay' || paymentUrl.searchParams.get('id') !== eventId || paymentUrl.searchParams.get('v') !== '1') throw Object.assign(new Error('Payment link does not match this request.'), { status: 400 })
-      const flexibleAmount = paymentUrl.searchParams.get('f') === '1'
-      const amount = flexibleAmount ? '' : paymentUrl.searchParams.get('a') ?? ''
-      const network: PocketMoneyRequest['network'] = paymentUrl.searchParams.get('x') === '1'
-        ? 'multi'
-        : paymentUrl.searchParams.get('n') === 'solana'
-          ? 'solana'
-          : paymentUrl.searchParams.get('n') === 'arbitrum'
-            ? 'arbitrum'
-            : 'base'
+      const amount = clean(input.amount, 30)
+      if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) throw Object.assign(new Error('Enter a valid USDC amount.'), { status: 400 })
+      const network = input.network === 'solana' || input.network === 'arbitrum' ? input.network : 'base'
+      const senderAddress = clean(input.senderAddress, 120)
+      if (network === 'solana' ? !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(senderAddress) : !/^0x[a-fA-F0-9]{40}$/.test(senderAddress)) {
+        throw Object.assign(new Error(`Open your ${network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : 'Base'} Pocket wallet before requesting payment.`), { status: 409 })
+      }
       return mutate(store => {
         const existing = Object.values(store.requests).find(item => item.eventId === eventId)
         if (existing) { if (existing.senderId !== input.senderId) throw Object.assign(new Error('This request already belongs to another user.'), { status: 409 }); return { request: existing, replayed: true } }
         const timestamp = now()
-        const title = paymentUrl.searchParams.get('m')?.trim().slice(0, 100) || input.title
-        const request: PocketMoneyRequest = { ...input, eventId, title, amount, flexibleAmount, network, id: 'preq_' + eventId, paymentUrl: paymentUrl.toString(), status: 'pending', createdAt: timestamp, updatedAt: timestamp }
+        const id = 'preq_' + eventId
+        const request: PocketMoneyRequest = { ...input, eventId, id, title: clean(input.title, 100) || 'USDC request', amount, flexibleAmount: false, network, senderAddress, paymentPath: `/home/send?request=${encodeURIComponent(id)}`, status: 'pending', createdAt: timestamp, updatedAt: timestamp }
         store.requests[request.id] = request
         store.notificationReads[input.senderId] = timestamp
         return { request, replayed: false }
       })
     },
     async listFor(userId: string) { return Object.values((await readStore()).requests).filter(item => item.senderId === userId || item.recipientId === userId).sort((a, b) => b.updatedAt - a.updatedAt) },
+    async getFor(userId: string, id: string) {
+      const request = (await readStore()).requests[clean(id, 160)]
+      if (!request) throw Object.assign(new Error('Payment request was not found.'), { status: 404 })
+      if (request.senderId !== userId && request.recipientId !== userId) throw Object.assign(new Error('Payment request access is restricted.'), { status: 403 })
+      return request
+    },
     async unreadCount(userId: string) {
       const store = await readStore()
       const lastRead = store.notificationReads[userId] ?? 0
@@ -83,6 +88,24 @@ export function createPocketRequestRepository(options: Options = {}) {
         const updated: PocketMoneyRequest = { ...request, status, updatedAt: now() }
         store.requests[id] = updated
         store.notificationReads[userId] = updated.updatedAt
+        return updated
+      })
+    },
+    async markPaid(userId: string, id: string, transactionHash: string) {
+      return mutate(store => {
+        const request = store.requests[clean(id, 160)]
+        if (!request) throw Object.assign(new Error('Payment request was not found.'), { status: 404 })
+        if (request.recipientId !== userId) throw Object.assign(new Error('Only the requested Pocket user can pay this request.'), { status: 403 })
+        if (request.status === 'paid') return request
+        if (request.status !== 'accepted') throw Object.assign(new Error('Accept this request before paying.'), { status: 409 })
+        const normalizedHash = clean(transactionHash, 120).toLowerCase()
+        if (!normalizedHash) throw Object.assign(new Error('A confirmed transaction is required.'), { status: 400 })
+        const claimedBy = store.transactionHashes[normalizedHash]
+        if (claimedBy && claimedBy !== request.id) throw Object.assign(new Error('This transaction has already completed another request.'), { status: 409 })
+        const timestamp = now()
+        const updated: PocketMoneyRequest = { ...request, status: 'paid', transactionHash: clean(transactionHash, 120), paidAt: timestamp, updatedAt: timestamp }
+        store.requests[id] = updated
+        store.transactionHashes[normalizedHash] = request.id
         return updated
       })
     },

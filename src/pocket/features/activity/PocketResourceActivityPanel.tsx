@@ -9,14 +9,30 @@ import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
 import { hashPayLinkAppOriginForOrigin } from '../../lib/pocketRoutes'
 import UnifiedReceipt from '../../../components/UnifiedReceipt'
 import { pocketActivityReceipt } from '../../lib/pocketReceipt'
+import type { PocketRequestItem } from '../../api/pocketRequestsClient'
 
 type Props = {
   view: 'pos' | 'collections'
   rows: PocketActivityRow[]
   merchants: PocketPosResource[]
   collections: PocketCollectionResource[]
+  requests: PocketRequestItem[]
   busy: boolean
   error: string
+}
+
+type ActivityResource = {
+  id: string
+  title: string
+  createdAt: number
+  paymentUrl?: string
+  kind: 'pos' | 'collection' | 'request'
+  request?: PocketRequestItem
+}
+
+function resourceTitle(resource: ActivityResource) {
+  if (resource.request?.status === 'paid') return resource.request.direction === 'outgoing' ? 'USDC received' : 'USDC sent'
+  return resource.title
 }
 
 function rowSource(row: PocketActivityRow) {
@@ -42,29 +58,30 @@ function totalLabel(rows: PocketActivityRow[]) {
   return `${formatPocketDisplayAmount(usdc)} USDC`
 }
 
-export default function PocketResourceActivityPanel({ view, rows, merchants, collections, busy, error }: Props) {
+export default function PocketResourceActivityPanel({ view, rows, merchants, collections, requests, busy, error }: Props) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [copiedId, setCopiedId] = useState('')
   const [expandedPaymentId, setExpandedPaymentId] = useState('')
   const key = view === 'pos' ? 'terminal' : 'collection'
   const selectedId = searchParams.get(key) ?? ''
-  const resources = useMemo(() => view === 'pos'
+  const resources = useMemo<ActivityResource[]>(() => view === 'pos'
     ? merchants.filter(merchant => !merchant.source || merchant.source === 'pos').map(merchant => ({
         id: merchant.merchant_id,
         title: merchant.display_name,
         createdAt: merchant.created_at ? Date.parse(merchant.created_at) : 0,
         paymentUrl: `${hashPayLinkAppOriginForOrigin(window.location.origin)}/pos/ng?merchant_id=${encodeURIComponent(merchant.merchant_id)}`,
+        kind: 'pos' as const,
       }))
-    : collections.map(collection => ({
-        id: collection.eventId,
-        title: collection.title,
-        createdAt: collection.createdAt,
-        paymentUrl: collection.paymentUrl,
-      })), [collections, merchants, view])
+    : [
+        ...requests.map(request => ({ id: request.id, title: request.title, createdAt: request.createdAt, kind: 'request' as const, request })),
+        ...collections.map(collection => ({ id: collection.eventId, title: collection.title, createdAt: collection.createdAt, paymentUrl: collection.paymentUrl, kind: 'collection' as const })),
+      ].sort((a, b) => b.createdAt - a.createdAt), [collections, merchants, requests, view])
   const selected = resources.find(resource => resource.id === selectedId)
   const resourceRows = (resourceId: string) => rows.filter(row => view === 'pos'
     ? ['ngpos', 'pos'].includes(rowSource(row)) && row.merchantId === resourceId
-    : rowSource(row) === 'collection' && row.eventId === resourceId)
+    : resourceId.startsWith('preq_')
+      ? Boolean(resources.find(resource => resource.id === resourceId)?.request?.transactionHash) && row.txHash.toLowerCase() === resources.find(resource => resource.id === resourceId)?.request?.transactionHash.toLowerCase()
+      : rowSource(row) === 'collection' && row.eventId === resourceId)
 
   const copyLink = async (id: string, paymentUrl: string) => {
     await copyToClipboard(paymentUrl)
@@ -82,19 +99,20 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
               <ArrowLeft className="h-4 w-4" />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">{view === 'pos' ? 'POS terminal' : 'Payment request'}</p>
-              <h2 className="mt-1 truncate text-lg font-black text-gray-950 dark:text-white">{selected.title}</h2>
-              <p className="mt-0.5 text-xs font-semibold text-gray-400">{payments.length} payment{payments.length === 1 ? '' : 's'} · {totalLabel(payments)}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">{selected.kind === 'pos' ? 'POS terminal' : selected.kind === 'request' ? 'Personal request' : 'Collection'}</p>
+              <h2 className="mt-1 truncate text-lg font-black text-gray-950 dark:text-white">{resourceTitle(selected)}</h2>
+              <p className="mt-0.5 text-xs font-semibold text-gray-400">{selected.request ? `${selected.request.amount} USDC · ${selected.request.direction === 'outgoing' ? `To ${selected.request.recipientName}` : `From ${selected.request.senderName}`}` : `${payments.length} payment${payments.length === 1 ? '' : 's'} · ${totalLabel(payments)}`}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5">
+            {selected.paymentUrl && <div className="flex shrink-0 items-center gap-1.5">
               <a href={selected.paymentUrl} target="_blank" rel="noreferrer" aria-label="Open payment link" className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
                 <ExternalLink className="h-4 w-4" />
               </a>
               <button type="button" aria-label="Copy payment link" onClick={() => void copyLink(selected.id, selected.paymentUrl)} className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
                 {copiedId === selected.id ? <CheckCheck className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
               </button>
-            </div>
+            </div>}
           </div>
+          {selected.request && <div className="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-4 text-xs dark:border-white/10"><div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</p><p className="mt-1 font-bold capitalize">{selected.request.status === 'pending' ? 'Awaiting response' : selected.request.status}</p></div><div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Network</p><p className="mt-1 font-bold capitalize">{selected.request.network}</p></div></div>}
         </div>
 
         {error && !payments.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">{error}</p> : null}
@@ -124,8 +142,8 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
           </div>
         ) : !busy ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center dark:border-white/10 dark:bg-[#111216]">
-            <p className="text-sm font-black text-gray-900 dark:text-gray-100">No payments yet</p>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Copy the link above when you are ready to receive.</p>
+            <p className="text-sm font-black text-gray-900 dark:text-gray-100">{selected.request ? selected.request.status === 'paid' ? 'Payment is syncing' : 'No payment yet' : 'No payments yet'}</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{selected.request ? selected.request.status === 'paid' ? 'The confirmed transfer will appear here when Activity finishes syncing.' : selected.request.direction === 'incoming' && selected.request.status === 'accepted' ? 'Open Notifications when you are ready to pay.' : 'Pocket will update this request when its status changes.' : 'Share the collection link when you are ready to receive.'}</p>
           </div>
         ) : null}
       </div>
@@ -144,24 +162,24 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
                 <button type="button" onClick={() => setSearchParams({ [key]: resource.id })} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1.5 text-left">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">{view === 'pos' ? <Store className="h-4 w-4" /> : <Users className="h-4 w-4" />}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">{resource.title}</span>
-                  <span className="mt-0.5 block text-[11px] font-medium text-gray-400">{payments.length} payment{payments.length === 1 ? '' : 's'} · {totalLabel(payments)}</span>
+                  <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">{resourceTitle(resource)}</span>
+                  <span className="mt-0.5 block text-[11px] font-medium text-gray-400">{resource.request ? `${resource.request.direction === 'outgoing' ? `To ${resource.request.recipientName}` : `From ${resource.request.senderName}`} · ${resource.request.amount} USDC · ${resource.request.status === 'pending' ? 'Awaiting response' : resource.request.status.charAt(0).toUpperCase() + resource.request.status.slice(1)}` : `${payments.length} payment${payments.length === 1 ? '' : 's'} · ${totalLabel(payments)}`}</span>
                 </span>
                 </button>
-                <a href={resource.paymentUrl} target="_blank" rel="noreferrer" aria-label="Open payment link" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 dark:border-white/10 dark:text-gray-300">
+                {resource.paymentUrl && <><a href={resource.paymentUrl} target="_blank" rel="noreferrer" aria-label="Open payment link" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 dark:border-white/10 dark:text-gray-300">
                   <ExternalLink className="h-4 w-4" />
                 </a>
                 <button type="button" aria-label="Copy payment link" onClick={() => void copyLink(resource.id, resource.paymentUrl)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 dark:border-white/10 dark:text-gray-300">
                   {copiedId === resource.id ? <CheckCheck className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                </button>
+                </button></>}
               </div>
             )
           })}
         </div>
       ) : !busy ? (
         <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center dark:border-white/10 dark:bg-[#111216]">
-          <p className="text-sm font-black text-gray-900 dark:text-gray-100">No {view === 'pos' ? 'terminals' : 'payment requests'} yet</p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Create one from Move and it will appear here.</p>
+          <p className="text-sm font-black text-gray-900 dark:text-gray-100">No {view === 'pos' ? 'terminals' : 'requests or collections'} yet</p>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{view === 'pos' ? 'Create a POS terminal and it will appear here.' : 'Create one from Receive and it will appear here.'}</p>
         </div>
       ) : null}
     </div>

@@ -145,7 +145,7 @@ type PocketPayLinkSubmitPanelProps = {
 
 export function PocketPayLinkSubmitPanel({ lane, shellActive, idle, canSubmit, submitting, error, addressGuidance, onSubmit }: PocketPayLinkSubmitPanelProps) {
   const bankLane = usesNaira(lane)
-  const label = lane === 'bank' ? 'Create Bank PayLink' : lane === 'bank-send' ? 'Create Bank-to-USDC PayLink' : 'Create Collection'
+  const label = lane === 'bank' ? 'Create Collection' : lane === 'bank-send' ? 'Create Bank-to-USDC PayLink' : 'Create Collection'
   return (
     <div className={cn('space-y-2', shellActive ? 'w-full' : 'p-3 sm:p-4')}>
       {idle && (
@@ -176,7 +176,7 @@ export function PocketPayLinkSubmitPanel({ lane, shellActive, idle, canSubmit, s
       {lane === 'bank' && idle && (
         <div className="space-y-1 px-2 text-center text-xs leading-snug">
           {error && <p className="font-medium text-red-500">{error}</p>}
-          {!canSubmit && !error && <p className="text-gray-400 dark:text-gray-500">Enter an account in your Profile name and a Naira amount.</p>}
+          {!canSubmit && !error && <p className="text-gray-400 dark:text-gray-500">Choose your verified Nigerian bank account and enter the collection amount.</p>}
         </div>
       )}
       {lane === 'bank-send' && idle && <div className="space-y-1 px-2 text-center text-xs leading-snug"><p className="text-gray-400 dark:text-gray-500">Payer checkout will collect refund bank details before creating the bank transfer order.</p></div>}
