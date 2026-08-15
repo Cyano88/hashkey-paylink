@@ -50,13 +50,14 @@ function responseRecorder() {
   }
 }
 
-async function request(handler, method = 'GET') {
+async function request(handler, method = 'GET', query = {}) {
   const res = responseRecorder()
-  await handler({ method, headers: {} }, res)
+  await handler({ method, headers: {}, query }, res)
   return res
 }
 
 const ownerIds = []
+const readOptions = []
 const handler = createPocketActivityHandler({
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   readHistory: async ownerId => {
@@ -136,8 +137,9 @@ const handler = createPocketActivityHandler({
     createdAt: 1_740_000_000_000,
     updatedAt: 1_740_000_000_000,
   }],
-  readWalletHistory: async ownerId => {
+  readWalletHistory: async (ownerId, options) => {
     ownerIds.push(ownerId)
+    readOptions.push(options)
     return [{
       eventId: 'base:0xdeposit:1',
       txHash: '0xpolydesk',
@@ -203,6 +205,19 @@ assert.equal(loaded.body.payments[3].bankLast4, '1234')
 assert.equal(loaded.body.payments[3].accountName, 'Ada Lovelace')
 assert.equal(serialized.includes('must-not-leak-bank-secret'), false)
 assert.equal(serialized.includes('must-not-leak-wallet'), false)
+
+ownerIds.length = 0
+const recent = await request(handler, 'GET', { scope: 'recent' })
+assert.equal(recent.statusCode, 200)
+assert.equal(recent.body.payments.length, 4)
+assert.deepEqual(recent.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', '0xbill', 'paycrest_intent-2'])
+assert.deepEqual(recent.body.merchants, [])
+assert.deepEqual(recent.body.collections, [])
+assert.equal(readOptions.at(-1).recent, true)
+assert.equal(readOptions.at(-1).limit, 4)
+const invalidScope = await request(handler, 'GET', { scope: 'everything' })
+assert.equal(invalidScope.statusCode, 400)
+assert.equal(invalidScope.body.error.code, 'VALIDATION_FAILED')
 
 const refundActivityHandler = createPocketActivityHandler({
   verifyUser: async () => ({ userId: 'privy-user-1' }),

@@ -187,7 +187,12 @@ async function solanaActivity(wallet: string): Promise<PocketActivityRow[]> {
   })
 }
 
-export async function readPocketWalletChainActivity(ownerId: string) {
+export async function readPocketWalletChainActivity(
+  ownerId: string,
+  options: { timeoutMs?: number; limit?: number } = {},
+) {
+  const timeoutMs = Math.max(500, Math.min(Math.trunc(options.timeoutMs ?? 10_000), 10_000))
+  const limit = Math.max(1, Math.min(Math.trunc(options.limit ?? 100), 100))
   const links = await readPocketLinkedWalletAddresses(ownerId)
   const results = await Promise.all(links.map(async ({ network, walletAddress }) => {
     const link = { circleWalletAddress: walletAddress }
@@ -198,14 +203,14 @@ export async function readPocketWalletChainActivity(ownerId: string) {
         : evmActivity(network as EvmNetwork, link.circleWalletAddress)
       return await Promise.race([
         read,
-        new Promise<PocketActivityRow[]>((_, reject) => setTimeout(() => reject(new Error('chain activity lookup timed out')), 10_000)),
+        new Promise<PocketActivityRow[]>((_, reject) => setTimeout(() => reject(new Error('chain activity lookup timed out')), timeoutMs)),
       ])
     } catch (reason) {
       console.warn('[pocket-activity] wallet chain history unavailable', { network, message: reason instanceof Error ? reason.message : 'lookup failed' })
       return []
     }
   }))
-  return results.flat()
+  return results.flat().sort((a, b) => b.ts - a.ts).slice(0, limit)
 }
 
 export async function readPocketLinkedWalletAddresses(ownerId: string) {

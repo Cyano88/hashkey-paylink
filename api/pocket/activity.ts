@@ -28,16 +28,18 @@ type PocketPosResource = {
 
 type PocketActivityHandlerDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
-  readHistory(ownerId: string): Promise<{ payments: unknown[]; merchants?: PocketPosResource[] }>
-  readWalletHistory?(ownerId: string): Promise<unknown[]>
-  readBills?(ownerId: string): Promise<PocketBillsIntent[]>
+  readHistory(ownerId: string, options?: PocketActivityReadOptions): Promise<{ payments: unknown[]; merchants?: PocketPosResource[] }>
+  readWalletHistory?(ownerId: string, options?: PocketActivityReadOptions): Promise<unknown[]>
+  readBills?(ownerId: string, options?: PocketActivityReadOptions): Promise<PocketBillsIntent[]>
   readBillsRefundPolicy?(): { enabled: boolean; treasuryAddress: string }
-  readCollections?(ownerId: string): Promise<PocketCollectionLink[]>
-  readCollectionPayments?(eventIds: string[]): Promise<unknown[]>
-  readExternalPayments?(walletAddresses: string[]): Promise<PaymentExecutionIntent[]>
-  readWalletAddresses?(ownerId: string): Promise<string[]>
-  readActions?(ownerId: string): Promise<CirclePocketActionRecord[]>
+  readCollections?(ownerId: string, options?: PocketActivityReadOptions): Promise<PocketCollectionLink[]>
+  readCollectionPayments?(eventIds: string[], options?: PocketActivityReadOptions): Promise<unknown[]>
+  readExternalPayments?(walletAddresses: string[], options?: PocketActivityReadOptions): Promise<PaymentExecutionIntent[]>
+  readWalletAddresses?(ownerId: string, options?: PocketActivityReadOptions): Promise<string[]>
+  readActions?(ownerId: string, options?: PocketActivityReadOptions): Promise<CirclePocketActionRecord[]>
 }
+
+type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
   if (record.action !== 'wallet.bridge' || !record.metadata?.txHash) return undefined
@@ -201,21 +203,25 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
     }
 
     if (req.method !== 'GET') return fail(405, 'VALIDATION_FAILED', 'Method not allowed.', false)
+    const scopeValue = req.query?.scope
+    const scope = typeof scopeValue === 'string' ? scopeValue.trim().toLowerCase() : ''
+    if (scope && scope !== 'recent') return fail(400, 'VALIDATION_FAILED', 'Activity scope is invalid.', false)
+    const options: PocketActivityReadOptions = { recent: scope === 'recent', limit: scope === 'recent' ? 4 : 100 }
 
     try {
       const identity = await dependencies.verifyUser(req)
       const [history, collections, walletHistory, durableActionRecords, walletAddresses, billsIntents] = await Promise.all([
-        dependencies.readHistory(identity.userId),
-        dependencies.readCollections?.(identity.userId) ?? Promise.resolve([]),
-        dependencies.readWalletHistory?.(identity.userId) ?? Promise.resolve([]),
-        dependencies.readActions?.(identity.userId) ?? Promise.resolve([]),
-        dependencies.readWalletAddresses?.(identity.userId) ?? Promise.resolve([]),
-        dependencies.readBills?.(identity.userId) ?? Promise.resolve([]),
+        dependencies.readHistory(identity.userId, options),
+        dependencies.readCollections?.(identity.userId, options) ?? Promise.resolve([]),
+        dependencies.readWalletHistory?.(identity.userId, options) ?? Promise.resolve([]),
+        dependencies.readActions?.(identity.userId, options) ?? Promise.resolve([]),
+        dependencies.readWalletAddresses?.(identity.userId, options) ?? Promise.resolve([]),
+        dependencies.readBills?.(identity.userId, options) ?? Promise.resolve([]),
       ])
       const collectionTitles = new Map(collections.map(link => [link.eventId, link.title]))
       const [collectionPaymentRecords, externalPaymentIntents] = await Promise.all([
-        dependencies.readCollectionPayments?.(collections.map(link => link.eventId)) ?? Promise.resolve([]),
-        dependencies.readExternalPayments?.(walletAddresses) ?? Promise.resolve([]),
+        dependencies.readCollectionPayments?.(collections.map(link => link.eventId), options) ?? Promise.resolve([]),
+        dependencies.readExternalPayments?.(walletAddresses, options) ?? Promise.resolve([]),
       ])
       const collectionPayments = collectionPaymentRecords
         .map(sanitizedActivityRow)
@@ -245,17 +251,18 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
         return row ? [row] : []
       })
       const contextualTxHashes = new Set(externalPayments.map(row => row.txHash.toLowerCase()))
-      const payments = [...externalPayments, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
+      const allPayments = [...externalPayments, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
         .filter(row => row.source === 'purchase' || !contextualTxHashes.has(row.txHash.toLowerCase()))
         .filter((row, index, rows) => rows.findIndex(candidate => candidate.txHash === row.txHash && (
           candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
         )) === index)
         .sort((a, b) => b.ts - a.ts)
+      const payments = options.recent ? allPayments.slice(0, options.limit) : allPayments
       return res.json({
         ok: true,
         payments,
-        merchants: history.merchants ?? [],
-        collections: collections.map(link => ({
+        merchants: options.recent ? [] : history.merchants ?? [],
+        collections: options.recent ? [] : collections.map(link => ({
           eventId: link.eventId,
           title: link.title,
           paymentUrl: link.paymentUrl,
@@ -279,8 +286,11 @@ export default createPocketActivityHandler({
   readHistory: listNgPosHistoryForOwner,
   readCollections: ownerId => pocketPaylinkRepository.listOwned(ownerId),
   readCollectionPayments: listRegisteredPaymentsForEventIds,
-  readWalletHistory: readPocketWalletChainActivity,
-  readActions: ownerId => listCirclePocketActions(ownerId, 500),
+  readWalletHistory: (ownerId, options) => readPocketWalletChainActivity(ownerId, {
+    timeoutMs: options?.recent ? 1_800 : 10_000,
+    limit: options?.recent ? 8 : 100,
+  }),
+  readActions: (ownerId, options) => listCirclePocketActions(ownerId, options?.recent ? 20 : 500),
   readWalletAddresses: async ownerId => (await readPocketLinkedWalletAddresses(ownerId)).map(item => item.walletAddress),
   readExternalPayments: async walletAddresses => {
     const matches = await Promise.all(walletAddresses.map(walletAddress =>
@@ -288,10 +298,10 @@ export default createPocketActivityHandler({
     ))
     return matches.flat()
   },
-  readBills: async ownerId => {
+  readBills: async (ownerId, options) => {
     const config = readVtpassPhase0Config()
     try {
-      return await createPocketBillsStore({ config }).listOwnedIntents(ownerId, 100)
+      return await createPocketBillsStore({ config }).listOwnedIntents(ownerId, options?.recent ? 12 : 100)
     } catch (error) {
       // Activity remains available during local development or an emergency
       // Bills rollback. Other durable activity sources must not be hidden just

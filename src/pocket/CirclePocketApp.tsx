@@ -55,7 +55,7 @@ export default function CirclePocketApp() {
     if (!ready || !authenticated || !email) return
     void Promise.allSettled([
       prefetchPocketWalletSnapshot({ email, getAccessToken }),
-      prefetchPocketActivity({ email, getAccessToken }),
+      prefetchPocketActivity({ email, getAccessToken, recent: true }),
     ])
   }, [authenticated, email, getAccessToken, ready])
 

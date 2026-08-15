@@ -10,20 +10,25 @@ const pocketResourceCache = new Map<string, { merchants: PocketPosResource[]; co
 const pocketActivityPrefetches = new Map<string, Promise<void>>()
 const pocketActivityResolved = new Set<string>()
 
-export async function prefetchPocketActivity({ email, getAccessToken }: { email: string; getAccessToken: PocketAccessTokenReader }) {
-  if (!email || pocketActivityResolved.has(email)) return
-  const active = pocketActivityPrefetches.get(email)
+function activityCacheKey(email: string, recent: boolean) {
+  return recent ? `${email}:recent` : email
+}
+
+export async function prefetchPocketActivity({ email, getAccessToken, recent = false }: { email: string; getAccessToken: PocketAccessTokenReader; recent?: boolean }) {
+  const key = activityCacheKey(email, recent)
+  if (!email || pocketActivityResolved.has(key)) return
+  const active = pocketActivityPrefetches.get(key)
   if (active) return active
   const request = (async () => {
     const token = await getAccessToken()
     if (!token) throw new Error('Pocket session is not ready.')
-    const data = await readPocketActivity({ accessToken: token })
+    const data = await readPocketActivity({ accessToken: token, recent })
     const rows = data.payments.slice().sort((a, b) => Number((b.ts || 0) - (a.ts || 0)))
-    pocketActivityCache.set(email, rows)
-    pocketResourceCache.set(email, { merchants: data.merchants, collections: data.collections })
-    pocketActivityResolved.add(email)
-  })().finally(() => pocketActivityPrefetches.delete(email))
-  pocketActivityPrefetches.set(email, request)
+    pocketActivityCache.set(key, rows)
+    if (!recent) pocketResourceCache.set(email, { merchants: data.merchants, collections: data.collections })
+    pocketActivityResolved.add(key)
+  })().finally(() => pocketActivityPrefetches.delete(key))
+  pocketActivityPrefetches.set(key, request)
   return request
 }
 
@@ -31,16 +36,19 @@ export default function usePocketActivity({
   authenticated,
   email,
   enabled,
+  recent = false,
   getAccessToken,
 }: {
   authenticated: boolean
   email: string
   enabled: boolean
+  recent?: boolean
   getAccessToken: PocketAccessTokenReader
 }) {
-  const [rows, setRows] = useState<PocketActivityRow[]>(() => authenticated && email ? pocketActivityCache.get(email) ?? [] : [])
+  const key = activityCacheKey(email, recent)
+  const [rows, setRows] = useState<PocketActivityRow[]>(() => authenticated && email ? pocketActivityCache.get(key) ?? [] : [])
   const [busy, setBusy] = useState(false)
-  const [resolved, setResolved] = useState(() => !authenticated || Boolean(email && (pocketActivityResolved.has(email) || pocketActivityCache.has(email) || pocketResourceCache.has(email))))
+  const [resolved, setResolved] = useState(() => !authenticated || Boolean(email && (pocketActivityResolved.has(key) || pocketActivityCache.has(key) || (!recent && pocketResourceCache.has(email)))))
   const [error, setError] = useState('')
   const [merchants, setMerchants] = useState<PocketPosResource[]>(() => authenticated && email ? pocketResourceCache.get(email)?.merchants ?? [] : [])
   const [collections, setCollections] = useState<PocketCollectionResource[]>(() => authenticated && email ? pocketResourceCache.get(email)?.collections ?? [] : [])
@@ -54,20 +62,20 @@ export default function usePocketActivity({
       setResolved(true)
       return
     }
-    const hasSnapshot = Boolean(email && (pocketActivityCache.has(email) || pocketResourceCache.has(email) || pocketActivityResolved.has(email)))
+    const hasSnapshot = Boolean(email && (pocketActivityCache.has(key) || (!recent && pocketResourceCache.has(email)) || pocketActivityResolved.has(key)))
     if (!hasSnapshot) setBusy(true)
     try {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to load Circle Pocket activity.')
-      const data = await readPocketActivity({ accessToken: token })
+      const data = await readPocketActivity({ accessToken: token, recent })
       const nextRows = data.payments.slice().sort((a, b) => Number((b.ts || 0) - (a.ts || 0)))
       setRows(nextRows)
       setMerchants(data.merchants)
       setCollections(data.collections)
       if (email) {
-        pocketActivityCache.set(email, nextRows)
-        pocketResourceCache.set(email, { merchants: data.merchants, collections: data.collections })
-        pocketActivityResolved.add(email)
+        pocketActivityCache.set(key, nextRows)
+        if (!recent) pocketResourceCache.set(email, { merchants: data.merchants, collections: data.collections })
+        pocketActivityResolved.add(key)
       }
       setError('')
     } catch (reason) {
@@ -76,7 +84,7 @@ export default function usePocketActivity({
       setBusy(false)
       setResolved(true)
     }
-  }, [authenticated, email, getAccessToken])
+  }, [authenticated, email, getAccessToken, key, recent])
 
   useEffect(() => {
     if (!authenticated) {
@@ -87,16 +95,16 @@ export default function usePocketActivity({
       setResolved(true)
       return
     }
-    const cached = pocketActivityCache.get(email)
+    const cached = pocketActivityCache.get(key)
     if (cached) setRows(cached)
-    const cachedResources = pocketResourceCache.get(email)
+    const cachedResources = recent ? undefined : pocketResourceCache.get(email)
     if (cachedResources) {
       setMerchants(cachedResources.merchants)
       setCollections(cachedResources.collections)
     }
-    setResolved(Boolean(cached || cachedResources) || pocketActivityResolved.has(email))
+    setResolved(Boolean(cached || cachedResources) || pocketActivityResolved.has(key))
     if (enabled) void refresh()
-  }, [authenticated, email, enabled, refresh])
+  }, [authenticated, email, enabled, key, recent, refresh])
 
   useEffect(() => {
     if (!authenticated || !enabled) return

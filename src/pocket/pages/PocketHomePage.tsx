@@ -39,7 +39,7 @@ export default function PocketHomePage() {
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
-  const activity = usePocketActivity({ authenticated, email, enabled: true, getAccessToken })
+  const activity = usePocketActivity({ authenticated, email, enabled: true, recent: true, getAccessToken })
   const showNgn = profile.profile?.displayCurrency === 'NGN'
   const fx = usePocketFxQuote(1, showNgn)
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)

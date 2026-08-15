@@ -685,6 +685,15 @@ assert.equal(activityReadRequest.url, '/api/pocket/activity')
 assert.equal(activityReadRequest.init.method, 'GET')
 assert.equal(activityReadRequest.init.headers.authorization, 'Bearer test-activity-token')
 assert.equal(activityReadRequest.init.body, undefined)
+await readPocketActivity({
+  accessToken: 'test-activity-token',
+  recent: true,
+  fetcher: async (url, init) => {
+    activityReadRequest = { url, init }
+    return { ok: true, json: async () => ({ ok: true, payments: [activityRow], merchants: [], collections: [] }) }
+  },
+})
+assert.equal(activityReadRequest.url, '/api/pocket/activity?scope=recent')
 const balancesEnvelope = {
   ok: true,
   total: 5,
@@ -869,11 +878,15 @@ assert.match(serverSource, /public, max-age=31536000, immutable/)
 assert.match(serverSource, /filePath\.includes\(\`\$\{sep\}assets\$\{sep\}\`\)/)
 assert.match(serverSource, /Cache-Control', 'no-cache'/)
 const pocketActivityHookSource = await readFile(new URL('../src/pocket/hooks/usePocketActivity.ts', import.meta.url), 'utf8')
-assert.match(pocketActivityHookSource, /readPocketActivity\(\{ accessToken: token \}\)/)
+const pocketWalletChainActivitySource = await readFile(new URL('../api/pocket/wallet-chain-activity.ts', import.meta.url), 'utf8')
+assert.match(pocketActivityHookSource, /readPocketActivity\(\{ accessToken: token, recent \}\)/)
+assert.match(pocketActivityHookSource, /activityCacheKey\(email, recent\)/)
 assert.match(pocketActivityHookSource, /data\.payments\.slice\(\)\.sort/)
-assert.match(pocketActivityHookSource, /pocketActivityCache\.set\(email, nextRows\)/)
+assert.match(pocketActivityHookSource, /pocketActivityCache\.set\(key, nextRows\)/)
 assert.doesNotMatch(pocketActivityHookSource, /catch \(reason\) \{\s*setRows\(\[\]\)/)
 assert.doesNotMatch(pocketActivityHookSource, /\/api\/ng-pos|fetch\(|create|submit|transfer/i)
+assert.match(pocketWalletChainActivitySource, /options\.timeoutMs \?\? 10_000/)
+assert.match(pocketWalletChainActivitySource, /setTimeout\(\(\) => reject\(new Error\('chain activity lookup timed out'\)\), timeoutMs\)/)
 const pocketProfileHookSource = await readFile(new URL('../src/pocket/hooks/usePocketProfile.ts', import.meta.url), 'utf8')
 assert.match(pocketProfileHookSource, /readPocketLocalCurrencyProfile\(\{ accessToken: token \}\)/)
 assert.match(pocketProfileHookSource, /savePocketLocalCurrencyProfile\(\{/)
@@ -1152,13 +1165,13 @@ assert.match(pocketBankWithdrawControllerSource, /if \(reconciliation\) void pol
 assert.match(pocketBankWithdrawControllerSource, /without a verifiable source transaction\|check activity before retrying/)
 assert.match(circlePocketAppBootSource, /Promise\.allSettled\(\[/)
 assert.match(circlePocketAppBootSource, /prefetchPocketWalletSnapshot\(\{ email, getAccessToken \}\)/)
-assert.match(circlePocketAppBootSource, /prefetchPocketActivity\(\{ email, getAccessToken \}\)/)
+assert.match(circlePocketAppBootSource, /prefetchPocketActivity\(\{ email, getAccessToken, recent: true \}\)/)
 assert.match(circlePocketAppBootSource, /if \(!ready\)/)
 assert.doesNotMatch(circlePocketAppBootSource, /appReady|pocketDataReady/)
 assert.match(pocketWalletsHookSource, /export async function prefetchPocketWalletSnapshot/)
 assert.match(pocketHomePageSource, /usePocketIdentity\(\)/)
 assert.match(pocketHomePageSource, /usePocketWallets\(\{ authenticated, email, getAccessToken \}\)/)
-assert.match(pocketHomePageSource, /usePocketActivity\(\{ authenticated, email, enabled: true, getAccessToken \}\)/)
+assert.match(pocketHomePageSource, /usePocketActivity\(\{ authenticated, email, enabled: true, recent: true, getAccessToken \}\)/)
 assert.match(pocketHomePageSource, /usePocketFxQuote\(1, showNgn\)/)
 assert.match(pocketHomePageSource, /Recent activity/)
 assert.match(pocketHomePageSource, /label: 'Bank'/)
@@ -1386,6 +1399,12 @@ const pocketMoveUsdcSource = await readFile(new URL('../src/pocket/pages/PocketM
 assert.match(pocketMoveUsdcSource, /useState<ReceiveMode>\('email'\)/)
 assert.match(pocketMoveUsdcSource, /type ReceiveFlow = 'request' \| 'collection'/)
 assert.match(pocketMoveUsdcSource, /resolvePocketRequestUser/)
+assert.match(pocketMoveUsdcSource, /<span className="absolute right-4 top-1\/2 flex h-4 w-4 -translate-y-1\/2 items-center justify-center text-gray-400"><Loader2 className="h-4 w-4" \/><\/span>/)
+assert.doesNotMatch(pocketMoveUsdcSource, /<Loader2 className="absolute right-4 top-1\/2[^"]*animate-spin/)
+const pocketHeaderIdentitySource = await readFile(new URL('../src/pocket/components/PocketHeaderIdentity.tsx', import.meta.url), 'utf8')
+assert.match(pocketHeaderIdentitySource, /copyToClipboard\(pocketId\)/)
+assert.match(pocketHeaderIdentitySource, /Pocket ID copied/)
+assert.match(pocketHeaderIdentitySource, /role="status" aria-live="polite"/)
 assert.match(pocketMoveUsdcSource, /createPocketUserRequest/)
 assert.match(pocketMoveUsdcSource, /manualEvmAddress/)
 assert.match(pocketMoveUsdcSource, /<PrivyConnectButton/)
