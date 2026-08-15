@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
-import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, recoverPocketBankWithdrawals, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
+import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, recoverPocketBankWithdrawals, registerPocketBankWithdrawTransfer, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
-import { clearActivePocketBankPayout, readActivePocketBankPayout, saveActivePocketBankPayout } from '../lib/pocketBankPayoutState'
+import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout } from '../lib/pocketBankPayoutState'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
 
 export type PocketBankWithdrawStatus = 'idle' | 'preparing' | 'routing' | 'route-review' | 'authorizing' | 'processing' | 'sent'
@@ -113,6 +113,10 @@ export default function usePocketBankWithdrawController({
       if (!next) continue
       const active = activeIntentId.current === intentId
       if (active) setResult(next)
+      if (next.nextAction === 'ensure_liquidity' || next.nextAction === 'wait_bridge' || next.nextAction === 'authorize_transfer') {
+        if (active) { setStatus('routing'); setError('') }
+        return
+      }
       if (next.state === 'sent') {
         clearActivePocketBankPayout(intentId)
         if (active) { setStatus('sent'); setError('') }
@@ -146,16 +150,71 @@ export default function usePocketBankWithdrawController({
       const accessToken = await getAccessToken()
       if (!accessToken) return
       let intentId = activeIntentId.current
+      let recovered: PocketBankWithdrawData | null = null
       if (!intentId) {
         const unresolved = await recoverPocketBankWithdrawals({ accessToken }).catch(() => [])
-        intentId = unresolved[0]?.intentId ?? ''
+        recovered = unresolved[0] ?? null
+        intentId = recovered?.intentId ?? ''
         if (intentId) {
           activeIntentId.current = intentId
           saveActivePocketBankPayout(intentId)
         }
       }
-      if (intentId) await pollUntilSettled(accessToken, intentId, 1)
-      else setStatus('idle')
+      if (!intentId) {
+        setStatus('idle')
+        return
+      }
+      const next = recovered ?? await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
+      if (!next) return
+      setResult(next)
+      const recoveredTxHash = readActivePocketBankPayoutTransfer(intentId)
+      if (next.nextAction === 'authorize_transfer' && recoveredTxHash && wallet?.address) {
+        try {
+          const submitted = await registerPocketBankWithdrawTransfer({
+            accessToken,
+            request: { intent_id: intentId, tx_hash: recoveredTxHash },
+          })
+          setResult(submitted)
+          setStatus('processing')
+          const confirmed = await confirmPocketBankWithdraw({
+            accessToken,
+            request: {
+              intent_id: intentId,
+              order_id: submitted.orderId,
+              tx_hash: recoveredTxHash,
+              wallet_address: wallet.address,
+            },
+          }).catch(() => null)
+          if (confirmed) setResult(confirmed)
+          void pollUntilSettled(accessToken, intentId)
+        } catch {
+          setStatus('processing')
+          setError('')
+        }
+        return
+      }
+      if (next.state === 'sent') {
+        clearActivePocketBankPayout(intentId)
+        setStatus('sent')
+        setError('')
+        await onSent()
+        return
+      }
+      if (next.state === 'refunded' || next.state === 'failed') {
+        clearActivePocketBankPayout(intentId)
+        setStatus('idle')
+        setError(next.state === 'refunded'
+          ? 'The payout was refunded. Your USDC should return to the Circle wallet.'
+          : 'The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
+        return
+      }
+      if (next.nextAction === 'ensure_liquidity' || next.nextAction === 'wait_bridge' || next.nextAction === 'authorize_transfer') {
+        setStatus('routing')
+        setError('')
+        return
+      }
+      setStatus('processing')
+      void pollUntilSettled(accessToken, intentId)
     }
     void reconcile()
     const refreshVisible = () => { if (document.visibilityState === 'visible') void reconcile() }
@@ -167,7 +226,7 @@ export default function usePocketBankWithdrawController({
       window.removeEventListener('focus', refreshVisible)
       document.removeEventListener('visibilitychange', refreshVisible)
     }
-  }, [authenticated, getAccessToken, pollUntilSettled])
+  }, [authenticated, getAccessToken, onSent, pollUntilSettled, wallet?.address])
 
   const submit = useCallback(async () => {
     if (!canSubmit) return
@@ -202,6 +261,7 @@ export default function usePocketBankWithdrawController({
         },
       })
       activeIntentId.current = prepared.intentId
+      saveActivePocketBankPayout(prepared.intentId)
       setResult(prepared)
       const requiredUsdc = Number(prepared.amountUsdc)
       if (!Number.isFinite(requiredUsdc) || requiredUsdc <= 0) {
@@ -245,8 +305,13 @@ export default function usePocketBankWithdrawController({
       })
       if (!transfer.txHash) throw new Error('Circle accepted the payout, but no transaction hash was returned. Check Activity before retrying.')
       setResult({ ...payable, txHash: transfer.txHash })
+      saveActivePocketBankPayout(prepared.intentId, transfer.txHash)
+      const submitted = await registerPocketBankWithdrawTransfer({
+        accessToken,
+        request: { intent_id: prepared.intentId, tx_hash: transfer.txHash },
+      })
+      setResult(submitted)
       setStatus('processing')
-      saveActivePocketBankPayout(prepared.intentId)
       setAmountState('')
       setMemoState('')
       idempotencyKey.current = ''

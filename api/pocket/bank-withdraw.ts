@@ -56,7 +56,22 @@ export function payoutState(status: unknown) {
   return 'processing'
 }
 
-export function publicOrder(order: any, execution?: PaymentExecutionIntent) {
+type BankPayoutRoute = ReturnType<typeof routeRecord>
+type BankPayoutNextAction = 'ensure_liquidity' | 'wait_bridge' | 'authorize_transfer' | 'provider_processing' | 'done'
+
+function payoutNextAction(order: any, execution?: PaymentExecutionIntent, route?: BankPayoutRoute): BankPayoutNextAction {
+  const state = payoutState(order?.status)
+  if (state !== 'processing') return 'done'
+  const providerStatus = text(order?.status, 40).toLowerCase()
+  if (text(order?.tx_hash) || execution?.transactionHash || ['deposited', 'fulfilling', 'fulfilled', 'settling', 'refunding'].includes(providerStatus)) {
+    return 'provider_processing'
+  }
+  if (route?.phase === 'submitted') return 'wait_bridge'
+  if (route?.phase === 'completed') return 'authorize_transfer'
+  return 'ensure_liquidity'
+}
+
+export function publicOrder(order: any, execution?: PaymentExecutionIntent, route?: BankPayoutRoute) {
   return {
     intentId: text(order?.intent_id),
     orderId: text(order?.paycrest_order_id),
@@ -64,7 +79,7 @@ export function publicOrder(order: any, execution?: PaymentExecutionIntent) {
     amountNgn: text(order?.amount_ngn),
     amountUsdc: text(order?.amount_usdc),
     receiveAddress: text(order?.receive_address),
-    txHash: text(order?.tx_hash),
+    txHash: text(order?.tx_hash) || execution?.transactionHash || '',
     providerStatus: text(order?.status),
     state: payoutState(order?.status),
     bankName: text(order?.bank_name),
@@ -73,6 +88,8 @@ export function publicOrder(order: any, execution?: PaymentExecutionIntent) {
     validUntil: text(order?.valid_until),
     executionId: execution?.id || '',
     executionState: execution?.state || '',
+    nextAction: payoutNextAction(order, execution, route),
+    route: route ?? null,
   }
 }
 
@@ -125,6 +142,30 @@ async function ownedRoute(identity: VerifiedLinkUser, intentId: string, dependen
   ))
 }
 
+async function syncOwnedRoute(identity: VerifiedLinkUser, intentId: string, dependencies: BankWithdrawDependencies) {
+  const existing = await ownedRoute(identity, intentId, dependencies)
+  if (!existing || existing.status !== 'submitted') return existing
+  const source = existing.metadata?.source
+  const txHash = existing.metadata?.txHash || ''
+  if ((source !== 'arbitrum' && source !== 'solana') || !txHash) return existing
+  const provider = await dependencies.readBridgeStatus(source, txHash).catch(() => null)
+  if (!provider) return existing
+  if (!isCircleBridgeComplete(provider.status)) return existing
+  return dependencies.recordAction({
+    ownerId: identity.userId,
+    idempotencyKey: existing.idempotencyKey,
+    action: existing.action,
+    status: 'completed',
+    resourceId: txHash,
+    metadata: {
+      ...(existing.metadata ?? {}),
+      txHash,
+      paymentState: 'completed',
+      destinationTxHash: provider.destinationTxHash || '',
+    },
+  })
+}
+
 async function assertOwnedOrder(req: Request, identity: VerifiedLinkUser, id: string, dependencies: BankWithdrawDependencies) {
   const current = await dependencies.invokeLegacy(req, { action: 'offrampStatus', intent_id: id, refresh: false })
   if (current.status !== 200 || !current.body?.order) throw Object.assign(new Error(current.body?.error || 'Bank payout was not found.'), { status: current.status })
@@ -159,13 +200,15 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           ['bank_payout'],
           ['prepared', 'authorized', 'submitted', 'processing', 'needs_review'],
         )
-        return res.json({
-          ok: true,
-          data: unresolved
-            .filter(intent => intent.resourceId)
-            .slice(0, 10)
-            .map(intent => ({ intentId: intent.resourceId, executionId: intent.id, state: intent.state, updatedAt: intent.updatedAt })),
-        })
+        const recovered = []
+        for (const intent of unresolved.filter(item => item.resourceId).slice(0, 10)) {
+          const current = await dependencies.invokeLegacy(req, { action: 'offrampStatus', intent_id: intent.resourceId, refresh: true })
+          if (current.status !== 200 || !current.body?.order) continue
+          const execution = await syncExecution(identity.userId, current.body.order, dependencies)
+          const route = routeRecord(await syncOwnedRoute(identity, text(current.body.order.intent_id), dependencies))
+          recovered.push(publicOrder(current.body.order, execution, route))
+        }
+        return res.json({ ok: true, data: recovered })
       }
       if (action === 'prepare') {
         const idempotencyKey = text(req.headers['idempotency-key'], 128)
@@ -238,7 +281,8 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           throw Object.assign(new Error('The payout window is too close to expiry. Start the payment again.'), { status: 409 })
         }
         const execution = await syncExecution(identity.userId, payable.body.order, dependencies)
-        return res.json({ ok: true, data: publicOrder(payable.body.order, execution) })
+        const route = routeRecord(await syncOwnedRoute(identity, text(payable.body.order.intent_id), dependencies))
+        return res.json({ ok: true, data: publicOrder(payable.body.order, execution, route) })
       }
 
       if (action === 'routeStart') {
@@ -320,6 +364,35 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         return res.json({ ok: true, data: routeRecord(updated) })
       }
 
+      if (action === 'submit') {
+        const txHash = text(req.body?.tx_hash, 128)
+        if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+          return res.status(400).json({ ok: false, error: 'A valid payout transaction is required.' })
+        }
+        let execution = await executionForOrder(identity.userId, ownedOrder, dependencies)
+        if (!execution) throw Object.assign(new Error('Bank payout execution was not found.'), { status: 404 })
+        if (execution.transactionHash && execution.transactionHash.toLowerCase() !== txHash.toLowerCase()) {
+          return res.status(409).json({ ok: false, error: 'This payout already has another submitted transaction.' })
+        }
+        if (execution.state === 'authorized') {
+          execution = await dependencies.executions.update({
+            ownerId: identity.userId,
+            intentId: execution.id,
+            state: 'submitted',
+            expectedState: 'authorized',
+            transactionHash: txHash,
+          })
+        } else if (!execution.transactionHash && (execution.state === 'submitted' || execution.state === 'processing' || execution.state === 'needs_review')) {
+          execution = await dependencies.executions.update({
+            ownerId: identity.userId,
+            intentId: execution.id,
+            transactionHash: txHash,
+          })
+        }
+        const route = routeRecord(await ownedRoute(identity, text(ownedOrder.intent_id), dependencies))
+        return res.json({ ok: true, data: publicOrder(ownedOrder, execution, route) })
+      }
+
       if (action === 'confirm') {
         const existingExecution = await executionForOrder(identity.userId, ownedOrder, dependencies)
         if (existingExecution?.state === 'authorized') await dependencies.executions.update({ ownerId: identity.userId, intentId: existingExecution.id, state: 'submitted', transactionHash: text(req.body?.tx_hash) })
@@ -333,14 +406,16 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         })
         if (confirmed.status !== 200 || !confirmed.body?.order) throw Object.assign(new Error(confirmed.body?.error || 'Could not verify bank payout transfer.'), { status: confirmed.status })
         const execution = await syncExecution(identity.userId, confirmed.body.order, dependencies)
-        return res.json({ ok: true, data: publicOrder(confirmed.body.order, execution) })
+        const route = routeRecord(await ownedRoute(identity, text(confirmed.body.order.intent_id), dependencies))
+        return res.json({ ok: true, data: publicOrder(confirmed.body.order, execution, route) })
       }
 
       if (action === 'status') {
         const status = await dependencies.invokeLegacy(req, { action: 'offrampStatus', intent_id: id, refresh: true })
         if (status.status !== 200 || !status.body?.order) throw Object.assign(new Error(status.body?.error || 'Could not refresh bank payout.'), { status: status.status })
         const execution = await syncExecution(identity.userId, status.body.order, dependencies)
-        return res.json({ ok: true, data: publicOrder(status.body.order, execution) })
+        const route = routeRecord(await syncOwnedRoute(identity, text(status.body.order.intent_id), dependencies))
+        return res.json({ ok: true, data: publicOrder(status.body.order, execution, route) })
       }
 
       return res.status(400).json({ ok: false, error: 'Unknown bank payout action.' })

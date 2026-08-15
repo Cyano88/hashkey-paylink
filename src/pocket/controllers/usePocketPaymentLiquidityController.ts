@@ -161,6 +161,11 @@ export default function usePocketPaymentLiquidityController(input: {
       const destinationWallet = inspected.wallets[currentRoute.destination]
         ?? await input.ensureWallet(currentRoute.destination)
       if (!destinationWallet) throw new Error('Open the destination Pocket wallet before paying.')
+      if (checkpoint?.phase === 'completed') {
+        void input.refreshBalances().catch(() => undefined)
+        setStatus('arrived')
+        return destinationWallet
+      }
       if (currentRoute.kind === 'direct') {
         if (checkpoint?.phase === 'submitted' || checkpoint?.phase === 'completed') {
           await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash: checkpoint.txHash })

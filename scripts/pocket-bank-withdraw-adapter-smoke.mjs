@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { createPocketBankWithdrawHandler, payoutState } from '../api/pocket/bank-withdraw.ts'
 import { createPaymentExecutionRepository } from '../api/pocket/payment-execution-intents.ts'
-import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawRoute, readPocketBankWithdrawStatus, startPocketBankWithdrawRoute, updatePocketBankWithdrawRoute } from '../src/pocket/api/pocketBankWithdrawClient.ts'
+import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawRoute, readPocketBankWithdrawStatus, recoverPocketBankWithdrawals, registerPocketBankWithdrawTransfer, startPocketBankWithdrawRoute, updatePocketBankWithdrawRoute } from '../src/pocket/api/pocketBankWithdrawClient.ts'
+import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout } from '../src/pocket/lib/pocketBankPayoutState.ts'
 
 function responseRecorder() {
   return {
@@ -46,11 +47,16 @@ const processingOrder = {
 const settledOrder = { ...processingOrder, status: 'settled', tx_hash: `0x${'2'.repeat(64)}` }
 const calls = []
 let routeAction
+let bridgeState = 'pending'
+let refreshedOrder = processingOrder
 const handler = createPocketBankWithdrawHandler({
   executions,
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   authorizeBankAccount: async () => ({ verification: { account_name: 'ADA LOVELACE' } }),
-  readBridgeStatus: async () => ({ status: 'confirmed' }),
+  readBridgeStatus: async () => {
+    if (bridgeState === 'unavailable') throw new Error('Circle bridge status is temporarily unavailable.')
+    return { status: bridgeState, destinationTxHash: bridgeState === 'confirmed' ? `0x${'4'.repeat(64)}` : undefined }
+  },
   createBankReceive: async req => {
     calls.push({ kind: 'create', body: req.body, headers: req.headers })
     return { ok: true, link: { intent_id: processingOrder.intent_id, merchant_id: processingOrder.merchant_id } }
@@ -67,7 +73,7 @@ const handler = createPocketBankWithdrawHandler({
   },
   invokeLegacy: async (_req, body) => {
     calls.push({ kind: 'legacy', body })
-    if (body.action === 'offrampStatus') return { status: 200, body: { ok: true, order: body.refresh ? settledOrder : processingOrder } }
+    if (body.action === 'offrampStatus') return { status: 200, body: { ok: true, order: body.refresh ? refreshedOrder : processingOrder } }
     return { status: 200, body: { ok: true, order: processingOrder } }
   },
 })
@@ -91,6 +97,7 @@ assert.equal(prepared.body.data.state, 'processing')
 assert.equal(prepared.body.data.amountUsdc, '1')
 assert.equal(prepared.body.data.executionId, 'pex_bank_withdraw_test')
 assert.equal(prepared.body.data.executionState, 'authorized')
+assert.equal(prepared.body.data.nextAction, 'ensure_liquidity')
 assert.equal(calls[0].body.direct_payout, true)
 assert.equal(calls[0].body.flexible_amount, false)
 assert.equal(calls[0].headers.authorization, 'Bearer privy-token')
@@ -152,6 +159,19 @@ const routeDuplicate = await request(handler, { action: 'routeStart', intent_id:
 assert.equal(routeDuplicate.body.data.claimed, false)
 const routeSubmitted = await request(handler, { action: 'routeUpdate', intent_id: processingOrder.intent_id, phase: 'submitted', tx_hash: `0x${'3'.repeat(64)}` })
 assert.equal(routeSubmitted.body.data.phase, 'submitted')
+bridgeState = 'unavailable'
+const recoverWhileCircleUnavailable = await request(handler, { action: 'recover' })
+assert.equal(recoverWhileCircleUnavailable.statusCode, 200)
+assert.equal(recoverWhileCircleUnavailable.body.data[0].nextAction, 'wait_bridge')
+bridgeState = 'pending'
+const recoverWhileMoving = await request(handler, { action: 'recover' })
+assert.equal(recoverWhileMoving.body.data[0].nextAction, 'wait_bridge')
+assert.equal(recoverWhileMoving.body.data[0].route.phase, 'submitted')
+bridgeState = 'confirmed'
+const recoverAfterArrival = await request(handler, { action: 'recover' })
+assert.equal(recoverAfterArrival.body.data[0].nextAction, 'authorize_transfer')
+assert.equal(recoverAfterArrival.body.data[0].route.phase, 'completed')
+assert.equal(recoverAfterArrival.body.data[0].route.txHash, `0x${'3'.repeat(64)}`)
 const routeCompleted = await request(handler, { action: 'routeUpdate', intent_id: processingOrder.intent_id, phase: 'completed', tx_hash: `0x${'3'.repeat(64)}` })
 assert.equal(routeCompleted.body.data.phase, 'completed')
 const routeBackward = await request(handler, { action: 'routeUpdate', intent_id: processingOrder.intent_id, phase: 'failed' })
@@ -163,6 +183,27 @@ assert.equal(routeRestarted.body.data.source, 'solana')
 assert.equal(routeRestarted.body.data.amount, '0.1')
 assert.equal(routeAction.metadata.previousTxHash, `0x${'3'.repeat(64)}`)
 
+const submittedTransfer = await request(handler, {
+  action: 'submit',
+  intent_id: processingOrder.intent_id,
+  tx_hash: `0x${'2'.repeat(64)}`,
+})
+assert.equal(submittedTransfer.statusCode, 200)
+assert.equal(submittedTransfer.body.data.nextAction, 'provider_processing')
+assert.equal(submittedTransfer.body.data.txHash, `0x${'2'.repeat(64)}`)
+const duplicateSubmittedTransfer = await request(handler, {
+  action: 'submit',
+  intent_id: processingOrder.intent_id,
+  tx_hash: `0x${'2'.repeat(64)}`,
+})
+assert.equal(duplicateSubmittedTransfer.statusCode, 200)
+const conflictingSubmittedTransfer = await request(handler, {
+  action: 'submit',
+  intent_id: processingOrder.intent_id,
+  tx_hash: `0x${'5'.repeat(64)}`,
+})
+assert.equal(conflictingSubmittedTransfer.statusCode, 409)
+
 const confirmed = await request(handler, {
   action: 'confirm',
   intent_id: processingOrder.intent_id,
@@ -172,11 +213,15 @@ const confirmed = await request(handler, {
 })
 assert.equal(confirmed.statusCode, 200)
 assert.equal(confirmed.body.data.state, 'processing')
+assert.equal(confirmed.body.data.nextAction, 'provider_processing')
+assert.equal(confirmed.body.data.txHash, `0x${'2'.repeat(64)}`)
 assert.equal(calls.at(-1).body.action, 'markOfframpPaid')
 
+refreshedOrder = settledOrder
 const status = await request(handler, { action: 'status', intent_id: processingOrder.intent_id })
 assert.equal(status.statusCode, 200)
 assert.equal(status.body.data.state, 'sent')
+assert.equal(status.body.data.nextAction, 'done')
 assert.equal(payoutState('validated'), 'sent')
 assert.equal(payoutState('deposited'), 'processing')
 assert.equal(payoutState('refunded'), 'refunded')
@@ -197,7 +242,9 @@ const clientCalls = []
 const fetcher = async (url, init) => {
   clientCalls.push({ url, init })
   const action = JSON.parse(init.body).action
-  const data = action.startsWith('route')
+  const data = action === 'recover'
+    ? [prepared.body.data]
+    : action.startsWith('route')
     ? { intentId: processingOrder.intent_id, phase: action === 'routeStart' ? 'started' : action === 'routeUpdate' ? JSON.parse(init.body).phase : 'completed', source: 'arbitrum', destination: 'base', amount: '1', txHash: `0x${'3'.repeat(64)}`, updatedAt: 2 }
     : prepared.body.data
   return { ok: true, json: async () => ({ ok: true, data }) }
@@ -205,7 +252,10 @@ const fetcher = async (url, init) => {
 await preparePocketBankWithdraw({ accessToken: 'privy-token', request: prepareBody, idempotencyKey, fetcher })
 await authorizePocketBankWithdraw({ accessToken: 'privy-token', request: { intent_id: processingOrder.intent_id }, fetcher })
 await confirmPocketBankWithdraw({ accessToken: 'privy-token', request: { intent_id: processingOrder.intent_id }, fetcher })
+await registerPocketBankWithdrawTransfer({ accessToken: 'privy-token', request: { intent_id: processingOrder.intent_id, tx_hash: `0x${'2'.repeat(64)}` }, fetcher })
 await readPocketBankWithdrawStatus({ accessToken: 'privy-token', intentId: processingOrder.intent_id, fetcher })
+const recoveredClient = await recoverPocketBankWithdrawals({ accessToken: 'privy-token', fetcher })
+assert.equal(recoveredClient[0].nextAction, 'ensure_liquidity')
 await readPocketBankWithdrawRoute({ accessToken: 'privy-token', intentId: processingOrder.intent_id, fetcher })
 await startPocketBankWithdrawRoute({ accessToken: 'privy-token', intentId: processingOrder.intent_id, source: 'arbitrum', amount: '1', fetcher })
 await updatePocketBankWithdrawRoute({ accessToken: 'privy-token', intentId: processingOrder.intent_id, phase: 'submitted', txHash: `0x${'3'.repeat(64)}`, fetcher })
@@ -215,13 +265,32 @@ assert.equal(clientCalls[0].init.headers['idempotency-key'], idempotencyKey)
 assert.equal(JSON.parse(clientCalls[0].init.body).action, 'prepare')
 assert.equal(JSON.parse(clientCalls[1].init.body).action, 'authorize')
 assert.equal(JSON.parse(clientCalls[2].init.body).action, 'confirm')
-assert.equal(JSON.parse(clientCalls[3].init.body).action, 'status')
-assert.equal(JSON.parse(clientCalls[4].init.body).action, 'routeStatus')
-assert.equal(JSON.parse(clientCalls[5].init.body).action, 'routeStart')
-assert.equal(JSON.parse(clientCalls[6].init.body).action, 'routeUpdate')
+assert.equal(JSON.parse(clientCalls[3].init.body).action, 'submit')
+assert.equal(JSON.parse(clientCalls[4].init.body).action, 'status')
+assert.equal(JSON.parse(clientCalls[5].init.body).action, 'recover')
+assert.equal(JSON.parse(clientCalls[6].init.body).action, 'routeStatus')
+assert.equal(JSON.parse(clientCalls[7].init.body).action, 'routeStart')
+assert.equal(JSON.parse(clientCalls[8].init.body).action, 'routeUpdate')
 await assert.rejects(
   preparePocketBankWithdraw({ accessToken: 'privy-token', request: prepareBody, idempotencyKey, fetcher: async () => { throw new TypeError('Failed to fetch') } }),
   /could not reach the bank payout service/i,
 )
+
+const localValues = new Map()
+globalThis.window = {
+  localStorage: {
+    getItem: key => localValues.get(key) ?? null,
+    setItem: (key, value) => localValues.set(key, value),
+    removeItem: key => localValues.delete(key),
+  },
+}
+saveActivePocketBankPayout(processingOrder.intent_id)
+assert.equal(readActivePocketBankPayout(), processingOrder.intent_id)
+saveActivePocketBankPayout(processingOrder.intent_id, `0x${'2'.repeat(64)}`)
+assert.equal(readActivePocketBankPayoutTransfer(processingOrder.intent_id), `0x${'2'.repeat(64)}`)
+saveActivePocketBankPayout(processingOrder.intent_id)
+assert.equal(readActivePocketBankPayoutTransfer(processingOrder.intent_id), `0x${'2'.repeat(64)}`, 'saving the active intent must preserve submitted transfer evidence')
+clearActivePocketBankPayout(processingOrder.intent_id)
+assert.equal(readActivePocketBankPayout(), '')
 
 console.log('Circle Pocket direct bank-withdraw adapter smoke tests passed.')

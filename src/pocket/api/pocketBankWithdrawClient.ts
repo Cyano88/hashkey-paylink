@@ -16,6 +16,8 @@ export type PocketBankWithdrawData = {
   validUntil: string
   executionId: string
   executionState: string
+  nextAction: 'ensure_liquidity' | 'wait_bridge' | 'authorize_transfer' | 'provider_processing' | 'done'
+  route: PocketBankWithdrawRouteData | null
 }
 
 export type PocketBankWithdrawRouteData = {
@@ -34,7 +36,9 @@ function parseData(value: unknown): PocketBankWithdrawData {
     throw new Error(typeof (value as any)?.error === 'string' ? (value as any).error : 'Bank payout failed.')
   }
   const data = (value as any).data
-  if (!data.intentId || !data.orderId || !data.amountUsdc || !data.receiveAddress || !['processing', 'sent', 'refunded', 'failed'].includes(data.state)) {
+  if (!data.intentId || !data.orderId || !data.amountUsdc || !data.receiveAddress
+    || !['processing', 'sent', 'refunded', 'failed'].includes(data.state)
+    || !['ensure_liquidity', 'wait_bridge', 'authorize_transfer', 'provider_processing', 'done'].includes(data.nextAction)) {
     throw new Error('Bank payout response was invalid.')
   }
   return data as PocketBankWithdrawData
@@ -73,6 +77,10 @@ export function confirmPocketBankWithdraw(input: { accessToken: string; request:
   return mutate({ ...input, body: { action: 'confirm', ...input.request } })
 }
 
+export function registerPocketBankWithdrawTransfer(input: { accessToken: string; request: Record<string, unknown>; fetcher?: typeof fetch }) {
+  return mutate({ ...input, body: { action: 'submit', ...input.request } })
+}
+
 export function authorizePocketBankWithdraw(input: { accessToken: string; request: Record<string, unknown>; fetcher?: typeof fetch }) {
   return mutate({ ...input, body: { action: 'authorize', ...input.request } })
 }
@@ -91,7 +99,7 @@ export async function recoverPocketBankWithdrawals({ accessToken, fetcher = fetc
   if (!response.ok || value?.ok !== true || !Array.isArray(value?.data)) {
     throw new Error(typeof value?.error === 'string' ? value.error : 'Could not recover bank payouts.')
   }
-  return value.data as Array<{ intentId: string; executionId: string; state: string; updatedAt: number }>
+  return value.data.map((item: unknown) => parseData({ ok: true, data: item })) as PocketBankWithdrawData[]
 }
 
 async function routeRequest({ accessToken, body, fetcher = fetch }: { accessToken: string; body: Record<string, unknown>; fetcher?: typeof fetch }) {

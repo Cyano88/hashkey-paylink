@@ -75,6 +75,9 @@ async function reconcileExecution(intent: PaymentExecutionIntent, dependencies: 
     if (!result.order) return { id: intent.id, kind: intent.kind, result: 'unchanged', message: 'Paycrest order is not available yet.' }
     const target = paycrestTarget(result.order.status)
     if (!target) return { id: intent.id, kind: intent.kind, result: 'unchanged' }
+    if (String(result.order.status ?? '').trim().toLowerCase() === 'pending' && !result.order.tx_hash && !intent.transactionHash) {
+      return { id: intent.id, kind: intent.kind, result: 'unchanged', message: 'Waiting for user payment authorization.' }
+    }
     await advance(dependencies.executions, intent, target, {
       providerReference: result.order.paycrest_order_id, transactionHash: result.order.tx_hash,
       failureCode: target === 'failed' ? `PROVIDER_${String(result.order.status).toUpperCase()}` : undefined,
@@ -142,6 +145,42 @@ async function reconcileBridges(dependencies: Dependencies, limit: number): Prom
   }))
 }
 
+async function reconcileBankPayoutRoutes(dependencies: Dependencies, limit: number): Promise<ItemResult[]> {
+  const records = await dependencies.listBridges('bank-withdraw.route', limit)
+  return Promise.all(records.map(async record => {
+    if (record.status === 'started') {
+      return { id: record.id, kind: 'bank_payout_route', result: 'unchanged' as const, message: 'Waiting for user bridge approval.' }
+    }
+    const source = record.metadata?.source
+    const txHash = record.metadata?.txHash || record.resourceId || ''
+    if ((source !== 'arbitrum' && source !== 'solana') || !txHash) {
+      return { id: record.id, kind: 'bank_payout_route', result: 'review' as const, message: 'Bank payout route is incomplete.' }
+    }
+    try {
+      const provider = await dependencies.readBridge(source, txHash)
+      if (!isCircleBridgeComplete(provider.status)) {
+        return { id: record.id, kind: 'bank_payout_route', result: 'unchanged' as const }
+      }
+      await dependencies.recordAction({
+        ownerId: record.ownerId,
+        idempotencyKey: record.idempotencyKey,
+        action: record.action,
+        status: 'completed',
+        resourceId: txHash,
+        metadata: {
+          ...(record.metadata ?? {}),
+          txHash,
+          paymentState: 'completed',
+          destinationTxHash: provider.destinationTxHash || '',
+        },
+      })
+      return { id: record.id, kind: 'bank_payout_route', result: 'reconciled' as const }
+    } catch (error) {
+      return { id: record.id, kind: 'bank_payout_route', result: 'error' as const, message: errorText(error) }
+    }
+  }))
+}
+
 async function maybeAlert(results: ItemResult[], stale: PaymentExecutionIntent[], dependencies: Dependencies) {
   const to = String(process.env.POCKET_OPERATIONS_ALERT_EMAIL ?? '').trim()
   if (!to || !stale.length) return false
@@ -191,6 +230,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
     catch (error) { results.push({ id: intent.id, kind: intent.kind, result: 'error', message: errorText(error) }) }
   }
   results.push(...await reconcileBridges(dependencies, limit))
+  results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
   const threshold = Math.max(60_000, Number(process.env.POCKET_MAX_UNRESOLVED_AGE_MS ?? 15 * 60_000))
   const remaining = await dependencies.executions.listUnresolved(1000)
   const stale = remaining.filter(intent => dependencies.now() - intent.updatedAt > threshold)
