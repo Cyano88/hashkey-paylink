@@ -100,6 +100,7 @@ import pocketAgentAskHandler from './api/pocket/agent-ask.js'
 import pocketSupportCasesHandler from './api/pocket/support-cases.js'
 import { readPocketOperationsHealth } from './api/pocket/operations-health.js'
 import { drainPocketReconciliation, pocketReconciliationHandler } from './api/pocket/reconciliation-worker.js'
+import pocketTransactionOperationsHandler from './api/pocket/transaction-operations.js'
 import pocketWalletsHandler from './api/pocket/wallets/index.js'
 import pocketWalletLinkHandler from './api/pocket/wallets/link.js'
 import { paycrestWebhookHandler } from './api/paycrest-pos.js'
@@ -392,6 +393,7 @@ app.all('/api/pocket/bills/pay',       billsPayLimiter, billsBrowserBoundary, po
 app.post('/api/pocket/bills/refund',   billsRefundLimiter, billsBrowserBoundary, pocketBillsUserRefundHandler)
 app.post('/api/admin/pocket/bills/refunds/process', strictLimiter, pocketBillsRefundHandler)
 app.post('/api/admin/pocket/reconciliation/run', strictLimiter, pocketReconciliationHandler)
+app.all('/api/admin/pocket/transactions', strictLimiter, pocketTransactionOperationsHandler)
 app.get('/api/health', async (_req, res) => {
   try {
     const pocket = await readPocketOperationsHealth()

@@ -19,6 +19,7 @@ import PocketSelect from '../pocket/components/PocketSelect'
 import { cn } from '../lib/utils'
 import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
 import PocketSupportOperationsPanel from '../components/PocketSupportOperationsPanel'
+import PocketTransactionOperationsPanel from '../components/PocketTransactionOperationsPanel'
 
 type Network = 'base' | 'arbitrum' | 'arc'
 type Operation = {
@@ -92,11 +93,12 @@ function formatDate(value?: string) {
     : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
-type OperationsSurface = 'projects' | 'agreements' | 'support'
+type OperationsSurface = 'projects' | 'agreements' | 'transactions' | 'support'
 
 const OPERATIONS_SECTIONS: Array<{ id: OperationsSurface; label: string; description: string; path: string }> = [
   { id: 'projects', label: 'Developer projects', description: 'Integrations, API access and settlement routing', path: '/admin/developers' },
   { id: 'agreements', label: 'Arc agreements', description: 'Agreement lifecycle and controlled operations', path: '/admin/agreements' },
+  { id: 'transactions', label: 'Transactions', description: 'Payment status and reconciliation', path: '/admin/transactions' },
   { id: 'support', label: 'Pocket Support', description: 'Agent Hash handoffs and customer conversations', path: '/admin/support' },
 ]
 
@@ -238,7 +240,7 @@ export default function DeveloperOperationsPage({ surface }: { surface: Operatio
     <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-6xl px-4 py-8 sm:py-10">
       <OperationsTop onLogout={logout} />
       <OperationsSectionNav active={surface} />
-      {surface === 'agreements' ? <ArcAgreementOperationsPanel /> : surface === 'support' ? <PocketSupportOperationsPanel /> : <>
+      {surface === 'agreements' ? <ArcAgreementOperationsPanel /> : surface === 'transactions' ? <PocketTransactionOperationsPanel /> : surface === 'support' ? <PocketSupportOperationsPanel /> : <>
       <div className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard label="Projects" value={summary.total} />
         <SummaryCard label="Active" value={summary.active} tone="success" />
@@ -315,20 +317,20 @@ export default function DeveloperOperationsPage({ surface }: { surface: Operatio
 }
 
 function OperationsSectionNav({ active }: { active: OperationsSurface }) {
-  return <nav aria-label="Operations sections" className="mt-6 grid gap-3 md:grid-cols-3">
+  return <nav aria-label="Operations sections" className="mt-6 flex gap-1 overflow-x-auto rounded-2xl border border-gray-200 bg-white p-1 dark:border-white/10 dark:bg-[#111216]">
     {OPERATIONS_SECTIONS.map(section => <NavLink
       key={section.id}
       to={section.path}
       aria-current={active === section.id ? 'page' : undefined}
       className={({ isActive }) => cn(
-        'rounded-2xl border p-4 transition',
+        'min-w-max flex-1 rounded-xl px-4 py-3 text-center transition',
         isActive
-          ? 'border-gray-950 bg-gray-950 text-white shadow-sm dark:border-white dark:bg-white dark:text-gray-950'
-          : 'border-gray-200 bg-white text-gray-950 hover:border-gray-300 dark:border-white/10 dark:bg-[#111216] dark:text-white dark:hover:border-white/20',
+          ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950'
+          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/[0.05] dark:hover:text-white',
       )}
     >
       <p className="text-sm font-semibold tracking-[-0.01em]">{section.label}</p>
-      <p className={cn('mt-1 text-[11px] leading-4', active === section.id ? 'text-white/65 dark:text-gray-950/60' : 'text-gray-500 dark:text-gray-400')}>{section.description}</p>
+      <span className="sr-only"> — {section.description}</span>
     </NavLink>)}
   </nav>
 }
