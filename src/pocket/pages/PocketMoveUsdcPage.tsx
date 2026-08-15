@@ -18,7 +18,6 @@ import usePocketUsdcDraftController from '../controllers/usePocketUsdcDraftContr
 import { PocketPayerNetworkPanel } from '../features/move/PocketPayerNetworkPanel'
 import { PocketFlexibleAmountToggle, PocketPaymentAmountField, PocketPaymentNoteField, PocketPayLinkSubmitPanel } from '../features/move/PocketPayLinkFields'
 import { PocketPayLinkReadyPanel } from '../features/move/PocketPayLinkReadyPanel'
-import { PocketRecipientAddressFields } from '../features/move/PocketRecipientAddressFields'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketRecipient from '../hooks/usePocketRecipient'
 import usePocketWallets from '../hooks/usePocketWallets'
@@ -132,6 +131,14 @@ export default function PocketMoveUsdcPage() {
     draft.setMultiChain(enabled)
   }, [authenticated, draft, selectedNet, wallets.wallets])
 
+  useEffect(() => {
+    if (flow !== 'collection' || !draft.multiChain) return
+    const pocketEvmAddress = wallets.wallets.base?.address || wallets.wallets.arbitrum?.address || ''
+    const pocketSolanaAddress = wallets.wallets.solana?.address || ''
+    if (pocketEvmAddress && pocketEvmAddress !== draft.evmAddress) draft.setEvmAddress(pocketEvmAddress)
+    if (pocketSolanaAddress && pocketSolanaAddress !== draft.solanaAddress) draft.setSolanaAddress(pocketSolanaAddress)
+  }, [draft, flow, wallets.wallets])
+
   const selectNav = (tab: PocketNavTab) => {
     const path = tab === 'home' ? pocketPathFor({ section: 'home', view: 'overview' })
       : tab === 'bills' ? pocketPathFor({ section: 'bills', view: 'airtime' })
@@ -221,7 +228,7 @@ export default function PocketMoveUsdcPage() {
             {[['Ghana', 'GHS'], ['Kenya', 'KES']].map(([country, currency]) => <button key={country} type="button" disabled className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-gray-200 px-4 text-left opacity-55 dark:border-white/10"><span><span className="block text-sm font-bold">{country}</span><span className="mt-0.5 block text-[11px] text-gray-400">{currency} local-currency collection</span></span><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[9px] font-black uppercase text-gray-500 dark:bg-white/[0.08]">Soon</span></button>)}
             <p className="px-2 pt-1 text-center text-[11px] leading-5 text-gray-400 dark:text-gray-500">Nigeria is available now. Ghana and Kenya will become selectable when their local payment rails are ready.</p>
           </div> : <>
-            <PocketPayerNetworkPanel showSelector selectedNetwork={selectedNet} selectedNetworkLabel={CHAIN_META[selectedNet].label} options={POCKET_NETWORKS.map(network => ({ value: network, label: CHAIN_META[network].label }))} multiChain={flow === 'collection' && draft.multiChain} emailReceive={flow !== 'collection' && receiveMode === 'email'} onNetworkSelect={network => onNetworkSelect(network as ChainKey)} onMultiChainToggle={toggleMultiChain} showMultiChainToggle={flow === 'collection'} embedded />
+            <PocketPayerNetworkPanel showSelector selectedNetwork={selectedNet} selectedNetworkLabel={CHAIN_META[selectedNet].label} options={POCKET_NETWORKS.map(network => ({ value: network, label: CHAIN_META[network].label }))} multiChain={flow === 'collection' && draft.multiChain} emailReceive={flow !== 'collection' && receiveMode === 'email'} onNetworkSelect={network => onNetworkSelect(network as ChainKey)} onMultiChainToggle={toggleMultiChain} showMultiChainToggle={flow === 'collection'} managedNetworkRouting={flow === 'collection'} embedded />
 
             {flow === 'request' ? <>
               <label className="block space-y-1.5"><span className="text-sm font-medium text-gray-700 dark:text-gray-200">Payer Pocket ID</span><span className="relative block"><input type="text" inputMode="numeric" value={payerPocketId} onChange={event => setPayerPocketId(event.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="Enter 6 to 12 digits" className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-3 pr-11 text-sm font-semibold tabular-nums outline-none focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04]" />{resolvingPayer ? <span className="absolute right-4 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-gray-400"><Loader2 className="h-4 w-4" /></span> : resolvedPayer ? <Check className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" /> : null}</span><span className="block text-[11px] leading-5 text-gray-400">Only this Pocket user will receive the request. No public link or QR code is created.</span></label>
@@ -230,11 +237,10 @@ export default function PocketMoveUsdcPage() {
               <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} label="Payment note" placeholder="Dinner, tickets, shared expense..." />
               <button type="button" disabled={!requestCanSubmit || requestBusy} onClick={() => void createRequest()} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 text-sm font-semibold text-white disabled:bg-gray-100 disabled:text-gray-400 dark:bg-white/[0.12] dark:disabled:bg-white/[0.06]"><span className="absolute left-5">{requestBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</span>Send request{requestCanSubmit && !requestBusy && <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10"><ArrowRight className="h-4 w-4" /></span>}</button>
             </> : <>
-              <PocketRecipientAddressFields showEvm={(isEvmNetwork || draft.multiChain) && (draft.multiChain || receiveMode === 'paste')} showSolana={(selectedNet === 'solana' || draft.multiChain) && (draft.multiChain || receiveMode === 'paste')} bankSend={false} multiChain={draft.multiChain} selectedNetwork={selectedNet} receiveMode={receiveMode} evm={{ address: draft.evmAddress, dirty: draft.validation.evmDirty, valid: draft.validation.evmValid, connectedAddress: connectedEvm, onChange: address => { manualEvmAddress.current = address; draft.setEvmAddress(address) }, onDisconnect: () => { disconnectEvm(); manualEvmAddress.current = ''; draft.setEvmAddress('') } }} solana={{ address: draft.solanaAddress, dirty: draft.validation.solanaDirty, valid: draft.validation.solanaValid, connectedAddress: connectedSolana, onChange: address => { manualSolanaAddress.current = address; draft.setSolanaAddress(address) }, onDisconnect: () => { disconnectSolana(); manualSolanaAddress.current = ''; draft.setSolanaAddress('') } }} />
               <PocketPaymentAmountField lane="usdc" flexible={draft.flexibleAmount} amount={draft.amount} dirty={draft.validation.amountDirty} valid={draft.validation.amountValid} helperText={amountHelperText} onAmountChange={draft.setAmount} />
               <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} label="Collection name" placeholder="Wedding, team dues, donations..." optional={false} />
               <PocketFlexibleAmountToggle lane="usdc" enabled={draft.flexibleAmount} onToggle={() => draft.setFlexibleAmount(!draft.flexibleAmount)} />
-              <PocketPayLinkSubmitPanel lane="usdc" shellActive idle={!draft.generatedLink} canSubmit={draft.validation.canGenerate && authenticated && Boolean(draft.memo.trim())} submitting={requestBusy} addressGuidance={draft.validation.addressGuidance} onSubmit={() => void createCollection()} />
+              <PocketPayLinkSubmitPanel lane="usdc" shellActive idle={!draft.generatedLink} canSubmit={draft.validation.canGenerate && authenticated && Boolean(draft.memo.trim())} submitting={requestBusy} addressGuidance={draft.validation.addressGuidance ? (wallets.resolved ? 'Pocket could not prepare your receiving wallet. Try again.' : 'Pocket is preparing your collection.') : undefined} onSubmit={() => void createCollection()} />
             </>}
           </>}
         </>}

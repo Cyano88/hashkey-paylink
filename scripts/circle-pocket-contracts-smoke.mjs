@@ -1404,6 +1404,8 @@ assert.match(pocketMoveUsdcSource, /usePocketWallets\(\{ authenticated, email, g
 assert.match(pocketMoveUsdcSource, /wallets\.wallets\.base\?\.address \|\| wallets\.wallets\.arbitrum\?\.address/)
 assert.match(pocketMoveUsdcSource, /wallets\.wallets\.solana\?\.address/)
 assert.match(pocketMoveUsdcSource, /emailReceive=\{flow !== 'collection' && receiveMode === 'email'\}/)
+assert.match(pocketMoveUsdcSource, /managedNetworkRouting=\{flow === 'collection'\}/)
+assert.doesNotMatch(pocketMoveUsdcSource, /<PocketRecipientAddressFields/)
 assert.doesNotMatch(pocketMoveUsdcSource, /if \(authenticated\) void logout\(\)/)
 assert.match(pocketMoveUsdcSource, /<span className="absolute right-4 top-1\/2 flex h-4 w-4 -translate-y-1\/2 items-center justify-center text-gray-400"><Loader2 className="h-4 w-4" \/><\/span>/)
 assert.doesNotMatch(pocketMoveUsdcSource, /<Loader2 className="absolute right-4 top-1\/2[^"]*animate-spin/)

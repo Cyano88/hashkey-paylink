@@ -16,6 +16,7 @@ type PocketPayerNetworkPanelProps = {
   onNetworkSelect: (network: string) => void
   onMultiChainToggle: () => void
   showMultiChainToggle?: boolean
+  managedNetworkRouting?: boolean
   embedded?: boolean
 }
 
@@ -29,6 +30,7 @@ export function PocketPayerNetworkPanel({
   onNetworkSelect,
   onMultiChainToggle,
   showMultiChainToggle = true,
+  managedNetworkRouting = false,
   embedded = false,
 }: PocketPayerNetworkPanelProps) {
   return (
@@ -69,7 +71,7 @@ export function PocketPayerNetworkPanel({
               {emailReceive
                 ? 'Pocket uses the selected network.'
                 : multiChain
-                  ? 'Add addresses per network.'
+                  ? managedNetworkRouting ? 'Pocket uses your linked wallets.' : 'Add addresses per network.'
                   : 'Use one selected network.'}
             </span>
           </span>
@@ -85,7 +87,7 @@ export function PocketPayerNetworkPanel({
         </button>}
       </div>}
 
-      {multiChain && (
+      {multiChain && !managedNetworkRouting && (
         <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
           <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Add receiving addresses</p>
           <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">Enter one address for each network payers can choose.</p>
