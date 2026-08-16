@@ -13,14 +13,10 @@ export type VerifiedBankNameDependencies = {
   verifyAccount(body: Record<string, unknown>): Promise<unknown>
 }
 
-export async function assertBankAccountMatchesPocketName(
+async function verifyPocketBankAccount(
   req: Request,
   body: Record<string, unknown>,
-  dependencies: VerifiedBankNameDependencies = {
-    verifyUser: verifiedPrivyUser,
-    profiles: localCurrencyProfileRepository,
-    verifyAccount: verifyNgPosBankAccount,
-  },
+  dependencies: VerifiedBankNameDependencies,
 ) {
   const identity = await dependencies.verifyUser(req)
   const profile = await dependencies.profiles.get(identity.userId)
@@ -31,6 +27,29 @@ export async function assertBankAccountMatchesPocketName(
   if (!isPocketBankVerifyData(verification)) {
     throw Object.assign(new Error('Bank provider returned an invalid verification result.'), { status: 502 })
   }
+  return { identity, profile, verification }
+}
+
+const defaultDependencies: VerifiedBankNameDependencies = {
+  verifyUser: verifiedPrivyUser,
+  profiles: localCurrencyProfileRepository,
+  verifyAccount: verifyNgPosBankAccount,
+}
+
+export async function verifyBankPayoutBeneficiary(
+  req: Request,
+  body: Record<string, unknown>,
+  dependencies: VerifiedBankNameDependencies = defaultDependencies,
+) {
+  return verifyPocketBankAccount(req, body, dependencies)
+}
+
+export async function assertBankAccountMatchesPocketName(
+  req: Request,
+  body: Record<string, unknown>,
+  dependencies: VerifiedBankNameDependencies = defaultDependencies,
+) {
+  const { identity, profile, verification } = await verifyPocketBankAccount(req, body, dependencies)
   if (normalizeBankLegalName(verification.account_name) !== normalizeBankLegalName(profile.resolvedName)) {
     throw Object.assign(new Error('This account belongs to a different verified name. Use an account in your verified name.'), { status: 403 })
   }
