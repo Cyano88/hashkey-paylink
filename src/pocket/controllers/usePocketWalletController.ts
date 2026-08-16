@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { PRIVY_AUTH_ENABLED } from '../../lib/authMode'
 import {
   canUseCircleEvmEmailWallet,
@@ -12,9 +12,36 @@ import {
 import { CHAIN_META } from '../../lib/chains'
 import { linkPocketWallet, readPocketWallet } from '../api/pocketWalletLinkClient'
 import type { PocketNetwork } from '../lib/pocketSchemas'
+import {
+  readPocketEvmQuickSession,
+  savePocketEvmQuickSession,
+} from '../lib/pocketQuickApproval'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 
 export type PocketSolanaEmailSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
+
+function isExpiredEmailChallenge(reason: unknown) {
+  const message = reason instanceof Error ? reason.message : String(reason ?? '')
+  return /email verification code is invalid or expired|code expired/i.test(message)
+}
+
+async function connectFreshEvmSession(
+  email: string,
+  network: Exclude<PocketNetwork, 'solana'>,
+  walletAddress: string,
+) {
+  const secured = await readPocketEvmQuickSession(email, network, walletAddress)
+  if (secured) return secured
+  let session: CircleEvmEmailSession
+  try {
+    session = await connectCircleEvmEmailWallet(email, network)
+  } catch (reason) {
+    if (!isExpiredEmailChallenge(reason)) throw reason
+    session = await connectCircleEvmEmailWallet(email, network)
+  }
+  await savePocketEvmQuickSession(email, session).catch(() => undefined)
+  return session
+}
 
 type PocketAccessTokenReader = () => Promise<string | null>
 
@@ -127,6 +154,7 @@ export default function usePocketWalletController({
 }) {
   const [evmSession, setEvmSession] = useState<CircleEvmEmailSession | null>(null)
   const [solanaSession, setSolanaSession] = useState<PocketSolanaEmailSession | null>(null)
+  const pendingEvmSessions = useRef(new Map<string, Promise<CircleEvmEmailSession>>())
 
   const ensureWallet = useCallback(async (
     network: PocketNetwork,
@@ -152,9 +180,17 @@ export default function usePocketWalletController({
     if (evmSession && evmSession.chain === network && evmSession.wallet.address.toLowerCase() === walletAddress.toLowerCase()) {
       return evmSession
     }
-    const session = await connectCircleEvmEmailWallet(email, network)
-    setEvmSession(session)
-    return session
+    const key = `${network}:${walletAddress.toLowerCase()}`
+    const pending = pendingEvmSessions.current.get(key)
+    if (pending) return pending
+    const request = connectFreshEvmSession(email, network, walletAddress)
+      .then(session => {
+        setEvmSession(session)
+        return session
+      })
+      .finally(() => pendingEvmSessions.current.delete(key))
+    pendingEvmSessions.current.set(key, request)
+    return request
   }, [email, evmSession])
 
   const getSolanaSession = useCallback(async (walletAddress: string) => {

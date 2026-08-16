@@ -7,6 +7,7 @@ import { claimCirclePocketAction, listCirclePocketActions, recordCirclePocketAct
 import { paymentExecutionRepository, type PaymentExecutionIntent, type PaymentExecutionRepository } from './payment-execution-intents.js'
 import { assertBankAccountMatchesPocketName } from './verified-bank-name.js'
 import { isCircleBridgeComplete, readCircleBridgeStatus } from './circle-bridge-status.js'
+import { paymentApprovalTimeoutMs, unsignedApprovalExpired } from './payment-timeouts.js'
 
 type LegacyResult = { status: number; body: any }
 type BankWithdrawDependencies = {
@@ -20,6 +21,7 @@ type BankWithdrawDependencies = {
   executions: PaymentExecutionRepository
   authorizeBankAccount: typeof assertBankAccountMatchesPocketName
   readBridgeStatus: typeof readCircleBridgeStatus
+  now: () => number
 }
 
 async function invokeNgPos(req: Request, body: Record<string, unknown>): Promise<LegacyResult> {
@@ -59,8 +61,23 @@ export function payoutState(status: unknown) {
 type BankPayoutRoute = ReturnType<typeof routeRecord>
 type BankPayoutNextAction = 'ensure_liquidity' | 'wait_bridge' | 'authorize_transfer' | 'provider_processing' | 'done'
 
+function hasSubmittedPayout(order: any, execution?: PaymentExecutionIntent) {
+  return Boolean(text(order?.tx_hash) || execution?.transactionHash)
+}
+
+function payoutWindowExpired(order: any, execution: PaymentExecutionIntent | undefined, now: number) {
+  if (!execution || (execution.state !== 'prepared' && execution.state !== 'authorized')) return false
+  if (hasSubmittedPayout(order, execution)) return false
+  const validUntil = Date.parse(text(order?.valid_until, 80))
+  return Number.isFinite(validUntil) && validUntil <= now
+}
+
+function resolvedPayoutState(order: any, execution?: PaymentExecutionIntent) {
+  return execution?.state === 'expired' ? 'expired' : payoutState(order?.status)
+}
+
 function payoutNextAction(order: any, execution?: PaymentExecutionIntent, route?: BankPayoutRoute): BankPayoutNextAction {
-  const state = payoutState(order?.status)
+  const state = resolvedPayoutState(order, execution)
   if (state !== 'processing') return 'done'
   const providerStatus = text(order?.status, 40).toLowerCase()
   if (text(order?.tx_hash) || execution?.transactionHash || ['deposited', 'fulfilling', 'fulfilled', 'settling', 'refunding'].includes(providerStatus)) {
@@ -81,7 +98,7 @@ export function publicOrder(order: any, execution?: PaymentExecutionIntent, rout
     receiveAddress: text(order?.receive_address),
     txHash: text(order?.tx_hash) || execution?.transactionHash || '',
     providerStatus: text(order?.status),
-    state: payoutState(order?.status),
+    state: resolvedPayoutState(order, execution),
     bankName: text(order?.bank_name),
     bankLast4: text(order?.bank_last4),
     accountName: text(order?.bank_account_name),
@@ -100,6 +117,16 @@ async function executionForOrder(ownerId: string, order: any, dependencies: Bank
 async function syncExecution(ownerId: string, order: any, dependencies: BankWithdrawDependencies) {
   let execution = await executionForOrder(ownerId, order, dependencies)
   if (!execution) return undefined
+  if (payoutWindowExpired(order, execution, dependencies.now())) {
+    return dependencies.executions.update({
+      ownerId,
+      intentId: execution.id,
+      state: 'expired',
+      failureCode: 'PAYOUT_WINDOW_EXPIRED',
+      providerReference: text(order?.paycrest_order_id),
+      metadata: { providerStatus: text(order?.status), closureReason: 'authorization_window_expired' },
+    })
+  }
   const state = payoutState(order?.status)
   if (state === 'sent') {
     if (execution.state === 'authorized') execution = await dependencies.executions.update({ ownerId, intentId: execution.id, state: 'submitted', transactionHash: text(order?.tx_hash) })
@@ -144,7 +171,23 @@ async function ownedRoute(identity: VerifiedLinkUser, intentId: string, dependen
 
 async function syncOwnedRoute(identity: VerifiedLinkUser, intentId: string, dependencies: BankWithdrawDependencies) {
   const existing = await ownedRoute(identity, intentId, dependencies)
-  if (!existing || existing.status !== 'submitted') return existing
+  if (!existing) return existing
+  if (existing.status === 'started' && unsignedApprovalExpired({
+    updatedAt: existing.updatedAt,
+    transactionHash: existing.metadata?.txHash,
+    now: dependencies.now(),
+    timeoutMs: paymentApprovalTimeoutMs(),
+  })) {
+    return dependencies.recordAction({
+      ownerId: identity.userId,
+      idempotencyKey: existing.idempotencyKey,
+      action: existing.action,
+      status: 'failed',
+      resourceId: existing.resourceId,
+      metadata: { ...(existing.metadata ?? {}), paymentState: 'expired', failureCode: 'BRIDGE_APPROVAL_EXPIRED' },
+    })
+  }
+  if (existing.status !== 'submitted') return existing
   const source = existing.metadata?.source
   const txHash = existing.metadata?.txHash || ''
   if ((source !== 'arbitrum' && source !== 'solana') || !txHash) return existing
@@ -187,6 +230,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     executions: paymentExecutionRepository,
     authorizeBankAccount: assertBankAccountMatchesPocketName,
     readBridgeStatus: readCircleBridgeStatus,
+    now: Date.now,
     ...overrides,
   }
   return async function pocketBankWithdrawHandler(req: Request, res: Response) {
@@ -249,7 +293,14 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         const execution = await dependencies.executions.create({
           ownerId: identity.userId, idempotencyKey, kind: 'bank_payout', amount: text(prepared.body.order.amount_usdc),
           sourceNetwork: 'base', settlementNetwork: 'base', destinationType: 'verified_bank_account',
-          metadata: { bankCode: text(req.body?.bank_code, 20), bankLast4: accountNumber.slice(-4) },
+          metadata: {
+            bankCode: text(req.body?.bank_code, 20),
+            bankName: text(req.body?.bank_name, 160),
+            bankLast4: accountNumber.slice(-4),
+            accountName: text(req.body?.account_name, 200),
+            amountNgn: amount,
+            memo: text(req.body?.memo, 180) || 'Direct bank payout',
+          },
         })
         const authorized = execution.intent.state === 'prepared'
           ? await dependencies.executions.update({ ownerId: identity.userId, intentId: execution.intent.id, state: 'authorized', resourceId: text(prepared.body.order.intent_id), providerReference: text(prepared.body.order.paycrest_order_id) })
@@ -262,7 +313,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
       const ownedOrder = await assertOwnedOrder(req, identity, id, dependencies)
 
       if (action === 'routeStatus') {
-        return res.json({ ok: true, data: routeRecord(await ownedRoute(identity, ownedOrder.intent_id, dependencies)) })
+        return res.json({ ok: true, data: routeRecord(await syncOwnedRoute(identity, ownedOrder.intent_id, dependencies)) })
       }
 
       if (action === 'authorize') {
@@ -277,10 +328,13 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         })
         if (payable.status !== 200 || !payable.body?.order) throw Object.assign(new Error(payable.body?.error || 'Could not open a current payout window.'), { status: payable.status })
         const validUntil = Date.parse(payable.body.order.valid_until || '')
-        if (!Number.isFinite(validUntil) || validUntil <= Date.now() + 60_000) {
+        if (!Number.isFinite(validUntil) || validUntil <= dependencies.now() + 60_000) {
           throw Object.assign(new Error('The payout window is too close to expiry. Start the payment again.'), { status: 409 })
         }
         const execution = await syncExecution(identity.userId, payable.body.order, dependencies)
+        if (execution?.state === 'expired') {
+          return res.status(409).json({ ok: false, error: 'This payout window expired. Start a new payout.' })
+        }
         const route = routeRecord(await syncOwnedRoute(identity, text(payable.body.order.intent_id), dependencies))
         return res.json({ ok: true, data: publicOrder(payable.body.order, execution, route) })
       }
@@ -300,7 +354,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         if (orderAmountUnits === null || routeAmountUnits > orderAmountUnits) {
           return res.status(409).json({ ok: false, error: 'Bank payout routing amount exceeds the provider order.' })
         }
-        const existing = await ownedRoute(identity, ownedOrder.intent_id, dependencies)
+        const existing = await syncOwnedRoute(identity, ownedOrder.intent_id, dependencies)
         if (existing && existing.status !== 'failed' && existing.status !== 'completed') {
           return res.json({ ok: true, data: routeRecord(existing, false) })
         }

@@ -44,7 +44,13 @@ export default function PocketBottomNav({ active, disabled = false, keyboardOpen
                   : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:text-white/40 dark:hover:bg-white/[0.05] dark:hover:text-white/70',
               )}
             >
-              <Icon className={cn('h-[19px] w-[19px]', selected && 'stroke-[2.5]')} />
+              <Icon
+                aria-hidden="true"
+                className={cn(
+                  'h-[19px] w-[19px] shrink-0 stroke-current',
+                  selected ? 'text-white stroke-[2.5] dark:text-gray-950' : 'text-gray-500 dark:text-white/50',
+                )}
+              />
               <span>{label}</span>
             </button>
           )

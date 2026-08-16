@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core'
+
 export const POCKET_MOVE_VIEWS = ['usdc', 'bank', 'pos'] as const
 export type PocketMoveView = typeof POCKET_MOVE_VIEWS[number]
 
@@ -11,8 +13,12 @@ export const POCKET_HOSTNAME = 'pocket.hashpaylink.com'
 export const POCKET_ORIGIN = `https://${POCKET_HOSTNAME}`
 export const HASH_PAYLINK_APP_ORIGIN = 'https://app.hashpaylink.com'
 
+export function isPocketNativeRuntime() {
+  return Capacitor.isNativePlatform()
+}
+
 export function isPocketHostname(hostname = typeof window === 'undefined' ? '' : window.location.hostname) {
-  return hostname.toLowerCase() === POCKET_HOSTNAME
+  return isPocketNativeRuntime() || hostname.toLowerCase() === POCKET_HOSTNAME
 }
 
 export function pocketBasePathForHostname(hostname: string) {
@@ -20,8 +26,18 @@ export function pocketBasePathForHostname(hostname: string) {
 }
 
 export function hashPayLinkAppOriginForOrigin(origin: string) {
+  if (isPocketNativeRuntime()) return HASH_PAYLINK_APP_ORIGIN
   const url = new URL(origin)
   return isPocketHostname(url.hostname) ? HASH_PAYLINK_APP_ORIGIN : url.origin
+}
+
+export function pocketRuntimeOrigin() {
+  return isPocketNativeRuntime() ? POCKET_ORIGIN : window.location.origin
+}
+
+export function pocketApiUrl(path: string) {
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return isPocketNativeRuntime() ? `${POCKET_ORIGIN}${normalized}` : normalized
 }
 
 // Pocket owns root-level routes on its production hostname. The legacy

@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import { verifyDeveloperOperationsAdmin } from '../developer-projects.js'
 import { drainPocketReconciliation } from './reconciliation-worker.js'
 import { paymentExecutionRepository, type PaymentExecutionIntent } from './payment-execution-intents.js'
+import { submittedReviewThresholdMs } from './payment-timeouts.js'
 
 type Dependencies = {
   verifyAdmin: typeof verifyDeveloperOperationsAdmin
@@ -52,8 +53,7 @@ export function createPocketTransactionOperationsHandler(overrides: Partial<Depe
       }
       const now = dependencies.now()
       const executions = (await dependencies.listUnresolved(500)).map(intent => publicExecution(intent, now))
-      const configuredStaleAge = Number(process.env.POCKET_MAX_UNRESOLVED_AGE_MS ?? 15 * 60_000)
-      const staleAfterMs = Number.isFinite(configuredStaleAge) ? Math.max(60_000, configuredStaleAge) : 15 * 60_000
+      const staleAfterMs = submittedReviewThresholdMs()
       return res.status(200).json({
         ok: true,
         executions,

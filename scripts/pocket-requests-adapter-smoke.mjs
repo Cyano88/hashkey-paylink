@@ -6,7 +6,8 @@ import { createPocketRequestRepository } from '../api/pocket/request-store.ts'
 import { createPocketRequestsHandler } from '../api/pocket/requests.ts'
 
 const root = await mkdtemp(join(tmpdir(), 'pocket-requests-'))
-const repository = createPocketRequestRepository({ durable: false, isRender: false, storePath: join(root, 'requests.json'), now: (() => { let value = 100; return () => ++value })() })
+let requestNow = 100
+const repository = createPocketRequestRepository({ durable: false, isRender: false, storePath: join(root, 'requests.json'), now: () => ++requestNow, approvalTimeoutMs: 5 * 60_000 })
 const profiles = {
   async ensure(identity) { return { profile: identity.userId === 'sender' ? { privyUserId: 'sender', pocketId: '11111111', resolvedName: 'Ada Sender', nameStatus: 'bank_resolved', email: 'ada@example.com' } : { privyUserId: 'recipient', pocketId: '22222222', resolvedName: '', nameStatus: 'unverified', email: 'grace@example.com' }, unchanged: true } },
   async getByPocketId(id) { return id === '22222222' ? { privyUserId: 'recipient', pocketId: '22222222', resolvedName: '', nameStatus: 'unverified', email: 'grace@example.com' } : id === '11111111' ? { privyUserId: 'sender', pocketId: '11111111', resolvedName: 'Ada Sender', nameStatus: 'bank_resolved', email: 'ada@example.com' } : undefined },
@@ -73,9 +74,16 @@ try {
   assert.equal(routeStarted.body.route.claimed, true)
   const routeReplay = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '4' })
   assert.equal(routeReplay.body.route.claimed, false)
+  requestNow += 5 * 60_000
+  const routeRestarted = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '4' })
+  assert.equal(routeRestarted.body.route.claimed, true, 'an unsigned payment route must unlock after five minutes')
   const bridgeHash = '0x' + 'b'.repeat(64)
   const routeSubmitted = await call(handler, 'POST', { action: 'route-update', id: incoming.body.requests[0].id, phase: 'submitted', transactionHash: bridgeHash })
   assert.equal(routeSubmitted.body.route.phase, 'submitted')
+  requestNow += 30 * 60_000
+  const submittedRouteReplay = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '4' })
+  assert.equal(submittedRouteReplay.body.route.claimed, false, 'a submitted route with a hash must never age-expire')
+  assert.equal(submittedRouteReplay.body.route.txHash, bridgeHash)
   const changedRouteHash = await call(handler, 'POST', { action: 'route-update', id: incoming.body.requests[0].id, phase: 'submitted', transactionHash: '0x' + 'c'.repeat(64) })
   assert.equal(changedRouteHash.statusCode, 409)
   const routeStillMoving = await call(handler, 'POST', { action: 'route-update', id: incoming.body.requests[0].id, phase: 'completed', transactionHash: bridgeHash })

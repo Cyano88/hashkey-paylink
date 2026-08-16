@@ -14,9 +14,12 @@ import { arcChain, baseMainnet } from './lib/chains'
 import { arbitrum, polygon } from 'viem/chains'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyLoginProvider } from './lib/PrivyLoginProvider'
-import { isPocketHostname } from './pocket/lib/pocketRoutes'
+import { isPocketHostname, isPocketNativeRuntime, pocketRuntimeOrigin } from './pocket/lib/pocketRoutes'
+import { installPocketNativeFetch } from './pocket/lib/pocketNativeFetch'
 
 const BRAND_ORIGIN = 'https://hashpaylink.com'
+if (isPocketNativeRuntime()) document.documentElement.dataset.pocketRuntime = 'native'
+installPocketNativeFetch()
 const rootAppModule = isPocketHostname(window.location.hostname)
   ? import('./pocket/PocketHostApp')
   : import('./App')
@@ -83,7 +86,7 @@ function AppProviders() {
     appearance: {
       theme: theme === 'dark' ? 'dark' : 'light',
       accentColor: '#0071E3',
-      logo: new URL('/privy-mark-logo.png', window.location.origin).toString(),
+      logo: new URL('/privy-mark-logo.png', pocketRuntimeOrigin()).toString(),
       landingHeader: '\u00A0',
       loginMessage: 'Staff will never ask for this code.',
       emailDomain: 'Hash PayLink',

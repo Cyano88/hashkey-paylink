@@ -6,6 +6,7 @@ import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBa
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout } from '../lib/pocketBankPayoutState'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
+import { pocketRuntimeOrigin } from '../lib/pocketRoutes'
 
 export type PocketBankWithdrawStatus = 'idle' | 'preparing' | 'routing' | 'route-review' | 'authorizing' | 'processing' | 'sent'
 
@@ -29,7 +30,7 @@ function storedOperation(fingerprint: string) {
 
 function payoutError(reason: unknown, fallback: string) {
   const message = reason instanceof Error ? reason.message : fallback
-  return /failed to fetch|networkerror|network request failed/i.test(message)
+  return /failed to fetch|networkerror|network request failed|unable to resolve host|no address associated|enotfound|pocket could not connect/i.test(message)
     ? 'Pocket lost connection while preparing this payout. Check Activity before trying again.'
     : message
 }
@@ -139,6 +140,16 @@ export default function usePocketBankWithdrawController({
         }
         return
       }
+      if (next.state === 'expired') {
+        clearActivePocketBankPayout(intentId)
+        if (active) {
+          activeIntentId.current = ''
+          setResult(null)
+          setStatus('idle')
+          setError('The payout window expired. Any routed USDC remains available on Base.')
+        }
+        return
+      }
     } } finally { polling.current = false }
   }, [onSent])
 
@@ -200,12 +211,16 @@ export default function usePocketBankWithdrawController({
         await onSent()
         return
       }
-      if (next.state === 'refunded' || next.state === 'failed') {
+      if (next.state === 'refunded' || next.state === 'failed' || next.state === 'expired') {
         clearActivePocketBankPayout(intentId)
+        activeIntentId.current = ''
+        setResult(null)
         setStatus('idle')
         setError(next.state === 'refunded'
           ? 'The payout was refunded. Your USDC should return to the Circle wallet.'
-          : 'The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
+          : next.state === 'expired'
+            ? 'The payout window expired. Any routed USDC remains available on Base.'
+            : 'The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
         return
       }
       if (next.nextAction === 'ensure_liquidity' || next.nextAction === 'wait_bridge' || next.nextAction === 'authorize_transfer') {
@@ -257,7 +272,7 @@ export default function usePocketBankWithdrawController({
           amount_ngn: amount,
           wallet_address: selectedWallet.address,
           memo: memo.trim() || 'Direct bank payout',
-          client_origin: window.location.origin,
+          client_origin: pocketRuntimeOrigin(),
         },
       })
       activeIntentId.current = prepared.intentId
@@ -294,6 +309,7 @@ export default function usePocketBankWithdrawController({
         },
       })
       if (activeIntentId.current !== prepared.intentId) return
+      if (payable.state === 'expired') throw new Error('This payout window expired. Start a new payout.')
       setResult(payable)
       const session = await getEvmSession(selectedWallet.address)
       const transfer = await executePocketEvmTransfer({
@@ -330,6 +346,14 @@ export default function usePocketBankWithdrawController({
       void pollUntilSettled(accessToken, prepared.intentId)
     } catch (reason) {
       const message = payoutError(reason, 'Bank payout failed.')
+      if (/payout window expired/i.test(message)) {
+        clearActivePocketBankPayout(prepared.intentId)
+        activeIntentId.current = ''
+        setResult(null)
+        setStatus('idle')
+        setError('The payout window expired. Any routed USDC remains available on Base.')
+        return
+      }
       if (message.includes('submitted and is being reconciled')) {
         setStatus('processing')
         setError('')

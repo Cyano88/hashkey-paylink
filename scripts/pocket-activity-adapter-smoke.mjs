@@ -115,6 +115,13 @@ const handler = createPocketActivityHandler({
       createdAt: 1_745_000_000_000, updatedAt: 1_745_000_000_000,
     }]
   },
+  readClosedBankPayouts: async () => [{
+    id: 'pex-expired-payout-1', ownerId: 'privy-user-1', idempotencyKey: 'expired-payout-1', requestHash: 'hash',
+    kind: 'bank_payout', state: 'expired', asset: 'USDC', amount: '0.72', sourceNetwork: 'base', settlementNetwork: 'base',
+    destinationType: 'verified_bank_account', resourceId: 'paycrest-intent-expired-1', providerReference: 'paycrest-order-expired-1',
+    failureCode: 'PAYOUT_WINDOW_EXPIRED', metadata: { bankName: 'OPay', bankLast4: '9696', accountName: 'ADA LOVELACE', amountNgn: '1000', memo: 'Direct bank payout' },
+    createdAt: 1_743_000_000_000, updatedAt: 1_744_000_000_000,
+  }],
   readCollections: async ownerId => [{
     eventId: 'collection_shys_wedding_01', ownerId, title: "Shy's wedding",
     paymentUrl: 'https://app.hashpaylink.com/pay?v=1&id=collection_shys_wedding_01',
@@ -181,7 +188,7 @@ assert.equal(isPocketActivityReadData(loaded.body), true)
 assert.equal(loaded.body.merchants[0].display_name, 'Ada Shop')
 assert.equal(loaded.body.collections[0].title, "Shy's wedding")
 assert.deepEqual(ownerIds, ['privy-user-1', 'privy-user-1', 'privy-user-1', 'privy-user-1'])
-assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', '0xbill', 'paycrest_intent-2', '0xolder'])
+assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', 'execution:pex-expired-payout-1', '0xbill', 'paycrest_intent-2', '0xolder'])
 assert.equal(loaded.body.payments[0].source, 'collection')
 assert.equal(loaded.body.payments[0].activityLabel, "Shy's wedding")
 assert.equal(loaded.body.payments[0].paycrestStatus, 'confirmed')
@@ -189,20 +196,24 @@ assert.match(loaded.body.payments[0].receiptId, /^r1\./)
 assert.equal(loaded.body.payments[1].source, 'purchase')
 assert.equal(loaded.body.payments[1].activityLabel, 'PolyDesk funding')
 assert.equal(loaded.body.payments[1].receiptId, 'r1.test.signature')
-assert.equal(loaded.body.payments[2].source, 'bills')
-assert.equal(loaded.body.payments[2].amountNgn, '100')
-assert.equal(loaded.body.payments[2].paycrestStatus, 'test complete')
-assert.equal(loaded.body.payments[2].activityLabel, 'Electricity sandbox test')
-assert.equal(loaded.body.payments[2].providerReference, 'provider-bill-1')
-assert.equal(loaded.body.payments[2].billToken, 'Token : 26362054405982757802')
-assert.equal(loaded.body.payments[2].supportReference, 'VTpass 000 · 202607191200bill')
+assert.equal(loaded.body.payments[2].source, 'bank-withdraw')
+assert.equal(loaded.body.payments[2].activityLabel, 'Payout expired')
+assert.equal(loaded.body.payments[2].paycrestStatus, 'expired')
+assert.equal(loaded.body.payments[2].amountNgn, '1000')
+assert.equal(loaded.body.payments[3].source, 'bills')
+assert.equal(loaded.body.payments[3].amountNgn, '100')
+assert.equal(loaded.body.payments[3].paycrestStatus, 'test complete')
+assert.equal(loaded.body.payments[3].activityLabel, 'Electricity sandbox test')
+assert.equal(loaded.body.payments[3].providerReference, 'provider-bill-1')
+assert.equal(loaded.body.payments[3].billToken, 'Token : 26362054405982757802')
+assert.equal(loaded.body.payments[3].supportReference, 'VTpass 000 · 202607191200bill')
 const serialized = JSON.stringify(loaded.body)
 assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)
 assert.equal(serialized.includes('must-not-leak'), false)
-assert.equal(loaded.body.payments[3].bankName, 'Example Bank')
-assert.equal(loaded.body.payments[3].bankLast4, '1234')
-assert.equal(loaded.body.payments[3].accountName, 'Ada Lovelace')
+assert.equal(loaded.body.payments[4].bankName, 'Example Bank')
+assert.equal(loaded.body.payments[4].bankLast4, '1234')
+assert.equal(loaded.body.payments[4].accountName, 'Ada Lovelace')
 assert.equal(serialized.includes('must-not-leak-bank-secret'), false)
 assert.equal(serialized.includes('must-not-leak-wallet'), false)
 
@@ -210,7 +221,7 @@ ownerIds.length = 0
 const recent = await request(handler, 'GET', { scope: 'recent' })
 assert.equal(recent.statusCode, 200)
 assert.equal(recent.body.payments.length, 4)
-assert.deepEqual(recent.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', '0xbill', 'paycrest_intent-2'])
+assert.deepEqual(recent.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', 'execution:pex-expired-payout-1', '0xbill'])
 assert.deepEqual(recent.body.merchants, [])
 assert.deepEqual(recent.body.collections, [])
 assert.equal(readOptions.at(-1).recent, true)

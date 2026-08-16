@@ -143,7 +143,10 @@ function emailVerificationError(err: unknown) {
     lower.includes('failed to fetch') ||
     lower.includes('networkerror') ||
     lower.includes('network error') ||
-    lower.includes('load failed')
+    lower.includes('load failed') ||
+    lower.includes('unable to resolve host') ||
+    lower.includes('no address associated') ||
+    lower.includes('enotfound')
   ) {
     return 'Email verification could not reach Circle. Request a new code, disable VPN/ad blockers, and try again.'
   }
@@ -184,7 +187,10 @@ function deviceIdError(err: unknown) {
     message.includes('failed to fetch') ||
     message.includes('networkerror') ||
     message.includes('network error') ||
-    message.includes('load failed')
+    message.includes('load failed') ||
+    message.includes('unable to resolve host') ||
+    message.includes('no address associated') ||
+    message.includes('enotfound')
   ) {
     return 'Circle Smart Wallet could not connect. Check your network and try again.'
   }

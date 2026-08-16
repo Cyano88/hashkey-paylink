@@ -14,7 +14,7 @@ import PocketSelect from '../components/PocketSelect'
 import usePocketX402Controller from '../controllers/usePocketX402Controller'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { buildPocketX402FundUrl } from '../lib/pocketX402FundUrl'
-import { POCKET_BASE_PATH, pocketPathFor } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, pocketPathFor, pocketRuntimeOrigin } from '../lib/pocketRoutes'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 
 function balanceText(value: string | undefined, checked: boolean, error?: string) {
@@ -39,7 +39,7 @@ export default function PocketX402Page() {
   const fundUrl = useMemo(() => {
     if (!x402.snapshot?.walletAddress) return ''
     return buildPocketX402FundUrl({
-      origin: window.location.origin,
+      origin: pocketRuntimeOrigin(),
       network: x402.network,
       walletAddress: x402.snapshot.walletAddress,
     })

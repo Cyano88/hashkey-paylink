@@ -1,0 +1,71 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { App as CapacitorApp } from '@capacitor/app'
+import { Network } from '@capacitor/network'
+import { StatusBar, Style } from '@capacitor/status-bar'
+import { isPocketNativeRuntime, POCKET_HOSTNAME } from '../lib/pocketRoutes'
+
+function nativePocketDestination(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl)
+    if (url.hostname !== POCKET_HOSTNAME && url.protocol !== 'pocket:') return ''
+    return `${url.pathname || '/'}${url.search}${url.hash}`
+  } catch {
+    return ''
+  }
+}
+
+export default function PocketNativeBridge() {
+  const navigate = useNavigate()
+  const [online, setOnline] = useState(true)
+
+  useEffect(() => {
+    if (!isPocketNativeRuntime()) return
+    let active = true
+    const listeners: Array<Promise<{ remove: () => Promise<void> }>> = []
+
+    void StatusBar.setOverlaysWebView({ overlay: true }).catch(() => undefined)
+    const syncStatusBar = () => {
+      const style = document.documentElement.classList.contains('dark') ? Style.Dark : Style.Light
+      void StatusBar.setStyle({ style }).catch(() => undefined)
+    }
+    syncStatusBar()
+    const themeObserver = new MutationObserver(syncStatusBar)
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    void Network.getStatus().then(status => {
+      if (active) setOnline(status.connected)
+    }).catch(() => undefined)
+
+    listeners.push(Network.addListener('networkStatusChange', status => {
+      if (active) setOnline(status.connected)
+    }))
+    listeners.push(CapacitorApp.addListener('appUrlOpen', event => {
+      const destination = nativePocketDestination(event.url)
+      if (destination) navigate(destination)
+    }))
+    listeners.push(CapacitorApp.addListener('appStateChange', state => {
+      if (state.isActive) {
+        window.dispatchEvent(new Event('focus'))
+        document.dispatchEvent(new Event('visibilitychange'))
+      }
+    }))
+
+    void CapacitorApp.getLaunchUrl().then(result => {
+      const destination = result?.url ? nativePocketDestination(result.url) : ''
+      if (destination) navigate(destination, { replace: true })
+    }).catch(() => undefined)
+
+    return () => {
+      active = false
+      themeObserver.disconnect()
+      for (const listener of listeners) void listener.then(handle => handle.remove()).catch(() => undefined)
+    }
+  }, [navigate])
+
+  if (!isPocketNativeRuntime() || online) return null
+  return (
+    <div className="fixed inset-x-0 top-0 z-[100] bg-gray-950 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-center text-[11px] font-semibold text-white dark:bg-white dark:text-gray-950">
+      Offline - balances and activity will update when you reconnect
+    </div>
+  )
+}

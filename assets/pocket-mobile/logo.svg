@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="232" fill="#0A0A0A"/>
+  <clipPath id="pocket-mark">
+    <circle cx="512" cy="512" r="326"/>
+  </clipPath>
+  <g fill="#FFFFFF" clip-path="url(#pocket-mark)">
+    <rect x="186" y="186" width="395" height="652"/>
+    <rect x="612" y="186" width="38" height="652"/>
+    <rect x="681" y="186" width="157" height="652"/>
+  </g>
+</svg>

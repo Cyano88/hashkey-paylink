@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { POCKET_BASE_PATH, POCKET_ROUTES, resolvePocketRoute } from './lib/pocketRoutes'
+import { isPocketNativeRuntime, POCKET_BASE_PATH, POCKET_ROUTES, resolvePocketRoute } from './lib/pocketRoutes'
 import PocketLoadingState from './components/PocketLoadingState'
+import PocketSessionSplash from './components/PocketSessionSplash'
 import type { PocketNavTab } from './components/PocketBottomNav'
 import usePocketIdentity from './hooks/usePocketIdentity'
 import usePocketSessionSplash from './hooks/usePocketSessionSplash'
@@ -44,7 +45,29 @@ export default function CirclePocketApp() {
   const route = useMemo(() => landing ? null : resolvePocketRoute(relativePath), [landing, relativePath])
   const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
-  const splashState = usePocketSessionSplash(landing)
+  const [initialDataReady, setInitialDataReady] = useState(false)
+  const sessionResolved = ready && (!authenticated || (
+    profile.loaded
+    && !profile.busy
+    && !profile.loadError
+    && Boolean(profile.profile)
+    && initialDataReady
+  ))
+  const [launchSurface] = useState(() => landing || isPocketNativeRuntime())
+  const splashState = usePocketSessionSplash(launchSurface, sessionResolved)
+  const [sessionDelayed, setSessionDelayed] = useState(false)
+
+  useEffect(() => {
+    setSessionDelayed(false)
+    if (sessionResolved || splashState === 'idle') return
+    const timer = window.setTimeout(() => setSessionDelayed(true), 10_000)
+    return () => window.clearTimeout(timer)
+  }, [sessionResolved, splashState])
+
+  useEffect(() => {
+    if (!landing || !sessionResolved || !authenticated) return
+    navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.home}`, { replace: true })
+  }, [authenticated, landing, navigate, sessionResolved])
 
   useEffect(() => {
     if (!authenticated || !email) return
@@ -53,10 +76,13 @@ export default function CirclePocketApp() {
 
   useEffect(() => {
     if (!ready || !authenticated || !email) return
+    let active = true
+    setInitialDataReady(false)
     void Promise.allSettled([
       prefetchPocketWalletSnapshot({ email, getAccessToken }),
       prefetchPocketActivity({ email, getAccessToken, recent: true }),
-    ])
+    ]).then(() => { if (active) setInitialDataReady(true) })
+    return () => { active = false }
   }, [authenticated, email, getAccessToken, ready])
 
   useEffect(() => {
@@ -70,7 +96,7 @@ export default function CirclePocketApp() {
         const accessToken = await getAccessToken()
         if (!accessToken) return
         const payout = await readPocketBankWithdrawStatus({ accessToken, intentId })
-        if (payout.state === 'sent' || payout.state === 'refunded' || payout.state === 'failed') clearActivePocketBankPayout(intentId)
+        if (payout.state === 'sent' || payout.state === 'refunded' || payout.state === 'failed' || payout.state === 'expired') clearActivePocketBankPayout(intentId)
       } catch {
         // Keep the active payout for the next quiet reconciliation attempt.
       } finally {
@@ -94,9 +120,7 @@ export default function CirclePocketApp() {
     navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.home}`, { replace: true })
   }, [landing, navigate, route])
 
-  if (!ready) {
-    if (landing) return <PocketPageBoundary active="home"><PocketLandingPage splashState={splashState} /></PocketPageBoundary>
-    const active: PocketNavTab = route?.section === 'home'
+  const active: PocketNavTab = route?.section === 'home'
       ? 'home'
       : route?.section === 'profile'
       ? 'profile'
@@ -105,26 +129,33 @@ export default function CirclePocketApp() {
         : route?.section === 'activity'
           ? 'activity'
           : 'home'
-    return <PocketLoadingState active={active} />
+  let content: ReactNode = null
+  const concealLaunchContent = splashState !== 'idle' && (!sessionResolved || (authenticated && landing))
+  if (concealLaunchContent) content = <main className="min-h-screen bg-[#F5F5F7]" aria-hidden="true" />
+  else if (!ready) content = <PocketLoadingState active={active} />
+  else if (landing) content = <PocketPageBoundary active="home"><PocketLandingPage /></PocketPageBoundary>
+  else if (route?.section === 'home' && route.view === 'deposit') content = <PocketPageBoundary active="home"><PocketDepositPage /></PocketPageBoundary>
+  else if (route?.section === 'home' && route.view === 'send') content = <PocketPageBoundary active="home"><PocketSendPage /></PocketPageBoundary>
+  else if (route?.section === 'home' && route.view === 'swap') content = <PocketPageBoundary active="home"><PocketSwapPage /></PocketPageBoundary>
+  else if (route?.section === 'home') content = <PocketPageBoundary active="home"><PocketHomePage /></PocketPageBoundary>
+  else if (route?.section === 'profile' && route.view === 'verify-name') content = <PocketPageBoundary active="profile"><PocketVerifyNamePage /></PocketPageBoundary>
+  else if (route?.section === 'profile') content = <PocketPageBoundary active="profile"><PocketProfilePage /></PocketPageBoundary>
+  else if (route?.section === 'notifications') content = <PocketPageBoundary active="home"><PocketNotificationsPage /></PocketPageBoundary>
+  else if (route?.section === 'bills') content = <PocketPageBoundary active="bills"><PocketBillsPage view={route.view} /></PocketPageBoundary>
+  else if (route?.section === 'activity') content = <PocketPageBoundary active="activity"><PocketActivityPage view={route.view} /></PocketPageBoundary>
+  else if (route?.section === 'assistant') content = <PocketPageBoundary active="home"><PocketAssistantPage /></PocketPageBoundary>
+  else if (route?.section === 'move' && route.view === 'usdc') content = <PocketPageBoundary active="home"><PocketMoveUsdcPage /></PocketPageBoundary>
+  else if (route?.section === 'move' && route.view === 'bank') content = <PocketPageBoundary active="home"><PocketMoveBankPage /></PocketPageBoundary>
+  else if (route?.section === 'move' && route.view === 'pos') content = <PocketPageBoundary active="home"><PocketMovePosPage /></PocketPageBoundary>
+
+  const retrySession = () => {
+    if (ready && authenticated) void profile.reload()
+    else window.location.reload()
   }
-
-  if (landing) return <PocketPageBoundary active="home"><PocketLandingPage splashState={splashState} /></PocketPageBoundary>
-
-  if (!route) return null
-
-  if (route.section === 'home' && route.view === 'deposit') return <PocketPageBoundary active="home"><PocketDepositPage /></PocketPageBoundary>
-  if (route.section === 'home' && route.view === 'send') return <PocketPageBoundary active="home"><PocketSendPage /></PocketPageBoundary>
-  if (route.section === 'home' && route.view === 'swap') return <PocketPageBoundary active="home"><PocketSwapPage /></PocketPageBoundary>
-  if (route.section === 'home') return <PocketPageBoundary active="home"><PocketHomePage /></PocketPageBoundary>
-  if (route.section === 'profile' && route.view === 'verify-name') return <PocketPageBoundary active="profile"><PocketVerifyNamePage /></PocketPageBoundary>
-  if (route.section === 'profile') return <PocketPageBoundary active="profile"><PocketProfilePage /></PocketPageBoundary>
-  if (route.section === 'notifications') return <PocketPageBoundary active="home"><PocketNotificationsPage /></PocketPageBoundary>
-  if (route.section === 'bills') return <PocketPageBoundary active="bills"><PocketBillsPage view={route.view} /></PocketPageBoundary>
-  if (route.section === 'activity') return <PocketPageBoundary active="activity"><PocketActivityPage view={route.view} /></PocketPageBoundary>
-  if (route.section === 'assistant') return <PocketPageBoundary active="home"><PocketAssistantPage /></PocketPageBoundary>
-  if (route.section === 'move' && route.view === 'usdc') return <PocketPageBoundary active="home"><PocketMoveUsdcPage /></PocketPageBoundary>
-  if (route.section === 'move' && route.view === 'bank') return <PocketPageBoundary active="home"><PocketMoveBankPage /></PocketPageBoundary>
-  if (route.section === 'move' && route.view === 'pos') return <PocketPageBoundary active="home"><PocketMovePosPage /></PocketPageBoundary>
-
-  return null
+  return (
+    <>
+      {content}
+      <PocketSessionSplash state={splashState} delayed={sessionDelayed} onRetry={retrySession} />
+    </>
+  )
 }

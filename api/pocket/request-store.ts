@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
+import { paymentApprovalTimeoutMs, unsignedApprovalExpired } from './payment-timeouts.js'
 
 export type PocketRequestStatus = 'pending' | 'accepted' | 'declined' | 'paid'
 export type PocketRequestRoute = {
@@ -20,7 +21,7 @@ export type PocketMoneyRequest = {
   transactionHash?: string; paidAt?: number; status: PocketRequestStatus; createdAt: number; updatedAt: number
 }
 type Store = { requests: Record<string, PocketMoneyRequest>; notificationReads: Record<string, number>; transactionHashes: Record<string, string> }
-type Options = { storePath?: string; storeKey?: string; durable?: boolean; isRender?: boolean; now?: () => number; mutateDurable?: typeof mutateDurableJson; readDurable?: typeof readDurableJson }
+type Options = { storePath?: string; storeKey?: string; durable?: boolean; isRender?: boolean; now?: () => number; approvalTimeoutMs?: number; mutateDurable?: typeof mutateDurableJson; readDurable?: typeof readDurableJson }
 const STORE_PATH = process.env.POCKET_REQUEST_STORE ?? './data/pocket-requests.json'
 const STORE_KEY = (process.env.POCKET_REQUEST_STORE_KEY ?? 'hashpaylink:pocket-requests:v1').trim()
 const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID || process.env.RENDER_EXTERNAL_URL)
@@ -38,6 +39,7 @@ export function createPocketRequestRepository(options: Options = {}) {
   const storePath = resolve(options.storePath ?? STORE_PATH), storeKey = options.storeKey ?? STORE_KEY
   const durable = options.durable ?? hasRenderDurableStore(), isRender = options.isRender ?? IS_RENDER
   const now = options.now ?? Date.now, mutateRemote = options.mutateDurable ?? mutateDurableJson, readRemote = options.readDurable ?? readDurableJson
+  const approvalTimeoutMs = options.approvalTimeoutMs ?? paymentApprovalTimeoutMs()
   let queue = Promise.resolve()
   async function readLocal() { try { return normalizedStore(JSON.parse(await readFile(storePath, 'utf8')) as Store) } catch { return normalizedStore() } }
   async function writeLocal(store: Store) { await mkdir(dirname(storePath), { recursive: true }); await writeFile(storePath, JSON.stringify(store, null, 2), 'utf8') }
@@ -140,7 +142,11 @@ export function createPocketRequestRepository(options: Options = {}) {
         if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0 || Number(amount) > Number(request.amount)) {
           throw Object.assign(new Error('Pocket payment route amount is invalid.'), { status: 400 })
         }
-        const existing = request.route
+        let existing = request.route
+        if (existing?.phase === 'started' && unsignedApprovalExpired({ updatedAt: existing.updatedAt, transactionHash: existing.txHash, now: now(), timeoutMs: approvalTimeoutMs })) {
+          existing = { ...existing, phase: 'failed', updatedAt: now() }
+          store.requests[request.id] = { ...request, route: existing, updatedAt: existing.updatedAt }
+        }
         if (existing && existing.phase !== 'failed') {
           if (existing.source !== source || existing.destination !== destination || existing.amount !== amount) {
             throw Object.assign(new Error('A previous payment move needs review before another route can start.'), { status: 409 })

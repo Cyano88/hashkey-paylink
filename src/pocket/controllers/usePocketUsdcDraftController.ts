@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { copyToClipboard, formatAmount } from '../../lib/utils'
 import { buildPocketPayLink } from '../lib/pocketPayLinkBuilder'
-import { hashPayLinkAppOriginForOrigin } from '../lib/pocketRoutes'
+import { hashPayLinkAppOriginForOrigin, pocketRuntimeOrigin } from '../lib/pocketRoutes'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import { normalizePocketAmountInput, resolvePocketUsdcDraft } from './pocketUsdcDraftValidation'
 
@@ -72,7 +72,7 @@ export default function usePocketUsdcDraftController(network: PocketNetwork) {
   const generate = useCallback((collection?: { eventId: string }) => {
     if (!validation.canGenerate) return
     const link = buildPocketPayLink({
-      origin: window.location.origin,
+      origin: pocketRuntimeOrigin(),
       network,
       multiChain,
       flexibleAmount,
@@ -136,7 +136,7 @@ export default function usePocketUsdcDraftController(network: PocketNetwork) {
       params.set('n', network)
       params.set(network === 'solana' ? 's' : 'e', network === 'solana' ? solanaAddress : evmAddress)
     }
-    return `${hashPayLinkAppOriginForOrigin(window.location.origin)}/dashboard?${params.toString()}`
+    return `${hashPayLinkAppOriginForOrigin(pocketRuntimeOrigin())}/dashboard?${params.toString()}`
   }, [evmAddress, multiChain, network, solanaAddress, validation.evmValid, validation.solanaValid])
 
   const downloadQr = useCallback(() => {

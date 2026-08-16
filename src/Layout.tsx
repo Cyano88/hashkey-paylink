@@ -420,7 +420,7 @@ export default function Layout() {
           ? 'pointer-events-none fixed inset-x-0 top-0 z-50 border-b border-gray-200 bg-[#F5F5F7] shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:border-white/[0.08] dark:bg-[#0A0A0A] dark:shadow-[0_10px_30px_rgba(0,0,0,0.24)]'
           : 'sticky top-0 z-50 border-b border-gray-200 bg-white transition-transform duration-100 dark:border-white/5 dark:bg-[#111113]'}
       >
-        <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'flex-col gap-1.5 py-2' : `justify-between ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}`}>
+        <div className={`relative mx-auto flex max-w-5xl items-center px-4 sm:px-6 ${isPocketAppPage ? 'flex-col gap-1.5 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]' : `justify-between ${isPolyDeskSurface ? 'pt-3 pb-2' : 'py-3'}`}`}>
           {isPocketAppPage ? (
             <>
               {pocketRoute?.section !== 'bills' && pocketRoute?.section !== 'activity' && (

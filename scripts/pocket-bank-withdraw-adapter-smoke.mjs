@@ -49,8 +49,10 @@ const calls = []
 let routeAction
 let bridgeState = 'pending'
 let refreshedOrder = processingOrder
+let handlerNow = 2
 const handler = createPocketBankWithdrawHandler({
   executions,
+  now: () => handlerNow,
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   authorizeBankAccount: async () => ({ verification: { account_name: 'ADA LOVELACE' } }),
   readBridgeStatus: async () => {
@@ -228,6 +230,42 @@ assert.equal(payoutState('refunded'), 'refunded')
 assert.equal(payoutState('failed'), 'failed')
 assert.equal(payoutState('expired'), 'failed')
 assert.equal(payoutState('cancelled'), 'failed')
+
+let expiryExecutionStore
+const expiryExecutions = createPaymentExecutionRepository({
+  durable: true,
+  isRender: false,
+  readDurable: async () => expiryExecutionStore,
+  mutateDurable: async (_key, mutate) => {
+    expiryExecutionStore = await mutate(expiryExecutionStore)
+    return expiryExecutionStore
+  },
+  createId: () => 'pex_bank_withdraw_expired',
+})
+const expiryNow = Date.parse('2026-08-16T09:00:00.000Z')
+const expiredPendingOrder = { ...processingOrder, status: 'pending', valid_until: new Date(expiryNow - 1).toISOString(), tx_hash: '' }
+const expiryHandler = createPocketBankWithdrawHandler({
+  executions: expiryExecutions,
+  now: () => expiryNow,
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  authorizeBankAccount: async () => ({ verification: { account_name: 'ADA LOVELACE' } }),
+  createBankReceive: async () => ({ ok: true, link: { intent_id: expiredPendingOrder.intent_id, merchant_id: expiredPendingOrder.merchant_id } }),
+  listHistory: async () => ({ merchants: [{ merchant_id: expiredPendingOrder.merchant_id }], orders: [], bankSendLinks: [], bankSendOrders: [] }),
+  invokeLegacy: async (_req, body) => ({ status: 200, body: { ok: true, order: body.action === 'createOfframpOrder' ? processingOrder : expiredPendingOrder } }),
+})
+const expiryPrepared = await request(expiryHandler, prepareBody, { 'idempotency-key': 'pocket:bank-withdraw:expiry-test-0001' })
+assert.equal(expiryPrepared.statusCode, 200)
+const expiredStatus = await request(expiryHandler, { action: 'status', intent_id: expiredPendingOrder.intent_id })
+assert.equal(expiredStatus.statusCode, 200)
+assert.equal(expiredStatus.body.data.state, 'expired')
+assert.equal(expiredStatus.body.data.executionState, 'expired')
+assert.equal(expiredStatus.body.data.nextAction, 'done')
+assert.equal(expiredStatus.body.data.txHash, '', 'an unused payout must never invent a transaction hash')
+const expiredAuthorize = await request(expiryHandler, {
+  action: 'authorize', intent_id: expiredPendingOrder.intent_id, wallet_address: prepareBody.wallet_address, payer_name: 'Ada Lovelace',
+})
+assert.equal(expiredAuthorize.statusCode, 409)
+assert.match(expiredAuthorize.body.error, /start a new payout/i)
 
 const forbidden = createPocketBankWithdrawHandler({
   executions,

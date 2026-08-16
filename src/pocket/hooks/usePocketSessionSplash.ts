@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
-const POCKET_SPLASH_SESSION_KEY = 'pocket_splash_shown'
-export type PocketSplashState = 'idle' | 'entering' | 'holding' | 'launching'
-
-function isPageReload() {
-  const navigation = window.performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
-  return navigation?.type === 'reload'
-}
+const POCKET_SPLASH_SESSION_KEY = 'pocket_splash_shown_v2'
+export type PocketSplashState = 'idle' | 'entering' | 'mark' | 'assembling' | 'holding' | 'launching'
 
 export function resetPocketSessionSplash() {
   try {
@@ -21,14 +16,14 @@ function resolveInitialState(enabled: boolean): PocketSplashState {
   try {
     const alreadyShown = window.sessionStorage.getItem(POCKET_SPLASH_SESSION_KEY) === 'true'
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    window.sessionStorage.setItem(POCKET_SPLASH_SESSION_KEY, 'true')
-    return alreadyShown || isPageReload() || reduceMotion ? 'idle' : 'entering'
+    const nativeRuntime = document.documentElement.dataset.pocketRuntime === 'native'
+    return reduceMotion || (alreadyShown && !nativeRuntime) ? 'idle' : 'entering'
   } catch {
     return 'idle'
   }
 }
 
-export default function usePocketSessionSplash(enabled: boolean) {
+export default function usePocketSessionSplash(enabled: boolean, canLaunch = true) {
   const [state, setState] = useState<PocketSplashState>(() => resolveInitialState(enabled))
   const previousEnabled = useRef(enabled)
 
@@ -40,19 +35,31 @@ export default function usePocketSessionSplash(enabled: boolean) {
 
   useEffect(() => {
     if (state !== 'entering') return
-    const revealTimer = window.setTimeout(() => setState('holding'), 60)
+    try { window.sessionStorage.setItem(POCKET_SPLASH_SESSION_KEY, 'true') } catch { /* animation remains available */ }
+    const revealTimer = window.setTimeout(() => setState('mark'), 160)
     return () => window.clearTimeout(revealTimer)
   }, [state])
 
   useEffect(() => {
-    if (state !== 'holding') return
-    const launchTimer = window.setTimeout(() => setState('launching'), 760)
-    return () => window.clearTimeout(launchTimer)
+    if (state !== 'mark') return
+    const assembleTimer = window.setTimeout(() => setState('assembling'), 620)
+    return () => window.clearTimeout(assembleTimer)
   }, [state])
 
   useEffect(() => {
+    if (state !== 'assembling') return
+    const holdTimer = window.setTimeout(() => setState('holding'), 1_300)
+    return () => window.clearTimeout(holdTimer)
+  }, [state])
+
+  useEffect(() => {
+    if (state !== 'holding' || !canLaunch) return
+    setState('launching')
+  }, [canLaunch, state])
+
+  useEffect(() => {
     if (state !== 'launching') return
-    const finishTimer = window.setTimeout(() => setState('idle'), 820)
+    const finishTimer = window.setTimeout(() => setState('idle'), 900)
     return () => window.clearTimeout(finishTimer)
   }, [state])
 

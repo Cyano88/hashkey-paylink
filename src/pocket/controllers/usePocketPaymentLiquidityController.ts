@@ -26,6 +26,13 @@ export type PocketPaymentLiquidityPersistence = {
   start(accessToken: string, input: { source: PocketCheckoutNetwork; destination: PocketCheckoutNetwork; amount: string }): Promise<PocketPaymentLiquidityCheckpoint>
   update(accessToken: string, input: { phase: 'submitted' | 'completed' | 'failed'; txHash?: string }): Promise<PocketPaymentLiquidityCheckpoint | null>
 }
+
+function liquidityError(reason: unknown) {
+  const message = reason instanceof Error ? reason.message : String(reason ?? '')
+  return /failed to fetch|networkerror|network request failed|unable to resolve host|no address associated|enotfound|pocket could not connect/i.test(message)
+    ? 'Pocket could not connect. Check your connection and try again.'
+    : message || 'Pocket routing is temporarily unavailable.'
+}
 const NETWORKS: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'solana']
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 const networkLabel = (network: PocketCheckoutNetwork) => network === 'base' ? 'Base' : network === 'arbitrum' ? 'Arbitrum' : 'Solana'
@@ -132,7 +139,7 @@ export default function usePocketPaymentLiquidityController(input: {
         if (run.current !== current) return
         setRoute(null)
         setStatus('idle')
-        setError(reason instanceof Error ? reason.message : 'Pocket routing is temporarily unavailable.')
+        setError(liquidityError(reason))
       })
   }, [amountUnits, input.enabled, inspect])
 
@@ -264,7 +271,7 @@ export default function usePocketPaymentLiquidityController(input: {
       setStatus('arrived')
       return destinationWallet
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Pocket could not prepare this payment.'
+      const message = liquidityError(reason)
       const retryBlocked = /submitted and is being reconciled|still moving|without a verifiable source transaction|check activity before retrying/i.test(message)
       setStatus(retryBlocked ? 'reconciling' : 'idle')
       setError(message)

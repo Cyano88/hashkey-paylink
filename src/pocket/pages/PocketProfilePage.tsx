@@ -10,6 +10,12 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
 import { resetPocketSessionSplash } from '../hooks/usePocketSessionSplash'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
+import {
+  disablePocketQuickApproval,
+  enablePocketQuickApproval,
+  pocketQuickApprovalAvailability,
+  pocketQuickApprovalEnabled,
+} from '../lib/pocketQuickApproval'
 import { cn } from '../../lib/utils'
 
 export default function PocketProfilePage() {
@@ -19,11 +25,39 @@ export default function PocketProfilePage() {
   const [editing, setEditing] = useState(() => new URLSearchParams(window.location.search).get('edit') === 'id')
   const [currencyOpen, setCurrencyOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [quickApprovalAvailable, setQuickApprovalAvailable] = useState(false)
+  const [quickApprovalEnabled, setQuickApprovalEnabled] = useState(pocketQuickApprovalEnabled)
+  const [quickApprovalBusy, setQuickApprovalBusy] = useState(false)
+  const [quickApprovalError, setQuickApprovalError] = useState('')
+  useEffect(() => {
+    void pocketQuickApprovalAvailability().then(result => {
+      setQuickApprovalAvailable(Boolean(result?.isAvailable && result.strongBiometryIsAvailable))
+    })
+  }, [])
   useEffect(() => { if (profile.loaded && editing) profile.edit() }, [profile.loaded]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!profile.loaded || profile.busy && !profile.profile) return <PocketLoadingState active="home" />
   const current = profile.profile
   const copyId = async () => { if (!current?.pocketId) return; await navigator.clipboard.writeText(current.pocketId); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }
   const save = async () => { if (await profile.save()) setEditing(false) }
+  const toggleQuickApproval = async () => {
+    if (quickApprovalBusy || !quickApprovalAvailable) return
+    setQuickApprovalBusy(true)
+    setQuickApprovalError('')
+    try {
+      if (quickApprovalEnabled) {
+        await disablePocketQuickApproval(email)
+        setQuickApprovalEnabled(false)
+      } else {
+        await enablePocketQuickApproval()
+        setQuickApprovalEnabled(true)
+      }
+    } catch {
+      setQuickApprovalEnabled(pocketQuickApprovalEnabled())
+      setQuickApprovalError('Phone unlock was not enabled.')
+    } finally {
+      setQuickApprovalBusy(false)
+    }
+  }
   const selectNav = (tab: PocketNavTab) => navigate(POCKET_BASE_PATH + (tab === 'profile' ? POCKET_ROUTES.profile : tab === 'bills' ? pocketPathFor({ section: 'bills', view: 'airtime' }) : tab === 'activity' ? POCKET_ROUTES.activity : POCKET_ROUTES.home))
   if (currencyOpen) return <PocketDisplayCurrencyPicker current={current?.displayCurrency ?? 'USDC'} busy={profile.busy} error={profile.error} onBack={() => setCurrencyOpen(false)} onSelect={async currency => Boolean(await profile.saveDisplayCurrency(currency))} />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
@@ -46,6 +80,12 @@ export default function PocketProfilePage() {
             <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Display currency</span><span className="mt-1 block text-sm font-bold">{current?.displayCurrency === 'NGN' ? 'Nigeria (NGN)' : 'Default (USDC)'}</span></span>
             <ChevronRight className="h-4 w-4 text-gray-400" />
           </button>
+          {quickApprovalAvailable && <button type="button" onClick={() => void toggleQuickApproval()} disabled={quickApprovalBusy} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm disabled:opacity-60 dark:bg-white/[0.05]">
+            <Lock className="h-5 w-5 text-gray-500 dark:text-gray-300" />
+            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Phone unlock</span><span className="mt-1 block text-sm font-bold">{quickApprovalEnabled ? 'Enabled for payments' : 'Use fingerprint or face'}</span></span>
+            <span className={cn('relative h-7 w-12 rounded-full transition-colors', quickApprovalEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}><span className={cn('absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform', quickApprovalEnabled ? 'translate-x-6' : 'translate-x-1')} /></span>
+          </button>}
+          {quickApprovalError && <p className="-mt-1 px-2 text-xs font-medium text-red-500" role="status">{quickApprovalError}</p>}
           <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.assistant)} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-white/[0.05]">
             <MessageCircle className="h-5 w-5 text-gray-500 dark:text-gray-300" />
             <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Support</span><span className="mt-1 block text-sm font-bold">Chat with Agent Hash</span></span>
@@ -53,7 +93,7 @@ export default function PocketProfilePage() {
           </button>
           <button type="button" onClick={() => { profile.edit(); setEditing(true) }} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-bold text-white dark:bg-white dark:text-gray-950"><Pencil className="h-4 w-4" />Edit profile</button>
         </div>}
-        {!editing && <button type="button" onClick={() => { resetPocketSessionSplash(); void logout().then(() => navigate(POCKET_BASE_PATH || POCKET_ROUTES.root)) }} className="mt-auto flex min-h-14 w-full items-center justify-center gap-2 pt-10 text-sm font-bold text-red-600 dark:text-red-300"><LogOut className="h-4 w-4" />Sign out</button>}
+        {!editing && <button type="button" onClick={() => { resetPocketSessionSplash(); void disablePocketQuickApproval(email).then(logout).then(() => navigate(POCKET_BASE_PATH || POCKET_ROUTES.root)) }} className="mt-auto flex min-h-14 w-full items-center justify-center gap-2 pt-10 text-sm font-bold text-red-600 dark:text-red-300"><LogOut className="h-4 w-4" />Sign out</button>}
       </section>
     </main>
     {!editing && <PocketBottomNav active="profile" onSelect={selectNav} />}

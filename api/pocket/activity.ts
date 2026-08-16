@@ -35,6 +35,7 @@ type PocketActivityHandlerDependencies = {
   readCollections?(ownerId: string, options?: PocketActivityReadOptions): Promise<PocketCollectionLink[]>
   readCollectionPayments?(eventIds: string[], options?: PocketActivityReadOptions): Promise<unknown[]>
   readExternalPayments?(walletAddresses: string[], options?: PocketActivityReadOptions): Promise<PaymentExecutionIntent[]>
+  readClosedBankPayouts?(ownerId: string, options?: PocketActivityReadOptions): Promise<PaymentExecutionIntent[]>
   readWalletAddresses?(ownerId: string, options?: PocketActivityReadOptions): Promise<string[]>
   readActions?(ownerId: string, options?: PocketActivityReadOptions): Promise<CirclePocketActionRecord[]>
 }
@@ -90,6 +91,36 @@ function externalPaymentActivityRow(intent: PaymentExecutionIntent): PocketActiv
     providerReference: intent.providerReference || intent.metadata.fundingRequestId || intent.resourceId,
     ...(intent.metadata.receiptId ? { receiptId: intent.metadata.receiptId } : {}),
     ...(intent.metadata.receiptUrl ? { receiptUrl: intent.metadata.receiptUrl } : {}),
+  }
+}
+
+function closedBankPayoutActivityRow(intent: PaymentExecutionIntent): PocketActivityRow | undefined {
+  if (intent.kind !== 'bank_payout' || intent.state !== 'expired' || intent.transactionHash) return undefined
+  const bank = intent.metadata.bankName || 'Bank account'
+  const last4 = intent.metadata.bankLast4 ? ` ****${intent.metadata.bankLast4}` : ''
+  return {
+    eventId: `pocket-bank-payout:${intent.id}`,
+    txHash: `execution:${intent.id}`,
+    chain: 'base',
+    payer: 'Pocket wallet',
+    memo: intent.metadata.memo || 'Direct bank payout',
+    amount: intent.amount,
+    ts: intent.updatedAt,
+    source: 'bank-withdraw',
+    merchantId: intent.resourceId || intent.id,
+    contextLabel: `${bank}${last4}`,
+    settlementType: 'instant_fiat',
+    amountNgn: intent.metadata.amountNgn,
+    paycrestStatus: 'expired',
+    activityLabel: 'Payout expired',
+    direction: 'out',
+    recipient: intent.metadata.accountName || bank,
+    destination: `${bank}${last4}`,
+    bankName: intent.metadata.bankName,
+    bankLast4: intent.metadata.bankLast4,
+    accountName: intent.metadata.accountName,
+    providerReference: intent.providerReference || intent.resourceId || intent.id,
+    supportReference: intent.providerReference || intent.resourceId || intent.id,
   }
 }
 
@@ -210,13 +241,14 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
 
     try {
       const identity = await dependencies.verifyUser(req)
-      const [history, collections, walletHistory, durableActionRecords, walletAddresses, billsIntents] = await Promise.all([
+      const [history, collections, walletHistory, durableActionRecords, walletAddresses, billsIntents, closedBankPayoutIntents] = await Promise.all([
         dependencies.readHistory(identity.userId, options),
         dependencies.readCollections?.(identity.userId, options) ?? Promise.resolve([]),
         dependencies.readWalletHistory?.(identity.userId, options) ?? Promise.resolve([]),
         dependencies.readActions?.(identity.userId, options) ?? Promise.resolve([]),
         dependencies.readWalletAddresses?.(identity.userId, options) ?? Promise.resolve([]),
         dependencies.readBills?.(identity.userId, options) ?? Promise.resolve([]),
+        dependencies.readClosedBankPayouts?.(identity.userId, options) ?? Promise.resolve([]),
       ])
       const collectionTitles = new Map(collections.map(link => [link.eventId, link.title]))
       const [collectionPaymentRecords, externalPaymentIntents] = await Promise.all([
@@ -245,13 +277,17 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
           const row = externalPaymentActivityRow(intent)
           return row ? [row] : []
         })
+      const closedBankPayouts = closedBankPayoutIntents.flatMap(intent => {
+        const row = closedBankPayoutActivityRow(intent)
+        return row ? [row] : []
+      })
       const refundPolicy = dependencies.readBillsRefundPolicy?.() ?? { enabled: false, treasuryAddress: '' }
       const bills = billsIntents.flatMap(intent => {
         const row = billActivityRow(intent, refundPolicy)
         return row ? [row] : []
       })
       const contextualTxHashes = new Set(externalPayments.map(row => row.txHash.toLowerCase()))
-      const allPayments = [...externalPayments, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
+      const allPayments = [...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
         .filter(row => row.source === 'purchase' || !contextualTxHashes.has(row.txHash.toLowerCase()))
         .filter((row, index, rows) => rows.findIndex(candidate => candidate.txHash === row.txHash && (
           candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
@@ -298,6 +334,11 @@ export default createPocketActivityHandler({
     ))
     return matches.flat()
   },
+  readClosedBankPayouts: (ownerId, options) => paymentExecutionRepository.listOwned(
+    ownerId,
+    ['bank_payout'],
+    ['expired'],
+  ).then(items => items.slice(0, options?.recent ? 4 : 100)),
   readBills: async (ownerId, options) => {
     const config = readVtpassPhase0Config()
     try {

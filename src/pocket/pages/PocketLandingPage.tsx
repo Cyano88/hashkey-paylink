@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowRight, Lock, Mail } from '../components/PocketIcons'
 import { Link, useNavigate } from 'react-router-dom'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
-import { CPurseIcon, PocketPillMark } from '../components/CPurseIcon'
+import { CPurseIcon } from '../components/CPurseIcon'
 import PocketThemeToggle from '../components/PocketThemeToggle'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
@@ -13,9 +13,9 @@ type LogoTarget = { top: number; left: number; width: number; height: number }
 
 export default function PocketLandingPage({ splashState = 'idle' }: { splashState?: PocketSplashState }) {
   const navigate = useNavigate()
-  const { authenticated, email, getAccessToken } = usePocketIdentity()
+  const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
-  const [enterAfterLogin, setEnterAfterLogin] = useState(false)
+  const [authReadyTimedOut, setAuthReadyTimedOut] = useState(false)
   const heroLogoRef = useRef<HTMLDivElement>(null)
   const [logoTarget, setLogoTarget] = useState<LogoTarget | null>(null)
   const splashActive = splashState !== 'idle'
@@ -25,12 +25,21 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
   const enterPocket = () => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.home}`)
 
   useEffect(() => {
-    if (!authenticated || !enterAfterLogin || !profile.loaded || profile.busy || profile.loadError || !profile.profile) return
-    enterPocket()
-  }, [authenticated, enterAfterLogin, profile.busy, profile.loadError, profile.loaded, profile.profile]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (ready) {
+      setAuthReadyTimedOut(false)
+      return
+    }
+    const timeout = window.setTimeout(() => setAuthReadyTimedOut(true), 6_000)
+    return () => window.clearTimeout(timeout)
+  }, [ready])
 
-  const checkingProfile = authenticated && enterAfterLogin && (!profile.loaded || profile.busy)
-  const profileLoadFailed = authenticated && enterAfterLogin && profile.loaded && Boolean(profile.loadError)
+  useEffect(() => {
+    if (!authenticated || splashState !== 'idle' || !profile.loaded || profile.busy || profile.loadError || !profile.profile) return
+    enterPocket()
+  }, [authenticated, profile.busy, profile.loadError, profile.loaded, profile.profile, splashState]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const checkingProfile = authenticated && (!profile.loaded || profile.busy)
+  const profileLoadFailed = authenticated && profile.loaded && Boolean(profile.loadError)
 
   useLayoutEffect(() => {
     if (!splashActive) return
@@ -49,6 +58,14 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
       ? 'translate-y-0 opacity-100'
       : 'translate-y-5 opacity-0'
     : 'translate-y-0 opacity-100'
+
+  if (authenticated) {
+    return (
+      <main className="fixed inset-0 z-40 flex items-center justify-center bg-[#F5F5F7]" aria-label="Opening Pocket">
+        <CPurseIcon size={96} title="Pocket" className="h-24 w-24 text-gray-950" />
+      </main>
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-[#F5F5F7] text-gray-950 transition-colors dark:bg-[#0A0A0A] dark:text-white">
@@ -115,22 +132,30 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
 
         {!checkingProfile && !profileLoadFailed && <section className={`space-y-2.5 transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '180ms' : '0ms' }}>
           {authenticated ? (
+            <div className="flex min-h-14 items-center justify-center gap-2.5 text-sm font-semibold text-gray-500 dark:text-gray-400" aria-live="polite">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-950 dark:border-white/25 dark:border-t-white" aria-hidden="true" />
+              <span>Opening Pocket</span>
+            </div>
+          ) : !ready ? (
             <button
               type="button"
-              onClick={() => setEnterAfterLogin(true)}
-              className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+              onClick={authReadyTimedOut ? () => window.location.reload() : undefined}
+              disabled={!authReadyTimedOut}
+              className="relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-6 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.98] disabled:cursor-wait dark:bg-white dark:text-gray-950"
             >
-              <PocketPillMark className="absolute left-5" tone="contrast" />
-              <span>Open Pocket</span>
-              <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5 dark:bg-black/[0.06]">
-                <ArrowRight className="h-4 w-4" />
-              </span>
+              {authReadyTimedOut ? (
+                <span>Retry secure sign in</span>
+              ) : (
+                <span className="flex items-center gap-2.5" aria-live="polite">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white dark:border-gray-950/25 dark:border-t-gray-950" aria-hidden="true" />
+                  Preparing secure sign in
+                </span>
+              )}
             </button>
           ) : (
             <PrivyConnectButton
               debugLabel="pocket-landing-sign-in"
               logoutOnAuthenticated={false}
-              onBeforeLogin={() => setEnterAfterLogin(true)}
               className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
             >
               <Mail className="absolute left-5 h-4 w-4" />
@@ -153,7 +178,7 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
               <Link to="/docs/privacy" className="transition hover:text-gray-950 dark:hover:text-white/75">Privacy</Link>
               <a href="mailto:support@hashpaylink.com" className="transition hover:text-gray-950 dark:hover:text-white/75">Support</a>
             </div>
-            <p className="mt-2 text-[10px] font-bold tracking-[0.08em] text-gray-400 dark:text-white/25">Pocket by Hash PayLink</p>
+            <p className="mt-2 text-[10px] font-bold tracking-[0.08em] text-gray-400 dark:text-white/25">Pocket</p>
           </footer>
         </section>}
       </main>

@@ -117,6 +117,7 @@ export default function PocketMoveBankPage() {
   }, [bankLiquidity.ensureLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
   const directAmountDirty = direct.amount.length > 0
   const directAmountValid = /^\d+(?:\.\d{1,2})?$/.test(direct.amount) && Number(direct.amount) > 0
+  const recoveredPayout = !directAmountValid && Boolean(direct.result?.intentId) && direct.status !== 'idle' && direct.status !== 'sent'
   const directSlideStatus = direct.status === 'sent'
     ? 'successful'
     : direct.status === 'processing' || direct.status === 'route-review' || (direct.status === 'routing' && (bankLiquidity.status === 'waiting' || bankLiquidity.status === 'reconciling'))
@@ -325,7 +326,11 @@ export default function PocketMoveBankPage() {
               <PocketPaymentNoteField value={direct.memo} onChange={direct.setMemo} />
 
               <div className="space-y-2 pt-1">
-                <PocketSlideAction
+                {recoveredPayout ? (
+                  <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
+                    Your previous payout is updating in Activity.
+                  </p>
+                ) : <PocketSlideAction
                   status={directSlideStatus}
                   disabled={!direct.canSubmit}
                   onConfirm={() => void direct.submit()}
@@ -336,12 +341,12 @@ export default function PocketMoveBankPage() {
                     submitted: direct.status === 'route-review' ? 'Move needs review' : direct.status === 'routing' ? 'USDC moving to Base' : 'Payment processing',
                     successful: 'Sent',
                   }}
-                />
-                {direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
-                {direct.status === 'routing' && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
-                {direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.providerStatus === 'fulfilled' ? 'Your bank transfer was delivered and is being verified.' : direct.result?.providerStatus === 'fulfilling' ? 'The provider is sending Naira to your bank.' : direct.result?.providerStatus === 'settling' ? 'Bank delivery is confirmed. Final settlement is completing.' : direct.result?.txHash ? 'Payout submitted. You can leave this page; Pocket will update Activity automatically.' : 'Circle is reconciling the submitted transfer. Check Activity before retrying.'}</p>}
+                />}
+                {!recoveredPayout && direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
+                {!recoveredPayout && direct.status === 'routing' && directAmountValid && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
+                {!recoveredPayout && direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.providerStatus === 'fulfilled' ? 'Your bank transfer was delivered and is being verified.' : direct.result?.providerStatus === 'fulfilling' ? 'The provider is sending Naira to your bank.' : direct.result?.providerStatus === 'settling' ? 'Bank delivery is confirmed. Final settlement is completing.' : direct.result?.txHash ? 'Payout submitted. You can leave this page; Pocket will update Activity automatically.' : 'Circle is reconciling the submitted transfer. Check Activity before retrying.'}</p>}
                 {direct.status === 'sent' && direct.result?.amountUsdc && <p className="px-2 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPocketDisplayAmount(direct.result.amountUsdc)} USDC · {bankReceipt ? 'Bank payout completed' : 'Bank delivery processing'}</p>}
-                {direct.error && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
+                {!recoveredPayout && direct.error && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
                 {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Enter an account in your verified name and a Naira amount.</p>}
               </div>
             </>}

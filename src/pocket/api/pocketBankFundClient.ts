@@ -1,3 +1,5 @@
+import { pocketApiUrl, pocketRuntimeOrigin } from '../lib/pocketRoutes'
+
 export type PocketBankFundData = {
   intentId: string
   orderId: string
@@ -26,7 +28,7 @@ function parse(value: unknown): PocketBankFundData {
 }
 
 async function request(accessToken: string, body: Record<string, unknown>, idempotencyKey?: string) {
-  const response = await fetch('/api/pocket/bank-fund', {
+  const response = await fetch(pocketApiUrl('/api/pocket/bank-fund'), {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -60,7 +62,7 @@ export function preparePocketBankFund(input: {
     refund_account_name: input.refundAccountName,
     owner_first_name: input.firstName,
     owner_last_name: input.lastName,
-    client_origin: window.location.origin,
+    client_origin: pocketRuntimeOrigin(),
   }, input.idempotencyKey)
 }
 

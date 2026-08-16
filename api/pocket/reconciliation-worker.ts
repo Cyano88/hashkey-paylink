@@ -11,6 +11,7 @@ import { isCircleBridgeComplete, readCircleBridgeStatus } from './circle-bridge-
 import { expireHostedCheckoutExecution, syncHostedCheckoutExecution } from './hosted-checkout-payment-executions.js'
 import { appendPocketMoneyLedgerEvent } from './money-ledger.js'
 import { paymentExecutionRepository, type PaymentExecutionIntent, type PaymentExecutionRepository, type PaymentExecutionState } from './payment-execution-intents.js'
+import { paymentApprovalTimeoutMs, submittedReviewThresholdMs, unsignedApprovalExpired } from './payment-timeouts.js'
 
 type ItemResult = { id: string; kind: string; result: 'reconciled' | 'unchanged' | 'review' | 'error'; message?: string }
 type AlertState = { lastSentAt: number; signature: string }
@@ -68,6 +69,13 @@ function paycrestTarget(value: unknown): PaymentExecutionState | null {
   return null
 }
 
+function providerWindowExpired(order: any, intent: PaymentExecutionIntent, now: number) {
+  if (intent.kind !== 'bank_payout' || (intent.state !== 'prepared' && intent.state !== 'authorized')) return false
+  if (order?.tx_hash || intent.transactionHash) return false
+  const validUntil = Date.parse(String(order?.valid_until ?? order?.validUntil ?? ''))
+  return Number.isFinite(validUntil) && validUntil <= now
+}
+
 async function reconcileExecution(intent: PaymentExecutionIntent, dependencies: Dependencies): Promise<ItemResult> {
   if (intent.kind === 'bank_payout' || intent.kind === 'pos_settlement') {
     if (!intent.resourceId) return { id: intent.id, kind: intent.kind, result: 'review', message: 'Missing Paycrest order reference.' }
@@ -76,6 +84,14 @@ async function reconcileExecution(intent: PaymentExecutionIntent, dependencies: 
     const target = paycrestTarget(result.order.status)
     if (!target) return { id: intent.id, kind: intent.kind, result: 'unchanged' }
     if (String(result.order.status ?? '').trim().toLowerCase() === 'pending' && !result.order.tx_hash && !intent.transactionHash) {
+      if (providerWindowExpired(result.order, intent, dependencies.now())) {
+        await advance(dependencies.executions, intent, 'expired', {
+          providerReference: result.order.paycrest_order_id,
+          failureCode: 'PAYOUT_WINDOW_EXPIRED',
+          metadata: { providerStatus: String(result.order.status ?? ''), closureReason: 'authorization_window_expired' },
+        })
+        return { id: intent.id, kind: intent.kind, result: 'reconciled', message: 'Unused payout window expired.' }
+      }
       return { id: intent.id, kind: intent.kind, result: 'unchanged', message: 'Waiting for user payment authorization.' }
     }
     await advance(dependencies.executions, intent, target, {
@@ -147,8 +163,20 @@ async function reconcileBridges(dependencies: Dependencies, limit: number): Prom
 
 async function reconcileBankPayoutRoutes(dependencies: Dependencies, limit: number): Promise<ItemResult[]> {
   const records = await dependencies.listBridges('bank-withdraw.route', limit)
+  const approvalTimeout = paymentApprovalTimeoutMs()
   return Promise.all(records.map(async record => {
     if (record.status === 'started') {
+      if (unsignedApprovalExpired({ updatedAt: record.updatedAt, transactionHash: record.metadata?.txHash, now: dependencies.now(), timeoutMs: approvalTimeout })) {
+        await dependencies.recordAction({
+          ownerId: record.ownerId,
+          idempotencyKey: record.idempotencyKey,
+          action: record.action,
+          status: 'failed',
+          resourceId: record.resourceId,
+          metadata: { ...(record.metadata ?? {}), paymentState: 'expired', failureCode: 'BRIDGE_APPROVAL_EXPIRED' },
+        })
+        return { id: record.id, kind: 'bank_payout_route', result: 'reconciled' as const, message: 'Unused bridge approval expired.' }
+      }
       return { id: record.id, kind: 'bank_payout_route', result: 'unchanged' as const, message: 'Waiting for user bridge approval.' }
     }
     const source = record.metadata?.source
@@ -231,7 +259,7 @@ export async function runPocketReconciliation(overrides: Partial<Dependencies> =
   }
   results.push(...await reconcileBridges(dependencies, limit))
   results.push(...await reconcileBankPayoutRoutes(dependencies, limit))
-  const threshold = Math.max(60_000, Number(process.env.POCKET_MAX_UNRESOLVED_AGE_MS ?? 15 * 60_000))
+  const threshold = submittedReviewThresholdMs()
   const remaining = await dependencies.executions.listUnresolved(1000)
   const stale = remaining.filter(intent => dependencies.now() - intent.updatedAt > threshold)
   let alerted = false
