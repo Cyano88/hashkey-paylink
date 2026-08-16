@@ -7,6 +7,7 @@ import type { PocketNavTab } from './components/PocketBottomNav'
 import usePocketIdentity from './hooks/usePocketIdentity'
 import usePocketSessionSplash from './hooks/usePocketSessionSplash'
 import usePocketProfile from './hooks/usePocketProfile'
+import usePocketPushNotifications from './hooks/usePocketPushNotifications'
 import { prefetchPocketWalletSnapshot } from './hooks/usePocketWallets'
 import { prefetchPocketActivity } from './hooks/usePocketActivity'
 import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
@@ -44,6 +45,7 @@ export default function CirclePocketApp() {
   const landing = relativePath === '/'
   const route = useMemo(() => landing ? null : resolvePocketRoute(relativePath), [landing, relativePath])
   const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
+  usePocketPushNotifications({ ready, authenticated, getAccessToken, navigate })
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const [initialDataReady, setInitialDataReady] = useState(false)
   const sessionResolved = ready && (!authenticated || (

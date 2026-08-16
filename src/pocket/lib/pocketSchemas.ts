@@ -401,6 +401,7 @@ export const POCKET_API = {
   transferSubmit: pocketApiUrl('/api/pocket/transfers/submit'),
   paylinks: pocketApiUrl('/api/pocket/paylinks'),
   requests: pocketApiUrl('/api/pocket/requests'),
+  pushDevices: pocketApiUrl('/api/pocket/push-devices'),
   bankReceive: pocketApiUrl('/api/pocket/bank-receive'),
   bankInstitutions: pocketApiUrl('/api/pocket/bank-receive/institutions'),
   bankVerify: pocketApiUrl('/api/pocket/bank-receive/verify'),

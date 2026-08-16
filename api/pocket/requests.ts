@@ -6,6 +6,7 @@ import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from '../usdc-transfer-v
 import { solanaUsdcTransferParties } from './wallet-chain-activity.js'
 import { pocketRequestRepository, type PocketRequestRepository } from './request-store.js'
 import { isCircleBridgeComplete, readCircleBridgeStatus } from './circle-bridge-status.js'
+import { sendPocketPush } from './push-devices.js'
 
 type Dependencies = { verifyUser(req: Request): ReturnType<typeof verifiedPrivyUser>; profiles: ProfileRepository; repository: PocketRequestRepository; readWallet?: (key: string) => Promise<CircleLinkRecord | null>; verifyEvm?: typeof verifyEvmUsdcTransfer; solanaConnection?: () => Connection; readBridgeStatus?: typeof readCircleBridgeStatus }
 const fail = (res: Response, status: number, message: string) => res.status(status).json({ ok: false, error: { message } })
@@ -51,6 +52,11 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         const wallet = await deps.readWallet(circleLinkKey(identity.userId, network))
         if (!wallet?.circleWalletAddress) return fail(res, 409, `Open your ${network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : 'Base'} Pocket wallet before requesting payment.`)
         const saved = await deps.repository.create({ eventId: req.body?.eventId, senderId: identity.userId, senderPocketId: sender.profile.pocketId, senderName: profileName(sender.profile), senderAddress: wallet.circleWalletAddress, recipientId: recipient.privyUserId, recipientPocketId: recipient.pocketId, recipientName: profileName(recipient), title: String(req.body?.title ?? '').trim().slice(0, 100) || 'USDC request', amount: String(req.body?.amount ?? '').trim(), flexibleAmount: false, network })
+        if (!saved.replayed) void sendPocketPush(recipient.privyUserId, 'request-created:' + saved.request.id, {
+          title: 'New payment request',
+          body: 'Open Pocket to review it.',
+          path: '/notifications',
+        }).catch(() => undefined)
         return res.status(saved.replayed ? 200 : 201).json({ ok: true, request: publicRequest(saved.request, identity.userId) })
       }
       if (req.method === 'POST' && req.body?.action === 'mark-read') {
@@ -59,6 +65,11 @@ export function createPocketRequestsHandler(deps: Dependencies) {
       }
       if (req.method === 'POST' && (req.body?.action === 'accept' || req.body?.action === 'decline')) {
         const decided = await deps.repository.decide(identity.userId, req.body?.id, req.body.action)
+        void sendPocketPush(decided.senderId, 'request-' + decided.status + ':' + decided.id, {
+          title: decided.status === 'accepted' ? 'Request accepted' : 'Request declined',
+          body: decided.status === 'accepted' ? 'Your request is ready for payment.' : 'Your request was declined.',
+          path: '/notifications',
+        }).catch(() => undefined)
         return res.json({ ok: true, request: publicRequest(decided, identity.userId) })
       }
       if (req.method === 'POST' && req.body?.action === 'route-status') {
@@ -117,6 +128,11 @@ export function createPocketRequestsHandler(deps: Dependencies) {
           }
         }
         const paid = await deps.repository.markPaid(identity.userId, request.id, txHash)
+        void sendPocketPush(paid.senderId, 'request-paid:' + paid.id, {
+          title: 'Payment received',
+          body: 'Your Pocket activity has been updated.',
+          path: '/activity',
+        }).catch(() => undefined)
         return res.json({ ok: true, request: publicRequest(paid, identity.userId) })
       }
       if (req.method === 'POST') return fail(res, 400, 'Choose a valid request action.')
