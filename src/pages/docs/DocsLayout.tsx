@@ -52,14 +52,6 @@ const NAV = [
     ],
   },
   {
-    group: 'HashpayStream',
-    items: [
-      { label: 'Arc Agreements', path: '/hashpaystream/docs' },
-      { label: 'Integration',    path: '/docs/streampay/integration' },
-      { label: 'Lifecycle',      path: '/docs/streampay/lifecycle' },
-    ],
-  },
-  {
     group: 'Reference',
     items: [
       { label: 'API Endpoints',          path: '/docs/api' },

@@ -34,9 +34,9 @@ export default function SecurityDocs() {
         <ul className="list-none space-y-1 mt-2">
           <li>- <Code>PayLinkFactoryV2.sol</Code> - CREATE2 vault factory</li>
           <li>- <Code>PayLinkArchive.sol</Code> - 0G payment proof registry</li>
-          <li>- <Code>ArcAgreementEscrow.sol</Code> and <Code>ArcAgreementFactory.sol</Code> - HashpayStream fixed, progressive, and milestone agreements</li>
+          <li>- <Code>ArcAgreementEscrow.sol</Code> and <Code>ArcAgreementFactory.sol</Code> - fixed, progressive, and milestone Arc agreements</li>
         </ul>
-        <InfoBox type="warning"><Code>StreamVault</Code> and <Code>ArenaRoomEscrow</Code> contracts are retained compatibility or experimental assets. They are not approved HashpayStream public-fund paths.</InfoBox>
+        <InfoBox type="warning"><Code>StreamVault</Code> and <Code>ArenaRoomEscrow</Code> contracts are retained compatibility or experimental assets. They are not approved public-fund paths.</InfoBox>
       </Section>
 
       <Section title="0G proof layer">
@@ -57,7 +57,7 @@ export default function SecurityDocs() {
       </Section>
 
       <NavFooter
-        prev={{ label: 'HashpayStream', path: '/hashpaystream/docs' }}
+        prev={{ label: 'SDK', path: '/docs/sdk' }}
         next={{ label: 'Wallet Setup', path: '/docs/wallets' }}
       />
     </DocPage>

@@ -22,7 +22,6 @@ import {
   DollarSign,
   RefreshCw,
   Bot,
-  Radio,
   Store,
   UserRound,
   Landmark,
@@ -956,23 +955,8 @@ export default function CreateLink({
     setAccessView('overview')
   }
 
-  function openStreamMode(push = true) {
-    if (push && typeof window !== 'undefined') {
-      window.location.assign(HASHPAYSTREAM_APP_URL)
-      return
-    }
-    if (push) pushProductHistory('streampay')
-    setProductHubOpen(false)
-    setPaymentMenuOpen(false)
-    setStreamMode(true)
-    setPosMode(false)
-    setBillsMode(false)
-    setAccessMode(false)
-    setPolymarketMode(false)
-    setGeneratedLink('')
-    setCopied(false)
-    setVaultStep('idle')
-    setAccessView('overview')
+  function openStreamMode(_push = true) {
+    if (typeof window !== 'undefined') window.location.assign(HASHPAYSTREAM_APP_URL)
   }
 
   function closeStreamMode() {
@@ -1800,7 +1784,7 @@ export default function CreateLink({
   const howItWorksSteps = productHubOpen
     ? [
         { n: '1', title: 'Open Circle Pocket', body: 'Manage wallet, x402, receipts, and service balance' },
-        { n: '2', title: 'Launch services', body: 'PolyDesk and Hash Paystream run as standalone service apps' },
+        { n: '2', title: 'Launch services', body: 'Pocket and PolyDesk open as focused standalone apps' },
         { n: '3', title: 'Keep proof', body: 'Receipts, dashboards, and settlement records stay connected' },
       ]
     : polymarketMode
@@ -2054,7 +2038,7 @@ export default function CreateLink({
                 initialPayer={localCurrencyProfile?.firstName || ''}
                 onRecoverTelegramName={() => undefined}
                 onBack={closeServiceHubAgent}
-                welcomeText="Welcome to Agent Hash. Ask about payments, wallets, Hash Paystream, PolyDesk, research, planning, or any Hash PayLink service."
+                welcomeText="Welcome to Agent Hash. Ask about payments, wallets, PolyDesk, research, planning, or any Hash PayLink service."
                 inputPlaceholder="Ask Agent Hash..."
                 hideTopDivider
                 fillAvailableHeight={Boolean(serviceHubAgentViewport)}
@@ -2065,7 +2049,6 @@ export default function CreateLink({
           <div className="space-y-2">
             {[
               { icon: Wallet, title: 'Circle Pocket Wallet', body: 'Manage wallets, x402, receiving, bank payout, POS, bills, and receipts.', action: openStandaloneCirclePocket },
-              { icon: Radio, title: 'Hash Paystream', body: 'Open the standalone Arc streaming app for payroll, creators, and Arena.', action: () => openStreamMode() },
               { icon: PolymarketMark, title: 'PolyDesk', body: 'Open standalone Polymarket funding, portfolio, World Cup, and LP Scout.', action: () => openPolymarketMode() },
             ].map(({ icon: Icon, title, body, action }) => (
               <button

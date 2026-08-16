@@ -186,7 +186,7 @@ export default function ApiReference() {
             ['/api/privy-circle-link', 'Privy to Circle wallet mapping'],
             ['/api/stream-create', 'Legacy timed-stream compatibility'],
             ['/api/stream-status', 'Legacy timed-stream state'],
-            ['/api/arena-room', 'Experimental Arena test-room state; not a public HashpayStream API'],
+            ['/api/arena-room', 'Experimental Arena test-room state; not a public Arc Agreements API'],
           ]}
         />
       </Section>

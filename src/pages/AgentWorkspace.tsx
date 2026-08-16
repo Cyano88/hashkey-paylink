@@ -309,7 +309,7 @@ const LP_SCOUT_INTENT_TTL_MS = 30 * 60 * 1000
 const PLATFORM_AGENT_PROFILE: AgentProfileSummary = {
   slug: PLATFORM_AGENT_SLUG,
   name: 'Hash PayLink Agent',
-  purpose: 'Owner-managed platform agent for treasury, x402, LP Scout, and HashpayStream services.',
+  purpose: 'Owner-managed platform agent for treasury, x402, LP Scout, and payment services.',
   profileImage: {
     initials: 'HP',
     hue: agentAvatarHue(`${PLATFORM_AGENT_SLUG}:Hash PayLink Agent`),
@@ -396,11 +396,10 @@ function compactMemoryText(value: string, max = 180) {
 
 function nextHelperMemorySummary(existing: string, displayName: string, question: string, answer: string) {
   const base = existing.trim()
-    || `Prefers to be called ${displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, HashpayStream, planning, and agent setup.`
+    || `Prefers to be called ${displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, planning, and agent setup.`
   const lowerQuestion = question.toLowerCase()
   const topics = [
     lowerQuestion.includes('polymarket') && 'Polymarket',
-    lowerQuestion.includes('stream') && 'HashpayStream',
     lowerQuestion.includes('agent') && 'agent setup',
     lowerQuestion.includes('wallet') && 'wallets',
     lowerQuestion.includes('base') && 'Base',
@@ -428,8 +427,6 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
   const privyEmail = emailFromPrivyUser(privyUser).trim().toLowerCase()
   const params = new URLSearchParams(window.location.search)
   const agentSlug = params.get('agent') ?? ''
-  const agentStreamPrice = params.get('streamPrice') ?? ''
-  const agentStreamDuration = params.get('streamDuration') ?? ''
   const shouldOpenWalletLinkPanel = params.get('linkWallet') === '1'
   const pendingRun = params.get('run') ?? ''
   const pendingScoutMode = params.get('scoutMode') ?? 'best'
@@ -605,7 +602,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
     try {
       const memorySummary = memorySummaryOverride.trim()
         || helperProfile?.memorySummary
-        || `Prefers to be called ${displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, HashpayStream, planning, and agent setup.`
+        || `Prefers to be called ${displayName}. Uses Hash PayLink Agent Helper for payments, Polymarket funding, planning, and agent setup.`
       const res = await fetch('/api/helper-profile', {
         method: 'POST',
         headers: await circlePocketAgentHeaders({ authenticated: privyAuthenticated, getAccessToken, json: true }),
@@ -981,20 +978,6 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
     return true
   }
 
-  function buildAgentStreamUrl() {
-    if (!currentAgentWallet || !agentStreamPrice || !agentStreamDuration) return ''
-    const displayName = agentProfile?.name || agentSlug || 'Hash PayLink Agent'
-    const p = new URLSearchParams()
-    p.set('app', 'streampay')
-    p.set('amount', agentStreamPrice)
-    p.set('recipient', currentAgentWallet)
-    p.set('duration', agentStreamDuration)
-    p.set('reason', `Agent retainer: ${displayName}`)
-    p.set('src', 'agent')
-    p.set('wallet', 'circle')
-    return `/?${p.toString()}`
-  }
-
   async function callAgentWallet(action: 'init' | 'complete', mode?: 'create' | 'login') {
     const selectedMode = mode ?? (walletMode === 'choose' ? 'login' : walletMode)
     const requiresPrivyWalletAuth = Boolean(PRIVY_AUTH_ENABLED && !currentAgentWallet)
@@ -1319,7 +1302,6 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
     }
   }
 
-  const agentStreamUrl = buildAgentStreamUrl()
   const activityAmount = (item: AgentActivity) => {
     if (!item.amount) return item.direction === 'result' ? 'Result' : item.direction === 'system' ? 'Setup' : ''
     const prefix = item.direction === 'out' ? '-' : item.direction === 'in' ? '+' : ''
@@ -1679,11 +1661,6 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
             {!hasPendingLpScoutRequest && treasuryBalanceError && (
               <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
                 {treasuryBalanceError}
-              </p>
-            )}
-            {!hasPendingLpScoutRequest && agentStreamPrice && agentStreamDuration && (
-              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                HashpayStream retainer: {agentStreamPrice} USDC / {agentStreamDuration}
               </p>
             )}
             {hasPendingLpScoutRequest && (
@@ -2353,15 +2330,6 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                 )}
               </div>
 
-              {agentStreamUrl && (
-                <a
-                  href={agentStreamUrl}
-                  className="inline-flex w-full items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-all hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-100"
-                >
-                  HashpayStream
-                </a>
-              )}
-
               <div className="rounded-lg border border-gray-100 bg-white p-3 dark:border-white/10 dark:bg-white/[0.04]">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -2573,7 +2541,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:bg-emerald-300/15 dark:text-emerald-200">Open</span>
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  A pocket AI helper for payments, Polymarket funding, HashpayStream, research, planning, and daily questions.
+                  A pocket AI helper for payments, Polymarket funding, research, planning, and daily questions.
                 </p>
               </div>
             </div>
@@ -2674,7 +2642,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
                     {messages.length === 0 && !isAsking && (
                       <div className="rounded-2xl rounded-tl-md bg-gray-50 px-3 py-2.5 dark:bg-white/[0.05]">
                         <p className="text-sm text-gray-700 dark:text-gray-200">
-                          {helperName ? `Welcome back, ${helperName}.` : 'Welcome.'} Ask me about payments, Polymarket funding, HashpayStream, agent setup, research, planning, or daily questions.
+                          {helperName ? `Welcome back, ${helperName}.` : 'Welcome.'} Ask me about payments, Polymarket funding, agent setup, research, planning, or daily questions.
                         </p>
                         <div className="mt-2">
                           <ZeroScoutPowerBadge compact />

@@ -1,18 +1,17 @@
 # Hash PayLink Docs
 
-Hash PayLink is a hosted USDC payment platform for consumer and agent workflows. The public app is organized around payment links, retail POS, PolyDesk, StreamPay, and agent commerce.
+Hash PayLink is hosted USDC payment infrastructure for consumer, platform, and agent workflows. The public app is organized around payment links, retail POS, Pocket, PolyDesk, Arc agreements, and agent commerce.
 
 ## Public Routes
 
 | Route | Purpose |
 | --- | --- |
 | `/` | Foundation page for institutional and public discovery |
-| `/app` | Main Hash PayLink app for payment links, POS, agents, StreamPay, and PolyDesk entry |
+| `/app` | Main Hash PayLink app for payment links, POS, agents, Pocket, and PolyDesk entry |
 | `/pay` | Hosted checkout |
 | `/dashboard` | Multi-payer payment dashboard |
 | `/telegram/payment-links` | Telegram dashboard surface |
 | `/polymarket` | PolyDesk entry for Polymarket funding, portfolio, alerts, LP Scout, news, and World Cup market context |
-| `/?app=streampay` | StreamPay app with Payroll, Agentic, and Arena modes |
 | `/docs` | Web documentation |
 
 ## Current Product Modules
@@ -37,13 +36,9 @@ Polymarket-focused workflow for Telegram-first users:
 
 PolyDesk is intentionally Polymarket-only. Do not describe it as a generic prediction-market tool.
 
-### StreamPay
+### Arc Agreements
 
-StreamPay runs through the Hash PayLink platform and currently exposes:
-
-- Payroll streams.
-- Agentic streams to Hash PayLink Agent for daily Polymarket LP research.
-- Arena, a recoverable-risk USDC game module using private rooms, per-room escrow design, and a 0.5% completed-room platform fee.
+Hash PayLink exposes fixed, progressive, and milestone agreement infrastructure on Arc. The standalone HashPayStream application consumes these APIs and owns its customer-facing agreement experience.
 
 ### Agent Commerce
 
@@ -55,7 +50,7 @@ Agent flows use selected paying agents, Circle wallet sessions, x402-style servi
 | --- | --- |
 | Circle USDC | Settlement asset and wallet infrastructure |
 | Privy | Email-first user sessions |
-| Arc Testnet | StreamPay, agentic streams, and Arena testing |
+| Arc Testnet | Agreement escrow, lifecycle reconciliation, and agentic payment testing |
 | Base | Default USDC payment and PolyDesk funding rail |
 | Arbitrum | USDC payment rail |
 | Solana | USDC payment rail |

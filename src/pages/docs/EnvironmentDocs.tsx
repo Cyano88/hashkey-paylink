@@ -111,7 +111,7 @@ export default function EnvironmentDocs() {
       </Section>
 
       <Section title="Legacy compatibility">
-        <InfoBox type="warning">These variables support frozen timed-stream or Arena test surfaces. They are not required by the agreements-first HashpayStream product and must not be treated as Arc Agreement configuration.</InfoBox>
+        <InfoBox type="warning">These variables support frozen timed-stream or Arena test surfaces. They are not required by the current Arc Agreements API and must not be treated as agreement configuration.</InfoBox>
         <Table
           headers={['Variable', 'Required', 'Description']}
           rows={[

@@ -14,7 +14,7 @@ export default function Chains() {
           rows={[
             ['Base', 'USDC', 'Payment links, Telegram checkout, PolyDesk funding, retail POS', '8453'],
             ['Arbitrum', 'USDC', 'Payment links, retail POS, and sponsored EVM checkout paths', '42161'],
-            ['Arc Testnet', 'USDC', 'HashpayStream agreements and agentic payment testing', '5042002'],
+            ['Arc Testnet', 'USDC', 'Arc Agreements API and agentic payment testing', '5042002'],
             ['Solana', 'USDC', 'Payment links and retail POS through the Solana relay path', 'mainnet-beta'],
           ]}
         />
@@ -34,7 +34,7 @@ export default function Chains() {
       </Section>
 
       <Section title="Arc Testnet">
-        <p>Arc powers HashpayStream agreement testing. Privy provides email identity, Circle wallet sessions handle payer wallet access, and each funded agreement uses its own Arc Testnet USDC escrow.</p>
+        <p>Arc powers the Hash PayLink Agreements API. Privy provides email identity, Circle wallet sessions handle payer wallet access, and each funded agreement uses its own Arc Testnet USDC escrow.</p>
         <Table
           headers={['Property', 'Value']}
           rows={[

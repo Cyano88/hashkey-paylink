@@ -28,7 +28,6 @@ import ZeroGStorage     from './pages/docs/ZeroGStorage'
 import AccessMode       from './pages/docs/AccessMode'
 import ApiReference     from './pages/docs/ApiReference'
 import SDKDocs          from './pages/docs/SDKDocs'
-import StreamPayDocs    from './pages/docs/StreamPayDocs'
 import SecurityDocs     from './pages/docs/SecurityDocs'
 import WalletsDocs      from './pages/docs/WalletsDocs'
 import EnvironmentDocs  from './pages/docs/EnvironmentDocs'
@@ -38,9 +37,8 @@ import CirclePocketApp from './pocket/CirclePocketApp'
 import { isPocketHostname, POCKET_ORIGIN } from './pocket/lib/pocketRoutes'
 
 // ── Hostname-based app routing ────────────────────────────────────────────────
-// The same Render service hosts both apps. The active hostname determines
-// which React app is mounted. Add ?app=streampay to any localhost URL for
-// local HashpayStream development without changing DNS.
+// Pocket and legacy compatibility links still share this runtime. The
+// standalone HashPayStream product is served independently at hashpaystream.app.
 const { hostname, pathname, search } = window.location
 const searchParams = new URLSearchParams(search)
 const IS_APP_HOST = hostname === 'app.hashpaylink.com'
@@ -51,15 +49,8 @@ const isStreamPayRoute =
   pathname.startsWith('/stream/') ||
   pathname === '/recipient' ||
   pathname === '/creator' ||
-  pathname === '/creator-admin'
-const IS_STREAMPAY =
-  hostname === 'streampay.xyz'                           ||  // production domain
-  hostname.endsWith('.streampay.xyz')                    ||  // subdomains
-  hostname === 'hashpaystream.app'                       ||  // HashPayStream production domain
-  hostname === 'www.hashpaystream.app'                   ||  // HashPayStream www domain
-  hostname.includes('streampay')                         ||  // onrender.com service named streampay-*
-  isStreamPayRoute                                       ||  // HashpayStream share links on hashpaylink.com
-  searchParams.get('app') === 'streampay'                      // localhost dev toggle
+  pathname === '/creator-admin' ||
+  pathname === '/arena'
 
 export default function App() {
   // Pocket owns clean root-level routes on its dedicated production hostname.
@@ -78,8 +69,9 @@ export default function App() {
     )
   }
 
-  // HashpayStream domain -> mount the stream sub-app (full separate router)
-  if (IS_STREAMPAY) return <StreamPayApp />
+  // Hidden rollback boundary for historical links. No current Hash PayLink
+  // navigation exposes this embedded compatibility app.
+  if (isStreamPayRoute) return <StreamPayApp />
 
   const appShellRoutes = (
     <Route element={<Layout />}>
@@ -116,10 +108,7 @@ export default function App() {
     <SolanaProvider>
     <BrowserRouter>
       <Routes>
-        <Route path="hashpaystream/docs" element={<DocsLayout />}>
-          <Route index element={<StreamPayDocs />} />
-          <Route path="*" element={<StreamPayDocs />} />
-        </Route>
+        <Route path="hashpaystream/docs" element={<StandaloneHashPayStreamRedirect />} />
         <Route path="docs" element={<DocsLayout />}>
           <Route index element={<DocsHome />} />
           <Route path="getting-started"    element={<GettingStarted />} />
@@ -136,8 +125,8 @@ export default function App() {
           <Route path="api"                element={<ApiReference />} />
           <Route path="sdk"                element={<SDKDocs />} />
           <Route path="sdk/*"              element={<SDKDocs />} />
-          <Route path="streampay"          element={<StreamPayDocs />} />
-          <Route path="streampay/*"        element={<StreamPayDocs />} />
+          <Route path="streampay"          element={<StandaloneHashPayStreamRedirect />} />
+          <Route path="streampay/*"        element={<StandaloneHashPayStreamRedirect />} />
           <Route path="security"           element={<SecurityDocs />} />
           <Route path="wallets"            element={<WalletsDocs />} />
           <Route path="environment"        element={<EnvironmentDocs />} />
@@ -150,6 +139,13 @@ export default function App() {
     </BrowserRouter>
     </SolanaProvider>
   )
+}
+
+function StandaloneHashPayStreamRedirect() {
+  useEffect(() => {
+    window.location.replace('https://hashpaystream.app/docs')
+  }, [])
+  return <main className="grid min-h-screen place-items-center bg-white text-sm font-semibold text-gray-500 dark:bg-gray-950 dark:text-gray-400">Opening HashPayStream...</main>
 }
 
 function PocketLegacyEntry() {

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Bot, Code2, Database, Globe, MessageCircle, Radio, Shield, Store, Zap } from 'lucide-react'
+import { Bot, Code2, Database, Globe, MessageCircle, Shield, Store, Zap } from 'lucide-react'
 import { DocPage, DocHeader } from './components'
 
 const cards = [
@@ -26,14 +26,6 @@ const cards = [
     path: '/polymarket',
     color: 'text-cyan-500',
     bg: 'bg-cyan-50 dark:bg-cyan-950/40',
-  },
-  {
-    icon: Radio,
-    title: 'HashpayStream',
-    description: 'Protected fixed, progressive, and milestone USDC agreements on Arc.',
-    path: '/hashpaystream/docs',
-    color: 'text-indigo-500',
-    bg: 'bg-indigo-50 dark:bg-indigo-950/40',
   },
   {
     icon: Store,
@@ -82,19 +74,19 @@ export default function DocsHome() {
     <DocPage>
       <DocHeader
         title="Hash PayLink Documentation"
-        description="Programmable USDC payment infrastructure for hosted checkout, Telegram workflows, PolyDesk, HashpayStream, retail POS, and agent commerce."
+        description="Programmable USDC payment infrastructure for hosted checkout, Telegram workflows, PolyDesk, retail POS, Arc agreements, and agent commerce."
       />
 
       <div>
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">What is Hash PayLink?</h2>
         <p className="mb-4 leading-relaxed text-gray-600 dark:text-gray-400">
-          Hash PayLink is a programmable payment platform that generates shareable URLs and QR codes for collecting USDC, running Telegram payment workflows, opening PolyDesk for Polymarket users, powering HashpayStream on Arc, and supporting agent commerce.
+          Hash PayLink is programmable payment infrastructure for collecting USDC, running hosted checkout and retail POS, funding integrated applications, operating Arc agreements, and supporting agent commerce.
         </p>
         <p className="mb-4 leading-relaxed text-gray-600 dark:text-gray-400">
           Every confirmed multi-payer record can be archived to <strong className="text-gray-800 dark:text-gray-200">0G decentralized storage</strong> and anchored on-chain through the <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm dark:bg-gray-800">PayLinkArchive</code> contract. This creates payment proofs that AI agents, APIs, dashboards, and receipt pages can verify without trusting an application database.
         </p>
         <p className="leading-relaxed text-gray-600 dark:text-gray-400">
-          The root domain is the foundation page. The working app lives at <strong className="text-gray-800 dark:text-gray-200">/app</strong>, with direct routes for checkout, Telegram, PolyDesk, HashpayStream, agents, receipts, and docs.
+          The root domain is the foundation page. The working app lives at <strong className="text-gray-800 dark:text-gray-200">/app</strong>, with direct routes for checkout, Telegram, PolyDesk, agents, receipts, and docs.
         </p>
       </div>
 

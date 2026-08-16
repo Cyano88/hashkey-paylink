@@ -113,7 +113,7 @@ function polymarketFundingRequestId() {
   return `pmf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-type TelegramSectionId = 'payment-links' | 'agent-wallets' | 'market-tools' | 'streampay'
+type TelegramSectionId = 'payment-links' | 'agent-wallets' | 'market-tools'
 type TelegramServiceId =
   | 'request-usdc'
   | 'fund-polymarket'
@@ -127,7 +127,6 @@ type TelegramServiceId =
   | 'lp-scout'
   | 'poly-worldcup-news'
   | 'poly-stream'
-  | 'streampay-creator'
 
 type TelegramService = {
   id: TelegramServiceId
@@ -202,30 +201,18 @@ const sectionServices: Record<TelegramSectionId, TelegramService[]> = {
       active: true,
     },
   ],
-  streampay: [
-    {
-      id: 'streampay-creator',
-      title: 'HashpayStream Creator',
-      body: 'Publish paid posts, unlock content, and track creator earnings.',
-      icon: Pencil,
-      status: 'Open',
-      active: true,
-    },
-  ],
 }
 
 const sectionDescriptions: Record<TelegramSectionId, string> = {
   'payment-links': 'Create normal USDC requests and share them into Telegram.',
   'agent-wallets': 'Manage Circle wallet balance, x402 service balance, and receipts.',
   'market-tools': 'PolyDesk for Polymarket funding, portfolio alerts, LP Scout, and live market context.',
-  streampay: 'Creator publishing, paid access, reader comments, and earnings on HashpayStream.',
 }
 
 const telegramSections: Array<{ id: TelegramSectionId; title: string; icon: typeof Coins }> = [
   { id: 'payment-links', title: 'Payment Links', icon: Coins },
   { id: 'agent-wallets', title: 'Agent Wallets', icon: Bot },
   { id: 'market-tools', title: 'PolyDesk', icon: LineChart },
-  { id: 'streampay', title: 'HashpayStream', icon: Radio },
 ]
 
 type RequestMode = 'person' | 'group'
@@ -621,8 +608,8 @@ const helperModes: Array<{ id: HelperMode; label: string; intro: string; availab
   },
   {
     id: 'services',
-    label: 'Hash Paystream',
-    intro: 'Hash Paystream is ready. Ask about streaming payments, payroll, creator earnings, reader access, unlocks, and receipts.',
+    label: 'Hash PayLink',
+    intro: 'Hash PayLink is ready. Ask about payment links, hosted checkout, integrations, receipts, and developer support.',
   },
   {
     id: 'polydesk',
@@ -1004,7 +991,7 @@ export default function TelegramPaymentLinks() {
   const initialSection: TelegramSectionId =
     startPayload === 'polymarket' || startPayload === 'poly'
       ? 'market-tools'
-      : initialSectionParam === 'agent-wallets' || initialSectionParam === 'market-tools' || initialSectionParam === 'streampay'
+      : initialSectionParam === 'agent-wallets' || initialSectionParam === 'market-tools'
       ? initialSectionParam
       : 'payment-links'
   const initialServiceParam = searchParams.get('service')
@@ -1246,10 +1233,6 @@ export default function TelegramPaymentLinks() {
     }
     if (service.id === 'agent-dashboard' || service.id === 'fund-agent-wallet') {
       setActiveService('agent-dashboard')
-      return
-    }
-    if (service.id === 'streampay-creator') {
-      window.location.href = '/creator?app=streampay&src=telegram'
       return
     }
     if (service.id === 'poly-portfolio') {
@@ -3932,7 +3915,7 @@ export function TelegramHelperPanel({
       })
       void saveProfile({ question: nextQuestion, answer: data.answer } as Partial<HelperProfile>)
       if (!memoryDraft.trim()) {
-        setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, HashpayStream, agents, research, planning, and daily questions.`)
+        setMemoryDraft(`User is known as ${helperName || payer}. They use Hash PayLink Agent Helper from Telegram and may ask about payments, Polymarket, agents, research, planning, and daily questions.`)
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
@@ -3985,7 +3968,7 @@ export function TelegramHelperPanel({
                   : undefined}
               >
                 <div className="max-w-[86%] break-words rounded-[20px] rounded-bl-[6px] bg-[#f3f3f4] px-3 py-2 text-[13px] leading-[1.45] text-gray-900 shadow-[0_8px_24px_rgba(15,23,42,0.06)] dark:bg-white/[0.075] dark:text-gray-100 dark:shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
-                  <p>{humanSupportOpen ? 'Human Support' : welcomeText ?? `Welcome back, ${helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, HashpayStream, agent setup, research, planning, or daily questions.`}</p>
+                  <p>{humanSupportOpen ? 'Human Support' : welcomeText ?? `Welcome back, ${helperName || cleanTelegramName || 'there'}. Ask me about payments, Polymarket funding, agent setup, research, planning, or daily questions.`}</p>
                   {lockedHelperMode === 'circle-pocket' && (humanSupportOpen
                     ? <button type="button" onClick={() => { setHumanSupportOpen(false); setAskError('') }} className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-700 dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-200">Back to Agent Hash</button>
                     : <div className="mt-2 flex flex-wrap items-center gap-1.5"><button type="button" onClick={() => void startHumanSupport()} disabled={humanSupportBusy} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-gray-700 transition hover:border-gray-300 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-200"><MessageCircle className="h-3 w-3" />{humanSupportBusy ? 'Opening support…' : 'Chat with a human'}</button>{supportUnreadCount > 0 && <button type="button" onClick={() => void startHumanSupport()} className="rounded-full bg-red-600 px-2.5 py-1 text-[10px] font-bold text-white">{supportUnreadCount} support {supportUnreadCount === 1 ? 'reply' : 'replies'}</button>}</div>)}
