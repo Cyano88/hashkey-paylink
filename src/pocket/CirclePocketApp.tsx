@@ -229,7 +229,9 @@ export default function CirclePocketApp() {
         const accessToken = await getAccessToken()
         if (!accessToken) return
         const payout = await readPocketBankWithdrawStatus({ accessToken, intentId })
-        if (payout.state === 'sent' || payout.state === 'refunded' || payout.state === 'failed' || payout.state === 'expired') clearActivePocketBankPayout(intentId)
+        // Keep a completed payout available for the bank page to render its
+        // success card and receipt. The page clears it after consuming it.
+        if (payout.state === 'refunded' || payout.state === 'failed' || payout.state === 'expired') clearActivePocketBankPayout(intentId)
       } catch {
         // Keep the active payout for the next quiet reconciliation attempt.
       } finally {

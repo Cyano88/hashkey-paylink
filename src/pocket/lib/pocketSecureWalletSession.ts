@@ -64,7 +64,10 @@ async function readSession(email: string) {
   const key = server(email)
   const saved = await NativeBiometric.isCredentialsSaved({ server: key }).catch(() => ({ isSaved: false }))
   if (!saved.isSaved) return null
-  const credentials = await NativeBiometric.getSecureCredentials({ server: key }).catch(() => null)
+  // AccessControl.NONE is stored by the Android plugin as encrypted ordinary
+  // credentials. getSecureCredentials only reads biometric-protected records
+  // and therefore falsely reports this retained session as missing.
+  const credentials = await NativeBiometric.getCredentials({ server: key }).catch(() => null)
   if (!credentials || credentials.username !== email.trim().toLowerCase() || !credentials.password.startsWith(SESSION_PREFIX)) {
     throw new PocketWalletSessionRecoveryRequiredError()
   }

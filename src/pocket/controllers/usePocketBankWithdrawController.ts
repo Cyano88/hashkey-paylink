@@ -249,18 +249,27 @@ export default function usePocketBankWithdrawController({
         clearActivePocketBankPayout(intentId)
         activeIntentId.current = ''
         clearStoredOperation()
-        setResult(null)
-        setStatus('idle')
+        setResult(next)
+        setStatus('sent')
         setError('')
         await onSentRef.current()
         return
       }
-      if (next.state === 'refunded' || next.state === 'failed' || next.state === 'expired') {
+      if (next.state === 'refunded') {
         clearActivePocketBankPayout(intentId)
         activeIntentId.current = ''
-        setResult(null)
+        setResult(next)
         setStatus('idle')
-        setError('')
+        setError(PAYOUT_REFUNDED_NOTICE)
+        clearStoredOperation()
+        return
+      }
+      if (next.state === 'failed' || next.state === 'expired') {
+        clearActivePocketBankPayout(intentId)
+        activeIntentId.current = ''
+        setResult(next)
+        setStatus('idle')
+        setError(next.state === 'expired' ? PAYMENT_TIMEOUT_NOTICE : 'The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
         clearStoredOperation()
         return
       }
@@ -406,8 +415,6 @@ export default function usePocketBankWithdrawController({
         if (!acceptedTransfer) throw new Error('Circle did not submit the payout. No money was sent.')
         setResult(payable)
         setStatus('processing')
-        setAmountState('')
-        setMemoState('')
         clearStoredOperation()
         void reconcileCircleEvmEmailWithdraw({
           session,
@@ -446,8 +453,6 @@ export default function usePocketBankWithdrawController({
       })
       setResult(submitted)
       setStatus('processing')
-      setAmountState('')
-      setMemoState('')
       idempotencyKey.current = ''
       window.sessionStorage.removeItem(BANK_PAYOUT_OPERATION_KEY)
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
