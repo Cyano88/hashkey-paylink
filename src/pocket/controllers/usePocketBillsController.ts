@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
+import { registerPocketPaymentPreparer } from '../lib/pocketPaymentApproval'
 import {
   PocketBillsApiError,
   confirmPocketAirtime,
@@ -474,6 +475,15 @@ export default function usePocketBillsController({
     }
   }, [activeBillKey, baseWallet, category, ensureBaseWallet, getEvmSession, intent, reconcile, status, token])
 
+  const preparePaymentApproval = useCallback(async () => {
+    if (!intent || status !== 'ready') throw new Error('Review the bill payment before confirming.')
+    const wallet = baseWallet ?? await ensureBaseWallet()
+    if (!wallet) throw new Error('Open your Base wallet before confirming this bill.')
+    await getEvmSession(wallet.address)
+  }, [baseWallet, ensureBaseWallet, getEvmSession, intent, status])
+
+  useEffect(() => registerPocketPaymentPreparer(preparePaymentApproval), [preparePaymentApproval])
+
   const refresh = useCallback(async () => {
     if (!intent || !authenticated) return
     try {
@@ -534,6 +544,7 @@ export default function usePocketBillsController({
     verifyCustomer,
     edit: resetResult,
     review,
+    preparePaymentApproval,
     pay,
     refresh,
   }

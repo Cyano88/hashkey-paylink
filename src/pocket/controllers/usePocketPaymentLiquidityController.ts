@@ -284,6 +284,21 @@ export default function usePocketPaymentLiquidityController(input: {
     }
   }, [amountUnits, input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, input.refreshBalances, inspect])
 
+  const prepareLiquidity = useCallback(async () => {
+    const inspected = await inspect()
+    const checkpoint = await input.persistence?.read(inspected.accessToken) ?? null
+    let currentRoute = inspected.route
+    if ((checkpoint?.phase === 'submitted' || checkpoint?.phase === 'completed') && checkpoint.txHash) {
+      const checkpointAmountUnits = parseUnits(checkpoint.amount, 6)
+      currentRoute = { kind: 'bridge', source: checkpoint.source, destination: checkpoint.destination, amountUnits: checkpointAmountUnits, totalSourceUnits: checkpointAmountUnits }
+    }
+    if (currentRoute.kind !== 'bridge') return
+    const sourceWallet = inspected.wallets[currentRoute.source] ?? await input.ensureWallet(currentRoute.source)
+    if (!sourceWallet) throw new Error('Open the source Pocket wallet before confirming this payment.')
+    if (currentRoute.source === 'solana') await input.getSolanaSession(sourceWallet.address)
+    else await input.getEvmSession(currentRoute.source, sourceWallet.address)
+  }, [input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, inspect])
+
   const notice = error
     || (status === 'checking'
       ? 'Checking gas-sponsored USDC routes.'
@@ -308,6 +323,7 @@ export default function usePocketPaymentLiquidityController(input: {
     checking: status === 'checking',
     busy: status === 'checking' || status === 'moving' || status === 'waiting' || status === 'reconciling',
     insufficient: route?.kind === 'insufficient',
+    prepareLiquidity,
     ensureLiquidity,
   }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
-import { AlertCircle, Check, Clock3, Loader2, Lock } from 'lucide-react'
+import { AlertCircle, Check, Loader2, Lock } from 'lucide-react'
 import SlideAction, { type SlideActionStatus } from '../../components/SlideAction'
 import { cn } from '../../lib/utils'
 import { preparePocketPaymentApproval, requestPocketPaymentApproval } from '../lib/pocketPaymentApproval'
@@ -33,8 +33,6 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
       ? mergedLabels.pending === 'Approve with fingerprint' ? 'Confirming send' : mergedLabels.pending
       : visualStatus === 'submitted'
         ? mergedLabels.submitted === 'Sending' ? 'Sent - confirming' : mergedLabels.submitted
-        : visualStatus === 'submitted'
-          ? <Clock3 className='h-4 w-4' />
         : visualStatus === 'successful'
           ? mergedLabels.successful
           : disabled
@@ -79,6 +77,7 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
       onClick={() => void confirmOnce()}
       disabled={disabled || visualStatus !== 'idle'}
       aria-label={label}
+      aria-live={'polite'}
       className={cn(
         'flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-bold text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] transition active:scale-[0.99] disabled:cursor-not-allowed dark:bg-white dark:text-gray-950',
         disabled && status === 'idle' && 'opacity-45',
@@ -88,7 +87,7 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
         visualStatus === 'error' && 'bg-red-600 text-white dark:bg-red-500 dark:text-white',
       )}
     >
-      {visualStatus === 'pending'
+      {visualStatus === 'pending' || visualStatus === 'submitted'
         ? <Loader2 className="h-4 w-4 animate-spin" />
         : visualStatus === 'successful'
           ? <Check className="h-4 w-4" />

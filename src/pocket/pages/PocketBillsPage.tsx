@@ -97,6 +97,10 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
         baseBalance={localPreview ? 125.48 : baseBalance}
         walletBusy={walletBusy}
         onOpenWallet={() => void openBaseWallet()}
+        onPreparePayment={async () => {
+          await paymentLiquidity.prepareLiquidity()
+          await bills.preparePaymentApproval()
+        }}
         paymentRouting={{
           status: paymentLiquidity.status,
           notice: paymentLiquidity.notice,

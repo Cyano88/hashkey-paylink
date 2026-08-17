@@ -24,6 +24,7 @@ type PocketBillsPanelProps = {
   baseBalance: number
   walletBusy: boolean
   onOpenWallet: () => void
+  onPreparePayment?: () => Promise<void>
   paymentRouting?: {
     status: 'idle' | 'checking' | 'ready' | 'moving' | 'waiting' | 'reconciling' | 'arrived'
     notice: string
@@ -72,7 +73,7 @@ function SignInCard() {
   )
 }
 
-export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet, paymentRouting }: PocketBillsPanelProps) {
+export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet, onPreparePayment, paymentRouting }: PocketBillsPanelProps) {
   const meta = billMeta[view]
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
@@ -297,6 +298,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                     <PocketSlideAction
                       status={slideStatus}
                       disabled={bills.status !== 'ready' || paymentRouteBusy || paymentRouteInsufficient}
+                      onPrepare={onPreparePayment}
                       onConfirm={() => void bills.pay()}
                       labels={{
                         disabled: paymentRouteInsufficient

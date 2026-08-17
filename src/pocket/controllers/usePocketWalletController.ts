@@ -13,7 +13,7 @@ import {
 import { CHAIN_META } from '../../lib/chains'
 import { linkPocketWallet, readPocketWallet } from '../api/pocketWalletLinkClient'
 import type { PocketNetwork } from '../lib/pocketSchemas'
-import { readPocketSecureWalletSession, savePocketSecureWalletSession, secureSessionForNetwork } from '../lib/pocketSecureWalletSession'
+import { deletePocketSecureWalletSession, PocketWalletSessionRecoveryRequiredError, readPocketSecureWalletSession, savePocketSecureWalletSession, secureSessionForNetwork } from '../lib/pocketSecureWalletSession'
 import { pocketQuickApprovalCredentialSaved, readPocketEvmQuickSession } from '../lib/pocketQuickApproval'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 
@@ -80,6 +80,7 @@ async function connectFreshEvmSession(
   const stored = await restorePocketWalletSession(email)
   const secured = stored ? secureSessionForNetwork(stored, network, walletAddress) : null
   if (secured) return secured
+  if (stored) throw new PocketWalletSessionRecoveryRequiredError('The saved Circle session does not match this Pocket wallet. Reconnect it before making a payment.')
   if (await pocketQuickApprovalCredentialSaved(email)) {
     const migrated = await readPocketEvmQuickSession(email, network, walletAddress, { allowDisabled: true })
     if (migrated) {
@@ -89,7 +90,7 @@ async function connectFreshEvmSession(
     }
   }
   const session = await connectCircleEvmEmailWallet(email, network)
-  await savePocketSecureWalletSession(email, session).catch(() => undefined)
+  await savePocketSecureWalletSession(email, session)
   return session
 }
 
@@ -198,10 +199,12 @@ async function unlockPocketBaseWalletOnce({
   authenticated,
   email,
   getAccessToken,
+  forceReconnect = false,
 }: {
   authenticated: boolean
   email: string
   getAccessToken: PocketAccessTokenReader
+  forceReconnect?: boolean
 }) {
   let approvedSession: CircleEvmEmailSession | null = null
   const wallet = await ensurePocketWallet({
@@ -212,12 +215,15 @@ async function unlockPocketBaseWalletOnce({
     onEvmSession: session => { approvedSession = session },
   })
   if (!wallet) throw new Error('Circle wallet unlock did not complete.')
-  const storedSession = approvedSession ? null : await readPocketSecureWalletSession(email)
-  const session = approvedSession ?? (storedSession ? secureSessionForNetwork(storedSession, 'base', wallet.address) : null) ?? await connectCircleEvmEmailWallet(email, 'base')
+  if (forceReconnect) await deletePocketSecureWalletSession(email)
+  const storedSession = approvedSession || forceReconnect ? null : await readPocketSecureWalletSession(email)
+  const secured = storedSession ? secureSessionForNetwork(storedSession, 'base', wallet.address) : null
+  if (storedSession && !secured) throw new PocketWalletSessionRecoveryRequiredError('The saved Circle session does not match this Pocket wallet.')
+  const session = approvedSession ?? secured ?? await connectCircleEvmEmailWallet(email, 'base')
   if (session.wallet.address.toLowerCase() !== wallet.address.toLowerCase()) {
     throw new Error('The unlocked Circle wallet does not match this Pocket account.')
   }
-  await savePocketSecureWalletSession(email, session).catch(() => undefined)
+  await savePocketSecureWalletSession(email, session)
   cacheEvmSession(email, session)
   return { wallet, session }
 }
@@ -234,6 +240,14 @@ export async function unlockPocketBaseWallet(params: {
     .finally(() => sharedPocketUnlocks.delete(key))
   sharedPocketUnlocks.set(key, request)
   return request
+}
+
+export async function reconnectPocketBaseWallet(params: {
+  authenticated: boolean
+  email: string
+  getAccessToken: PocketAccessTokenReader
+}) {
+  return unlockPocketBaseWalletOnce({ ...params, forceReconnect: true })
 }
 
 export default function usePocketWalletController({
@@ -264,7 +278,7 @@ export default function usePocketWalletController({
       onEvmSession: async session => {
         evmSessionRef.current = session
         setEvmSession(session)
-        await savePocketSecureWalletSession(email, session).catch(() => undefined)
+        await savePocketSecureWalletSession(email, session)
         cacheEvmSession(email, session)
       },
       onSolanaSession: session => {

@@ -5,6 +5,7 @@ import { bridgeCircleSolanaWallet } from '../lib/pocketSolanaBridge'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
+import { registerPocketPaymentPreparer } from '../lib/pocketPaymentApproval'
 
 export type PocketBridgeStatus = 'idle' | 'quoting' | 'confirming' | 'bridging' | 'successful'
 
@@ -83,6 +84,16 @@ export default function usePocketBridgeController(input: {
     const timer = window.setTimeout(() => void refreshQuote(), 450)
     return () => window.clearTimeout(timer)
   }, [refreshQuote])
+
+  const prepare = useCallback(async () => {
+    if (!quote) throw new Error('Get a current bridge quote before confirming.')
+    const sourceWallet = input.wallets[input.source] ?? await input.ensureWallet(input.source)
+    if (!sourceWallet) throw new Error('Open the source Pocket wallet before confirming.')
+    if (input.source === 'solana') await input.getSolanaSession(sourceWallet.address)
+    else await input.getEvmSession(input.source, sourceWallet.address)
+  }, [input, quote])
+
+  useEffect(() => registerPocketPaymentPreparer(prepare), [prepare])
 
   const bridge = useCallback(async () => {
     setError('')

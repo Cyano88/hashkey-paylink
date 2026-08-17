@@ -127,6 +127,27 @@ export default function PocketMoveBankPage() {
       .then(wallet => direct.continueAfterRouting(wallet))
       .catch(reason => direct.failRouting(reason, intentId))
   }, [bankLiquidity.ensureLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
+  useEffect(() => {
+    const intentId = direct.result?.intentId ?? ''
+    if (direct.status !== 'route-review') return
+    if (!intentId) return
+    let cancelled = false
+    const reconcile = async () => {
+      while (!cancelled) {
+        try {
+          const wallet = await bankLiquidity.ensureLiquidity()
+          if (!cancelled) await direct.continueAfterRouting(wallet)
+          return
+        } catch (reason) {
+          if (cancelled) return
+          direct.failRouting(reason, intentId)
+          await new Promise(resolve => window.setTimeout(resolve, 2_500))
+        }
+      }
+    }
+    void reconcile()
+    return () => { cancelled = true }
+  }, [bankLiquidity.ensureLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
   const directAmountDirty = direct.amount.length > 0
   const directAmountValid = /^\d+(?:\.\d{1,2})?$/.test(direct.amount) && Number(direct.amount) > 0
   const recoveredPayout = !directAmountValid && Boolean(direct.result?.intentId) && direct.status !== 'idle' && direct.status !== 'sent'
@@ -350,6 +371,7 @@ export default function PocketMoveBankPage() {
                 ) : <PocketSlideAction
                   status={directSlideStatus}
                   disabled={!direct.canSubmit}
+                  onPrepare={direct.prepareApproval}
                   onConfirm={() => void direct.submit()}
                   labels={{
                     idle: 'Confirm payout',

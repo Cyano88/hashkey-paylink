@@ -7,6 +7,7 @@ import { readPocketBillsLimitUsage, type PocketBillsLimitUsage } from '../api/po
 import { readPocketBankPayoutLimit, type PocketBankPayoutLimit } from '../api/pocketSpendingLimitsClient'
 import { updatePocketPaymentSecurity, verifyPocketPaymentPin } from '../api/pocketPaymentSecurityClient'
 import { disablePocketPaymentBiometrics, enablePocketPaymentBiometrics, pocketPaymentBiometricsAvailable, pocketPaymentBiometricsEnabled } from '../lib/pocketPaymentBiometrics'
+import { reconnectPocketBaseWallet } from '../controllers/usePocketWalletController'
 
 export type PocketProfileFeature = 'rates' | 'limits' | 'notifications' | 'security'
 
@@ -136,6 +137,14 @@ function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; g
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Payment approval was not changed.') }
     finally { setBusy(false) }
   }
+  const reconnectWallet = async () => {
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await reconnectPocketBaseWallet({ authenticated: true, email, getAccessToken })
+      setNotice('Circle wallet session reconnected on this phone.')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Circle wallet was not reconnected.') }
+    finally { setBusy(false) }
+  }
   const inputClass = 'mt-2 min-h-12 w-full rounded-2xl bg-gray-50 px-4 text-center text-base font-black tracking-[0.25em] outline-none focus:ring-2 focus:ring-blue-500 dark:bg-white/[0.06]'
   return <section className='pt-8 space-y-4'>
     <article className='rounded-[26px] bg-white p-5 shadow-sm dark:bg-white/[0.05]'>
@@ -149,6 +158,7 @@ function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; g
       <input value={confirmPin} onChange={event => setConfirmPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='Confirm new PIN' aria-label='Confirm new Pocket PIN' className={inputClass} />
       <button type='button' onClick={() => void changePin()} disabled={busy || currentPin.length !== 6 || newPin.length !== 6 || confirmPin.length !== 6} className='mt-4 min-h-12 w-full rounded-full bg-gray-950 text-xs font-black text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>Change PIN</button>
     </article>
+    <button type='button' onClick={() => void reconnectWallet()} disabled={busy} className='min-h-12 w-full rounded-full border border-gray-200 text-xs font-black text-gray-700 disabled:opacity-50 dark:border-white/10 dark:text-gray-200'>{busy ? 'Please wait...' : 'Reconnect Circle wallet'}</button>
     {error && <p className='px-2 text-xs font-semibold text-red-500'>{error}</p>}{notice && <p className='px-2 text-xs font-semibold text-emerald-600'>{notice}</p>}
     <button type='button' onClick={onResetPin} className='min-h-12 w-full rounded-full border border-red-200 text-xs font-black text-red-600 dark:border-red-400/20 dark:text-red-300'>Forgot or reset PIN</button>
     <p className='px-1 text-[11px] leading-5 text-gray-400'>Reset signs you out first so your email identity can be verified again.</p>

@@ -297,7 +297,9 @@ export default function usePocketBankWithdrawController({
       // Authenticate before creating a provider intent. A cancelled fingerprint
       // must leave no payout operation behind, and the approved session is
       // reused when liquidity routing reaches the on-chain transfer.
-      const session = await getEvmSession(selectedWallet.address)
+      const session = approvedSession.current?.walletAddress === selectedWallet.address
+        ? approvedSession.current.session
+        : await getEvmSession(selectedWallet.address)
       approvedSession.current = { walletAddress: selectedWallet.address, session }
       const fingerprint = await operationFingerprint([email.toLowerCase(), bankCode, bankName, accountNumber, accountName, amount, memo.trim()].join('|'))
       const key = idempotencyKey.current || storedOperation(fingerprint) || window.crypto.randomUUID()
@@ -345,9 +347,22 @@ export default function usePocketBankWithdrawController({
     }
   }, [accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, getEvmSession, lastName, memo, wallet])
 
+  const prepareApproval = useCallback(async () => {
+    setError('')
+    try {
+      const selectedWallet = wallet ?? await ensureWallet()
+      if (!selectedWallet) throw new Error('Open your Base Circle wallet before withdrawing.')
+      const session = await getEvmSession(selectedWallet.address)
+      approvedSession.current = { walletAddress: selectedWallet.address, session }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Pocket could not prepare the Circle wallet session.')
+      throw reason
+    }
+  }, [ensureWallet, getEvmSession, wallet])
+
   const continueAfterRouting = useCallback(async (selectedWallet: CirclePocketWallet) => {
     const prepared = result
-    if (status !== 'routing' || !prepared || !activeIntentId.current || activeIntentId.current !== prepared.intentId) return
+    if (!['routing', 'route-review'].includes(status) || !prepared || !activeIntentId.current || activeIntentId.current !== prepared.intentId) return
     let reconciliation: { accessToken: string; intentId: string } | null = null
     let acceptedTransfer = readActivePocketBankPayoutAcceptance(prepared.intentId)
     let transactionSubmitted = Boolean(readActivePocketBankPayoutTransfer(prepared.intentId) || acceptedTransfer)
@@ -487,5 +502,5 @@ export default function usePocketBankWithdrawController({
     setError(review ? 'USDC move submitted. Pocket will continue the payout automatically after confirmation.' : message)
   }, [result])
 
-  return { amount, memo, status, error, result, canSubmit, setAmount, setMemo, resetResult, submit, continueAfterRouting, failRouting }
+  return { amount, memo, status, error, result, canSubmit, setAmount, setMemo, resetResult, prepareApproval, submit, continueAfterRouting, failRouting }
 }
