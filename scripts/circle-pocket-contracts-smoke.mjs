@@ -937,7 +937,7 @@ assert.match(pocketWalletControllerSource, /export async function restorePocketW
 assert.match(pocketWalletControllerSource, /const sharedSessionRestores = new Map/)
 assert.match(pocketWalletControllerSource, /pocketQuickApprovalCredentialSaved\(email\)/)
 assert.match(pocketWalletControllerSource, /readPocketEvmQuickSession\(email, network, walletAddress, \{ allowDisabled: true \}\)/)
-assert.ok(pocketWalletControllerSource.indexOf('readPocketEvmQuickSession(email, network, walletAddress') < pocketWalletControllerSource.indexOf('connectCircleEvmEmailWallet(email, network)'))
+assert.match(pocketWalletControllerSource, /readPocketEvmQuickSession\(email, network, walletAddress[\s\S]*throw new PocketWalletSessionRecoveryRequiredError\(\)/)
 assert.match(pocketWalletControllerSource, /cacheEvmSession\(email, session\)/)
 assert.doesNotMatch(pocketWalletControllerSource, /offerPocketQuickApprovalAfterEmail/)
 assert.match(pocketWalletControllerSource, /evmSessionKey\(email, network, walletAddress\)/)

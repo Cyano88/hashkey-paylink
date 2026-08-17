@@ -89,9 +89,7 @@ async function connectFreshEvmSession(
       return migrated
     }
   }
-  const session = await connectCircleEvmEmailWallet(email, network)
-  await savePocketSecureWalletSession(email, session)
-  return session
+  throw new PocketWalletSessionRecoveryRequiredError()
 }
 
 type PocketAccessTokenReader = () => Promise<string | null>
@@ -173,7 +171,16 @@ export async function ensurePocketWallet({
     }
   }
 
-  const session = await dependencies.connectEvm(email, network)
+  const storedSession = await readPocketSecureWalletSession(email)
+  const storedWallet = storedSession?.chain === network
+    ? storedSession.wallet
+    : network === 'base' || network === 'arbitrum'
+      ? storedSession?.productionEvmTopology?.wallets?.[network]
+      : null
+  const resumedSession = storedSession && storedWallet
+    ? secureSessionForNetwork(storedSession, network as Exclude<PocketNetwork, 'solana'>, storedWallet.address)
+    : null
+  const session = resumedSession ?? await dependencies.connectEvm(email, network)
   if (!shouldContinue()) return null
   await onEvmSession?.(session)
   const productionWallets = session.productionEvmTopology?.wallets

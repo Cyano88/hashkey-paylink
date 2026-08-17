@@ -66,7 +66,7 @@ async function readSession(email: string) {
   if (!saved.isSaved) return null
   const credentials = await NativeBiometric.getSecureCredentials({ server: key }).catch(() => null)
   if (!credentials || credentials.username !== email.trim().toLowerCase() || !credentials.password.startsWith(SESSION_PREFIX)) {
-    return null
+    throw new PocketWalletSessionRecoveryRequiredError()
   }
   let stored: CircleEvmEmailSession
   let savedAt = 0
