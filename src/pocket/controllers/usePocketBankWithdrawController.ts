@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
-import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, recoverPocketBankWithdrawals, registerPocketBankWithdrawTransfer, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
+import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, registerPocketBankWithdrawTransfer, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout } from '../lib/pocketBankPayoutState'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
@@ -13,6 +13,9 @@ export type PocketBankWithdrawStatus = 'idle' | 'preparing' | 'routing' | 'route
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 const BANK_PAYOUT_OPERATION_KEY = 'pocket:bank-withdraw:operation'
 const BANK_PAYOUT_FAST_POLL_ATTEMPTS = 12
+
+export const PAYMENT_TIMEOUT_NOTICE = 'The payout quote expired before any money was sent. Your details are still here; slide again to refresh it.'
+export const PAYOUT_REFUNDED_NOTICE = 'This payout was refunded. Your returned USDC will appear in Activity.'
 
 async function operationFingerprint(value: string) {
   const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
@@ -31,8 +34,16 @@ function storedOperation(fingerprint: string) {
 function payoutError(reason: unknown, fallback: string) {
   const message = reason instanceof Error ? reason.message : fallback
   return /failed to fetch|networkerror|network request failed|unable to resolve host|no address associated|enotfound|pocket could not connect/i.test(message)
-    ? 'Pocket lost connection while preparing this payout. Check Activity before trying again.'
+    ? 'Pocket could not connect before a transfer was submitted. No money was sent. Try again.'
     : message
+}
+
+function isPayoutExpiry(message: string) {
+  return /payout (?:window|quote).*(?:expired|expiry)|payment window expired|payment timed out/i.test(message)
+}
+
+function clearStoredOperation() {
+  window.sessionStorage.removeItem(BANK_PAYOUT_OPERATION_KEY)
 }
 
 export default function usePocketBankWithdrawController({
@@ -80,11 +91,14 @@ export default function usePocketBankWithdrawController({
 
   const resetResult = useCallback(() => {
     if (status === 'idle' || status === 'sent') {
+      const intentId = activeIntentId.current
+      if (intentId && !readActivePocketBankPayoutTransfer(intentId)) clearActivePocketBankPayout(intentId)
       setStatus('idle')
       setError('')
       setResult(null)
       idempotencyKey.current = ''
       activeIntentId.current = ''
+      clearStoredOperation()
     }
   }, [status])
 
@@ -115,26 +129,35 @@ export default function usePocketBankWithdrawController({
       const active = activeIntentId.current === intentId
       if (active) setResult(next)
       if (next.nextAction === 'ensure_liquidity' || next.nextAction === 'wait_bridge' || next.nextAction === 'authorize_transfer') {
-        if (active) { setStatus('routing'); setError('') }
+        if (active) setStatus(readActivePocketBankPayoutTransfer(intentId) ? 'processing' : 'routing')
         return
       }
       if (next.state === 'sent') {
         clearActivePocketBankPayout(intentId)
-        if (active) { setStatus('sent'); setError('') }
+        if (active) {
+          activeIntentId.current = ''
+          clearStoredOperation()
+          setStatus('sent')
+          setError('')
+        }
         await onSent()
         return
       }
       if (next.state === 'refunded') {
         clearActivePocketBankPayout(intentId)
         if (active) {
+          activeIntentId.current = ''
+          clearStoredOperation()
           setStatus('idle')
-          setError('The payout was refunded. Your USDC should return to the Circle wallet.')
+          setError(PAYOUT_REFUNDED_NOTICE)
         }
         return
       }
       if (next.state === 'failed') {
         clearActivePocketBankPayout(intentId)
         if (active) {
+          activeIntentId.current = ''
+          clearStoredOperation()
           setStatus('idle')
           setError('The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
         }
@@ -144,9 +167,10 @@ export default function usePocketBankWithdrawController({
         clearActivePocketBankPayout(intentId)
         if (active) {
           activeIntentId.current = ''
+          clearStoredOperation()
           setResult(null)
           setStatus('idle')
-          setError('The payout window expired. Any routed USDC remains available on Base.')
+          setError(PAYMENT_TIMEOUT_NOTICE)
         }
         return
       }
@@ -159,26 +183,27 @@ export default function usePocketBankWithdrawController({
     setStatus('processing')
     const reconcile = async () => {
       const accessToken = await getAccessToken()
-      if (!accessToken) return
-      let intentId = activeIntentId.current
-      let recovered: PocketBankWithdrawData | null = null
-      if (!intentId) {
-        const unresolved = await recoverPocketBankWithdrawals({ accessToken }).catch(() => [])
-        recovered = unresolved[0] ?? null
-        intentId = recovered?.intentId ?? ''
-        if (intentId) {
-          activeIntentId.current = intentId
-          saveActivePocketBankPayout(intentId)
-        }
-      }
+      if (!accessToken) { setStatus('idle'); return }
+      const intentId = activeIntentId.current
       if (!intentId) {
         setStatus('idle')
         return
       }
-      const next = recovered ?? await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
+      const recoveredTxHash = readActivePocketBankPayoutTransfer(intentId)
+      if (!recoveredTxHash) {
+        clearActivePocketBankPayout(intentId)
+        activeIntentId.current = ''
+        setResult(null)
+        setStatus('idle')
+        setError('')
+        clearStoredOperation()
+        return
+      }
+      const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
       if (!next) return
       setResult(next)
-      const recoveredTxHash = readActivePocketBankPayoutTransfer(intentId)
+      // A submitted transfer may be recorded and reconciled, but this path never
+      // creates a new transfer or asks the wallet to authorize one.
       if (next.nextAction === 'authorize_transfer' && recoveredTxHash && wallet?.address) {
         try {
           const submitted = await registerPocketBankWithdrawTransfer({
@@ -206,7 +231,10 @@ export default function usePocketBankWithdrawController({
       }
       if (next.state === 'sent') {
         clearActivePocketBankPayout(intentId)
-        setStatus('sent')
+        activeIntentId.current = ''
+        clearStoredOperation()
+        setResult(null)
+        setStatus('idle')
         setError('')
         await onSent()
         return
@@ -216,16 +244,12 @@ export default function usePocketBankWithdrawController({
         activeIntentId.current = ''
         setResult(null)
         setStatus('idle')
-        setError(next.state === 'refunded'
-          ? 'The payout was refunded. Your USDC should return to the Circle wallet.'
-          : next.state === 'expired'
-            ? 'The payout window expired. Any routed USDC remains available on Base.'
-            : 'The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
+        setError('')
+        clearStoredOperation()
         return
       }
       if (next.nextAction === 'ensure_liquidity' || next.nextAction === 'wait_bridge' || next.nextAction === 'authorize_transfer') {
-        setStatus('routing')
-        setError('')
+        setStatus('processing')
         return
       }
       setStatus('processing')
@@ -254,7 +278,7 @@ export default function usePocketBankWithdrawController({
       if (!accessToken) throw new Error('Sign in again to withdraw to bank.')
       const selectedWallet = wallet ?? await ensureWallet()
       if (!selectedWallet) throw new Error('Open your Base Circle wallet before withdrawing.')
-      const fingerprint = await operationFingerprint([email.toLowerCase(), bankCode, accountNumber, amount].join('|'))
+      const fingerprint = await operationFingerprint([email.toLowerCase(), bankCode, bankName, accountNumber, accountName, amount, memo.trim()].join('|'))
       const key = idempotencyKey.current || storedOperation(fingerprint) || window.crypto.randomUUID()
       idempotencyKey.current = key
       window.sessionStorage.setItem(BANK_PAYOUT_OPERATION_KEY, JSON.stringify({ fingerprint, idempotencyKey: key }))
@@ -285,6 +309,15 @@ export default function usePocketBankWithdrawController({
       setStatus('routing')
     } catch (reason) {
       const message = payoutError(reason, 'Bank payout failed.')
+      const intentId = activeIntentId.current
+      if (intentId && !readActivePocketBankPayoutTransfer(intentId)) {
+        clearActivePocketBankPayout(intentId)
+        activeIntentId.current = ''
+      }
+      if (isPayoutExpiry(message)) {
+        idempotencyKey.current = ''
+        clearStoredOperation()
+      }
       setStatus('idle')
       setError(message)
     }
@@ -294,6 +327,7 @@ export default function usePocketBankWithdrawController({
     const prepared = result
     if (status !== 'routing' || !prepared || !activeIntentId.current || activeIntentId.current !== prepared.intentId) return
     let reconciliation: { accessToken: string; intentId: string } | null = null
+    let transactionSubmitted = Boolean(readActivePocketBankPayoutTransfer(prepared.intentId))
     setError('')
     setStatus('authorizing')
     try {
@@ -309,9 +343,10 @@ export default function usePocketBankWithdrawController({
         },
       })
       if (activeIntentId.current !== prepared.intentId) return
-      if (payable.state === 'expired') throw new Error('This payout window expired. Start a new payout.')
+      if (payable.state === 'expired') throw new Error(PAYMENT_TIMEOUT_NOTICE)
       setResult(payable)
       const session = await getEvmSession(selectedWallet.address)
+      if (activeIntentId.current !== prepared.intentId) return
       const transfer = await executePocketEvmTransfer({
         session,
         linkedWalletAddress: selectedWallet.address,
@@ -322,6 +357,7 @@ export default function usePocketBankWithdrawController({
       if (!transfer.txHash) throw new Error('Circle accepted the payout, but no transaction hash was returned. Check Activity before retrying.')
       setResult({ ...payable, txHash: transfer.txHash })
       saveActivePocketBankPayout(prepared.intentId, transfer.txHash)
+      transactionSubmitted = true
       const submitted = await registerPocketBankWithdrawTransfer({
         accessToken,
         request: { intent_id: prepared.intentId, tx_hash: transfer.txHash },
@@ -346,12 +382,14 @@ export default function usePocketBankWithdrawController({
       void pollUntilSettled(accessToken, prepared.intentId)
     } catch (reason) {
       const message = payoutError(reason, 'Bank payout failed.')
-      if (/payout window expired/i.test(message)) {
+      if (isPayoutExpiry(message)) {
         clearActivePocketBankPayout(prepared.intentId)
         activeIntentId.current = ''
         setResult(null)
         setStatus('idle')
-        setError('The payout window expired. Any routed USDC remains available on Base.')
+        setError(PAYMENT_TIMEOUT_NOTICE)
+        idempotencyKey.current = ''
+        clearStoredOperation()
         return
       }
       if (message.includes('submitted and is being reconciled')) {
@@ -360,9 +398,9 @@ export default function usePocketBankWithdrawController({
         if (reconciliation) void pollUntilSettled(reconciliation.accessToken, reconciliation.intentId)
         return
       }
-      if (message.includes('lost connection')) {
-        setStatus('route-review')
-        setError(message)
+      if (transactionSubmitted) {
+        setStatus('processing')
+        setError('')
         if (reconciliation) void pollUntilSettled(reconciliation.accessToken, reconciliation.intentId)
         return
       }
@@ -373,10 +411,11 @@ export default function usePocketBankWithdrawController({
 
   const failRouting = useCallback((reason: unknown) => {
     const message = payoutError(reason, 'Pocket could not prepare this payout.')
-    const review = /previous payout move needs review|still moving|destination balance is still refreshing|submitted and is being reconciled|without a verifiable source transaction|check activity before retrying|lost connection/i.test(message)
+    const intentId = result?.intentId ?? activeIntentId.current
+    const review = Boolean(result?.txHash || (intentId && readActivePocketBankPayoutTransfer(intentId)))
     setStatus(review ? 'route-review' : 'idle')
-    setError(message)
-  }, [])
+    setError(review ? 'Payment is being confirmed. Pocket will update Activity automatically.' : message)
+  }, [result])
 
   return { amount, memo, status, error, result, canSubmit, setAmount, setMemo, resetResult, submit, continueAfterRouting, failRouting }
 }

@@ -54,6 +54,8 @@ assert.equal(
 )
 assert.match(handlerSource, /async function createCircleGasStationEvmChallenge/)
 assert.match(handlerSource, /requireCircleGasStationEvmWallet\(/)
+assert.match(handlerSource, /action === 'refreshEmailSession'/)
+assert.match(handlerSource, /\/v1\/w3s\/users\/token\/refresh/)
 assert.doesNotMatch(handlerSource, /BASE_GAS_RECOVERY_USDC|ARBITRUM_GAS_RECOVERY_USDC|ARC_GAS_RECOVERY_USDC/)
 
 const passkeySource = await readFile(new URL('../src/lib/circlePasskeyPayment.ts', import.meta.url), 'utf8')

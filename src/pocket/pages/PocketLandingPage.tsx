@@ -187,11 +187,11 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
         <>
           <div
             aria-hidden="true"
-            className={`pointer-events-none fixed inset-0 z-20 bg-[#0A0A0A] transition-opacity duration-700 ease-out motion-reduce:hidden ${splashLaunching ? 'opacity-0' : 'opacity-100'}`}
+            className={`pointer-events-none fixed inset-0 z-20 bg-[#F5F5F7] transition-opacity duration-700 ease-out motion-reduce:hidden ${splashLaunching ? 'opacity-0' : 'opacity-100'}`}
           />
           <div
             aria-hidden="true"
-            className={`pointer-events-none fixed z-30 text-white transition-[top,left,width,height,transform,opacity] duration-[820ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:hidden ${splashLogoVisible ? 'opacity-100' : 'opacity-0'}`}
+            className={`pointer-events-none fixed z-30 text-gray-950 transition-[top,left,width,height,transform,opacity] duration-[820ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:hidden ${splashLogoVisible ? 'opacity-100' : 'opacity-0'}`}
             style={splashLaunching && logoTarget
               ? {
                   top: logoTarget.top,

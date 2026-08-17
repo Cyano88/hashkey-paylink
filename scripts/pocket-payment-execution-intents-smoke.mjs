@@ -26,6 +26,8 @@ try {
   const replay = await repository.create({ ...request, metadata: { bankLast4: '6789', bankCode: '001' } })
   assert.equal(replay.replayed, true)
   assert.equal(replay.intent.id, created.intent.id)
+  assert.equal((await repository.findByIdempotency(request.ownerId, request.kind, request.idempotencyKey))?.id, created.intent.id)
+  assert.equal(await repository.findByIdempotency('another-user', request.kind, request.idempotencyKey), undefined)
   await assert.rejects(repository.create({ ...request, amount: '3' }), /another payment request/i)
   assert.equal(await repository.get('another-user', created.intent.id), undefined)
   const authorized = await repository.update({ ownerId: request.ownerId, intentId: created.intent.id, state: 'authorized', resourceId: 'provider-intent-1' })

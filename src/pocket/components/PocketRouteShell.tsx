@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type TouchEvent, type UIEvent } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { Keyboard } from '@capacitor/keyboard'
 import { useLocation } from 'react-router-dom'
 import PocketBottomNav, { type PocketNavTab } from './PocketBottomNav'
 import { Loader2 } from './PocketIcons'
@@ -24,6 +26,7 @@ export default function PocketRouteShell({
   const scrollFrame = useRef<number | null>(null)
   const pullStartY = useRef<number | null>(null)
   const pullDistanceRef = useRef(0)
+  const refreshTriggered = useRef(false)
 
   const contentTop = headerHeight + 16
 
@@ -64,7 +67,24 @@ export default function PocketRouteShell({
   const startPull = (event: TouchEvent<HTMLDivElement>) => {
     if (navigationDisabled || refreshing || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
     pullDistanceRef.current = 0
+    refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
+  }
+
+  const runRefresh = async () => {
+    if (refreshing || refreshTriggered.current) return
+    refreshTriggered.current = true
+    pullStartY.current = null
+    setRefreshing(true)
+    pullDistanceRef.current = 34
+    setPullDistance(34)
+    try {
+      await refreshPocketData()
+    } finally {
+      pullDistanceRef.current = 0
+      setRefreshing(false)
+      setPullDistance(0)
+    }
   }
 
   const movePull = (event: TouchEvent<HTMLDivElement>) => {
@@ -75,33 +95,38 @@ export default function PocketRouteShell({
       setPullDistance(0)
       return
     }
-    const nextDistance = Math.min(72, distance * 0.45)
+    const nextDistance = Math.min(58, distance * 0.62)
     pullDistanceRef.current = nextDistance
     setPullDistance(nextDistance)
+    if (nextDistance >= 30 && !refreshTriggered.current) void runRefresh()
   }
 
-  const finishPull = async () => {
+  const finishPull = () => {
     pullStartY.current = null
-    if (pullDistanceRef.current < 48 || refreshing) {
+    if (pullDistanceRef.current < 30 || refreshing || refreshTriggered.current) {
       pullDistanceRef.current = 0
-      setPullDistance(0)
+      if (!refreshing) setPullDistance(0)
       return
     }
-    setRefreshing(true)
-    pullDistanceRef.current = 42
-    setPullDistance(42)
-    try {
-      await refreshPocketData()
-    } finally {
-      window.setTimeout(() => {
-        pullDistanceRef.current = 0
-        setRefreshing(false)
-        setPullDistance(0)
-      }, 120)
-    }
+    void runRefresh()
   }
 
   useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      let disposed = false
+      const handles: Array<{ remove(): Promise<void> }> = []
+      void Promise.all([
+        Keyboard.addListener('keyboardWillShow', () => { if (!disposed) setKeyboardOpen(true) }),
+        Keyboard.addListener('keyboardDidShow', () => { if (!disposed) setKeyboardOpen(true) }),
+        Keyboard.addListener('keyboardWillHide', () => { if (!disposed) setKeyboardOpen(false) }),
+        Keyboard.addListener('keyboardDidHide', () => { if (!disposed) setKeyboardOpen(false) }),
+      ]).then(next => handles.push(...next))
+      return () => {
+        disposed = true
+        setKeyboardOpen(false)
+        handles.forEach(handle => { void handle.remove() })
+      }
+    }
     if (!window.matchMedia('(max-width: 767px)').matches) {
       setKeyboardOpen(false)
       return
@@ -130,13 +155,13 @@ export default function PocketRouteShell({
             onScroll={rememberScroll}
             onTouchStart={startPull}
             onTouchMove={movePull}
-            onTouchEnd={() => void finishPull()}
+            onTouchEnd={finishPull}
             onTouchCancel={() => { pullStartY.current = null; if (!refreshing) { pullDistanceRef.current = 0; setPullDistance(0) } }}
             className="h-full w-full overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
             style={{ scrollPaddingTop: contentTop, scrollPaddingBottom: 'calc(7.5rem + env(safe-area-inset-bottom))' }}
           >
             <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-20 flex justify-center transition-opacity duration-150" style={{ top: contentTop - 8, opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}>
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-3.5 w-3.5" /></span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-3.5 w-3.5 animate-spin" /></span>
             </div>
             <div
               className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))]"

@@ -46,9 +46,11 @@ export default function usePocketActivity({
   getAccessToken: PocketAccessTokenReader
 }) {
   const key = activityCacheKey(email, recent)
-  const [rows, setRows] = useState<PocketActivityRow[]>(() => authenticated && email ? pocketActivityCache.get(key) ?? [] : [])
+  const recentKey = activityCacheKey(email, true)
+  const cachedRows = () => authenticated && email ? pocketActivityCache.get(key) ?? (!recent ? pocketActivityCache.get(recentKey) : undefined) ?? [] : []
+  const [rows, setRows] = useState<PocketActivityRow[]>(cachedRows)
   const [busy, setBusy] = useState(false)
-  const [resolved, setResolved] = useState(() => !authenticated || Boolean(email && (pocketActivityResolved.has(key) || pocketActivityCache.has(key) || (!recent && pocketResourceCache.has(email)))))
+  const [resolved, setResolved] = useState(() => !authenticated || Boolean(email && (pocketActivityResolved.has(key) || pocketActivityCache.has(key) || (!recent && (pocketActivityCache.has(recentKey) || pocketResourceCache.has(email))))))
   const [error, setError] = useState('')
   const [merchants, setMerchants] = useState<PocketPosResource[]>(() => authenticated && email ? pocketResourceCache.get(email)?.merchants ?? [] : [])
   const [collections, setCollections] = useState<PocketCollectionResource[]>(() => authenticated && email ? pocketResourceCache.get(email)?.collections ?? [] : [])
@@ -62,29 +64,53 @@ export default function usePocketActivity({
       setResolved(true)
       return
     }
-    const hasSnapshot = Boolean(email && (pocketActivityCache.has(key) || (!recent && pocketResourceCache.has(email)) || pocketActivityResolved.has(key)))
+    const hasSnapshot = Boolean(email && (pocketActivityCache.has(key) || (!recent && (pocketActivityCache.has(recentKey) || pocketResourceCache.has(email))) || pocketActivityResolved.has(key)))
     if (!hasSnapshot) setBusy(true)
+    const initialController = !hasSnapshot ? new AbortController() : null
+    const initialTimeout = initialController ? window.setTimeout(() => initialController.abort(), 2_800) : 0
+    const initialDeadline = initialController ? new Promise<never>((_, reject) => {
+      initialController.signal.addEventListener('abort', () => reject(new DOMException('Activity deadline exceeded.', 'AbortError')), { once: true })
+    }) : null
     try {
-      const token = await getAccessToken()
+      const token = initialDeadline
+        ? await Promise.race([getAccessToken(), initialDeadline])
+        : await getAccessToken()
       if (!token) throw new Error('Sign in again to load Circle Pocket activity.')
-      const data = await readPocketActivity({ accessToken: token, recent })
-      const nextRows = data.payments.slice().sort((a, b) => Number((b.ts || 0) - (a.ts || 0)))
-      setRows(nextRows)
-      setMerchants(data.merchants)
-      setCollections(data.collections)
-      if (email) {
-        pocketActivityCache.set(key, nextRows)
-        if (!recent) pocketResourceCache.set(email, { merchants: data.merchants, collections: data.collections })
-        pocketActivityResolved.add(key)
+      const apply = (data: Awaited<ReturnType<typeof readPocketActivity>>, cacheKey: string, resources: boolean) => {
+        const nextRows = data.payments.slice().sort((a, b) => Number((b.ts || 0) - (a.ts || 0)))
+        setRows(nextRows)
+        if (resources) { setMerchants(data.merchants); setCollections(data.collections) }
+        if (email) {
+          pocketActivityCache.set(cacheKey, nextRows)
+          if (resources) pocketResourceCache.set(email, { merchants: data.merchants, collections: data.collections })
+          pocketActivityResolved.add(cacheKey)
+        }
       }
+      if (!hasSnapshot) {
+        apply(await Promise.race([
+          readPocketActivity({ accessToken: token, recent: true, signal: initialController?.signal }),
+          initialDeadline!,
+        ]), recentKey, false)
+        setBusy(false)
+        setResolved(true)
+        setError('')
+        if (!recent) void readPocketActivity({ accessToken: token }).then(data => apply(data, key, true)).catch(() => undefined)
+        return
+      }
+      apply(await readPocketActivity({ accessToken: token, recent }), key, !recent)
       setError('')
     } catch (reason) {
-      if (!hasSnapshot) setError('Activity is taking longer than expected. Pocket will keep trying in the background.')
+      if (!hasSnapshot) setError(!navigator.onLine
+        ? 'No internet connection. Reconnect, then tap Retry.'
+        : reason instanceof DOMException && reason.name === 'AbortError'
+          ? 'Activity did not respond within 3 seconds. Tap Retry.'
+          : reason instanceof Error ? `Activity sync failed: ${reason.message}` : 'Activity sync failed before a response was received.')
     } finally {
+      if (initialTimeout) window.clearTimeout(initialTimeout)
       setBusy(false)
       setResolved(true)
     }
-  }, [authenticated, email, getAccessToken, key, recent])
+  }, [authenticated, email, getAccessToken, key, recent, recentKey])
 
   useEffect(() => {
     if (!authenticated) {
@@ -95,16 +121,16 @@ export default function usePocketActivity({
       setResolved(true)
       return
     }
-    const cached = pocketActivityCache.get(key)
+    const cached = pocketActivityCache.get(key) ?? (!recent ? pocketActivityCache.get(recentKey) : undefined)
     if (cached) setRows(cached)
     const cachedResources = recent ? undefined : pocketResourceCache.get(email)
     if (cachedResources) {
       setMerchants(cachedResources.merchants)
       setCollections(cachedResources.collections)
     }
-    setResolved(Boolean(cached || cachedResources) || pocketActivityResolved.has(key))
+    setResolved(Boolean(cached || cachedResources) || pocketActivityResolved.has(key) || (!recent && pocketActivityResolved.has(recentKey)))
     if (enabled) void refresh()
-  }, [authenticated, email, enabled, key, recent, refresh])
+  }, [authenticated, email, enabled, key, recent, recentKey, refresh])
 
   useEffect(() => {
     if (!authenticated || !enabled) return

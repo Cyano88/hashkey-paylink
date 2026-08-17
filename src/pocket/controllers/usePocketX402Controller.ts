@@ -287,13 +287,14 @@ export default function usePocketX402Controller({
   }, [beginConnection])
 
   const setAmount = useCallback((value: string) => {
+    if (!activationPending) activationKey.current = ''
     setAmountState(normalizePocketX402Amount(value))
     setActivationSuccess('')
     activationTargetBalance.current = null
     activationStartedAt.current = null
     setActivationPending(false)
     setActivationNeedsCheck(false)
-  }, [])
+  }, [activationPending])
 
   const activationError = useMemo(
     () => pocketX402ActivationError(amount, snapshot?.walletBalance),

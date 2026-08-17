@@ -6,12 +6,8 @@ import type { PocketSplashState } from '../hooks/usePocketSessionSplash'
 
 export default function PocketSessionSplash({
   state,
-  delayed,
-  onRetry,
 }: {
   state: PocketSplashState
-  delayed: boolean
-  onRetry: () => void
 }) {
   const markVisible = state !== 'entering'
   const assembled = state === 'assembling' || state === 'holding' || state === 'launching'
@@ -29,7 +25,7 @@ export default function PocketSessionSplash({
 
   return (
     <div
-      className={`fixed inset-0 z-[120] bg-[#F5F5F7] text-gray-950 transition-opacity duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${launching ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
+      className={`fixed inset-0 z-[120] bg-[#F5F5F7] text-gray-950 transition-opacity duration-300 ease-out ${launching ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
       aria-busy="true"
       aria-label="Opening Pocket"
     >
@@ -44,15 +40,6 @@ export default function PocketSessionSplash({
           <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.2em] text-gray-400">By Hash PayLink</p>
         </div>
       </div>
-      {delayed && !launching && (
-        <div className="absolute inset-x-6 top-[calc(50%+5.25rem)] text-center" role="status" aria-live="polite">
-          <p className="text-[13px] font-semibold">Taking longer than expected</p>
-          <p className="mt-1.5 text-xs leading-5 text-gray-500">Check your connection and try again.</p>
-          <button type="button" onClick={onRetry} className="mt-4 rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-semibold shadow-sm">
-            Retry
-          </button>
-        </div>
-      )}
     </div>
   )
 }

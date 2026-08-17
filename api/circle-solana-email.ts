@@ -369,6 +369,27 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...data })
     }
 
+    if (action === 'refreshEmailSession') {
+      const { userToken, refreshToken, deviceId, chain } = params
+      if (!userToken || !refreshToken || !deviceId) {
+        return res.status(400).json({ ok: false, error: 'Missing Circle wallet session credentials' })
+      }
+      if (userToken.length > 8_000 || refreshToken.length > 8_000 || deviceId.length > 256) {
+        return res.status(400).json({ ok: false, error: 'Circle wallet session credentials are invalid' })
+      }
+      const data = await circleJson('/v1/w3s/users/token/refresh', {
+        method: 'POST',
+        userToken,
+        apiKey: circleApiKey({ chain }),
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          refreshToken,
+          deviceId,
+        }),
+      })
+      return res.json({ ok: true, ...data })
+    }
+
     if (action === 'initializeUser') {
       const { userToken, blockchain, accountType } = params
       if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })

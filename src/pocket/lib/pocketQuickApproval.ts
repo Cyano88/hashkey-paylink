@@ -4,31 +4,27 @@ import {
   NativeBiometric,
   type AvailableResult,
 } from '@capgo/capacitor-native-biometric'
-import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
+import {
+  refreshCircleEvmEmailSession,
+  type CircleEvmEmailSession,
+} from '../../lib/circleEvmEmailWallet'
 import type { PocketNetwork } from './pocketSchemas'
 
 const ENABLED_KEY = 'pocket:quick-approval:enabled:v1'
-const UNLOCK_WINDOW_MS = 60_000
-const unlocked = new Map<string, { session: CircleEvmEmailSession; until: number }>()
 
 function serverKey(email: string) {
   return `com.hashpaylink.pocket.circle.${email.trim().toLowerCase()}`
 }
 
-function tokenIsUsable(token: string) {
-  try {
-    const payload = token.split('.')[1]
-    if (!payload) return true
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const decoded = JSON.parse(window.atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='))) as { exp?: number }
-    return !decoded.exp || decoded.exp * 1_000 > Date.now() + 5 * 60_000
-  } catch {
-    return true
-  }
-}
-
 export function pocketQuickApprovalEnabled() {
   return Capacitor.isNativePlatform() && window.localStorage.getItem(ENABLED_KEY) === 'true'
+}
+
+export async function pocketQuickApprovalConfigured(email: string) {
+  if (!pocketQuickApprovalEnabled() || !email) return false
+  const saved = await NativeBiometric.isCredentialsSaved({ server: serverKey(email) })
+    .catch(() => ({ isSaved: false }))
+  return saved.isSaved
 }
 
 export async function pocketQuickApprovalAvailability(): Promise<AvailableResult | null> {
@@ -36,40 +32,60 @@ export async function pocketQuickApprovalAvailability(): Promise<AvailableResult
   return NativeBiometric.isAvailable({ useFallback: false }).catch(() => null)
 }
 
-export async function enablePocketQuickApproval() {
+async function storePocketEvmQuickSession(email: string, session: CircleEvmEmailSession) {
+  await NativeBiometric.setCredentials({
+    server: serverKey(email),
+    username: email.trim().toLowerCase(),
+    password: JSON.stringify(session),
+    accessControl: AccessControl.BIOMETRY_CURRENT_SET,
+    title: 'Approve Pocket payments',
+    negativeButtonText: 'Use email code',
+  })
+}
+
+export async function enablePocketQuickApproval(email: string, session: CircleEvmEmailSession) {
+  if (!email || !session.userToken || !session.encryptionKey) {
+    throw new Error('Complete Circle email verification before enabling payment approval.')
+  }
   const available = await pocketQuickApprovalAvailability()
   if (!available?.isAvailable || !available.strongBiometryIsAvailable) {
     throw new Error('Fingerprint or face unlock is not available on this phone.')
   }
   await NativeBiometric.verifyIdentity({
-    title: 'Enable phone unlock',
-    subtitle: 'Pocket payments',
-    description: 'Confirm it is you to enable faster payment approval.',
+    title: 'Enable payment approval',
+    subtitle: 'Pocket',
+    description: 'Confirm it is you to approve future payments with fingerprint or face.',
     negativeButtonText: 'Cancel',
     useFallback: false,
     maxAttempts: 3,
   })
+  await storePocketEvmQuickSession(email, session)
   window.localStorage.setItem(ENABLED_KEY, 'true')
 }
 
 export async function disablePocketQuickApproval(email: string) {
   window.localStorage.removeItem(ENABLED_KEY)
-  unlocked.clear()
   if (!Capacitor.isNativePlatform() || !email) return
   await NativeBiometric.deleteCredentials({ server: serverKey(email) }).catch(() => undefined)
 }
 
 export async function savePocketEvmQuickSession(email: string, session: CircleEvmEmailSession) {
   if (!pocketQuickApprovalEnabled() || !session.userToken || !session.encryptionKey) return
-  await NativeBiometric.setCredentials({
-    server: serverKey(email),
-    username: email.trim().toLowerCase(),
-    password: JSON.stringify(session),
-    accessControl: AccessControl.BIOMETRY_CURRENT_SET,
-    title: 'Enable phone unlock',
-    negativeButtonText: 'Use email code',
-  })
-  unlocked.set(serverKey(email), { session, until: Date.now() + UNLOCK_WINDOW_MS })
+  await storePocketEvmQuickSession(email, session)
+}
+
+function sessionForNetwork(
+  session: CircleEvmEmailSession,
+  network: Exclude<PocketNetwork, 'solana'>,
+  walletAddress: string,
+) {
+  const expectedAddress = walletAddress.toLowerCase()
+  if (session.chain === network && session.wallet.address.toLowerCase() === expectedAddress) return session
+  if (network === 'base' || network === 'arbitrum') {
+    const wallet = session.productionEvmTopology?.wallets?.[network]
+    if (wallet?.address?.toLowerCase() === expectedAddress) return { ...session, chain: network, wallet }
+  }
+  return null
 }
 
 export async function readPocketEvmQuickSession(
@@ -79,15 +95,6 @@ export async function readPocketEvmQuickSession(
 ) {
   if (!pocketQuickApprovalEnabled()) return null
   const key = serverKey(email)
-  const cached = unlocked.get(key)
-  if (
-    cached &&
-    cached.until > Date.now() &&
-    cached.session.chain === network &&
-    cached.session.wallet.address.toLowerCase() === walletAddress.toLowerCase() &&
-    tokenIsUsable(cached.session.userToken)
-  ) return cached.session
-
   const saved = await NativeBiometric.isCredentialsSaved({ server: key }).catch(() => ({ isSaved: false }))
   if (!saved.isSaved) return null
   const credentials = await NativeBiometric.getSecureCredentials({
@@ -99,13 +106,12 @@ export async function readPocketEvmQuickSession(
   }).catch(() => null)
   if (!credentials || credentials.username !== email.trim().toLowerCase()) return null
   try {
-    const session = JSON.parse(credentials.password) as CircleEvmEmailSession
-    if (
-      session.chain !== network ||
-      session.wallet?.address?.toLowerCase() !== walletAddress.toLowerCase() ||
-      !tokenIsUsable(session.userToken)
-    ) return null
-    unlocked.set(key, { session, until: Date.now() + UNLOCK_WINDOW_MS })
+    const storedSession = JSON.parse(credentials.password) as CircleEvmEmailSession
+    let session = sessionForNetwork(storedSession, network, walletAddress)
+    if (!session) return null
+    if (!session.refreshToken || !session.deviceId) return null
+    session = await refreshCircleEvmEmailSession(session)
+    await savePocketEvmQuickSession(email, session)
     return session
   } catch {
     return null

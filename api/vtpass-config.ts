@@ -18,6 +18,9 @@ export type VtpassPhase0Config = {
   refundsReady: boolean
   circleTreasuryReady: boolean
   treasuryAddress: string
+  airtimeMaxNgn: number
+  airtimeDailyLimitNgn: number
+  otherBillsDailyLimitNgn: number
   minimumProviderBalanceNgn: number | null
   storeKey: string
   credentialsReady: boolean
@@ -81,6 +84,9 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   const refundsReady = enabled(env.POCKET_BILLS_REFUNDS_READY)
   const circleTreasury = readCircleTreasuryConfig(env)
   const treasuryAddress = env.POCKET_BILLS_TREASURY_ADDRESS?.trim() || ''
+  const airtimeMaxNgn = positiveNumber(env.POCKET_AIRTIME_MAX_NGN) ?? 50_000
+  const airtimeDailyLimitNgn = positiveNumber(env.POCKET_AIRTIME_DAILY_LIMIT_NGN) ?? 200_000
+  const otherBillsDailyLimitNgn = positiveNumber(env.POCKET_OTHER_BILLS_DAILY_LIMIT_NGN) ?? 1_000_000
   const minimumProviderBalanceNgn = positiveNumber(env.VTPASS_MINIMUM_WALLET_BALANCE_NGN)
   const storeKey = env.POCKET_BILLS_STORE_KEY?.trim() || 'hashpaylink:pocket-bills:v1'
   const liveStoreIsolated = environment !== 'live' || /(?:^|[:/_-])live(?:$|[:/_-])/i.test(storeKey)
@@ -91,6 +97,7 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   if (!publicKey) issues.push('VTPASS_PUBLIC_KEY is missing.')
   if (!secretKey) issues.push('VTPASS_SECRET_KEY is missing.')
   if (!treasuryAddress || !isAddress(treasuryAddress)) issues.push('POCKET_BILLS_TREASURY_ADDRESS must be an explicit valid EVM address.')
+  if (airtimeDailyLimitNgn < airtimeMaxNgn) issues.push('POCKET_AIRTIME_DAILY_LIMIT_NGN cannot be lower than POCKET_AIRTIME_MAX_NGN.')
   if (minimumProviderBalanceNgn === null) issues.push('VTPASS_MINIMUM_WALLET_BALANCE_NGN must be a positive number.')
   if (!storeKey) issues.push('POCKET_BILLS_STORE_KEY is missing.')
   if (!liveStoreIsolated) issues.push('POCKET_BILLS_STORE_KEY must use an explicit live namespace in the live environment.')
@@ -103,6 +110,7 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
   const policyReady = Boolean(
     treasuryAddress
     && isAddress(treasuryAddress)
+    && airtimeDailyLimitNgn >= airtimeMaxNgn
     && minimumProviderBalanceNgn !== null
     && storeKey
     && liveStoreIsolated
@@ -137,6 +145,9 @@ export function readVtpassPhase0Config(env: NodeJS.ProcessEnv = process.env): Vt
     refundsReady,
     circleTreasuryReady: circleTreasury.verificationReady,
     treasuryAddress,
+    airtimeMaxNgn,
+    airtimeDailyLimitNgn,
+    otherBillsDailyLimitNgn,
     minimumProviderBalanceNgn,
     storeKey,
     credentialsReady,

@@ -102,6 +102,12 @@ export function createPaymentExecutionRepository(options: Options = {}) {
       return result
     },
     async get(ownerId: string, intentId: string) { const intent = (await readStore()).intents[intentId]; return intent?.ownerId === ownerId ? intent : undefined },
+    async findByIdempotency(ownerId: string, kind: PaymentExecutionKind, idempotencyKey: string) {
+      const store = await readStore()
+      const intentId = store.idempotency[scope(clean(ownerId, 180), kind, clean(idempotencyKey, 160))]
+      const intent = store.intents[intentId]
+      return intent?.ownerId === clean(ownerId, 180) && intent.kind === kind ? intent : undefined
+    },
     async findByResource(ownerId: string, resourceId: string, kind?: PaymentExecutionKind) {
       return Object.values((await readStore()).intents).find(intent => intent.ownerId === ownerId && intent.resourceId === resourceId && (!kind || intent.kind === kind))
     },

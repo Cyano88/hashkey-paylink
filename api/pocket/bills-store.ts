@@ -195,6 +195,36 @@ function decimalToMinor(value: string, decimals: number) {
   return (BigInt(whole) * (10n ** BigInt(decimals)) + BigInt(fraction.padEnd(decimals, '0'))).toString()
 }
 
+function ngnPolicyMinor(value: number) {
+  return BigInt(Math.round(value * 100))
+}
+
+function lagosDateParts(timestamp: number) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Lagos',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(timestamp))
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find(item => item.type === type)?.value || 0)
+  return { year: part('year'), month: part('month'), day: part('day') }
+}
+
+function lagosDay(timestamp: number) {
+  const { year, month, day } = lagosDateParts(timestamp)
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function nextLagosMidnight(timestamp: number) {
+  const { year, month, day } = lagosDateParts(timestamp)
+  return Date.UTC(year, month - 1, day + 1) - 60 * 60_000
+}
+
+function reservesDailyLimit(intent: PocketBillsIntent, timestamp: number) {
+  const abandoned = ['quoted', 'awaiting_payment'].includes(intent.state) && intent.quoteExpiresAt <= timestamp
+  return !abandoned && intent.state !== 'failed' && intent.state !== 'refunded'
+}
+
 function idempotencyIndex(ownerId: string, idempotencyKey: string) {
   return `${ownerId}:${idempotencyKey}`
 }
@@ -360,6 +390,9 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
 
     const amountMinor = BigInt(amountNgnMinor)
     if (amountMinor <= 0n) throw new PocketBillsStoreError('BILLS_INVALID_AMOUNT', 'Enter a valid Naira amount.')
+    if (category === 'airtime' && amountMinor > ngnPolicyMinor(config.airtimeMaxNgn)) {
+      throw new PocketBillsStoreError('BILLS_AMOUNT_ABOVE_LIMIT', `Airtime is limited to NGN ${config.airtimeMaxNgn.toLocaleString('en-NG')} per payment.`)
+    }
 
     // Idempotency follows the user's semantic request. Server-generated quote
     // values and expiry may drift between retries, but the original stored quote
@@ -374,6 +407,23 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
           throw new PocketBillsStoreError('BILLS_IDEMPOTENCY_CONFLICT', 'This idempotency key belongs to a different bill request.', 409)
         }
         return { intent: existing, created: false }
+      }
+
+      const day = lagosDay(createdAt)
+      const usedMinor = Object.values(store.intents).reduce((totals, intent) => {
+        if (intent.ownerId !== ownerId || lagosDay(intent.createdAt) !== day || !reservesDailyLimit(intent, createdAt)) return totals
+        const bucket = intent.category === 'airtime' ? 'airtime' : 'other'
+        totals[bucket] += BigInt(intent.amountNgnMinor)
+        return totals
+      }, { airtime: 0n, other: 0n })
+      const bucket = category === 'airtime' ? 'airtime' : 'other'
+      const dailyLimitMinor = ngnPolicyMinor(bucket === 'airtime' ? config.airtimeDailyLimitNgn : config.otherBillsDailyLimitNgn)
+      if (usedMinor[bucket] + amountMinor > dailyLimitMinor) {
+        throw new PocketBillsStoreError(
+          'BILLS_DAILY_LIMIT_EXCEEDED',
+          bucket === 'airtime' ? 'Daily airtime limit reached.' : 'Daily Bills limit reached.',
+          409,
+        )
       }
 
       const id = uuid()
@@ -492,6 +542,34 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
       .filter(intent => intent.ownerId === ownerId)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, safeLimit)
+  }
+
+  async function readLimitUsage(ownerIdInput: string) {
+    const ownerId = cleanText(ownerIdInput, 200)
+    if (!ownerId) throw new PocketBillsStoreError('BILLS_AUTH_REQUIRED', 'Pocket authentication is required.', 401)
+    const timestamp = now()
+    const day = lagosDay(timestamp)
+    const store = await read()
+    const usedMinor = Object.values(store.intents).reduce((totals, intent) => {
+      if (intent.ownerId !== ownerId || lagosDay(intent.createdAt) !== day || !reservesDailyLimit(intent, timestamp)) return totals
+      totals[intent.category === 'airtime' ? 'airtime' : 'other'] += BigInt(intent.amountNgnMinor)
+      return totals
+    }, { airtime: 0n, other: 0n })
+    const asNgn = (minor: bigint) => Number(minor) / 100
+    return {
+      resetAt: nextLagosMidnight(timestamp),
+      airtime: {
+        perPaymentNgn: config.airtimeMaxNgn,
+        dailyLimitNgn: config.airtimeDailyLimitNgn,
+        usedTodayNgn: asNgn(usedMinor.airtime),
+        remainingTodayNgn: Math.max(0, config.airtimeDailyLimitNgn - asNgn(usedMinor.airtime)),
+      },
+      otherBills: {
+        dailyLimitNgn: config.otherBillsDailyLimitNgn,
+        usedTodayNgn: asNgn(usedMinor.other),
+        remainingTodayNgn: Math.max(0, config.otherBillsDailyLimitNgn - asNgn(usedMinor.other)),
+      },
+    }
   }
 
   async function updateOwned(ownerIdInput: string, intentIdInput: string, fn: (intent: PocketBillsIntent, store: BillsStoreData, timestamp: number) => void) {
@@ -826,6 +904,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     releaseProviderRequeryClaim,
     getOwnedIntent,
     listOwnedIntents,
+    readLimitUsage,
     getIntentById,
     markAwaitingPayment,
     recordVerifiedPayment,

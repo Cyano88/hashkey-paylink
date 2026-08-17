@@ -416,6 +416,9 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
         const intents = await dependencies.store.listOwnedIntents(identity.userId, Number(req.body?.limit ?? 50))
         return respond.success({ intents: intents.map(publicPocketBillsIntent) })
       }
+      if (action === 'limits') {
+        return respond.success({ limits: await dependencies.store.readLimitUsage(identity.userId) })
+      }
 
       const intentId = cleanText(req.body?.intent_id, 100)
       if (!intentId) return respond.fail(new PocketBillsStoreError('BILLS_MISSING_INTENT', 'Bill payment ID is required.'), 'intentId')

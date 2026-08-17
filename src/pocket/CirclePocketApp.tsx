@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { App as CapacitorApp } from '@capacitor/app'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isPocketNativeRuntime, POCKET_BASE_PATH, POCKET_ROUTES, resolvePocketRoute } from './lib/pocketRoutes'
 import PocketLoadingState from './components/PocketLoadingState'
@@ -11,8 +12,9 @@ import usePocketPushNotifications from './hooks/usePocketPushNotifications'
 import { prefetchPocketWalletSnapshot } from './hooks/usePocketWallets'
 import { prefetchPocketActivity } from './hooks/usePocketActivity'
 import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
-import { clearActivePocketBankPayout, readActivePocketBankPayout } from './lib/pocketBankPayoutState'
+import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutTransfer } from './lib/pocketBankPayoutState'
 import { registerPocketRefreshHandler } from './lib/pocketRefresh'
+import { POCKET_NATIVE_BACK_EVENT } from './lib/pocketNativeBack'
 
 const PocketActivityPage = lazy(() => import('./pages/PocketActivityPage'))
 const PocketAssistantPage = lazy(() => import('./pages/PocketAssistantPage'))
@@ -57,14 +59,28 @@ export default function CirclePocketApp() {
   ))
   const [launchSurface] = useState(() => landing || isPocketNativeRuntime())
   const splashState = usePocketSessionSplash(launchSurface, sessionResolved)
-  const [sessionDelayed, setSessionDelayed] = useState(false)
 
   useEffect(() => {
-    setSessionDelayed(false)
-    if (sessionResolved || splashState === 'idle') return
-    const timer = window.setTimeout(() => setSessionDelayed(true), 10_000)
-    return () => window.clearTimeout(timer)
-  }, [sessionResolved, splashState])
+    if (!isPocketNativeRuntime()) return
+    let disposed = false
+    let remove: (() => Promise<void>) | undefined
+    void CapacitorApp.addListener('backButton', () => {
+      const event = new Event(POCKET_NATIVE_BACK_EVENT, { cancelable: true })
+      if (!window.dispatchEvent(event)) return
+      if (landing || route?.section === 'home' && route.view === 'overview') {
+        void CapacitorApp.minimizeApp()
+        return
+      }
+      navigate(-1)
+    }).then(handle => {
+      if (disposed) void handle.remove()
+      else remove = handle.remove
+    })
+    return () => {
+      disposed = true
+      if (remove) void remove()
+    }
+  }, [landing, navigate, route])
 
   useEffect(() => {
     if (!landing || !sessionResolved || !authenticated) return
@@ -80,9 +96,12 @@ export default function CirclePocketApp() {
     if (!ready || !authenticated || !email) return
     let active = true
     setInitialDataReady(false)
+    const walletSnapshot = prefetchPocketWalletSnapshot({ email, getAccessToken })
+    const recentActivity = prefetchPocketActivity({ email, getAccessToken, recent: true })
+    const activityDeadline = new Promise<void>(resolve => window.setTimeout(resolve, 900))
     void Promise.allSettled([
-      prefetchPocketWalletSnapshot({ email, getAccessToken }),
-      prefetchPocketActivity({ email, getAccessToken, recent: true }),
+      walletSnapshot,
+      Promise.race([recentActivity, activityDeadline]),
     ]).then(() => { if (active) setInitialDataReady(true) })
     return () => { active = false }
   }, [authenticated, email, getAccessToken, ready])
@@ -93,6 +112,10 @@ export default function CirclePocketApp() {
     const reconcile = async () => {
       const intentId = readActivePocketBankPayout()
       if (!intentId || checking || document.visibilityState !== 'visible') return
+      if (!readActivePocketBankPayoutTransfer(intentId)) {
+        clearActivePocketBankPayout(intentId)
+        return
+      }
       checking = true
       try {
         const accessToken = await getAccessToken()
@@ -150,14 +173,10 @@ export default function CirclePocketApp() {
   else if (route?.section === 'move' && route.view === 'bank') content = <PocketPageBoundary active="home"><PocketMoveBankPage /></PocketPageBoundary>
   else if (route?.section === 'move' && route.view === 'pos') content = <PocketPageBoundary active="home"><PocketMovePosPage /></PocketPageBoundary>
 
-  const retrySession = () => {
-    if (ready && authenticated) void profile.reload()
-    else window.location.reload()
-  }
   return (
     <>
       {content}
-      <PocketSessionSplash state={splashState} delayed={sessionDelayed} onRetry={retrySession} />
+      <PocketSessionSplash state={splashState} />
     </>
   )
 }

@@ -182,7 +182,7 @@ export default function usePocketPaymentLiquidityController(input: {
         setStatus('ready')
         return destinationWallet
       }
-      const activeCheckpoint = checkpoint?.phase === 'completed' ? null : checkpoint
+      let activeCheckpoint = checkpoint?.phase === 'completed' ? null : checkpoint
       const sourceWallet = inspected.wallets[currentRoute.source]
         ?? await input.ensureWallet(currentRoute.source)
       if (!sourceWallet?.walletId || !sourceWallet.blockchain || !destinationWallet.address) {
@@ -191,20 +191,25 @@ export default function usePocketPaymentLiquidityController(input: {
       const amount = formatUnits(currentRoute.amountUnits, 6)
       let txHash = ''
       let complete = false
+      if (activeCheckpoint?.phase === 'started' && !activeCheckpoint.txHash) {
+        await input.persistence?.update(inspected.accessToken, { phase: 'failed' }).catch(() => null)
+        activeCheckpoint = null
+      }
       if (activeCheckpoint && activeCheckpoint.phase !== 'failed') {
         if (activeCheckpoint.source !== currentRoute.source || activeCheckpoint.destination !== currentRoute.destination || activeCheckpoint.amount !== amount) {
           throw new Error('A previous payment move needs review before another route can start.')
         }
         txHash = activeCheckpoint.txHash
-        if (activeCheckpoint.phase === 'started' && !txHash) {
-          throw new Error('A previous payment move needs review before another route can start.')
-        }
       }
       if (!txHash) {
-        const started = await input.persistence?.start(inspected.accessToken, { source: currentRoute.source, destination: currentRoute.destination, amount })
+        let started = await input.persistence?.start(inspected.accessToken, { source: currentRoute.source, destination: currentRoute.destination, amount })
+        if (started && !started.claimed && !started.txHash) {
+          await input.persistence?.update(inspected.accessToken, { phase: 'failed' }).catch(() => null)
+          started = await input.persistence?.start(inspected.accessToken, { source: currentRoute.source, destination: currentRoute.destination, amount })
+        }
         if (started && !started.claimed) {
           if (started.source !== currentRoute.source || started.amount !== amount || !started.txHash) {
-            throw new Error('A previous payment move needs review before another route can start.')
+            throw new Error('Payment timed out. No money was sent. Try again.')
           }
           txHash = started.txHash
           complete = started.phase === 'completed'
@@ -245,7 +250,7 @@ export default function usePocketPaymentLiquidityController(input: {
         status: 'submitted',
       }).catch(() => undefined)
       setStatus('waiting')
-      for (let attempt = 0; attempt < 72 && !complete; attempt += 1) {
+      for (let attempt = 0; attempt < 12 && !complete; attempt += 1) {
         if (attempt) await wait(pocketBridgePollDelay(attempt))
         const next = await readPocketBridgeStatus({
           accessToken: inspected.accessToken,
@@ -254,7 +259,7 @@ export default function usePocketPaymentLiquidityController(input: {
         }).catch(() => null)
         complete = next?.status === 'confirmed' || next?.status === 'complete'
       }
-      if (!complete) throw new Error('USDC is still moving. Do not submit the move again.')
+      if (!complete) throw new Error('USDC move submitted. Pocket will continue automatically.')
       await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash })
       void recordPocketBridge({
         accessToken: inspected.accessToken,
@@ -272,7 +277,7 @@ export default function usePocketPaymentLiquidityController(input: {
       return destinationWallet
     } catch (reason) {
       const message = liquidityError(reason)
-      const retryBlocked = /submitted and is being reconciled|still moving|without a verifiable source transaction|check activity before retrying/i.test(message)
+      const retryBlocked = /submitted and is being reconciled|USDC move submitted|still moving|without a verifiable source transaction|check activity before retrying/i.test(message)
       setStatus(retryBlocked ? 'reconciling' : 'idle')
       setError(message)
       throw reason

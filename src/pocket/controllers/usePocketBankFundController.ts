@@ -71,6 +71,8 @@ export default function usePocketBankFundController(input: {
         return
       }
       if (next.state === 'expired' || next.state === 'refunded') {
+        activeIntent.current = ''
+        idempotencyKey.current = ''
         setStatus('failed')
         setError(next.state === 'expired' ? 'These bank transfer details expired. Start a new funding request.' : 'The bank funding order was refunded.')
         return
@@ -109,6 +111,8 @@ export default function usePocketBankFundController(input: {
         return
       }
       if (next.state === 'expired' || next.state === 'refunded') {
+        activeIntent.current = ''
+        idempotencyKey.current = ''
         setStatus('failed')
         setError(next.state === 'expired' ? 'These bank transfer details expired. Start a new funding request.' : 'The bank funding order was refunded.')
         return

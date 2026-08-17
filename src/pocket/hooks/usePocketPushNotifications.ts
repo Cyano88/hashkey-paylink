@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { PushNotifications } from '@capacitor/push-notifications'
 import type { NavigateFunction } from 'react-router-dom'
 import { refreshPocketData } from '../lib/pocketRefresh'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { POCKET_API } from '../lib/pocketSchemas'
+import { pocketPushEnabled, POCKET_PUSH_PREFERENCE_EVENT, rememberPocketPushToken, unregisterPocketPushDevice } from '../lib/pocketPushPreference'
 
 // Push registration must stay off unless the native build includes a matching
 // Firebase configuration. Calling register() without it crashes Android in the
@@ -23,19 +24,21 @@ export default function usePocketPushNotifications(input: {
   getAccessToken(): Promise<string | null>
   navigate: NavigateFunction
 }) {
+  const [userEnabled, setUserEnabled] = useState(pocketPushEnabled)
   useEffect(() => {
-    if (!POCKET_PUSH_ENABLED || !Capacitor.isNativePlatform() || !input.ready || !input.authenticated) return
-    let disposed = false
-    let registered: { token: string; accessToken: string } | null = null
+    const update = () => setUserEnabled(pocketPushEnabled())
+    window.addEventListener(POCKET_PUSH_PREFERENCE_EVENT, update)
+    return () => window.removeEventListener(POCKET_PUSH_PREFERENCE_EVENT, update)
+  }, [])
+  useEffect(() => {
+    if (userEnabled || !input.authenticated) return
+    void unregisterPocketPushDevice(input.getAccessToken).catch(() => undefined)
+  }, [input.authenticated, input.getAccessToken, userEnabled])
+  useEffect(() => {
+    if (!POCKET_PUSH_ENABLED || !userEnabled || !Capacitor.isNativePlatform() || !input.ready || !input.authenticated) return
     const handles: Array<{ remove(): Promise<void> }> = []
-    const unregister = ({ token, accessToken }: { token: string; accessToken: string }) => fetch(POCKET_API.pushDevices, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    }).catch(() => undefined)
     const register = async () => {
       handles.push(await PushNotifications.addListener('registration', async registration => {
-        if (disposed) return
         const accessToken = await input.getAccessToken()
         if (!accessToken) return
         const response = await fetch(POCKET_API.pushDevices, {
@@ -44,9 +47,7 @@ export default function usePocketPushNotifications(input: {
           body: JSON.stringify({ token: registration.value, platform: Capacitor.getPlatform() }),
         }).catch(() => null)
         if (!response?.ok) return
-        const device = { token: registration.value, accessToken }
-        if (disposed) void unregister(device)
-        else registered = device
+        rememberPocketPushToken(registration.value)
       }))
       handles.push(await PushNotifications.addListener('registrationError', () => {
         // Permission can remain granted while FCM registration is temporarily
@@ -62,8 +63,8 @@ export default function usePocketPushNotifications(input: {
       }))
       await PushNotifications.createChannel({
         id: 'pocket-payments',
-        name: 'Pocket payments',
-        description: 'Payment and request updates',
+        name: 'Pocket notifications',
+        description: 'Payments, service status, and Pocket updates',
         importance: 4,
         visibility: 0,
       }).catch(() => undefined)
@@ -73,9 +74,7 @@ export default function usePocketPushNotifications(input: {
     }
     void register().catch(() => undefined)
     return () => {
-      disposed = true
-      if (registered) void unregister(registered)
       handles.forEach(handle => { void handle.remove() })
     }
-  }, [input.authenticated, input.getAccessToken, input.navigate, input.ready])
+  }, [input.authenticated, input.getAccessToken, input.navigate, input.ready, userEnabled])
 }

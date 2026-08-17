@@ -110,7 +110,7 @@ const pocketAppSource = await readFile(new URL('../src/pocket/CirclePocketApp.ts
 const assistantPageSource = await readFile(new URL('../src/pocket/pages/PocketAssistantPage.tsx', import.meta.url), 'utf8')
 const assistantControllerSource = await readFile(new URL('../src/pocket/controllers/usePocketAssistantController.ts', import.meta.url), 'utf8')
 const createLinkSource = await readFile(new URL('../src/pages/CreateLink.tsx', import.meta.url), 'utf8')
-assert.match(pocketAppSource, /route\.section === 'assistant'.*PocketAssistantPage/)
+assert.match(pocketAppSource, /route\?\.section === 'assistant'.*PocketAssistantPage/)
 assert.doesNotMatch(pocketAppSource, /CreateLink/)
 assert.match(assistantPageSource, /TelegramHelperPanel/)
 assert.match(assistantPageSource, /initialHelperMode='circle-pocket'/)

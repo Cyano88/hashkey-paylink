@@ -255,7 +255,7 @@ export default function usePocketBillsController({
     }
   }, [activeBillKey, category, environment, refreshBalances])
 
-  const reconcile = useCallback(async (intentId: string, txHash: string, accessToken: string) => {
+  const reconcile = useCallback(async (intentId: string, txHash: string, accessToken: string, restoring = false) => {
     let next: PocketBillIntent | null = null
     if (txHash) {
       for (let attempt = 0; attempt < 16; attempt += 1) {
@@ -282,9 +282,20 @@ export default function usePocketBillsController({
       next = await refreshPocketAirtime({ accessToken, intentId, refresh: true })
       if (mounted.current) setIntent(next)
     }
+    if (restoring && (next.state === 'delivered' || next.state === 'refunded' || next.state === 'failed')) {
+      window.localStorage.removeItem(activeBillKey)
+      if (mounted.current) {
+        setIntent(null)
+        setStatus('idle')
+        setError('')
+        setErrorCode('')
+        setNotice('')
+      }
+      return next
+    }
     settleResult(next)
     return next
-  }, [category, settleResult])
+  }, [activeBillKey, category, settleResult])
 
   useEffect(() => {
     if (!authenticated || availability !== 'enabled') return
@@ -299,7 +310,7 @@ export default function usePocketBillsController({
       setError('')
       setErrorCode('')
       void token()
-        .then(accessToken => reconcile(active.intentId, active.txHash, accessToken))
+        .then(accessToken => reconcile(active.intentId, active.txHash, accessToken, true))
         .catch(reason => {
           if (!mounted.current || cancelled) return
           setStatus('error')

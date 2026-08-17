@@ -188,15 +188,18 @@ export async function savePocketLocalCurrencyProfile({
 export async function readPocketActivity({
   accessToken,
   recent = false,
+  signal,
   fetcher = fetch,
 }: {
   accessToken: string
   recent?: boolean
+  signal?: AbortSignal
   fetcher?: typeof fetch
 }): Promise<PocketActivityReadResult> {
   const response = await fetcher(recent ? `${POCKET_API.activity}?scope=recent` : POCKET_API.activity, {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },
+    signal,
   })
   const data = await response.json().catch(() => undefined)
   if (!response.ok) {

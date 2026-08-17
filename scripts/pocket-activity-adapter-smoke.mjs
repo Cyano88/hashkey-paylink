@@ -117,9 +117,9 @@ const handler = createPocketActivityHandler({
   },
   readClosedBankPayouts: async () => [{
     id: 'pex-expired-payout-1', ownerId: 'privy-user-1', idempotencyKey: 'expired-payout-1', requestHash: 'hash',
-    kind: 'bank_payout', state: 'expired', asset: 'USDC', amount: '0.72', sourceNetwork: 'base', settlementNetwork: 'base',
-    destinationType: 'verified_bank_account', resourceId: 'paycrest-intent-expired-1', providerReference: 'paycrest-order-expired-1',
-    failureCode: 'PAYOUT_WINDOW_EXPIRED', metadata: { bankName: 'OPay', bankLast4: '9696', accountName: 'ADA LOVELACE', amountNgn: '1000', memo: 'Direct bank payout' },
+    kind: 'bank_payout', state: 'failed', asset: 'USDC', amount: '0.72', sourceNetwork: 'base', settlementNetwork: 'base',
+    destinationType: 'verified_bank_account', resourceId: 'paycrest-intent-expired-1', providerReference: 'paycrest-order-expired-1', transactionHash: '0xreverted',
+    failureCode: 'PROVIDER_REFUNDED', metadata: { bankName: 'OPay', bankLast4: '9696', accountName: 'ADA LOVELACE', amountNgn: '1000', memo: 'Direct bank payout' },
     createdAt: 1_743_000_000_000, updatedAt: 1_744_000_000_000,
   }],
   readCollections: async ownerId => [{
@@ -188,7 +188,7 @@ assert.equal(isPocketActivityReadData(loaded.body), true)
 assert.equal(loaded.body.merchants[0].display_name, 'Ada Shop')
 assert.equal(loaded.body.collections[0].title, "Shy's wedding")
 assert.deepEqual(ownerIds, ['privy-user-1', 'privy-user-1', 'privy-user-1', 'privy-user-1'])
-assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', 'execution:pex-expired-payout-1', '0xbill', 'paycrest_intent-2', '0xolder'])
+assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', '0xreverted', '0xbill', 'paycrest_intent-2', '0xolder'])
 assert.equal(loaded.body.payments[0].source, 'collection')
 assert.equal(loaded.body.payments[0].activityLabel, "Shy's wedding")
 assert.equal(loaded.body.payments[0].paycrestStatus, 'confirmed')
@@ -197,8 +197,8 @@ assert.equal(loaded.body.payments[1].source, 'purchase')
 assert.equal(loaded.body.payments[1].activityLabel, 'PolyDesk funding')
 assert.equal(loaded.body.payments[1].receiptId, 'r1.test.signature')
 assert.equal(loaded.body.payments[2].source, 'bank-withdraw')
-assert.equal(loaded.body.payments[2].activityLabel, 'Payout expired')
-assert.equal(loaded.body.payments[2].paycrestStatus, 'expired')
+assert.equal(loaded.body.payments[2].activityLabel, 'Reverted payment')
+assert.equal(loaded.body.payments[2].paycrestStatus, 'refunded')
 assert.equal(loaded.body.payments[2].amountNgn, '1000')
 assert.equal(loaded.body.payments[3].source, 'bills')
 assert.equal(loaded.body.payments[3].amountNgn, '100')
@@ -221,7 +221,7 @@ ownerIds.length = 0
 const recent = await request(handler, 'GET', { scope: 'recent' })
 assert.equal(recent.statusCode, 200)
 assert.equal(recent.body.payments.length, 4)
-assert.deepEqual(recent.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', 'execution:pex-expired-payout-1', '0xbill'])
+assert.deepEqual(recent.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', '0xreverted', '0xbill'])
 assert.deepEqual(recent.body.merchants, [])
 assert.deepEqual(recent.body.collections, [])
 assert.equal(readOptions.at(-1).recent, true)

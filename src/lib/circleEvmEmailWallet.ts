@@ -1,4 +1,5 @@
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
+import { Capacitor } from '@capacitor/core'
 import { parseUnits, type Address, type Hex } from 'viem'
 import type { ChainKey } from './chains'
 import { CHAIN_META } from './chains'
@@ -36,6 +37,8 @@ type CircleEvmWallet = CircleEvmWalletRecord
 export type CircleEvmEmailSession = {
   userToken: string
   encryptionKey: string
+  refreshToken?: string
+  deviceId?: string
   wallet: CircleEvmWallet
   chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
   appId?: string
@@ -46,6 +49,7 @@ const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefi
 const ARC_TESTNET_APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET as string | undefined
 const ENABLED = import.meta.env.VITE_CIRCLE_EVM_EMAIL_ENABLED !== 'false'
 const CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000
+const POCKET_NATIVE_ORIGIN = 'https://pocket.hashpaylink.com'
 let runtimeConfigPromise: Promise<{
   circle?: {
     userWalletAppId?: string
@@ -60,6 +64,10 @@ const CHAIN_CONFIG = {
   arc: { blockchain: 'ARC-TESTNET', label: 'Arc' },
 } as const
 
+function circleRuntimeUrl(path: string) {
+  return Capacitor.isNativePlatform() ? `${POCKET_NATIVE_ORIGIN}${path}` : path
+}
+
 export function canUseCircleEvmEmailWallet(chain: ChainKey) {
   return ENABLED && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
 }
@@ -70,7 +78,7 @@ function appIdForChain(chain: ChainKey) {
 
 async function runtimePublicConfig() {
   if (!runtimeConfigPromise) {
-    runtimeConfigPromise = fetch('/api/public-config', { cache: 'no-store' })
+    runtimeConfigPromise = fetch(circleRuntimeUrl('/api/public-config'), { cache: 'no-store' })
       .then(async res => {
         const data = await res.json().catch(() => ({}))
         if (!res.ok || data?.ok === false) throw new Error('Public wallet config is unavailable.')
@@ -258,7 +266,7 @@ async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> 
   const label = scope ? `${action}/${scope}` : action
   let res: Response
   try {
-    res = await fetch('/api/circle-solana-email', {
+    res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -269,6 +277,30 @@ async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> 
   const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number; detail?: string }
   if (!res.ok || data.ok === false) throw new Error(`Circle email wallet ${label} failed: ${apiError(data, res.status, action)}`)
   return data as T
+}
+
+export async function refreshCircleEvmEmailSession(
+  session: CircleEvmEmailSession,
+): Promise<CircleEvmEmailSession> {
+  if (!session.refreshToken || !session.deviceId) {
+    throw new Error('Circle email approval is required once to enable phone unlock.')
+  }
+  const refreshed = await circleWalletApi<CircleEmailLoginResult>({
+    action: 'refreshEmailSession',
+    chain: session.chain,
+    userToken: session.userToken,
+    refreshToken: session.refreshToken,
+    deviceId: session.deviceId,
+  })
+  if (!refreshed.userToken || !refreshed.encryptionKey || !refreshed.refreshToken) {
+    throw new Error('Circle did not return a refreshed wallet session.')
+  }
+  return {
+    ...session,
+    userToken: refreshed.userToken,
+    encryptionKey: refreshed.encryptionKey,
+    refreshToken: refreshed.refreshToken,
+  }
 }
 
 function challengeCorrelationId(value: unknown) {
@@ -683,6 +715,8 @@ export async function connectCircleEvmEmailWallet(
   return {
     userToken: login.userToken,
     encryptionKey: login.encryptionKey,
+    refreshToken: login.refreshToken,
+    deviceId,
     wallet: ensured.wallet,
     chain,
     appId,

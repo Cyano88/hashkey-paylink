@@ -36,19 +36,19 @@ export default function usePocketSessionSplash(enabled: boolean, canLaunch = tru
   useEffect(() => {
     if (state !== 'entering') return
     try { window.sessionStorage.setItem(POCKET_SPLASH_SESSION_KEY, 'true') } catch { /* animation remains available */ }
-    const revealTimer = window.setTimeout(() => setState('mark'), 160)
+    const revealTimer = window.setTimeout(() => setState('mark'), 70)
     return () => window.clearTimeout(revealTimer)
   }, [state])
 
   useEffect(() => {
     if (state !== 'mark') return
-    const assembleTimer = window.setTimeout(() => setState('assembling'), 620)
+    const assembleTimer = window.setTimeout(() => setState('assembling'), 260)
     return () => window.clearTimeout(assembleTimer)
   }, [state])
 
   useEffect(() => {
     if (state !== 'assembling') return
-    const holdTimer = window.setTimeout(() => setState('holding'), 1_300)
+    const holdTimer = window.setTimeout(() => setState('holding'), 280)
     return () => window.clearTimeout(holdTimer)
   }, [state])
 
@@ -59,7 +59,7 @@ export default function usePocketSessionSplash(enabled: boolean, canLaunch = tru
 
   useEffect(() => {
     if (state !== 'launching') return
-    const finishTimer = window.setTimeout(() => setState('idle'), 900)
+    const finishTimer = window.setTimeout(() => setState('idle'), 320)
     return () => window.clearTimeout(finishTimer)
   }, [state])
 

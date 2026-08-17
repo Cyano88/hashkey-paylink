@@ -13,16 +13,18 @@ import { CHAIN_META } from '../../lib/chains'
 import { linkPocketWallet, readPocketWallet } from '../api/pocketWalletLinkClient'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import {
+  pocketQuickApprovalEnabled,
   readPocketEvmQuickSession,
   savePocketEvmQuickSession,
 } from '../lib/pocketQuickApproval'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 
 export type PocketSolanaEmailSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
+const sharedEvmSessions = new Map<string, CircleEvmEmailSession>()
+const sharedPendingEvmSessions = new Map<string, Promise<CircleEvmEmailSession>>()
 
-function isExpiredEmailChallenge(reason: unknown) {
-  const message = reason instanceof Error ? reason.message : String(reason ?? '')
-  return /email verification code is invalid or expired|code expired/i.test(message)
+function evmSessionKey(email: string, network: Exclude<PocketNetwork, 'solana'>, walletAddress: string) {
+  return `${email.trim().toLowerCase()}:${network}:${walletAddress.toLowerCase()}`
 }
 
 async function connectFreshEvmSession(
@@ -32,13 +34,7 @@ async function connectFreshEvmSession(
 ) {
   const secured = await readPocketEvmQuickSession(email, network, walletAddress)
   if (secured) return secured
-  let session: CircleEvmEmailSession
-  try {
-    session = await connectCircleEvmEmailWallet(email, network)
-  } catch (reason) {
-    if (!isExpiredEmailChallenge(reason)) throw reason
-    session = await connectCircleEvmEmailWallet(email, network)
-  }
+  const session = await connectCircleEvmEmailWallet(email, network)
   await savePocketEvmQuickSession(email, session).catch(() => undefined)
   return session
 }
@@ -153,8 +149,8 @@ export default function usePocketWalletController({
   onWalletReady?: (network: PocketNetwork, wallet: CirclePocketWallet) => void
 }) {
   const [evmSession, setEvmSession] = useState<CircleEvmEmailSession | null>(null)
+  const evmSessionRef = useRef<CircleEvmEmailSession | null>(null)
   const [solanaSession, setSolanaSession] = useState<PocketSolanaEmailSession | null>(null)
-  const pendingEvmSessions = useRef(new Map<string, Promise<CircleEvmEmailSession>>())
 
   const ensureWallet = useCallback(async (
     network: PocketNetwork,
@@ -166,7 +162,11 @@ export default function usePocketWalletController({
       email,
       getAccessToken,
       shouldContinue: options.shouldContinue,
-      onEvmSession: setEvmSession,
+      onEvmSession: session => {
+        evmSessionRef.current = session
+        setEvmSession(session)
+        void savePocketEvmQuickSession(email, session).catch(() => undefined)
+      },
       onSolanaSession: setSolanaSession,
     })
     if (wallet) onWalletReady?.(network, wallet)
@@ -176,20 +176,26 @@ export default function usePocketWalletController({
   const getEvmSession = useCallback(async (
     network: Exclude<PocketNetwork, 'solana'>,
     walletAddress: string,
+    options: { allowSharedSession?: boolean } = {},
   ) => {
-    if (evmSession && evmSession.chain === network && evmSession.wallet.address.toLowerCase() === walletAddress.toLowerCase()) {
-      return evmSession
+    const currentSession = evmSessionRef.current ?? evmSession
+    const key = evmSessionKey(email, network, walletAddress)
+    if (!pocketQuickApprovalEnabled() && options.allowSharedSession) {
+      if (currentSession && currentSession.chain === network && currentSession.wallet.address.toLowerCase() === walletAddress.toLowerCase()) return currentSession
+      const shared = sharedEvmSessions.get(key)
+      if (shared) return shared
     }
-    const key = `${network}:${walletAddress.toLowerCase()}`
-    const pending = pendingEvmSessions.current.get(key)
+    const pending = sharedPendingEvmSessions.get(key)
     if (pending) return pending
     const request = connectFreshEvmSession(email, network, walletAddress)
       .then(session => {
+        evmSessionRef.current = session
         setEvmSession(session)
+        sharedEvmSessions.set(key, session)
         return session
       })
-      .finally(() => pendingEvmSessions.current.delete(key))
-    pendingEvmSessions.current.set(key, request)
+      .finally(() => sharedPendingEvmSessions.delete(key))
+    sharedPendingEvmSessions.set(key, request)
     return request
   }, [email, evmSession])
 

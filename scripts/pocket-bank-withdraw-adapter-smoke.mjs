@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createPocketBankWithdrawHandler, payoutState } from '../api/pocket/bank-withdraw.ts'
+import { verifyBankPayoutBeneficiary } from '../api/pocket/verified-bank-name.ts'
 import { createPaymentExecutionRepository } from '../api/pocket/payment-execution-intents.ts'
 import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawRoute, readPocketBankWithdrawStatus, recoverPocketBankWithdrawals, registerPocketBankWithdrawTransfer, startPocketBankWithdrawRoute, updatePocketBankWithdrawRoute } from '../src/pocket/api/pocketBankWithdrawClient.ts'
 import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout } from '../src/pocket/lib/pocketBankPayoutState.ts'
@@ -18,6 +19,16 @@ async function request(handler, body, headers = {}) {
   await handler({ method: 'POST', body, headers }, response)
   return response
 }
+
+const thirdPartyBeneficiary = await verifyBankPayoutBeneficiary({}, {
+  bank_code: '001',
+  account_number: '0123456789',
+}, {
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  profiles: { get: async () => ({ nameStatus: 'bank_resolved', resolvedName: 'ADA LOVELACE' }) },
+  verifyAccount: async () => ({ bank_code: '001', account_name: 'GRACE HOPPER' }),
+})
+assert.equal(thirdPartyBeneficiary.verification.account_name, 'GRACE HOPPER')
 
 let executionStore
 const executions = createPaymentExecutionRepository({
@@ -105,6 +116,14 @@ assert.equal(calls[0].body.flexible_amount, false)
 assert.equal(calls[0].headers.authorization, 'Bearer privy-token')
 assert.equal(calls[1].body.action, 'createOfframpOrder')
 assert.equal(calls[1].body.ensure_payable, true)
+const replayedPrepare = await request(handler, prepareBody, { authorization: 'Bearer privy-token', 'idempotency-key': idempotencyKey })
+assert.equal(replayedPrepare.statusCode, 200)
+assert.equal(replayedPrepare.body.data.intentId, processingOrder.intent_id)
+assert.equal(calls.filter(call => call.kind === 'create').length, 1, 'an idempotent retry must not create another provider payout')
+const mismatchedReplay = await request(handler, { ...prepareBody, account_number: '9999996789' }, { authorization: 'Bearer privy-token', 'idempotency-key': idempotencyKey })
+assert.equal(mismatchedReplay.statusCode, 409)
+assert.match(mismatchedReplay.body.error, /different payout details/i)
+assert.equal(calls.filter(call => call.kind === 'create').length, 1)
 
 const unavailableHandler = createPocketBankWithdrawHandler({
   executions,

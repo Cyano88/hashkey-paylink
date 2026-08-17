@@ -63,6 +63,12 @@ export class PocketBillsApiError extends Error {
   }
 }
 
+export type PocketBillsLimitUsage = {
+  resetAt: number
+  airtime: { perPaymentNgn: number; dailyLimitNgn: number; usedTodayNgn: number; remainingTodayNgn: number }
+  otherBills: { dailyLimitNgn: number; usedTodayNgn: number; remainingTodayNgn: number }
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 }
@@ -177,6 +183,37 @@ export async function readPocketBillsAvailability(fetcher: typeof fetch = fetch)
   const data = await response.json().catch(() => undefined)
   if (!response.ok) throw new PocketBillsApiError('Bills availability is temporarily unavailable.', { status: response.status, retryable: true })
   return parsePocketBillsAvailability(data)
+}
+
+export async function readPocketBillsLimitUsage(input: { accessToken: string; fetcher?: typeof fetch }): Promise<PocketBillsLimitUsage> {
+  const data = await postBills({
+    endpoint: POCKET_API.billsPay,
+    accessToken: input.accessToken,
+    idempotencyKey: createPocketIdempotencyKey('bill-limits'),
+    fetcher: input.fetcher,
+    body: { action: 'limits' },
+  })
+  const limits = record(data.limits)
+  const airtime = record(limits.airtime)
+  const otherBills = record(limits.otherBills)
+  const values = [
+    limits.resetAt,
+    airtime.perPaymentNgn,
+    airtime.dailyLimitNgn,
+    airtime.usedTodayNgn,
+    airtime.remainingTodayNgn,
+    otherBills.dailyLimitNgn,
+    otherBills.usedTodayNgn,
+    otherBills.remainingTodayNgn,
+  ].map(Number)
+  if (!values.every(value => Number.isFinite(value) && value >= 0)) {
+    throw new PocketBillsApiError('Bills limits response was invalid.')
+  }
+  return {
+    resetAt: values[0],
+    airtime: { perPaymentNgn: values[1], dailyLimitNgn: values[2], usedTodayNgn: values[3], remainingTodayNgn: values[4] },
+    otherBills: { dailyLimitNgn: values[5], usedTodayNgn: values[6], remainingTodayNgn: values[7] },
+  }
 }
 
 export async function quotePocketAirtime(input: {

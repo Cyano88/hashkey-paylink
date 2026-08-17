@@ -396,6 +396,7 @@ export const POCKET_API = {
   walletLink: pocketApiUrl('/api/pocket/wallets/link'),
   balances: pocketApiUrl('/api/pocket/balances'),
   fxQuote: pocketApiUrl('/api/pocket/fx-quote'),
+  spendingLimits: pocketApiUrl('/api/pocket/spending-limits'),
   recipientBalance: pocketApiUrl('/api/pocket/balances/recipient'),
   transferPrepare: pocketApiUrl('/api/pocket/transfers/prepare'),
   transferSubmit: pocketApiUrl('/api/pocket/transfers/submit'),

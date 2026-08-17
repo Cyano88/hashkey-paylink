@@ -1,4 +1,5 @@
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
+import { Capacitor } from '@capacitor/core'
 
 type CircleSdkError = {
   message: string
@@ -31,6 +32,11 @@ type SolanaEmailSession = {
 }
 
 const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
+const POCKET_NATIVE_ORIGIN = 'https://pocket.hashpaylink.com'
+
+function circleRuntimeUrl(path: string) {
+  return Capacitor.isNativePlatform() ? `${POCKET_NATIVE_ORIGIN}${path}` : path
+}
 const CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000
 
 export function canUseCircleSolanaEmailWallet() {
@@ -92,7 +98,7 @@ function isCircleCloseMessage(data: unknown) {
 }
 
 async function circleSolanaApi<T>(payload: Record<string, unknown>): Promise<T> {
-  const res = await fetch('/api/circle-solana-email', {
+  const res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

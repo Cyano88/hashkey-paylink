@@ -15,12 +15,14 @@ export default function usePocketBankReceiveController({
   getAccessToken,
   profile,
   profileDraft,
+  allowThirdPartyAccount = false,
 }: {
   authenticated: boolean
   email: string
   getAccessToken: PocketAccessTokenReader
   profile: LocalCurrencyProfile | null
   profileDraft: LocalCurrencyProfile
+  allowThirdPartyAccount?: boolean
 }) {
   const [country, setCountryState] = useState('NG')
   const [institutions, setInstitutions] = useState<Array<{ code: string; name: string }>>([])
@@ -50,7 +52,10 @@ export default function usePocketBankReceiveController({
   const profileReady = Boolean(profile?.firstName && profile?.lastName && (profile.email || email))
   const normalizeName = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '')
   const profileVerified = profile?.nameStatus === 'bank_resolved' && Boolean(profile.resolvedName)
-  const identityMatches = profileVerified && verified && normalizeName(accountName) === normalizeName(profile?.resolvedName ?? '')
+  const staleOwnerNameRejection = /different verified name/i.test(error)
+  const beneficiaryVerified = verified || (allowThirdPartyAccount && staleOwnerNameRejection && Boolean(accountName))
+  const displayedError = allowThirdPartyAccount && staleOwnerNameRejection ? '' : error
+  const identityMatches = profileVerified && beneficiaryVerified && (allowThirdPartyAccount || normalizeName(accountName) === normalizeName(profile?.resolvedName ?? ''))
   const canSubmit = (flexibleAmount || amountValid) && identityMatches && Boolean(bankCode && accountName) && authenticated && profileReady
 
   const invalidateResult = useCallback(() => {
@@ -78,11 +83,13 @@ export default function usePocketBankReceiveController({
   }, [])
 
   const setCountry = useCallback((value: string) => {
+    idempotencyKey.current = ''
     setCountryState(value)
     invalidateResult()
   }, [invalidateResult])
 
   const setInstitution = useCallback((code: string, name: string, resetAccount: boolean) => {
+    idempotencyKey.current = ''
     lastVerificationKey.current = ''
     setBankCode(code)
     setBankName(name)
@@ -94,6 +101,7 @@ export default function usePocketBankReceiveController({
   }, [invalidateResult])
 
   const setAccount = useCallback((value: string) => {
+    idempotencyKey.current = ''
     lastVerificationKey.current = ''
     setAccountNumber(value.replace(/\D/g, '').slice(0, 10))
     setVerified(false)
@@ -121,7 +129,7 @@ export default function usePocketBankReceiveController({
       if (data.bank_code) setBankCode(String(data.bank_code).trim())
       const resolved = String(data.account_name ?? '').trim()
       setAccountName(resolved)
-      if (profileVerified && normalizeName(resolved) !== normalizeName(profile?.resolvedName ?? '')) {
+      if (!allowThirdPartyAccount && profileVerified && normalizeName(resolved) !== normalizeName(profile?.resolvedName ?? '')) {
         setError('This account belongs to a different verified name. Use an account in your verified name.')
         return
       }
@@ -131,7 +139,7 @@ export default function usePocketBankReceiveController({
     } finally {
       setVerifying(false)
     }
-  }, [accountNumber, bankCode, bankName, getAccessToken, profile?.resolvedName, profileVerified])
+  }, [accountNumber, allowThirdPartyAccount, bankCode, bankName, getAccessToken, profile?.resolvedName, profileVerified])
 
   useEffect(() => {
     if (!authenticated || !bankCode || accountNumber.length !== 10 || verifying || verified) return
@@ -143,16 +151,19 @@ export default function usePocketBankReceiveController({
   }, [accountNumber, authenticated, bankCode, verified, verify, verifying])
 
   const setAmount = useCallback((value: string) => {
+    idempotencyKey.current = ''
     setAmountState(normalizePocketAmountInput(value))
     invalidateResult()
   }, [invalidateResult])
 
   const setMemo = useCallback((value: string) => {
+    idempotencyKey.current = ''
     setMemoState(value)
     invalidateResult()
   }, [invalidateResult])
 
   const setFlexibleAmount = useCallback((enabled: boolean) => {
+    idempotencyKey.current = ''
     setFlexibleAmountState(enabled)
     if (enabled) setAmountState('')
     invalidateResult()
@@ -250,6 +261,7 @@ export default function usePocketBankReceiveController({
   }, [memo])
 
   const reset = useCallback(() => {
+    idempotencyKey.current = ''
     setAmountState('')
     setMemoState('')
     setFlexibleAmountState(false)
@@ -267,7 +279,7 @@ export default function usePocketBankReceiveController({
     bankName,
     accountNumber,
     accountName,
-    verified,
+    verified: beneficiaryVerified,
     profileVerified,
     identityMatches,
     verifying,
@@ -277,7 +289,7 @@ export default function usePocketBankReceiveController({
     memo,
     flexibleAmount,
     busy,
-    error,
+    error: displayedError,
     canSubmit,
     generatedLink,
     dashboardUrl,

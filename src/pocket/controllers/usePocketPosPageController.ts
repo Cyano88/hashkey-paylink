@@ -49,6 +49,7 @@ export default function usePocketPosPageController({
   const identityMatches = profileVerified && bankVerified && normalizeName(bankAccountName) === normalizeName(profile?.resolvedName ?? '')
 
   const resetBank = useCallback(() => {
+    creationIdempotencyKey.current = ''
     lastVerificationKey.current = ''
     setBankName('')
     setBankCode('')
@@ -208,6 +209,7 @@ export default function usePocketPosPageController({
         onStepChange('setup')
       },
       setMerchantName: name => {
+        creationIdempotencyKey.current = ''
         setMerchantName(name)
         setError('')
       },
@@ -215,6 +217,7 @@ export default function usePocketPosPageController({
         setError('')
       },
       setBankInstitution: (code, name) => {
+        creationIdempotencyKey.current = ''
         lastVerificationKey.current = ''
         setBankCode(code)
         setBankName(name)
@@ -223,6 +226,7 @@ export default function usePocketPosPageController({
         setError('')
       },
       setManualBankCode: code => {
+        creationIdempotencyKey.current = ''
         lastVerificationKey.current = ''
         setBankCode(code.toUpperCase().trim())
         setBankName('')
@@ -231,6 +235,7 @@ export default function usePocketPosPageController({
         setError('')
       },
       setBankAccount: accountNumber => {
+        creationIdempotencyKey.current = ''
         lastVerificationKey.current = ''
         setBankAccount(accountNumber.replace(/\D/g, '').slice(0, 10))
         setBankVerified(false)

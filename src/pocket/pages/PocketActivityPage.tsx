@@ -9,7 +9,8 @@ import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_BASE_PATH, pocketPathFor, type PocketActivityView } from '../lib/pocketRoutes'
 import { processPocketBillRefund } from '../api/pocketBillsClient'
-import { readPocketRequests, type PocketRequestItem } from '../api/pocketRequestsClient'
+import { POCKET_REQUESTS_UPDATED_EVENT, readPocketRequests, type PocketRequestItem } from '../api/pocketRequestsClient'
+import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
 export default function PocketActivityPage({ view }: { view: PocketActivityView }) {
   const navigate = useNavigate()
@@ -18,21 +19,30 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
   const [requests, setRequests] = useState<PocketRequestItem[]>([])
   const [requestsError, setRequestsError] = useState('')
 
-  useEffect(() => {
+  const refreshRequests = useCallback(async () => {
     if (!authenticated) { setRequests([]); return }
-    let cancelled = false
-    ;(async () => {
-      try {
-        const accessToken = await getAccessToken()
-        if (!accessToken) throw new Error('Sign in again to load requests.')
-        const next = await readPocketRequests(accessToken)
-        if (!cancelled) { setRequests(next); setRequestsError('') }
-      } catch (reason) {
-        if (!cancelled) setRequestsError(reason instanceof Error ? reason.message : 'Requests could not load.')
-      }
-    })()
-    return () => { cancelled = true }
+    try {
+      const accessToken = await getAccessToken()
+      if (!accessToken) throw new Error('Sign in again to load requests.')
+      const next = await readPocketRequests(accessToken)
+      setRequests(next)
+      setRequestsError('')
+    } catch (reason) {
+      setRequestsError(reason instanceof Error ? reason.message : 'Requests could not load.')
+    }
   }, [authenticated, getAccessToken])
+
+  useEffect(() => {
+    void refreshRequests()
+  }, [refreshRequests])
+
+  useEffect(() => {
+    if (!authenticated) return
+    const refresh = () => { void refreshRequests() }
+    const unregister = registerPocketRefreshHandler(refreshRequests)
+    window.addEventListener(POCKET_REQUESTS_UPDATED_EVENT, refresh)
+    return () => { unregister(); window.removeEventListener(POCKET_REQUESTS_UPDATED_EVENT, refresh) }
+  }, [authenticated, refreshRequests])
 
   const handleBillsRefund = useCallback(async (intentId: string) => {
     const accessToken = await getAccessToken()

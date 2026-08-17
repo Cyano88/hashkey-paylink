@@ -95,12 +95,14 @@ function externalPaymentActivityRow(intent: PaymentExecutionIntent): PocketActiv
 }
 
 function closedBankPayoutActivityRow(intent: PaymentExecutionIntent): PocketActivityRow | undefined {
-  if (intent.kind !== 'bank_payout' || intent.state !== 'expired' || intent.transactionHash) return undefined
+  const reverted = intent.state === 'failed' && intent.failureCode === 'PROVIDER_REFUNDED'
+  const expiredAfterDebit = intent.state === 'expired' && Boolean(intent.transactionHash)
+  if (intent.kind !== 'bank_payout' || !intent.transactionHash || (!reverted && !expiredAfterDebit)) return undefined
   const bank = intent.metadata.bankName || 'Bank account'
   const last4 = intent.metadata.bankLast4 ? ` ****${intent.metadata.bankLast4}` : ''
   return {
     eventId: `pocket-bank-payout:${intent.id}`,
-    txHash: `execution:${intent.id}`,
+    txHash: intent.transactionHash,
     chain: 'base',
     payer: 'Pocket wallet',
     memo: intent.metadata.memo || 'Direct bank payout',
@@ -111,8 +113,8 @@ function closedBankPayoutActivityRow(intent: PaymentExecutionIntent): PocketActi
     contextLabel: `${bank}${last4}`,
     settlementType: 'instant_fiat',
     amountNgn: intent.metadata.amountNgn,
-    paycrestStatus: 'expired',
-    activityLabel: 'Payout expired',
+    paycrestStatus: reverted ? 'refunded' : 'review required',
+    activityLabel: reverted ? 'Reverted payment' : 'Expired payout',
     direction: 'out',
     recipient: intent.metadata.accountName || bank,
     destination: `${bank}${last4}`,
@@ -323,7 +325,7 @@ export default createPocketActivityHandler({
   readCollections: ownerId => pocketPaylinkRepository.listOwned(ownerId),
   readCollectionPayments: listRegisteredPaymentsForEventIds,
   readWalletHistory: (ownerId, options) => readPocketWalletChainActivity(ownerId, {
-    timeoutMs: options?.recent ? 1_800 : 10_000,
+    timeoutMs: options?.recent ? 900 : 10_000,
     limit: options?.recent ? 8 : 100,
   }),
   readActions: (ownerId, options) => listCirclePocketActions(ownerId, options?.recent ? 20 : 500),
@@ -337,7 +339,7 @@ export default createPocketActivityHandler({
   readClosedBankPayouts: (ownerId, options) => paymentExecutionRepository.listOwned(
     ownerId,
     ['bank_payout'],
-    ['expired'],
+    ['expired', 'failed'],
   ).then(items => items.slice(0, options?.recent ? 4 : 100)),
   readBills: async (ownerId, options) => {
     const config = readVtpassPhase0Config()

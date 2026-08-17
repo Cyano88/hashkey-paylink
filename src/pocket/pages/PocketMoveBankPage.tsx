@@ -13,7 +13,7 @@ import PocketLoadingState from '../components/PocketLoadingState'
 import PocketPaymentSuccess from '../components/PocketPaymentSuccess'
 import PocketSlideAction from '../components/PocketSlideAction'
 import usePocketBankReceiveController from '../controllers/usePocketBankReceiveController'
-import usePocketBankWithdrawController from '../controllers/usePocketBankWithdrawController'
+import usePocketBankWithdrawController, { PAYMENT_TIMEOUT_NOTICE } from '../controllers/usePocketBankWithdrawController'
 import usePocketPaymentLiquidityController, { type PocketPaymentLiquidityPersistence } from '../controllers/usePocketPaymentLiquidityController'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import { readPocketBankWithdrawRoute, startPocketBankWithdrawRoute, updatePocketBankWithdrawRoute } from '../api/pocketBankWithdrawClient'
@@ -47,6 +47,7 @@ export default function PocketMoveBankPage() {
     const saved = window.sessionStorage.getItem('pocket:bank:mode')
     return saved === 'withdraw' ? saved : 'idle'
   })
+  const [payoutToast, setPayoutToast] = useState('')
   const setMode = useCallback((next: 'idle' | 'request' | 'withdraw') => {
     window.sessionStorage.setItem('pocket:bank:mode', next)
     setModeState(next)
@@ -57,6 +58,7 @@ export default function PocketMoveBankPage() {
     getAccessToken,
     profile: profile.profile,
     profileDraft: profile.draft,
+    allowThirdPartyAccount: mode === 'withdraw',
   })
   const onWalletReady = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana', wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
     wallets.setWallets(current => ({ ...current, [network]: wallet }))
@@ -79,6 +81,12 @@ export default function PocketMoveBankPage() {
     getAccessToken,
     onSent: wallets.refreshBalances,
   })
+  useEffect(() => {
+    if (direct.error !== PAYMENT_TIMEOUT_NOTICE) return
+    setPayoutToast(PAYMENT_TIMEOUT_NOTICE)
+    const timer = window.setTimeout(() => setPayoutToast(''), 7_000)
+    return () => window.clearTimeout(timer)
+  }, [direct.error])
   const routePersistence = useMemo<PocketPaymentLiquidityPersistence | undefined>(() => {
     const intentId = direct.result?.intentId
     if (!intentId) return undefined
@@ -170,6 +178,11 @@ export default function PocketMoveBankPage() {
 
   return (
     <PocketRouteShell active="home" onSelect={selectNav}>
+      {payoutToast && (
+        <div role="status" aria-live="polite" className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-[100] w-[min(calc(100%-2rem),26rem)] -translate-x-1/2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-950 shadow-xl dark:border-amber-400/30 dark:bg-amber-950 dark:text-amber-100">
+          {payoutToast}
+        </div>
+      )}
       <PocketFlowHeader title={routeMode === 'request' ? 'Request' : 'Bank payout'} onBack={() => navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <div className="space-y-3.5">
         {routeMode === 'request' && <>
@@ -346,8 +359,8 @@ export default function PocketMoveBankPage() {
                 {!recoveredPayout && direct.status === 'routing' && directAmountValid && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
                 {!recoveredPayout && direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.providerStatus === 'fulfilled' ? 'Your bank transfer was delivered and is being verified.' : direct.result?.providerStatus === 'fulfilling' ? 'The provider is sending Naira to your bank.' : direct.result?.providerStatus === 'settling' ? 'Bank delivery is confirmed. Final settlement is completing.' : direct.result?.txHash ? 'Payout submitted. You can leave this page; Pocket will update Activity automatically.' : 'Circle is reconciling the submitted transfer. Check Activity before retrying.'}</p>}
                 {direct.status === 'sent' && direct.result?.amountUsdc && <p className="px-2 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPocketDisplayAmount(direct.result.amountUsdc)} USDC · {bankReceipt ? 'Bank payout completed' : 'Bank delivery processing'}</p>}
-                {!recoveredPayout && direct.error && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
-                {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Enter an account in your verified name and a Naira amount.</p>}
+                {!recoveredPayout && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
+                {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Enter a verified beneficiary account and a Naira amount.</p>}
               </div>
             </>}
 

@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { createHash } from 'node:crypto'
 import { parseUnits } from 'viem'
 import ngPosHandler, { createNgPosBankReceive, listNgPosHistoryForOwner } from '../ng-pos.js'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
@@ -56,6 +57,10 @@ export function payoutState(status: unknown) {
   if (normalized === 'refunded') return 'refunded'
   if (['failed', 'expired', 'cancelled', 'canceled'].includes(normalized)) return 'failed'
   return 'processing'
+}
+
+function beneficiaryFingerprint(bankCode: string, accountNumber: string) {
+  return createHash('sha256').update(bankCode + ':' + accountNumber).digest('hex')
 }
 
 type BankPayoutRoute = ReturnType<typeof routeRecord>
@@ -265,6 +270,28 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         if (accountNumber.length !== 10 || !text(req.body?.account_name) || !text(req.body?.bank_code)) return res.status(400).json({ ok: false, error: 'Enter a valid destination bank account.' })
         await dependencies.authorizeBankAccount(req, req.body)
 
+        const replay = await dependencies.executions.findByIdempotency(identity.userId, 'bank_payout', idempotencyKey)
+        if (replay) {
+          const requestedBeneficiary = beneficiaryFingerprint(text(req.body?.bank_code, 20), accountNumber)
+          const sameRequest = Number(replay.metadata.amountNgn) === Number(amount)
+            && replay.metadata.bankCode === text(req.body?.bank_code, 20)
+            && replay.metadata.bankName === text(req.body?.bank_name, 160)
+            && replay.metadata.bankLast4 === accountNumber.slice(-4)
+            && replay.metadata.accountName === text(req.body?.account_name, 200)
+            && replay.metadata.memo === (text(req.body?.memo, 180) || 'Direct bank payout')
+            && (!replay.metadata.beneficiaryFingerprint || replay.metadata.beneficiaryFingerprint === requestedBeneficiary)
+          if (!sameRequest) {
+            return res.status(409).json({ ok: false, error: 'This payment retry belongs to different payout details. Start a new payment.' })
+          }
+          if (!replay.resourceId) {
+            return res.status(409).json({ ok: false, error: 'The earlier payout preparation is still being reconciled. Try again shortly.' })
+          }
+          const order = await assertOwnedOrder(req, identity, replay.resourceId, dependencies)
+          const execution = await syncExecution(identity.userId, order, dependencies)
+          const route = routeRecord(await syncOwnedRoute(identity, replay.resourceId, dependencies))
+          return res.json({ ok: true, data: publicOrder(order, execution, route) })
+        }
+
         const forwardedRequest = {
           ...req,
           headers: req.headers,
@@ -297,6 +324,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
             bankCode: text(req.body?.bank_code, 20),
             bankName: text(req.body?.bank_name, 160),
             bankLast4: accountNumber.slice(-4),
+            beneficiaryFingerprint: beneficiaryFingerprint(text(req.body?.bank_code, 20), accountNumber),
             accountName: text(req.body?.account_name, 200),
             amountNgn: amount,
             memo: text(req.body?.memo, 180) || 'Direct bank payout',

@@ -1,5 +1,6 @@
 import PocketRouteShell from './PocketRouteShell'
 import type { PocketNavTab } from './PocketBottomNav'
+import PocketActivityLoadingState from './PocketActivityLoadingState'
 
 function Skeleton({ className }: { className: string }) {
   return (
@@ -11,6 +12,7 @@ function Skeleton({ className }: { className: string }) {
 }
 
 export default function PocketLoadingState({ active }: { active: PocketNavTab }) {
+  if (active === 'activity') return <PocketActivityLoadingState />
   return (
     <div aria-busy="true" aria-label="Opening Pocket">
       <PocketRouteShell active={active} navigationDisabled onSelect={() => undefined}>

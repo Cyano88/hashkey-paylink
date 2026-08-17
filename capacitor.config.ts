@@ -6,6 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   loggingBehavior: 'none',
   server: {
+    hostname: 'app.hashpaylink.com',
     androidScheme: 'https',
   },
   plugins: {

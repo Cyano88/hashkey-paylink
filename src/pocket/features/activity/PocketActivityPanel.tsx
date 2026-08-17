@@ -103,7 +103,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
               {busy && !filteredRows.length
                 ? 'Loading activity...'
                 : error && !filteredRows.length
-                  ? 'Updating activity...'
+                  ? 'Activity could not refresh'
                   : `${filteredRows.length} record${filteredRows.length === 1 ? '' : 's'}`}
             </p>
             {!!visibleRows.length && <button type="button" onClick={() => setFilterOpen(current => !current)} className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06]" aria-label="Filter activity by month" aria-expanded={filterOpen}><Filter className="h-4 w-4" /></button>}
