@@ -24,7 +24,12 @@ export default function PocketNativeBridge() {
     let active = true
     const listeners: Array<Promise<{ remove: () => Promise<void> }>> = []
 
-    void StatusBar.setOverlaysWebView({ overlay: true }).catch(() => undefined)
+    // Android 16 enforces edge-to-edge and ignores overlaysWebView. Read the
+    // native inset and expose it to CSS instead of trusting env() alone.
+    void StatusBar.getInfo().then(info => {
+      if (!active) return
+      document.documentElement.style.setProperty('--pocket-status-bar-inset', `${Math.max(0, info.height || 0)}px`)
+    }).catch(() => undefined)
     const syncStatusBar = () => {
       const style = document.documentElement.classList.contains('dark') ? Style.Dark : Style.Light
       void StatusBar.setStyle({ style }).catch(() => undefined)
@@ -57,6 +62,7 @@ export default function PocketNativeBridge() {
 
     return () => {
       active = false
+      document.documentElement.style.removeProperty('--pocket-status-bar-inset')
       themeObserver.disconnect()
       for (const listener of listeners) void listener.then(handle => handle.remove()).catch(() => undefined)
     }

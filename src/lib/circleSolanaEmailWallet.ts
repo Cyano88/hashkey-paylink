@@ -419,7 +419,7 @@ export async function sendCircleSolanaTransfer(params: {
   session: SolanaEmailSession
   recipient: string
   amount: string
-}) {
+}): Promise<string | null> {
   if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
   const sdk = new W3SSdk({
     appSettings: { appId: APP_ID },
@@ -449,14 +449,27 @@ export async function sendCircleSolanaTransfer(params: {
   )
   const directHash = solanaTransactionHash(result)
   if (directHash) return directHash
-  const transactionId = circleTransactionId(result)
-    ?? circleTransactionId(challenge)
-    ?? await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId)
-  if (transactionId) {
-    const txHash = await pollCircleSolanaTransaction(params.session.userToken, transactionId)
-    if (txHash) return txHash
+  let transactionId = circleTransactionId(result) ?? circleTransactionId(challenge)
+  if (!transactionId) {
+    try {
+      transactionId = await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId, 5_000)
+    } catch (reason) {
+      if (/could not reach Hash PayLink \(getChallenge\/solana\)|failed to fetch|network/i.test(reason instanceof Error ? reason.message : String(reason))) return null
+      throw reason
+    }
   }
-  throw new Error('Circle accepted the Solana transfer and is reconciling it. Do not retry yet.')
+  if (transactionId) {
+    try {
+      const txHash = await pollCircleSolanaTransaction(params.session.userToken, transactionId, 5_000)
+      if (txHash) return txHash
+    } catch (reason) {
+      // Circle already accepted the signed challenge. A status lookup outage
+      // cannot turn that accepted transfer into a safe-to-retry failure.
+      if (/could not reach Hash PayLink \(getTransaction\/solana\)|failed to fetch|network/i.test(reason instanceof Error ? reason.message : String(reason))) return null
+      throw reason
+    }
+  }
+  return null
 }
 
 export async function signCircleSolanaTransaction(params: {

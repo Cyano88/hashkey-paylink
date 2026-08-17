@@ -44,6 +44,7 @@ import { PrivyWalletConnectButton } from '../lib/PrivyWalletConnectButton'
 import { PrivyDisconnectButton } from '../lib/PrivyDisconnectButton'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
+import { askPocketAgent } from '../pocket/api/pocketAgentClient'
 import { isClearAgentHashChatCommand } from '../lib/agentHashChat'
 import { circlePocketAgentHeaders, getCirclePocketBrowserSession } from '../lib/circlePocketAgentIdentity'
 import {
@@ -3859,6 +3860,25 @@ export function TelegramHelperPanel({
         return
       }
       if (helperMode === 'circle-pocket' && await handlePaylinkConversation(nextQuestion)) return
+      if (helperMode === 'circle-pocket') {
+        setThinkingState('light')
+        setAgentStatus('Checking Pocket...')
+        const accessToken = await getHelperAccessToken()
+        if (!accessToken) throw new Error('Sign in again to continue with Pocket Support.')
+        const pocketAnswer = await askPocketAgent({
+          accessToken,
+          threadId: activeHelperThreadId,
+          message: nextQuestion,
+          locale: navigator.language,
+          signal: abortController.signal,
+        })
+        const action = pocketAnswer.actions?.[0]
+        finishHelperMessage(nextQuestion, {
+          answer: pocketAnswer.answer,
+          ...(action?.href ? { actionLink: { label: action.label, url: action.href } } : {}),
+        })
+        return
+      }
       if (helperMode === 'polydesk' && await handlePolyDeskConversation(nextQuestion)) return
       setThinkingState(isDeepResearch ? 'deep-research' : 'light')
       setAgentStatus(isDeepResearch ? 'Running deeper research... this might take a little time.' : 'Asking ZeroScout...')
