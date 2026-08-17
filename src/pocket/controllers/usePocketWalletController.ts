@@ -14,6 +14,7 @@ import { linkPocketWallet, readPocketWallet } from '../api/pocketWalletLinkClien
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import {
   pocketQuickApprovalEnabled,
+  offerPocketQuickApprovalAfterEmail,
   readPocketEvmQuickSession,
   savePocketEvmQuickSession,
 } from '../lib/pocketQuickApproval'
@@ -35,6 +36,7 @@ async function connectFreshEvmSession(
   const secured = await readPocketEvmQuickSession(email, network, walletAddress)
   if (secured) return secured
   const session = await connectCircleEvmEmailWallet(email, network)
+  await offerPocketQuickApprovalAfterEmail(email, session).catch(() => false)
   await savePocketEvmQuickSession(email, session).catch(() => undefined)
   return session
 }
@@ -75,7 +77,7 @@ export async function ensurePocketWallet({
   email: string
   getAccessToken: PocketAccessTokenReader
   shouldContinue?: () => boolean
-  onEvmSession?: (session: CircleEvmEmailSession) => void
+  onEvmSession?: (session: CircleEvmEmailSession) => void | Promise<void>
   onSolanaSession?: (session: PocketSolanaEmailSession) => void
 }, dependencies: EnsurePocketWalletDependencies = defaultDependencies): Promise<CirclePocketWallet | null> {
   if (!dependencies.privyEnabled) throw new Error('Circle Pocket requires Privy email sign-in.')
@@ -117,7 +119,7 @@ export async function ensurePocketWallet({
 
   const session = await dependencies.connectEvm(email, network)
   if (!shouldContinue()) return null
-  onEvmSession?.(session)
+  await onEvmSession?.(session)
   const productionWallets = session.productionEvmTopology?.wallets
   const linkTargets = network !== 'arc' && productionWallets?.base && productionWallets.arbitrum
     ? ([['base', productionWallets.base], ['arbitrum', productionWallets.arbitrum]] as const)
@@ -162,10 +164,11 @@ export default function usePocketWalletController({
       email,
       getAccessToken,
       shouldContinue: options.shouldContinue,
-      onEvmSession: session => {
+      onEvmSession: async session => {
         evmSessionRef.current = session
         setEvmSession(session)
-        void savePocketEvmQuickSession(email, session).catch(() => undefined)
+        await offerPocketQuickApprovalAfterEmail(email, session).catch(() => false)
+        await savePocketEvmQuickSession(email, session).catch(() => undefined)
       },
       onSolanaSession: setSolanaSession,
     })

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { readPocketActivity } from '../api/pocketReadClient'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import type { PocketCollectionResource, PocketPosResource } from '../lib/pocketSchemas'
+import { isPocketActivityRow } from '../lib/pocketSchemas'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
 type PocketAccessTokenReader = () => Promise<string | null>
@@ -9,9 +10,38 @@ const pocketActivityCache = new Map<string, PocketActivityRow[]>()
 const pocketResourceCache = new Map<string, { merchants: PocketPosResource[]; collections: PocketCollectionResource[] }>()
 const pocketActivityPrefetches = new Map<string, Promise<void>>()
 const pocketActivityResolved = new Set<string>()
+const POCKET_ACTIVITY_CACHE_PREFIX = 'pocket:activity:snapshot:v1:'
+const POCKET_ACTIVITY_CACHE_TTL_MS = 7 * 24 * 60 * 60_000
 
 function activityCacheKey(email: string, recent: boolean) {
-  return recent ? `${email}:recent` : email
+  return recent ? email + ':recent' : email
+}
+
+function durableActivityKey(email: string, recent: boolean) {
+  return POCKET_ACTIVITY_CACHE_PREFIX + encodeURIComponent(email.trim().toLowerCase()) + ':' + (recent ? 'recent' : 'all')
+}
+
+function readDurableActivity(email: string, recent: boolean): PocketActivityRow[] | undefined {
+  if (!email) return undefined
+  try {
+    const value = JSON.parse(window.localStorage.getItem(durableActivityKey(email, recent)) || 'null') as { savedAt?: number; rows?: unknown[] } | null
+    if (!value?.savedAt || Date.now() - value.savedAt > POCKET_ACTIVITY_CACHE_TTL_MS || !Array.isArray(value.rows)) return undefined
+    return value.rows.filter(isPocketActivityRow)
+  } catch {
+    return undefined
+  }
+}
+
+function writeDurableActivity(email: string, recent: boolean, rows: PocketActivityRow[]) {
+  if (!email) return
+  try {
+    window.localStorage.setItem(durableActivityKey(email, recent), JSON.stringify({
+      savedAt: Date.now(),
+      rows: rows.slice(0, recent ? 4 : 100),
+    }))
+  } catch {
+    // In-memory caching remains available when device storage is full.
+  }
 }
 
 export async function prefetchPocketActivity({ email, getAccessToken, recent = false }: { email: string; getAccessToken: PocketAccessTokenReader; recent?: boolean }) {
@@ -47,10 +77,21 @@ export default function usePocketActivity({
 }) {
   const key = activityCacheKey(email, recent)
   const recentKey = activityCacheKey(email, true)
-  const cachedRows = () => authenticated && email ? pocketActivityCache.get(key) ?? (!recent ? pocketActivityCache.get(recentKey) : undefined) ?? [] : []
+  const cachedRows = () => authenticated && email
+    ? pocketActivityCache.get(key)
+      ?? (!recent ? pocketActivityCache.get(recentKey) : undefined)
+      ?? readDurableActivity(email, recent)
+      ?? (!recent ? readDurableActivity(email, true) : undefined)
+      ?? []
+    : []
   const [rows, setRows] = useState<PocketActivityRow[]>(cachedRows)
   const [busy, setBusy] = useState(false)
-  const [resolved, setResolved] = useState(() => !authenticated || Boolean(email && (pocketActivityResolved.has(key) || pocketActivityCache.has(key) || (!recent && (pocketActivityCache.has(recentKey) || pocketResourceCache.has(email))))))
+  const [resolved, setResolved] = useState(() => !authenticated || Boolean(email && (
+    pocketActivityResolved.has(key)
+    || pocketActivityCache.has(key)
+    || readDurableActivity(email, recent) !== undefined
+    || (!recent && (pocketActivityCache.has(recentKey) || pocketResourceCache.has(email) || readDurableActivity(email, true) !== undefined))
+  )))
   const [error, setError] = useState('')
   const [merchants, setMerchants] = useState<PocketPosResource[]>(() => authenticated && email ? pocketResourceCache.get(email)?.merchants ?? [] : [])
   const [collections, setCollections] = useState<PocketCollectionResource[]>(() => authenticated && email ? pocketResourceCache.get(email)?.collections ?? [] : [])
@@ -64,28 +105,35 @@ export default function usePocketActivity({
       setResolved(true)
       return
     }
-    const hasSnapshot = Boolean(email && (pocketActivityCache.has(key) || (!recent && (pocketActivityCache.has(recentKey) || pocketResourceCache.has(email))) || pocketActivityResolved.has(key)))
+    const hasSnapshot = Boolean(email && (
+      pocketActivityCache.has(key)
+      || readDurableActivity(email, recent) !== undefined
+      || (!recent && (pocketActivityCache.has(recentKey) || pocketResourceCache.has(email) || readDurableActivity(email, true) !== undefined))
+      || pocketActivityResolved.has(key)
+    ))
     if (!hasSnapshot) setBusy(true)
     const initialController = !hasSnapshot ? new AbortController() : null
     const initialTimeout = initialController ? window.setTimeout(() => initialController.abort(), 2_800) : 0
     const initialDeadline = initialController ? new Promise<never>((_, reject) => {
       initialController.signal.addEventListener('abort', () => reject(new DOMException('Activity deadline exceeded.', 'AbortError')), { once: true })
     }) : null
+    const apply = (data: Awaited<ReturnType<typeof readPocketActivity>>, cacheKey: string, resources: boolean) => {
+      const nextRows = data.payments.slice().sort((a, b) => Number((b.ts || 0) - (a.ts || 0)))
+      setRows(nextRows)
+      if (resources) { setMerchants(data.merchants); setCollections(data.collections) }
+      if (email) {
+        const cacheRecent = cacheKey === recentKey
+        pocketActivityCache.set(cacheKey, nextRows)
+        writeDurableActivity(email, cacheRecent, nextRows)
+        if (resources) pocketResourceCache.set(email, { merchants: data.merchants, collections: data.collections })
+        pocketActivityResolved.add(cacheKey)
+      }
+    }
     try {
       const token = initialDeadline
         ? await Promise.race([getAccessToken(), initialDeadline])
         : await getAccessToken()
       if (!token) throw new Error('Sign in again to load Circle Pocket activity.')
-      const apply = (data: Awaited<ReturnType<typeof readPocketActivity>>, cacheKey: string, resources: boolean) => {
-        const nextRows = data.payments.slice().sort((a, b) => Number((b.ts || 0) - (a.ts || 0)))
-        setRows(nextRows)
-        if (resources) { setMerchants(data.merchants); setCollections(data.collections) }
-        if (email) {
-          pocketActivityCache.set(cacheKey, nextRows)
-          if (resources) pocketResourceCache.set(email, { merchants: data.merchants, collections: data.collections })
-          pocketActivityResolved.add(cacheKey)
-        }
-      }
       if (!hasSnapshot) {
         apply(await Promise.race([
           readPocketActivity({ accessToken: token, recent: true, signal: initialController?.signal }),
@@ -100,11 +148,25 @@ export default function usePocketActivity({
       apply(await readPocketActivity({ accessToken: token, recent }), key, !recent)
       setError('')
     } catch (reason) {
-      if (!hasSnapshot) setError(!navigator.onLine
-        ? 'No internet connection. Reconnect, then tap Retry.'
-        : reason instanceof DOMException && reason.name === 'AbortError'
-          ? 'Activity did not respond within 3 seconds. Tap Retry.'
-          : reason instanceof Error ? `Activity sync failed: ${reason.message}` : 'Activity sync failed before a response was received.')
+      const deadlineExceeded = reason instanceof DOMException && reason.name === 'AbortError'
+      if (deadlineExceeded) {
+        // Resolve at the hard deadline using the durable snapshot or normal
+        // empty state, while a fresh server request continues quietly.
+        setError('')
+        void (async () => {
+          const retryToken = await getAccessToken()
+          if (!retryToken) return
+          const data = await readPocketActivity({ accessToken: retryToken, recent: true })
+          apply(data, recentKey, false)
+          if (!recent) {
+            void readPocketActivity({ accessToken: retryToken }).then(next => apply(next, key, true)).catch(() => undefined)
+          }
+        })().catch(() => undefined)
+      } else if (!hasSnapshot) {
+        setError(!navigator.onLine
+          ? 'No internet connection. Reconnect, then tap Retry.'
+          : reason instanceof Error ? reason.message : 'Activity is temporarily unavailable.')
+      }
     } finally {
       if (initialTimeout) window.clearTimeout(initialTimeout)
       setBusy(false)
@@ -121,14 +183,17 @@ export default function usePocketActivity({
       setResolved(true)
       return
     }
-    const cached = pocketActivityCache.get(key) ?? (!recent ? pocketActivityCache.get(recentKey) : undefined)
-    if (cached) setRows(cached)
+    const cached = pocketActivityCache.get(key)
+      ?? (!recent ? pocketActivityCache.get(recentKey) : undefined)
+      ?? readDurableActivity(email, recent)
+      ?? (!recent ? readDurableActivity(email, true) : undefined)
+    if (cached !== undefined) setRows(cached)
     const cachedResources = recent ? undefined : pocketResourceCache.get(email)
     if (cachedResources) {
       setMerchants(cachedResources.merchants)
       setCollections(cachedResources.collections)
     }
-    setResolved(Boolean(cached || cachedResources) || pocketActivityResolved.has(key) || (!recent && pocketActivityResolved.has(recentKey)))
+    setResolved(cached !== undefined || Boolean(cachedResources) || pocketActivityResolved.has(key) || (!recent && pocketActivityResolved.has(recentKey)))
     if (enabled) void refresh()
   }, [authenticated, email, enabled, key, recent, recentKey, refresh])
 

@@ -859,14 +859,28 @@ export async function sendCircleEvmEmailWithdraw(params: {
   )
   const txHash = findTxHash(result)
   if (txHash) return txHash
-  const transactionId = findTransactionId(result)
-    ?? findTransactionId(challenge)
-    ?? await pollChallengeTransactionId(params.session, challenge.challengeId)
-  if (transactionId) {
-    const hash = await pollTransactionHash(params.session, transactionId)
-    if (hash) return hash
+  let transactionId = findTransactionId(result) ?? findTransactionId(challenge)
+  if (!transactionId) {
+    try {
+      transactionId = await pollChallengeTransactionId(params.session, challenge.challengeId, 5_000)
+    } catch (reason) {
+      if (/could not reach Hash PayLink \(getChallenge\/|failed to fetch|network/i.test(readableError(reason))) return null
+      throw reason
+    }
   }
-  throw new Error('Withdrawal submitted and is being reconciled. Do not retry this payout.')
+  if (transactionId) {
+    try {
+      const hash = await pollTransactionHash(params.session, transactionId, 5_000)
+      if (hash) return hash
+    } catch (reason) {
+      // Once Circle has accepted the signed challenge, a lookup outage is not
+      // a payment failure. The transfer may already be on-chain, so return the
+      // submitted state and never invite a duplicate retry.
+      if (/could not reach Hash PayLink \(getTransaction\/|failed to fetch|network/i.test(readableError(reason))) return null
+      throw reason
+    }
+  }
+  return null
 }
 
 async function pollChallengeTransactionId(session: CircleEvmEmailSession, challengeId: string, timeoutMs = 30_000) {

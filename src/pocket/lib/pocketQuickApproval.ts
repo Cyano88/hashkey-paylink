@@ -20,6 +20,10 @@ export function pocketQuickApprovalEnabled() {
   return Capacitor.isNativePlatform() && window.localStorage.getItem(ENABLED_KEY) === 'true'
 }
 
+export function shouldOfferPocketQuickApproval() {
+  return Capacitor.isNativePlatform() && window.localStorage.getItem(ENABLED_KEY) === null
+}
+
 export async function pocketQuickApprovalConfigured(email: string) {
   if (!pocketQuickApprovalEnabled() || !email) return false
   const saved = await NativeBiometric.isCredentialsSaved({ server: serverKey(email) })
@@ -64,9 +68,24 @@ export async function enablePocketQuickApproval(email: string, session: CircleEv
 }
 
 export async function disablePocketQuickApproval(email: string) {
-  window.localStorage.removeItem(ENABLED_KEY)
+  window.localStorage.setItem(ENABLED_KEY, 'false')
   if (!Capacitor.isNativePlatform() || !email) return
   await NativeBiometric.deleteCredentials({ server: serverKey(email) }).catch(() => undefined)
+}
+
+export async function offerPocketQuickApprovalAfterEmail(email: string, session: CircleEvmEmailSession) {
+  if (!shouldOfferPocketQuickApproval()) return false
+  const available = await pocketQuickApprovalAvailability()
+  if (!available?.isAvailable || !available.strongBiometryIsAvailable) return false
+  try {
+    await enablePocketQuickApproval(email, session)
+    return true
+  } catch {
+    // A dismissed biometric prompt is a deliberate choice. The user can
+    // enable it later from Profile without blocking the payment in progress.
+    window.localStorage.setItem(ENABLED_KEY, 'false')
+    return false
+  }
 }
 
 export async function savePocketEvmQuickSession(email: string, session: CircleEvmEmailSession) {
