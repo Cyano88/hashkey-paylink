@@ -87,8 +87,12 @@ export default function usePocketBankWithdrawController({
   const cancelled = useRef(false)
   const polling = useRef(false)
   const approvedSession = useRef<{ walletAddress: string; session: CircleEvmEmailSession } | null>(null)
+  const statusRef = useRef<PocketBankWithdrawStatus>('idle')
+  const onSentRef = useRef(onSent)
 
   useEffect(() => () => { cancelled.current = true }, [])
+  useEffect(() => { statusRef.current = status }, [status])
+  useEffect(() => { onSentRef.current = onSent }, [onSent])
 
   const resetResult = useCallback(() => {
     if (status === 'idle' || status === 'sent') {
@@ -142,7 +146,7 @@ export default function usePocketBankWithdrawController({
           setStatus('sent')
           setError('')
         }
-        await onSent()
+        await onSentRef.current()
         return
       }
       if (next.state === 'refunded') {
@@ -177,22 +181,21 @@ export default function usePocketBankWithdrawController({
         return
       }
     } } finally { polling.current = false }
-  }, [onSent])
+  }, [])
 
   useEffect(() => {
     if (!authenticated) return
     cancelled.current = false
-    setStatus('processing')
     const reconcile = async () => {
       const accessToken = await getAccessToken()
-      if (!accessToken) { setStatus('idle'); return }
+      if (!accessToken) return
       const intentId = activeIntentId.current
-      if (!intentId) {
-        setStatus('idle')
-        return
-      }
+      if (!intentId) return
       const recoveredTxHash = readActivePocketBankPayoutTransfer(intentId)
       if (!recoveredTxHash) {
+        // A live prepare/routing operation has not submitted money yet. Wallet
+        // refreshes must never mistake it for an abandoned persisted payout.
+        if (statusRef.current !== 'idle') return
         clearActivePocketBankPayout(intentId)
         activeIntentId.current = ''
         setResult(null)
@@ -201,6 +204,7 @@ export default function usePocketBankWithdrawController({
         clearStoredOperation()
         return
       }
+      setStatus('processing')
       const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
       if (!next) return
       setResult(next)
@@ -238,7 +242,7 @@ export default function usePocketBankWithdrawController({
         setResult(null)
         setStatus('idle')
         setError('')
-        await onSent()
+        await onSentRef.current()
         return
       }
       if (next.state === 'refunded' || next.state === 'failed' || next.state === 'expired') {
@@ -267,7 +271,7 @@ export default function usePocketBankWithdrawController({
       window.removeEventListener('focus', refreshVisible)
       document.removeEventListener('visibilitychange', refreshVisible)
     }
-  }, [authenticated, getAccessToken, onSent, pollUntilSettled, wallet?.address])
+  }, [authenticated, getAccessToken, pollUntilSettled, wallet?.address])
 
   const submit = useCallback(async () => {
     if (!canSubmit) return
@@ -422,7 +426,8 @@ export default function usePocketBankWithdrawController({
     }
   }, [firstName, getAccessToken, getEvmSession, lastName, pollUntilSettled, result, status])
 
-  const failRouting = useCallback((reason: unknown) => {
+  const failRouting = useCallback((reason: unknown, expectedIntentId?: string) => {
+    if (expectedIntentId && activeIntentId.current !== expectedIntentId) return
     const message = payoutError(reason, 'Pocket could not prepare this payout.')
     const intentId = result?.intentId ?? activeIntentId.current
     const submittedRoute = /submitted and is being reconciled|USDC move submitted|still moving|without a verifiable source transaction|check activity before retrying/i.test(message)

@@ -64,7 +64,11 @@ export default function PocketMoveBankPage() {
     wallets.setWallets(current => ({ ...current, [network]: wallet }))
   }, [wallets.setWallets])
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
-  const ensureBaseWallet = useCallback(async () => walletController.ensureWallet('base'), [walletController])
+  const ensureBaseWallet = useCallback(async () => walletController.ensureWallet('base'), [walletController.ensureWallet])
+  const getBaseEvmSession = useCallback((walletAddress: string) => walletController.getEvmSession('base', walletAddress), [walletController.getEvmSession])
+  const ensureLiquidityWallet = useCallback((network: 'base' | 'arbitrum' | 'solana') => walletController.ensureWallet(network), [walletController.ensureWallet])
+  const getLiquidityEvmSession = useCallback((network: 'base' | 'arbitrum', walletAddress: string) => walletController.getEvmSession(network, walletAddress), [walletController.getEvmSession])
+  const getLiquiditySolanaSession = useCallback((walletAddress: string) => walletController.getSolanaSession(walletAddress), [walletController.getSolanaSession])
   const direct = usePocketBankWithdrawController({
     authenticated,
     email,
@@ -77,7 +81,7 @@ export default function PocketMoveBankPage() {
     bankVerified: bank.verified,
     wallet: wallets.wallets.base,
     ensureWallet: ensureBaseWallet,
-    getEvmSession: walletAddress => walletController.getEvmSession('base', walletAddress),
+    getEvmSession: getBaseEvmSession,
     getAccessToken,
     onSent: wallets.refreshBalances,
   })
@@ -104,9 +108,9 @@ export default function PocketMoveBankPage() {
     amount: direct.result?.amountUsdc ?? '',
     destination: 'base',
     getAccessToken,
-    ensureWallet: network => walletController.ensureWallet(network),
-    getEvmSession: (network, walletAddress) => walletController.getEvmSession(network, walletAddress),
-    getSolanaSession: walletAddress => walletController.getSolanaSession(walletAddress),
+    ensureWallet: ensureLiquidityWallet,
+    getEvmSession: getLiquidityEvmSession,
+    getSolanaSession: getLiquiditySolanaSession,
     refreshBalances: wallets.refreshBalances,
     persistence: routePersistence,
   })
@@ -121,7 +125,7 @@ export default function PocketMoveBankPage() {
     routedIntent.current = intentId
     void bankLiquidity.ensureLiquidity()
       .then(wallet => direct.continueAfterRouting(wallet))
-      .catch(direct.failRouting)
+      .catch(reason => direct.failRouting(reason, intentId))
   }, [bankLiquidity.ensureLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
   const directAmountDirty = direct.amount.length > 0
   const directAmountValid = /^\d+(?:\.\d{1,2})?$/.test(direct.amount) && Number(direct.amount) > 0
@@ -133,7 +137,7 @@ export default function PocketMoveBankPage() {
       : direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'authorizing'
         ? 'pending'
         : 'idle'
-  const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing'
+  const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing' || direct.status === 'processing'
   const bankReceipt = useMemo(() => (direct.status === 'sent' || (direct.status === 'processing' && Boolean(direct.result?.txHash))) && direct.result ? pocketActivityReceipt({
     eventId: `bank-withdraw:${direct.result.intentId}`,
     txHash: direct.result.txHash,
