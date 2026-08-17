@@ -16,6 +16,7 @@ import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePock
 import { registerPocketRefreshHandler } from './lib/pocketRefresh'
 import { POCKET_NATIVE_BACK_EVENT } from './lib/pocketNativeBack'
 import { unlockPocketBaseWallet } from './controllers/usePocketWalletController'
+import { readPocketPaymentSecurity } from './api/pocketPaymentSecurityClient'
 import {
   declinePocketQuickApproval,
   shouldOfferPocketQuickApproval,
@@ -107,7 +108,7 @@ export default function CirclePocketApp() {
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const unlockedEmail = useRef('')
   const [walletUnlockAttempt, setWalletUnlockAttempt] = useState(0)
-  const [walletUnlockState, setWalletUnlockState] = useState<'ready' | 'unlocking' | 'error'>('ready')
+  const [walletUnlockState, setWalletUnlockState] = useState<'checking' | 'ready' | 'unlocking' | 'error'>('checking')
   const [walletUnlockError, setWalletUnlockError] = useState('')
   const [initialDataReady, setInitialDataReady] = useState(false)
   const sessionResolved = ready && (!authenticated || (
@@ -123,7 +124,7 @@ export default function CirclePocketApp() {
   useEffect(() => {
     if (!ready || !authenticated || !email) {
       unlockedEmail.current = ''
-      setWalletUnlockState('ready')
+      setWalletUnlockState('checking')
       setWalletUnlockError('')
       return
     }
@@ -132,20 +133,37 @@ export default function CirclePocketApp() {
       return
     }
     let active = true
-    setWalletUnlockState('unlocking')
+    setWalletUnlockState('checking')
     setWalletUnlockError('')
-    void unlockPocketBaseWallet({ authenticated, email, getAccessToken })
-      .then(async ({ session }) => {
-        await refreshPocketWalletSnapshot({ email, getAccessToken }).catch(() => undefined)
+    void readPocketPaymentSecurity(getAccessToken)
+      .then(async security => {
         if (!active) return
-        if (shouldOfferPocketQuickApproval()) declinePocketQuickApproval()
-        unlockedEmail.current = email
-        setWalletUnlockState('ready')
+        if (security.configured) {
+          unlockedEmail.current = email
+          setWalletUnlockState('ready')
+          return
+        }
+        setWalletUnlockState('unlocking')
+        try {
+          await unlockPocketBaseWallet({ authenticated, email, getAccessToken })
+          await refreshPocketWalletSnapshot({ email, getAccessToken }).catch(() => undefined)
+          if (!active) return
+          if (shouldOfferPocketQuickApproval()) declinePocketQuickApproval()
+          unlockedEmail.current = email
+          setWalletUnlockState('ready')
+        } catch (reason) {
+          if (!active) return
+          setWalletUnlockState('error')
+          setWalletUnlockError(reason instanceof Error ? reason.message : 'Circle wallet unlock did not complete.')
+        }
       })
       .catch(reason => {
         if (!active) return
-        setWalletUnlockState('error')
-        setWalletUnlockError(reason instanceof Error ? reason.message : 'Circle wallet unlock did not complete.')
+        // A startup security-status outage must never fall through to an
+        // interactive Circle login. The security gate owns retry messaging.
+        unlockedEmail.current = email
+        setWalletUnlockState('ready')
+        setWalletUnlockError(reason instanceof Error ? reason.message : 'Pocket security status is unavailable.')
       })
     return () => { active = false }
   }, [authenticated, email, getAccessToken, ready, walletUnlockAttempt])
@@ -246,7 +264,8 @@ export default function CirclePocketApp() {
           : 'home'
   let content: ReactNode = null
   const concealLaunchContent = splashState !== 'idle' && (!sessionResolved || (authenticated && landing))
-  if (ready && authenticated && email && walletUnlockState !== 'ready') content = <PocketWalletAccessScreen mode={walletUnlockState} error={walletUnlockError} busy={false} onRetry={() => setWalletUnlockAttempt(value => value + 1)} onEnableBiometrics={() => undefined} onUseEmail={() => setWalletUnlockAttempt(value => value + 1)} />
+  if (ready && authenticated && email && walletUnlockState === 'checking') content = <PocketLoadingState active={active} />
+  else if (ready && authenticated && email && walletUnlockState !== 'ready') content = <PocketWalletAccessScreen mode={walletUnlockState} error={walletUnlockError} busy={false} onRetry={() => setWalletUnlockAttempt(value => value + 1)} onEnableBiometrics={() => undefined} onUseEmail={() => setWalletUnlockAttempt(value => value + 1)} />
   else if (concealLaunchContent) content = <main className="min-h-screen bg-[#F5F5F7]" aria-hidden="true" />
   else if (!ready) content = <PocketLoadingState active={active} />
   else if (landing) content = <PocketPageBoundary active="home"><PocketLandingPage /></PocketPageBoundary>

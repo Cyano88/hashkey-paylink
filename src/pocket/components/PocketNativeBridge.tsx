@@ -16,7 +16,17 @@ function nativePocketDestination(rawUrl: string) {
   }
 }
 
-const PocketInsets = registerPlugin<{ getInsets(): Promise<{ top: number; bottom: number }> }>('PocketInsets')
+type PocketNativeInsets = { top: number; bottom: number; topPx?: number; bottomPx?: number; density?: number }
+const PocketInsets = registerPlugin<{ getInsets(): Promise<PocketNativeInsets> }>('PocketInsets')
+
+function nativeInsetCssPixels(value: number | undefined, pixels: number | undefined, density: number | undefined) {
+  if (Number.isFinite(pixels) && Number.isFinite(density) && Number(density) > 0) {
+    return Math.max(0, Math.round(Number(pixels) / Number(density)))
+  }
+  const measured = Math.max(0, Number(value) || 0)
+  const ratio = Math.max(1, window.devicePixelRatio || 1)
+  return measured > 48 && ratio > 1 ? Math.round(measured / ratio) : Math.round(measured)
+}
 
 export default function PocketNativeBridge() {
   const navigate = useNavigate()
@@ -31,8 +41,8 @@ export default function PocketNativeBridge() {
     // native inset and expose it to CSS instead of trusting env() alone.
     const syncInsets = () => void PocketInsets.getInsets().then(info => {
       if (!active) return
-      document.documentElement.style.setProperty('--pocket-status-bar-inset', `${Math.max(0, info.top || 0)}px`)
-      document.documentElement.style.setProperty('--pocket-navigation-bar-inset', `${Math.max(0, info.bottom || 0)}px`)
+      document.documentElement.style.setProperty('--pocket-status-bar-inset', `${nativeInsetCssPixels(info.top, info.topPx, info.density)}px`)
+      document.documentElement.style.setProperty('--pocket-navigation-bar-inset', `${nativeInsetCssPixels(info.bottom, info.bottomPx, info.density)}px`)
     }).catch(() => StatusBar.getInfo().then(info => {
       if (active) document.documentElement.style.setProperty('--pocket-status-bar-inset', `${Math.max(0, Math.round((info.height || 0) / Math.max(1, window.devicePixelRatio || 1)))}px`)
     }).catch(() => undefined))

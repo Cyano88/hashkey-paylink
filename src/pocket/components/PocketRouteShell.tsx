@@ -163,7 +163,12 @@ export default function PocketRouteShell({
             </div>
             <div
               className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))]"
-              style={{ minHeight: `calc(100dvh - ${headerHeight}px)`, paddingTop: 16 }}
+              style={{
+                minHeight: `calc(100dvh - ${headerHeight}px)`,
+                paddingTop: headerHeight > 0
+                  ? 16
+                  : 'calc(max(env(safe-area-inset-top), var(--pocket-status-bar-inset, 0px)) + 1rem)',
+              }}
             >
               {children}
             </div>

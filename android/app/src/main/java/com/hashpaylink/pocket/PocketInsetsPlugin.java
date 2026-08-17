@@ -21,6 +21,9 @@ public class PocketInsetsPlugin extends Plugin {
             JSObject result = new JSObject();
             result.put(\u0022top\u0022, Math.max(0, Math.round(status.top / density)));
             result.put(\u0022bottom\u0022, Math.max(0, Math.round(navigation.bottom / density)));
+            result.put(\u0022topPx\u0022, Math.max(0, status.top));
+            result.put(\u0022bottomPx\u0022, Math.max(0, navigation.bottom));
+            result.put(\u0022density\u0022, density);
             call.resolve(result);
         });
     }

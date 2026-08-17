@@ -27,9 +27,9 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
   const label = visualStatus === 'error'
     ? mergedLabels.error
     : visualStatus === 'pending'
-      ? 'Confirming...'
+      ? mergedLabels.pending === 'Approve with fingerprint' ? 'Confirming send' : mergedLabels.pending
       : visualStatus === 'submitted'
-        ? 'Processing...'
+        ? mergedLabels.submitted === 'Sending' ? 'Sent - confirming' : mergedLabels.submitted
         : visualStatus === 'successful'
           ? mergedLabels.successful
           : disabled

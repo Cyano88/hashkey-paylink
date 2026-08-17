@@ -420,6 +420,27 @@ async function pollCircleSolanaChallenge(userToken: string, challengeId: string,
   return null
 }
 
+export async function reconcileCircleSolanaTransfer(params: {
+  session: SolanaEmailSession
+  challengeId: string
+  transactionId?: string
+  timeoutMs?: number
+}): Promise<{ state: 'submitted' | 'confirmed'; txHash: string; transactionId: string }> {
+  const startedAt = Date.now()
+  const timeoutMs = Math.max(2_500, params.timeoutMs ?? 180_000)
+  const transactionId = params.transactionId || await pollCircleSolanaChallenge(
+    params.session.userToken,
+    params.challengeId,
+    Math.min(30_000, timeoutMs),
+  )
+  if (!transactionId) return { state: 'submitted', txHash: '', transactionId: '' }
+  const remaining = Math.max(2_500, timeoutMs - (Date.now() - startedAt))
+  const txHash = await pollCircleSolanaTransaction(params.session.userToken, transactionId, remaining)
+  return txHash
+    ? { state: 'confirmed', txHash, transactionId }
+    : { state: 'submitted', txHash: '', transactionId }
+}
+
 export async function sendCircleSolanaTransfer(params: {
   session: SolanaEmailSession
   recipient: string
