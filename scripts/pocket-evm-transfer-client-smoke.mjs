@@ -24,8 +24,10 @@ const session = {
   appId: 'circle-app-id',
 }
 const calls = []
+const acceptedCalls = []
 const executor = async input => {
   calls.push(input)
+  input.onAccepted?.({ challengeId: 'challenge-1', transactionId: 'transaction-1' })
   return '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 }
 const confirmationCalls = []
@@ -40,6 +42,7 @@ const result = await executePocketEvmTransfer({
   recipient,
   amount: '1.25',
   executor,
+  onAccepted: value => acceptedCalls.push(value),
   confirmer,
 })
 assert.deepEqual(result, {
@@ -47,6 +50,7 @@ assert.deepEqual(result, {
   status: 'confirmed',
 })
 assert.equal(calls.length, 1)
+assert.deepEqual(acceptedCalls, [{ challengeId: 'challenge-1', transactionId: 'transaction-1' }])
 assert.match(calls[0].idempotencyKey, /^[0-9a-f-]{36}$/i)
 assert.deepEqual({ session: calls[0].session, recipient: calls[0].recipient, amount: calls[0].amount }, { session, recipient, amount: '1.25' })
 assert.deepEqual(confirmationCalls, [{ chain: 'base', txHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }])

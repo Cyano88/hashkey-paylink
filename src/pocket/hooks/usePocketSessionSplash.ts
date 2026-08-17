@@ -53,8 +53,15 @@ export default function usePocketSessionSplash(enabled: boolean, canLaunch = tru
   }, [state])
 
   useEffect(() => {
-    if (state !== 'holding' || !canLaunch) return
-    setState('launching')
+    if (state !== 'holding') return
+    if (canLaunch) {
+      setState('launching')
+      return
+    }
+    // The brand animation must never conceal a recoverable startup error or
+    // slow dependency. The underlying shell owns its own loading/error state.
+    const failSafeTimer = window.setTimeout(() => setState('launching'), 1_800)
+    return () => window.clearTimeout(failSafeTimer)
   }, [canLaunch, state])
 
   useEffect(() => {

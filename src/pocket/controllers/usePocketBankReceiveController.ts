@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { copyToClipboard, formatAmount } from '../../lib/utils'
-import { readPocketBankInstitutions, verifyPocketBankAccount } from '../api/pocketBankClient'
+import { readCachedPocketBankInstitutions, readPocketBankInstitutions, verifyPocketBankAccount } from '../api/pocketBankClient'
 import { createPocketBankReceive } from '../api/pocketBankReceiveClient'
 import { hashPayLinkAppOriginForOrigin, pocketRuntimeOrigin } from '../lib/pocketRoutes'
 import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
@@ -25,8 +25,9 @@ export default function usePocketBankReceiveController({
   allowThirdPartyAccount?: boolean
 }) {
   const [country, setCountryState] = useState('NG')
-  const [institutions, setInstitutions] = useState<Array<{ code: string; name: string }>>([])
-  const [institutionsBusy, setInstitutionsBusy] = useState(false)
+  const cachedInstitutions = useRef(readCachedPocketBankInstitutions())
+  const [institutions, setInstitutions] = useState<Array<{ code: string; name: string }>>(() => cachedInstitutions.current?.institutions ?? [])
+  const [institutionsBusy, setInstitutionsBusy] = useState(() => !cachedInstitutions.current)
   const [bankCode, setBankCode] = useState('')
   const [bankName, setBankName] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
@@ -66,15 +67,17 @@ export default function usePocketBankReceiveController({
 
   useEffect(() => {
     let current = true
-    setInstitutionsBusy(true)
+    setInstitutionsBusy(!cachedInstitutions.current)
     readPocketBankInstitutions()
       .then(data => {
         if (current) setInstitutions(data.institutions)
       })
       .catch(reason => {
         if (!current) return
-        setInstitutions([])
-        setError(readablePocketBankPayoutError(reason, 'Could not load banks.'))
+        if (!cachedInstitutions.current) {
+          setInstitutions([])
+          setError(readablePocketBankPayoutError(reason, 'Could not load banks.'))
+        }
       })
       .finally(() => {
         if (current) setInstitutionsBusy(false)

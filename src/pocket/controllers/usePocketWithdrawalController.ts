@@ -81,70 +81,16 @@ export default function usePocketWithdrawalController({
     if (!operation || operation.state !== 'submitted' || !operation.challengeId) return
     const sourceAddress = operation.sourceAddress ?? operation.fingerprint.split(':')[0]
     if (sourceAddress !== wallet.address) return
-    let active = true
     setStatus('submitted')
-    setNotice('Transfer submitted. Pocket is checking final delivery.')
-    void getSolanaSession(wallet.address)
-      .then(session => reconcileCircleSolanaTransfer({
-        session,
-        challengeId: operation.challengeId,
-        transactionId: operation.transactionId,
-        timeoutMs: 30_000,
-      }))
-      .then(reconciled => {
-        if (!active || reconciled.state !== 'confirmed') return
-        clearSolanaOperation()
-        setTxHash(reconciled.txHash)
-        setStatus('successful')
-        setNotice(operation.amount ? `${formatPocketDisplayAmount(operation.amount)} USDC sent on Solana` : 'USDC sent on Solana')
-        void refreshBalances().catch(() => undefined)
-        onActivity('Solana transfer confirmed')
-      })
-      .catch(reason => {
-        if (!active) return
-        const message = reason instanceof Error ? reason.message : ''
-        if (!/cancelled|failed|denied/i.test(message)) return
-        clearSolanaOperation()
-        setStatus('idle')
-        setNotice('')
-        setError(message || 'The Solana transfer did not complete.')
-      })
-    return () => { active = false }
+    setNotice('Transfer submitted. Pocket will verify final delivery without reopening authentication.')
   }, [network, resetKey, wallet?.address]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (network === 'solana' || !wallet?.address) return
     const operation = readRecentEvmOperation()
     if (!operation || operation.state !== 'submitted' || !operation.challengeId || operation.network !== network || operation.sourceAddress.toLowerCase() !== wallet.address.toLowerCase()) return
-    let active = true
     setStatus('submitted')
-    setNotice('Transfer submitted. Pocket is checking final delivery.')
-    void getEvmSession(network, wallet.address)
-      .then(session => reconcileCircleEvmEmailWithdraw({
-        session,
-        challengeId: operation.challengeId,
-        transactionId: operation.transactionId,
-        timeoutMs: 30_000,
-      }))
-      .then(reconciled => {
-        if (!active || reconciled.state !== 'confirmed' || !reconciled.txHash) return
-        clearEvmOperation()
-        setTxHash(reconciled.txHash)
-        setStatus('successful')
-        setNotice(`${formatPocketDisplayAmount(operation.amount)} USDC sent on ${networkLabel}`)
-        void refreshBalances().catch(() => undefined)
-        onActivity(`Withdrew ${operation.amount} USDC on ${networkLabel}`)
-      })
-      .catch(reason => {
-        if (!active) return
-        const message = reason instanceof Error ? reason.message : ''
-        if (!/cancelled|failed|denied/i.test(message)) return
-        clearEvmOperation()
-        setStatus('idle')
-        setNotice('')
-        setError(message || 'The transfer did not complete.')
-      })
-    return () => { active = false }
+    setNotice('Transfer submitted. Pocket will verify final delivery without reopening authentication.')
   }, [network, networkLabel, resetKey, wallet?.address]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setMax = useCallback(() => {

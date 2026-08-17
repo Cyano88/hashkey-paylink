@@ -5,7 +5,10 @@ import { POCKET_PAYMENT_APPROVAL_EVENT, setPocketPaymentApproval } from '../lib/
 import { disablePocketPaymentBiometrics, enablePocketPaymentBiometrics, pocketPaymentBiometricsAvailable, pocketPaymentBiometricsConfigured, pocketPaymentBiometricsEnabled, readPocketPinWithBiometrics } from '../lib/pocketPaymentBiometrics'
 
 export const POCKET_PIN_RESET_KEY = 'pocket:payment-pin:reset-after-login:v1'
+const PAYMENT_SECURITY_CONFIGURED_PREFIX = 'pocket:payment-security:configured:v1:'
 type PendingApproval = { resolve(): void; reject(reason?: unknown): void }
+
+function configuredKey(email: string) { return PAYMENT_SECURITY_CONFIGURED_PREFIX + email.trim().toLowerCase() }
 
 function PinFields({ pin, confirm, onPin, onConfirm, disabled }: { pin: string; confirm: string; onPin(value: string): void; onConfirm(value: string): void; disabled: boolean }) {
   const field = 'min-h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-white/10 dark:bg-white/[0.06]'
@@ -36,12 +39,23 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, child
       .then(([security, available]) => {
         if (!active) return
         const reset = localStorage.getItem(POCKET_PIN_RESET_KEY) === 'true'
+        if (security.configured) localStorage.setItem(configuredKey(email), 'true')
+        else localStorage.removeItem(configuredKey(email))
         setResetting(reset && security.configured)
         setBiometricsAvailable(available)
         setState(!security.configured || reset ? 'setup' : available && !pocketPaymentBiometricsConfigured() ? 'offer' : 'ready')
       })
       .catch(() => {
         if (!active) return
+        const configuredOnThisDevice = localStorage.getItem(configuredKey(email)) === 'true'
+        const reset = localStorage.getItem(POCKET_PIN_RESET_KEY) === 'true'
+        if (configuredOnThisDevice && !reset) {
+          // Opening the app may use the last verified non-secret configuration.
+          // Every payment still verifies its PIN/biometric approval with the
+          // server, so an outage cannot authorize a transaction.
+          setState('ready')
+          return
+        }
         setError('Pocket could not prepare payment security. Check your connection and try again.')
         setState('error')
       })
@@ -78,6 +92,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, child
     setBusy(true); setError('')
     try {
       await updatePocketPaymentSecurity(getAccessToken, resetting ? { action: 'reset', pin, confirmReset: true } : { action: 'setup', pin })
+      localStorage.setItem(configuredKey(email), 'true')
       localStorage.removeItem(POCKET_PIN_RESET_KEY)
       setSetupPin(pin); setPin(''); setConfirm('')
       setState(biometricsAvailable ? 'offer' : 'ready')

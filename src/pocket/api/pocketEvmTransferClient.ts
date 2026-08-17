@@ -8,6 +8,7 @@ type PocketEvmTransferExecutor = (input: {
   amount: string
   idempotencyKey?: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
+  onAccepted?: (value: { challengeId: string; transactionId: string }) => void
 }) => Promise<`0x${string}` | null>
 
 type PocketEvmTransferConfirmer = (input: {
@@ -39,6 +40,7 @@ export async function executePocketEvmTransfer({
   amount,
   idempotencyKey,
   onChallenge,
+  onAccepted,
   confirm = true,
   executor = defaultExecutor,
   confirmer = defaultConfirmer,
@@ -49,6 +51,7 @@ export async function executePocketEvmTransfer({
   amount: string
   idempotencyKey?: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
+  onAccepted?: (value: { challengeId: string; transactionId: string }) => void
   confirm?: boolean
   executor?: PocketEvmTransferExecutor
   confirmer?: PocketEvmTransferConfirmer
@@ -73,7 +76,7 @@ export async function executePocketEvmTransfer({
     throw new Error('Enter a valid USDC withdrawal amount.')
   }
   if (amountUnits <= 0n) throw new Error('Enter a USDC withdrawal amount greater than zero.')
-  const txHash = await executor({ session, recipient, amount, idempotencyKey: idempotencyKey ?? crypto.randomUUID(), onChallenge })
+  const txHash = await executor({ session, recipient, amount, idempotencyKey: idempotencyKey ?? crypto.randomUUID(), onChallenge, onAccepted })
   if (!txHash) return { txHash, status: 'submitted' as const }
   if (!confirm) return { txHash, status: 'submitted' as const }
   const status = await confirmer({ chain: session.chain, txHash })

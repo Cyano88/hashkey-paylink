@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
+import { reconcileCircleEvmEmailWithdraw } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
 import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, registerPocketBankWithdrawTransfer, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
-import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout } from '../lib/pocketBankPayoutState'
+import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutAcceptance, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout, saveActivePocketBankPayoutAcceptance } from '../lib/pocketBankPayoutState'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
 import { pocketRuntimeOrigin } from '../lib/pocketRoutes'
 
@@ -192,7 +193,16 @@ export default function usePocketBankWithdrawController({
       const intentId = activeIntentId.current
       if (!intentId) return
       const recoveredTxHash = readActivePocketBankPayoutTransfer(intentId)
+      const acceptedTransfer = readActivePocketBankPayoutAcceptance(intentId)
       if (!recoveredTxHash) {
+        if (acceptedTransfer) {
+          setStatus('processing')
+          const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
+          if (next) setResult(next)
+          // Never open Circle authentication from mount, focus, or a timer.
+          // The foreground approval path owns hash reconciliation.
+          return
+        }
         // A live prepare/routing operation has not submitted money yet. Wallet
         // refreshes must never mistake it for an abandoned persisted payout.
         if (statusRef.current !== 'idle') return
@@ -339,7 +349,8 @@ export default function usePocketBankWithdrawController({
     const prepared = result
     if (status !== 'routing' || !prepared || !activeIntentId.current || activeIntentId.current !== prepared.intentId) return
     let reconciliation: { accessToken: string; intentId: string } | null = null
-    let transactionSubmitted = Boolean(readActivePocketBankPayoutTransfer(prepared.intentId))
+    let acceptedTransfer = readActivePocketBankPayoutAcceptance(prepared.intentId)
+    let transactionSubmitted = Boolean(readActivePocketBankPayoutTransfer(prepared.intentId) || acceptedTransfer)
     setError('')
     setStatus('authorizing')
     try {
@@ -368,9 +379,49 @@ export default function usePocketBankWithdrawController({
         recipient: payable.receiveAddress as Address,
         amount: payable.amountUsdc,
         idempotencyKey: idempotencyKey.current,
+        onAccepted: identifiers => {
+          acceptedTransfer = identifiers
+          transactionSubmitted = true
+          saveActivePocketBankPayoutAcceptance(prepared.intentId, identifiers)
+          setStatus('processing')
+        },
         confirm: false,
       })
-      if (!transfer.txHash) throw new Error('Circle accepted the payout, but no transaction hash was returned. Check Activity before retrying.')
+      if (!transfer.txHash) {
+        if (!acceptedTransfer) throw new Error('Circle did not submit the payout. No money was sent.')
+        setResult(payable)
+        setStatus('processing')
+        setAmountState('')
+        setMemoState('')
+        clearStoredOperation()
+        void reconcileCircleEvmEmailWithdraw({
+          session,
+          challengeId: acceptedTransfer.challengeId,
+          transactionId: acceptedTransfer.transactionId,
+          timeoutMs: 180_000,
+        }).then(async reconciled => {
+          if (!reconciled.txHash || activeIntentId.current !== prepared.intentId) return
+          saveActivePocketBankPayout(prepared.intentId, reconciled.txHash)
+          const submitted = await registerPocketBankWithdrawTransfer({
+            accessToken,
+            request: { intent_id: prepared.intentId, tx_hash: reconciled.txHash },
+          })
+          if (activeIntentId.current !== prepared.intentId) return
+          setResult(submitted)
+          const confirmed = await confirmPocketBankWithdraw({
+            accessToken,
+            request: {
+              intent_id: prepared.intentId,
+              order_id: payable.orderId,
+              tx_hash: reconciled.txHash,
+              wallet_address: selectedWallet.address,
+            },
+          }).catch(() => null)
+          if (confirmed && activeIntentId.current === prepared.intentId) setResult(confirmed)
+          void pollUntilSettled(accessToken, prepared.intentId)
+        }).catch(() => undefined)
+        return
+      }
       setResult({ ...payable, txHash: transfer.txHash })
       saveActivePocketBankPayout(prepared.intentId, transfer.txHash)
       transactionSubmitted = true

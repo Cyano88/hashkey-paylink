@@ -834,6 +834,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
   amount: string
   idempotencyKey: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
+  onAccepted?: (value: { challengeId: string; transactionId: string }) => void
 }) {
   const sdk = authenticatedSdk(params.session)
   applyHashPayLinkCircleUi(sdk, {
@@ -865,6 +866,10 @@ export async function sendCircleEvmEmailWithdraw(params: {
     challenge.challengeId,
     'Circle withdraw confirmation did not finish. If you approved it, check the destination wallet in a moment.',
   )
+  params.onAccepted?.({
+    challengeId: challenge.challengeId,
+    transactionId: findTransactionId(result) ?? findTransactionId(challenge) ?? '',
+  })
   const txHash = findTxHash(result)
   if (txHash) return txHash
   let transactionId = findTransactionId(result) ?? findTransactionId(challenge)

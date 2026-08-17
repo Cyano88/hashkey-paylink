@@ -3,7 +3,7 @@ import { createPocketBankWithdrawHandler, payoutState } from '../api/pocket/bank
 import { verifyBankPayoutBeneficiary } from '../api/pocket/verified-bank-name.ts'
 import { createPaymentExecutionRepository } from '../api/pocket/payment-execution-intents.ts'
 import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawRoute, readPocketBankWithdrawStatus, recoverPocketBankWithdrawals, registerPocketBankWithdrawTransfer, startPocketBankWithdrawRoute, updatePocketBankWithdrawRoute } from '../src/pocket/api/pocketBankWithdrawClient.ts'
-import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout } from '../src/pocket/lib/pocketBankPayoutState.ts'
+import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutAcceptance, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout, saveActivePocketBankPayoutAcceptance } from '../src/pocket/lib/pocketBankPayoutState.ts'
 
 function responseRecorder() {
   return {
@@ -347,6 +347,10 @@ saveActivePocketBankPayout(processingOrder.intent_id, `0x${'2'.repeat(64)}`)
 assert.equal(readActivePocketBankPayoutTransfer(processingOrder.intent_id), `0x${'2'.repeat(64)}`)
 saveActivePocketBankPayout(processingOrder.intent_id)
 assert.equal(readActivePocketBankPayoutTransfer(processingOrder.intent_id), `0x${'2'.repeat(64)}`, 'saving the active intent must preserve submitted transfer evidence')
+saveActivePocketBankPayoutAcceptance(processingOrder.intent_id, { challengeId: 'challenge-1', transactionId: 'transaction-1' })
+assert.deepEqual(readActivePocketBankPayoutAcceptance(processingOrder.intent_id), { challengeId: 'challenge-1', transactionId: 'transaction-1' })
+saveActivePocketBankPayout(processingOrder.intent_id)
+assert.deepEqual(readActivePocketBankPayoutAcceptance(processingOrder.intent_id), { challengeId: 'challenge-1', transactionId: 'transaction-1' }, 'saving a later payout state must preserve accepted Circle evidence')
 clearActivePocketBankPayout(processingOrder.intent_id)
 assert.equal(readActivePocketBankPayout(), '')
 
