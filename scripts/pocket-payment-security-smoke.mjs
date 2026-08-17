@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { consumePocketPaymentApproval, createPocketPaymentSecurityHandler } from '../api/pocket/payment-security.ts'
 
 function response() {
-  return { statusCode: 200, payload: undefined, status(code) { this.statusCode = code; return this }, json(value) { this.payload = value; return this } }
+  return { statusCode: 200, payload: undefined, headers: {}, setHeader(name, value) { this.headers[name] = value }, status(code) { this.statusCode = code; return this }, json(value) { this.payload = value; return this } }
 }
 async function call(handler, method, body = {}) {
   const res = response()

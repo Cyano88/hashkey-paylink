@@ -73,6 +73,8 @@ export async function consumePocketPaymentApproval(token: string, ownerId?: stri
 export function createPocketPaymentSecurityHandler(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = { verifyUser: verifiedPrivyUser, now: Date.now, random: randomBytes, ...overrides }
   return async function pocketPaymentSecurityHandler(req: Request, res: Response) {
+    res.setHeader('Cache-Control', 'no-store, max-age=0')
+    res.setHeader('Pragma', 'no-cache')
     if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
     try {
       const identity = await dependencies.verifyUser(req)

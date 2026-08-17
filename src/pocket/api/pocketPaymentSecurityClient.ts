@@ -7,8 +7,9 @@ async function request(getAccessToken: AccessTokenReader, init?: RequestInit) {
   const timeout = window.setTimeout(() => controller.abort(), 8_000)
   let response: Response
   try {
-    response = await fetch('/api/pocket/payment-security', {
+    response = await fetch('/api/pocket/payment-security?v=1', {
       ...init,
+      cache: 'no-store',
       signal: controller.signal,
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', ...init?.headers },
     })
