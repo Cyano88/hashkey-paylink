@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { App as CapacitorApp } from '@capacitor/app'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isPocketNativeRuntime, POCKET_BASE_PATH, POCKET_ROUTES, resolvePocketRoute } from './lib/pocketRoutes'
@@ -15,7 +15,7 @@ import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
 import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutAcceptance, readActivePocketBankPayoutTransfer } from './lib/pocketBankPayoutState'
 import { registerPocketRefreshHandler } from './lib/pocketRefresh'
 import { POCKET_NATIVE_BACK_EVENT } from './lib/pocketNativeBack'
-import { restorePocketWalletSession } from './controllers/usePocketWalletController'
+import { reconnectPocketBaseWallet, restorePocketWalletSession } from './controllers/usePocketWalletController'
 import { Lock } from './components/PocketIcons'
 import PocketPaymentSecurityGate from './components/PocketPaymentSecurityGate'
 
@@ -68,7 +68,7 @@ function PocketWalletAccessScreen({
   return <main className='fixed inset-0 z-[60] flex items-center justify-center bg-[#F5F5F7] px-6 text-gray-950 dark:bg-[#0A0A0A] dark:text-white'>
     <section className='w-full max-w-[390px] rounded-[30px] border border-gray-200/80 bg-white p-7 text-center shadow-[0_24px_70px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#17181c]'>
       <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300'><Lock className='h-6 w-6' /></span>
-      <h1 className='mt-5 text-xl font-black tracking-tight'>{choosing ? 'Preparing Pocket' : mode === 'error' ? 'Wallet setup needs attention' : 'Preparing Pocket'}</h1>
+      <h1 className='mt-5 text-xl font-black tracking-tight'>{choosing ? 'Preparing Pocket' : mode === 'error' ? 'Connect your Circle wallet' : 'Preparing Pocket'}</h1>
       <p className='mx-auto mt-2 max-w-[300px] text-sm leading-6 text-gray-500 dark:text-gray-400'>
         {choosing
           ? 'Pocket is preparing your secure wallet session.'
@@ -80,7 +80,7 @@ function PocketWalletAccessScreen({
         <button type='button' onClick={onUseEmail} disabled={busy} className='mt-2 min-h-12 w-full rounded-full px-5 text-sm font-bold text-gray-500 disabled:opacity-60 dark:text-gray-300'>Use email code</button>
       </> : mode === 'error'
         ? <>
-          <button type='button' onClick={onRetry} disabled={busy} className='mt-6 min-h-14 w-full rounded-full bg-gray-950 px-5 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950'>Try again</button>
+          <button type='button' onClick={onRetry} disabled={busy} className='mt-6 min-h-14 w-full rounded-full bg-gray-950 px-5 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950'>{busy ? 'Connecting Circle wallet...' : 'Connect Circle wallet'}</button>
         </>
         : <span className='mx-auto mt-6 block h-2.5 w-2.5 animate-pulse rounded-full bg-blue-600' aria-label='Opening Pocket wallets' />}
     </section>
@@ -102,7 +102,9 @@ export default function CirclePocketApp() {
   usePocketPushNotifications({ ready, authenticated, getAccessToken, navigate })
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const unlockedEmail = useRef('')
-  const [walletUnlockState, setWalletUnlockState] = useState<'checking' | 'ready'>('checking')
+  const [walletUnlockState, setWalletUnlockState] = useState<'checking' | 'reconnect' | 'ready'>('checking')
+  const [walletUnlockError, setWalletUnlockError] = useState('')
+  const [walletUnlockBusy, setWalletUnlockBusy] = useState(false)
   const [initialDataReady, setInitialDataReady] = useState(false)
   const sessionResolved = ready && (!authenticated || (
     profile.loaded
@@ -115,6 +117,7 @@ export default function CirclePocketApp() {
   useEffect(() => {
     if (!ready || !authenticated || !email) {
       unlockedEmail.current = ''
+      setWalletUnlockError('')
       setWalletUnlockState('checking')
       return
     }
@@ -124,17 +127,41 @@ export default function CirclePocketApp() {
     }
     let active = true
     setWalletUnlockState('checking')
+    setWalletUnlockError('')
     void restorePocketWalletSession(email)
-      .catch(() => null)
-      .finally(() => {
+      .then(session => {
         if (!active) return
-        // Relaunch is always silent. A missing Circle session is recovered only
-        // from an explicit payment action, never from app startup or focus.
+        if (!session) {
+          setWalletUnlockError('Connect your Circle wallet once on this phone. Pocket will keep the secure session for future visits.')
+          setWalletUnlockState('reconnect')
+          return
+        }
         unlockedEmail.current = email
         setWalletUnlockState('ready')
       })
+      .catch(() => {
+        if (!active) return
+        setWalletUnlockError('Reconnect your Circle wallet once to restore secure payments on this phone.')
+        setWalletUnlockState('reconnect')
+      })
     return () => { active = false }
   }, [authenticated, email, ready])
+
+  const reconnectWallet = useCallback(async () => {
+    if (!ready || !authenticated || !email || walletUnlockBusy) return
+    setWalletUnlockBusy(true)
+    setWalletUnlockError('')
+    try {
+      await reconnectPocketBaseWallet({ authenticated, email, getAccessToken })
+      unlockedEmail.current = email
+      setWalletUnlockState('ready')
+    } catch (reason) {
+      setWalletUnlockError(reason instanceof Error ? reason.message : 'Circle wallet was not connected.')
+      setWalletUnlockState('reconnect')
+    } finally {
+      setWalletUnlockBusy(false)
+    }
+  }, [authenticated, email, getAccessToken, ready, walletUnlockBusy])
 
   useEffect(() => {
     if (!isPocketNativeRuntime()) return
@@ -162,6 +189,11 @@ export default function CirclePocketApp() {
     if (!landing || !sessionResolved || !authenticated) return
     navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.home}`, { replace: true })
   }, [authenticated, landing, navigate, sessionResolved])
+
+  useEffect(() => {
+    if (!ready || authenticated || landing) return
+    navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.root}`, { replace: true })
+  }, [authenticated, landing, navigate, ready])
 
   useEffect(() => {
     if (!authenticated || !email) return
@@ -233,8 +265,10 @@ export default function CirclePocketApp() {
   let content: ReactNode = null
   const concealLaunchContent = splashState !== 'idle' && (!sessionResolved || (authenticated && landing))
   if (ready && authenticated && email && walletUnlockState === 'checking') content = <PocketLoadingState active={active} />
+  else if (ready && authenticated && email && walletUnlockState === 'reconnect') content = <PocketWalletAccessScreen mode='error' error={walletUnlockError} busy={walletUnlockBusy} onRetry={() => { void reconnectWallet() }} onEnableBiometrics={() => { void reconnectWallet() }} onUseEmail={() => { void reconnectWallet() }} />
   else if (concealLaunchContent) content = <main className="min-h-screen bg-[#F5F5F7]" aria-hidden="true" />
   else if (!ready) content = <PocketLoadingState active={active} />
+  else if (!authenticated) content = <PocketPageBoundary active='home'><PocketLandingPage /></PocketPageBoundary>
   else if (landing) content = <PocketPageBoundary active="home"><PocketLandingPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'deposit') content = <PocketPageBoundary active="home"><PocketDepositPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'send') content = <PocketPageBoundary active="home"><PocketSendPage /></PocketPageBoundary>
