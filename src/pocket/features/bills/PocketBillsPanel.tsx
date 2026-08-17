@@ -80,9 +80,9 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
   const reviewBlocked = Boolean(bills.intent && ['provider_failed_unverified', 'refund_pending', 'refund_eligible', 'needs_review'].includes(bills.intent.state))
   const slideStatus = bills.status === 'successful'
     ? 'successful'
-    : bills.status === 'processing'
+    : bills.status === 'processing' || paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling'
       ? 'submitted'
-      : bills.status === 'paying' || bills.status === 'confirming'
+      : bills.status === 'paying' || bills.status === 'confirming' || paymentRouting?.status === 'checking' || paymentRouting?.status === 'moving'
         ? 'pending'
         : 'idle'
   const isData = view === 'data'
@@ -307,8 +307,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                               ? 'Checking balances'
                               : 'Review payment',
                         idle: bills.environment === 'sandbox' ? 'Confirm test payment' : 'Confirm payment',
-                        pending: 'Approve with fingerprint',
-                        submitted: bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`,
+                        pending: paymentRouting?.status === 'checking' ? 'Checking balances' : paymentRouting?.status === 'moving' ? 'Confirm move in Circle' : 'Approve with fingerprint',
+                        submitted: paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling' ? 'USDC move confirming' : bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`,
                         successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent`,
                       }}
                     />

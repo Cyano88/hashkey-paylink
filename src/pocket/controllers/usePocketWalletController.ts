@@ -147,6 +147,36 @@ export async function ensurePocketWallet({
   }
 }
 
+export async function unlockPocketBaseWallet({
+  authenticated,
+  email,
+  getAccessToken,
+}: {
+  authenticated: boolean
+  email: string
+  getAccessToken: PocketAccessTokenReader
+}) {
+  let approvedSession: CircleEvmEmailSession | null = null
+  const wallet = await ensurePocketWallet({
+    network: 'base',
+    authenticated,
+    email,
+    getAccessToken,
+    onEvmSession: session => { approvedSession = session },
+  })
+  if (!wallet) throw new Error('Circle wallet unlock did not complete.')
+  const session = approvedSession ?? (pocketQuickApprovalEnabled()
+    ? await readPocketEvmQuickSession(email, 'base', wallet.address)
+    : await connectCircleEvmEmailWallet(email, 'base'))
+  if (session.wallet.address.toLowerCase() !== wallet.address.toLowerCase()) {
+    throw new Error('The unlocked Circle wallet does not match this Pocket account.')
+  }
+  await offerPocketQuickApprovalAfterEmail(email, session).catch(() => false)
+  await savePocketEvmQuickSession(email, session).catch(() => undefined)
+  sharedEvmSessions.set(evmSessionKey(email, 'base', wallet.address), session)
+  return wallet
+}
+
 export default function usePocketWalletController({
   authenticated,
   email,
@@ -187,7 +217,7 @@ export default function usePocketWalletController({
   const getEvmSession = useCallback(async (
     network: Exclude<PocketNetwork, 'solana'>,
     walletAddress: string,
-    options: { allowSharedSession?: boolean } = {},
+    options: { allowSharedSession?: boolean } = { allowSharedSession: true },
   ) => {
     const currentSession = evmSessionRef.current ?? evmSession
     const key = evmSessionKey(email, network, walletAddress)

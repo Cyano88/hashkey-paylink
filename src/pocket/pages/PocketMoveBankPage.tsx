@@ -351,7 +351,7 @@ export default function PocketMoveBankPage() {
                     idle: 'Confirm payout',
                     disabled: 'Complete payout details',
                     pending: direct.status === 'authorizing' ? 'Confirm payout in Circle' : direct.status === 'routing' && bankLiquidity.status === 'moving' ? 'Moving USDC' : direct.status === 'routing' ? 'Checking balances' : 'Preparing payout',
-                    submitted: direct.status === 'route-review' ? 'Move needs review' : direct.status === 'routing' ? 'USDC moving to Base' : 'Payment processing',
+                    submitted: direct.status === 'route-review' ? 'USDC move confirming' : direct.status === 'routing' ? 'USDC moving to Base' : 'Payment processing',
                     successful: 'Sent',
                   }}
                 />}

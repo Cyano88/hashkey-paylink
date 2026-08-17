@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
 import { AlertCircle, Check, Loader2, Lock } from 'lucide-react'
 import SlideAction, { type SlideActionStatus } from '../../components/SlideAction'
@@ -20,57 +20,65 @@ const POCKET_DEFAULT_LABELS: NonNullable<PocketSlideActionProps['labels']> = {
 export default function PocketSlideAction({ labels, status, disabled, onConfirm }: PocketSlideActionProps) {
   const activationLocked = useRef(false)
   const unlockTimer = useRef<number | null>(null)
+  const [optimisticPending, setOptimisticPending] = useState(false)
   const mergedLabels = { ...POCKET_DEFAULT_LABELS, ...labels }
-  const label = status === 'error'
+  const visualStatus = status === 'idle' && optimisticPending ? 'pending' : status
+  const label = visualStatus === 'error'
     ? mergedLabels.error
-    : status === 'pending'
+    : visualStatus === 'pending'
       ? mergedLabels.pending
-      : status === 'submitted'
+      : visualStatus === 'submitted'
         ? mergedLabels.submitted
-        : status === 'successful'
+        : visualStatus === 'successful'
           ? mergedLabels.successful
           : disabled
             ? mergedLabels.disabled
             : mergedLabels.idle
 
   useEffect(() => {
-    if (status !== 'idle') activationLocked.current = true
-    if (status === 'idle' && !disabled) activationLocked.current = false
-    return () => {
-      if (unlockTimer.current) window.clearTimeout(unlockTimer.current)
+    if (status !== 'idle') {
+      activationLocked.current = true
+      setOptimisticPending(false)
     }
-  }, [disabled, status])
+    if (status === 'idle' && !disabled && !optimisticPending) activationLocked.current = false
+  }, [disabled, optimisticPending, status])
+
+  useEffect(() => () => {
+    if (unlockTimer.current) window.clearTimeout(unlockTimer.current)
+  }, [])
 
   const confirmOnce = () => {
     if (disabled || status !== 'idle' || activationLocked.current) return
     activationLocked.current = true
+    setOptimisticPending(true)
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
     onConfirm()
     unlockTimer.current = window.setTimeout(() => {
-      if (status === 'idle') activationLocked.current = false
-    }, 900)
+      setOptimisticPending(false)
+      activationLocked.current = false
+    }, 1_200)
   }
 
   return (
     <button
       type="button"
       onClick={confirmOnce}
-      disabled={disabled || status !== 'idle'}
+      disabled={disabled || visualStatus !== 'idle'}
       aria-label={label}
       className={cn(
         'flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-bold text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] transition active:scale-[0.99] disabled:cursor-not-allowed dark:bg-white dark:text-gray-950',
         disabled && status === 'idle' && 'opacity-45',
-        status === 'pending' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
-        status === 'submitted' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
-        status === 'successful' && 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-white',
-        status === 'error' && 'bg-red-600 text-white dark:bg-red-500 dark:text-white',
+        visualStatus === 'pending' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
+        visualStatus === 'submitted' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
+        visualStatus === 'successful' && 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-white',
+        visualStatus === 'error' && 'bg-red-600 text-white dark:bg-red-500 dark:text-white',
       )}
     >
-      {status === 'pending' || status === 'submitted'
+      {visualStatus === 'pending' || visualStatus === 'submitted'
         ? <Loader2 className="h-4 w-4 animate-spin" />
-        : status === 'successful'
+        : visualStatus === 'successful'
           ? <Check className="h-4 w-4" />
-          : status === 'error'
+          : visualStatus === 'error'
             ? <AlertCircle className="h-4 w-4" />
             : <Lock className="h-4 w-4" />}
       <span>{label}</span>

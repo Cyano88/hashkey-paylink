@@ -28,8 +28,6 @@ export default function PocketRouteShell({
   const pullDistanceRef = useRef(0)
   const refreshTriggered = useRef(false)
 
-  const contentTop = headerHeight + 16
-
   useEffect(() => {
     const header = document.querySelector<HTMLElement>('[data-hashpaylink-top-nav]')
     if (!header) return
@@ -157,15 +155,15 @@ export default function PocketRouteShell({
             onTouchMove={movePull}
             onTouchEnd={finishPull}
             onTouchCancel={() => { pullStartY.current = null; if (!refreshing) { pullDistanceRef.current = 0; setPullDistance(0) } }}
-            className="h-full w-full overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
-            style={{ scrollPaddingTop: contentTop, scrollPaddingBottom: 'calc(7.5rem + env(safe-area-inset-bottom))' }}
+            className="absolute inset-x-0 bottom-0 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
+            style={{ top: headerHeight, scrollPaddingTop: 16, scrollPaddingBottom: 'calc(7.5rem + env(safe-area-inset-bottom))' }}
           >
-            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-20 flex justify-center transition-opacity duration-150" style={{ top: contentTop - 8, opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}>
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}>
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-3.5 w-3.5 animate-spin" /></span>
             </div>
             <div
               className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))]"
-              style={{ minHeight: `calc(100dvh - ${contentTop}px)`, paddingTop: contentTop }}
+              style={{ minHeight: `calc(100dvh - ${headerHeight}px)`, paddingTop: 16 }}
             >
               {children}
             </div>

@@ -63,6 +63,18 @@ export async function prefetchPocketWalletSnapshot({
   return prefetch
 }
 
+export async function refreshPocketWalletSnapshot({
+  email,
+  getAccessToken,
+}: {
+  email: string
+  getAccessToken: PocketAccessTokenReader
+}) {
+  await pocketWalletPrefetches.get(email)?.catch(() => undefined)
+  pocketWalletCache.delete(email)
+  return prefetchPocketWalletSnapshot({ email, getAccessToken })
+}
+
 export default function usePocketWallets({
   authenticated,
   email,

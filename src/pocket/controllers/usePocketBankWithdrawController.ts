@@ -424,9 +424,10 @@ export default function usePocketBankWithdrawController({
   const failRouting = useCallback((reason: unknown) => {
     const message = payoutError(reason, 'Pocket could not prepare this payout.')
     const intentId = result?.intentId ?? activeIntentId.current
-    const review = Boolean(result?.txHash || (intentId && readActivePocketBankPayoutTransfer(intentId)))
+    const submittedRoute = /submitted and is being reconciled|USDC move submitted|still moving|without a verifiable source transaction|check activity before retrying/i.test(message)
+    const review = submittedRoute || Boolean(result?.txHash || (intentId && readActivePocketBankPayoutTransfer(intentId)))
     setStatus(review ? 'route-review' : 'idle')
-    setError(review ? 'Payment is being confirmed. Pocket will update Activity automatically.' : message)
+    setError(review ? 'USDC move submitted. Pocket will continue the payout automatically after confirmation.' : message)
   }, [result])
 
   return { amount, memo, status, error, result, canSubmit, setAmount, setMemo, resetResult, submit, continueAfterRouting, failRouting }
