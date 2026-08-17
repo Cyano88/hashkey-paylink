@@ -15,7 +15,6 @@ import { linkPocketWallet, readPocketWallet } from '../api/pocketWalletLinkClien
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import {
   pocketQuickApprovalEnabled,
-  offerPocketQuickApprovalAfterEmail,
   readPocketEvmQuickSession,
   readPocketQuickApprovalSession,
   savePocketEvmQuickSession,
@@ -25,9 +24,41 @@ import type { CirclePocketWallet } from '../models/pocketWallet'
 export type PocketSolanaEmailSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
 const sharedEvmSessions = new Map<string, CircleEvmEmailSession>()
 const sharedPendingEvmSessions = new Map<string, Promise<CircleEvmEmailSession>>()
+const sharedSolanaSessions = new Map<string, PocketSolanaEmailSession>()
+const sharedPocketUnlocks = new Map<string, Promise<PocketWalletUnlock>>()
+
+export type PocketWalletUnlock = {
+  wallet: CirclePocketWallet
+  session: CircleEvmEmailSession
+}
 
 function evmSessionKey(email: string, network: Exclude<PocketNetwork, 'solana'>, walletAddress: string) {
   return `${email.trim().toLowerCase()}:${network}:${walletAddress.toLowerCase()}`
+}
+
+function solanaSessionKey(email: string, walletAddress: string) {
+  return `${email.trim().toLowerCase()}:solana:${walletAddress}`
+}
+
+function cacheEvmSession(email: string, session: CircleEvmEmailSession) {
+  sharedEvmSessions.set(evmSessionKey(email, session.chain, session.wallet.address), session)
+  if (session.chain === 'base' || session.chain === 'arbitrum') {
+    const topology = session.productionEvmTopology?.wallets
+    for (const network of ['base', 'arbitrum'] as const) {
+      const wallet = topology?.[network]
+      if (wallet) sharedEvmSessions.set(evmSessionKey(email, network, wallet.address), { ...session, chain: network, wallet })
+    }
+  }
+}
+
+export function activePocketEvmSession(
+  email: string,
+  network: Exclude<PocketNetwork, 'solana'>,
+  walletAddress?: string,
+) {
+  if (walletAddress) return sharedEvmSessions.get(evmSessionKey(email, network, walletAddress)) ?? null
+  const prefix = `${email.trim().toLowerCase()}:${network}:`
+  return Array.from(sharedEvmSessions.entries()).find(([key]) => key.startsWith(prefix))?.[1] ?? null
 }
 
 async function connectFreshEvmSession(
@@ -41,7 +72,6 @@ async function connectFreshEvmSession(
     return secured
   }
   const session = await connectCircleEvmEmailWallet(email, network)
-  await offerPocketQuickApprovalAfterEmail(email, session).catch(() => false)
   await savePocketEvmQuickSession(email, session).catch(() => undefined)
   return session
 }
@@ -147,7 +177,7 @@ export async function ensurePocketWallet({
   }
 }
 
-export async function unlockPocketBaseWallet({
+async function unlockPocketBaseWalletOnce({
   authenticated,
   email,
   getAccessToken,
@@ -171,10 +201,23 @@ export async function unlockPocketBaseWallet({
   if (session.wallet.address.toLowerCase() !== wallet.address.toLowerCase()) {
     throw new Error('The unlocked Circle wallet does not match this Pocket account.')
   }
-  await offerPocketQuickApprovalAfterEmail(email, session).catch(() => false)
   await savePocketEvmQuickSession(email, session).catch(() => undefined)
-  sharedEvmSessions.set(evmSessionKey(email, 'base', wallet.address), session)
-  return wallet
+  cacheEvmSession(email, session)
+  return { wallet, session }
+}
+
+export async function unlockPocketBaseWallet(params: {
+  authenticated: boolean
+  email: string
+  getAccessToken: PocketAccessTokenReader
+}) {
+  const key = params.email.trim().toLowerCase()
+  const pending = sharedPocketUnlocks.get(key)
+  if (pending) return pending
+  const request = unlockPocketBaseWalletOnce(params)
+    .finally(() => sharedPocketUnlocks.delete(key))
+  sharedPocketUnlocks.set(key, request)
+  return request
 }
 
 export default function usePocketWalletController({
@@ -205,10 +248,13 @@ export default function usePocketWalletController({
       onEvmSession: async session => {
         evmSessionRef.current = session
         setEvmSession(session)
-        await offerPocketQuickApprovalAfterEmail(email, session).catch(() => false)
         await savePocketEvmQuickSession(email, session).catch(() => undefined)
+        cacheEvmSession(email, session)
       },
-      onSolanaSession: setSolanaSession,
+      onSolanaSession: session => {
+        setSolanaSession(session)
+        sharedSolanaSessions.set(solanaSessionKey(email, session.wallet.address), session)
+      },
     })
     if (wallet) onWalletReady?.(network, wallet)
     return wallet
@@ -221,9 +267,9 @@ export default function usePocketWalletController({
   ) => {
     const currentSession = evmSessionRef.current ?? evmSession
     const key = evmSessionKey(email, network, walletAddress)
-    if (!pocketQuickApprovalEnabled() && options.allowSharedSession) {
+    if (options.allowSharedSession) {
       if (currentSession && currentSession.chain === network && currentSession.wallet.address.toLowerCase() === walletAddress.toLowerCase()) return currentSession
-      const shared = sharedEvmSessions.get(key)
+      const shared = activePocketEvmSession(email, network, walletAddress)
       if (shared) return shared
     }
     const pending = sharedPendingEvmSessions.get(key)
@@ -232,7 +278,7 @@ export default function usePocketWalletController({
       .then(session => {
         evmSessionRef.current = session
         setEvmSession(session)
-        sharedEvmSessions.set(key, session)
+        cacheEvmSession(email, session)
         return session
       })
       .finally(() => sharedPendingEvmSessions.delete(key))
@@ -241,16 +287,17 @@ export default function usePocketWalletController({
   }, [email, evmSession])
 
   const getSolanaSession = useCallback(async (walletAddress: string) => {
-    if (!pocketQuickApprovalEnabled() && solanaSession?.wallet.address === walletAddress) return solanaSession
-    if (pocketQuickApprovalEnabled()) {
-      const authentication = await readPocketQuickApprovalSession(email)
-      if (!authentication) throw new Error('Fingerprint approval is required before paying.')
-      const session = await resumeCircleSolanaEmailWallet(authentication, walletAddress)
-      setSolanaSession(session)
-      return session
-    }
-    const session = await connectCircleSolanaEmailWallet(email)
+    if (solanaSession?.wallet.address === walletAddress) return solanaSession
+    const shared = sharedSolanaSessions.get(solanaSessionKey(email, walletAddress))
+    if (shared) return shared
+    const activeAuthentication = activePocketEvmSession(email, 'base')
+    const authentication = activeAuthentication
+      ?? (pocketQuickApprovalEnabled() ? await readPocketQuickApprovalSession(email) : null)
+    const session = authentication
+      ? await resumeCircleSolanaEmailWallet(authentication, walletAddress)
+      : await connectCircleSolanaEmailWallet(email)
     setSolanaSession(session)
+    sharedSolanaSessions.set(solanaSessionKey(email, walletAddress), session)
     return session
   }, [email, solanaSession])
 

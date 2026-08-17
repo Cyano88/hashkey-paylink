@@ -8,8 +8,7 @@ import PocketThemeToggle from '../components/PocketThemeToggle'
 import PocketDisplayCurrencyPicker from '../components/PocketDisplayCurrencyPicker'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
-import usePocketWallets from '../hooks/usePocketWallets'
-import usePocketWalletController from '../controllers/usePocketWalletController'
+import { activePocketEvmSession } from '../controllers/usePocketWalletController'
 import { resetPocketSessionSplash } from '../hooks/usePocketSessionSplash'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 import {
@@ -28,8 +27,6 @@ export default function PocketProfilePage() {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken, logout } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
-  const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const walletController = usePocketWalletController({ authenticated, email, getAccessToken })
   const [editing, setEditing] = useState(() => new URLSearchParams(window.location.search).get('edit') === 'id')
   const [currencyOpen, setCurrencyOpen] = useState(false)
   const [feature, setFeature] = useState<PocketProfileFeature | null>(null)
@@ -82,12 +79,11 @@ export default function PocketProfilePage() {
         await disablePocketQuickApproval(email)
         setQuickApprovalEnabled(false)
       } else {
-        const baseWallet = wallets.wallets.base ?? await walletController.ensureWallet('base')
-        if (!baseWallet?.address) throw new Error('Open your Base wallet before enabling payment approval.')
-        const session = await walletController.getEvmSession('base', baseWallet.address, { allowSharedSession: true })
+        const session = activePocketEvmSession(email, 'base')
+        if (!session) throw new Error('Your Pocket wallet session is not active. Reopen Pocket and try again.')
         await enablePocketQuickApproval(email, session)
         if (!await pocketQuickApprovalConfigured(email)) {
-          throw new Error('Pocket could not securely bind payment approval.')
+          throw new Error('Pocket could not securely enable fingerprint or face unlock.')
         }
         setQuickApprovalEnabled(true)
       }
@@ -127,7 +123,7 @@ export default function PocketProfilePage() {
           <button type='button' onClick={() => setFeature('notifications')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-white/[0.05]'><Bell className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400'>Notifications</span><span className='mt-1 block text-sm font-bold'>Alerts and Pocket updates</span></span><ChevronRight className='h-4 w-4 text-gray-400' /></button>
           {quickApprovalAvailable && <button type="button" onClick={() => void toggleQuickApproval()} disabled={quickApprovalBusy} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm disabled:opacity-60 dark:bg-white/[0.05]">
             <Lock className="h-5 w-5 text-gray-500 dark:text-gray-300" />
-            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Payment approval</span><span className="mt-1 block text-sm font-bold">{quickApprovalEnabled ? 'Fingerprint or face enabled' : 'Use fingerprint or face'}</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Pocket unlock</span><span className="mt-1 block text-sm font-bold">{quickApprovalEnabled ? 'Fingerprint or face enabled' : 'Use fingerprint or face'}</span></span>
             <span className={cn('relative h-7 w-12 rounded-full transition-colors', quickApprovalEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}><span className={cn('absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform', quickApprovalEnabled ? 'translate-x-6' : 'translate-x-1')} /></span>
           </button>}
           {quickApprovalError && <p className="-mt-1 px-2 text-xs font-medium text-red-500" role="status">{quickApprovalError}</p>}
