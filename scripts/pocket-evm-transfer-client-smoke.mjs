@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { createPocketEvmTransferStatusHandler } from '../api/pocket/evm-transfer-status.ts'
 import { executePocketEvmTransfer } from '../src/pocket/api/pocketEvmTransferClient.ts'
 import { readPocketEvmTransferStatus } from '../src/pocket/api/pocketEvmTransferStatusClient.ts'
+
+const circleHandlerSource = await readFile(new URL('../api/circle-solana-email.ts', import.meta.url), 'utf8')
+const withdrawalSource = circleHandlerSource.slice(circleHandlerSource.indexOf(/executeEvmWithdraw/.source))
+assert.match(withdrawalSource, /const \{ userToken, walletId, walletAddress, chain, recipient, totalUnits, idempotencyKey \} = params/)
+assert.match(withdrawalSource, /Invalid withdrawal idempotency key\./)
+assert.match(withdrawalSource, /createCircleGasStationEvmChallenge\(\{[\s\S]*?idempotencyKey,/)
 
 const walletAddress = '0x1111111111111111111111111111111111111111'
 const recipient = '0x2222222222222222222222222222222222222222'

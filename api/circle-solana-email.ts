@@ -560,15 +560,18 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'executeEvmWithdraw') {
-      const { userToken, walletId, walletAddress, chain, recipient, totalUnits } = params
-      if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits) {
-        return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, chain, recipient, or totalUnits' })
+      const { userToken, walletId, walletAddress, chain, recipient, totalUnits, idempotencyKey } = params
+      if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits || !idempotencyKey) {
+        return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, chain, recipient, totalUnits, or idempotencyKey' })
       }
       if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') {
         return res.status(400).json({ ok: false, error: 'Unsupported EVM withdraw chain' })
       }
       if (!isAddress(walletAddress) || !isAddress(recipient)) {
         return res.status(400).json({ ok: false, error: 'Invalid EVM wallet or recipient address' })
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) {
+        return res.status(400).json({ ok: false, error: 'Invalid withdrawal idempotency key.' })
       }
 
       const total = BigInt(totalUnits)
