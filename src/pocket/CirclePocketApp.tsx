@@ -146,12 +146,19 @@ export default function CirclePocketApp() {
             pocketQuickApprovalCredentialSaved(email),
           ])
           if (!active) return
-          if (durableSession || legacySession) {
-            if (durableSession) void restorePocketWalletSession(email).catch(() => undefined)
-            unlockedEmail.current = email
-            setWalletUnlockState('ready')
-            return
+          if (durableSession) {
+            const restored = await restorePocketWalletSession(email).catch(() => null)
+            if (!active) return
+            if (restored) {
+              unlockedEmail.current = email
+              setWalletUnlockState('ready')
+              return
+            }
           }
+          // A legacy biometric record is not proof that Circle authentication
+          // was restored. The unlock path below migrates or recovers it before
+          // Pocket allows a payment screen to become actionable.
+          void legacySession
         }
         setWalletUnlockState('unlocking')
         try {

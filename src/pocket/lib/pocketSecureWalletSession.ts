@@ -36,18 +36,30 @@ export async function deletePocketSecureWalletSession(email: string) {
 
 export async function readPocketSecureWalletSession(email: string) {
   if (!Capacitor.isNativePlatform() || !email) return null
-  let stored: CircleEvmEmailSession | null = null
+  const key = server(email)
+  const saved = await NativeBiometric.isCredentialsSaved({ server: key }).catch(() => ({ isSaved: false }))
+  if (!saved.isSaved) return null
+  const credentials = await NativeBiometric.getSecureCredentials({ server: key }).catch(() => null)
+  if (!credentials || credentials.username !== email.trim().toLowerCase() || !credentials.password.startsWith(SESSION_PREFIX)) {
+    return null
+  }
+  let stored: CircleEvmEmailSession
+  let savedAt = 0
   try {
-    const saved = await NativeBiometric.isCredentialsSaved({ server: server(email) })
-    if (!saved.isSaved) return null
-    const credentials = await NativeBiometric.getSecureCredentials({ server: server(email) })
-    if (credentials.username !== email.trim().toLowerCase() || !credentials.password.startsWith(SESSION_PREFIX)) return null
     const parsed = JSON.parse(credentials.password.slice(SESSION_PREFIX.length)) as CircleEvmEmailSession | StoredSessionPayload
     const wrapped = parsed && typeof parsed === 'object' && 'session' in parsed
     stored = wrapped ? parsed.session : parsed
-    const savedAt = wrapped && typeof parsed.savedAt === 'number' ? parsed.savedAt : 0
-    if (!stored?.userToken || !stored?.encryptionKey || !stored?.wallet?.address) return null
-    if (savedAt > 0 && Date.now() - savedAt < SESSION_REFRESH_INTERVAL_MS) return stored
+    savedAt = wrapped && typeof parsed.savedAt === 'number' ? parsed.savedAt : 0
+  } catch {
+    await deletePocketSecureWalletSession(email)
+    return null
+  }
+  if (!stored?.userToken || !stored?.encryptionKey || !stored?.wallet?.address) {
+    await deletePocketSecureWalletSession(email)
+    return null
+  }
+  if (savedAt > 0 && Date.now() - savedAt < SESSION_REFRESH_INTERVAL_MS) return stored
+  try {
     const refreshed = await refreshCircleEvmEmailSession(stored)
     await savePocketSecureWalletSession(email, refreshed)
     return refreshed
@@ -59,7 +71,7 @@ export async function readPocketSecureWalletSession(email: string) {
       return null
     }
     if (stored) return stored
-    throw new Error('Pocket could not refresh the secure wallet session. Check your connection and try again.')
+    return null
   }
 }
 
