@@ -1,5 +1,6 @@
 let approvalToken = ''
 let approvalExpiresAt = 0
+let paymentPreparer: (() => Promise<void>) | null = null
 
 export const POCKET_PAYMENT_APPROVAL_EVENT = 'pocket:payment-approval-request'
 
@@ -15,6 +16,17 @@ export function takePocketPaymentApproval() {
     return ''
   }
   return approvalToken
+}
+
+export function registerPocketPaymentPreparer(preparer: () => Promise<void>) {
+  paymentPreparer = preparer
+  return () => {
+    if (paymentPreparer === preparer) paymentPreparer = null
+  }
+}
+
+export async function preparePocketPaymentApproval() {
+  await paymentPreparer?.()
 }
 
 export function requestPocketPaymentApproval() {

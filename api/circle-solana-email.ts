@@ -501,10 +501,11 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'executeEvmPayment') {
-      const { userToken, walletId, walletAddress, chain, recipient, totalUnits } = params
-      if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits) {
-        return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, chain, recipient, or totalUnits' })
+      const { userToken, walletId, walletAddress, chain, recipient, totalUnits, idempotencyKey } = params
+      if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits || !idempotencyKey) {
+        return res.status(400).json({ ok: false, error: 'Missing EVM withdrawal details or idempotency key.' })
       }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) return res.status(400).json({ ok: false, error: 'Invalid withdrawal idempotency key.' })
       if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') {
         return res.status(400).json({ ok: false, error: 'Unsupported EVM email wallet chain' })
       }
@@ -596,6 +597,7 @@ export default async function handler(req: Request, res: Response) {
         chain,
         refId: `hashpaylink-${chain}-withdraw`,
         callData: batchCallData,
+        idempotencyKey,
       })
       return res.json({ ok: true, ...data })
     }

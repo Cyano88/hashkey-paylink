@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Lock, Loader2 } from './PocketIcons'
 import { readPocketPaymentSecurity, updatePocketPaymentSecurity, verifyPocketPaymentPin } from '../api/pocketPaymentSecurityClient'
 import { POCKET_PAYMENT_APPROVAL_EVENT, setPocketPaymentApproval } from '../lib/pocketPaymentApproval'
-import { enablePocketPaymentBiometrics, pocketPaymentBiometricsAvailable, pocketPaymentBiometricsEnabled, readPocketPinWithBiometrics } from '../lib/pocketPaymentBiometrics'
+import { disablePocketPaymentBiometrics, enablePocketPaymentBiometrics, pocketPaymentBiometricsAvailable, pocketPaymentBiometricsConfigured, pocketPaymentBiometricsEnabled, readPocketPinWithBiometrics } from '../lib/pocketPaymentBiometrics'
 
 export const POCKET_PIN_RESET_KEY = 'pocket:payment-pin:reset-after-login:v1'
 type PendingApproval = { resolve(): void; reject(reason?: unknown): void }
@@ -22,6 +22,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, child
   const [pin, setPin] = useState('')
   const [confirm, setConfirm] = useState('')
   const [setupPin, setSetupPin] = useState('')
+  const [existingPin, setExistingPin] = useState('')
   const [approvalPin, setApprovalPin] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -37,7 +38,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, child
         const reset = localStorage.getItem(POCKET_PIN_RESET_KEY) === 'true'
         setResetting(reset && security.configured)
         setBiometricsAvailable(available)
-        setState(!security.configured || reset ? 'setup' : 'ready')
+        setState(!security.configured || reset ? 'setup' : available && !pocketPaymentBiometricsConfigured() ? 'offer' : 'ready')
       })
       .catch(() => {
         if (!active) return
@@ -96,6 +97,20 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, child
     finally { setBusy(false) }
   }
 
+  const turnOnBiometrics = async () => {
+    const value = setupPin || existingPin.trim()
+    if (!/^\d{6}$/.test(value)) return setError('Enter your six-digit Pocket PIN.')
+    setBusy(true); setError('')
+    try {
+      if (!setupPin) await verifyPocketPaymentPin(getAccessToken, value)
+      await enablePocketPaymentBiometrics(email, value)
+      setExistingPin('')
+      setSetupPin('')
+      setState('ready')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Biometrics were not enabled.') }
+    finally { setBusy(false) }
+  }
+
   const cancelApproval = () => {
     pending.current?.reject(new Error('Payment approval was cancelled.'))
     pending.current = null; setApprovalPin(''); setError('')
@@ -122,10 +137,11 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, child
   if (state === 'offer') return <main className='fixed inset-0 z-[80] flex items-center justify-center bg-[#F5F5F7] px-6 text-gray-950 dark:bg-[#0A0A0A] dark:text-white'>
     <section className='w-full max-w-[390px] rounded-[30px] bg-white p-7 text-center shadow-xl dark:bg-[#17181c]'>
       <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10'><Lock className='h-6 w-6' /></span>
-      <h1 className='mt-5 text-xl font-black'>Faster payment approval</h1><p className='mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400'>Use fingerprint or face first. Your Pocket PIN remains available as fallback.</p>
+      <h1 className='mt-5 text-xl font-black'>Faster payment approval</h1><p className='mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400'>{setupPin ? 'Use fingerprint or face first. Your Pocket PIN remains available as fallback.' : 'Confirm your Pocket PIN once, then use fingerprint or face for payments on this phone.'}</p>
+      {!setupPin && <input autoFocus value={existingPin} onChange={event => setExistingPin(event.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={event => { if (event.key === 'Enter') void turnOnBiometrics() }} inputMode='numeric' type='password' autoComplete='current-password' placeholder='Six-digit Pocket PIN' aria-label='Pocket PIN' disabled={busy} className='mt-6 min-h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-white/10 dark:bg-white/[0.06]' />}
       {error && <p className='mt-3 text-xs font-semibold text-red-500'>{error}</p>}
-      <button type='button' disabled={busy} onClick={() => { setBusy(true); setError(''); void enablePocketPaymentBiometrics(email, setupPin).then(() => setState('ready')).catch(reason => setError(reason instanceof Error ? reason.message : 'Biometrics were not enabled.')).finally(() => setBusy(false)) }} className='mt-6 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Turning on…' : 'Use fingerprint or face'}</button>
-      <button type='button' disabled={busy} onClick={() => setState('ready')} className='mt-2 min-h-12 w-full text-sm font-bold text-gray-500'>Use PIN only</button>
+      <button type='button' disabled={busy || (!setupPin && existingPin.length !== 6)} onClick={() => void turnOnBiometrics()} className='mt-6 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Turning on…' : setupPin ? 'Use fingerprint or face' : 'Verify PIN and enable'}</button>
+      <button type='button' disabled={busy} onClick={() => { setBusy(true); setError(''); void disablePocketPaymentBiometrics(email).then(() => setState('ready')).catch(() => setError('Pocket could not save this choice. Try again.')).finally(() => setBusy(false)) }} className='mt-2 min-h-12 w-full text-sm font-bold text-gray-500'>Use PIN only</button>
     </section>
   </main>
 

@@ -4,6 +4,19 @@
 @tailwind components;
 @tailwind utilities;
 
+html[data-pocket-runtime='native'],
+html[data-pocket-runtime='native'] body,
+html[data-pocket-runtime='native'] #root {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+html[data-pocket-runtime='native'] [data-pocket-app-frame='true'] {
+  height: 100%;
+  min-height: 0;
+}
+
 /* Privy keeps its close control in the modal header. Keep that row clear and
    render the product name with the branded mark instead of at the top-left. */
 [role='dialog'] div:has(> img[alt='Hash PayLink logo']) {

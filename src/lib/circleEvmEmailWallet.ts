@@ -227,7 +227,7 @@ function findTxHash(value: unknown): Hex | null {
 function findTransactionId(value: unknown): string | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Record<string, unknown>
-  const direct = record.transactionId ?? record.transactionID ?? record.id
+  const direct = record.transactionId ?? record.transactionID
   if (typeof direct === 'string' && direct) return direct
   for (const nested of Object.values(record)) {
     if (nested && typeof nested === 'object') {
@@ -832,6 +832,8 @@ export async function sendCircleEvmEmailWithdraw(params: {
   session: CircleEvmEmailSession
   recipient: Address
   amount: string
+  idempotencyKey: string
+  onChallenge?: (value: { challengeId: string; transactionId: string }) => void
 }) {
   const sdk = authenticatedSdk(params.session)
   applyHashPayLinkCircleUi(sdk, {
@@ -854,8 +856,10 @@ export async function sendCircleEvmEmailWithdraw(params: {
     chain: params.session.chain,
     recipient: params.recipient,
     totalUnits: totalUnits.toString(),
+    idempotencyKey: params.idempotencyKey,
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a withdraw challenge.')
+  params.onChallenge?.({ challengeId: challenge.challengeId, transactionId: findTransactionId(challenge) ?? '' })
   const result = await executeChallengeWithTimeout(
     sdk,
     challenge.challengeId,
@@ -864,6 +868,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
   const txHash = findTxHash(result)
   if (txHash) return txHash
   let transactionId = findTransactionId(result) ?? findTransactionId(challenge)
+  params.onChallenge?.({ challengeId: challenge.challengeId, transactionId: transactionId ?? '' })
   if (!transactionId) {
     try {
       transactionId = await pollChallengeTransactionId(params.session, challenge.challengeId, 5_000)
@@ -885,6 +890,27 @@ export async function sendCircleEvmEmailWithdraw(params: {
     }
   }
   return null
+}
+
+export async function reconcileCircleEvmEmailWithdraw(params: {
+  session: CircleEvmEmailSession
+  challengeId: string
+  transactionId?: string
+  timeoutMs?: number
+}) {
+  const startedAt = Date.now()
+  const timeoutMs = Math.max(2_500, params.timeoutMs ?? 180_000)
+  const transactionId = params.transactionId ?? await pollChallengeTransactionId(
+    params.session,
+    params.challengeId,
+    Math.min(30_000, timeoutMs),
+  )
+  if (!transactionId) return { state: 'submitted' as const, txHash: null, transactionId: '' }
+  const remaining = Math.max(2_500, timeoutMs - (Date.now() - startedAt))
+  const txHash = await pollTransactionHash(params.session, transactionId, remaining)
+  return txHash
+    ? { state: 'confirmed' as const, txHash, transactionId }
+    : { state: 'submitted' as const, txHash: null, transactionId }
 }
 
 async function pollChallengeTransactionId(session: CircleEvmEmailSession, challengeId: string, timeoutMs = 30_000) {

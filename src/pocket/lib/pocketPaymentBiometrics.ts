@@ -6,6 +6,7 @@ const PIN_PREFIX = 'pocket-pin-v1:'
 
 function server(email: string) { return `com.hashpaylink.pocket.payment.${email.trim().toLowerCase()}` }
 export function pocketPaymentBiometricsEnabled() { return Capacitor.isNativePlatform() && localStorage.getItem(ENABLED_KEY) === 'true' }
+export function pocketPaymentBiometricsConfigured() { return Capacitor.isNativePlatform() && localStorage.getItem(ENABLED_KEY) !== null }
 export async function pocketPaymentBiometricsAvailable() {
   if (!Capacitor.isNativePlatform()) return false
   const value = await NativeBiometric.isAvailable({ useFallback: false }).catch(() => null)

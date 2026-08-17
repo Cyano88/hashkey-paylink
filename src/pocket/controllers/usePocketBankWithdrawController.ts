@@ -363,6 +363,7 @@ export default function usePocketBankWithdrawController({
         linkedWalletAddress: selectedWallet.address,
         recipient: payable.receiveAddress as Address,
         amount: payable.amountUsdc,
+        idempotencyKey: idempotencyKey.current,
         confirm: false,
       })
       if (!transfer.txHash) throw new Error('Circle accepted the payout, but no transaction hash was returned. Check Activity before retrying.')

@@ -15,12 +15,14 @@ import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
 import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutTransfer } from './lib/pocketBankPayoutState'
 import { registerPocketRefreshHandler } from './lib/pocketRefresh'
 import { POCKET_NATIVE_BACK_EVENT } from './lib/pocketNativeBack'
-import { unlockPocketBaseWallet } from './controllers/usePocketWalletController'
+import { restorePocketWalletSession, unlockPocketBaseWallet } from './controllers/usePocketWalletController'
 import { readPocketPaymentSecurity } from './api/pocketPaymentSecurityClient'
 import {
   declinePocketQuickApproval,
+  pocketQuickApprovalCredentialSaved,
   shouldOfferPocketQuickApproval,
 } from './lib/pocketQuickApproval'
+import { pocketSecureWalletSessionAvailable } from './lib/pocketSecureWalletSession'
 import { Lock } from './components/PocketIcons'
 import PocketPaymentSecurityGate from './components/PocketPaymentSecurityGate'
 
@@ -139,9 +141,17 @@ export default function CirclePocketApp() {
       .then(async security => {
         if (!active) return
         if (security.configured) {
-          unlockedEmail.current = email
-          setWalletUnlockState('ready')
-          return
+          const [durableSession, legacySession] = await Promise.all([
+            pocketSecureWalletSessionAvailable(email),
+            pocketQuickApprovalCredentialSaved(email),
+          ])
+          if (!active) return
+          if (durableSession || legacySession) {
+            if (durableSession) void restorePocketWalletSession(email).catch(() => undefined)
+            unlockedEmail.current = email
+            setWalletUnlockState('ready')
+            return
+          }
         }
         setWalletUnlockState('unlocking')
         try {
@@ -289,7 +299,7 @@ export default function CirclePocketApp() {
   return (
     <>
       {securedContent}
-      {walletUnlockState === 'ready' && <PocketSessionSplash state={splashState} />}
+      <PocketSessionSplash state={splashState} />
     </>
   )
 }

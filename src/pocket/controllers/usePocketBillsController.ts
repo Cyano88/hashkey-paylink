@@ -61,15 +61,15 @@ function finalState(intent: PocketBillIntent) {
   return ['delivered', 'failed', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)
 }
 
-function persistActive(key: string, intentId: string, txHash = '') {
-  window.localStorage.setItem(key, JSON.stringify({ intentId, txHash }))
+function persistActive(key: string, intentId: string, txHash = '', idempotencyKey = '') {
+  window.localStorage.setItem(key, JSON.stringify({ intentId, txHash, idempotencyKey }))
 }
 
-function readActive(key: string): { intentId: string; txHash: string } | null {
+function readActive(key: string): { intentId: string; txHash: string; idempotencyKey: string } | null {
   try {
     const value = JSON.parse(window.localStorage.getItem(key) || '{}')
     return typeof value.intentId === 'string' && value.intentId
-      ? { intentId: value.intentId, txHash: typeof value.txHash === 'string' ? value.txHash : '' }
+      ? { intentId: value.intentId, txHash: typeof value.txHash === 'string' ? value.txHash : '', idempotencyKey: typeof value.idempotencyKey === 'string' ? value.idempotencyKey : '' }
       : null
   } catch {
     return null
@@ -450,16 +450,20 @@ export default function usePocketBillsController({
       const accessToken = await token()
       const prepared = await preparePocketAirtime({ accessToken, intentId: intent.id })
       setIntent(prepared)
+      const saved = readActive(activeBillKey)
+      const idempotencyKey = saved?.intentId === prepared.id && saved.idempotencyKey ? saved.idempotencyKey : crypto.randomUUID()
+      persistActive(activeBillKey, prepared.id, '', idempotencyKey)
       const session = await getEvmSession(wallet.address)
       const transfer = await executePocketEvmTransfer({
         session,
         linkedWalletAddress: wallet.address,
         recipient: prepared.treasuryAddress as `0x${string}`,
         amount: prepared.amountUsdc,
+        idempotencyKey,
         confirm: false,
       })
       if (!transfer.txHash) throw new Error('Circle did not return a Base transaction hash. Check Activity before retrying.')
-      persistActive(activeBillKey, prepared.id, transfer.txHash)
+      persistActive(activeBillKey, prepared.id, transfer.txHash, idempotencyKey)
       setStatus('confirming')
       await reconcile(prepared.id, transfer.txHash, accessToken)
     } catch (reason) {

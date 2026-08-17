@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { SplashScreen } from '@capacitor/splash-screen'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { CPurseIcon } from './CPurseIcon'
 import type { PocketSplashState } from '../hooks/usePocketSessionSplash'
@@ -9,17 +10,26 @@ export default function PocketSessionSplash({
 }: {
   state: PocketSplashState
 }) {
-  const markVisible = state !== 'entering'
+  const nativeRuntime = Capacitor.isNativePlatform()
+  const markVisible = nativeRuntime || state !== 'entering'
   const assembled = state === 'assembling' || state === 'holding' || state === 'launching'
   const launching = state === 'launching'
 
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return
+    if (!nativeRuntime) return
+    const frame = window.requestAnimationFrame(() => {
+      void SplashScreen.hide().catch(() => undefined)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [nativeRuntime])
+
+  useEffect(() => {
+    if (!nativeRuntime) return
     const style = state === 'idle'
       ? (document.documentElement.classList.contains('dark') ? Style.Dark : Style.Light)
       : Style.Light
     void StatusBar.setStyle({ style }).catch(() => undefined)
-  }, [state])
+  }, [nativeRuntime, state])
 
   if (state === 'idle') return null
 

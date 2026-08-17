@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { AlertCircle, ArrowRight, Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowRight, Clock3, Loader2 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 
@@ -115,8 +115,10 @@ export default function SlideAction({
         className="pointer-events-none absolute bottom-1.5 top-1.5 flex aspect-square items-center justify-center rounded-full bg-white/12 shadow-sm ring-1 ring-white/10 transition-[left,background-color] duration-200 dark:bg-gray-950/10 dark:ring-gray-950/10"
         style={{ left: `calc(6px + ${progress} * (100% - 58px))` }}
       >
-        {status === 'pending' || status === 'submitted'
+        {status === 'pending'
           ? <Loader2 className="h-5 w-5 animate-spin" />
+          : status === 'submitted'
+            ? <Clock3 className='h-5 w-5' />
           : status === 'successful'
             ? <PocketStatusCheck className="h-11 w-11 bg-white text-emerald-600 shadow-none ring-0" />
             : status === 'error'

@@ -380,7 +380,19 @@ function solanaTransactionHash(value: unknown) {
 
 function circleTransactionId(value: unknown) {
   const candidate = findCircleString(value, ['transactionId', 'transactionID'])
-  return candidate && candidate.length <= 256 ? candidate : null
+  if (candidate && candidate.length <= 256) return candidate
+  if (!value || typeof value !== 'object') return null
+  const record = value as Record<string, unknown>
+  const correlations = record.correlationIds
+  if (Array.isArray(correlations)) {
+    const transactionId = correlations.find(item => typeof item === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item))
+    if (typeof transactionId === 'string') return transactionId
+  }
+  for (const nested of Object.values(record)) {
+    const transactionId = circleTransactionId(nested)
+    if (transactionId) return transactionId
+  }
+  return null
 }
 
 async function pollCircleSolanaTransaction(userToken: string, transactionId: string, timeoutMs = 180_000) {

@@ -14,6 +14,7 @@ import { CHAIN_META } from '../../lib/chains'
 import { linkPocketWallet, readPocketWallet } from '../api/pocketWalletLinkClient'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import { readPocketSecureWalletSession, savePocketSecureWalletSession, secureSessionForNetwork } from '../lib/pocketSecureWalletSession'
+import { pocketQuickApprovalCredentialSaved, readPocketEvmQuickSession } from '../lib/pocketQuickApproval'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 
 export type PocketSolanaEmailSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
@@ -21,6 +22,7 @@ const sharedEvmSessions = new Map<string, CircleEvmEmailSession>()
 const sharedPendingEvmSessions = new Map<string, Promise<CircleEvmEmailSession>>()
 const sharedSolanaSessions = new Map<string, PocketSolanaEmailSession>()
 const sharedPocketUnlocks = new Map<string, Promise<PocketWalletUnlock>>()
+const sharedSessionRestores = new Map<string, Promise<CircleEvmEmailSession | null>>()
 
 export type PocketWalletUnlock = {
   wallet: CirclePocketWallet
@@ -46,6 +48,20 @@ function cacheEvmSession(email: string, session: CircleEvmEmailSession) {
   }
 }
 
+export async function restorePocketWalletSession(email: string) {
+  const key = email.trim().toLowerCase()
+  const pending = sharedSessionRestores.get(key)
+  if (pending) return pending
+  const request = readPocketSecureWalletSession(email)
+    .then(session => {
+      if (session) cacheEvmSession(email, session)
+      return session
+    })
+    .finally(() => sharedSessionRestores.delete(key))
+  sharedSessionRestores.set(key, request)
+  return request
+}
+
 export function activePocketEvmSession(
   email: string,
   network: Exclude<PocketNetwork, 'solana'>,
@@ -61,9 +77,17 @@ async function connectFreshEvmSession(
   network: Exclude<PocketNetwork, 'solana'>,
   walletAddress: string,
 ) {
-  const stored = await readPocketSecureWalletSession(email)
+  const stored = await restorePocketWalletSession(email)
   const secured = stored ? secureSessionForNetwork(stored, network, walletAddress) : null
   if (secured) return secured
+  if (await pocketQuickApprovalCredentialSaved(email)) {
+    const migrated = await readPocketEvmQuickSession(email, network, walletAddress, { allowDisabled: true })
+    if (migrated) {
+      await savePocketSecureWalletSession(email, migrated)
+      cacheEvmSession(email, migrated)
+      return migrated
+    }
+  }
   const session = await connectCircleEvmEmailWallet(email, network)
   await savePocketSecureWalletSession(email, session).catch(() => undefined)
   return session

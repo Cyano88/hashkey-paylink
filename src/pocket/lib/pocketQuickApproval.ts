@@ -90,6 +90,13 @@ export async function pocketQuickApprovalConfigured(email: string) {
   return saved.isSaved
 }
 
+export async function pocketQuickApprovalCredentialSaved(email: string) {
+  if (!Capacitor.isNativePlatform() || !email) return false
+  const saved = await NativeBiometric.isCredentialsSaved({ server: serverKey(email) })
+    .catch(() => ({ isSaved: false }))
+  return saved.isSaved
+}
+
 export async function pocketQuickApprovalAvailability(): Promise<AvailableResult | null> {
   if (!Capacitor.isNativePlatform()) return null
   return NativeBiometric.isAvailable({ useFallback: false }).catch(() => null)
@@ -163,9 +170,10 @@ export async function readPocketEvmQuickSession(
   email: string,
   network: Exclude<PocketNetwork, 'solana'>,
   walletAddress: string,
+  options: { allowDisabled?: boolean } = {},
 ) {
-  if (!pocketQuickApprovalEnabled()) return null
-  const session = await readPocketQuickApprovalSession(email)
+  if (!options.allowDisabled && !pocketQuickApprovalEnabled()) return null
+  const session = await readPocketQuickApprovalSession(email, options)
   if (!session) throw new PocketBiometricApprovalError('Fingerprint or face unlock is required to open Pocket.')
   const networkSession = sessionForNetwork(session, network, walletAddress)
   if (!networkSession) {
@@ -174,8 +182,8 @@ export async function readPocketEvmQuickSession(
   return networkSession
 }
 
-export async function readPocketQuickApprovalSession(email: string) {
-  if (!pocketQuickApprovalEnabled()) return null
+export async function readPocketQuickApprovalSession(email: string, options: { allowDisabled?: boolean } = {}) {
+  if (!options.allowDisabled && !pocketQuickApprovalEnabled()) return null
   const key = serverKey(email)
   const saved = await NativeBiometric.isCredentialsSaved({ server: key }).catch(() => ({ isSaved: false }))
   if (!saved.isSaved) {

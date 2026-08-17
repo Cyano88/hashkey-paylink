@@ -407,7 +407,7 @@ export default function Layout() {
   }, [navigate])
 
   return (
-    <div className={`${isPocketAppPage ? 'h-[100dvh] min-h-0 overflow-hidden' : 'min-h-screen'} bg-[#F5F5F7] dark:bg-[#0A0A0A] font-sans flex flex-col`}>
+    <div data-pocket-app-frame={isPocketAppPage ? 'true' : undefined} className={`${isPocketAppPage ? 'h-[100dvh] min-h-0 overflow-hidden' : 'min-h-screen'} bg-[#F5F5F7] dark:bg-[#0A0A0A] font-sans flex flex-col`}>
       {/* ── Sticky frosted-glass header ─────────────────────────────────── */}
       <header
         data-hashpaylink-top-nav

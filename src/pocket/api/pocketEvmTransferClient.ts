@@ -6,6 +6,8 @@ type PocketEvmTransferExecutor = (input: {
   session: CircleEvmEmailSession
   recipient: Address
   amount: string
+  idempotencyKey?: string
+  onChallenge?: (value: { challengeId: string; transactionId: string }) => void
 }) => Promise<`0x${string}` | null>
 
 type PocketEvmTransferConfirmer = (input: {
@@ -15,7 +17,7 @@ type PocketEvmTransferConfirmer = (input: {
 
 const defaultExecutor: PocketEvmTransferExecutor = async input => {
   const { sendCircleEvmEmailWithdraw } = await import('../../lib/circleEvmEmailWallet')
-  return sendCircleEvmEmailWithdraw(input)
+  return sendCircleEvmEmailWithdraw({ ...input, idempotencyKey: input.idempotencyKey ?? crypto.randomUUID() })
 }
 
 const defaultConfirmer: PocketEvmTransferConfirmer = async ({ chain, txHash }) => {
@@ -35,6 +37,8 @@ export async function executePocketEvmTransfer({
   linkedWalletAddress,
   recipient,
   amount,
+  idempotencyKey,
+  onChallenge,
   confirm = true,
   executor = defaultExecutor,
   confirmer = defaultConfirmer,
@@ -43,6 +47,8 @@ export async function executePocketEvmTransfer({
   linkedWalletAddress: string
   recipient: Address
   amount: string
+  idempotencyKey?: string
+  onChallenge?: (value: { challengeId: string; transactionId: string }) => void
   confirm?: boolean
   executor?: PocketEvmTransferExecutor
   confirmer?: PocketEvmTransferConfirmer
@@ -67,7 +73,7 @@ export async function executePocketEvmTransfer({
     throw new Error('Enter a valid USDC withdrawal amount.')
   }
   if (amountUnits <= 0n) throw new Error('Enter a USDC withdrawal amount greater than zero.')
-  const txHash = await executor({ session, recipient, amount })
+  const txHash = await executor({ session, recipient, amount, idempotencyKey: idempotencyKey ?? crypto.randomUUID(), onChallenge })
   if (!txHash) return { txHash, status: 'submitted' as const }
   if (!confirm) return { txHash, status: 'submitted' as const }
   const status = await confirmer({ chain: session.chain, txHash })

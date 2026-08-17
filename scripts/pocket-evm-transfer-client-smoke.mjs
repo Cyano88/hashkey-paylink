@@ -40,7 +40,8 @@ assert.deepEqual(result, {
   status: 'confirmed',
 })
 assert.equal(calls.length, 1)
-assert.deepEqual(calls[0], { session, recipient, amount: '1.25' })
+assert.match(calls[0].idempotencyKey, /^[0-9a-f-]{36}$/i)
+assert.deepEqual({ session: calls[0].session, recipient: calls[0].recipient, amount: calls[0].amount }, { session, recipient, amount: '1.25' })
 assert.deepEqual(confirmationCalls, [{ chain: 'base', txHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }])
 
 const handedOff = await executePocketEvmTransfer({
