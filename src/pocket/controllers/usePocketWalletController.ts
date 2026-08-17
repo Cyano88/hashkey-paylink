@@ -13,12 +13,7 @@ import {
 import { CHAIN_META } from '../../lib/chains'
 import { linkPocketWallet, readPocketWallet } from '../api/pocketWalletLinkClient'
 import type { PocketNetwork } from '../lib/pocketSchemas'
-import {
-  pocketQuickApprovalEnabled,
-  readPocketEvmQuickSession,
-  readPocketQuickApprovalSession,
-  savePocketEvmQuickSession,
-} from '../lib/pocketQuickApproval'
+import { readPocketSecureWalletSession, savePocketSecureWalletSession, secureSessionForNetwork } from '../lib/pocketSecureWalletSession'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 
 export type PocketSolanaEmailSession = Awaited<ReturnType<typeof connectCircleSolanaEmailWallet>>
@@ -66,13 +61,11 @@ async function connectFreshEvmSession(
   network: Exclude<PocketNetwork, 'solana'>,
   walletAddress: string,
 ) {
-  if (pocketQuickApprovalEnabled()) {
-    const secured = await readPocketEvmQuickSession(email, network, walletAddress)
-    if (!secured) throw new Error('Fingerprint approval is required before paying.')
-    return secured
-  }
+  const stored = await readPocketSecureWalletSession(email)
+  const secured = stored ? secureSessionForNetwork(stored, network, walletAddress) : null
+  if (secured) return secured
   const session = await connectCircleEvmEmailWallet(email, network)
-  await savePocketEvmQuickSession(email, session).catch(() => undefined)
+  await savePocketSecureWalletSession(email, session).catch(() => undefined)
   return session
 }
 
@@ -135,9 +128,9 @@ export async function ensurePocketWallet({
   }
 
   if (network === 'solana') {
-    const quickSession = pocketQuickApprovalEnabled() ? await readPocketQuickApprovalSession(email) : null
-    const session = quickSession
-      ? await resumeCircleSolanaEmailWallet(quickSession)
+    const storedSession = await readPocketSecureWalletSession(email)
+    const session = storedSession
+      ? await resumeCircleSolanaEmailWallet(storedSession)
       : await dependencies.connectSolana(email)
     if (!shouldContinue()) return null
     onSolanaSession?.(session)
@@ -195,13 +188,12 @@ async function unlockPocketBaseWalletOnce({
     onEvmSession: session => { approvedSession = session },
   })
   if (!wallet) throw new Error('Circle wallet unlock did not complete.')
-  const session = approvedSession ?? (pocketQuickApprovalEnabled()
-    ? await readPocketEvmQuickSession(email, 'base', wallet.address)
-    : await connectCircleEvmEmailWallet(email, 'base'))
+  const storedSession = approvedSession ? null : await readPocketSecureWalletSession(email)
+  const session = approvedSession ?? (storedSession ? secureSessionForNetwork(storedSession, 'base', wallet.address) : null) ?? await connectCircleEvmEmailWallet(email, 'base')
   if (session.wallet.address.toLowerCase() !== wallet.address.toLowerCase()) {
     throw new Error('The unlocked Circle wallet does not match this Pocket account.')
   }
-  await savePocketEvmQuickSession(email, session).catch(() => undefined)
+  await savePocketSecureWalletSession(email, session).catch(() => undefined)
   cacheEvmSession(email, session)
   return { wallet, session }
 }
@@ -248,7 +240,7 @@ export default function usePocketWalletController({
       onEvmSession: async session => {
         evmSessionRef.current = session
         setEvmSession(session)
-        await savePocketEvmQuickSession(email, session).catch(() => undefined)
+        await savePocketSecureWalletSession(email, session).catch(() => undefined)
         cacheEvmSession(email, session)
       },
       onSolanaSession: session => {
@@ -291,8 +283,7 @@ export default function usePocketWalletController({
     const shared = sharedSolanaSessions.get(solanaSessionKey(email, walletAddress))
     if (shared) return shared
     const activeAuthentication = activePocketEvmSession(email, 'base')
-    const authentication = activeAuthentication
-      ?? (pocketQuickApprovalEnabled() ? await readPocketQuickApprovalSession(email) : null)
+    const authentication = activeAuthentication ?? await readPocketSecureWalletSession(email)
     const session = authentication
       ? await resumeCircleSolanaEmailWallet(authentication, walletAddress)
       : await connectCircleSolanaEmailWallet(email)

@@ -3,10 +3,11 @@ import type { ComponentProps } from 'react'
 import { AlertCircle, Check, Loader2, Lock } from 'lucide-react'
 import SlideAction, { type SlideActionStatus } from '../../components/SlideAction'
 import { cn } from '../../lib/utils'
+import { requestPocketPaymentApproval } from '../lib/pocketPaymentApproval'
 
 export type PocketSlideActionStatus = SlideActionStatus
 
-type PocketSlideActionProps = ComponentProps<typeof SlideAction>
+type PocketSlideActionProps = ComponentProps<typeof SlideAction> & { approvalRequired?: boolean }
 
 const POCKET_DEFAULT_LABELS: NonNullable<PocketSlideActionProps['labels']> = {
   idle: 'Confirm withdrawal',
@@ -17,7 +18,7 @@ const POCKET_DEFAULT_LABELS: NonNullable<PocketSlideActionProps['labels']> = {
   error: 'Withdrawal failed',
 }
 
-export default function PocketSlideAction({ labels, status, disabled, onConfirm }: PocketSlideActionProps) {
+export default function PocketSlideAction({ labels, status, disabled, onConfirm, approvalRequired = true }: PocketSlideActionProps) {
   const activationLocked = useRef(false)
   const unlockTimer = useRef<number | null>(null)
   const [optimisticPending, setOptimisticPending] = useState(false)
@@ -26,9 +27,9 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm 
   const label = visualStatus === 'error'
     ? mergedLabels.error
     : visualStatus === 'pending'
-      ? mergedLabels.pending
+      ? 'Confirming...'
       : visualStatus === 'submitted'
-        ? mergedLabels.submitted
+        ? 'Processing...'
         : visualStatus === 'successful'
           ? mergedLabels.successful
           : disabled
@@ -47,22 +48,28 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm 
     if (unlockTimer.current) window.clearTimeout(unlockTimer.current)
   }, [])
 
-  const confirmOnce = () => {
+  const confirmOnce = async () => {
     if (disabled || status !== 'idle' || activationLocked.current) return
     activationLocked.current = true
     setOptimisticPending(true)
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
-    onConfirm()
-    unlockTimer.current = window.setTimeout(() => {
+    try {
+      if (approvalRequired) await requestPocketPaymentApproval()
+      onConfirm()
+      unlockTimer.current = window.setTimeout(() => {
+        setOptimisticPending(false)
+        activationLocked.current = false
+      }, 1_200)
+    } catch {
       setOptimisticPending(false)
       activationLocked.current = false
-    }, 1_200)
+    }
   }
 
   return (
     <button
       type="button"
-      onClick={confirmOnce}
+      onClick={() => void confirmOnce()}
       disabled={disabled || visualStatus !== 'idle'}
       aria-label={label}
       className={cn(

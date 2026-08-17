@@ -5,8 +5,10 @@ import { cn } from '../../lib/utils'
 import { pocketPushEnabled, setPocketPushEnabled } from '../lib/pocketPushPreference'
 import { readPocketBillsLimitUsage, type PocketBillsLimitUsage } from '../api/pocketBillsClient'
 import { readPocketBankPayoutLimit, type PocketBankPayoutLimit } from '../api/pocketSpendingLimitsClient'
+import { updatePocketPaymentSecurity, verifyPocketPaymentPin } from '../api/pocketPaymentSecurityClient'
+import { disablePocketPaymentBiometrics, enablePocketPaymentBiometrics, pocketPaymentBiometricsAvailable, pocketPaymentBiometricsEnabled } from '../lib/pocketPaymentBiometrics'
 
-export type PocketProfileFeature = 'rates' | 'limits' | 'notifications'
+export type PocketProfileFeature = 'rates' | 'limits' | 'notifications' | 'security'
 
 function ngn(value: number, maximumFractionDigits = 0) {
   return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits }).format(value)
@@ -97,7 +99,63 @@ function NotificationsPanel({ enabled, onChange }: { enabled: boolean; onChange(
   </section>
 }
 
-export default function PocketProfileFeaturePage({ feature, onBack, getAccessToken }: { feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null> }) {
+function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; getAccessToken(): Promise<string | null>; onResetPin(): void }) {
+  const [currentPin, setCurrentPin] = useState('')
+  const [biometricPin, setBiometricPin] = useState('')
+  const [newPin, setNewPin] = useState('')
+  const [confirmPin, setConfirmPin] = useState('')
+  const [biometrics, setBiometrics] = useState(pocketPaymentBiometricsEnabled)
+  const [biometricsAvailable, setBiometricsAvailable] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  useEffect(() => { void pocketPaymentBiometricsAvailable().then(setBiometricsAvailable) }, [])
+  const clean = (value: string) => value.replace(/\D/g, '').slice(0, 6)
+  const changePin = async () => {
+    if (!/^\d{6}$/.test(currentPin) || !/^\d{6}$/.test(newPin)) return setError('Enter your current and new six-digit PINs.')
+    if (newPin !== confirmPin) return setError('The new PINs do not match.')
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await updatePocketPaymentSecurity(getAccessToken, { action: 'change', currentPin, newPin })
+      if (biometrics) await enablePocketPaymentBiometrics(email, newPin)
+      setCurrentPin(''); setNewPin(''); setConfirmPin(''); setNotice('Pocket PIN changed.')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Pocket PIN was not changed.') }
+    finally { setBusy(false) }
+  }
+  const toggleBiometrics = async () => {
+    setBusy(true); setError(''); setNotice('')
+    try {
+      if (biometrics) {
+        await disablePocketPaymentBiometrics(email); setBiometrics(false); setNotice('Payments will use your Pocket PIN.')
+      } else {
+        if (!/^\d{6}$/.test(biometricPin)) throw new Error('Enter your current Pocket PIN to enable fingerprint or face.')
+        await verifyPocketPaymentPin(getAccessToken, biometricPin)
+        await enablePocketPaymentBiometrics(email, biometricPin)
+        setBiometrics(true); setBiometricPin(''); setNotice('Fingerprint or face enabled for payments.')
+      }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Payment approval was not changed.') }
+    finally { setBusy(false) }
+  }
+  const inputClass = 'mt-2 min-h-12 w-full rounded-2xl bg-gray-50 px-4 text-center text-base font-black tracking-[0.25em] outline-none focus:ring-2 focus:ring-blue-500 dark:bg-white/[0.06]'
+  return <section className='pt-8 space-y-4'>
+    <article className='rounded-[26px] bg-white p-5 shadow-sm dark:bg-white/[0.05]'>
+      <div className='flex items-center gap-3'><span className='min-w-0 flex-1'><strong className='block text-sm'>Fingerprint or face</strong><span className='mt-1 block text-xs text-gray-500'>{biometrics ? 'Used first for payment approval' : 'Payments use your Pocket PIN'}</span></span>{biometricsAvailable && <button type='button' role='switch' aria-checked={biometrics} onClick={() => void toggleBiometrics()} disabled={busy} className={cn('relative h-7 w-12 rounded-full transition-colors disabled:opacity-50', biometrics ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}><span className={cn('absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform', biometrics ? 'translate-x-6' : 'translate-x-1')} /></button>}</div>
+      {!biometrics && biometricsAvailable && <><label className='mt-4 block text-[10px] font-black uppercase tracking-[0.16em] text-gray-400'>Current PIN</label><input value={biometricPin} onChange={event => setBiometricPin(clean(event.target.value))} inputMode='numeric' type='password' className={inputClass} /></>}
+    </article>
+    <article className='rounded-[26px] bg-white p-5 shadow-sm dark:bg-white/[0.05]'>
+      <strong className='text-sm'>Change PIN</strong>
+      <input value={currentPin} onChange={event => setCurrentPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='Current PIN' aria-label='Current Pocket PIN' className={inputClass} />
+      <input value={newPin} onChange={event => setNewPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='New PIN' aria-label='New Pocket PIN' className={inputClass} />
+      <input value={confirmPin} onChange={event => setConfirmPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='Confirm new PIN' aria-label='Confirm new Pocket PIN' className={inputClass} />
+      <button type='button' onClick={() => void changePin()} disabled={busy || currentPin.length !== 6 || newPin.length !== 6 || confirmPin.length !== 6} className='mt-4 min-h-12 w-full rounded-full bg-gray-950 text-xs font-black text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>Change PIN</button>
+    </article>
+    {error && <p className='px-2 text-xs font-semibold text-red-500'>{error}</p>}{notice && <p className='px-2 text-xs font-semibold text-emerald-600'>{notice}</p>}
+    <button type='button' onClick={onResetPin} className='min-h-12 w-full rounded-full border border-red-200 text-xs font-black text-red-600 dark:border-red-400/20 dark:text-red-300'>Forgot or reset PIN</button>
+    <p className='px-1 text-[11px] leading-5 text-gray-400'>Reset signs you out first so your email identity can be verified again.</p>
+  </section>
+}
+
+export default function PocketProfileFeaturePage({ feature, onBack, getAccessToken, email = '', onResetPin = () => undefined }: { feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null>; email?: string; onResetPin?(): void }) {
   const fx = usePocketFxQuote(10, feature === 'rates')
   const [currency, setCurrency] = useState('NGN')
   const [pushEnabled, setPushEnabled] = useState(pocketPushEnabled)
@@ -125,13 +183,14 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
     }
   }
   useEffect(() => { if (feature === 'limits') void refreshLimits() }, [feature]) // eslint-disable-line react-hooks/exhaustive-deps
-  const title = feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : 'Notifications'
+  const title = feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
   return <div className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white'>
     <main className='mx-auto min-h-full w-full max-w-[480px] px-5 pb-10 pt-[max(1rem,env(safe-area-inset-top))]'>
       <header className='flex h-12 items-center justify-between'><button type='button' onClick={onBack} className='flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]' aria-label='Back'><ArrowLeft className='h-4 w-4' /></button><p className='text-sm font-black'>{title}</p><span className='h-10 w-10' /></header>
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={setCurrency} />}
       {feature === 'limits' && <LimitsPanel usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
       {feature === 'notifications' && <NotificationsPanel enabled={pushEnabled} onChange={enabled => { setPocketPushEnabled(enabled); setPushEnabled(enabled) }} />}
+      {feature === 'security' && <SecurityPanel email={email} getAccessToken={getAccessToken} onResetPin={onResetPin} />}
     </main>
   </div>
 }

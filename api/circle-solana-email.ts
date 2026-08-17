@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { consumePocketPaymentApproval } from './pocket/payment-security.js'
 import crypto from 'crypto'
 import { PublicKey } from '@solana/web3.js'
 import { encodeFunctionData, isAddress, parseAbi } from 'viem'
@@ -338,6 +339,10 @@ export default async function handler(req: Request, res: Response) {
   if (!action) return res.status(400).json({ ok: false, error: 'Missing action' })
 
   try {
+    if (req.headers['x-pocket-client'] === '1' && /^(execute|signPayment)/.test(action)) {
+      const approved = await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval'] ?? ''))
+      if (!approved) return res.status(401).json({ ok: false, error: 'Approve this payment with fingerprint, face, or your Pocket PIN.' })
+    }
     if (action === 'requestEmailOtp') {
       const { deviceId, email, chain } = params
       if (!deviceId || !email) return res.status(400).json({ ok: false, error: 'Missing deviceId or email' })
@@ -454,10 +459,11 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'executeSolanaTransfer') {
-      const { userToken, walletId, walletAddress, recipient, amount } = params
-      if (!userToken || !walletId || !walletAddress || !recipient || !amount) {
-        return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, recipient, or amount' })
+      const { userToken, walletId, walletAddress, recipient, amount, idempotencyKey } = params
+      if (!userToken || !walletId || !walletAddress || !recipient || !amount || !idempotencyKey) {
+        return res.status(400).json({ ok: false, error: 'Missing transfer details or idempotency key.' })
       }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) return res.status(400).json({ ok: false, error: 'Invalid transfer idempotency key.' })
       let destinationAddress: string
       try {
         destinationAddress = new PublicKey(recipient).toBase58()
@@ -481,7 +487,7 @@ export default async function handler(req: Request, res: Response) {
         userToken,
         apiKey: circleApiKey({ chain: 'solana' }),
         body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey,
           walletId: wallet.id,
           destinationAddress,
           amounts: [transferAmount],

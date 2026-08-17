@@ -68,6 +68,7 @@ import polymarketSubmitOrderHandler from './api/polymarket-submit-order.js'
 import ngPosHandler from './api/ng-pos.js'
 import localCurrencyProfileHandler from './api/local-currency-profile.js'
 import pocketProfileHandler from './api/pocket/profile.js'
+import pocketPaymentSecurityHandler from './api/pocket/payment-security.js'
 import pocketPosHandler from './api/pocket/pos.js'
 import pocketBankReceiveHandler from './api/pocket/bank-receive.js'
 import pocketBankInstitutionsHandler from './api/pocket/bank-receive-institutions.js'
@@ -320,6 +321,7 @@ app.post('/api/polymarket-submit-order', strictLimiter, polymarketSubmitOrderHan
 app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
 app.all('/api/local-currency-profile',  strictLimiter, localCurrencyProfileHandler)
 app.all('/api/pocket/profile',           strictLimiter, pocketProfileHandler)
+app.all('/api/pocket/payment-security',  strictLimiter, pocketPaymentSecurityHandler)
 app.all('/api/pocket/pos',               strictLimiter, pocketPosHandler)
 app.all('/api/pocket/bank-receive',      strictLimiter, pocketBankReceiveHandler)
 app.all('/api/pocket/bank-receive/institutions', readLimiter, pocketBankInstitutionsHandler)

@@ -1,5 +1,6 @@
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
 import { Capacitor } from '@capacitor/core'
+import { takePocketPaymentApproval } from '../pocket/lib/pocketPaymentApproval'
 
 type CircleSdkError = {
   message: string
@@ -100,9 +101,13 @@ function isCircleCloseMessage(data: unknown) {
 }
 
 async function circleSolanaApi<T>(payload: Record<string, unknown>): Promise<T> {
+  const action = typeof payload.action === 'string' ? payload.action : ''
+  const paymentAction = /^(execute|signPayment)/.test(action)
+  const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.pathname.includes('/pocket'))
+  const approval = pocketClient ? takePocketPaymentApproval() : ''
   const res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(pocketClient ? { 'X-Pocket-Client': '1', ...(approval ? { 'X-Pocket-Payment-Approval': approval } : {}) } : {}) },
     body: JSON.stringify(payload),
   })
   const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number }
@@ -419,7 +424,9 @@ export async function sendCircleSolanaTransfer(params: {
   session: SolanaEmailSession
   recipient: string
   amount: string
-}): Promise<string | null> {
+  idempotencyKey: string
+  onChallenge?: (value: { challengeId: string; transactionId: string }) => void
+}): Promise<{ state: 'submitted' | 'confirmed'; txHash: string; challengeId: string; transactionId: string }> {
   if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
   const sdk = new W3SSdk({
     appSettings: { appId: APP_ID },
@@ -440,36 +447,40 @@ export async function sendCircleSolanaTransfer(params: {
     walletAddress: params.session.wallet.address,
     recipient: params.recipient,
     amount: params.amount,
+    idempotencyKey: params.idempotencyKey,
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a Solana transfer challenge.')
-  const result = await withTimeout(
-    executeChallenge(sdk, challenge.challengeId),
-    120_000,
-    'Circle Solana confirmation did not finish. Check Activity before trying again.',
-  )
+  params.onChallenge?.({ challengeId: challenge.challengeId, transactionId: circleTransactionId(challenge) ?? '' })
+  let result: CircleChallengeResult
+  try {
+    result = await withTimeout(executeChallenge(sdk, challenge.challengeId), 120_000, 'Payment confirmation is taking longer than usual.')
+  } catch (reason) {
+    if (isCircleCancellationError(reason)) throw reason
+    const transactionId = await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId, 8_000).catch(() => null)
+    const txHash = transactionId ? await pollCircleSolanaTransaction(params.session.userToken, transactionId, 8_000).catch(() => null) : null
+    return { state: txHash ? 'confirmed' : 'submitted', txHash: txHash ?? '', challengeId: challenge.challengeId, transactionId: transactionId ?? '' }
+  }
   const directHash = solanaTransactionHash(result)
-  if (directHash) return directHash
+  if (directHash) return { state: 'confirmed', txHash: directHash, challengeId: challenge.challengeId, transactionId: circleTransactionId(result) ?? circleTransactionId(challenge) ?? '' }
   let transactionId = circleTransactionId(result) ?? circleTransactionId(challenge)
   if (!transactionId) {
     try {
       transactionId = await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId, 5_000)
     } catch (reason) {
-      if (/could not reach Hash PayLink \(getChallenge\/solana\)|failed to fetch|network/i.test(reason instanceof Error ? reason.message : String(reason))) return null
-      throw reason
+      return { state: 'submitted', txHash: '', challengeId: challenge.challengeId, transactionId: '' }
     }
   }
   if (transactionId) {
     try {
       const txHash = await pollCircleSolanaTransaction(params.session.userToken, transactionId, 5_000)
-      if (txHash) return txHash
+      if (txHash) return { state: 'confirmed', txHash, challengeId: challenge.challengeId, transactionId }
     } catch (reason) {
       // Circle already accepted the signed challenge. A status lookup outage
       // cannot turn that accepted transfer into a safe-to-retry failure.
-      if (/could not reach Hash PayLink \(getTransaction\/solana\)|failed to fetch|network/i.test(reason instanceof Error ? reason.message : String(reason))) return null
-      throw reason
+      return { state: 'submitted', txHash: '', challengeId: challenge.challengeId, transactionId }
     }
   }
-  return null
+  return { state: 'submitted', txHash: '', challengeId: challenge.challengeId, transactionId: transactionId ?? '' }
 }
 
 export async function signCircleSolanaTransaction(params: {

@@ -1,5 +1,6 @@
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
 import { Capacitor } from '@capacitor/core'
+import { takePocketPaymentApproval } from '../pocket/lib/pocketPaymentApproval'
 import { parseUnits, type Address, type Hex } from 'viem'
 import type { ChainKey } from './chains'
 import { CHAIN_META } from './chains'
@@ -258,6 +259,9 @@ function transactionFailureMessage(value: unknown) {
 
 async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> {
   const action = typeof payload.action === 'string' ? payload.action : 'request'
+  const paymentAction = /^(execute|signPayment)/.test(action)
+  const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.pathname.includes('/pocket'))
+  const approval = pocketClient ? takePocketPaymentApproval() : ''
   const scope = typeof payload.chain === 'string'
     ? payload.chain
     : typeof payload.blockchain === 'string'
@@ -268,7 +272,7 @@ async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> 
   try {
     res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(pocketClient ? { 'X-Pocket-Client': '1', ...(approval ? { 'X-Pocket-Payment-Approval': approval } : {}) } : {}) },
       body: JSON.stringify(payload),
     })
   } catch (err) {

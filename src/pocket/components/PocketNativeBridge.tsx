@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Network } from '@capacitor/network'
 import { StatusBar, Style } from '@capacitor/status-bar'
+import { registerPlugin } from '@capacitor/core'
 import { isPocketNativeRuntime, POCKET_HOSTNAME } from '../lib/pocketRoutes'
 
 function nativePocketDestination(rawUrl: string) {
@@ -15,6 +16,8 @@ function nativePocketDestination(rawUrl: string) {
   }
 }
 
+const PocketInsets = registerPlugin<{ getInsets(): Promise<{ top: number; bottom: number }> }>('PocketInsets')
+
 export default function PocketNativeBridge() {
   const navigate = useNavigate()
   const [online, setOnline] = useState(true)
@@ -26,10 +29,14 @@ export default function PocketNativeBridge() {
 
     // Android 16 enforces edge-to-edge and ignores overlaysWebView. Read the
     // native inset and expose it to CSS instead of trusting env() alone.
-    void StatusBar.getInfo().then(info => {
+    const syncInsets = () => void PocketInsets.getInsets().then(info => {
       if (!active) return
-      document.documentElement.style.setProperty('--pocket-status-bar-inset', `${Math.max(0, info.height || 0)}px`)
-    }).catch(() => undefined)
+      document.documentElement.style.setProperty('--pocket-status-bar-inset', `${Math.max(0, info.top || 0)}px`)
+      document.documentElement.style.setProperty('--pocket-navigation-bar-inset', `${Math.max(0, info.bottom || 0)}px`)
+    }).catch(() => StatusBar.getInfo().then(info => {
+      if (active) document.documentElement.style.setProperty('--pocket-status-bar-inset', `${Math.max(0, Math.round((info.height || 0) / Math.max(1, window.devicePixelRatio || 1)))}px`)
+    }).catch(() => undefined))
+    syncInsets()
     const syncStatusBar = () => {
       const style = document.documentElement.classList.contains('dark') ? Style.Dark : Style.Light
       void StatusBar.setStyle({ style }).catch(() => undefined)
@@ -50,6 +57,7 @@ export default function PocketNativeBridge() {
     }))
     listeners.push(CapacitorApp.addListener('appStateChange', state => {
       if (state.isActive) {
+        syncInsets()
         window.dispatchEvent(new Event('focus'))
         document.dispatchEvent(new Event('visibilitychange'))
       }
@@ -63,6 +71,7 @@ export default function PocketNativeBridge() {
     return () => {
       active = false
       document.documentElement.style.removeProperty('--pocket-status-bar-inset')
+      document.documentElement.style.removeProperty('--pocket-navigation-bar-inset')
       themeObserver.disconnect()
       for (const listener of listeners) void listener.then(handle => handle.remove()).catch(() => undefined)
     }

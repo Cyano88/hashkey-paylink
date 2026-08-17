@@ -9,6 +9,16 @@ import type { PocketSolanaEmailSession } from './usePocketWalletController'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { validatePocketWithdrawal } from './pocketWithdrawalValidation'
 
+const SOLANA_SEND_OPERATION_KEY = 'pocket:solana-send:operation:v2'
+type SolanaSendOperation = { fingerprint: string; idempotencyKey: string; challengeId: string; transactionId: string; state: 'preparing' | 'submitted' | 'confirmed'; updatedAt: number }
+function readSolanaOperation(fingerprint: string): SolanaSendOperation | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(SOLANA_SEND_OPERATION_KEY) || 'null') as SolanaSendOperation | null
+    return value?.fingerprint === fingerprint && Date.now() - value.updatedAt < 24 * 60 * 60_000 ? value : null
+  } catch { return null }
+}
+function writeSolanaOperation(value: SolanaSendOperation) { localStorage.setItem(SOLANA_SEND_OPERATION_KEY, JSON.stringify(value)) }
+
 export default function usePocketWithdrawalController({
   network,
   networkLabel,
@@ -98,13 +108,20 @@ export default function usePocketWithdrawalController({
       if (!selectedWallet) throw new Error('Circle wallet setup was cancelled.')
       if (network === 'solana') {
         const session = await getSolanaSession(selectedWallet.address)
-        const solanaTxHash = await sendCircleSolanaTransfer({
+        const fingerprint = [selectedWallet.address, recipient, amount.trim()].join(':')
+        const existing = readSolanaOperation(fingerprint)
+        const operation: SolanaSendOperation = existing ?? { fingerprint, idempotencyKey: crypto.randomUUID(), challengeId: '', transactionId: '', state: 'preparing', updatedAt: Date.now() }
+        writeSolanaOperation(operation)
+        const result = await sendCircleSolanaTransfer({
           session,
           recipient,
           amount: amount.trim(),
+          idempotencyKey: operation.idempotencyKey,
+          onChallenge: identifiers => writeSolanaOperation({ ...operation, ...identifiers, state: 'submitted', updatedAt: Date.now() }),
         })
-        setTxHash(solanaTxHash)
-        handedOff = Boolean(solanaTxHash)
+        writeSolanaOperation({ ...operation, challengeId: result.challengeId, transactionId: result.transactionId, state: result.state, updatedAt: Date.now() })
+        setTxHash(result.txHash)
+        handedOff = result.state === 'confirmed'
       } else {
         const session = await getEvmSession(network, selectedWallet.address)
         const result = await executePocketEvmTransfer({
