@@ -306,8 +306,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                             : paymentRouting?.status === 'checking'
                               ? 'Checking balances'
                               : 'Review payment',
-                        idle: bills.environment === 'sandbox' ? 'Slide to test payment' : 'Slide to pay',
-                        pending: 'Confirm in Circle',
+                        idle: bills.environment === 'sandbox' ? 'Confirm test payment' : 'Confirm payment',
+                        pending: 'Approve with fingerprint',
                         submitted: bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`,
                         successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent`,
                       }}

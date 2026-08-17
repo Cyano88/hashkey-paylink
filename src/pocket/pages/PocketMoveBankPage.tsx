@@ -348,7 +348,7 @@ export default function PocketMoveBankPage() {
                   disabled={!direct.canSubmit}
                   onConfirm={() => void direct.submit()}
                   labels={{
-                    idle: 'Slide to confirm',
+                    idle: 'Confirm payout',
                     disabled: 'Complete payout details',
                     pending: direct.status === 'authorizing' ? 'Confirm payout in Circle' : direct.status === 'routing' && bankLiquidity.status === 'moving' ? 'Moving USDC' : direct.status === 'routing' ? 'Checking balances' : 'Preparing payout',
                     submitted: direct.status === 'route-review' ? 'Move needs review' : direct.status === 'routing' ? 'USDC moving to Base' : 'Payment processing',

@@ -14,7 +14,7 @@ const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, m
 const BANK_PAYOUT_OPERATION_KEY = 'pocket:bank-withdraw:operation'
 const BANK_PAYOUT_FAST_POLL_ATTEMPTS = 12
 
-export const PAYMENT_TIMEOUT_NOTICE = 'The payout quote expired before any money was sent. Your details are still here; slide again to refresh it.'
+export const PAYMENT_TIMEOUT_NOTICE = 'The payout quote expired before any money was sent. Your details are still here; tap Confirm again to refresh it.'
 export const PAYOUT_REFUNDED_NOTICE = 'This payout was refunded. Your returned USDC will appear in Activity.'
 
 async function operationFingerprint(value: string) {
@@ -86,6 +86,7 @@ export default function usePocketBankWithdrawController({
   const activeIntentId = useRef(readActivePocketBankPayout())
   const cancelled = useRef(false)
   const polling = useRef(false)
+  const approvedSession = useRef<{ walletAddress: string; session: CircleEvmEmailSession } | null>(null)
 
   useEffect(() => () => { cancelled.current = true }, [])
 
@@ -98,6 +99,7 @@ export default function usePocketBankWithdrawController({
       setResult(null)
       idempotencyKey.current = ''
       activeIntentId.current = ''
+      approvedSession.current = null
       clearStoredOperation()
     }
   }, [status])
@@ -278,6 +280,11 @@ export default function usePocketBankWithdrawController({
       if (!accessToken) throw new Error('Sign in again to withdraw to bank.')
       const selectedWallet = wallet ?? await ensureWallet()
       if (!selectedWallet) throw new Error('Open your Base Circle wallet before withdrawing.')
+      // Authenticate before creating a provider intent. A cancelled fingerprint
+      // must leave no payout operation behind, and the approved session is
+      // reused when liquidity routing reaches the on-chain transfer.
+      const session = await getEvmSession(selectedWallet.address)
+      approvedSession.current = { walletAddress: selectedWallet.address, session }
       const fingerprint = await operationFingerprint([email.toLowerCase(), bankCode, bankName, accountNumber, accountName, amount, memo.trim()].join('|'))
       const key = idempotencyKey.current || storedOperation(fingerprint) || window.crypto.randomUUID()
       idempotencyKey.current = key
@@ -308,6 +315,7 @@ export default function usePocketBankWithdrawController({
       }
       setStatus('routing')
     } catch (reason) {
+      approvedSession.current = null
       const message = payoutError(reason, 'Bank payout failed.')
       const intentId = activeIntentId.current
       if (intentId && !readActivePocketBankPayoutTransfer(intentId)) {
@@ -321,7 +329,7 @@ export default function usePocketBankWithdrawController({
       setStatus('idle')
       setError(message)
     }
-  }, [accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, lastName, memo, wallet])
+  }, [accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, getEvmSession, lastName, memo, wallet])
 
   const continueAfterRouting = useCallback(async (selectedWallet: CirclePocketWallet) => {
     const prepared = result
@@ -345,7 +353,10 @@ export default function usePocketBankWithdrawController({
       if (activeIntentId.current !== prepared.intentId) return
       if (payable.state === 'expired') throw new Error(PAYMENT_TIMEOUT_NOTICE)
       setResult(payable)
-      const session = await getEvmSession(selectedWallet.address)
+      const session = approvedSession.current?.walletAddress === selectedWallet.address
+        ? approvedSession.current.session
+        : await getEvmSession(selectedWallet.address)
+      approvedSession.current = null
       if (activeIntentId.current !== prepared.intentId) return
       const transfer = await executePocketEvmTransfer({
         session,
@@ -381,6 +392,7 @@ export default function usePocketBankWithdrawController({
       if (confirmed && activeIntentId.current === prepared.intentId) setResult(confirmed)
       void pollUntilSettled(accessToken, prepared.intentId)
     } catch (reason) {
+      approvedSession.current = null
       const message = payoutError(reason, 'Bank payout failed.')
       if (isPayoutExpiry(message)) {
         clearActivePocketBankPayout(prepared.intentId)

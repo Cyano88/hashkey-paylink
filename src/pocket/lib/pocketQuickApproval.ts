@@ -16,6 +16,13 @@ function serverKey(email: string) {
   return `com.hashpaylink.pocket.circle.${email.trim().toLowerCase()}`
 }
 
+export class PocketBiometricApprovalError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'PocketBiometricApprovalError'
+  }
+}
+
 export function pocketQuickApprovalEnabled() {
   return Capacitor.isNativePlatform() && window.localStorage.getItem(ENABLED_KEY) === 'true'
 }
@@ -43,7 +50,7 @@ async function storePocketEvmQuickSession(email: string, session: CircleEvmEmail
     password: JSON.stringify(session),
     accessControl: AccessControl.BIOMETRY_CURRENT_SET,
     title: 'Approve Pocket payments',
-    negativeButtonText: 'Use email code',
+    negativeButtonText: 'Cancel',
   })
 }
 
@@ -113,26 +120,46 @@ export async function readPocketEvmQuickSession(
   walletAddress: string,
 ) {
   if (!pocketQuickApprovalEnabled()) return null
+  const session = await readPocketQuickApprovalSession(email)
+  if (!session) throw new PocketBiometricApprovalError('Fingerprint approval is required before paying.')
+  const networkSession = sessionForNetwork(session, network, walletAddress)
+  if (!networkSession) {
+    throw new PocketBiometricApprovalError('This wallet is not bound to fingerprint approval. Re-enable fingerprint in Profile before paying.')
+  }
+  return networkSession
+}
+
+export async function readPocketQuickApprovalSession(email: string) {
+  if (!pocketQuickApprovalEnabled()) return null
   const key = serverKey(email)
   const saved = await NativeBiometric.isCredentialsSaved({ server: key }).catch(() => ({ isSaved: false }))
-  if (!saved.isSaved) return null
-  const credentials = await NativeBiometric.getSecureCredentials({
-    server: key,
-    title: 'Approve with phone unlock',
-    subtitle: 'Pocket payment',
-    description: 'Confirm it is you to continue.',
-    negativeButtonText: 'Use email code',
-  }).catch(() => null)
-  if (!credentials || credentials.username !== email.trim().toLowerCase()) return null
+  if (!saved.isSaved) {
+    throw new PocketBiometricApprovalError('Fingerprint approval needs to be re-enabled in Profile. No payment was started.')
+  }
+  let credentials
+  try {
+    credentials = await NativeBiometric.getSecureCredentials({
+      server: key,
+      title: 'Approve with fingerprint',
+      subtitle: 'Pocket payment',
+      description: 'Confirm it is you to authorize this payment.',
+      negativeButtonText: 'Cancel payment',
+    })
+  } catch {
+    throw new PocketBiometricApprovalError('Fingerprint approval was cancelled. Nothing was sent.')
+  }
+  if (!credentials || credentials.username !== email.trim().toLowerCase()) {
+    throw new PocketBiometricApprovalError('Fingerprint approval does not match this Pocket account. Nothing was sent.')
+  }
   try {
     const storedSession = JSON.parse(credentials.password) as CircleEvmEmailSession
-    let session = sessionForNetwork(storedSession, network, walletAddress)
-    if (!session) return null
-    if (!session.refreshToken || !session.deviceId) return null
-    session = await refreshCircleEvmEmailSession(session)
+    if (!storedSession.refreshToken || !storedSession.deviceId) {
+      throw new Error('Stored Circle session cannot be refreshed.')
+    }
+    const session = await refreshCircleEvmEmailSession(storedSession)
     await savePocketEvmQuickSession(email, session)
     return session
   } catch {
-    return null
+    throw new PocketBiometricApprovalError('Fingerprint was accepted, but payment approval needs to be re-enabled in Profile. Nothing was sent.')
   }
 }

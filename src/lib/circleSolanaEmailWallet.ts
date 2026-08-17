@@ -25,9 +25,11 @@ type SolanaCircleWallet = {
   blockchain: string
 }
 
-type SolanaEmailSession = {
+export type SolanaEmailSession = {
   userToken: string
   encryptionKey: string
+  refreshToken?: string
+  deviceId?: string
   wallet: SolanaCircleWallet
 }
 
@@ -326,8 +328,31 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
   return {
     userToken: login.userToken,
     encryptionKey: login.encryptionKey,
+    refreshToken: login.refreshToken,
+    deviceId,
     wallet,
   }
+}
+
+export async function resumeCircleSolanaEmailWallet(
+  authentication: Pick<SolanaEmailSession, 'userToken' | 'encryptionKey' | 'refreshToken' | 'deviceId'>,
+  expectedWalletAddress?: string,
+): Promise<SolanaEmailSession> {
+  if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
+  const sdk = new W3SSdk({
+    appSettings: { appId: APP_ID },
+    authentication: {
+      userToken: authentication.userToken,
+      encryptionKey: authentication.encryptionKey,
+    },
+  })
+  applyHashPayLinkCircleSolanaUi(sdk)
+  const wallet = await ensureInitializedWallet(sdk, authentication.userToken, authentication.encryptionKey)
+  if (!isSolanaAddress(wallet.address)) throw new Error('Circle returned an invalid Solana wallet.')
+  if (expectedWalletAddress && wallet.address !== expectedWalletAddress) {
+    throw new Error('Fingerprint approval opened a different Solana wallet. Nothing was sent.')
+  }
+  return { ...authentication, wallet }
 }
 
 function findCircleString(value: unknown, keys: string[]): string | null {

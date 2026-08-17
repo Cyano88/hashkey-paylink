@@ -8,6 +8,7 @@ import {
 import {
   canUseCircleSolanaEmailWallet,
   connectCircleSolanaEmailWallet,
+  resumeCircleSolanaEmailWallet,
 } from '../../lib/circleSolanaEmailWallet'
 import { CHAIN_META } from '../../lib/chains'
 import { linkPocketWallet, readPocketWallet } from '../api/pocketWalletLinkClient'
@@ -16,6 +17,7 @@ import {
   pocketQuickApprovalEnabled,
   offerPocketQuickApprovalAfterEmail,
   readPocketEvmQuickSession,
+  readPocketQuickApprovalSession,
   savePocketEvmQuickSession,
 } from '../lib/pocketQuickApproval'
 import type { CirclePocketWallet } from '../models/pocketWallet'
@@ -33,8 +35,11 @@ async function connectFreshEvmSession(
   network: Exclude<PocketNetwork, 'solana'>,
   walletAddress: string,
 ) {
-  const secured = await readPocketEvmQuickSession(email, network, walletAddress)
-  if (secured) return secured
+  if (pocketQuickApprovalEnabled()) {
+    const secured = await readPocketEvmQuickSession(email, network, walletAddress)
+    if (!secured) throw new Error('Fingerprint approval is required before paying.')
+    return secured
+  }
   const session = await connectCircleEvmEmailWallet(email, network)
   await offerPocketQuickApprovalAfterEmail(email, session).catch(() => false)
   await savePocketEvmQuickSession(email, session).catch(() => undefined)
@@ -100,7 +105,10 @@ export async function ensurePocketWallet({
   }
 
   if (network === 'solana') {
-    const session = await dependencies.connectSolana(email)
+    const quickSession = pocketQuickApprovalEnabled() ? await readPocketQuickApprovalSession(email) : null
+    const session = quickSession
+      ? await resumeCircleSolanaEmailWallet(quickSession)
+      : await dependencies.connectSolana(email)
     if (!shouldContinue()) return null
     onSolanaSession?.(session)
     const linked = await dependencies.linkWallet({
@@ -203,7 +211,14 @@ export default function usePocketWalletController({
   }, [email, evmSession])
 
   const getSolanaSession = useCallback(async (walletAddress: string) => {
-    if (solanaSession?.wallet.address === walletAddress) return solanaSession
+    if (!pocketQuickApprovalEnabled() && solanaSession?.wallet.address === walletAddress) return solanaSession
+    if (pocketQuickApprovalEnabled()) {
+      const authentication = await readPocketQuickApprovalSession(email)
+      if (!authentication) throw new Error('Fingerprint approval is required before paying.')
+      const session = await resumeCircleSolanaEmailWallet(authentication, walletAddress)
+      setSolanaSession(session)
+      return session
+    }
     const session = await connectCircleSolanaEmailWallet(email)
     setSolanaSession(session)
     return session
