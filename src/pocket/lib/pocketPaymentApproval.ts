@@ -3,6 +3,7 @@ let approvalExpiresAt = 0
 let paymentPreparer: (() => Promise<void>) | null = null
 
 export const POCKET_PAYMENT_APPROVAL_EVENT = 'pocket:payment-approval-request'
+export const POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT = 'pocket:payment-approval-cancelled'
 
 export function setPocketPaymentApproval(token: string, expiresAt: number) {
   approvalToken = token

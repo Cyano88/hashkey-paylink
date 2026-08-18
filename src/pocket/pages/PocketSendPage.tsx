@@ -40,6 +40,7 @@ export default function PocketSendPage() {
   const [requestLoading, setRequestLoading] = useState(Boolean(requestId))
   const [requestError, setRequestError] = useState('')
   const [requestConfirmed, setRequestConfirmed] = useState(false)
+  const [requestAccepted, setRequestAccepted] = useState(() => requestId ? window.localStorage.getItem(`pocket.request.accepted.${requestId}`) === 'true' : false)
   const [paymentTxHash, setPaymentTxHash] = useState(() => requestId ? window.localStorage.getItem(`pocket.request.payment.${requestId}`) ?? '' : '')
   const onWalletReady = useCallback((key: PocketNetwork, wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => wallets.setWallets(current => ({ ...current, [key]: wallet })), [wallets.setWallets])
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
@@ -75,7 +76,7 @@ export default function PocketSendPage() {
         if (!item) throw new Error('This payment request is no longer available.')
         if (item.status === 'declined') throw new Error('You declined this request.')
         if (item.status === 'pending') throw new Error('Accept this request from Notifications before paying.')
-        if (item.status === 'paid') { setPaymentRequest(item); setRequestConfirmed(true); return }
+        if (item.status === 'paid') { setPaymentRequest(item); setRequestConfirmed(true); setRequestAccepted(true); return }
         setPaymentRequest(item)
         setNetwork(item.network === 'multi' ? 'base' : item.network)
         setMode('pocket')
@@ -118,7 +119,7 @@ export default function PocketSendPage() {
           const token = await getAccessToken()
           if (!token) throw new Error('Sign in again to confirm this payment.')
           const completed = await completePocketRequest(token, paymentRequest.id, paymentTxHash)
-          if (!cancelled) { setPaymentRequest(completed); setRequestConfirmed(true); setRequestError(''); window.localStorage.removeItem(`pocket.request.payment.${paymentRequest.id}`) }
+          if (!cancelled) { setPaymentRequest(completed); setRequestConfirmed(true); setRequestAccepted(true); setRequestError(''); window.localStorage.removeItem(`pocket.request.payment.${paymentRequest.id}`); window.localStorage.removeItem(`pocket.request.accepted.${paymentRequest.id}`) }
           return
         } catch (reason) {
           if (attempt === 9 && !cancelled) setRequestError(reason instanceof Error ? reason.message : 'Payment was sent, but confirmation is still pending.')
@@ -136,12 +137,18 @@ export default function PocketSendPage() {
     }
     try {
       const destinationWallet = await requestLiquidity.ensureLiquidity()
-      await send.withdraw({ balanceOverride: Number(paymentRequest.amount), walletOverride: destinationWallet })
+      const accepted = await send.withdraw({ balanceOverride: Number(paymentRequest.amount), walletOverride: destinationWallet, preserveForm: true })
+      if (accepted) {
+        setRequestAccepted(true)
+        window.localStorage.setItem(`pocket.request.accepted.${paymentRequest.id}`, 'true')
+      }
     } catch {
       // The liquidity controller owns the durable progress and user-facing
       // error. A confirmed bridge is resumed rather than submitted twice.
     }
   }, [paymentRequest, requestLiquidity.ensureLiquidity, send.withdraw])
+
+  const requestPaid = requestConfirmed || requestAccepted
 
   if (authenticated && (!wallets.resolved || requestLoading)) return <PocketLoadingState active="home" />
   const recipientReady = mode === 'pocket' ? Boolean(resolved) : Boolean(send.address.trim())
@@ -149,7 +156,7 @@ export default function PocketSendPage() {
     <PocketFlowHeader title={paymentRequest ? 'Pay request' : 'Send USDC'} onBack={() => navigate(requestId ? POCKET_BASE_PATH + POCKET_ROUTES.notifications : POCKET_BASE_PATH + POCKET_ROUTES.home)} />
     {requestError && !paymentRequest ? <section className="rounded-[26px] border border-gray-100 bg-white p-6 text-center shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]"><p className="text-sm font-bold">Request unavailable</p><p className="mt-2 text-xs leading-5 text-gray-400">{requestError}</p><button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.notifications)} className="mt-5 min-h-11 rounded-full bg-gray-950 px-6 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">Back to notifications</button></section> :
     <section className="space-y-4 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]">
-      {paymentRequest && <div><p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Request from {paymentRequest.senderName}</p><p className="mt-1 text-sm font-bold">{paymentRequest.title}</p></div>}
+      {paymentRequest && <div><p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Request from {paymentRequest.senderName}</p><p className="mt-1 text-sm font-bold">{paymentRequest.title}</p><p className="mt-1 text-[10px] font-medium text-gray-400">Sent {new Date(paymentRequest.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })} at {new Date(paymentRequest.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div>}
       <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-400">Network</p><PocketSelect value={network} options={(['base','arbitrum','solana'] as SendNetwork[]).map(value => ({ value, label: networkLabel(value) }))} onChange={value => setNetwork(value as SendNetwork)} disabled={Boolean(paymentRequest)} ariaLabel="Select send network" /></div>
       <div className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 dark:bg-white/[0.04]"><span className="text-xs font-semibold text-gray-500">Available</span><span className="text-sm font-black tabular-nums">{formatPocketDisplayAmount(balance)} USDC</span></div>
       {!paymentRequest && <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-100 p-1 dark:bg-white/[0.06]">{(['pocket','address'] as RecipientMode[]).map(value => <button key={value} type="button" onClick={() => { setMode(value); setResolved(null); setResolveError(''); send.setAddress('') }} className={`min-h-10 rounded-full px-3 text-xs font-bold transition ${mode === value ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950' : 'text-gray-500 dark:text-gray-400'}`}>{value === 'pocket' ? 'Pocket ID' : 'Wallet address'}</button>)}</div>}
@@ -157,7 +164,7 @@ export default function PocketSendPage() {
       {resolved && <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-gray-900 dark:bg-blue-400/10 dark:text-white"><Check className="h-3.5 w-3.5 text-blue-500" /><span className="truncate">{resolved.name}</span><span className="ml-auto text-[10px] text-gray-400">Pocket {resolved.pocketId}</span></div>}
       {resolveError && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{resolveError}</p>}
       <label className="block"><span className="flex items-center justify-between text-[11px] font-bold text-gray-500"><span>Amount</span>{!paymentRequest && <button type="button" onClick={send.setMax} className="text-blue-500">Max</button>}</span><span className="mt-2 flex items-center rounded-2xl border border-gray-200 px-4 dark:border-white/10"><input type="text" inputMode="decimal" value={send.amount} readOnly={Boolean(paymentRequest)} onChange={event => send.setAmount(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 bg-transparent py-4 text-base font-bold outline-none" /><b className="text-xs text-gray-400">USDC</b></span></label>
-      {requestConfirmed ? <div className="rounded-2xl bg-blue-50 px-4 py-4 text-center dark:bg-blue-400/10"><Check className="mx-auto h-5 w-5 text-blue-500" /><p className="mt-2 text-sm font-bold">Request paid</p><p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">The sender has been notified and this transfer will appear in Activity.</p></div> : <PocketSlideAction status={paymentRequest && requestLiquidity.busy ? (requestLiquidity.status === 'waiting' || requestLiquidity.status === 'reconciling' ? 'submitted' : 'pending') : send.status} disabled={!recipientReady || !send.amount || resolving || Boolean(paymentTxHash) || Boolean(paymentRequest && (requestLiquidity.checking || requestLiquidity.insufficient))} onConfirm={() => void submitPayment()} labels={{ disabled: paymentTxHash ? 'Confirming payment' : paymentRequest && requestLiquidity.checking ? 'Checking balance' : paymentRequest && requestLiquidity.insufficient ? 'Insufficient USDC' : recipientReady ? 'Enter amount' : 'Choose recipient', idle: paymentRequest ? 'Confirm payment' : 'Confirm send', pending: requestLiquidity.status === 'moving' ? 'Approve move' : 'Approve with fingerprint', submitted: requestLiquidity.busy ? 'USDC moving' : 'Sending', successful: 'Sent' }} />}
+      {requestPaid ? <div className="rounded-2xl bg-emerald-50 px-4 py-4 text-center dark:bg-emerald-400/10"><Check className="mx-auto h-5 w-5 text-emerald-600" /><p className="mt-2 text-sm font-bold">Request paid</p><p className="mt-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{requestConfirmed ? 'The sender has been notified and this transfer will appear in Activity.' : 'Your payment was sent successfully. It will appear in Activity shortly.'}</p></div> : <PocketSlideAction status={paymentRequest && requestLiquidity.busy ? (requestLiquidity.status === 'waiting' || requestLiquidity.status === 'reconciling' ? 'submitted' : 'pending') : send.status} disabled={!recipientReady || !send.amount || resolving || Boolean(paymentTxHash) || Boolean(paymentRequest && (requestLiquidity.checking || requestLiquidity.insufficient))} onConfirm={submitPayment} labels={{ disabled: paymentTxHash ? 'Confirming payment' : paymentRequest && requestLiquidity.checking ? 'Checking balance' : paymentRequest && requestLiquidity.insufficient ? 'Insufficient USDC' : recipientReady ? 'Enter amount' : 'Choose recipient', idle: paymentRequest ? 'Confirm payment' : 'Confirm send', pending: requestLiquidity.status === 'moving' ? 'Approve move' : 'Approve with fingerprint', submitted: requestLiquidity.busy ? 'USDC moving' : 'Sending', successful: paymentRequest ? 'Request paid' : 'Sent' }} />}
       {paymentRequest && !requestLiquidity.error && requestLiquidity.notice && (requestLiquidity.route?.kind === 'bridge' || requestLiquidity.busy || requestLiquidity.insufficient) && <p className="rounded-xl bg-blue-50 px-3 py-2 text-center text-xs font-semibold leading-5 text-blue-700 dark:bg-blue-400/10 dark:text-blue-200">{requestLiquidity.notice}</p>}
       {send.notice && <p className="text-center text-xs font-semibold text-emerald-600">{send.notice}</p>}
       {(requestError || send.error || wallets.error || requestLiquidity.error) && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{requestError || send.error || wallets.error || requestLiquidity.error}</p>}

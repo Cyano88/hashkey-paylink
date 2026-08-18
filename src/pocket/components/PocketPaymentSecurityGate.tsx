@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Lock, Loader2 } from './PocketIcons'
 import { readPocketPaymentSecurity, updatePocketPaymentSecurity, verifyPocketPaymentPin } from '../api/pocketPaymentSecurityClient'
-import { POCKET_PAYMENT_APPROVAL_EVENT, setPocketPaymentApproval } from '../lib/pocketPaymentApproval'
+import { POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT, POCKET_PAYMENT_APPROVAL_EVENT, setPocketPaymentApproval } from '../lib/pocketPaymentApproval'
 import { disablePocketPaymentBiometrics, enablePocketPaymentBiometrics, pocketPaymentBiometricsAvailable, pocketPaymentBiometricsConfigured, pocketPaymentBiometricsEnabled, readPocketPinWithBiometrics } from '../lib/pocketPaymentBiometrics'
 
 export const POCKET_PIN_RESET_KEY = 'pocket:payment-pin:reset-after-login:v1'
@@ -129,6 +129,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, child
   const cancelApproval = () => {
     pending.current?.reject(new Error('Payment approval was cancelled.'))
     pending.current = null; setApprovalPin(''); setError('')
+    window.dispatchEvent(new Event(POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT))
   }
 
   if (state === 'loading') return <main className='fixed inset-0 z-[80] flex items-center justify-center bg-[#F5F5F7] dark:bg-[#0A0A0A]'><Loader2 className='h-6 w-6 animate-spin text-blue-600' /></main>

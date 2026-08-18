@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
 import SlideAction, { type SlideActionStatus } from '../../components/SlideAction'
 import { cn } from '../../lib/utils'
-import { preparePocketPaymentApproval, requestPocketPaymentApproval } from '../lib/pocketPaymentApproval'
+import { POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT, preparePocketPaymentApproval, requestPocketPaymentApproval } from '../lib/pocketPaymentApproval'
 import { AlertCircle, ArrowLeftRight, Banknote, Check, CheckCircle2, Loader2, Send, Wallet } from './PocketIcons'
 
 export type PocketSlideActionStatus = SlideActionStatus
@@ -57,8 +57,18 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
     if (status === 'idle' && !disabled && !optimisticPending) activationLocked.current = false
   }, [disabled, optimisticPending, status])
 
-  useEffect(() => () => {
-    if (unlockTimer.current) window.clearTimeout(unlockTimer.current)
+  useEffect(() => {
+    const resetCancelledApproval = () => {
+      if (unlockTimer.current) window.clearTimeout(unlockTimer.current)
+      unlockTimer.current = null
+      setOptimisticPending(false)
+      activationLocked.current = false
+    }
+    window.addEventListener(POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT, resetCancelledApproval)
+    return () => {
+      window.removeEventListener(POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT, resetCancelledApproval)
+      if (unlockTimer.current) window.clearTimeout(unlockTimer.current)
+    }
   }, [])
 
   const confirmOnce = async () => {

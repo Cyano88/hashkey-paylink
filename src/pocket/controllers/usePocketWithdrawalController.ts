@@ -170,7 +170,7 @@ export default function usePocketWithdrawalController({
 
   useEffect(() => registerPocketPaymentPreparer(prepare), [prepare])
 
-  const withdraw = useCallback(async (options?: { balanceOverride?: number; walletOverride?: CirclePocketWallet }) => {
+  const withdraw = useCallback(async (options?: { balanceOverride?: number; walletOverride?: CirclePocketWallet; preserveForm?: boolean }) => {
     clearExternalError()
     setError('')
     setNotice('')
@@ -181,7 +181,7 @@ export default function usePocketWithdrawalController({
       recipient = validatePocketWithdrawal({ network, address, amount, balance: options?.balanceOverride ?? balance }).recipient
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Withdraw failed.')
-      return
+      return false
     }
 
     setPending(true)
@@ -212,7 +212,7 @@ export default function usePocketWithdrawalController({
             setNotice(`${formatPocketDisplayAmount(operation.amount ?? amount)} USDC sent on ${networkLabel}`)
             void refreshBalances().catch(() => undefined)
           }).catch(() => undefined)
-          return
+          return operation.state === 'accepted'
         }
         writeSolanaOperation(operation)
         const result = await sendCircleSolanaTransfer({
@@ -258,7 +258,7 @@ export default function usePocketWithdrawalController({
           setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')
           setNotice(operation.state === 'accepted' ? `${formatPocketDisplayAmount(operation.amount)} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
           const recovered = operation.state === 'submitted' && await recoverEvmOperation(operation).catch(() => false)
-          if (recovered) return
+          if (recovered) return true
           const session = await getEvmSession(network, selectedWallet.address)
           void reconcileCircleEvmEmailWithdraw({
             session,
@@ -273,7 +273,7 @@ export default function usePocketWithdrawalController({
             setNotice(`${formatPocketDisplayAmount(operation.amount)} USDC sent on ${networkLabel}`)
             void refreshBalances().catch(() => undefined)
           }).catch(() => undefined)
-          return
+          return operation.state === 'accepted'
         }
         const session = await getEvmSession(network, selectedWallet.address)
         writeEvmOperation(operation)
@@ -318,9 +318,12 @@ export default function usePocketWithdrawalController({
       setStatus(handedOff ? 'successful' : 'submitted')
       setNotice(handedOff ? `${formatPocketDisplayAmount(amount)} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
       if (handedOff) onActivity(`Withdrew ${amount} USDC on ${networkLabel}`)
-      setAmount('')
-      setAddress('')
+      if (!options?.preserveForm) {
+        setAmount('')
+        setAddress('')
+      }
       void refreshBalances().catch(() => undefined)
+      return handedOff
     } catch (reason) {
       setStatus('idle')
       const message = reason instanceof Error && reason.message ? reason.message : typeof reason === 'string' && reason ? reason : 'Withdraw failed.'
@@ -329,6 +332,7 @@ export default function usePocketWithdrawalController({
         else clearEvmOperation()
       }
       setError(message)
+      return false
     } finally {
       setPending(false)
     }
