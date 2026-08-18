@@ -176,10 +176,15 @@ export async function findEvmUsdcTransfer(input: {
   if (!isAddress(input.recipient)) throw new Error('Invalid USDC recipient.')
   if (input.payer && !isAddress(input.payer)) throw new Error('Invalid USDC payer.')
   if (input.chain === 'base' && input.payer && input.notBefore && input.notAfter) {
-    return findBaseBlockscoutUsdcTransfer({
-      payer: input.payer, recipient: input.recipient, minAmount: input.minAmount,
-      exactAmount: input.exactAmount, notBefore: input.notBefore, notAfter: input.notAfter,
-    })
+    try {
+      const explorerMatch = await findBaseBlockscoutUsdcTransfer({
+        payer: input.payer, recipient: input.recipient, minAmount: input.minAmount,
+        exactAmount: input.exactAmount, notBefore: input.notBefore, notAfter: input.notAfter,
+      })
+      if (explorerMatch) return explorerMatch
+    } catch (error) {
+      console.warn('[usdc-transfer-verify] Base explorer unavailable; using configured RPC:', error instanceof Error ? error.message : String(error))
+    }
   }
   const rpcUrl = rpcFor(input.chain)
   if (!rpcUrl) throw new Error(`PRIVATE_RPC_URL is not configured for ${input.chain}.`)
