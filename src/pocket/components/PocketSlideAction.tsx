@@ -36,13 +36,16 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
         : /payment|pay/.test(action)
           ? Wallet
           : Check
-  const visualStatus = status === 'idle' && optimisticPending ? 'pending' : status
-  const label = visualStatus === 'error'
+  const awaitingApproval = status === 'idle' && optimisticPending
+  const visualStatus = awaitingApproval ? 'pending' : status
+  const label = awaitingApproval
+    ? 'Awaiting approval'
+    : visualStatus === 'error'
     ? mergedLabels.error
     : visualStatus === 'pending'
-      ? mergedLabels.pending === 'Approve with fingerprint' ? 'Confirming send' : mergedLabels.pending
+      ? mergedLabels.pending
       : visualStatus === 'submitted'
-        ? mergedLabels.submitted === 'Sending' ? 'Sent - confirming' : mergedLabels.submitted
+        ? mergedLabels.submitted
         : visualStatus === 'successful'
           ? mergedLabels.successful
           : disabled

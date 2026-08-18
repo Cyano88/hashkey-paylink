@@ -346,10 +346,10 @@ export default function PocketHomeControls({
             </div>
           ) : null}
           <PocketSlideAction
-            status={bridgeStatus === 'successful' ? 'successful' : bridgeStatus === 'bridging' ? 'submitted' : bridgeStatus === 'confirming' || bridgeStatus === 'quoting' ? 'pending' : 'idle'}
+            status={bridgeStatus === 'successful' ? 'successful' : bridgeStatus === 'bridging' ? 'submitted' : bridgeStatus === 'confirming' ? 'pending' : 'idle'}
             disabled={!bridgeQuote || Number(bridgeQuote.total) > selectedBalance || bridgeStatus === 'quoting'}
             onConfirm={onBridge}
-            labels={{ disabled: bridgeStatus === 'quoting' && bridgeAmountReady ? 'Getting live quote' : 'Enter bridge amount', idle: 'Confirm move', pending: bridgeStatus === 'quoting' ? 'Refreshing live quote' : 'Confirm move in Circle', submitted: 'Move processing', successful: 'Sent' }}
+            labels={{ disabled: bridgeStatus === 'quoting' && bridgeAmountReady ? 'Getting live quote' : 'Enter bridge amount', idle: 'Confirm move', pending: 'Preparing move', submitted: 'Move processing', successful: 'Sent' }}
           />
           <p className="text-center text-[10px] leading-4 text-gray-400">Native USDC via Circle CCTP. Destination gas is handled by Circle; source network gas may apply.</p>
           {bridgeNotice && <p className={cn('text-center text-xs font-semibold', bridgeStatus === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bridgeNotice}</p>}

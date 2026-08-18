@@ -42,6 +42,7 @@ export default function usePocketWithdrawalController({
   wallet,
   balance,
   resetKey,
+  restoreOperations = true,
   ensureWallet,
   getEvmSession,
   getSolanaSession,
@@ -55,6 +56,7 @@ export default function usePocketWithdrawalController({
   wallet?: CirclePocketWallet
   balance: number
   resetKey: string
+  restoreOperations?: boolean
   ensureWallet: (network: PocketNetwork) => Promise<CirclePocketWallet | null>
   getEvmSession: (network: Exclude<PocketNetwork, 'solana'>, walletAddress: string) => Promise<CircleEvmEmailSession>
   getSolanaSession: (walletAddress: string) => Promise<PocketSolanaEmailSession>
@@ -108,7 +110,7 @@ export default function usePocketWithdrawalController({
   }, [resetKey])
 
   useEffect(() => {
-    if (network !== 'solana' || !wallet?.address) return
+    if (!restoreOperations || network !== 'solana' || !wallet?.address) return
     const operation = readRecentSolanaOperation()
     if (!operation || !['submitted', 'accepted'].includes(operation.state) || !operation.challengeId) return
     const sourceAddress = operation.sourceAddress ?? operation.fingerprint.split(':')[0]
@@ -118,7 +120,7 @@ export default function usePocketWithdrawalController({
   }, [network, resetKey, wallet?.address]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (network === 'solana' || !wallet?.address) return
+    if (!restoreOperations || network === 'solana' || !wallet?.address) return
     const operation = readRecentEvmOperation()
     if (!operation || !['submitted', 'accepted'].includes(operation.state) || !operation.challengeId || operation.network !== network || operation.sourceAddress.toLowerCase() !== wallet.address.toLowerCase()) return
     setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')

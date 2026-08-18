@@ -83,7 +83,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     ? 'successful'
     : bills.status === 'processing' || paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling'
       ? 'submitted'
-      : bills.status === 'paying' || bills.status === 'confirming' || paymentRouting?.status === 'checking' || paymentRouting?.status === 'moving'
+      : bills.status === 'paying' || bills.status === 'confirming' || paymentRouting?.status === 'moving'
         ? 'pending'
         : 'idle'
   const isData = view === 'data'
@@ -309,7 +309,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                               ? 'Checking balances'
                               : 'Review payment',
                         idle: bills.environment === 'sandbox' ? 'Confirm test payment' : 'Confirm payment',
-                        pending: paymentRouting?.status === 'checking' ? 'Checking balances' : paymentRouting?.status === 'moving' ? 'Confirm move in Circle' : 'Approve with fingerprint',
+                        pending: paymentRouting?.status === 'moving' ? 'Moving USDC' : 'Preparing payment',
                         submitted: paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling' ? 'USDC move confirming' : bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`,
                         successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent`,
                       }}
