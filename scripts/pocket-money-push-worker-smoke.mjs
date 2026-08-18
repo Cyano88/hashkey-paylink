@@ -59,4 +59,26 @@ assert.ok(pushes.every(item => item.input.tag.startsWith('pocket-')))
 assert.ok(pushes.some(item => item.eventId.includes(incomingHash)))
 assert.ok(pushes.some(item => item.eventId.includes(outgoingHash)))
 assert.equal(pushes.some(item => item.eventId.includes(acceptedHash)), false, 'accepted request transfer must not also produce a generic push')
-console.log('Pocket money push worker smoke tests passed: accepted payments reconcile to Paid while confirmed external sends and receipts notify without duplicates.')
+const olderHash = `0x${'8'.repeat(64)}`
+const olderPushes = []
+const olderMarks = []
+const olderResult = await runPocketMoneyPushWorker({
+  configured: () => true,
+  listOwners: async () => ['owner-old'],
+  readActivity: async () => [],
+  readWallets: async () => [{ network: 'base', walletAddress: '0xpayer' }],
+  listActions: async () => [],
+  listRequests: async () => [{ id: 'older-request', status: 'accepted', recipientId: 'owner-old', senderId: 'requester-old', senderAddress: '0x1111111111111111111111111111111111111111', amount: '2', network: 'base', updatedAt: now - 60 * 60_000 }],
+  markRequestPaid: async (ownerId, requestId, txHash) => {
+    olderMarks.push({ ownerId, requestId, txHash })
+    return { id: requestId, senderId: 'requester-old', recipientId: ownerId, amount: '2' }
+  },
+  findEvm: async input => { assert.equal(input.exactAmount, true); return { txHash: olderHash } },
+  findSolana: async () => null,
+  sendPush: async (ownerId, eventId, input) => { olderPushes.push({ ownerId, eventId, input }) },
+  now: () => now,
+})
+assert.deepEqual(olderResult, { ok: true, owners: 1, notifications: 2, errors: 0 })
+assert.deepEqual(olderMarks, [{ ownerId: 'owner-old', requestId: 'older-request', txHash: olderHash }])
+assert.deepEqual(olderPushes.map(item => item.input.title).sort(), ['Payment received', 'Payment sent'])
+console.log('Pocket money push worker smoke tests passed: recent and older accepted payments reconcile to Paid while confirmed external sends and receipts notify without duplicates.')

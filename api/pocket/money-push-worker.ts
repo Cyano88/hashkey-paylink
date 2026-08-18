@@ -1,7 +1,8 @@
 import { listCirclePocketActions } from '../circle-pocket-action-journal.js'
+import { findEvmUsdcTransfer, normalizeEvmUsdcChain } from '../usdc-transfer-verify.js'
 import { pocketRequestRepository } from './request-store.js'
 import { listPocketPushOwners, pocketPushConfigured, sendPocketPush } from './push-devices.js'
-import { readPocketLinkedWalletAddresses, readPocketWalletChainActivity } from './wallet-chain-activity.js'
+import { findSolanaUsdcTransfer, readPocketLinkedWalletAddresses, readPocketWalletChainActivity } from './wallet-chain-activity.js'
 
 const NETWORK_LABELS: Record<string, string> = { base: 'Base', arbitrum: 'Arbitrum', solana: 'Solana', arc: 'Arc' }
 let inFlight: Promise<Awaited<ReturnType<typeof runPocketMoneyPushWorker>>> | null = null
@@ -14,6 +15,8 @@ type Dependencies = {
   listActions: typeof listCirclePocketActions
   listRequests: typeof pocketRequestRepository.listFor
   markRequestPaid: typeof pocketRequestRepository.markPaid
+  findEvm: typeof findEvmUsdcTransfer
+  findSolana: typeof findSolanaUsdcTransfer
   sendPush: typeof sendPocketPush
   now: () => number
 }
@@ -37,6 +40,8 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
     listActions: listCirclePocketActions,
     listRequests: pocketRequestRepository.listFor,
     markRequestPaid: pocketRequestRepository.markPaid,
+    findEvm: findEvmUsdcTransfer,
+    findSolana: findSolanaUsdcTransfer,
     sendPush: sendPocketPush,
     now: Date.now,
     ...overrides,
@@ -73,16 +78,48 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
         if (request.senderId === ownerId && row.direction === 'in') return row.recipient?.toLowerCase() === senderAddress
         return false
       })
+      const reconciledRequestIds = new Set<string>()
       for (const row of rows.filter(isConfirmedMoney)) {
         const request = matchingAcceptedRequest(row)
         if (!request || request.recipientId !== ownerId || !row.txHash) continue
         const paid = await dependencies.markRequestPaid(ownerId, request.id, row.txHash)
+        reconciledRequestIds.add(request.id)
         ignoredHashes.add(row.txHash.toLowerCase())
         await Promise.allSettled([
           dependencies.sendPush(paid.senderId, `request-paid-received:${paid.id}`, { title: 'Payment received', body: `${paid.amount} USDC received.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
           dependencies.sendPush(paid.recipientId, `request-paid-sent:${paid.id}`, { title: 'Payment sent', body: `${paid.amount} USDC sent successfully.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
         ])
         notifications += 2
+      }
+      for (const request of requests.filter(item => item.status === 'accepted' && item.recipientId === ownerId).slice(0, 4)) {
+        if (reconciledRequestIds.has(request.id) || !request.senderAddress) continue
+        try {
+          const network = request.network === 'multi' ? 'base' : request.network
+          const payerWallet = wallets.find(wallet => wallet.network === network)?.walletAddress
+          if (!payerWallet) continue
+          const match = network === 'solana'
+            ? await dependencies.findSolana({ payer: payerWallet, recipient: request.senderAddress, amount: request.amount, notBefore: request.updatedAt })
+            : await dependencies.findEvm({
+                chain: normalizeEvmUsdcChain(network)!,
+                payer: payerWallet,
+                recipient: request.senderAddress,
+                minAmount: request.amount,
+                exactAmount: true,
+                notBefore: new Date(request.updatedAt).toISOString(),
+                notAfter: new Date(dependencies.now() + 120_000).toISOString(),
+              })
+          if (!match?.txHash) continue
+          const paid = await dependencies.markRequestPaid(ownerId, request.id, match.txHash)
+          ignoredHashes.add(match.txHash.toLowerCase())
+          reconciledRequestIds.add(request.id)
+          await Promise.allSettled([
+            dependencies.sendPush(paid.senderId, `request-paid-received:${paid.id}`, { title: 'Payment received', body: `${paid.amount} USDC received.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
+            dependencies.sendPush(paid.recipientId, `request-paid-sent:${paid.id}`, { title: 'Payment sent', body: `${paid.amount} USDC sent successfully.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
+          ])
+          notifications += 2
+        } catch (error) {
+          console.warn('[pocket-money-push] accepted request recovery deferred:', error instanceof Error ? error.message : String(error))
+        }
       }
       requests.filter(item => item.status === 'paid' && item.transactionHash).forEach(item => ignoredHashes.add(item.transactionHash!.toLowerCase()))
       const confirmed = rows.filter(row => {
