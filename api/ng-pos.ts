@@ -522,6 +522,13 @@ export function mergeRegisteredPaycrestActivity<
   })
 }
 
+export function bankWithdrawActivityStatus(order: { status: string; tx_hash?: string }) {
+  const status = order.status.trim().toLowerCase()
+  if (status === 'refunded') return 'reversed'
+  if (status === 'refunding') return 'pending'
+  return order.tx_hash ? 'successful' : status
+}
+
 export function paycrestActivityTimestamp(order: { created_at?: string; updated_at?: string }) {
   const createdAt = Date.parse(order.created_at || '')
   if (Number.isFinite(createdAt)) return createdAt
@@ -591,7 +598,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
             : isBankWithdrawOrder ? 'Direct bank payout' : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
         settlementType: isBankSendOrder ? 'PAYCREST_ONRAMP' : 'INSTANT_FIAT',
         amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
-        paycrestStatus: order.status,
+        paycrestStatus: isBankWithdrawOrder ? bankWithdrawActivityStatus(order) : order.status,
         direction: isBankWithdrawOrder ? 'out' : 'in',
         recipient: isBankSendOrder
           ? (order.destination_address || link?.destination_address || '')

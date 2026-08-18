@@ -152,7 +152,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                           {kind === 'wallet'
                             ? String(row.source).toLowerCase() === 'wallet-deposit' ? <ArrowDownToLine className="h-4 w-4" /> : String(row.source).toLowerCase() === 'wallet-bridge' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />
                             : String(row.source).toLowerCase() === 'request' ? row.direction === 'in' ? <ArrowDownToLine className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />
-                            : kind === 'bank' ? String(row.paycrestStatus ?? '').toLowerCase() === 'refunded' || row.refundTxHash ? <ArrowDownToLine className="h-4 w-4" /> : <Landmark className="h-4 w-4" /> : kind === 'purchases' ? row.source === 'bills' ? <Banknote className="h-4 w-4" /> : <Wallet className="h-4 w-4" /> : <Store className="h-4 w-4" />}
+                            : kind === 'bank' ? ['refunded', 'reversed'].includes(String(row.paycrestStatus ?? '').toLowerCase()) || row.refundTxHash ? <ArrowDownToLine className="h-4 w-4" /> : <Landmark className="h-4 w-4" /> : kind === 'purchases' ? row.source === 'bills' ? <Banknote className="h-4 w-4" /> : <Wallet className="h-4 w-4" /> : <Store className="h-4 w-4" />}
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">

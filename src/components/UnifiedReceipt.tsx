@@ -11,7 +11,7 @@ import {
   type PaylinkReceipt,
   type X402ReceiptLike,
 } from '../lib/paymentReceiptPdf'
-import { Check, Clock3, Copy, Eye, Loader2, Share2 } from '../pocket/components/PocketIcons'
+import { Check, Clock3, Copy, Eye, Loader2, Share2, Undo2 } from '../pocket/components/PocketIcons'
 import { CPurseIcon } from '../pocket/components/CPurseIcon'
 
 type UnifiedReceiptProps = {
@@ -32,9 +32,13 @@ type ReceiptResponse = {
 type ReceiptSurface = 'details' | 'receipt' | null
 
 const PENDING_RECEIPT_STATUSES = new Set(['deposited', 'fulfilling', 'fulfilled', 'needs review', 'pending', 'processing', 'reconciling', 'settling', 'submitted', 'verification pending'])
+const REVERSED_RECEIPT_STATUSES = new Set(['refunded', 'reversed'])
 
-function isPendingReceipt(receipt: PaylinkReceipt) {
-  return PENDING_RECEIPT_STATUSES.has(String(receipt.status || '').trim().toLowerCase())
+function receiptState(receipt: PaylinkReceipt) {
+  const status = String(receipt.status || '').trim().toLowerCase()
+  if (REVERSED_RECEIPT_STATUSES.has(status)) return 'reversed'
+  if (PENDING_RECEIPT_STATUSES.has(status)) return 'pending'
+  return 'successful'
 }
 
 function isCanonicalReceipt(receipt: ReceiptResponse['receipt']): receipt is PaylinkReceipt {
@@ -58,13 +62,13 @@ function BrandMark({ receipt, className = '' }: { receipt: PaylinkReceipt; class
   const brand = paymentReceiptBrand(receipt)
   const [failed, setFailed] = useState(false)
   if (brand.kind === 'pocket') {
-    return <CPurseIcon size="100%" title="" className={`text-gray-950 ${className}`} />
+    return <CPurseIcon size="100%" title="" className={`text-gray-950 dark:text-white ${className}`} />
   }
   if (brand.imageUrl && !failed) {
     return <img src={brand.imageUrl} alt="" onError={() => setFailed(true)} className={`object-contain ${className}`} />
   }
   return (
-    <span className={`flex items-center justify-center rounded-xl bg-gray-950 text-[10px] font-bold text-white ${className}`}>
+    <span className={`flex items-center justify-center rounded-xl bg-gray-950 text-[10px] font-bold text-white dark:bg-white dark:text-gray-950 ${className}`}>
       {brand.name.slice(0, 2).toUpperCase()}
     </span>
   )
@@ -73,38 +77,40 @@ function BrandMark({ receipt, className = '' }: { receipt: PaylinkReceipt; class
 function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
   const view = useMemo(() => paymentReceiptView(receipt), [receipt])
   const brand = paymentReceiptBrand(receipt)
-  const pending = isPendingReceipt(receipt)
+  const state = receiptState(receipt)
+  const pending = state === 'pending'
+  const reversed = state === 'reversed'
   return (
-    <article className="mx-auto flex h-full min-h-0 w-full max-w-md flex-col bg-white px-7 pb-4 pt-4 font-sans text-gray-950 sm:px-9">
+    <article className="mx-auto flex h-full min-h-0 w-full max-w-md flex-col bg-white px-7 pb-4 pt-4 font-sans text-gray-950 dark:bg-[#111216] dark:text-white sm:px-9">
       <header className="flex items-center justify-between gap-4">
         <span className="flex min-w-0 items-center gap-3">
           <BrandMark receipt={receipt} className="h-9 w-9 shrink-0" />
           <span className="truncate text-sm font-bold tracking-[-0.02em]">{brand.name}</span>
         </span>
-        <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-500">{view.badge}</span>
+        <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:bg-white/10 dark:text-gray-300">{view.badge}</span>
       </header>
 
       <section className="mt-3">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : 'bg-emerald-500'}`}>
-          {pending ? <Clock3 className="h-5 w-5" /> : <Check className="h-5 w-5" strokeWidth={2.5} />}
+        <span className={`flex h-9 w-9 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : reversed ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+          {pending ? <Clock3 className="h-5 w-5" /> : reversed ? <Undo2 className="h-5 w-5" /> : <Check className="h-5 w-5" strokeWidth={2.5} />}
         </span>
-        <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.02em]">{pending ? 'Payment pending' : 'Payment successful'}</h2>
+        <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.02em]">{pending ? 'Payment pending' : reversed ? 'Payment reversed' : 'Payment successful'}</h2>
         <p className="mt-1 text-[11px] font-medium text-gray-400">{view.timestamp}</p>
         <p className="mt-3 break-words text-[30px] font-bold tracking-[-0.045em]">{view.amount}</p>
       </section>
 
-      <dl className="mt-3 border-t border-gray-100 pt-0.5">
+      <dl className="mt-3 border-t border-gray-100 pt-0.5 dark:border-white/10">
         {view.rows.map(row => (
           <div key={row.label} className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-5 py-1.5">
             <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">{row.label}</dt>
-            <dd className={`min-w-0 break-words text-right text-[11px] font-semibold leading-5 text-gray-700 ${row.mono ? 'font-mono' : ''}`}>{row.value || '-'}</dd>
+            <dd className={`min-w-0 break-words text-right text-[11px] font-semibold leading-5 text-gray-700 dark:text-gray-200 ${row.mono ? 'font-mono' : ''}`}>{row.value || '-'}</dd>
           </div>
         ))}
       </dl>
 
-      <div className="mt-1.5 border-t border-gray-100 pt-2">
+      <div className="mt-1.5 border-t border-gray-100 pt-2 dark:border-white/10">
         <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">Reference ID</p>
-        <p className="mt-1 break-all font-mono text-[10px] font-semibold leading-5 text-gray-600">{view.reference}</p>
+        <p className="mt-1 break-all font-mono text-[10px] font-semibold leading-5 text-gray-600 dark:text-gray-300">{view.reference}</p>
       </div>
 
       <footer className="mt-auto pt-2 text-center text-[10px] font-semibold text-gray-400">Powered by Hash PayLink</footer>
@@ -114,14 +120,16 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
 
 function TransactionDetails({ receipt, copied, onCopy }: { receipt: PaylinkReceipt; copied: boolean; onCopy: () => void }) {
   const view = paymentReceiptView(receipt)
-  const pending = isPendingReceipt(receipt)
+  const state = receiptState(receipt)
+  const pending = state === 'pending'
+  const reversed = state === 'reversed'
   return (
     <div className="mx-auto w-full max-w-lg px-4 pb-12 pt-8">
       <div className="rounded-[28px] bg-white p-5 shadow-sm dark:bg-[#111216]">
         <div className="flex items-center gap-3">
-          <span className={`flex h-11 w-11 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : 'bg-emerald-500'}`}>{pending ? <Clock3 className="h-5 w-5" /> : <Check className="h-5 w-5" />}</span>
+          <span className={`flex h-11 w-11 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : reversed ? 'bg-amber-500' : 'bg-emerald-500'}`}>{pending ? <Clock3 className="h-5 w-5" /> : reversed ? <Undo2 className="h-5 w-5" /> : <Check className="h-5 w-5" />}</span>
           <span>
-            <span className="block text-sm font-bold text-gray-950 dark:text-white">{pending ? 'Payment pending' : 'Payment successful'}</span>
+            <span className="block text-sm font-bold text-gray-950 dark:text-white">{pending ? 'Payment pending' : reversed ? 'Payment reversed' : 'Payment successful'}</span>
             <span className="mt-0.5 block text-[11px] font-medium text-gray-400">{view.timestamp}</span>
           </span>
         </div>
@@ -220,12 +228,12 @@ function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: Payl
 
       {surface === 'details' ? <div className="min-h-0 flex-1 overflow-y-auto"><TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /></div> : (
         <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col px-3 pb-[max(0.5rem,var(--pocket-safe-bottom))] pt-2">
-          <div className="min-h-0 flex-1 overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm"><ReceiptDocument receipt={receipt} /></div>
+          <div className="min-h-0 flex-1 overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]"><ReceiptDocument receipt={receipt} /></div>
           <div className="mt-2 grid shrink-0 grid-cols-2 gap-2">
-            <button type="button" disabled={Boolean(sharing)} onClick={() => void share('image')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-950 disabled:opacity-60">
+            <button type="button" disabled={Boolean(sharing)} onClick={() => void share('image')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-950 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.08] dark:text-white">
               {sharing === 'image' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}Share as image
             </button>
-            <button type="button" disabled={Boolean(sharing)} onClick={() => void share('pdf')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-gray-950 px-4 text-xs font-bold text-white disabled:opacity-60">
+            <button type="button" disabled={Boolean(sharing)} onClick={() => void share('pdf')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-gray-950 px-4 text-xs font-bold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950">
               {sharing === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}Share as PDF
             </button>
           </div>

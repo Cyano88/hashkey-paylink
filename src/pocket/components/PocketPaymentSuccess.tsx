@@ -12,9 +12,9 @@ export default function PocketPaymentSuccess({ receipt, onDone, title = 'Bank pa
   const pending = outcome === 'pending'
   const heading = pending ? 'Payment pending' : 'Payment successful'
   const detail = outcome === 'handed-off'
-    ? 'Paycrest received your USDC. Bank delivery will update in Activity.'
+    ? 'Your USDC reached the payout recipient. Bank delivery will update in Activity.'
     : pending
-      ? "Paycrest's payment window elapsed before the deposit was detected. Follow the final status or refund in Activity."
+      ? 'The payment window elapsed before the recipient detected your USDC. Follow the final status or reversal in Activity.'
       : ''
   useEffect(() => {
     const previous = document.body.style.overflow

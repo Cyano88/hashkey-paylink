@@ -10,7 +10,9 @@ const FINAL_STATUSES = new Set([
   'delivered',
   'paid',
   'refunded',
+  'reversed',
   'settled',
+  'successful',
   'test complete',
   'validated',
 ])
@@ -43,6 +45,11 @@ function normalizedSettlement(row: PocketActivityRow) {
 
 export function pocketActivityStatus(row: PocketActivityRow) {
   const status = String(row.paycrestStatus || '').trim().toLowerCase()
+  if (normalizedSource(row) === 'bank-withdraw') {
+    if (status === 'refunded' || status === 'reversed') return 'reversed'
+    if (['deposited', 'fulfilled', 'fulfilling', 'settled', 'settling', 'successful', 'validated'].includes(status)) return 'successful'
+    if (status === 'pending' && /^0x[a-f0-9]{64}$/i.test(row.txHash)) return 'successful'
+  }
   return status || 'status unavailable'
 }
 

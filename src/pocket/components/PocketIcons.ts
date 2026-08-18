@@ -40,6 +40,7 @@ export {
   ExclamationCircleIcon as AlertCircle,
   ExclamationTriangleIcon as AlertTriangle,
   ArrowTopRightOnSquareIcon as ExternalLink,
+  ArrowUturnLeftIcon as Undo2,
   InformationCircleIcon as Info,
   LinkIcon as Link2,
   LockClosedIcon as Lock,

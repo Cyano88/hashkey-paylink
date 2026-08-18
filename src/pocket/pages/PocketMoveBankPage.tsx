@@ -171,7 +171,7 @@ export default function PocketMoveBankPage() {
     merchantId: direct.result.merchantId,
     contextLabel: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
     settlementType: 'INSTANT_FIAT',
-    paycrestStatus: direct.status === 'sent' ? 'deposited' : 'pending',
+    paycrestStatus: direct.status === 'sent' ? 'successful' : 'pending',
     direction: 'out',
     recipient: direct.result.accountName,
     destination: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),

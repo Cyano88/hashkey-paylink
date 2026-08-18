@@ -33,7 +33,7 @@ function storedOperation(fingerprint: string) {
 }
 
 function payoutError(reason: unknown, fallback: string) {
-  const message = reason instanceof Error ? reason.message : fallback
+  const message = (reason instanceof Error ? reason.message : fallback).replace(/\bPaycrest\b/gi, 'the payout recipient')
   return /failed to fetch|networkerror|network request failed|unable to resolve host|no address associated|enotfound|pocket could not connect/i.test(message)
     ? 'Pocket could not connect before a transfer was submitted. No money was sent. Try again.'
     : message
@@ -51,6 +51,11 @@ function hasPayoutWindowElapsed(payout: Pick<PocketBankWithdrawData, 'state' | '
 
 function submittedPayoutStatus(payout: Pick<PocketBankWithdrawData, 'state' | 'validUntil'>): 'processing' | 'pending' {
   return hasPayoutWindowElapsed(payout) ? 'pending' : 'processing'
+}
+
+function payoutHandoffSucceeded(payout: Pick<PocketBankWithdrawData, 'handoffVerified' | 'providerStatus' | 'state'>) {
+  const providerStatus = payout.providerStatus.trim().toLowerCase()
+  return payout.handoffVerified && payout.state !== 'refunded' && providerStatus !== 'refunding'
 }
 
 function clearStoredOperation() {
@@ -152,9 +157,9 @@ export default function usePocketBankWithdrawController({
       const active = activeIntentId.current === intentId
       if (active) {
         setResult(next)
-        if (!next.handoffVerified) setStatus(submittedPayoutStatus(next))
+        if (!payoutHandoffSucceeded(next)) setStatus(submittedPayoutStatus(next))
       }
-      if (next.handoffVerified) {
+      if (payoutHandoffSucceeded(next)) {
         clearActivePocketBankPayout(intentId)
         if (active) {
           activeIntentId.current = ''
@@ -242,7 +247,7 @@ export default function usePocketBankWithdrawController({
         // must never move a terminal success screen back to processing.
         if (!next || activeIntentId.current !== intentId || cancelled.current) return
         setResult(next)
-        if (next.handoffVerified) {
+        if (payoutHandoffSucceeded(next)) {
           clearActivePocketBankPayout(intentId)
           activeIntentId.current = ''
           clearStoredOperation()
@@ -312,7 +317,7 @@ export default function usePocketBankWithdrawController({
             }).catch(() => null)
             if (activeIntentId.current !== intentId || cancelled.current) return
             if (confirmed) setResult(confirmed)
-            if (confirmed?.handoffVerified) {
+            if (confirmed && payoutHandoffSucceeded(confirmed)) {
               clearActivePocketBankPayout(intentId)
               activeIntentId.current = ''
               clearStoredOperation()
@@ -501,7 +506,7 @@ export default function usePocketBankWithdrawController({
           }).catch(() => null)
           if (confirmed && activeIntentId.current === prepared.intentId) {
             setResult(confirmed)
-            if (confirmed.handoffVerified) {
+            if (payoutHandoffSucceeded(confirmed)) {
               clearActivePocketBankPayout(prepared.intentId)
               activeIntentId.current = ''
               setStatus('sent')
@@ -536,7 +541,7 @@ export default function usePocketBankWithdrawController({
         },
       }).catch(() => null)
       if (confirmed && activeIntentId.current === prepared.intentId) setResult(confirmed)
-      if (confirmed?.handoffVerified && activeIntentId.current === prepared.intentId) {
+      if (confirmed && payoutHandoffSucceeded(confirmed) && activeIntentId.current === prepared.intentId) {
         clearActivePocketBankPayout(prepared.intentId)
         activeIntentId.current = ''
         clearStoredOperation()

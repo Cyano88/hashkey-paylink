@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import { createPocketActivityHandler } from '../api/pocket/activity.ts'
-import { mergeRegisteredPaycrestActivity, paycrestActivityTimestamp } from '../api/ng-pos.ts'
+import { bankWithdrawActivityStatus, mergeRegisteredPaycrestActivity, paycrestActivityTimestamp } from '../api/ng-pos.ts'
 import { isPocketActivityReadData } from '../src/pocket/lib/pocketSchemas.ts'
+
+assert.equal(bankWithdrawActivityStatus({ status: 'deposited', tx_hash: '0x' + 'a'.repeat(64) }), 'successful')
+assert.equal(bankWithdrawActivityStatus({ status: 'pending', tx_hash: '0x' + 'b'.repeat(64) }), 'successful')
+assert.equal(bankWithdrawActivityStatus({ status: 'refunding', tx_hash: '0x' + 'c'.repeat(64) }), 'pending')
+assert.equal(bankWithdrawActivityStatus({ status: 'refunded', tx_hash: '0x' + 'd'.repeat(64) }), 'reversed')
 
 const registeredPayout = {
   eventId: 'ngpos-bank-withdraw-1',
@@ -197,8 +202,8 @@ assert.equal(loaded.body.payments[1].source, 'purchase')
 assert.equal(loaded.body.payments[1].activityLabel, 'PolyDesk funding')
 assert.equal(loaded.body.payments[1].receiptId, 'r1.test.signature')
 assert.equal(loaded.body.payments[2].source, 'bank-withdraw')
-assert.equal(loaded.body.payments[2].activityLabel, 'Reverted payment')
-assert.equal(loaded.body.payments[2].paycrestStatus, 'refunded')
+assert.equal(loaded.body.payments[2].activityLabel, 'Reversed payment')
+assert.equal(loaded.body.payments[2].paycrestStatus, 'reversed')
 assert.equal(loaded.body.payments[2].amountNgn, '1000')
 assert.equal(loaded.body.payments[3].source, 'bills')
 assert.equal(loaded.body.payments[3].amountNgn, '100')

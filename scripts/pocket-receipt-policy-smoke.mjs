@@ -77,6 +77,17 @@ assert.equal(pocketReceiptAvailability(bankPending), 'pending')
 assert.equal(pocketActivityReceipt(bankPending), null)
 assert.equal(pocketActivityReceipt(bankPending, { allowPending: true })?.status, 'processing')
 
+const bankDeposited = { ...bankPending, paycrestStatus: 'deposited' }
+assert.equal(pocketActivityStatus(bankDeposited), 'successful')
+assert.equal(pocketReceiptAvailability(bankDeposited), 'ready')
+assert.equal(pocketActivityReceipt(bankDeposited)?.status, 'successful')
+assert.equal(pocketActivityStatus({ ...bankPending, paycrestStatus: 'pending' }), 'successful')
+
+const bankReversed = { ...bankPending, paycrestStatus: 'refunded' }
+assert.equal(pocketActivityStatus(bankReversed), 'reversed')
+assert.equal(pocketReceiptAvailability(bankReversed), 'ready')
+assert.equal(pocketActivityReceipt(bankReversed)?.status, 'reversed')
+
 const bankSettled = { ...bankPending, paycrestStatus: 'settled', bankName: 'Example Bank', bankLast4: '1234', accountName: 'Pocket User' }
 assert.equal(pocketActivityReceipt(bankSettled)?.title, 'Bank payout')
 
