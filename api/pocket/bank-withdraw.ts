@@ -102,6 +102,11 @@ export function publicOrder(order: any, execution?: PaymentExecutionIntent, rout
     amountUsdc: text(order?.amount_usdc),
     receiveAddress: text(order?.receive_address),
     txHash: text(order?.tx_hash) || execution?.transactionHash || '',
+    // The provider order receives a transaction hash only after Hash PayLink
+    // verifies that Base USDC reached Paycrest's quoted receive address.
+    // An execution hash alone means Circle submitted a transaction, not that
+    // Paycrest has received it.
+    handoffVerified: Boolean(text(order?.tx_hash)),
     providerStatus: text(order?.status),
     state: resolvedPayoutState(order, execution),
     bankName: text(order?.bank_name),

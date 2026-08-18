@@ -28,7 +28,6 @@ import { PocketVerifiedBankFields } from '../features/move/PocketVerifiedBankFie
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
 import usePocketWallets from '../hooks/usePocketWallets'
-import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 import { pocketActivityReceipt } from '../lib/pocketReceipt'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 
@@ -153,13 +152,13 @@ export default function PocketMoveBankPage() {
   const recoveredPayout = !directAmountValid && Boolean(direct.result?.intentId) && direct.status !== 'idle' && direct.status !== 'sent'
   const directSlideStatus = direct.status === 'sent'
     ? 'successful'
-    : direct.status === 'processing' || direct.status === 'route-review' || (direct.status === 'routing' && (bankLiquidity.status === 'waiting' || bankLiquidity.status === 'reconciling'))
+    : direct.status === 'pending' || direct.status === 'processing' || direct.status === 'route-review' || (direct.status === 'routing' && (bankLiquidity.status === 'waiting' || bankLiquidity.status === 'reconciling'))
       ? 'submitted'
       : direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'authorizing'
         ? 'pending'
         : 'idle'
-  const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing' || direct.status === 'processing'
-  const bankReceipt = useMemo(() => (direct.status === 'sent' || (direct.status === 'processing' && Boolean(direct.result?.txHash))) && direct.result ? pocketActivityReceipt({
+  const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing' || direct.status === 'processing' || direct.status === 'pending'
+  const bankReceipt = useMemo(() => (direct.status === 'sent' || direct.status === 'pending') && direct.result ? pocketActivityReceipt({
     eventId: `bank-withdraw:${direct.result.intentId}`,
     txHash: direct.result.txHash,
     chain: 'base',
@@ -172,7 +171,7 @@ export default function PocketMoveBankPage() {
     merchantId: direct.result.merchantId,
     contextLabel: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
     settlementType: 'INSTANT_FIAT',
-    paycrestStatus: direct.status === 'sent' ? direct.result.providerStatus || 'settled' : 'processing',
+    paycrestStatus: direct.status === 'sent' ? 'deposited' : 'pending',
     direction: 'out',
     recipient: direct.result.accountName,
     destination: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
@@ -383,8 +382,6 @@ export default function PocketMoveBankPage() {
                 />}
                 {!recoveredPayout && direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
                 {!recoveredPayout && direct.status === 'routing' && directAmountValid && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
-                {!recoveredPayout && direct.status === 'processing' && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{direct.result?.providerStatus === 'fulfilled' ? 'Your bank transfer was delivered and is being verified.' : direct.result?.providerStatus === 'fulfilling' ? 'The provider is sending Naira to your bank.' : direct.result?.providerStatus === 'settling' ? 'Bank delivery is confirmed. Final settlement is completing.' : direct.result?.txHash ? 'Payout submitted. You can leave this page; Pocket will update Activity automatically.' : 'Circle is reconciling the submitted transfer. Check Activity before retrying.'}</p>}
-                {direct.status === 'sent' && direct.result?.amountUsdc && <p className="px-2 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPocketDisplayAmount(direct.result.amountUsdc)} USDC · {bankReceipt ? 'Bank payout completed' : 'Bank delivery processing'}</p>}
                 {!recoveredPayout && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
                 {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Enter a verified beneficiary account and a Naira amount.</p>}
               </div>
@@ -426,6 +423,7 @@ export default function PocketMoveBankPage() {
       {mode === 'withdraw' && bankReceipt && (
         <PocketPaymentSuccess
           receipt={bankReceipt}
+          outcome={direct.status === 'sent' ? 'handed-off' : 'pending'}
           onDone={() => {
             direct.resetResult()
             navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)

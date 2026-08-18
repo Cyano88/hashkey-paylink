@@ -8,6 +8,7 @@ export type PocketBankWithdrawData = {
   amountUsdc: string
   receiveAddress: string
   txHash: string
+  handoffVerified: boolean
   providerStatus: string
   state: 'processing' | 'sent' | 'refunded' | 'failed' | 'expired'
   bankName: string
@@ -36,12 +37,23 @@ function parseData(value: unknown): PocketBankWithdrawData {
     throw new Error(typeof (value as any)?.error === 'string' ? (value as any).error : 'Bank payout failed.')
   }
   const data = (value as any).data
+  // During a rolling web/API deployment the previous API does not include
+  // handoffVerified. On that version txHash is only exposed after the exact
+  // Base USDC transfer has been verified and submitted to Paycrest, so it is
+  // the backward-compatible proof of the same handoff boundary.
+  const normalized = {
+    ...data,
+    handoffVerified: typeof data.handoffVerified === 'boolean'
+      ? data.handoffVerified
+      : Boolean(String(data.txHash || '').trim()),
+  }
   if (!data.intentId || !data.orderId || !data.amountUsdc || !data.receiveAddress
+    || typeof normalized.handoffVerified !== 'boolean'
     || !['processing', 'sent', 'refunded', 'failed', 'expired'].includes(data.state)
     || !['ensure_liquidity', 'wait_bridge', 'authorize_transfer', 'provider_processing', 'done'].includes(data.nextAction)) {
     throw new Error('Bank payout response was invalid.')
   }
-  return data as PocketBankWithdrawData
+  return normalized as PocketBankWithdrawData
 }
 
 async function mutate({ accessToken, body, idempotencyKey, fetcher = fetch }: { accessToken: string; body: Record<string, unknown>; idempotencyKey?: string; fetcher?: typeof fetch }) {

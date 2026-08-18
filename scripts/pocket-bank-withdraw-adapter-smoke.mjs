@@ -87,6 +87,7 @@ const handler = createPocketBankWithdrawHandler({
   invokeLegacy: async (_req, body) => {
     calls.push({ kind: 'legacy', body })
     if (body.action === 'offrampStatus') return { status: 200, body: { ok: true, order: body.refresh ? refreshedOrder : processingOrder } }
+    if (body.action === 'markOfframpPaid') return { status: 200, body: { ok: true, order: { ...processingOrder, status: 'deposited', tx_hash: body.tx_hash } } }
     return { status: 200, body: { ok: true, order: processingOrder } }
   },
 })
@@ -212,6 +213,7 @@ const submittedTransfer = await request(handler, {
 assert.equal(submittedTransfer.statusCode, 200)
 assert.equal(submittedTransfer.body.data.nextAction, 'provider_processing')
 assert.equal(submittedTransfer.body.data.txHash, `0x${'2'.repeat(64)}`)
+assert.equal(submittedTransfer.body.data.handoffVerified, false)
 const duplicateSubmittedTransfer = await request(handler, {
   action: 'submit',
   intent_id: processingOrder.intent_id,
@@ -236,6 +238,7 @@ assert.equal(confirmed.statusCode, 200)
 assert.equal(confirmed.body.data.state, 'processing')
 assert.equal(confirmed.body.data.nextAction, 'provider_processing')
 assert.equal(confirmed.body.data.txHash, `0x${'2'.repeat(64)}`)
+assert.equal(confirmed.body.data.handoffVerified, true)
 assert.equal(calls.at(-1).body.action, 'markOfframpPaid')
 
 refreshedOrder = settledOrder
@@ -243,6 +246,7 @@ const status = await request(handler, { action: 'status', intent_id: processingO
 assert.equal(status.statusCode, 200)
 assert.equal(status.body.data.state, 'sent')
 assert.equal(status.body.data.nextAction, 'done')
+assert.equal(status.body.data.handoffVerified, true)
 assert.equal(payoutState('validated'), 'sent')
 assert.equal(payoutState('deposited'), 'processing')
 assert.equal(payoutState('refunded'), 'refunded')

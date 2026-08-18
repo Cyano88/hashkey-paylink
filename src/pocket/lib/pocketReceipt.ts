@@ -17,6 +17,9 @@ const FINAL_STATUSES = new Set([
 
 const PENDING_STATUSES = new Set([
   'bridging',
+  'deposited',
+  'fulfilled',
+  'fulfilling',
   'needs review',
   'paid pending',
   'pending',

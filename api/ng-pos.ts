@@ -486,7 +486,7 @@ function parseSettlementType(value: unknown): SettlementType {
 
 function isVisiblePaycrestHistoryStatus(status: string) {
   const normalized = status.trim().toLowerCase()
-  return ['deposited', 'validated', 'settling', 'settled', 'refunding', 'refunded'].includes(normalized)
+  return ['deposited', 'pending', 'fulfilling', 'fulfilled', 'validated', 'settling', 'settled', 'refunding', 'refunded'].includes(normalized)
 }
 
 function isReconcileablePaycrestStatus(status: string) {

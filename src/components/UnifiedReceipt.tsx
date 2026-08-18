@@ -11,7 +11,7 @@ import {
   type PaylinkReceipt,
   type X402ReceiptLike,
 } from '../lib/paymentReceiptPdf'
-import { Check, Copy, Eye, Loader2, Share2 } from '../pocket/components/PocketIcons'
+import { Check, Clock3, Copy, Eye, Loader2, Share2 } from '../pocket/components/PocketIcons'
 import { CPurseIcon } from '../pocket/components/CPurseIcon'
 
 type UnifiedReceiptProps = {
@@ -30,6 +30,12 @@ type ReceiptResponse = {
 }
 
 type ReceiptSurface = 'details' | 'receipt' | null
+
+const PENDING_RECEIPT_STATUSES = new Set(['deposited', 'fulfilling', 'fulfilled', 'needs review', 'pending', 'processing', 'reconciling', 'settling', 'submitted', 'verification pending'])
+
+function isPendingReceipt(receipt: PaylinkReceipt) {
+  return PENDING_RECEIPT_STATUSES.has(String(receipt.status || '').trim().toLowerCase())
+}
 
 function isCanonicalReceipt(receipt: ReceiptResponse['receipt']): receipt is PaylinkReceipt {
   return Boolean(receipt?.receiptId && receipt.receiptHash && receipt.eventId && receipt.status)
@@ -67,6 +73,7 @@ function BrandMark({ receipt, className = '' }: { receipt: PaylinkReceipt; class
 function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
   const view = useMemo(() => paymentReceiptView(receipt), [receipt])
   const brand = paymentReceiptBrand(receipt)
+  const pending = isPendingReceipt(receipt)
   return (
     <article className="mx-auto flex h-full min-h-0 w-full max-w-md flex-col bg-white px-7 pb-4 pt-4 font-sans text-gray-950 sm:px-9">
       <header className="flex items-center justify-between gap-4">
@@ -78,10 +85,10 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
       </header>
 
       <section className="mt-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white">
-          <Check className="h-5 w-5" strokeWidth={2.5} />
+        <span className={`flex h-9 w-9 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : 'bg-emerald-500'}`}>
+          {pending ? <Clock3 className="h-5 w-5" /> : <Check className="h-5 w-5" strokeWidth={2.5} />}
         </span>
-        <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.02em]">Payment successful</h2>
+        <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.02em]">{pending ? 'Payment pending' : 'Payment successful'}</h2>
         <p className="mt-1 text-[11px] font-medium text-gray-400">{view.timestamp}</p>
         <p className="mt-3 break-words text-[30px] font-bold tracking-[-0.045em]">{view.amount}</p>
       </section>
@@ -107,13 +114,14 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
 
 function TransactionDetails({ receipt, copied, onCopy }: { receipt: PaylinkReceipt; copied: boolean; onCopy: () => void }) {
   const view = paymentReceiptView(receipt)
+  const pending = isPendingReceipt(receipt)
   return (
     <div className="mx-auto w-full max-w-lg px-4 pb-12 pt-8">
       <div className="rounded-[28px] bg-white p-5 shadow-sm dark:bg-[#111216]">
         <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500 text-white"><Check className="h-5 w-5" /></span>
+          <span className={`flex h-11 w-11 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : 'bg-emerald-500'}`}>{pending ? <Clock3 className="h-5 w-5" /> : <Check className="h-5 w-5" />}</span>
           <span>
-            <span className="block text-sm font-bold text-gray-950 dark:text-white">Payment successful</span>
+            <span className="block text-sm font-bold text-gray-950 dark:text-white">{pending ? 'Payment pending' : 'Payment successful'}</span>
             <span className="mt-0.5 block text-[11px] font-medium text-gray-400">{view.timestamp}</span>
           </span>
         </div>
@@ -201,8 +209,8 @@ function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: Payl
   }
 
   return createPortal(
-    <div className={`fixed inset-0 z-[140] bg-[#F5F5F7] font-sans text-gray-950 dark:bg-[#0A0A0A] dark:text-white ${surface === 'receipt' ? 'overflow-hidden' : 'overflow-y-auto'}`} role="dialog" aria-modal="true" aria-label={surface === 'details' ? 'Transaction details' : 'Receipt preview'}>
-      <div className="sticky top-0 z-10 border-b border-gray-200/80 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:border-white/10 dark:bg-[#0A0A0A]/95">
+    <div className="fixed inset-x-0 bottom-0 z-[140] flex flex-col overflow-hidden bg-[#F5F5F7] font-sans text-gray-950 dark:bg-[#0A0A0A] dark:text-white" style={{ top: 'var(--pocket-safe-top)' }} role="dialog" aria-modal="true" aria-label={surface === 'details' ? 'Transaction details' : 'Receipt preview'}>
+      <div className="z-10 shrink-0 border-b border-gray-200/80 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:border-white/10 dark:bg-[#0A0A0A]/95">
         <div className="mx-auto grid h-14 max-w-lg grid-cols-[48px_1fr_48px] items-center">
           <span className="h-10 w-12" />
           <h1 className="text-sm font-bold tracking-[-0.02em]">{surface === 'details' ? 'Transaction details' : 'Receipt'}</h1>
@@ -210,8 +218,8 @@ function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: Payl
         </div>
       </div>
 
-      {surface === 'details' ? <TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /> : (
-        <div className="mx-auto flex h-[calc(100dvh-56px)] w-full max-w-lg flex-col px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
+      {surface === 'details' ? <div className="min-h-0 flex-1 overflow-y-auto"><TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /></div> : (
+        <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col px-3 pb-[max(0.5rem,var(--pocket-safe-bottom))] pt-2">
           <div className="min-h-0 flex-1 overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm"><ReceiptDocument receipt={receipt} /></div>
           <div className="mt-2 grid shrink-0 grid-cols-2 gap-2">
             <button type="button" disabled={Boolean(sharing)} onClick={() => void share('image')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-950 disabled:opacity-60">
