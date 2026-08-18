@@ -73,7 +73,7 @@ const olderResult = await runPocketMoneyPushWorker({
     olderMarks.push({ ownerId, requestId, txHash })
     return { id: requestId, senderId: 'requester-old', recipientId: ownerId, amount: '2' }
   },
-  findEvm: async input => { assert.equal(input.exactAmount, true); return { txHash: olderHash } },
+  findEvm: async input => { assert.equal(input.exactAmount, true); assert.equal(input.lookbackBlocks, 43_200n); assert.equal(input.chunkSize, 3_600n); return { txHash: olderHash } },
   findSolana: async () => null,
   sendPush: async (ownerId, eventId, input) => { olderPushes.push({ ownerId, eventId, input }) },
   now: () => now,

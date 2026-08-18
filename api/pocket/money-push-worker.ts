@@ -6,6 +6,8 @@ import { findSolanaUsdcTransfer, readPocketLinkedWalletAddresses, readPocketWall
 
 const NETWORK_LABELS: Record<string, string> = { base: 'Base', arbitrum: 'Arbitrum', solana: 'Solana', arc: 'Arc' }
 let inFlight: Promise<Awaited<ReturnType<typeof runPocketMoneyPushWorker>>> | null = null
+const acceptedRecoveryAttemptAt = new Map<string, number>()
+const ACCEPTED_RECOVERY_BACKOFF_MS = 10 * 60_000
 
 type Dependencies = {
   configured: () => boolean
@@ -93,6 +95,9 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       }
       for (const request of requests.filter(item => item.status === 'accepted' && item.recipientId === ownerId).slice(0, 4)) {
         if (reconciledRequestIds.has(request.id) || !request.senderAddress) continue
+        const recoveryKey = ${ownerId}:`n        const lastAttempt = acceptedRecoveryAttemptAt.get(recoveryKey) ?? 0
+        if (dependencies.now() - lastAttempt < ACCEPTED_RECOVERY_BACKOFF_MS) continue
+        acceptedRecoveryAttemptAt.set(recoveryKey, dependencies.now())
         try {
           const network = request.network === 'multi' ? 'base' : request.network
           const payerWallet = wallets.find(wallet => wallet.network === network)?.walletAddress
@@ -107,11 +112,14 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
                 exactAmount: true,
                 notBefore: new Date(request.updatedAt).toISOString(),
                 notAfter: new Date(dependencies.now() + 120_000).toISOString(),
+                lookbackBlocks: 43_200n,
+                chunkSize: 3_600n,
               })
           if (!match?.txHash) continue
           const paid = await dependencies.markRequestPaid(ownerId, request.id, match.txHash)
           ignoredHashes.add(match.txHash.toLowerCase())
           reconciledRequestIds.add(request.id)
+          acceptedRecoveryAttemptAt.delete(recoveryKey)
           await Promise.allSettled([
             dependencies.sendPush(paid.senderId, `request-paid-received:${paid.id}`, { title: 'Payment received', body: `${paid.amount} USDC received.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
             dependencies.sendPush(paid.recipientId, `request-paid-sent:${paid.id}`, { title: 'Payment sent', body: `${paid.amount} USDC sent successfully.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
