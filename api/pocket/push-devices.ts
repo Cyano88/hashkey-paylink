@@ -27,6 +27,14 @@ export async function registerPocketPushDevice(ownerId: string, tokenValue: unkn
   })
 }
 
+export function pocketPushConfigured() {
+  return Boolean(String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON ?? '').trim())
+}
+
+export async function listPocketPushOwners() {
+  const snapshot = normalized(await readDurableJson<PocketPushStore>(STORE_KEY))
+  return [...new Set(Object.values(snapshot.devices).map(device => device.ownerId).filter(Boolean))]
+}
 export async function unregisterPocketPushDevice(ownerId: string, tokenValue: unknown) {
   const token = cleanToken(tokenValue)
   await mutateDurableJson<PocketPushStore>(STORE_KEY, current => {
@@ -103,6 +111,8 @@ export async function sendPocketPush(ownerId: string, eventId: string, input: { 
   }))
   await mutateDurableJson<PocketPushStore>(STORE_KEY, current => {
     const store = normalized(current)
+    const cutoff = Date.now() - 45 * 24 * 60 * 60_000
+    Object.entries(store.delivered).forEach(([key, deliveredAt]) => { if (deliveredAt < cutoff) delete store.delivered[key] })
     if (responses.some(result => result.ok)) store.delivered[deliveryKey] = Date.now()
     responses.forEach((result, index) => {
       if (!result.ok && /UNREGISTERED|registration-token-not-registered|invalid-registration-token/i.test(result.body)) delete store.devices[tokens[index]]

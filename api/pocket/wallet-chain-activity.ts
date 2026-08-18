@@ -149,6 +149,34 @@ export function solanaUsdcTransferParties(
   return { ownerDelta, counterparty }
 }
 
+export async function findSolanaUsdcTransfer(input: {
+  payer: string
+  recipient: string
+  amount: string
+  notBefore: number
+  notAfter?: number
+  limit?: number
+}) {
+  const rpcUrl = process.env.SOLANA_RPC_URL?.trim() || 'https://api.mainnet-beta.solana.com'
+  const connection = new Connection(rpcUrl, 'confirmed')
+  const payer = new PublicKey(input.payer)
+  const recipient = new PublicKey(input.recipient).toBase58()
+  const payerAta = await getAssociatedTokenAddress(SOLANA_USDC_MINT, payer, true)
+  const signatures = await connection.getSignaturesForAddress(payerAta, { limit: Math.max(1, Math.min(input.limit ?? 100, 100)) }, 'confirmed')
+  const transactions = await connection.getParsedTransactions(signatures.map(row => row.signature), { maxSupportedTransactionVersion: 0, commitment: 'confirmed' })
+  const expected = Number(input.amount)
+  const notAfter = input.notAfter ?? Date.now() + 120_000
+  for (let index = 0; index < transactions.length; index += 1) {
+    const transaction = transactions[index]
+    const confirmedAt = Number(transaction?.blockTime ?? signatures[index]?.blockTime ?? 0) * 1_000
+    if (!transaction || transaction.meta?.err || !Number.isFinite(confirmedAt) || confirmedAt < input.notBefore || confirmedAt > notAfter) continue
+    const transfer = solanaUsdcTransferParties(payer.toBase58(), transaction.meta?.preTokenBalances, transaction.meta?.postTokenBalances)
+    if (transfer.counterparty !== recipient || Math.abs(Math.abs(transfer.ownerDelta) - expected) > 0.000001 || transfer.ownerDelta >= 0) continue
+    const txHash = signatures[index]?.signature || transaction.transaction.signatures[0]
+    if (txHash) return { txHash, confirmedAt }
+  }
+  return null
+}
 async function solanaActivity(wallet: string): Promise<PocketActivityRow[]> {
   const rpcUrl = process.env.SOLANA_RPC_URL?.trim() || 'https://api.mainnet-beta.solana.com'
   const connection = new Connection(rpcUrl, 'confirmed')

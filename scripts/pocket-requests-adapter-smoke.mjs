@@ -17,6 +17,7 @@ async function call(handler, method, body = {}) { const res = response(); await 
 const identity = { current: 'sender' }
 const eventId = 'request_event_0001'
 const txHash = '0x' + 'a'.repeat(64)
+const reconciledTxHash = '0x' + 'd'.repeat(64)
 let bridgeStatus = 'pending'
 
 try {
@@ -30,6 +31,7 @@ try {
       : key === 'sender:base'
         ? { privyUserId: 'sender', chain: 'base', circleWalletId: 'wallet-1', circleWalletAddress: '0x1111111111111111111111111111111111111111', circleBlockchain: 'ETH', updatedAt: 1 }
         : null,
+    findEvm: async input => { assert.equal(input.exactAmount, true); return { txHash: reconciledTxHash } },
     verifyEvm: async input => { assert.equal(input.payer, '0x2222222222222222222222222222222222222222'); assert.equal(input.recipient, '0x1111111111111111111111111111111111111111'); assert.equal(input.minAmount, '5'); return { transactionHash: input.txHash } },
     readBridgeStatus: async () => ({ status: bridgeStatus }),
   })
@@ -97,6 +99,15 @@ try {
   assert.equal(completed.statusCode, 200, JSON.stringify(completed.body))
   assert.equal(completed.body.request.status, 'paid')
   assert.equal(completed.body.request.transactionHash, txHash)
+  identity.current = 'sender'
+  const reconciledRequest = await call(handler, 'POST', { action: 'create', recipientPocketId: '22222222', eventId: 'request_event_reconcile', title: 'Reconcile', amount: '5', network: 'base' })
+  identity.current = 'recipient'
+  await call(handler, 'POST', { action: 'accept', id: reconciledRequest.body.request.id })
+  const reconciled = await call(handler, 'POST', { action: 'reconcile', id: reconciledRequest.body.request.id })
+  assert.equal(reconciled.statusCode, 200, JSON.stringify(reconciled.body))
+  assert.equal(reconciled.body.request.status, 'paid')
+  assert.equal(reconciled.body.request.transactionHash, reconciledTxHash)
+
   identity.current = 'sender'
   const second = await call(handler, 'POST', { action: 'create', recipientPocketId: '22222222', eventId: 'request_event_0002', title: 'Tickets', amount: '5', network: 'base' })
   assert.equal(second.statusCode, 201, JSON.stringify(second.body))

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import { AlertCircle, Bell, Check, Loader2, XCircle } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import { decidePocketRequest, markPocketRequestsRead, POCKET_REQUESTS_UPDATED_EVENT, readPocketRequests, type PocketRequestItem } from '../api/pocketRequestsClient'
+import { decidePocketRequest, markPocketRequestsRead, POCKET_REQUESTS_UPDATED_EVENT, readPocketRequests, reconcilePocketRequest, type PocketRequestItem } from '../api/pocketRequestsClient'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
@@ -19,6 +19,8 @@ export default function PocketNotificationsPage() {
   const scrollerRef = useRef<HTMLDivElement>(null)
   const pullStartY = useRef<number | null>(null)
   const pullDistanceRef = useRef(0)
+  const refreshTriggered = useRef(false)
+  const lastReconcileAt = useRef(0)
 
   const load = useCallback(async ({ showBusy = false, markRead = false } = {}) => {
     if (!authenticated) { setBusy(false); return }
@@ -27,7 +29,15 @@ export default function PocketNotificationsPage() {
       const token = await getAccessToken()
       if (!token) throw new Error('Sign in again to read requests.')
       const next = await readPocketRequests(token)
-      setItems(next)
+      let resolved = next
+      const accepted = next.filter(item => item.status === 'accepted').slice(0, 4)
+      if (accepted.length && Date.now() - lastReconcileAt.current >= 30_000) {
+        lastReconcileAt.current = Date.now()
+        const updates = await Promise.all(accepted.map(item => reconcilePocketRequest(token, item.id).catch(() => item)))
+        const byId = new Map(updates.map(item => [item.id, item]))
+        resolved = next.map(item => byId.get(item.id) ?? item)
+      }
+      setItems(resolved)
       setError('')
       if (markRead) await markPocketRequestsRead(token)
     } catch (reason) {
@@ -42,7 +52,10 @@ export default function PocketNotificationsPage() {
     setRefreshing(true)
     pullDistanceRef.current = 32
     setPullDistance(32)
-    try { await load({ markRead: true }) }
+    try {
+      const refreshWork = load({ markRead: true })
+      await Promise.race([refreshWork, new Promise(resolve => window.setTimeout(resolve, 3_000))])
+    }
     finally { pullDistanceRef.current = 0; setRefreshing(false); setPullDistance(0) }
   }, [load, refreshing])
 
@@ -69,6 +82,7 @@ export default function PocketNotificationsPage() {
 
   const startPull = (event: TouchEvent<HTMLDivElement>) => {
     if (refreshing || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
+    refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
   }
   const movePull = (event: TouchEvent<HTMLDivElement>) => {
@@ -76,10 +90,11 @@ export default function PocketNotificationsPage() {
     const distance = Math.min(58, Math.max(0, (event.touches[0].clientY - pullStartY.current) * 0.62))
     pullDistanceRef.current = distance
     setPullDistance(distance)
+    if (distance >= 30 && !refreshTriggered.current) { refreshTriggered.current = true; void refresh() }
   }
   const finishPull = () => {
     pullStartY.current = null
-    if (pullDistanceRef.current >= 30) void refresh()
+    if (pullDistanceRef.current >= 30 && !refreshTriggered.current) void refresh()
     else { pullDistanceRef.current = 0; setPullDistance(0) }
   }
 

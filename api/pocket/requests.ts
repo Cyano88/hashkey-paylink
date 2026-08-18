@@ -2,13 +2,13 @@ import type { Request, Response } from 'express'
 import { Connection } from '@solana/web3.js'
 import { localCurrencyProfileRepository, verifiedPrivyUser, type ProfileRepository } from '../local-currency-profile.js'
 import { circleLinkKey, readCircleLink, type CircleLinkRecord } from '../privy-circle-link.js'
-import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from '../usdc-transfer-verify.js'
-import { solanaUsdcTransferParties } from './wallet-chain-activity.js'
+import { findEvmUsdcTransfer, normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from '../usdc-transfer-verify.js'
+import { findSolanaUsdcTransfer, solanaUsdcTransferParties } from './wallet-chain-activity.js'
 import { pocketRequestRepository, type PocketRequestRepository } from './request-store.js'
 import { isCircleBridgeComplete, readCircleBridgeStatus } from './circle-bridge-status.js'
 import { sendPocketPush } from './push-devices.js'
 
-type Dependencies = { verifyUser(req: Request): ReturnType<typeof verifiedPrivyUser>; profiles: ProfileRepository; repository: PocketRequestRepository; readWallet?: (key: string) => Promise<CircleLinkRecord | null>; verifyEvm?: typeof verifyEvmUsdcTransfer; solanaConnection?: () => Connection; readBridgeStatus?: typeof readCircleBridgeStatus }
+type Dependencies = { verifyUser(req: Request): ReturnType<typeof verifiedPrivyUser>; profiles: ProfileRepository; repository: PocketRequestRepository; readWallet?: (key: string) => Promise<CircleLinkRecord | null>; verifyEvm?: typeof verifyEvmUsdcTransfer; findEvm?: typeof findEvmUsdcTransfer; findSolana?: typeof findSolanaUsdcTransfer; solanaConnection?: () => Connection; readBridgeStatus?: typeof readCircleBridgeStatus }
 const fail = (res: Response, status: number, message: string) => res.status(status).json({ ok: false, error: { message } })
 const maskedEmail = (email: string) => {
   const [local, domain] = email.toLowerCase().split('@')
@@ -19,6 +19,53 @@ const profileName = (profile: Awaited<ReturnType<ProfileRepository['getByPocketI
 const publicRequest = (item: Awaited<ReturnType<PocketRequestRepository['listFor']>>[number], userId: string) => ({ id: item.id, eventId: item.eventId, direction: item.recipientId === userId ? 'incoming' : 'outgoing', senderPocketId: item.senderPocketId, senderName: item.senderName, recipientPocketId: item.recipientPocketId, recipientName: item.recipientName || `Pocket ${item.recipientPocketId}`, title: item.title, amount: item.amount, flexibleAmount: item.flexibleAmount, network: item.network, paymentPath: item.paymentPath || '', status: item.status, transactionHash: item.transactionHash || '', createdAt: item.createdAt, updatedAt: item.updatedAt })
 
 export function createPocketRequestsHandler(deps: Dependencies) {
+  const notifyPaid = (request: Awaited<ReturnType<PocketRequestRepository['getFor']>>) => {
+    void Promise.allSettled([
+      sendPocketPush(request.senderId, 'request-paid-received:' + request.id, {
+        title: 'Payment received',
+        body: `${request.amount} USDC received.`,
+        path: '/activity',
+        tag: 'pocket-request:' + request.id,
+      }),
+      sendPocketPush(request.recipientId, 'request-paid-sent:' + request.id, {
+        title: 'Payment sent',
+        body: `${request.amount} USDC sent successfully.`,
+        path: '/activity',
+        tag: 'pocket-request:' + request.id,
+      }),
+    ])
+  }
+
+  const reconcileAccepted = async (viewerId: string, id: string) => {
+    const request = await deps.repository.getFor(viewerId, id)
+    if (request.status !== 'accepted') return request
+    if (!deps.readWallet || !request.senderAddress) return request
+    const network = request.network === 'multi' ? 'base' : request.network
+    const payerWallet = await deps.readWallet(circleLinkKey(request.recipientId, network))
+    if (!payerWallet?.circleWalletAddress) return request
+    const notBefore = request.updatedAt
+    const match = network === 'solana'
+      ? await (deps.findSolana ?? findSolanaUsdcTransfer)({
+          payer: payerWallet.circleWalletAddress,
+          recipient: request.senderAddress,
+          amount: request.amount,
+          notBefore,
+        })
+      : await (deps.findEvm ?? findEvmUsdcTransfer)({
+          chain: normalizeEvmUsdcChain(network)!,
+          payer: payerWallet.circleWalletAddress,
+          recipient: request.senderAddress,
+          minAmount: request.amount,
+          exactAmount: true,
+          notBefore: new Date(notBefore).toISOString(),
+          notAfter: new Date(Date.now() + 120_000).toISOString(),
+        })
+    if (!match?.txHash) return request
+    const paid = await deps.repository.markPaid(request.recipientId, request.id, match.txHash)
+    notifyPaid(paid)
+    return paid
+  }
+
   return async function handler(req: Request, res: Response) {
     if (req.method !== 'GET' && req.method !== 'POST') return fail(res, 405, 'Method not allowed.')
     try {
@@ -101,6 +148,10 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         })
         return res.json({ ok: true, route })
       }
+      if (req.method === 'POST' && req.body?.action === 'reconcile') {
+        const request = await reconcileAccepted(identity.userId, String(req.body?.id ?? ''))
+        return res.json({ ok: true, request: publicRequest(request, identity.userId) })
+      }
       if (req.method === 'POST' && req.body?.action === 'complete') {
         const request = await deps.repository.getFor(identity.userId, String(req.body?.id ?? ''))
         if (request.recipientId !== identity.userId) return fail(res, 403, 'Only the requested Pocket user can pay this request.')
@@ -130,12 +181,8 @@ export function createPocketRequestsHandler(deps: Dependencies) {
           }
         }
         const paid = await deps.repository.markPaid(identity.userId, request.id, txHash)
-        void sendPocketPush(paid.senderId, 'request-paid:' + paid.id, {
-          title: 'Payment received',
-          body: 'Your Pocket activity has been updated.',
-          path: '/activity',
-          tag: 'pocket-request:' + paid.id,
-        }).catch(() => undefined)
+        notifyPaid(paid)
+
         return res.json({ ok: true, request: publicRequest(paid, identity.userId) })
       }
       if (req.method === 'POST') return fail(res, 400, 'Choose a valid request action.')
@@ -149,4 +196,4 @@ export function createPocketRequestsHandler(deps: Dependencies) {
     }
   }
 }
-export default createPocketRequestsHandler({ verifyUser: verifiedPrivyUser, profiles: localCurrencyProfileRepository, repository: pocketRequestRepository, readWallet: readCircleLink, verifyEvm: verifyEvmUsdcTransfer })
+export default createPocketRequestsHandler({ verifyUser: verifiedPrivyUser, profiles: localCurrencyProfileRepository, repository: pocketRequestRepository, readWallet: readCircleLink, verifyEvm: verifyEvmUsdcTransfer, findEvm: findEvmUsdcTransfer, findSolana: findSolanaUsdcTransfer })

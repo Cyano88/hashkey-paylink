@@ -103,6 +103,7 @@ import pocketAgentAskHandler from './api/pocket/agent-ask.js'
 import pocketSupportCasesHandler from './api/pocket/support-cases.js'
 import { readPocketOperationsHealth } from './api/pocket/operations-health.js'
 import { drainPocketReconciliation, pocketReconciliationHandler } from './api/pocket/reconciliation-worker.js'
+import { drainPocketMoneyPushWorker } from './api/pocket/money-push-worker.js'
 import pocketTransactionOperationsHandler from './api/pocket/transaction-operations.js'
 import pocketWalletsHandler from './api/pocket/wallets/index.js'
 import pocketWalletLinkHandler from './api/pocket/wallets/link.js'
@@ -470,6 +471,15 @@ void drainPocketReconciliation().catch(error => {
   console.error('[pocket-reconciliation] startup run failed:', error instanceof Error ? error.message : String(error))
 })
 
+const pocketMoneyPushTimer = setInterval(() => {
+  void drainPocketMoneyPushWorker().catch(error => {
+    console.error('[pocket-money-push] scheduled run failed:', error instanceof Error ? error.message : String(error))
+  })
+}, Math.max(15_000, Number(process.env.POCKET_MONEY_PUSH_INTERVAL_MS ?? 30_000)))
+pocketMoneyPushTimer.unref()
+void drainPocketMoneyPushWorker().catch(error => {
+  console.error('[pocket-money-push] startup run failed:', error instanceof Error ? error.message : String(error))
+})
 const arcAgreementOutboxTimer = setInterval(() => {
   void drainArcAgreementWebhookOutbox().catch(error => {
     console.error('[arc-agreement-webhook] scheduled outbox drain failed:', error instanceof Error ? error.message : String(error))

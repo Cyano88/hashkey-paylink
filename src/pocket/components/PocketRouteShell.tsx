@@ -77,7 +77,8 @@ export default function PocketRouteShell({
     pullDistanceRef.current = 34
     setPullDistance(34)
     try {
-      await refreshPocketData()
+      const refreshWork = refreshPocketData()
+      await Promise.race([refreshWork, new Promise(resolve => window.setTimeout(resolve, 3_000))])
     } finally {
       pullDistanceRef.current = 0
       setRefreshing(false)

@@ -33,6 +33,7 @@
     "test:pocket-ledger": "node --import tsx scripts/pocket-ledger-smoke.mjs",
     "test:pocket-load": "node --import tsx scripts/pocket-load-smoke.mjs",
     "test:pocket-reconciliation": "node --import tsx scripts/pocket-reconciliation-worker-smoke.mjs",
+    "test:pocket-money-push": "node --import tsx scripts/pocket-money-push-worker-smoke.mjs",
     "test:pocket-transaction-operations": "node --import tsx scripts/pocket-transaction-operations-smoke.mjs",
     "ops:pocket-reconcile": "node --import tsx scripts/pocket-reconcile-once.mjs",
     "ops:pocket-resolve-legacy-pos": "node --import tsx scripts/pocket-resolve-legacy-pos.mjs",

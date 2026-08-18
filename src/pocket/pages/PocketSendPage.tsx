@@ -13,7 +13,7 @@ import usePocketWallets from '../hooks/usePocketWallets'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import usePocketWithdrawalController from '../controllers/usePocketWithdrawalController'
 import usePocketPaymentLiquidityController, { type PocketPaymentLiquidityPersistence } from '../controllers/usePocketPaymentLiquidityController'
-import { completePocketRequest, readPocketRequestRoute, readPocketRequests, resolvePocketRecipient, startPocketRequestRoute, updatePocketRequestRoute, type PocketRequestItem, type PocketResolvedRecipient } from '../api/pocketRequestsClient'
+import { completePocketRequest, readPocketRequestRoute, reconcilePocketRequest, readPocketRequests, resolvePocketRecipient, startPocketRequestRoute, updatePocketRequestRoute, type PocketRequestItem, type PocketResolvedRecipient } from '../api/pocketRequestsClient'
 import { formatPocketDisplayAmount } from '../lib/pocketMoney'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
@@ -130,6 +130,30 @@ export default function PocketSendPage() {
     return () => { cancelled = true }
   }, [getAccessToken, paymentRequest, paymentTxHash, requestConfirmed])
 
+  useEffect(() => {
+    if (!paymentRequest || paymentRequest.status !== 'accepted' || !requestAccepted || requestConfirmed) return
+    let cancelled = false
+    const reconcile = async () => {
+      try {
+        const token = await getAccessToken()
+        if (!token) return
+        const next = await reconcilePocketRequest(token, paymentRequest.id)
+        if (!cancelled && next.status === 'paid') {
+          setPaymentRequest(next)
+          setRequestConfirmed(true)
+          setRequestError('')
+          window.localStorage.removeItem(`pocket.request.payment.${paymentRequest.id}`)
+          window.localStorage.removeItem(`pocket.request.accepted.${paymentRequest.id}`)
+        }
+      } catch {
+        // A submitted transfer remains protected by its idempotency key. The
+        // next bounded reconciliation pass checks the same on-chain payment.
+      }
+    }
+    void reconcile()
+    const interval = window.setInterval(reconcile, 5_000)
+    return () => { cancelled = true; window.clearInterval(interval) }
+  }, [getAccessToken, paymentRequest, requestAccepted, requestConfirmed])
   const submitPayment = useCallback(async () => {
     if (!paymentRequest) {
       await send.withdraw()
