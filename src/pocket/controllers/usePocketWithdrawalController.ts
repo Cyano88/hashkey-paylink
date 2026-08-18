@@ -12,7 +12,7 @@ import { validatePocketWithdrawal } from './pocketWithdrawalValidation'
 
 const SOLANA_SEND_OPERATION_KEY = 'pocket:solana-send:operation:v2'
 const EVM_SEND_OPERATION_KEY = 'pocket:evm-send:operation:v1'
-type SolanaSendOperation = { fingerprint: string; idempotencyKey: string; challengeId: string; transactionId: string; state: 'preparing' | 'submitted' | 'confirmed'; updatedAt: number; sourceAddress?: string; recipient?: string; amount?: string }
+type SolanaSendOperation = { fingerprint: string; idempotencyKey: string; challengeId: string; transactionId: string; state: 'preparing' | 'submitted' | 'accepted' | 'confirmed'; updatedAt: number; sourceAddress?: string; recipient?: string; amount?: string }
 function readRecentSolanaOperation(): SolanaSendOperation | null {
   try {
     const value = JSON.parse(localStorage.getItem(SOLANA_SEND_OPERATION_KEY) || 'null') as SolanaSendOperation | null
@@ -25,7 +25,7 @@ function readSolanaOperation(fingerprint: string): SolanaSendOperation | null {
 }
 function writeSolanaOperation(value: SolanaSendOperation) { localStorage.setItem(SOLANA_SEND_OPERATION_KEY, JSON.stringify(value)) }
 function clearSolanaOperation() { localStorage.removeItem(SOLANA_SEND_OPERATION_KEY) }
-type EvmSendOperation = { fingerprint: string; idempotencyKey: string; challengeId: string; transactionId: string; state: 'preparing' | 'submitted'; network: Exclude<PocketNetwork, 'solana'>; sourceAddress: string; recipient: string; amount: string; updatedAt: number }
+type EvmSendOperation = { fingerprint: string; idempotencyKey: string; challengeId: string; transactionId: string; state: 'preparing' | 'submitted' | 'accepted'; network: Exclude<PocketNetwork, 'solana'>; sourceAddress: string; recipient: string; amount: string; updatedAt: number }
 function readRecentEvmOperation(): EvmSendOperation | null {
   try {
     const value = JSON.parse(localStorage.getItem(EVM_SEND_OPERATION_KEY) || 'null') as EvmSendOperation | null
@@ -78,19 +78,19 @@ export default function usePocketWithdrawalController({
   useEffect(() => {
     if (network !== 'solana' || !wallet?.address) return
     const operation = readRecentSolanaOperation()
-    if (!operation || operation.state !== 'submitted' || !operation.challengeId) return
+    if (!operation || !['submitted', 'accepted'].includes(operation.state) || !operation.challengeId) return
     const sourceAddress = operation.sourceAddress ?? operation.fingerprint.split(':')[0]
     if (sourceAddress !== wallet.address) return
-    setStatus('submitted')
-    setNotice('Transfer submitted. Pocket will verify final delivery without reopening authentication.')
+    setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')
+    setNotice(operation.state === 'accepted' ? `${formatPocketDisplayAmount(operation.amount ?? '')} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
   }, [network, resetKey, wallet?.address]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (network === 'solana' || !wallet?.address) return
     const operation = readRecentEvmOperation()
-    if (!operation || operation.state !== 'submitted' || !operation.challengeId || operation.network !== network || operation.sourceAddress.toLowerCase() !== wallet.address.toLowerCase()) return
-    setStatus('submitted')
-    setNotice('Transfer submitted. Pocket will verify final delivery without reopening authentication.')
+    if (!operation || !['submitted', 'accepted'].includes(operation.state) || !operation.challengeId || operation.network !== network || operation.sourceAddress.toLowerCase() !== wallet.address.toLowerCase()) return
+    setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')
+    setNotice(operation.state === 'accepted' ? `${formatPocketDisplayAmount(operation.amount)} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
   }, [network, networkLabel, resetKey, wallet?.address]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setMax = useCallback(() => {
@@ -155,6 +155,7 @@ export default function usePocketWithdrawalController({
     setStatus('pending')
     try {
       let handedOff = false
+      let circleAccepted = false
       const selectedWallet = options?.walletOverride ?? wallet ?? await ensureWallet(network)
       if (!selectedWallet) throw new Error('Circle wallet setup was cancelled.')
       if (network === 'solana') {
@@ -162,9 +163,9 @@ export default function usePocketWithdrawalController({
         const fingerprint = [selectedWallet.address, recipient, amount.trim()].join(':')
         const existing = readSolanaOperation(fingerprint)
         const operation: SolanaSendOperation = existing ?? { fingerprint, idempotencyKey: crypto.randomUUID(), challengeId: '', transactionId: '', state: 'preparing', updatedAt: Date.now(), sourceAddress: selectedWallet.address, recipient, amount: amount.trim() }
-        if (operation.state === 'submitted' && operation.challengeId) {
-          setStatus('submitted')
-          setNotice('Transfer already submitted. Pocket is checking final delivery.')
+        if (['submitted', 'accepted'].includes(operation.state) && operation.challengeId) {
+          setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')
+          setNotice(operation.state === 'accepted' ? `${formatPocketDisplayAmount(operation.amount ?? amount)} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
           void reconcileCircleSolanaTransfer({
             session,
             challengeId: operation.challengeId,
@@ -187,14 +188,18 @@ export default function usePocketWithdrawalController({
           amount: amount.trim(),
           idempotencyKey: operation.idempotencyKey,
           onChallenge: identifiers => writeSolanaOperation({ ...operation, ...identifiers, state: 'submitted', updatedAt: Date.now() }),
+          onAccepted: identifiers => {
+            circleAccepted = true
+            writeSolanaOperation({ ...operation, ...identifiers, state: 'accepted', updatedAt: Date.now() })
+          },
         })
-        writeSolanaOperation({ ...operation, challengeId: result.challengeId, transactionId: result.transactionId, state: result.state, updatedAt: Date.now() })
+        writeSolanaOperation({ ...operation, challengeId: result.challengeId, transactionId: result.transactionId, state: result.state === 'confirmed' ? 'confirmed' : circleAccepted ? 'accepted' : 'submitted', updatedAt: Date.now() })
         setTxHash(result.txHash)
-        handedOff = result.state === 'confirmed'
-        if (handedOff) clearSolanaOperation()
-        if (!handedOff) {
+        handedOff = result.state === 'confirmed' || circleAccepted
+        if (result.txHash) clearSolanaOperation()
+        if (!result.txHash) {
           const sentAmount = amount
-          const submittedOperation = { ...operation, challengeId: result.challengeId, transactionId: result.transactionId, state: 'submitted' as const, updatedAt: Date.now() }
+          const submittedOperation = { ...operation, challengeId: result.challengeId, transactionId: result.transactionId, state: circleAccepted ? 'accepted' as const : 'submitted' as const, updatedAt: Date.now() }
           void reconcileCircleSolanaTransfer({
             session,
             challengeId: result.challengeId,
@@ -207,7 +212,7 @@ export default function usePocketWithdrawalController({
             setStatus('successful')
             setNotice(`${formatPocketDisplayAmount(sentAmount)} USDC sent on ${networkLabel}`)
             void refreshBalances().catch(() => undefined)
-            onActivity(`Withdrew ${sentAmount} USDC on ${networkLabel}`)
+            if (!circleAccepted) onActivity(`Withdrew ${sentAmount} USDC on ${networkLabel}`)
           }).catch(() => undefined)
         }
       } else {
@@ -217,9 +222,9 @@ export default function usePocketWithdrawalController({
         const operation: EvmSendOperation = existing?.fingerprint === fingerprint
           ? existing
           : { fingerprint, idempotencyKey: crypto.randomUUID(), challengeId: '', transactionId: '', state: 'preparing', network, sourceAddress: selectedWallet.address, recipient, amount: amount.trim(), updatedAt: Date.now() }
-        if (operation.state === 'submitted' && operation.challengeId) {
-          setStatus('submitted')
-          setNotice('Transfer already submitted. Pocket is checking final delivery.')
+        if (['submitted', 'accepted'].includes(operation.state) && operation.challengeId) {
+          setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')
+          setNotice(operation.state === 'accepted' ? `${formatPocketDisplayAmount(operation.amount)} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
           void reconcileCircleEvmEmailWithdraw({
             session,
             challengeId: operation.challengeId,
@@ -243,15 +248,19 @@ export default function usePocketWithdrawalController({
           amount,
           idempotencyKey: operation.idempotencyKey,
           onChallenge: identifiers => writeEvmOperation({ ...operation, ...identifiers, state: 'submitted', updatedAt: Date.now() }),
+          onAccepted: identifiers => {
+            circleAccepted = true
+            writeEvmOperation({ ...operation, ...identifiers, state: 'accepted', updatedAt: Date.now() })
+          },
           confirm: false,
         })
         if (result.txHash) setTxHash(result.txHash)
-        handedOff = Boolean(result.txHash)
-        if (handedOff) clearEvmOperation()
-        if (!handedOff) {
+        handedOff = Boolean(result.txHash) || circleAccepted
+        if (result.txHash) clearEvmOperation()
+        if (!result.txHash) {
           const submitted = readRecentEvmOperation()
           if (submitted?.fingerprint === fingerprint && submitted.challengeId) {
-            writeEvmOperation({ ...submitted, state: 'submitted', updatedAt: Date.now() })
+            writeEvmOperation({ ...submitted, state: circleAccepted ? 'accepted' : 'submitted', updatedAt: Date.now() })
             void reconcileCircleEvmEmailWithdraw({
               session,
               challengeId: submitted.challengeId,
@@ -264,15 +273,15 @@ export default function usePocketWithdrawalController({
               setStatus('successful')
               setNotice(`${formatPocketDisplayAmount(operation.amount)} USDC sent on ${networkLabel}`)
               void refreshBalances().catch(() => undefined)
-              onActivity(`Withdrew ${operation.amount} USDC on ${networkLabel}`)
+              if (!circleAccepted) onActivity(`Withdrew ${operation.amount} USDC on ${networkLabel}`)
             }).catch(() => undefined)
           }
         }
       }
       setPending(false)
       setStatus(handedOff ? 'successful' : 'submitted')
-      setNotice(handedOff ? `${formatPocketDisplayAmount(amount)} USDC sent on ${networkLabel}` : 'Your send was accepted. Pocket is confirming delivery.')
-      onActivity(`Withdrew ${amount} USDC on ${networkLabel}`)
+      setNotice(handedOff ? `${formatPocketDisplayAmount(amount)} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
+      if (handedOff) onActivity(`Withdrew ${amount} USDC on ${networkLabel}`)
       setAmount('')
       setAddress('')
       void refreshBalances().catch(() => undefined)

@@ -459,6 +459,7 @@ export async function sendCircleSolanaTransfer(params: {
   amount: string
   idempotencyKey: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
+  onAccepted?: (value: { challengeId: string; transactionId: string }) => void
 }): Promise<{ state: 'submitted' | 'confirmed'; txHash: string; challengeId: string; transactionId: string }> {
   if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
   const sdk = new W3SSdk({
@@ -491,8 +492,12 @@ export async function sendCircleSolanaTransfer(params: {
     if (isCircleCancellationError(reason)) throw reason
     const transactionId = await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId, 8_000).catch(() => null)
     const txHash = transactionId ? await pollCircleSolanaTransaction(params.session.userToken, transactionId, 8_000).catch(() => null) : null
+    if (transactionId || txHash) {
+      params.onAccepted?.({ challengeId: challenge.challengeId, transactionId: transactionId ?? '' })
+    }
     return { state: txHash ? 'confirmed' : 'submitted', txHash: txHash ?? '', challengeId: challenge.challengeId, transactionId: transactionId ?? '' }
   }
+  params.onAccepted?.({ challengeId: challenge.challengeId, transactionId: circleTransactionId(result) ?? circleTransactionId(challenge) ?? '' })
   const directHash = solanaTransactionHash(result)
   if (directHash) return { state: 'confirmed', txHash: directHash, challengeId: challenge.challengeId, transactionId: circleTransactionId(result) ?? circleTransactionId(challenge) ?? '' }
   let transactionId = circleTransactionId(result) ?? circleTransactionId(challenge)

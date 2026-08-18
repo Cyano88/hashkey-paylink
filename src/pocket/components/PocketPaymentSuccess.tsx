@@ -14,7 +14,7 @@ export default function PocketPaymentSuccess({ receipt, onDone, title = 'Bank pa
   const detail = outcome === 'handed-off'
     ? 'Paycrest received your USDC. Bank delivery will update in Activity.'
     : pending
-      ? 'Your transfer was submitted but the Paycrest handoff is not verified yet. Follow its final status in Activity.'
+      ? "Paycrest's payment window elapsed before the deposit was detected. Follow the final status or refund in Activity."
       : ''
   useEffect(() => {
     const previous = document.body.style.overflow

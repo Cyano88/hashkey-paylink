@@ -43,6 +43,16 @@ function isPayoutExpiry(message: string) {
   return /payout (?:window|quote).*(?:expired|expiry)|payment window expired|payment timed out/i.test(message)
 }
 
+function hasPayoutWindowElapsed(payout: Pick<PocketBankWithdrawData, 'state' | 'validUntil'>) {
+  if (payout.state === 'expired') return true
+  const validUntil = Date.parse(payout.validUntil || '')
+  return Number.isFinite(validUntil) && validUntil <= Date.now()
+}
+
+function submittedPayoutStatus(payout: Pick<PocketBankWithdrawData, 'state' | 'validUntil'>): 'processing' | 'pending' {
+  return hasPayoutWindowElapsed(payout) ? 'pending' : 'processing'
+}
+
 function clearStoredOperation() {
   window.sessionStorage.removeItem(BANK_PAYOUT_OPERATION_KEY)
 }
@@ -140,7 +150,10 @@ export default function usePocketBankWithdrawController({
       const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
       if (!next) continue
       const active = activeIntentId.current === intentId
-      if (active) setResult(next)
+      if (active) {
+        setResult(next)
+        if (!next.handoffVerified) setStatus(submittedPayoutStatus(next))
+      }
       if (next.handoffVerified) {
         clearActivePocketBankPayout(intentId)
         if (active) {
@@ -153,7 +166,7 @@ export default function usePocketBankWithdrawController({
         return
       }
       if (next.nextAction === 'ensure_liquidity' || next.nextAction === 'wait_bridge' || next.nextAction === 'authorize_transfer') {
-        if (active) setStatus(readActivePocketBankPayoutTransfer(intentId) ? 'pending' : 'routing')
+        if (active) setStatus(readActivePocketBankPayoutTransfer(intentId) ? submittedPayoutStatus(next) : 'routing')
         return
       }
       if (next.state === 'sent') {
@@ -188,13 +201,10 @@ export default function usePocketBankWithdrawController({
         return
       }
       if (next.state === 'expired') {
-        clearActivePocketBankPayout(intentId)
         if (active) {
-          activeIntentId.current = ''
-          clearStoredOperation()
-          setResult(null)
-          setStatus('idle')
-          setError(PAYMENT_TIMEOUT_NOTICE)
+          setResult(next)
+          setStatus('pending')
+          setError('')
         }
         return
       }
@@ -226,7 +236,7 @@ export default function usePocketBankWithdrawController({
           clearStoredOperation()
           return
         }
-        setStatus('pending')
+        setStatus('processing')
         const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
         // A response started before a receipt closed this intent is stale. It
         // must never move a terminal success screen back to processing.
@@ -259,11 +269,17 @@ export default function usePocketBankWithdrawController({
           clearStoredOperation()
           return
         }
-        if (next.state === 'failed' || next.state === 'expired') {
+        if (next.state === 'expired') {
+          setResult(next)
+          setStatus('pending')
+          setError('')
+          return
+        }
+        if (next.state === 'failed') {
           clearActivePocketBankPayout(intentId)
           activeIntentId.current = ''
           setStatus('idle')
-          setError(next.state === 'expired' ? PAYMENT_TIMEOUT_NOTICE : 'The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
+          setError('The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
           clearStoredOperation()
           return
         }
@@ -271,7 +287,7 @@ export default function usePocketBankWithdrawController({
         // Status polling is safe; background reconciliation must never reopen
         // Circle authentication or create another transfer.
         if (!recoveredTxHash) {
-          setStatus('pending')
+          setStatus(submittedPayoutStatus(next))
           return
         }
       // A submitted transfer may be recorded and reconciled, but this path never
@@ -284,7 +300,7 @@ export default function usePocketBankWithdrawController({
             })
             if (activeIntentId.current !== intentId || cancelled.current) return
             setResult(submitted)
-            setStatus('pending')
+            setStatus(submittedPayoutStatus(submitted))
             const confirmed = await confirmPocketBankWithdraw({
               accessToken,
               request: {
@@ -304,21 +320,21 @@ export default function usePocketBankWithdrawController({
               setError('')
               await onSentRef.current()
             } else {
-              setStatus('pending')
+              setStatus(submittedPayoutStatus(confirmed ?? submitted))
               void pollUntilSettled(accessToken, intentId)
             }
           } catch {
             if (activeIntentId.current !== intentId || cancelled.current) return
-            setStatus('pending')
+            setStatus(submittedPayoutStatus(next))
             setError('')
           }
           return
         }
         if (next.nextAction === 'ensure_liquidity' || next.nextAction === 'wait_bridge' || next.nextAction === 'authorize_transfer') {
-          setStatus('pending')
+          setStatus(submittedPayoutStatus(next))
           return
         }
-        setStatus('pending')
+        setStatus(submittedPayoutStatus(next))
         void pollUntilSettled(accessToken, intentId)
       } finally {
         reconciling.current = false
@@ -451,14 +467,14 @@ export default function usePocketBankWithdrawController({
           acceptedTransfer = identifiers
           transactionSubmitted = true
           saveActivePocketBankPayoutAcceptance(prepared.intentId, identifiers)
-          setStatus('pending')
+          setStatus(submittedPayoutStatus(payable))
         },
         confirm: false,
       })
       if (!transfer.txHash) {
         if (!acceptedTransfer) throw new Error('Circle did not submit the payout. No money was sent.')
         setResult(payable)
-        setStatus('pending')
+        setStatus(submittedPayoutStatus(payable))
         clearStoredOperation()
         void reconcileCircleEvmEmailWithdraw({
           session,
@@ -506,7 +522,7 @@ export default function usePocketBankWithdrawController({
         request: { intent_id: prepared.intentId, tx_hash: transfer.txHash },
       })
       setResult(submitted)
-      setStatus('pending')
+      setStatus(submittedPayoutStatus(submitted))
       idempotencyKey.current = ''
       window.sessionStorage.removeItem(BANK_PAYOUT_OPERATION_KEY)
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
@@ -528,7 +544,7 @@ export default function usePocketBankWithdrawController({
         setError('')
         await onSentRef.current()
       } else {
-        setStatus('pending')
+        setStatus(submittedPayoutStatus(confirmed ?? submitted))
         void pollUntilSettled(accessToken, prepared.intentId)
       }
     } catch (reason) {
@@ -545,13 +561,13 @@ export default function usePocketBankWithdrawController({
         return
       }
       if (message.includes('submitted and is being reconciled')) {
-        setStatus('pending')
+        setStatus(submittedPayoutStatus(prepared))
         setError('')
         if (reconciliation) void pollUntilSettled(reconciliation.accessToken, reconciliation.intentId)
         return
       }
       if (transactionSubmitted) {
-        setStatus('pending')
+        setStatus(submittedPayoutStatus(prepared))
         setError('')
         if (reconciliation) void pollUntilSettled(reconciliation.accessToken, reconciliation.intentId)
         return

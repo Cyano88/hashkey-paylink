@@ -45,6 +45,7 @@ import { PrivyDisconnectButton } from '../lib/PrivyDisconnectButton'
 import { PRIVY_AUTH_ENABLED } from '../lib/authMode'
 import { readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
 import { askPocketAgent } from '../pocket/api/pocketAgentClient'
+import { pocketApiUrl } from '../pocket/lib/pocketRoutes'
 import { isClearAgentHashChatCommand } from '../lib/agentHashChat'
 import { circlePocketAgentHeaders, getCirclePocketBrowserSession } from '../lib/circlePocketAgentIdentity'
 import {
@@ -2065,7 +2066,7 @@ export function TelegramHelperPanel({
     let cancelled = false
     const syncSupport = async () => {
       try {
-        const response = await fetch('/api/pocket/support/cases?action=list-mine', {
+        const response = await fetch(pocketApiUrl('/api/pocket/support/cases?action=list-mine'), {
           cache: 'no-store', headers: await helperProfileHeaders(),
         })
         const data = await readPocketSupportResponse<{ ok?: boolean; cases?: PocketSupportCase[] }>(response)
@@ -2238,7 +2239,7 @@ export function TelegramHelperPanel({
       ...(message.question ? [{ author: 'user', text: message.question }] : []),
       ...(message.answer ? [{ author: 'agent', text: message.answer }] : []),
     ])
-    const response = await fetch('/api/pocket/support/cases', {
+    const response = await fetch(pocketApiUrl('/api/pocket/support/cases'), {
       method: 'POST',
       headers: await helperProfileHeaders(true),
       body: JSON.stringify({
@@ -2255,7 +2256,7 @@ export function TelegramHelperPanel({
   }
 
   async function replyToPocketSupport(caseId: string, text: string) {
-    const response = await fetch('/api/pocket/support/cases', {
+    const response = await fetch(pocketApiUrl('/api/pocket/support/cases'), {
       method: 'POST', headers: await helperProfileHeaders(true),
       body: JSON.stringify({ action: 'reply', caseId, message: text }),
     })
@@ -2264,7 +2265,7 @@ export function TelegramHelperPanel({
   }
 
   async function markPocketSupportRead(caseId: string) {
-    const response = await fetch('/api/pocket/support/cases', {
+    const response = await fetch(pocketApiUrl('/api/pocket/support/cases'), {
       method: 'POST', headers: await helperProfileHeaders(true),
       body: JSON.stringify({ action: 'mark-read', caseId }),
     })
@@ -2281,7 +2282,7 @@ export function TelegramHelperPanel({
     setHumanSupportBusy(true)
     setAskError('')
     try {
-      const response = await fetch('/api/pocket/support/cases', {
+      const response = await fetch(pocketApiUrl('/api/pocket/support/cases'), {
         method: 'POST', headers: await helperProfileHeaders(true),
         body: JSON.stringify({ action: 'create', entrypoint: 'human_chat', category: 'account', priority: 'normal', summary: 'Human support requested' }),
       })
