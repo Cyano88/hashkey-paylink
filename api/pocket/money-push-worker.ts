@@ -95,7 +95,8 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       }
       for (const request of requests.filter(item => item.status === 'accepted' && item.recipientId === ownerId).slice(0, 4)) {
         if (reconciledRequestIds.has(request.id) || !request.senderAddress) continue
-        const recoveryKey = ${ownerId}:`n        const lastAttempt = acceptedRecoveryAttemptAt.get(recoveryKey) ?? 0
+        const recoveryKey = `${ownerId}:${request.id}`
+        const lastAttempt = acceptedRecoveryAttemptAt.get(recoveryKey) ?? 0
         if (dependencies.now() - lastAttempt < ACCEPTED_RECOVERY_BACKOFF_MS) continue
         acceptedRecoveryAttemptAt.set(recoveryKey, dependencies.now())
         try {
