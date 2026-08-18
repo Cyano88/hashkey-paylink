@@ -65,6 +65,34 @@ await assert.rejects(
   /confirmed after the checkout expired/,
 )
 
+const discoveryCalls = []
+globalThis.fetch = async (_url, init) => {
+  const request = JSON.parse(String(init?.body ?? '{}'))
+  discoveryCalls.push(request)
+  let result
+  if (request.method === 'eth_blockNumber') result = '0x20'
+  else if (request.method === 'eth_getLogs') result = [{
+    transactionHash: txHash,
+    blockNumber: '0x1f',
+    logIndex: '0x0',
+    topics: [TRANSFER_TOPIC, pad(payer, { size: 32 }), pad(recipient, { size: 32 })],
+    data: `0x${parseUnits('0.5', 6).toString(16)}`,
+  }]
+  else if (request.method === 'eth_getBlockByNumber') result = { timestamp: blockTimestamp }
+  else throw new Error(`Unexpected RPC method ${request.method}`)
+  return { ok: true, status: 200, statusText: 'OK', text: async () => JSON.stringify({ result }) }
+}
+blockTimestamp = `0x${BigInt(Math.floor(Date.parse('2026-07-19T12:03:00.000Z') / 1_000)).toString(16)}`
+const discovered = await findEvmUsdcTransfer({
+  chain: 'base', payer, recipient, minAmount: '0.5', exactAmount: true,
+  notBefore: '2026-07-19T12:00:00.000Z', notAfter: '2026-07-19T12:10:00.000Z',
+  lookbackBlocks: 10n, chunkSize: 10n,
+})
+assert.equal(discovered.txHash, txHash)
+assert.equal(discovered.amount, '0.5')
+assert.equal(discovered.confirmedAt, '2026-07-19T12:03:00.000Z')
+const logRequest = discoveryCalls.find(call => call.method === 'eth_getLogs')
+assert.equal(logRequest.params[0].topics[1].toLowerCase(), pad(payer, { size: 32 }).toLowerCase())
 globalThis.fetch = async () => ({
   ok: false,
   status: 400,

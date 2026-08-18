@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express'
-import { verifiedPrivyUser } from '../privy-circle-link.js'
-import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from '../usdc-transfer-verify.js'
+import { circleLinkKey, readCircleLink, verifiedPrivyUser } from '../privy-circle-link.js'
+import { findEvmUsdcTransfer, normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from '../usdc-transfer-verify.js'
 
 type Dependencies = {
   verifyUser: typeof verifiedPrivyUser
   verifyTransfer: typeof verifyEvmUsdcTransfer
+  findTransfer: typeof findEvmUsdcTransfer
+  readLink: typeof readCircleLink
 }
 
 function text(value: unknown, max = 180) {
@@ -19,17 +21,48 @@ export function createPocketEvmTransferStatusHandler(overrides: Partial<Dependen
   const dependencies: Dependencies = {
     verifyUser: verifiedPrivyUser,
     verifyTransfer: verifyEvmUsdcTransfer,
+    findTransfer: findEvmUsdcTransfer,
+    readLink: readCircleLink,
     ...overrides,
   }
   return async function pocketEvmTransferStatusHandler(req: Request, res: Response) {
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
     try {
-      await dependencies.verifyUser(req)
+      const identity = await dependencies.verifyUser(req)
       const chain = normalizeEvmUsdcChain(req.body?.chain)
       const txHash = text(req.body?.tx_hash, 80)
+      const payer = text(req.body?.payer, 80)
       const recipient = text(req.body?.recipient, 80)
       const amount = text(req.body?.amount, 30)
+      const notBefore = text(req.body?.not_before, 40)
+      const notAfter = text(req.body?.not_after, 40)
       if (!chain) return res.status(400).json({ ok: false, error: 'Unsupported withdrawal network.' })
+
+      if (!txHash) {
+        const earliest = Date.parse(notBefore)
+        const deadline = Date.parse(notAfter)
+        if (!Number.isFinite(earliest) || !Number.isFinite(deadline) || deadline < earliest || deadline - earliest > 45 * 60_000) {
+          return res.status(400).json({ ok: false, error: 'Transfer recovery window is invalid.' })
+        }
+        const link = await dependencies.readLink(circleLinkKey(identity.userId, chain, 'payment'))
+        if (!link || link.circleWalletAddress.toLowerCase() !== payer.toLowerCase()) {
+          return res.status(403).json({ ok: false, error: 'Transfer sender does not match your linked Pocket wallet.' })
+        }
+        const found = await dependencies.findTransfer({
+          chain,
+          payer,
+          recipient,
+          minAmount: amount,
+          exactAmount: true,
+          notBefore,
+          notAfter,
+          lookbackBlocks: 50_000n,
+          chunkSize: 2_000n,
+        })
+        if (!found) return res.status(202).json({ ok: true, status: 'pending' })
+        return res.json({ ok: true, status: 'confirmed', txHash: found.txHash, amount: found.amount })
+      }
+
       try {
         const verified = await dependencies.verifyTransfer({ chain, txHash, recipient, minAmount: amount })
         return res.json({ ok: true, status: 'confirmed', txHash, amount: verified.amount })

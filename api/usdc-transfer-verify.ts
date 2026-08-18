@@ -28,6 +28,7 @@ type TransferLog = {
   transactionHash?: `0x${string}`
   blockNumber?: `0x${string}`
   logIndex?: `0x${string}`
+  topics?: string[]
   data?: `0x${string}`
 }
 
@@ -78,12 +79,14 @@ function readPositiveBigInt(value: unknown, fallback: bigint) {
 async function getTransferLogs(input: {
   rpcUrl: string
   chain: EvmUsdcChain
+  payer?: string
   recipient: string
   fromBlock: bigint
   toBlock: bigint
   chunkSize: bigint
 }) {
   const logs: TransferLog[] = []
+  const payerTopic = input.payer ? pad(input.payer as Address, { size: 32 }) : null
   const recipientTopic = pad(input.recipient as Address, { size: 32 })
   for (let from = input.fromBlock; from <= input.toBlock; from += input.chunkSize) {
     const end = from + input.chunkSize - 1n > input.toBlock ? input.toBlock : from + input.chunkSize - 1n
@@ -91,7 +94,7 @@ async function getTransferLogs(input: {
       address: USDC_TOKENS[input.chain],
       fromBlock: `0x${from.toString(16)}`,
       toBlock: `0x${end.toString(16)}`,
-      topics: [TRANSFER_TOPIC, null, recipientTopic],
+      topics: [TRANSFER_TOPIC, payerTopic, recipientTopic],
     }]))
   }
   return logs
@@ -99,12 +102,17 @@ async function getTransferLogs(input: {
 
 export async function findEvmUsdcTransfer(input: {
   chain: EvmUsdcChain
+  payer?: string
   recipient: string
   minAmount: string
+  exactAmount?: boolean
+  notBefore?: string
+  notAfter?: string
   lookbackBlocks?: bigint
   chunkSize?: bigint
 }) {
   if (!isAddress(input.recipient)) throw new Error('Invalid USDC recipient.')
+  if (input.payer && !isAddress(input.payer)) throw new Error('Invalid USDC payer.')
   const rpcUrl = rpcFor(input.chain)
   if (!rpcUrl) throw new Error(`PRIVATE_RPC_URL is not configured for ${input.chain}.`)
 
@@ -117,15 +125,36 @@ export async function findEvmUsdcTransfer(input: {
   const logs = await getTransferLogs({
     rpcUrl,
     chain: input.chain,
+    payer: input.payer,
     recipient: input.recipient,
     fromBlock,
     toBlock: latestBlock,
     chunkSize,
   })
-  const match = [...logs].reverse().find(log => {
+  const candidates = logs.filter(log => {
     const value = log.data ? BigInt(log.data) : 0n
-    return !!log.transactionHash && value >= minUnits
+    return !!log.transactionHash && (input.exactAmount ? value === minUnits : value >= minUnits)
   })
+  let match: TransferLog | undefined
+  let confirmedAt: string | undefined
+  if (input.notBefore || input.notAfter) {
+    const earliest = input.notBefore ? Date.parse(input.notBefore) : Number.NEGATIVE_INFINITY
+    const deadline = input.notAfter ? Date.parse(input.notAfter) : Number.POSITIVE_INFINITY
+    if (!Number.isFinite(earliest) && input.notBefore) throw new Error('Invalid transfer start time.')
+    if (!Number.isFinite(deadline) && input.notAfter) throw new Error('Invalid transfer end time.')
+    for (const candidate of candidates) {
+      if (!candidate.blockNumber) continue
+      const block = await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', [candidate.blockNumber, false])
+      if (!block.timestamp) continue
+      const timestamp = Number(BigInt(block.timestamp) * 1_000n)
+      if (!Number.isSafeInteger(timestamp) || timestamp < earliest || timestamp > deadline) continue
+      match = candidate
+      confirmedAt = new Date(timestamp).toISOString()
+      break
+    }
+  } else {
+    match = [...candidates].reverse()[0]
+  }
   if (!match?.transactionHash) return null
   const amountUnits = match.data ? BigInt(match.data) : 0n
   return {
@@ -134,6 +163,7 @@ export async function findEvmUsdcTransfer(input: {
     amount: formatUnits(amountUnits, 6),
     blockNumber: match.blockNumber ? BigInt(match.blockNumber).toString() : null,
     logIndex: match.logIndex ? Number(BigInt(match.logIndex)) : null,
+    confirmedAt,
   }
 }
 

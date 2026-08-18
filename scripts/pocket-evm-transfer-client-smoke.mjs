@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { createPocketEvmTransferStatusHandler } from '../api/pocket/evm-transfer-status.ts'
 import { executePocketEvmTransfer } from '../src/pocket/api/pocketEvmTransferClient.ts'
-import { readPocketEvmTransferStatus } from '../src/pocket/api/pocketEvmTransferStatusClient.ts'
+import { readPocketEvmTransferStatus, recoverPocketEvmTransfer } from '../src/pocket/api/pocketEvmTransferStatusClient.ts'
 
 const circleHandlerSource = await readFile(new URL('../api/circle-solana-email.ts', import.meta.url), 'utf8')
 const withdrawalSource = circleHandlerSource.slice(circleHandlerSource.indexOf(/executeEvmWithdraw/.source))
@@ -126,6 +126,24 @@ assert.equal(confirmedStatus, 'confirmed')
 assert.equal(fetchCalls[0].url, '/api/pocket/transfers/evm-status')
 assert.equal(fetchCalls[0].init.headers.authorization, 'Bearer privy-token')
 assert.deepEqual(JSON.parse(fetchCalls[0].init.body), { chain: 'base', tx_hash: result.txHash, recipient, amount: '1.25' })
+const recoveryStatus = await recoverPocketEvmTransfer({
+  accessToken: 'privy-token',
+  chain: 'base',
+  payer: walletAddress,
+  recipient,
+  amount: '0.5',
+  notBefore: '2026-08-18T00:00:00.000Z',
+  notAfter: '2026-08-18T00:40:00.000Z',
+  fetcher: async (_url, init) => {
+    fetchCalls.push({ url: _url, init })
+    return { ok: true, status: 200, json: async () => ({ ok: true, status: 'confirmed', txHash: result.txHash }) }
+  },
+})
+assert.deepEqual(recoveryStatus, { status: 'confirmed', txHash: result.txHash })
+assert.deepEqual(JSON.parse(fetchCalls[1].init.body), {
+  chain: 'base', payer: walletAddress, recipient, amount: '0.5',
+  not_before: '2026-08-18T00:00:00.000Z', not_after: '2026-08-18T00:40:00.000Z',
+})
 
 function responseRecorder() {
   return {
@@ -148,6 +166,35 @@ const statusHandler = createPocketEvmTransferStatusHandler({
 const serverConfirmed = await statusRequest(statusHandler, statusBody)
 assert.equal(serverConfirmed.statusCode, 200)
 assert.equal(serverConfirmed.body.status, 'confirmed')
+const linkedWallet = {
+  privyUserId: 'privy-user-1', chain: 'base', circleWalletId: 'wallet-1',
+  circleWalletAddress: walletAddress, circleBlockchain: 'BASE', updatedAt: Date.now(),
+}
+const recoveryCalls = []
+const recoveryHandler = createPocketEvmTransferStatusHandler({
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  readLink: async () => linkedWallet,
+  findTransfer: async input => { recoveryCalls.push(input); return { txHash: result.txHash, amount: input.minAmount } },
+})
+const recoveryBody = {
+  chain: 'base', payer: walletAddress, recipient, amount: '0.5',
+  not_before: '2026-08-18T00:00:00.000Z', not_after: '2026-08-18T00:40:00.000Z',
+}
+const recovered = await statusRequest(recoveryHandler, recoveryBody)
+assert.equal(recovered.statusCode, 200)
+assert.equal(recovered.body.status, 'confirmed')
+assert.equal(recovered.body.txHash, result.txHash)
+assert.equal(recoveryCalls[0].payer, walletAddress)
+assert.equal(recoveryCalls[0].exactAmount, true)
+
+const wrongOwnerHandler = createPocketEvmTransferStatusHandler({
+  verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  readLink: async () => ({ ...linkedWallet, circleWalletAddress: '0x3333333333333333333333333333333333333333' }),
+  findTransfer: async () => { throw new Error('must not search') },
+})
+const wrongOwner = await statusRequest(wrongOwnerHandler, recoveryBody)
+assert.equal(wrongOwner.statusCode, 403)
+assert.match(wrongOwner.body.error, /linked Pocket wallet/)
 
 const pendingHandler = createPocketEvmTransferStatusHandler({
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),

@@ -44,7 +44,7 @@ export default function PocketSendPage() {
   const onWalletReady = useCallback((key: PocketNetwork, wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => wallets.setWallets(current => ({ ...current, [key]: wallet })), [wallets.setWallets])
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
   const balance = wallets.rows.find(row => row.key === network)?.balance ?? 0
-  const send = usePocketWithdrawalController({ network, networkLabel: networkLabel(network), wallet: wallets.wallets[network], balance, resetKey: `${network}:${mode}`, ensureWallet: walletController.ensureWallet, getEvmSession: walletController.getEvmSession, getSolanaSession: walletController.getSolanaSession, refreshBalances: wallets.refreshBalances, clearExternalError: () => { wallets.setError(''); setResolveError('') }, onActivity: () => void activity.refresh() })
+  const send = usePocketWithdrawalController({ network, networkLabel: networkLabel(network), wallet: wallets.wallets[network], balance, resetKey: `${network}:${mode}`, ensureWallet: walletController.ensureWallet, getEvmSession: walletController.getEvmSession, getSolanaSession: walletController.getSolanaSession, getAccessToken, refreshBalances: wallets.refreshBalances, clearExternalError: () => { wallets.setError(''); setResolveError('') }, onActivity: () => void activity.refresh() })
   const routePersistence = useMemo<PocketPaymentLiquidityPersistence | undefined>(() => requestId ? ({
     read: accessToken => readPocketRequestRoute(accessToken, requestId),
     start: (accessToken, route) => startPocketRequestRoute(accessToken, requestId, route),
