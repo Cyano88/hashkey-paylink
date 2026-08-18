@@ -1,6 +1,7 @@
 import { formatUnits, isAddress, pad, parseUnits, type Address } from 'viem'
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+const BASE_PUBLIC_RPC = 'https://mainnet.base.org'
 
 const USDC_TOKENS = {
   base: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
@@ -220,15 +221,15 @@ export async function findEvmUsdcTransfer(input: {
       toBlock = estimated + paddingBlocks < latestBlock ? estimated + paddingBlocks : latestBlock
     }
   }
-  const logs = await getTransferLogs({
-    rpcUrl,
-    chain: input.chain,
-    payer: input.payer,
-    recipient: input.recipient,
-    fromBlock,
-    toBlock,
-    chunkSize,
-  })
+  let discoveryRpcUrl = rpcUrl
+  let logs: TransferLog[]
+  try {
+    logs = await getTransferLogs({ rpcUrl: discoveryRpcUrl, chain: input.chain, payer: input.payer, recipient: input.recipient, fromBlock, toBlock, chunkSize })
+  } catch (error) {
+    if (input.chain !== 'base' || discoveryRpcUrl === BASE_PUBLIC_RPC || !/eth_getLogs/i.test(error instanceof Error ? error.message : String(error))) throw error
+    discoveryRpcUrl = BASE_PUBLIC_RPC
+    logs = await getTransferLogs({ rpcUrl: discoveryRpcUrl, chain: input.chain, payer: input.payer, recipient: input.recipient, fromBlock, toBlock, chunkSize })
+  }
   const candidates = logs.filter(log => {
     const value = log.data ? BigInt(log.data) : 0n
     return !!log.transactionHash && (input.exactAmount ? value === minUnits : value >= minUnits)
@@ -238,7 +239,7 @@ export async function findEvmUsdcTransfer(input: {
   if (input.notBefore || input.notAfter) {
     for (const candidate of candidates) {
       if (!candidate.blockNumber) continue
-      const block = await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', [candidate.blockNumber, false])
+      const block = await rpcCall<RpcBlock>(discoveryRpcUrl, 'eth_getBlockByNumber', [candidate.blockNumber, false])
       if (!block.timestamp) continue
       const timestamp = Number(BigInt(block.timestamp) * 1_000n)
       if (!Number.isSafeInteger(timestamp) || timestamp < earliest || timestamp > deadline) continue

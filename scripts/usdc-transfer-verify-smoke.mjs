@@ -113,6 +113,28 @@ const explorerUrl = discoveryCalls.find(call => call.kind === 'explorer').url
 assert.equal(new URL(explorerUrl).searchParams.get('filter'), 'to')
 assert.equal(new URL(explorerUrl).searchParams.get('token')?.toLowerCase(), '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913')
 assert.equal(discoveryCalls.some(call => call.request?.method === 'eth_getTransactionReceipt'), true)
+const fallbackCalls = []
+globalThis.fetch = async (url, init) => {
+  const target = String(url)
+  if (target.startsWith('https://base.blockscout.com/')) return { ok: false, status: 500, statusText: 'Internal Server Error', text: async () => '' }
+  const request = JSON.parse(String(init?.body ?? '{}'))
+  fallbackCalls.push({ target, method: request.method })
+  if (request.method === 'eth_getLogs' && target === 'https://rpc.invalid') return { ok: false, status: 400, statusText: 'Bad Request', text: async () => '' }
+  const result = request.method === 'eth_blockNumber'
+    ? '0x100'
+    : request.method === 'eth_getLogs'
+      ? [{ transactionHash: txHash, blockNumber: '0xff', logIndex: '0x0', data: `0x${parseUnits('0.5', 6).toString(16)}` }]
+      : { timestamp: `0x${BigInt(Math.floor(Date.parse('2026-07-19T12:03:00.000Z') / 1_000)).toString(16)}` }
+  return { ok: true, status: 200, statusText: 'OK', text: async () => JSON.stringify({ result }) }
+}
+const rpcFallback = await findEvmUsdcTransfer({
+  chain: 'base', payer, recipient, minAmount: '0.5', exactAmount: true,
+  notBefore: '2026-07-19T12:00:00.000Z', notAfter: '2026-07-19T12:10:00.000Z',
+  lookbackBlocks: 10n, chunkSize: 10n,
+})
+assert.equal(rpcFallback.txHash, txHash)
+assert.equal(fallbackCalls.some(call => call.target === 'https://rpc.invalid' && call.method === 'eth_getLogs'), true)
+assert.equal(fallbackCalls.some(call => call.target === 'https://mainnet.base.org' && call.method === 'eth_getLogs'), true)
 globalThis.fetch = async () => ({
   ok: false,
   status: 400,
