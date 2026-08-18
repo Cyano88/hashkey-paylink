@@ -117,18 +117,42 @@ export async function findEvmUsdcTransfer(input: {
   if (!rpcUrl) throw new Error(`PRIVATE_RPC_URL is not configured for ${input.chain}.`)
 
   const minUnits = usdcAmountUnits(input.minAmount)
+  const earliest = input.notBefore ? Date.parse(input.notBefore) : Number.NEGATIVE_INFINITY
+  const deadline = input.notAfter ? Date.parse(input.notAfter) : Number.POSITIVE_INFINITY
+  if (!Number.isFinite(earliest) && input.notBefore) throw new Error('Invalid transfer start time.')
+  if (!Number.isFinite(deadline) && input.notAfter) throw new Error('Invalid transfer end time.')
   const latestBlockHex = await rpcCall<`0x${string}`>(rpcUrl, 'eth_blockNumber', [])
   const latestBlock = BigInt(latestBlockHex)
   const lookback = input.lookbackBlocks ?? readPositiveBigInt(process.env.PAYCREST_RECONCILE_LOOKBACK_BLOCKS, 900n)
   const chunkSize = input.chunkSize ?? readPositiveBigInt(process.env.PAYCREST_RECONCILE_CHUNK_SIZE, 120n)
-  const fromBlock = latestBlock > lookback ? latestBlock - lookback : 0n
+  const lookbackFrom = latestBlock > lookback ? latestBlock - lookback : 0n
+  let fromBlock = lookbackFrom
+  let toBlock = latestBlock
+  if (Number.isFinite(earliest) || Number.isFinite(deadline)) {
+    const latest = await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', [latestBlockHex, false])
+    if (!latest.timestamp) throw new Error('Latest block time was not available.')
+    const latestMs = Number(BigInt(latest.timestamp) * 1_000n)
+    const blockMs = input.chain === 'arbitrum' ? 250 : input.chain === 'arc' ? 1_000 : 2_000
+    const paddingBlocks = BigInt(Math.ceil(10 * 60_000 / blockMs))
+    if (Number.isFinite(earliest)) {
+      const ageBlocks = BigInt(Math.ceil(Math.max(0, latestMs - earliest) / blockMs))
+      const estimated = latestBlock > ageBlocks ? latestBlock - ageBlocks : 0n
+      fromBlock = estimated > paddingBlocks ? estimated - paddingBlocks : 0n
+      if (fromBlock < lookbackFrom) fromBlock = lookbackFrom
+    }
+    if (Number.isFinite(deadline)) {
+      const ageBlocks = BigInt(Math.floor(Math.max(0, latestMs - deadline) / blockMs))
+      const estimated = latestBlock > ageBlocks ? latestBlock - ageBlocks : 0n
+      toBlock = estimated + paddingBlocks < latestBlock ? estimated + paddingBlocks : latestBlock
+    }
+  }
   const logs = await getTransferLogs({
     rpcUrl,
     chain: input.chain,
     payer: input.payer,
     recipient: input.recipient,
     fromBlock,
-    toBlock: latestBlock,
+    toBlock,
     chunkSize,
   })
   const candidates = logs.filter(log => {
@@ -138,10 +162,6 @@ export async function findEvmUsdcTransfer(input: {
   let match: TransferLog | undefined
   let confirmedAt: string | undefined
   if (input.notBefore || input.notAfter) {
-    const earliest = input.notBefore ? Date.parse(input.notBefore) : Number.NEGATIVE_INFINITY
-    const deadline = input.notAfter ? Date.parse(input.notAfter) : Number.POSITIVE_INFINITY
-    if (!Number.isFinite(earliest) && input.notBefore) throw new Error('Invalid transfer start time.')
-    if (!Number.isFinite(deadline) && input.notAfter) throw new Error('Invalid transfer end time.')
     for (const candidate of candidates) {
       if (!candidate.blockNumber) continue
       const block = await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', [candidate.blockNumber, false])

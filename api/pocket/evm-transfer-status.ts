@@ -57,7 +57,7 @@ export function createPocketEvmTransferStatusHandler(overrides: Partial<Dependen
           notBefore,
           notAfter,
           lookbackBlocks: 50_000n,
-          chunkSize: 2_000n,
+          chunkSize: 120n,
         })
         if (!found) return res.status(202).json({ ok: true, status: 'pending' })
         return res.json({ ok: true, status: 'confirmed', txHash: found.txHash, amount: found.amount })
