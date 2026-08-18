@@ -87,6 +87,7 @@ export default function usePocketBankWithdrawController({
   const activeIntentId = useRef(readActivePocketBankPayout())
   const cancelled = useRef(false)
   const polling = useRef(false)
+  const reconciling = useRef(false)
   const approvedSession = useRef<{ walletAddress: string; session: CircleEvmEmailSession } | null>(null)
   const statusRef = useRef<PocketBankWithdrawStatus>('idle')
   const onSentRef = useRef(onSent)
@@ -188,97 +189,105 @@ export default function usePocketBankWithdrawController({
     if (!authenticated) return
     cancelled.current = false
     const reconcile = async () => {
-      const accessToken = await getAccessToken()
-      if (!accessToken) return
-      const intentId = activeIntentId.current
-      if (!intentId) return
-      const recoveredTxHash = readActivePocketBankPayoutTransfer(intentId)
-      const acceptedTransfer = readActivePocketBankPayoutAcceptance(intentId)
-      if (!recoveredTxHash) {
-        if (acceptedTransfer) {
-          setStatus('processing')
-          const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
-          if (next) setResult(next)
-          // Never open Circle authentication from mount, focus, or a timer.
-          // The foreground approval path owns hash reconciliation.
+      if (reconciling.current || polling.current) return
+      reconciling.current = true
+      try {
+        const accessToken = await getAccessToken()
+        if (!accessToken || cancelled.current) return
+        const intentId = activeIntentId.current
+        if (!intentId) return
+        const recoveredTxHash = readActivePocketBankPayoutTransfer(intentId)
+        const acceptedTransfer = readActivePocketBankPayoutAcceptance(intentId)
+        if (!recoveredTxHash && !acceptedTransfer) {
+          // A live prepare/routing operation has not submitted money yet. Wallet
+          // refreshes must never mistake it for an abandoned persisted payout.
+          if (statusRef.current !== 'idle') return
+          clearActivePocketBankPayout(intentId)
+          activeIntentId.current = ''
+          setResult(null)
+          setStatus('idle')
+          setError('')
+          clearStoredOperation()
           return
         }
-        // A live prepare/routing operation has not submitted money yet. Wallet
-        // refreshes must never mistake it for an abandoned persisted payout.
-        if (statusRef.current !== 'idle') return
-        clearActivePocketBankPayout(intentId)
-        activeIntentId.current = ''
-        setResult(null)
-        setStatus('idle')
-        setError('')
-        clearStoredOperation()
-        return
-      }
-      setStatus('processing')
-      const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
-      if (!next) return
-      setResult(next)
+        setStatus('processing')
+        const next = await readPocketBankWithdrawStatus({ accessToken, intentId }).catch(() => null)
+        // A response started before a receipt closed this intent is stale. It
+        // must never move a terminal success screen back to processing.
+        if (!next || activeIntentId.current !== intentId || cancelled.current) return
+        setResult(next)
+        if (next.state === 'sent') {
+          clearActivePocketBankPayout(intentId)
+          activeIntentId.current = ''
+          clearStoredOperation()
+          setResult(next)
+          setStatus('sent')
+          setError('')
+          await onSentRef.current()
+          return
+        }
+        if (next.state === 'refunded') {
+          clearActivePocketBankPayout(intentId)
+          activeIntentId.current = ''
+          setStatus('idle')
+          setError(PAYOUT_REFUNDED_NOTICE)
+          clearStoredOperation()
+          return
+        }
+        if (next.state === 'failed' || next.state === 'expired') {
+          clearActivePocketBankPayout(intentId)
+          activeIntentId.current = ''
+          setStatus('idle')
+          setError(next.state === 'expired' ? PAYMENT_TIMEOUT_NOTICE : 'The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
+          clearStoredOperation()
+          return
+        }
+        // An accepted Circle challenge can settle before its hash is returned.
+        // Status polling is safe; background reconciliation must never reopen
+        // Circle authentication or create another transfer.
+        if (!recoveredTxHash) {
+          setStatus('processing')
+          return
+        }
       // A submitted transfer may be recorded and reconciled, but this path never
       // creates a new transfer or asks the wallet to authorize one.
-      if (next.nextAction === 'authorize_transfer' && recoveredTxHash && wallet?.address) {
-        try {
-          const submitted = await registerPocketBankWithdrawTransfer({
-            accessToken,
-            request: { intent_id: intentId, tx_hash: recoveredTxHash },
-          })
-          setResult(submitted)
-          setStatus('processing')
-          const confirmed = await confirmPocketBankWithdraw({
-            accessToken,
-            request: {
-              intent_id: intentId,
-              order_id: submitted.orderId,
-              tx_hash: recoveredTxHash,
-              wallet_address: wallet.address,
-            },
-          }).catch(() => null)
-          if (confirmed) setResult(confirmed)
-          void pollUntilSettled(accessToken, intentId)
-        } catch {
-          setStatus('processing')
-          setError('')
+        if (next.nextAction === 'authorize_transfer' && wallet?.address) {
+          try {
+            const submitted = await registerPocketBankWithdrawTransfer({
+              accessToken,
+              request: { intent_id: intentId, tx_hash: recoveredTxHash },
+            })
+            if (activeIntentId.current !== intentId || cancelled.current) return
+            setResult(submitted)
+            setStatus('processing')
+            const confirmed = await confirmPocketBankWithdraw({
+              accessToken,
+              request: {
+                intent_id: intentId,
+                order_id: submitted.orderId,
+                tx_hash: recoveredTxHash,
+                wallet_address: wallet.address,
+              },
+            }).catch(() => null)
+            if (activeIntentId.current !== intentId || cancelled.current) return
+            if (confirmed) setResult(confirmed)
+            void pollUntilSettled(accessToken, intentId)
+          } catch {
+            if (activeIntentId.current !== intentId || cancelled.current) return
+            setStatus('processing')
+            setError('')
+          }
+          return
         }
-        return
-      }
-      if (next.state === 'sent') {
-        clearActivePocketBankPayout(intentId)
-        activeIntentId.current = ''
-        clearStoredOperation()
-        setResult(next)
-        setStatus('sent')
-        setError('')
-        await onSentRef.current()
-        return
-      }
-      if (next.state === 'refunded') {
-        clearActivePocketBankPayout(intentId)
-        activeIntentId.current = ''
-        setResult(next)
-        setStatus('idle')
-        setError(PAYOUT_REFUNDED_NOTICE)
-        clearStoredOperation()
-        return
-      }
-      if (next.state === 'failed' || next.state === 'expired') {
-        clearActivePocketBankPayout(intentId)
-        activeIntentId.current = ''
-        setResult(next)
-        setStatus('idle')
-        setError(next.state === 'expired' ? PAYMENT_TIMEOUT_NOTICE : 'The payout closed before completion. Check Activity and your USDC balance before starting another payout.')
-        clearStoredOperation()
-        return
-      }
-      if (next.nextAction === 'ensure_liquidity' || next.nextAction === 'wait_bridge' || next.nextAction === 'authorize_transfer') {
+        if (next.nextAction === 'ensure_liquidity' || next.nextAction === 'wait_bridge' || next.nextAction === 'authorize_transfer') {
+          setStatus('processing')
+          return
+        }
         setStatus('processing')
-        return
+        void pollUntilSettled(accessToken, intentId)
+      } finally {
+        reconciling.current = false
       }
-      setStatus('processing')
-      void pollUntilSettled(accessToken, intentId)
     }
     void reconcile()
     const refreshVisible = () => { if (document.visibilityState === 'visible') void reconcile() }

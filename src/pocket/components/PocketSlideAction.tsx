@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
-import { AlertCircle, Check, Loader2, Lock } from 'lucide-react'
 import SlideAction, { type SlideActionStatus } from '../../components/SlideAction'
 import { cn } from '../../lib/utils'
 import { preparePocketPaymentApproval, requestPocketPaymentApproval } from '../lib/pocketPaymentApproval'
+import { AlertCircle, ArrowLeftRight, Banknote, Check, CheckCircle2, Loader2, Send, Wallet } from './PocketIcons'
 
 export type PocketSlideActionStatus = SlideActionStatus
 
@@ -26,6 +26,16 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
   const unlockTimer = useRef<number | null>(null)
   const [optimisticPending, setOptimisticPending] = useState(false)
   const mergedLabels = { ...POCKET_DEFAULT_LABELS, ...labels }
+  const action = mergedLabels.idle.toLowerCase()
+  const ActionIcon = /swap|move|bridge/.test(action)
+    ? ArrowLeftRight
+    : /payout|withdraw/.test(action)
+      ? Banknote
+      : /send/.test(action)
+        ? Send
+        : /payment|pay/.test(action)
+          ? Wallet
+          : Check
   const visualStatus = status === 'idle' && optimisticPending ? 'pending' : status
   const label = visualStatus === 'error'
     ? mergedLabels.error
@@ -90,10 +100,10 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
       {visualStatus === 'pending' || visualStatus === 'submitted'
         ? <Loader2 className="h-4 w-4 animate-spin" />
         : visualStatus === 'successful'
-          ? <Check className="h-4 w-4" />
+          ? <CheckCircle2 className="h-4 w-4" />
           : visualStatus === 'error'
             ? <AlertCircle className="h-4 w-4" />
-            : <Lock className="h-4 w-4" />}
+            : <ActionIcon className="h-4 w-4" />}
       <span>{label}</span>
     </button>
   )

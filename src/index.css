@@ -4,6 +4,13 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --pocket-status-bar-inset: 0px;
+  --pocket-navigation-bar-inset: 0px;
+  --pocket-safe-top: max(env(safe-area-inset-top, 0px), var(--pocket-status-bar-inset, 0px));
+  --pocket-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--pocket-navigation-bar-inset, 0px));
+}
+
 html[data-pocket-runtime='native'],
 html[data-pocket-runtime='native'] body,
 html[data-pocket-runtime='native'] #root {
