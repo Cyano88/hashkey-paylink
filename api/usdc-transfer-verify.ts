@@ -123,7 +123,8 @@ async function findBaseBlockscoutUsdcTransfer(input: {
   const deadline = Date.parse(input.notAfter)
   if (!Number.isFinite(earliest) || !Number.isFinite(deadline)) throw new Error('Invalid transfer recovery time.')
   const minUnits = usdcAmountUnits(input.minAmount)
-  let url = `https://base.blockscout.com/api/v2/addresses/${input.recipient}/token-transfers?type=ERC-20`
+  const baseParams = { type: 'ERC-20', filter: 'to', token: USDC_TOKENS.base }
+  let url = `https://base.blockscout.com/api/v2/addresses/${input.recipient}/token-transfers?${new URLSearchParams(baseParams)}`
   for (let page = 0; page < 10 && url; page += 1) {
     const response = await fetch(url, { headers: { accept: 'application/json' } })
     const raw = await response.text()
@@ -156,7 +157,7 @@ async function findBaseBlockscoutUsdcTransfer(input: {
     }
     const next = data.next_page_params
     if (reachedEarlierTransfers || !next) break
-    const params = new URLSearchParams({ type: 'ERC-20' })
+    const params = new URLSearchParams(baseParams)
     for (const [key, value] of Object.entries(next)) params.set(key, String(value))
     url = `https://base.blockscout.com/api/v2/addresses/${input.recipient}/token-transfers?${params}`
   }

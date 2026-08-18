@@ -109,6 +109,9 @@ assert.equal(discovered.txHash, txHash)
 assert.equal(discovered.amount, '0.5')
 assert.equal(discovered.confirmedAt, '2026-07-19T12:03:00.000Z')
 assert.equal(discoveryCalls.some(call => call.kind === 'explorer'), true)
+const explorerUrl = discoveryCalls.find(call => call.kind === 'explorer').url
+assert.equal(new URL(explorerUrl).searchParams.get('filter'), 'to')
+assert.equal(new URL(explorerUrl).searchParams.get('token')?.toLowerCase(), '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913')
 assert.equal(discoveryCalls.some(call => call.request?.method === 'eth_getTransactionReceipt'), true)
 globalThis.fetch = async () => ({
   ok: false,
