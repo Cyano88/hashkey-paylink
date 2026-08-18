@@ -47,6 +47,7 @@ export function pocketActivityStatus(row: PocketActivityRow) {
   const status = String(row.paycrestStatus || '').trim().toLowerCase()
   if (normalizedSource(row) === 'bank-withdraw') {
     if (status === 'refunded' || status === 'reversed') return 'reversed'
+    if (status === 'refunding' || status === 'reversing') return 'reversing'
     if (['deposited', 'fulfilled', 'fulfilling', 'settled', 'settling', 'successful', 'validated'].includes(status)) return 'successful'
     if (status === 'pending' && /^0x[a-f0-9]{64}$/i.test(row.txHash)) return 'successful'
   }

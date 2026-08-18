@@ -525,7 +525,7 @@ export function mergeRegisteredPaycrestActivity<
 export function bankWithdrawActivityStatus(order: { status: string; tx_hash?: string }) {
   const status = order.status.trim().toLowerCase()
   if (status === 'refunded') return 'reversed'
-  if (status === 'refunding') return 'pending'
+  if (status === 'refunding') return 'reversing'
   return order.tx_hash ? 'successful' : status
 }
 
@@ -565,6 +565,10 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
   const existingTxHashes = new Set(payments.map(payment => payment.txHash.toLowerCase()).filter(Boolean))
   const allPaycrestRows = paycrestOrders
     .filter(order => isVisiblePaycrestHistoryStatus(order.status))
+    .filter(order => {
+      const bankWithdraw = order.source === 'bank-withdraw' || merchantById.get(order.merchant_id)?.source === 'bank-withdraw'
+      return !bankWithdraw || Boolean(order.tx_hash)
+    })
     .map(order => {
       const isBankSendOrder = order.source === 'bank-send'
       const link = isBankSendOrder ? bankSendById.get(order.merchant_id) : undefined

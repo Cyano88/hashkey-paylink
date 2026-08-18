@@ -5,7 +5,7 @@ import { isPocketActivityReadData } from '../src/pocket/lib/pocketSchemas.ts'
 
 assert.equal(bankWithdrawActivityStatus({ status: 'deposited', tx_hash: '0x' + 'a'.repeat(64) }), 'successful')
 assert.equal(bankWithdrawActivityStatus({ status: 'pending', tx_hash: '0x' + 'b'.repeat(64) }), 'successful')
-assert.equal(bankWithdrawActivityStatus({ status: 'refunding', tx_hash: '0x' + 'c'.repeat(64) }), 'pending')
+assert.equal(bankWithdrawActivityStatus({ status: 'refunding', tx_hash: '0x' + 'c'.repeat(64) }), 'reversing')
 assert.equal(bankWithdrawActivityStatus({ status: 'refunded', tx_hash: '0x' + 'd'.repeat(64) }), 'reversed')
 
 const registeredPayout = {
