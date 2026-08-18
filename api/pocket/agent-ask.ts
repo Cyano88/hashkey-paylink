@@ -9,9 +9,11 @@ import {
   type PocketErrorCode,
 } from '../../src/pocket/lib/pocketSchemas.js'
 import { routeCirclePocketQuestion } from './agent-router.js'
+import { readHelperProfileMemory } from '../helper-profile.js'
 
 type PocketAgentAskDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
+  readMemory?(user: VerifiedLinkUser): Promise<string>
 }
 
 export function createPocketAgentAskHandler(dependencies: PocketAgentAskDependencies) {
@@ -32,8 +34,9 @@ export function createPocketAgentAskHandler(dependencies: PocketAgentAskDependen
     }
 
     try {
-      await dependencies.verifyUser(req)
-      const route = routeCirclePocketQuestion(req.body.message, 'circle-pocket')
+      const user = await dependencies.verifyUser(req)
+      const memorySummary = dependencies.readMemory ? await dependencies.readMemory(user).catch(() => '') : ''
+      const route = routeCirclePocketQuestion(req.body.message, 'circle-pocket', { memorySummary })
       if (!route) return fail(500, 'INTERNAL_ERROR', 'Circle Pocket routing failed.', true)
 
       const response: CirclePocketAgentResponse = {
@@ -48,6 +51,7 @@ export function createPocketAgentAskHandler(dependencies: PocketAgentAskDependen
           supported: route.supported,
           confidence: route.confidence,
           readOnly: true,
+          memoryAvailable: Boolean(memorySummary),
         },
       }
       return res.json(response)
@@ -62,4 +66,7 @@ export function createPocketAgentAskHandler(dependencies: PocketAgentAskDependen
   }
 }
 
-export default createPocketAgentAskHandler({ verifyUser: verifiedPrivyUser })
+export default createPocketAgentAskHandler({
+  verifyUser: verifiedPrivyUser,
+  readMemory: user => readHelperProfileMemory({ kind: 'privy', storageKey: `privy:${user.userId}`, subject: user.userId }),
+})

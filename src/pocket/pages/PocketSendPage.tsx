@@ -27,12 +27,16 @@ export default function PocketSendPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const requestId = searchParams.get('request')?.trim() ?? ''
+  const preparedRecipient = requestId ? '' : searchParams.get('recipient')?.trim() ?? ''
+  const preparedMode: RecipientMode = !requestId && searchParams.get('mode') === 'address' ? 'address' : 'pocket'
+  const preparedAmount = requestId ? '' : searchParams.get('amount')?.trim() ?? ''
+  const preparedNetwork = requestId ? '' : searchParams.get('network')?.trim().toLowerCase() ?? ''
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const activity = usePocketActivity({ authenticated, email, enabled: false, getAccessToken })
-  const [network, setNetworkState] = useState<SendNetwork>(() => { const saved = window.localStorage.getItem('pocket.home.network'); return saved === 'arbitrum' || saved === 'solana' ? saved : 'base' })
-  const [mode, setMode] = useState<RecipientMode>('pocket')
-  const [pocketId, setPocketId] = useState('')
+  const [network, setNetworkState] = useState<SendNetwork>(() => { if (preparedNetwork === 'arbitrum' || preparedNetwork === 'solana' || preparedNetwork === 'base') return preparedNetwork; const saved = window.localStorage.getItem('pocket.home.network'); return saved === 'arbitrum' || saved === 'solana' ? saved : 'base' })
+  const [mode, setMode] = useState<RecipientMode>(preparedMode)
+  const [pocketId, setPocketId] = useState(preparedMode === 'pocket' ? preparedRecipient.replace(/\D/g, '').slice(0, 12) : '')
   const [resolved, setResolved] = useState<PocketResolvedRecipient | null>(null)
   const [resolving, setResolving] = useState(false)
   const [resolveError, setResolveError] = useState('')
@@ -45,7 +49,12 @@ export default function PocketSendPage() {
   const onWalletReady = useCallback((key: PocketNetwork, wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => wallets.setWallets(current => ({ ...current, [key]: wallet })), [wallets.setWallets])
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
   const balance = wallets.rows.find(row => row.key === network)?.balance ?? 0
-  const send = usePocketWithdrawalController({ network, networkLabel: networkLabel(network), wallet: wallets.wallets[network], balance, resetKey: `${network}:${mode}:${requestId || 'direct'}`, restoreOperations: Boolean(requestId) || mode === 'address', operationContext: requestId ? `request:${requestId}` : 'send', allowLegacyOperation: Boolean(requestId && requestAccepted), ensureWallet: walletController.ensureWallet, getEvmSession: walletController.getEvmSession, getSolanaSession: walletController.getSolanaSession, getAccessToken, refreshBalances: wallets.refreshBalances, clearExternalError: () => { wallets.setError(''); setResolveError('') }, onActivity: () => void activity.refresh() })
+  const send = usePocketWithdrawalController({ network, networkLabel: networkLabel(network), wallet: wallets.wallets[network], balance, resetKey: `${network}:${mode}:${requestId || 'direct'}`, restoreOperations: Boolean(requestId) || mode === 'address', operationContext: requestId ? `request:${requestId}` : 'send', allowLegacyOperation: Boolean(requestId && requestAccepted), ensureWallet: walletController.ensureWallet, getEvmSession: walletController.getEvmSession, getSolanaSession: walletController.getSolanaSession, getAccessToken, refreshBalances: wallets.refreshBalances, clearExternalError: () => { wallets.setError(''); setResolveError('') }, onActivity: () => void activity.refresh() })  // Agent Hash task preparation is applied once; later edits belong to the user.
+  useEffect(() => {
+    if (requestId) return
+    if (preparedAmount && !send.amount) send.setAmount(preparedAmount)
+    if (preparedMode === 'address' && preparedRecipient && !send.address) send.setAddress(preparedRecipient)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const routePersistence = useMemo<PocketPaymentLiquidityPersistence | undefined>(() => requestId ? ({
     read: accessToken => readPocketRequestRoute(accessToken, requestId),
     start: (accessToken, route) => startPocketRequestRoute(accessToken, requestId, route),

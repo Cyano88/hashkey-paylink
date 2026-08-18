@@ -223,6 +223,8 @@ export function PocketPosSetupPanel({
                     }}
                     placeholder={bankInstitutionsBusy ? 'Loading banks...' : 'Select bank'}
                     ariaLabel="POS payout bank"
+                    searchable
+                    searchPlaceholder="Search banks"
                     className="mt-1"
                   />
                 ) : (

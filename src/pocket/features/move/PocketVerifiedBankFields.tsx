@@ -78,6 +78,8 @@ export function PocketVerifiedBankFields({
                 }}
                 placeholder={institutionsBusy ? 'Loading banks...' : 'Select bank'}
                 ariaLabel="Bank"
+                searchable
+                searchPlaceholder="Search banks"
                 className="mt-1"
                 buttonClassName="rounded-lg font-medium"
               />

@@ -25,7 +25,10 @@ export default function PocketProfilePage() {
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const [editing, setEditing] = useState(() => new URLSearchParams(window.location.search).get('edit') === 'id')
   const [currencyOpen, setCurrencyOpen] = useState(false)
-  const [feature, setFeature] = useState<PocketProfileFeature | null>(null)
+  const [feature, setFeature] = useState<PocketProfileFeature | null>(() => {
+    const requested = new URLSearchParams(window.location.search).get('feature')
+    return requested === 'rates' || requested === 'limits' || requested === 'notifications' || requested === 'security' ? requested : null
+  })
   const quickApprovalAvailable = false
   const quickApprovalBusy = false
   const quickApprovalEnabled = false

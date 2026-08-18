@@ -53,12 +53,22 @@ assert.match(mutation.payload.error.message, /read-only/i)
 assert.equal(verified, 0)
 
 const cases = [
-['show my wallet balance', 'circle-pocket-wallet-overview', 'https://pocket.hashpaylink.com/home'],
-  ['create a USDC payment link', 'circle-pocket-receive-usdc', 'https://pocket.hashpaylink.com/move/usdc'],
-  ['receive into my bank account', 'circle-pocket-bank-payout', 'https://pocket.hashpaylink.com/move/bank'],
-  ['open a POS terminal', 'circle-pocket-retail-pos', 'https://pocket.hashpaylink.com/move/pos'],
-  ['buy airtime', 'circle-pocket-bills', 'https://pocket.hashpaylink.com/bills/airtime'],
-  ['find my receipt', 'circle-pocket-receipts', 'https://pocket.hashpaylink.com/activity'],
+  ['show my wallet balance', 'circle-pocket-wallet-overview', '/home'],
+  ['create a USDC payment link', 'circle-pocket-receive-usdc', '/move/usdc'],
+  ['send 1 USDC to Lola', 'circle-pocket-send-usdc', '/home/send'],
+  ['make a direct bank payout', 'circle-pocket-bank-payout', '/move/bank'],
+  ['open a POS terminal', 'circle-pocket-retail-pos', '/move/pos'],
+  ['buy airtime', 'circle-pocket-bills', '/bills/airtime'],
+  ['buy mobile data', 'circle-pocket-bills', '/bills/data'],
+  ['pay electricity', 'circle-pocket-bills', '/bills/electricity'],
+  ['find my receipt', 'circle-pocket-receipts', '/activity'],
+  ['show activity', 'circle-pocket-activity', '/activity'],
+  ['show my payment requests', 'circle-pocket-payment-requests', '/activity/collections'],
+  ['what is the USDC to Naira rate', 'circle-pocket-rates', '/profile?feature=rates'],
+  ['show my daily spending limits', 'circle-pocket-spending-limits', '/profile?feature=limits'],
+  ['enable push notifications', 'circle-pocket-notifications', '/profile?feature=notifications'],
+  ['reset my Pocket PIN', 'circle-pocket-payment-security', '/profile?feature=security'],
+  ['I need to speak to a human', 'circle-pocket-human-support', '/assistant'],
 ]
 
 for (const [message, intent, href] of cases) {
@@ -67,10 +77,20 @@ for (const [message, intent, href] of cases) {
   assert.equal(isCirclePocketAgentResponse(result.payload), true)
   assert.equal(result.payload.intent, intent)
   assert.equal(result.payload.actions[0].href, href)
+  assert.equal(result.payload.actions[0].href.startsWith('/'), true)
   assert.equal(result.payload.proof.readOnly, true)
 }
 assert.equal(verified, cases.length)
 
+const memoryHandler = createPocketAgentAskHandler({
+  async verifyUser() { return { userId: 'did:privy:returning-user', email: 'shy@example.com' } },
+  async readMemory() { return 'User prefers to be called Shy.\nUser has a friend called Lola.' },
+})
+const remembered = await call(memoryHandler, { body: { threadId: 'pocket-thread-memory', message: 'what do you remember about me?' } })
+assert.equal(remembered.statusCode, 200)
+assert.match(remembered.payload.answer, /Shy/)
+assert.match(remembered.payload.answer, /Lola/)
+assert.equal(remembered.payload.proof.memoryAvailable, true)
 const fallback = await call(handler, {
   body: { threadId: 'pocket-thread-1', message: 'write a poem about the moon' },
 })
@@ -79,8 +99,12 @@ assert.equal(fallback.payload.intent, 'circle-pocket-closest-assistance')
 assert.equal(fallback.payload.proof.supported, false)
 
 const legacyRoute = routeCirclePocketQuestion('find my receipt', 'circle-pocket')
-assert.equal(legacyRoute?.action.url, 'https://pocket.hashpaylink.com/activity')
+assert.equal(legacyRoute?.action.url, '/activity')
 assert.equal(routeCirclePocketQuestion('find my receipt', 'support'), undefined)
+const preparedSend = routeCirclePocketQuestion('Send 0.5 USDC on Base to 0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce', 'circle-pocket')
+assert.equal(preparedSend?.capability, 'send-usdc')
+assert.equal(preparedSend?.action.url, '/home/send?recipient=0xCEB57B0C27C47657C7B2f847196C953Fc7f155Ce&mode=address&amount=0.5&network=base')
+assert.match(preparedSend?.answer ?? '', /will not sign or submit/i)
 
 const clientPayload = {
   answer: 'Open your Circle Pocket wallet.',
@@ -108,6 +132,9 @@ assert.throws(() => parsePocketAgentResponse({ answer: 'missing intent' }), /inv
 
 const pocketAppSource = await readFile(new URL('../src/pocket/CirclePocketApp.tsx', import.meta.url), 'utf8')
 const assistantPageSource = await readFile(new URL('../src/pocket/pages/PocketAssistantPage.tsx', import.meta.url), 'utf8')
+const pocketSelectSource = await readFile(new URL('../src/pocket/components/PocketSelect.tsx', import.meta.url), 'utf8')
+const verifiedBankFieldsSource = await readFile(new URL('../src/pocket/features/move/PocketVerifiedBankFields.tsx', import.meta.url), 'utf8')
+const helperPanelSource = await readFile(new URL('../src/pages/TelegramPaymentLinks.tsx', import.meta.url), 'utf8')
 const assistantControllerSource = await readFile(new URL('../src/pocket/controllers/usePocketAssistantController.ts', import.meta.url), 'utf8')
 const createLinkSource = await readFile(new URL('../src/pages/CreateLink.tsx', import.meta.url), 'utf8')
 assert.match(pocketAppSource, /route\?\.section === 'assistant'.*PocketAssistantPage/)
@@ -118,6 +145,11 @@ assert.match(assistantPageSource, /lockedHelperMode='circle-pocket'/)
 assert.match(assistantPageSource, /fillAvailableHeight/)
 assert.match(assistantPageSource, /Ask Agent Hash\.\.\./)
 assert.doesNotMatch(assistantPageSource, /PolyDesk|PayLinkCard/)
+assert.match(pocketSelectSource, /searchable.*searchPlaceholder/s)
+assert.match(pocketSelectSource, /No matching options/)
+assert.match(verifiedBankFieldsSource, /searchPlaceholder="Search banks"/)
+assert.match(helperPanelSource, /isPocketAction.*pocket\.hashpaylink\.com/s)
+assert.doesNotMatch(helperPanelSource, /url: 'https:\/\/pocket\.hashpaylink\.com/)
 assert.match(assistantControllerSource, /askPocketAgent/)
 assert.doesNotMatch(assistantControllerSource, /api\/agent-ask|telegram-request|ng-pos/)
 assert.doesNotMatch(createLinkSource, /initialPocketRoute|pocketBasePath|startsInStandalonePocket|startsInPocketAssistant|navigatePocket/)

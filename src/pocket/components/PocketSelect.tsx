@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown } from './PocketIcons'
+import { Check, ChevronDown, Search } from './PocketIcons'
 import { cn } from '../../lib/utils'
 
 export type PocketSelectOption = {
@@ -17,6 +17,8 @@ export default function PocketSelect({
   ariaLabel,
   className,
   buttonClassName,
+  searchable = false,
+  searchPlaceholder = 'Search',
 }: {
   value: string
   options: PocketSelectOption[]
@@ -26,11 +28,18 @@ export default function PocketSelect({
   ariaLabel: string
   className?: string
   buttonClassName?: string
+  searchable?: boolean
+  searchPlaceholder?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
   const selected = options.find(option => option.value === value)
   const unavailable = disabled || options.length === 0
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const filteredOptions = searchable && normalizedQuery
+    ? options.filter(option => option.label.toLocaleLowerCase().includes(normalizedQuery))
+    : options
 
   useEffect(() => {
     if (!open) return
@@ -51,6 +60,10 @@ export default function PocketSelect({
   useEffect(() => {
     if (unavailable) setOpen(false)
   }, [unavailable])
+
+  useEffect(() => {
+    if (!open) setQuery('')
+  }, [open])
 
   return (
     <div ref={rootRef} className={cn('relative', className)}>
@@ -75,7 +88,13 @@ export default function PocketSelect({
 
       {open && options.length > 0 && (
         <div role="listbox" aria-label={ariaLabel} className="absolute left-0 right-0 top-full z-[80] mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-[#1b1b20] dark:shadow-[0_22px_60px_rgba(0,0,0,0.5)]">
-          {options.map(option => {
+          {searchable && (
+            <label className="sticky top-0 z-10 mb-1.5 flex min-h-11 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 shadow-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10 dark:border-white/10 dark:bg-[#1b1b20]">
+              <Search className="h-4 w-4 shrink-0 text-gray-400" />
+              <input autoFocus value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} placeholder={searchPlaceholder} aria-label={searchPlaceholder} className="min-w-0 flex-1 bg-transparent py-2 text-sm font-semibold text-gray-900 outline-none placeholder:text-gray-400 dark:text-white" />
+            </label>
+          )}
+          {filteredOptions.map(option => {
             const active = option.value === value
             return (
               <button
@@ -102,6 +121,7 @@ export default function PocketSelect({
               </button>
             )
           })}
+          {filteredOptions.length === 0 && <p className="px-3 py-6 text-center text-xs font-medium text-gray-400">No matching options</p>}
         </div>
       )}
     </div>

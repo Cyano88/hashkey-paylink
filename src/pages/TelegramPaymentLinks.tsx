@@ -288,7 +288,8 @@ function sameOriginHelperPath(value: string) {
   if (typeof window === 'undefined') return ''
   try {
     const url = new URL(value, window.location.origin)
-    return url.origin === window.location.origin ? `${url.pathname}${url.search}${url.hash}` : ''
+    const isPocketAction = url.hostname.toLowerCase() === 'pocket.hashpaylink.com'
+    return url.origin === window.location.origin || isPocketAction ? `${url.pathname}${url.search}${url.hash}` : ''
   } catch {
     return ''
   }
@@ -2491,7 +2492,7 @@ export function TelegramHelperPanel({
     if (!wallet) {
       finishHelperMessage(text, {
         answer: `No ${requestNetworkLabels[network]} Pocket wallet is connected to this signed-in account yet. Open Pocket to create or connect it.`,
-        actionLink: { label: 'Open Circle Pocket', url: 'https://pocket.hashpaylink.com/move/usdc' },
+        actionLink: { label: 'Open Circle Pocket', url: '/move/usdc' },
       })
       return true
     }
@@ -2769,7 +2770,7 @@ export function TelegramHelperPanel({
     if (!hasOpenPaymentFlow && isOutboundTransferIntent(nextQuestion)) {
       finishHelperMessage(nextQuestion, {
         answer: 'Are you trying to send money from your wallet, or request that person to pay you? I will not create a receive PayLink until you confirm.',
-        actionLink: { label: 'Open Circle Pocket', url: 'https://pocket.hashpaylink.com/move/usdc' },
+        actionLink: { label: 'Open Circle Pocket', url: '/move/usdc' },
       })
       return true
     }
