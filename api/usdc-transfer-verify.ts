@@ -100,6 +100,68 @@ async function getTransferLogs(input: {
   return logs
 }
 
+type BlockscoutTransfer = {
+  block_number?: number
+  log_index?: number
+  timestamp?: string
+  transaction_hash?: string
+  from?: { hash?: string }
+  to?: { hash?: string }
+  token?: { address_hash?: string }
+  total?: { value?: string }
+}
+
+async function findBaseBlockscoutUsdcTransfer(input: {
+  payer: string
+  recipient: string
+  minAmount: string
+  exactAmount?: boolean
+  notBefore: string
+  notAfter: string
+}) {
+  const earliest = Date.parse(input.notBefore)
+  const deadline = Date.parse(input.notAfter)
+  if (!Number.isFinite(earliest) || !Number.isFinite(deadline)) throw new Error('Invalid transfer recovery time.')
+  const minUnits = usdcAmountUnits(input.minAmount)
+  let url = `https://base.blockscout.com/api/v2/addresses/${input.recipient}/token-transfers?type=ERC-20`
+  for (let page = 0; page < 10 && url; page += 1) {
+    const response = await fetch(url, { headers: { accept: 'application/json' } })
+    const raw = await response.text()
+    if (!response.ok) throw new Error(`Base explorer HTTP ${response.status}.`)
+    const data = JSON.parse(raw) as { items?: BlockscoutTransfer[]; next_page_params?: Record<string, string | number> | null }
+    let reachedEarlierTransfers = false
+    for (const item of data.items ?? []) {
+      const timestamp = Date.parse(String(item.timestamp ?? ''))
+      if (Number.isFinite(timestamp) && timestamp < earliest) reachedEarlierTransfers = true
+      if (!Number.isFinite(timestamp) || timestamp < earliest || timestamp > deadline) continue
+      if (String(item.from?.hash ?? '').toLowerCase() !== input.payer.toLowerCase()) continue
+      if (String(item.to?.hash ?? '').toLowerCase() !== input.recipient.toLowerCase()) continue
+      if (String(item.token?.address_hash ?? '').toLowerCase() !== USDC_TOKENS.base.toLowerCase()) continue
+      const amountUnits = BigInt(String(item.total?.value ?? '0'))
+      if (input.exactAmount ? amountUnits !== minUnits : amountUnits < minUnits) continue
+      const txHash = String(item.transaction_hash ?? '')
+      if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) continue
+      const verified = await verifyEvmUsdcTransfer({
+        chain: 'base', txHash, payer: input.payer, recipient: input.recipient,
+        minAmount: input.minAmount, notBefore: input.notBefore, notAfter: input.notAfter,
+      })
+      return {
+        txHash: txHash as `0x${string}`,
+        amountUnits: amountUnits.toString(),
+        amount: verified.amount,
+        blockNumber: item.block_number == null ? null : String(item.block_number),
+        logIndex: item.log_index ?? null,
+        confirmedAt: verified.confirmedAt,
+      }
+    }
+    const next = data.next_page_params
+    if (reachedEarlierTransfers || !next) break
+    const params = new URLSearchParams({ type: 'ERC-20' })
+    for (const [key, value] of Object.entries(next)) params.set(key, String(value))
+    url = `https://base.blockscout.com/api/v2/addresses/${input.recipient}/token-transfers?${params}`
+  }
+  return null
+}
 export async function findEvmUsdcTransfer(input: {
   chain: EvmUsdcChain
   payer?: string
@@ -113,6 +175,12 @@ export async function findEvmUsdcTransfer(input: {
 }) {
   if (!isAddress(input.recipient)) throw new Error('Invalid USDC recipient.')
   if (input.payer && !isAddress(input.payer)) throw new Error('Invalid USDC payer.')
+  if (input.chain === 'base' && input.payer && input.notBefore && input.notAfter) {
+    return findBaseBlockscoutUsdcTransfer({
+      payer: input.payer, recipient: input.recipient, minAmount: input.minAmount,
+      exactAmount: input.exactAmount, notBefore: input.notBefore, notAfter: input.notAfter,
+    })
+  }
   const rpcUrl = rpcFor(input.chain)
   if (!rpcUrl) throw new Error(`PRIVATE_RPC_URL is not configured for ${input.chain}.`)
 

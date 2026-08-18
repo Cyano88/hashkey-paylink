@@ -66,18 +66,35 @@ await assert.rejects(
 )
 
 const discoveryCalls = []
-globalThis.fetch = async (_url, init) => {
+globalThis.fetch = async (url, init) => {
+  if (String(url).startsWith('https://base.blockscout.com/')) {
+    discoveryCalls.push({ kind: 'explorer', url: String(url) })
+    return {
+      ok: true, status: 200, statusText: 'OK',
+      text: async () => JSON.stringify({ items: [{
+        block_number: 31,
+        log_index: 0,
+        timestamp: '2026-07-19T12:03:00.000Z',
+        transaction_hash: txHash,
+        from: { hash: payer },
+        to: { hash: recipient },
+        token: { address_hash: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
+        total: { value: parseUnits('0.5', 6).toString() },
+      }], next_page_params: null }),
+    }
+  }
   const request = JSON.parse(String(init?.body ?? '{}'))
-  discoveryCalls.push(request)
+  discoveryCalls.push({ kind: 'rpc', request })
   let result
-  if (request.method === 'eth_blockNumber') result = '0x20'
-  else if (request.method === 'eth_getLogs') result = [{
-    transactionHash: txHash,
+  if (request.method === 'eth_getTransactionReceipt') result = {
+    status: '0x1',
     blockNumber: '0x1f',
-    logIndex: '0x0',
-    topics: [TRANSFER_TOPIC, pad(payer, { size: 32 }), pad(recipient, { size: 32 })],
-    data: `0x${parseUnits('0.5', 6).toString(16)}`,
-  }]
+    logs: [{
+      address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+      topics: [TRANSFER_TOPIC, pad(payer, { size: 32 }), pad(recipient, { size: 32 })],
+      data: `0x${parseUnits('0.5', 6).toString(16)}`,
+    }],
+  }
   else if (request.method === 'eth_getBlockByNumber') result = { timestamp: blockTimestamp }
   else throw new Error(`Unexpected RPC method ${request.method}`)
   return { ok: true, status: 200, statusText: 'OK', text: async () => JSON.stringify({ result }) }
@@ -91,8 +108,8 @@ const discovered = await findEvmUsdcTransfer({
 assert.equal(discovered.txHash, txHash)
 assert.equal(discovered.amount, '0.5')
 assert.equal(discovered.confirmedAt, '2026-07-19T12:03:00.000Z')
-const logRequest = discoveryCalls.find(call => call.method === 'eth_getLogs')
-assert.equal(logRequest.params[0].topics[1].toLowerCase(), pad(payer, { size: 32 }).toLowerCase())
+assert.equal(discoveryCalls.some(call => call.kind === 'explorer'), true)
+assert.equal(discoveryCalls.some(call => call.request?.method === 'eth_getTransactionReceipt'), true)
 globalThis.fetch = async () => ({
   ok: false,
   status: 400,
