@@ -10,10 +10,45 @@ import {
 } from '../../src/pocket/lib/pocketSchemas.js'
 import { routeCirclePocketQuestion } from './agent-router.js'
 import { readHelperProfileMemory } from '../helper-profile.js'
+import { readPocketPaycrestQuote } from './fx-quote.js'
+import { readPocketBankPayoutLimit } from './spending-limits.js'
+import { readPocketBillsLimitUsage } from './bills.js'
+
+type PocketAgentLimitSummary = {
+  bankPayout: { maxUsdc: number; ngnEquivalent: number }
+  bills: {
+    airtime: { perPaymentNgn: number; dailyLimitNgn: number; usedTodayNgn: number; remainingTodayNgn: number }
+    otherBills: { dailyLimitNgn: number; usedTodayNgn: number; remainingTodayNgn: number }
+  }
+}
 
 type PocketAgentAskDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   readMemory?(user: VerifiedLinkUser): Promise<string>
+  readRate?(): Promise<{ rate: number; stale?: boolean }>
+  readLimits?(user: VerifiedLinkUser): Promise<PocketAgentLimitSummary>
+}
+
+const ngn = (value: number) => `₦${new Intl.NumberFormat('en-NG', { maximumFractionDigits: 2 }).format(value)}`
+const usdc = (value: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(value)
+
+async function liveAnswer(route: ReturnType<typeof routeCirclePocketQuestion>, user: VerifiedLinkUser, dependencies: PocketAgentAskDependencies) {
+  if (!route) return ''
+  if (route.capability === 'rates' && dependencies.readRate) {
+    const quote = await dependencies.readRate().catch(() => undefined)
+    if (quote && Number.isFinite(quote.rate) && quote.rate > 0) {
+      return `The current direct rate is 1 USDC = ${ngn(quote.rate)}.${quote.stale ? ' This is the last confirmed rate; Pocket will request a fresh amount-specific quote before payment.' : ' Pocket requests an amount-specific quote again before payment.'}`
+    }
+  }
+  if (route.capability === 'spending-limits' && dependencies.readLimits) {
+    const limits = await dependencies.readLimits(user).catch(() => undefined)
+    if (limits) {
+      const airtime = limits.bills.airtime
+      const other = limits.bills.otherBills
+      return `Your current bank-payout capacity is ${usdc(limits.bankPayout.maxUsdc)} USDC (about ${ngn(limits.bankPayout.ngnEquivalent)}). Airtime is up to ${ngn(airtime.perPaymentNgn)} per payment and ${ngn(airtime.dailyLimitNgn)} daily; you have used ${ngn(airtime.usedTodayNgn)} today and have ${ngn(airtime.remainingTodayNgn)} remaining. Data, TV, and electricity share a ${ngn(other.dailyLimitNgn)} daily limit; you have used ${ngn(other.usedTodayNgn)} and have ${ngn(other.remainingTodayNgn)} remaining today.`
+    }
+  }
+  return route.answer
 }
 
 export function createPocketAgentAskHandler(dependencies: PocketAgentAskDependencies) {
@@ -40,7 +75,7 @@ export function createPocketAgentAskHandler(dependencies: PocketAgentAskDependen
       if (!route) return fail(500, 'INTERNAL_ERROR', 'Circle Pocket routing failed.', true)
 
       const response: CirclePocketAgentResponse = {
-        answer: route.answer,
+        answer: await liveAnswer(route, user, dependencies),
         intent: route.supported
           ? `circle-pocket-${route.capability}`
           : 'circle-pocket-closest-assistance',
@@ -69,4 +104,12 @@ export function createPocketAgentAskHandler(dependencies: PocketAgentAskDependen
 export default createPocketAgentAskHandler({
   verifyUser: verifiedPrivyUser,
   readMemory: user => readHelperProfileMemory({ kind: 'privy', storageKey: `privy:${user.userId}`, subject: user.userId }),
+  readRate: () => readPocketPaycrestQuote('1'),
+  readLimits: async user => {
+    const [bankPayout, bills] = await Promise.all([
+      readPocketBankPayoutLimit(),
+      readPocketBillsLimitUsage(user.userId),
+    ])
+    return { bankPayout, bills }
+  },
 })

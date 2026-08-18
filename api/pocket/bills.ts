@@ -633,6 +633,10 @@ function getDefaultHandlers() {
   return defaultHandlers
 }
 
+export async function readPocketBillsLimitUsage(ownerId: string) {
+  return getDefaultHandlers().dependencies.store.readLimitUsage(ownerId)
+}
+
 export async function reconcilePocketBillExecutionByResource(intentId: string) {
   const dependencies = getDefaultHandlers().dependencies
   let intent = await dependencies.store.getIntentById(intentId)

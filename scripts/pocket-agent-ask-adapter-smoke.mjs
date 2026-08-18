@@ -91,6 +91,25 @@ assert.equal(remembered.statusCode, 200)
 assert.match(remembered.payload.answer, /Shy/)
 assert.match(remembered.payload.answer, /Lola/)
 assert.equal(remembered.payload.proof.memoryAvailable, true)
+const liveDataHandler = createPocketAgentAskHandler({
+  async verifyUser() { return { userId: 'did:privy:live-data', email: 'live@example.com' } },
+  async readRate() { return { rate: 1384.28, stale: false } },
+  async readLimits() {
+    return {
+      bankPayout: { maxUsdc: 721.5, ngnEquivalent: 998_451.2 },
+      bills: {
+        airtime: { perPaymentNgn: 50_000, dailyLimitNgn: 200_000, usedTodayNgn: 20_000, remainingTodayNgn: 180_000 },
+        otherBills: { dailyLimitNgn: 1_000_000, usedTodayNgn: 75_000, remainingTodayNgn: 925_000 },
+      },
+    }
+  },
+})
+const liveRate = await call(liveDataHandler, { body: { threadId: 'pocket-thread-live', message: 'what is the USDC to Naira rate?' } })
+assert.match(liveRate.payload.answer, /1 USDC = ₦1,384\.28/)
+const liveLimits = await call(liveDataHandler, { body: { threadId: 'pocket-thread-live', message: 'how much of my limits have I used today?' } })
+assert.match(liveLimits.payload.answer, /721\.5 USDC/)
+assert.match(liveLimits.payload.answer, /₦20,000/)
+assert.match(liveLimits.payload.answer, /₦925,000/)
 const fallback = await call(handler, {
   body: { threadId: 'pocket-thread-1', message: 'write a poem about the moon' },
 })

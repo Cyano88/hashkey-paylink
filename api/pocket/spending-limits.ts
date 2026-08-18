@@ -53,6 +53,10 @@ async function readBankPayoutLimit() {
   return inFlight;
 }
 
+export async function readPocketBankPayoutLimit() {
+  return readBankPayoutLimit();
+}
+
 export default async function pocketSpendingLimitsHandler(
   req: Request,
   res: Response,
