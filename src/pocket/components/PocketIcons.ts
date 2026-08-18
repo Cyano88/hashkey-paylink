@@ -1,13 +1,13 @@
-import { createElement, type HTMLAttributes } from 'react'
+import { ArrowPathIcon } from '@heroicons/react/24/outline'
+import { createElement, type ComponentProps } from 'react'
 
-export function Loader2({ className = '', ...props }: HTMLAttributes<HTMLSpanElement>) {
-  return createElement('span', {
+export function Loader2({ className = '', ...props }: ComponentProps<typeof ArrowPathIcon>) {
+  return createElement(ArrowPathIcon, {
     ...props,
-    className: `inline-block shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none ${className}`,
-    role: props.role ?? 'status',
+    className: `shrink-0 animate-spin motion-reduce:animate-none ${className}`,
+    'aria-hidden': props['aria-label'] ? undefined : true,
   })
 }
-
 export {
   ArrowDownIcon as ArrowDownToLine,
   ArrowLeftIcon as ArrowLeft,

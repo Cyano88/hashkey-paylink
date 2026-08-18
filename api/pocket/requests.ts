@@ -56,6 +56,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
           title: 'New payment request',
           body: 'Open Pocket to review it.',
           path: '/notifications',
+          tag: 'pocket-request:' + saved.request.id,
         }).catch(() => undefined)
         return res.status(saved.replayed ? 200 : 201).json({ ok: true, request: publicRequest(saved.request, identity.userId) })
       }
@@ -69,6 +70,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
           title: decided.status === 'accepted' ? 'Request accepted' : 'Request declined',
           body: decided.status === 'accepted' ? 'Your request is ready for payment.' : 'Your request was declined.',
           path: '/notifications',
+          tag: 'pocket-request:' + decided.id,
         }).catch(() => undefined)
         return res.json({ ok: true, request: publicRequest(decided, identity.userId) })
       }
@@ -132,6 +134,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
           title: 'Payment received',
           body: 'Your Pocket activity has been updated.',
           path: '/activity',
+          tag: 'pocket-request:' + paid.id,
         }).catch(() => undefined)
         return res.json({ ok: true, request: publicRequest(paid, identity.userId) })
       }

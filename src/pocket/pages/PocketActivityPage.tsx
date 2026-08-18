@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketLoadingState from '../components/PocketLoadingState'
@@ -11,16 +11,41 @@ import { POCKET_BASE_PATH, pocketPathFor, type PocketActivityView } from '../lib
 import { processPocketBillRefund } from '../api/pocketBillsClient'
 import { POCKET_REQUESTS_UPDATED_EVENT, readPocketRequests, type PocketRequestItem } from '../api/pocketRequestsClient'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
+import type { PocketActivityRow } from '../models/pocketActivity'
 
+function requestActivityRows(rows: PocketActivityRow[], requests: PocketRequestItem[]) {
+  const paidHashes = new Set(requests.filter(request => request.status === 'paid' && request.transactionHash).map(request => request.transactionHash.toLowerCase()))
+  const activityRows = rows.filter(row => !row.txHash || !paidHashes.has(row.txHash.toLowerCase()))
+  const requestRows = requests.map<PocketActivityRow>(request => ({
+    eventId: request.id,
+    txHash: request.transactionHash,
+    chain: request.network,
+    payer: request.direction === 'incoming' ? request.senderName : request.recipientName,
+    memo: request.title,
+    amount: request.amount,
+    ts: request.createdAt,
+    source: 'request',
+    settlementType: 'pocket_request',
+    activityLabel: request.title,
+    contextLabel: `${request.direction === 'incoming' ? `From ${request.senderName}` : `To ${request.recipientName}`} · ${request.status === 'pending' ? 'Awaiting response' : request.status.charAt(0).toUpperCase() + request.status.slice(1)}`,
+    paycrestStatus: request.status === 'pending' ? 'awaiting response' : request.status,
+    direction: request.direction === 'incoming' ? 'out' : 'in',
+    recipient: request.direction === 'incoming' ? request.senderName : request.recipientName,
+    supportReference: request.id,
+  }))
+  return [...activityRows, ...requestRows]
+}
 export default function PocketActivityPage({ view }: { view: PocketActivityView }) {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const activity = usePocketActivity({ authenticated, email, enabled: true, getAccessToken })
   const [requests, setRequests] = useState<PocketRequestItem[]>([])
   const [requestsError, setRequestsError] = useState('')
+  const [requestsResolved, setRequestsResolved] = useState(!authenticated)
+  const rowsWithRequests = useMemo(() => requestActivityRows(activity.rows, requests), [activity.rows, requests])
 
   const refreshRequests = useCallback(async () => {
-    if (!authenticated) { setRequests([]); return }
+    if (!authenticated) { setRequests([]); setRequestsResolved(true); return }
     try {
       const accessToken = await getAccessToken()
       if (!accessToken) throw new Error('Sign in again to load requests.')
@@ -29,12 +54,15 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
       setRequestsError('')
     } catch (reason) {
       setRequestsError(reason instanceof Error ? reason.message : 'Requests could not load.')
+    } finally {
+      setRequestsResolved(true)
     }
   }, [authenticated, getAccessToken])
 
   useEffect(() => {
+    if (authenticated) setRequestsResolved(false)
     void refreshRequests()
-  }, [refreshRequests])
+  }, [authenticated, refreshRequests])
 
   useEffect(() => {
     if (!authenticated) return
@@ -85,10 +113,10 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
         error={view === 'collections' ? activity.error || requestsError : activity.error}
       /> : <PocketActivityPanel
         view={view}
-        rows={activity.rows}
+        rows={rowsWithRequests}
         authenticated={authenticated}
-        busy={activity.busy}
-        error={activity.error}
+        busy={activity.busy || !requestsResolved}
+        error={view === 'all' ? activity.error || requestsError : activity.error}
         onRefund={handleBillsRefund}
       />}
     </PocketRouteShell>

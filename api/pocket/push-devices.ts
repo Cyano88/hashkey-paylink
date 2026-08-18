@@ -78,7 +78,7 @@ async function firebaseAccessToken(serviceAccount: FirebaseServiceAccount) {
   return data.access_token
 }
 
-export async function sendPocketPush(ownerId: string, eventId: string, input: { title: string; body: string; path: string }) {
+export async function sendPocketPush(ownerId: string, eventId: string, input: { title: string; body: string; path: string; tag?: string }) {
   const serviceAccount = firebaseServiceAccount()
   if (!serviceAccount) return
   const snapshot = normalized(await readDurableJson<PocketPushStore>(STORE_KEY))
@@ -95,7 +95,7 @@ export async function sendPocketPush(ownerId: string, eventId: string, input: { 
         token,
         notification: { title: input.title, body: input.body },
         data: { path: input.path, eventId },
-        android: { priority: 'high', notification: { channel_id: 'pocket-payments', visibility: 'PRIVATE' } },
+        android: { priority: 'high', notification: { channel_id: 'pocket-payments', visibility: 'PRIVATE', ...(input.tag ? { tag: input.tag } : {}) } },
         apns: { payload: { aps: { sound: 'default' } } },
       } }),
     })

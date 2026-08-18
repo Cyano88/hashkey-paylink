@@ -26,7 +26,7 @@ type PocketActivityPanelProps = {
 function activityKind(row: PocketActivityRow): ActivityKind {
   const source = String(row.source ?? '').toLowerCase()
   const settlement = String(row.settlementType ?? '').toLowerCase()
-  if (source === 'collection') return 'collections'
+  if (source === 'collection' || source === 'request') return 'collections'
   if (source === 'wallet-deposit' || source === 'wallet-withdrawal' || source === 'wallet-bridge' || settlement === 'wallet_transfer' || settlement === 'wallet_bridge') return 'wallet'
   if (source === 'purchase' || source === 'bills' || settlement === 'bill_payment' || settlement === 'hosted_checkout' || settlement === 'service_funding') return 'purchases'
   if (source === 'bank-send' || source === 'bank_send' || settlement === 'paycrest_onramp') return 'bank'
@@ -41,6 +41,7 @@ function supportedRows(rows: PocketActivityRow[]) {
     const source = String(row.source ?? '').toLowerCase()
     const settlement = String(row.settlementType ?? '').toLowerCase()
     return source === 'collection'
+      || source === 'request'
       || source === 'wallet-deposit'
       || source === 'wallet-withdrawal'
       || source === 'wallet-bridge'
@@ -150,7 +151,8 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
                           {kind === 'wallet'
                             ? String(row.source).toLowerCase() === 'wallet-deposit' ? <ArrowDownToLine className="h-4 w-4" /> : String(row.source).toLowerCase() === 'wallet-bridge' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />
-                            : kind === 'bank' ? <Landmark className="h-4 w-4" /> : kind === 'purchases' ? row.source === 'bills' ? <Banknote className="h-4 w-4" /> : <Wallet className="h-4 w-4" /> : <Store className="h-4 w-4" />}
+                            : String(row.source).toLowerCase() === 'request' ? row.direction === 'in' ? <ArrowDownToLine className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />
+                            : kind === 'bank' ? String(row.paycrestStatus ?? '').toLowerCase() === 'refunded' || row.refundTxHash ? <ArrowDownToLine className="h-4 w-4" /> : <Landmark className="h-4 w-4" /> : kind === 'purchases' ? row.source === 'bills' ? <Banknote className="h-4 w-4" /> : <Wallet className="h-4 w-4" /> : <Store className="h-4 w-4" />}
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">
