@@ -43,10 +43,10 @@ export function PocketVerifiedBankFields({
 }: PocketVerifiedBankFieldsProps) {
   return (
     <div className={cn(
-      'space-y-2.5 rounded-xl p-2.5',
+      'space-y-2.5',
       embedded
-        ? 'bg-gray-50/80 dark:bg-white/[0.04]'
-        : 'border border-gray-100 bg-gray-50/70 dark:border-white/10 dark:bg-white/[0.04]',
+        ? 'rounded-none bg-transparent p-0'
+        : 'rounded-xl border border-gray-100 bg-gray-50/70 p-2.5 dark:border-white/10 dark:bg-white/[0.04]',
     )}>
       <div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Country</p>
