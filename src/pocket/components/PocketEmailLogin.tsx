@@ -82,7 +82,8 @@ export default function PocketEmailLogin() {
         <div className="text-center">
           <h1 className="text-3xl font-black tracking-[-0.045em]">Check your email</h1>
           <p className="mt-3 text-sm font-medium leading-6 text-gray-500">
-            Enter the code sent to<br /><strong className="font-bold text-gray-900">{email}</strong>
+            Enter the code sent to
+            <strong className="mx-auto mt-1.5 block max-w-full break-all text-base font-extrabold leading-6 text-gray-950">{email}</strong>
           </p>
         </div>
         <form onSubmit={verifyCode} className="mt-8">
