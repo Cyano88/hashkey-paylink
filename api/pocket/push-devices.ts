@@ -44,6 +44,19 @@ export async function unregisterPocketPushDevice(ownerId: string, tokenValue: un
   })
 }
 
+export async function unregisterAllPocketPushDevices(ownerId: string) {
+  await mutateDurableJson<PocketPushStore>(STORE_KEY, current => {
+    const store = normalized(current)
+    for (const [token, device] of Object.entries(store.devices)) {
+      if (device.ownerId === ownerId) delete store.devices[token]
+    }
+    for (const deliveryKey of Object.keys(store.delivered)) {
+      if (deliveryKey.startsWith(ownerId + ':')) delete store.delivered[deliveryKey]
+    }
+    return store
+  })
+}
+
 type FirebaseServiceAccount = { project_id: string; client_email: string; private_key: string; token_uri?: string }
 let firebaseTokenCache: { token: string; expiresAt: number } | null = null
 

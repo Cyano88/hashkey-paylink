@@ -45,7 +45,10 @@ export default function PocketHomePage() {
   const fx = usePocketFxQuote(1, showNgn)
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
   const [balanceVisible, setBalanceVisible] = useState(() => window.localStorage.getItem(BALANCE_VISIBLE_KEY) !== 'false')
-  const recent = activity.rows.slice(0, 4)
+  // Keep the compact Home preview above the fixed native navigation. Four rows
+  // intersect the nav's compositor layer on current Android WebView builds and
+  // can leave the lower viewport unrasterized; the full list remains in Activity.
+  const recent = activity.rows.slice(0, 3)
   const balancesReady = !authenticated || wallets.resolved
   const balancesVisible = balancesReady && (!wallets.error || wallets.rows.length > 0)
   const activityReady = !authenticated || activity.resolved

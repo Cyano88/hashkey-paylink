@@ -48,12 +48,13 @@ export default function PocketNativeBridge() {
     }).catch(() => undefined))
     syncInsets()
     const syncStatusBar = () => {
-      const style = document.documentElement.classList.contains('dark') ? Style.Dark : Style.Light
+      const lightSurface = document.documentElement.dataset.pocketLightSurface === 'true'
+      const style = !lightSurface && document.documentElement.classList.contains('dark') ? Style.Dark : Style.Light
       void StatusBar.setStyle({ style }).catch(() => undefined)
     }
     syncStatusBar()
     const themeObserver = new MutationObserver(syncStatusBar)
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-pocket-light-surface'] })
     void Network.getStatus().then(status => {
       if (active) setOnline(status.connected)
     }).catch(() => undefined)

@@ -33,6 +33,8 @@ import WalletsDocs      from './pages/docs/WalletsDocs'
 import EnvironmentDocs  from './pages/docs/EnvironmentDocs'
 import TermsDocs        from './pages/docs/TermsDocs'
 import PrivacyDocs      from './pages/docs/PrivacyDocs'
+import AccountDeletionDocs from './pages/docs/AccountDeletionDocs'
+import PocketLegalDocumentPage from './pocket/pages/PocketLegalDocumentPage'
 import CirclePocketApp from './pocket/CirclePocketApp'
 import { isPocketHostname, POCKET_ORIGIN } from './pocket/lib/pocketRoutes'
 
@@ -59,6 +61,7 @@ export default function App() {
       <SolanaProvider>
         <BrowserRouter>
           <Routes>
+            <Route path="docs/account-deletion" element={<PocketLegalDocumentPage document="account-deletion" />} />
             <Route element={<Layout />}>
               <Route path="receipt/:activityId" element={<X402Receipt />} />
               <Route path="*" element={<CirclePocketApp />} />
@@ -132,6 +135,7 @@ export default function App() {
           <Route path="environment"        element={<EnvironmentDocs />} />
           <Route path="terms"              element={<TermsDocs />} />
           <Route path="privacy"            element={<PrivacyDocs />} />
+          <Route path="account-deletion"   element={<AccountDeletionDocs />} />
         </Route>
         {IS_POLYDESK_HOST ? <Route index element={<PolyDesk />} /> : !IS_APP_HOST && <Route index element={<FoundationPage />} />}
         {appShellRoutes}

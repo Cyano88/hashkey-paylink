@@ -1,22 +1,29 @@
 let approvalToken = ''
 let approvalExpiresAt = 0
+let approvalAuthorization = ''
 let paymentPreparer: (() => Promise<void>) | null = null
 
 export const POCKET_PAYMENT_APPROVAL_EVENT = 'pocket:payment-approval-request'
 export const POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT = 'pocket:payment-approval-cancelled'
 
-export function setPocketPaymentApproval(token: string, expiresAt: number) {
+export function setPocketPaymentApproval(token: string, expiresAt: number, authorization: string) {
   approvalToken = token
   approvalExpiresAt = expiresAt
+  approvalAuthorization = authorization
 }
 
 export function takePocketPaymentApproval() {
-  if (!approvalToken || approvalExpiresAt <= Date.now()) {
+  if (!approvalToken || !approvalAuthorization || approvalExpiresAt <= Date.now()) {
     approvalToken = ''
     approvalExpiresAt = 0
-    return ''
+    approvalAuthorization = ''
+    return null
   }
-  return approvalToken
+  const approval = { token: approvalToken, authorization: approvalAuthorization }
+  approvalToken = ''
+  approvalExpiresAt = 0
+  approvalAuthorization = ''
+  return approval
 }
 
 export function registerPocketPaymentPreparer(preparer: () => Promise<void>) {

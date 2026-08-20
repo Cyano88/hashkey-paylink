@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 
-const suites = ['test:pocket-contracts','test:pocket-ledger','test:pocket-payment-executions','test:pocket-reconciliation','test:pocket-transaction-operations','test:paycrest-provider-boundaries','test:pocket-requests-adapter','test:pocket-balances-adapter','test:pocket-activity-adapter','test:pocket-bank-withdraw-adapter','test:pocket-pos-adapter','test:pocket-bills','test:pocket-support-lifecycle','test:router-security','test:solana-token-security','test:durable-store-security','test:pocket-load']
+const suites = ['test:pocket-contracts','test:pocket-payment-security','test:circle-link','test:pocket-wallet-link-adapter','test:pocket-account-deletion','test:pocket-ledger','test:pocket-payment-executions','test:pocket-reconciliation','test:pocket-transaction-operations','test:paycrest-reconcile-policy','test:paycrest-provider-boundaries','test:pocket-requests-adapter','test:pocket-balances-adapter','test:pocket-activity-adapter','test:pocket-bank-withdraw-adapter','test:pocket-pos-adapter','test:pocket-bills','test:pocket-money-push','test:pocket-support-lifecycle','test:router-security','test:solana-token-security','test:durable-store-security','test:pocket-load']
 const timeoutMs = Number(process.env.POCKET_RELEASE_SUITE_TIMEOUT_MS || 180_000)
 for (const suite of suites) {
   const code = await new Promise(resolve => {

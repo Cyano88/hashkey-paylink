@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import {
   isNonRetryablePaycrestReconciliationError,
   isTerminalPaycrestReconciliationStatus,
+  paycrestTransferRecoveryWindow,
 } from '../api/paycrest-reconcile.ts'
 
 for (const status of ['settled', 'refunded', 'failed', 'expired', 'cancelled', 'canceled']) {
@@ -29,5 +30,20 @@ for (const message of [
 ]) {
   assert.equal(isNonRetryablePaycrestReconciliationError(new Error(message)), false)
 }
+
+assert.deepEqual(paycrestTransferRecoveryWindow({
+  payer_wallet: '0xdccad7c3e7f15db13e1aaba4b4e80832d9d3e0e4',
+  created_at: '2026-08-18T10:00:00.000Z',
+  valid_until: '2026-08-18T11:00:00.000Z',
+}), {
+  payer: '0xdccad7c3e7f15db13e1aaba4b4e80832d9d3e0e4',
+  notBefore: '2026-08-18T10:00:00.000Z',
+  notAfter: '2026-08-18T11:00:00.000Z',
+})
+assert.deepEqual(paycrestTransferRecoveryWindow({
+  payer_wallet: 'not-an-address',
+  created_at: 'invalid',
+  valid_until: 'invalid',
+}), {})
 
 console.log('Paycrest reconciliation policy smoke checks passed.')

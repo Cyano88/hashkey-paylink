@@ -18,6 +18,9 @@ import { POCKET_NATIVE_BACK_EVENT } from './lib/pocketNativeBack'
 import { reconnectPocketBaseWallet, restorePocketWalletSession } from './controllers/usePocketWalletController'
 import { Lock } from './components/PocketIcons'
 import PocketPaymentSecurityGate from './components/PocketPaymentSecurityGate'
+import PocketAuthBrand from './components/PocketAuthBrand'
+import PocketProgressDots from './components/PocketProgressDots'
+import usePocketLightSurface from './hooks/usePocketLightSurface'
 
 const PocketActivityPage = lazy(() => import('./pages/PocketActivityPage'))
 const PocketAssistantPage = lazy(() => import('./pages/PocketAssistantPage'))
@@ -49,40 +52,23 @@ function PocketWalletUnlockScreen({ error, onRetry }: { error: string; onRetry: 
   </main>
 }
 
-function PocketWalletAccessScreen({
-  mode,
-  error,
-  busy,
-  onRetry,
-  onEnableBiometrics,
-  onUseEmail,
-}: {
-  mode: 'unlocking' | 'choice' | 'error'
-  error: string
-  busy: boolean
-  onRetry: () => void
-  onEnableBiometrics: () => void
-  onUseEmail: () => void
-}) {
-  const choosing = mode === 'choice'
-  return <main className='fixed inset-0 z-[60] flex items-center justify-center bg-[#F5F5F7] px-6 text-gray-950 dark:bg-[#0A0A0A] dark:text-white'>
-    <section className='w-full max-w-[390px] rounded-[30px] border border-gray-200/80 bg-white p-7 text-center shadow-[0_24px_70px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-[#17181c]'>
-      <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300'><Lock className='h-6 w-6' /></span>
-      <h1 className='mt-5 text-xl font-black tracking-tight'>{choosing ? 'Preparing Pocket' : mode === 'error' ? 'Connect your Circle wallet' : 'Preparing Pocket'}</h1>
-      <p className='mx-auto mt-2 max-w-[300px] text-sm leading-6 text-gray-500 dark:text-gray-400'>
-        {choosing
-          ? 'Pocket is preparing your secure wallet session.'
-          : error || 'This may require one email verification on first setup or recovery.'}
-      </p>
-      {choosing ? <>
-        {error && <p className='mt-3 text-xs font-semibold text-red-500' role='status'>{error}</p>}
-        <button type='button' onClick={onEnableBiometrics} disabled={busy} className='mt-6 min-h-14 w-full rounded-full bg-gray-950 px-5 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950'>{busy ? 'Turning on secure unlock...' : 'Use fingerprint or face'}</button>
-        <button type='button' onClick={onUseEmail} disabled={busy} className='mt-2 min-h-12 w-full rounded-full px-5 text-sm font-bold text-gray-500 disabled:opacity-60 dark:text-gray-300'>Use email code</button>
-      </> : mode === 'error'
-        ? <>
-          <button type='button' onClick={onRetry} disabled={busy} className='mt-6 min-h-14 w-full rounded-full bg-gray-950 px-5 text-sm font-bold text-white disabled:opacity-60 dark:bg-white dark:text-gray-950'>{busy ? 'Connecting Circle wallet...' : 'Connect Circle wallet'}</button>
+function PocketWalletAccessScreen({ error, busy, onRetry }: { error: string; busy: boolean; onRetry: () => void }) {
+  usePocketLightSurface()
+  return <main className='fixed inset-0 z-[60] flex items-center justify-center bg-[#F5F5F7] px-6 pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-[max(1.5rem,var(--pocket-safe-top))] text-gray-950'>
+    <section className='w-full max-w-[390px] text-center'>
+      <PocketAuthBrand compact />
+      <span className='mx-auto mt-9 flex h-16 w-16 items-center justify-center rounded-full border border-gray-200 bg-white text-blue-600 shadow-sm'><Lock className='h-6 w-6' /></span>
+      <p className='mt-6 text-[10px] font-black uppercase tracking-[0.22em] text-gray-400'>One final step</p>
+      <h1 className='mx-auto mt-3 max-w-[320px] text-2xl font-black leading-tight tracking-[-0.035em]'>Sign in to your Circle Pocket wallet</h1>
+      <p className='mx-auto mt-3 max-w-[310px] text-sm font-medium leading-6 text-gray-500'>Continue to your account and securely open all your Pocket wallets.</p>
+      {busy ? (
+        <PocketProgressDots label='Opening Circle wallet sign in' />
+      ) : (
+        <>
+          {error && <p className='mx-auto mt-5 max-w-[310px] text-xs font-semibold leading-5 text-gray-500' role='status'>{error}</p>}
+          <button type='button' onClick={onRetry} className='mt-4 min-h-11 px-5 text-sm font-bold text-blue-600'>Retry Circle sign in</button>
         </>
-        : <span className='mx-auto mt-6 block h-2.5 w-2.5 animate-pulse rounded-full bg-blue-600' aria-label='Opening Pocket wallets' />}
+      )}
     </section>
   </main>
 }
@@ -102,21 +88,30 @@ export default function CirclePocketApp() {
   usePocketPushNotifications({ ready, authenticated, getAccessToken, navigate })
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const unlockedEmail = useRef('')
+  const automaticWalletSignInEmail = useRef('')
   const [walletUnlockState, setWalletUnlockState] = useState<'checking' | 'reconnect' | 'ready'>('checking')
   const [walletUnlockError, setWalletUnlockError] = useState('')
   const [walletUnlockBusy, setWalletUnlockBusy] = useState(false)
   const [initialDataReady, setInitialDataReady] = useState(false)
+  const [paymentSecurityReady, setPaymentSecurityReady] = useState(false)
   const sessionResolved = ready && (!authenticated || (
     profile.loaded
     && !profile.busy
     && initialDataReady
   ))
   const [launchSurface] = useState(() => landing || isPocketNativeRuntime())
-  const splashState = usePocketSessionSplash(launchSurface, sessionResolved)
+  // Keep the launcher above every authenticated startup gate. It should fade
+  // directly onto Home (or a real recovery screen), never onto a blank loader.
+  const launchDestinationReady = sessionResolved && (!authenticated || (
+    !landing
+    && (walletUnlockState === 'reconnect' || (walletUnlockState === 'ready' && paymentSecurityReady))
+  ))
+  const splashState = usePocketSessionSplash(launchSurface, launchDestinationReady)
 
   useEffect(() => {
     if (!ready || !authenticated || !email) {
       unlockedEmail.current = ''
+      automaticWalletSignInEmail.current = ''
       setWalletUnlockError('')
       setWalletUnlockState('checking')
       return
@@ -147,6 +142,10 @@ export default function CirclePocketApp() {
     return () => { active = false }
   }, [authenticated, email, ready])
 
+  useEffect(() => {
+    setPaymentSecurityReady(false)
+  }, [authenticated, email])
+
   const reconnectWallet = useCallback(async () => {
     if (!ready || !authenticated || !email || walletUnlockBusy) return
     setWalletUnlockBusy(true)
@@ -156,12 +155,22 @@ export default function CirclePocketApp() {
       unlockedEmail.current = email
       setWalletUnlockState('ready')
     } catch (reason) {
-      setWalletUnlockError(reason instanceof Error ? reason.message : 'Circle wallet was not connected.')
+      const message = reason instanceof Error ? reason.message : ''
+      setWalletUnlockError(/cancel/i.test(message)
+        ? 'Circle wallet sign-in was cancelled.'
+        : 'Circle wallet sign-in did not finish. Check your connection and try again.')
       setWalletUnlockState('reconnect')
     } finally {
       setWalletUnlockBusy(false)
     }
   }, [authenticated, email, getAccessToken, ready, walletUnlockBusy])
+
+  useEffect(() => {
+    if (walletUnlockState !== 'reconnect' || walletUnlockBusy || !email || automaticWalletSignInEmail.current === email) return
+    automaticWalletSignInEmail.current = email
+    const timer = window.setTimeout(() => { void reconnectWallet() }, 450)
+    return () => window.clearTimeout(timer)
+  }, [email, reconnectWallet, walletUnlockBusy, walletUnlockState])
 
   useEffect(() => {
     if (!isPocketNativeRuntime()) return
@@ -267,7 +276,7 @@ export default function CirclePocketApp() {
   let content: ReactNode = null
   const concealLaunchContent = splashState !== 'idle' && (!sessionResolved || (authenticated && landing))
   if (ready && authenticated && email && walletUnlockState === 'checking') content = <PocketLoadingState active={active} />
-  else if (ready && authenticated && email && walletUnlockState === 'reconnect') content = <PocketWalletAccessScreen mode='error' error={walletUnlockError} busy={walletUnlockBusy} onRetry={() => { void reconnectWallet() }} onEnableBiometrics={() => { void reconnectWallet() }} onUseEmail={() => { void reconnectWallet() }} />
+  else if (ready && authenticated && email && walletUnlockState === 'reconnect') content = <PocketWalletAccessScreen error={walletUnlockError} busy={walletUnlockBusy || automaticWalletSignInEmail.current !== email} onRetry={() => { void reconnectWallet() }} />
   else if (concealLaunchContent) content = <main className="min-h-screen bg-[#F5F5F7]" aria-hidden="true" />
   else if (!ready) content = <PocketLoadingState active={active} />
   else if (!authenticated) content = <PocketPageBoundary active='home'><PocketLandingPage /></PocketPageBoundary>
@@ -287,7 +296,7 @@ export default function CirclePocketApp() {
   else if (route?.section === 'move' && route.view === 'pos') content = <PocketPageBoundary active="home"><PocketMovePosPage /></PocketPageBoundary>
 
   const securedContent = ready && authenticated && email && walletUnlockState === 'ready'
-    ? <PocketPaymentSecurityGate email={email} getAccessToken={getAccessToken}>{content}</PocketPaymentSecurityGate>
+    ? <PocketPaymentSecurityGate email={email} getAccessToken={getAccessToken} onInitialStateResolved={() => setPaymentSecurityReady(true)}>{content}</PocketPaymentSecurityGate>
     : content
   return (
     <>

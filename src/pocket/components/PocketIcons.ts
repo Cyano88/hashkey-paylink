@@ -56,6 +56,7 @@ export {
   BuildingStorefrontIcon as Store,
   SunIcon as Sun,
   TagIcon as Tag,
+  TrashIcon as Trash,
   UserCircleIcon as UserRound,
   UserGroupIcon as Users,
   WrenchScrewdriverIcon as Sliders,

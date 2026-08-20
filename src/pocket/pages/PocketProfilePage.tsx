@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Banknote, Bell, Check, ChevronRight, Coins, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil, TrendingUp } from '../components/PocketIcons'
+import { ArrowLeft, Banknote, Bell, Check, ChevronRight, Coins, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil, Trash, TrendingUp } from '../components/PocketIcons'
 import PocketAvatar, { POCKET_AVATARS } from '../components/PocketAvatar'
 import PocketBottomNav, { type PocketNavTab } from '../components/PocketBottomNav'
 import PocketLoadingState from '../components/PocketLoadingState'
@@ -18,6 +18,9 @@ import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 import { disablePocketPaymentBiometrics } from '../lib/pocketPaymentBiometrics'
 import { POCKET_PIN_RESET_KEY } from '../components/PocketPaymentSecurityGate'
 import { deletePocketSecureWalletSession } from '../lib/pocketSecureWalletSession'
+import { beginPocketPaymentPinReset } from '../api/pocketPaymentSecurityClient'
+import { clearPocketAccountOperationState } from '../lib/pocketAccountState'
+import { deletePocketAccount } from '../api/pocketAccountClient'
 
 export default function PocketProfilePage() {
   const navigate = useNavigate()
@@ -25,6 +28,10 @@ export default function PocketProfilePage() {
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const [editing, setEditing] = useState(() => new URLSearchParams(window.location.search).get('edit') === 'id')
   const [currencyOpen, setCurrencyOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [feature, setFeature] = useState<PocketProfileFeature | null>(() => {
     const requested = new URLSearchParams(window.location.search).get('feature')
     return requested === 'rates' || requested === 'limits' || requested === 'notifications' || requested === 'security' ? requested : null
@@ -46,7 +53,10 @@ export default function PocketProfilePage() {
   useEffect(() => { if (profile.loaded && editing) profile.edit() }, [profile.loaded]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const handleNativeBack = (rawEvent: Event) => {
-      if (feature) {
+      if (deleteOpen) {
+        rawEvent.preventDefault()
+        if (!deleteBusy) setDeleteOpen(false)
+      } else if (feature) {
         rawEvent.preventDefault()
         setFeature(null)
       } else if (currencyOpen) {
@@ -59,13 +69,16 @@ export default function PocketProfilePage() {
     }
     window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
     return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
-  }, [currencyOpen, editing, feature])
+  }, [currencyOpen, deleteBusy, deleteOpen, editing, feature])
   if (!profile.loaded || profile.busy && !profile.profile) return <PocketLoadingState active="home" />
   const current = profile.profile
   const copyId = async () => { if (!current?.pocketId) return; await navigator.clipboard.writeText(current.pocketId); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }
   const save = async () => { if (await profile.save()) setEditing(false) }
   const signOut = async (resetPin = false) => {
-    if (resetPin) localStorage.setItem(POCKET_PIN_RESET_KEY, 'true')
+    if (resetPin) {
+      const reset = await beginPocketPaymentPinReset(getAccessToken)
+      localStorage.setItem(POCKET_PIN_RESET_KEY, reset.resetToken)
+    }
     resetPocketSessionSplash()
     await unregisterPocketPushDevice(getAccessToken).catch(() => false)
     await Promise.all([
@@ -73,14 +86,58 @@ export default function PocketProfilePage() {
       disablePocketQuickApproval(email),
       deletePocketSecureWalletSession(email),
     ])
+    clearPocketAccountOperationState()
     await logout()
     navigate(POCKET_BASE_PATH || POCKET_ROUTES.root)
   }
   const selectNav = (tab: PocketNavTab) => navigate(POCKET_BASE_PATH + (tab === 'profile' ? POCKET_ROUTES.profile : tab === 'bills' ? pocketPathFor({ section: 'bills', view: 'airtime' }) : tab === 'activity' ? POCKET_ROUTES.activity : POCKET_ROUTES.home))
-  if (feature) return <PocketProfileFeaturePage feature={feature} onBack={() => setFeature(null)} getAccessToken={getAccessToken} email={email} onResetPin={() => void signOut(true)} />
+  const confirmAccountDeletion = async () => {
+    if (deleteConfirmation !== 'DELETE' || deleteBusy) return
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await deletePocketAccount(getAccessToken, deleteConfirmation)
+      resetPocketSessionSplash()
+      await Promise.all([
+        disablePocketPaymentBiometrics(email),
+        disablePocketQuickApproval(email),
+        deletePocketSecureWalletSession(email),
+      ])
+      clearPocketAccountOperationState()
+      await identityLogout().catch(() => undefined)
+      navigate(POCKET_BASE_PATH || POCKET_ROUTES.root, { replace: true })
+    } catch (reason) {
+      setDeleteError(reason instanceof Error ? reason.message : 'Pocket could not delete your account.')
+      setDeleteBusy(false)
+    }
+  }
+  if (deleteOpen) return <div className="fixed inset-0 z-[70] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
+    <main className="mx-auto flex min-h-full w-full max-w-[480px] flex-col px-5 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]">
+      <header className="flex h-12 items-center justify-between">
+        <button type="button" onClick={() => !deleteBusy && setDeleteOpen(false)} disabled={deleteBusy} className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm disabled:opacity-50 dark:bg-white/[0.07]" aria-label="Back"><ArrowLeft className="h-4 w-4" /></button>
+        <p className="text-sm font-black">Delete account</p><span className="h-10 w-10" />
+      </header>
+      <section className="flex flex-1 flex-col pt-8">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-300"><Trash className="h-6 w-6" /></span>
+        <h1 className="mt-6 text-3xl font-black tracking-[-0.04em]">Delete your Pocket account?</h1>
+        <p className="mt-3 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400">This permanently removes your profile, Pocket ID association, saved wallet links, push registrations, Pocket PIN, and Agent Hash account memory.</p>
+        <div className="mt-6 rounded-[22px] border border-amber-200 bg-amber-50 p-4 text-xs font-medium leading-5 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100">
+          Completed payments are not reversed. Transaction, payout, bill, receipt, reconciliation, dispute, fraud-prevention, security, and accounting records may be retained where required. Public blockchain records cannot be erased.
+        </div>
+        <label className="mt-8 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400" htmlFor="delete-pocket-confirmation">Type DELETE to confirm</label>
+        <input id="delete-pocket-confirmation" value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value.toUpperCase().slice(0, 6))} autoCapitalize="characters" autoCorrect="off" disabled={deleteBusy} className="mt-2 min-h-14 rounded-2xl border border-gray-200 bg-white px-4 text-base font-black tracking-[0.16em] outline-none focus:border-red-500 dark:border-white/10 dark:bg-white/[0.05]" />
+        {deleteError && <p className="mt-3 text-xs font-semibold leading-5 text-red-600 dark:text-red-300" role="alert">{deleteError}</p>}
+        <button type="button" onClick={() => void confirmAccountDeletion()} disabled={deleteConfirmation !== 'DELETE' || deleteBusy} className="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-red-600 px-5 text-sm font-bold text-white disabled:opacity-40">
+          {deleteBusy && <Loader2 className="h-4 w-4" />}{deleteBusy ? 'Deleting account' : 'Delete account permanently'}
+        </button>
+        <a href="/docs/account-deletion" target="_blank" rel="noreferrer" className="mt-5 text-center text-xs font-bold text-gray-500 underline underline-offset-4">Account deletion and retention details</a>
+      </section>
+    </main>
+  </div>
+  if (feature) return <PocketProfileFeaturePage feature={feature} onBack={() => setFeature(null)} getAccessToken={getAccessToken} email={email} onResetPin={() => signOut(true)} />
   if (currencyOpen) return <PocketDisplayCurrencyPicker current={current?.displayCurrency ?? 'USDC'} busy={profile.busy} error={profile.error} onBack={() => setCurrencyOpen(false)} onSelect={async currency => Boolean(await profile.saveDisplayCurrency(currency))} />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
-    <main className="mx-auto flex min-h-full w-full max-w-[480px] flex-col px-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
+    <main className="mx-auto flex min-h-full w-full max-w-[480px] flex-col px-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]">
       <header className="flex h-12 items-center justify-between"><button type="button" onClick={() => editing ? setEditing(false) : navigate(-1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]" aria-label="Back"><ArrowLeft className="h-4 w-4" /></button><p className="text-sm font-black">Profile</p><span className="h-10 w-10" /></header>
       <section className="flex flex-1 flex-col pt-8">
         <div className="text-center"><PocketAvatar avatarId={editing ? profile.draft.avatarId : current?.avatarId} className="mx-auto h-24 w-24 border-4 border-white shadow-md dark:border-[#19191d]" /><p className="mt-4 text-xl font-black tracking-[-0.03em]">{current?.resolvedName || 'Pocket profile'}</p><p className="mt-1 text-xs font-medium text-gray-400">{email}</p></div>
@@ -112,6 +169,11 @@ export default function PocketProfilePage() {
           <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.assistant)} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-white/[0.05]">
             <MessageCircle className="h-5 w-5 text-gray-500 dark:text-gray-300" />
             <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Support</span><span className="mt-1 block text-sm font-bold">Chat with Agent Hash</span></span>
+            <ChevronRight className="h-4 w-4 text-gray-400" />
+          </button>
+          <button type="button" onClick={() => { setDeleteConfirmation(''); setDeleteError(''); setDeleteOpen(true) }} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-white/[0.05]">
+            <Trash className="h-5 w-5 text-red-500" />
+            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-red-500">Account</span><span className="mt-1 block text-sm font-bold">Delete account</span></span>
             <ChevronRight className="h-4 w-4 text-gray-400" />
           </button>
           <button type="button" onClick={() => { profile.edit(); setEditing(true) }} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-bold text-white dark:bg-white dark:text-gray-950"><Pencil className="h-4 w-4" />Edit profile</button>

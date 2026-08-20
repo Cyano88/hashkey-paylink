@@ -91,16 +91,17 @@ function NotificationsPanel({ enabled, onChange }: { enabled: boolean; onChange(
       <div className='flex items-center gap-3'>
         <span className='flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-blue-700 dark:bg-blue-400/10 dark:text-blue-300'><Bell className='h-5 w-5' /></span>
         <span className='min-w-0 flex-1'><strong className='block text-sm'>Notifications</strong><span className='mt-1 block text-xs text-gray-500 dark:text-gray-400'>Payments, service status, and important Pocket updates</span></span>
-        <button type='button' role='switch' aria-checked={enabled} onClick={() => onChange(!enabled)} className={cn('relative h-7 w-12 shrink-0 rounded-full transition-colors', enabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}>
-          <span className={cn('absolute left-0 top-1 block h-5 w-5 rounded-full bg-white shadow-sm transition-transform', enabled ? 'translate-x-6' : 'translate-x-1')} />
-        </button>
+        <label className={cn('relative h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors', enabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}>
+          <input type='checkbox' role='switch' aria-label='Notifications' checked={enabled} onChange={event => onChange(event.target.checked)} className='peer sr-only' />
+          <span className={cn('pointer-events-none absolute left-0 top-1 block h-5 w-5 rounded-full bg-white shadow-sm transition-transform', enabled ? 'translate-x-6' : 'translate-x-1')} />
+        </label>
       </div>
     </div>
     <p className='mt-4 px-1 text-[11px] leading-5 text-gray-400'>{enabled ? 'Enabled on this device. Android notification permission must also remain allowed.' : 'Disabled on this device. Pocket will stop registering this device for notifications.'}</p>
   </section>
 }
 
-function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; getAccessToken(): Promise<string | null>; onResetPin(): void }) {
+function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; getAccessToken(): Promise<string | null>; onResetPin(): Promise<void> }) {
   const [currentPin, setCurrentPin] = useState('')
   const [biometricPin, setBiometricPin] = useState('')
   const [newPin, setNewPin] = useState('')
@@ -145,10 +146,16 @@ function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; g
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Circle wallet was not reconnected.') }
     finally { setBusy(false) }
   }
+  const resetPin = async () => {
+    setBusy(true); setError(''); setNotice('')
+    try { await onResetPin() }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Pocket PIN reset could not start.') }
+    finally { setBusy(false) }
+  }
   const inputClass = 'mt-2 min-h-12 w-full rounded-2xl bg-gray-50 px-4 text-center text-base font-black tracking-[0.25em] outline-none focus:ring-2 focus:ring-blue-500 dark:bg-white/[0.06]'
   return <section className='pt-8 space-y-4'>
     <article className='rounded-[26px] bg-white p-5 shadow-sm dark:bg-white/[0.05]'>
-      <div className='flex items-center gap-3'><span className='min-w-0 flex-1'><strong className='block text-sm'>Fingerprint or face</strong><span className='mt-1 block text-xs text-gray-500'>{biometrics ? 'Used first for payment approval' : 'Payments use your Pocket PIN'}</span></span>{biometricsAvailable && <button type='button' role='switch' aria-checked={biometrics} onClick={() => void toggleBiometrics()} disabled={busy} className={cn('relative h-7 w-12 rounded-full transition-colors disabled:opacity-50', biometrics ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}><span className={cn('absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform', biometrics ? 'translate-x-6' : 'translate-x-1')} /></button>}</div>
+      <div className='flex items-center gap-3'><span className='min-w-0 flex-1'><strong className='block text-sm'>Fingerprint or face</strong><span className='mt-1 block text-xs text-gray-500'>{biometrics ? 'Used first for payment approval' : 'Payments use your Pocket PIN'}</span></span>{biometricsAvailable && <label className={cn('relative h-7 w-12 cursor-pointer rounded-full transition-colors', busy && 'pointer-events-none opacity-50', biometrics ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}><input type='checkbox' role='switch' aria-label='Fingerprint or face' checked={biometrics} onChange={() => void toggleBiometrics()} disabled={busy} className='peer sr-only' /><span className={cn('pointer-events-none absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform', biometrics ? 'translate-x-6' : 'translate-x-1')} /></label>}</div>
       {!biometrics && biometricsAvailable && <><label className='mt-4 block text-[10px] font-black uppercase tracking-[0.16em] text-gray-400'>Current PIN</label><input value={biometricPin} onChange={event => setBiometricPin(clean(event.target.value))} inputMode='numeric' type='password' className={inputClass} /></>}
     </article>
     <article className='rounded-[26px] bg-white p-5 shadow-sm dark:bg-white/[0.05]'>
@@ -160,12 +167,12 @@ function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; g
     </article>
     <button type='button' onClick={() => void reconnectWallet()} disabled={busy} className='min-h-12 w-full rounded-full border border-gray-200 text-xs font-black text-gray-700 disabled:opacity-50 dark:border-white/10 dark:text-gray-200'>{busy ? 'Please wait...' : 'Reconnect Circle wallet'}</button>
     {error && <p className='px-2 text-xs font-semibold text-red-500'>{error}</p>}{notice && <p className='px-2 text-xs font-semibold text-emerald-600'>{notice}</p>}
-    <button type='button' onClick={onResetPin} className='min-h-12 w-full rounded-full border border-red-200 text-xs font-black text-red-600 dark:border-red-400/20 dark:text-red-300'>Forgot or reset PIN</button>
+    <button type='button' onClick={() => void resetPin()} disabled={busy} className='min-h-12 w-full rounded-full border border-red-200 text-xs font-black text-red-600 disabled:opacity-50 dark:border-red-400/20 dark:text-red-300'>Forgot or reset PIN</button>
     <p className='px-1 text-[11px] leading-5 text-gray-400'>Reset signs you out first so your email identity can be verified again.</p>
   </section>
 }
 
-export default function PocketProfileFeaturePage({ feature, onBack, getAccessToken, email = '', onResetPin = () => undefined }: { feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null>; email?: string; onResetPin?(): void }) {
+export default function PocketProfileFeaturePage({ feature, onBack, getAccessToken, email = '', onResetPin = async () => undefined }: { feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null>; email?: string; onResetPin?(): Promise<void> }) {
   const fx = usePocketFxQuote(10, feature === 'rates')
   const [currency, setCurrency] = useState('NGN')
   const [pushEnabled, setPushEnabled] = useState(pocketPushEnabled)
@@ -195,7 +202,7 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
   useEffect(() => { if (feature === 'limits') void refreshLimits() }, [feature]) // eslint-disable-line react-hooks/exhaustive-deps
   const title = feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
   return <div className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white'>
-    <main className='mx-auto min-h-full w-full max-w-[480px] px-5 pb-10 pt-[max(1rem,env(safe-area-inset-top))]'>
+    <main className='mx-auto min-h-full w-full max-w-[480px] px-5 pb-[max(2.5rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]'>
       <header className='flex h-12 items-center justify-between'><button type='button' onClick={onBack} className='flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]' aria-label='Back'><ArrowLeft className='h-4 w-4' /></button><p className='text-sm font-black'>{title}</p><span className='h-10 w-10' /></header>
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={setCurrency} />}
       {feature === 'limits' && <LimitsPanel usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}

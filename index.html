@@ -12,9 +12,18 @@
     <link rel="icon" type="image/png" href="/hash-logo-modal-dark.png" />
     <title>Hash PayLink</title>
     <script src="/theme-init.js"></script>
+    <script>
+      if (location.hostname === 'app.hashpaylink.com' && /\bwv\b/i.test(navigator.userAgent)) document.documentElement.classList.add('pocket-native-boot')
+    </script>
+    <style>
+      #pocket-native-boot { display: none; }
+      .pocket-native-boot #pocket-native-boot { position: fixed; inset: 0; display: block; background: #F5F5F7; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="pocket-native-boot" aria-label="Opening Pocket"></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

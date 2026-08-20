@@ -120,30 +120,27 @@ export default function usePocketWithdrawalController({
     if (operation.context ? operation.context !== operationContext : (operationContext !== 'send' && !allowLegacyOperation)) return
     const sourceAddress = operation.sourceAddress ?? operation.fingerprint.split(':')[0]
     if (sourceAddress !== wallet.address) return
-    setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')
-    setNotice(operation.state === 'accepted' ? `${formatPocketDisplayAmount(operation.amount ?? '')} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
-    void getSolanaSession(wallet.address).then(session => reconcileCircleSolanaTransfer({
-      session,
-      challengeId: operation.challengeId,
-      transactionId: operation.transactionId,
-      timeoutMs: 30_000,
-    })).then(reconciled => {
-      if (reconciled.state !== 'confirmed' || !reconciled.txHash) return
+    // Circle acceptance is a completed handoff, not a draft UI state. Never
+    // restore yesterday's success banner into a newly opened send form.
+    if (operation.state === 'accepted') {
       clearSolanaOperation()
-      setTxHash(reconciled.txHash)
-      setStatus('successful')
-      setNotice(`${formatPocketDisplayAmount(operation.amount ?? '')} USDC sent on ${networkLabel}`)
-      void refreshBalances().catch(() => undefined)
-    }).catch(() => undefined)
-  }, [allowLegacyOperation, getSolanaSession, network, networkLabel, operationContext, refreshBalances, resetKey, restoreOperations, wallet?.address]) // eslint-disable-line react-hooks/exhaustive-deps
+      return
+    }
+    setStatus('submitted')
+    setNotice('Transfer submitted. Pocket is checking Circle acceptance.')
+  }, [allowLegacyOperation, network, networkLabel, operationContext, resetKey, restoreOperations, wallet?.address])
 
   useEffect(() => {
     if (!restoreOperations || network === 'solana' || !wallet?.address) return
     const operation = readRecentEvmOperation()
     if (!operation || !['submitted', 'accepted'].includes(operation.state) || !operation.challengeId || operation.network !== network || operation.sourceAddress.toLowerCase() !== wallet.address.toLowerCase()) return
     if (operation.context ? operation.context !== operationContext : (operationContext !== 'send' && !allowLegacyOperation)) return
-    setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')
-    setNotice(operation.state === 'accepted' ? `${formatPocketDisplayAmount(operation.amount)} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
+    if (operation.state === 'accepted') {
+      clearEvmOperation()
+      return
+    }
+    setStatus('submitted')
+    setNotice('Transfer submitted. Pocket is checking Circle acceptance.')
     void recoverEvmOperation(operation).catch(() => undefined)
   }, [allowLegacyOperation, network, networkLabel, operationContext, recoverEvmOperation, resetKey, restoreOperations, wallet?.address])
 
@@ -215,7 +212,8 @@ export default function usePocketWithdrawalController({
       if (network === 'solana') {
         const session = await getSolanaSession(selectedWallet.address)
         const fingerprint = [selectedWallet.address, recipient, amount.trim()].join(':')
-        const existing = readSolanaOperation(fingerprint, operationContext, allowLegacyOperation)
+        const savedOperation = readSolanaOperation(fingerprint, operationContext, allowLegacyOperation)
+        const existing = savedOperation?.state === 'preparing' || savedOperation?.state === 'submitted' ? savedOperation : null
         const operation: SolanaSendOperation = existing ?? { context: operationContext, fingerprint, idempotencyKey: crypto.randomUUID(), challengeId: '', transactionId: '', state: 'preparing', updatedAt: Date.now(), sourceAddress: selectedWallet.address, recipient, amount: amount.trim() }
         if (['submitted', 'accepted'].includes(operation.state) && operation.challengeId) {
           setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')
@@ -271,7 +269,8 @@ export default function usePocketWithdrawalController({
         }
       } else {
         const fingerprint = [network, selectedWallet.address.toLowerCase(), recipient.toLowerCase(), amount.trim()].join(':')
-        const existing = readRecentEvmOperation()
+        const savedOperation = readRecentEvmOperation()
+        const existing = savedOperation?.state === 'preparing' || savedOperation?.state === 'submitted' ? savedOperation : null
         const operation: EvmSendOperation = existing?.fingerprint === fingerprint && (existing.context ? existing.context === operationContext : (operationContext === 'send' || allowLegacyOperation))
           ? existing
           : { context: operationContext, fingerprint, idempotencyKey: crypto.randomUUID(), challengeId: '', transactionId: '', state: 'preparing', network, sourceAddress: selectedWallet.address, recipient, amount: amount.trim(), createdAt: Date.now(), updatedAt: Date.now() }
@@ -338,6 +337,13 @@ export default function usePocketWithdrawalController({
       setPending(false)
       setStatus(handedOff ? 'successful' : 'submitted')
       setNotice(handedOff ? `${formatPocketDisplayAmount(amount)} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
+      // The journal is only for an unresolved submission. Once Circle accepts
+      // the handoff, keep success in this mounted flow and let a future Send
+      // screen start clean—even for the same recipient and amount.
+      if (handedOff) {
+        if (network === 'solana') clearSolanaOperation()
+        else clearEvmOperation()
+      }
       if (handedOff) onActivity(`Withdrew ${amount} USDC on ${networkLabel}`)
       if (!options?.preserveForm) {
         setAmount('')
@@ -357,7 +363,7 @@ export default function usePocketWithdrawalController({
     } finally {
       setPending(false)
     }
-  }, [address, amount, balance, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, networkLabel, onActivity, recoverEvmOperation, refreshBalances, wallet])
+  }, [address, allowLegacyOperation, amount, balance, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, networkLabel, onActivity, operationContext, recoverEvmOperation, refreshBalances, wallet])
 
   return {
     address,

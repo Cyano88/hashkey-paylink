@@ -2,15 +2,17 @@ import { createHash, createHmac, randomBytes, scrypt as nodeScrypt, timingSafeEq
 import { promisify } from 'node:util'
 import type { Request, Response } from 'express'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
-import { hasRenderDurableStore, mutateDurableJson, readDurableJson, writeDurableJson } from '../render-durable-store.js'
+import { deleteDurableJson, hasRenderDurableStore, mutateDurableJson, readDurableJson, writeDurableJson } from '../render-durable-store.js'
 
 const scrypt = promisify(nodeScrypt)
 const PIN_PATTERN = /^\d{6}$/
 const APPROVAL_TTL_MS = 2 * 60_000
+const RESET_TTL_MS = 15 * 60_000
 const localStore = new Map<string, unknown>()
 
 type PinRecord = { version: 1; salt: string; hash: string; failedAttempts: number; lockedUntil: number; createdAt: number; updatedAt: number }
 type ApprovalRecord = { version: 1; ownerId: string; expiresAt: number; uses: number }
+type ResetRecord = { version: 1; ownerId: string; previousAuthorizationHash: string; expiresAt: number; used: boolean }
 type Dependencies = { verifyUser(req: Request): Promise<VerifiedLinkUser>; now(): number; random(size: number): Buffer }
 
 function pepper() {
@@ -22,6 +24,11 @@ function pepper() {
 
 function ownerKey(ownerId: string) { return `pocket-pin:v1:${createHash('sha256').update(ownerId).digest('hex')}` }
 function approvalKey(token: string) { return `pocket-approval:v1:${createHash('sha256').update(token).digest('hex')}` }
+function resetKey(token: string) { return `pocket-pin-reset:v1:${createHash('sha256').update(token).digest('hex')}` }
+function authorizationHash(req: Request) {
+  const match = String(req.headers.authorization ?? '').match(/^Bearer\s+(.+)$/i)
+  return match?.[1] ? createHash('sha256').update(match[1]).digest('hex') : ''
+}
 
 async function readStore<T>(key: string): Promise<T | undefined> {
   if (hasRenderDurableStore()) return readDurableJson<T>(key)
@@ -36,6 +43,12 @@ async function mutateStore<T>(key: string, mutate: (current: T | undefined) => T
   const next = await mutate(localStore.get(key) as T | undefined)
   localStore.set(key, next)
   return next
+}
+
+export async function deletePocketPaymentSecurity(ownerId: string) {
+  const key = ownerKey(String(ownerId ?? '').trim())
+  if (hasRenderDurableStore()) return deleteDurableJson(key)
+  localStore.delete(key)
 }
 
 async function pinHash(pin: string, salt: Buffer) {
@@ -58,12 +71,13 @@ function cleanPin(value: unknown) {
   return pin
 }
 
-export async function consumePocketPaymentApproval(token: string, ownerId?: string, now = Date.now()) {
+export async function consumePocketPaymentApproval(token: string, ownerId: string, now = Date.now()) {
   const cleanToken = String(token ?? '').trim()
-  if (!/^[A-Za-z0-9_-]{32,160}$/.test(cleanToken)) return false
+  const cleanOwnerId = String(ownerId ?? '').trim()
+  if (!/^[A-Za-z0-9_-]{32,160}$/.test(cleanToken) || !cleanOwnerId) return false
   let accepted = false
   await mutateStore<ApprovalRecord>(approvalKey(cleanToken), current => {
-    if (!current || current.uses >= 4 || current.expiresAt <= now || ownerId && current.ownerId !== ownerId) return current ?? { version: 1, ownerId: '', expiresAt: 0, uses: 4 }
+    if (!current || current.uses >= 1 || current.expiresAt <= now || current.ownerId !== cleanOwnerId) return current ?? { version: 1, ownerId: '', expiresAt: 0, uses: 1 }
     accepted = true
     return { ...current, uses: current.uses + 1 }
   })
@@ -89,9 +103,29 @@ export function createPocketPaymentSecurityHandler(overrides: Partial<Dependenci
         return res.json({ ok: true, configured: true })
       }
       if (!current) return res.status(428).json({ ok: false, error: 'Create your Pocket PIN first.' })
+      if (action === 'begin-reset') {
+        const previousAuthorizationHash = authorizationHash(req)
+        if (!previousAuthorizationHash) return res.status(401).json({ ok: false, error: 'Sign in again to reset your Pocket PIN.' })
+        const resetToken = dependencies.random(32).toString('base64url')
+        const expiresAt = now + RESET_TTL_MS
+        await writeStore(resetKey(resetToken), { version: 1, ownerId: identity.userId, previousAuthorizationHash, expiresAt, used: false } satisfies ResetRecord)
+        return res.json({ ok: true, resetToken, expiresAt })
+      }
       if (current.lockedUntil > now) return res.status(429).json({ ok: false, error: 'Too many incorrect attempts. Try again shortly.', lockedUntil: current.lockedUntil })
       if (action === 'reset') {
-        if (req.body?.confirmReset !== true) return res.status(400).json({ ok: false, error: 'Confirm the PIN reset.' })
+        const token = String(req.body?.resetToken ?? '').trim()
+        const nextAuthorizationHash = authorizationHash(req)
+        let resetAccepted = false
+        if (/^[A-Za-z0-9_-]{32,160}$/.test(token) && nextAuthorizationHash) {
+          await mutateStore<ResetRecord>(resetKey(token), record => {
+            if (!record || record.used || record.expiresAt <= now || record.ownerId !== identity.userId || record.previousAuthorizationHash === nextAuthorizationHash) {
+              return record ?? { version: 1, ownerId: '', previousAuthorizationHash: '', expiresAt: 0, used: true }
+            }
+            resetAccepted = true
+            return { ...record, used: true }
+          })
+        }
+        if (!resetAccepted) return res.status(401).json({ ok: false, error: 'Sign out and verify your email again before resetting your PIN.' })
         await writeStore(key, await newPinRecord(cleanPin(req.body?.pin), now, dependencies.random))
         return res.json({ ok: true, configured: true, reset: true })
       }

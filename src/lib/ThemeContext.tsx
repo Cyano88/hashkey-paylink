@@ -20,9 +20,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const dark = theme === 'dark'
-    document.documentElement.classList.toggle('dark', dark)
-    document.documentElement.style.colorScheme = theme
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0A0A0A' : '#F5F5F7')
+    const root = document.documentElement
+    const pocketLightSurface = root.dataset.pocketLightSurface === 'true'
+    root.classList.toggle('dark', dark && !pocketLightSurface)
+    root.style.colorScheme = pocketLightSurface ? 'only light' : theme
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark && !pocketLightSurface ? '#0A0A0A' : '#F5F5F7')
     localStorage.setItem('hp_theme', theme)
   }, [theme])
 

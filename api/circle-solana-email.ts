@@ -9,6 +9,7 @@ import {
   type CircleGasStationEvmChain,
 } from './circle-evm-gas-station.js'
 import { requireCircleSolanaGasStationWallet } from './circle-solana-gas-station.js'
+import { findPaymentCircleLinkByWallet, verifiedPrivyUser } from './privy-circle-link.js'
 
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
@@ -339,13 +340,25 @@ export default async function handler(req: Request, res: Response) {
   if (!action) return res.status(400).json({ ok: false, error: 'Missing action' })
 
   try {
-    if (req.headers['x-pocket-client'] === '1' && /^(execute|signPayment)/.test(action)) {
-      const approved = await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval'] ?? ''))
-      if (!approved) return res.status(401).json({ ok: false, error: 'Approve this payment with fingerprint, face, or your Pocket PIN.' })
+    if (/^(execute|signPayment)/.test(action)) {
+      const walletId = String(params.walletId ?? '').trim()
+      const walletAddress = String(params.walletAddress ?? params.fromAddress ?? '').trim()
+      const link = await findPaymentCircleLinkByWallet(walletId, walletAddress)
+      const declaredPocketClient = req.headers['x-pocket-client'] === '1'
+      if (declaredPocketClient || link) {
+        if (!link) return res.status(403).json({ ok: false, error: 'Reconnect your Pocket wallet before paying.' })
+        const identity = await verifiedPrivyUser(req)
+        if (identity.userId !== link.privyUserId) return res.status(403).json({ ok: false, error: 'This Pocket wallet belongs to a different signed-in account.' })
+        const approved = await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval'] ?? ''), identity.userId)
+        if (!approved) return res.status(401).json({ ok: false, error: 'Approve this payment with fingerprint, face, or your Pocket PIN.' })
+      }
     }
     if (action === 'requestEmailOtp') {
       const { deviceId, email, chain } = params
       if (!deviceId || !email) return res.status(400).json({ ok: false, error: 'Missing deviceId or email' })
+      if (deviceId.length > 256 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ ok: false, error: 'Enter a valid email address.' })
+      }
       const data = await circleJson('/v1/w3s/users/email/token', {
         method: 'POST',
         apiKey: circleApiKey({ chain }),

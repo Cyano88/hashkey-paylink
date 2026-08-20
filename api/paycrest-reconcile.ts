@@ -28,6 +28,22 @@ function validTxHash(value: string | undefined) {
   return !!value && /^0x[a-fA-F0-9]{64}$/.test(value)
 }
 
+function validEvmAddress(value: string | undefined) {
+  return !!value && /^0x[a-fA-F0-9]{40}$/.test(value)
+}
+
+export function paycrestTransferRecoveryWindow(order: PaycrestOrderRecord) {
+  const payer = validEvmAddress(order.payer_wallet) ? order.payer_wallet : undefined
+  const createdAt = Date.parse(String(order.created_at || ''))
+  const validUntil = Date.parse(String(order.valid_until || ''))
+  return {
+    ...(payer ? { payer } : {}),
+    ...(payer && Number.isFinite(createdAt) && Number.isFinite(validUntil) && validUntil >= createdAt
+      ? { notBefore: new Date(createdAt).toISOString(), notAfter: new Date(validUntil).toISOString() }
+      : {}),
+  }
+}
+
 function receiptSource(order: PaycrestOrderRecord) {
   return order.source === 'ngpos' ? 'ngpos' : order.source === 'bank-withdraw' ? 'bank-withdraw' : 'bank-receive'
 }
@@ -109,6 +125,7 @@ export async function reconcilePaycrestOrderPayment(id: string, options: { allow
     chain: 'base',
     recipient: order.receive_address,
     minAmount: order.amount_usdc,
+    ...paycrestTransferRecoveryWindow(order),
   })
   if (!match?.txHash) return { ok: true, found: false, order }
 

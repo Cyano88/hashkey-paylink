@@ -35,9 +35,18 @@ export async function updatePocketPaymentSecurity(getAccessToken: AccessTokenRea
   return request(getAccessToken, { method: 'POST', body: JSON.stringify(body) })
 }
 
+export async function beginPocketPaymentPinReset(getAccessToken: AccessTokenReader) {
+  const data = await updatePocketPaymentSecurity(getAccessToken, { action: 'begin-reset' })
+  const resetToken = String(data.resetToken || '')
+  if (!resetToken) throw new Error('Pocket PIN reset could not start.')
+  return { resetToken, expiresAt: Number(data.expiresAt || 0) }
+}
+
 export async function verifyPocketPaymentPin(getAccessToken: AccessTokenReader, pin: string) {
-  const data = await updatePocketPaymentSecurity(getAccessToken, { action: 'verify', pin })
+  const accessToken = await getAccessToken()
+  if (!accessToken) throw new Error('Sign in again to continue.')
+  const data = await updatePocketPaymentSecurity(async () => accessToken, { action: 'verify', pin })
   const approvalToken = String(data.approvalToken || '')
   if (!approvalToken) throw new Error('Payment approval did not complete.')
-  return { approvalToken, expiresAt: Number(data.expiresAt || 0) }
+  return { approvalToken, expiresAt: Number(data.expiresAt || 0), authorization: `Bearer ${accessToken}` }
 }

@@ -13,6 +13,7 @@ import {
 import { createPocketIdempotencyKey } from '../lib/pocketSchemas'
 import { POCKET_BASE_PATH } from '../lib/pocketRoutes'
 import UnifiedReceipt from '../../components/UnifiedReceipt'
+import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 
 type Props = {
   connected: boolean
@@ -91,6 +92,16 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
     autoLoadAttempted.current = true
     void load('')
   }, [connected, load, network])
+
+  useEffect(() => {
+    const handleNativeBack = (event: Event) => {
+      if (!selected) return
+      event.preventDefault()
+      if (!buying) setSelected(null)
+    }
+    window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
+    return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
+  }, [buying, selected])
 
   const canPay = useMemo(() => (
     selected !== null

@@ -71,6 +71,19 @@ function publicCase(item: SupportCase) {
   return { ...safe, unreadCount }
 }
 
+export async function redactPocketSupportCases(profileId: string) {
+  const deletedProfileId = 'deleted:' + crypto.createHash('sha256').update(profileId).digest('hex').slice(0, 24)
+  await mutateDurableJson<SupportStore>(STORE_KEY, current => {
+    const next = current || { cases: {} }
+    for (const item of Object.values(next.cases)) {
+      if (item.profileId !== profileId) continue
+      item.profileId = deletedProfileId
+      delete item.customer
+    }
+    return next
+  })
+}
+
 async function privateCustomerIdentity(identity: Awaited<ReturnType<typeof resolveCirclePocketIdentity>>) {
   if (identity.kind !== 'privy') return undefined
   const profile = await localCurrencyProfileRepository.get(identity.subject)

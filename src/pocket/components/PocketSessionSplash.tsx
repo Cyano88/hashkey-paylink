@@ -4,6 +4,7 @@ import { SplashScreen } from '@capacitor/splash-screen'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { CPurseIcon } from './CPurseIcon'
 import type { PocketSplashState } from '../hooks/usePocketSessionSplash'
+import usePocketLightSurface from '../hooks/usePocketLightSurface'
 
 export default function PocketSessionSplash({
   state,
@@ -14,13 +15,22 @@ export default function PocketSessionSplash({
   const markVisible = nativeRuntime || state !== 'entering'
   const assembled = state === 'assembling' || state === 'holding' || state === 'launching'
   const launching = state === 'launching'
+  usePocketLightSurface(state !== 'idle')
 
   useEffect(() => {
     if (!nativeRuntime) return
-    const frame = window.requestAnimationFrame(() => {
-      void SplashScreen.hide().catch(() => undefined)
+    let handoffFrame = 0
+    const paintedFrame = window.requestAnimationFrame(() => {
+      handoffFrame = window.requestAnimationFrame(() => {
+        const launchBridge = (window as Window & { PocketLaunch?: { ready(): void } }).PocketLaunch
+        launchBridge?.ready()
+        void SplashScreen.hide().catch(() => undefined)
+      })
     })
-    return () => window.cancelAnimationFrame(frame)
+    return () => {
+      window.cancelAnimationFrame(paintedFrame)
+      if (handoffFrame) window.cancelAnimationFrame(handoffFrame)
+    }
   }, [nativeRuntime])
 
   useEffect(() => {

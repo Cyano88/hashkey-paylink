@@ -17,7 +17,10 @@ function resolveInitialState(enabled: boolean): PocketSplashState {
     const alreadyShown = window.sessionStorage.getItem(POCKET_SPLASH_SESSION_KEY) === 'true'
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const nativeRuntime = document.documentElement.dataset.pocketRuntime === 'native'
-    return reduceMotion || (alreadyShown && !nativeRuntime) ? 'idle' : 'entering'
+    // Native launches deliberately hand the Android mark to the matching CSS
+    // mark so one continuous animation can assemble the Pocket wordmark.
+    if (nativeRuntime) return 'entering'
+    return reduceMotion || alreadyShown ? 'idle' : 'entering'
   } catch {
     return 'idle'
   }
@@ -58,9 +61,10 @@ export default function usePocketSessionSplash(enabled: boolean, canLaunch = tru
       setState('launching')
       return
     }
-    // The brand animation must never conceal a recoverable startup error or
-    // slow dependency. The underlying shell owns its own loading/error state.
-    const failSafeTimer = window.setTimeout(() => setState('launching'), 1_800)
+    // Startup dependencies own bounded timeouts and surface a real recovery
+    // screen. Keep branding above their internal loaders long enough for that
+    // outcome instead of exposing a white spinner between launch and Home.
+    const failSafeTimer = window.setTimeout(() => setState('launching'), 12_000)
     return () => window.clearTimeout(failSafeTimer)
   }, [canLaunch, state])
 

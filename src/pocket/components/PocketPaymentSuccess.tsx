@@ -4,6 +4,7 @@ import UnifiedReceipt from '../../components/UnifiedReceipt'
 import { Check, Clock3 } from './PocketIcons'
 import type { PaylinkReceipt } from '../../lib/paymentReceiptPdf'
 import { paymentReceiptView } from '../../lib/paymentReceiptPdf'
+import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 
 type PocketPaymentOutcome = 'completed' | 'handed-off' | 'pending'
 
@@ -21,6 +22,14 @@ export default function PocketPaymentSuccess({ receipt, onDone, title = 'Bank pa
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = previous }
   }, [])
+  useEffect(() => {
+    const handleNativeBack = (event: Event) => {
+      event.preventDefault()
+      onDone()
+    }
+    window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
+    return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
+  }, [onDone])
   return createPortal(
     <div className="fixed inset-x-0 bottom-0 z-[130] flex flex-col overflow-hidden bg-[#F5F5F7] font-sans text-gray-950 dark:bg-[#0A0A0A] dark:text-white" style={{ top: 'var(--pocket-safe-top)' }} role="dialog" aria-modal="true" aria-label={heading}>
       <header className="z-10 shrink-0 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:bg-[#0A0A0A]/95">

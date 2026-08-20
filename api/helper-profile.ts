@@ -370,6 +370,18 @@ export async function readHelperProfileMemory(identity: CirclePocketIdentity) {
   return cleanString(profile?.memorySummary, 2600)
 }
 
+export async function deleteHelperProfile(identity: CirclePocketIdentity) {
+  const id = circlePocketIdentityId(identity)
+  if (pool) {
+    await ensurePgSchema()
+    await pool.query('delete from helper_profiles where id = $1', [id])
+    return
+  }
+  const current = await readStore()
+  delete current.profiles[id]
+  await writeStore(current)
+}
+
 async function checkpointMemory(profile: HelperProfile) {
   const ts = Date.now()
   const commitmentSecret = (process.env.OG_MEMORY_COMMITMENT_SECRET || process.env.DEVELOPER_PORTAL_SECRET || '').trim()

@@ -81,7 +81,7 @@ export default function PocketVerifyNamePage() {
 
   if (!profile.loaded) return <PocketLoadingState active="profile" />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
-    <main className="mx-auto min-h-full w-full max-w-[480px] px-5 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
+    <main className="mx-auto min-h-full w-full max-w-[480px] px-5 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]">
       <PocketFlowHeader title="Verified name" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.profile)} />
       {locked ? <section className="mt-7 rounded-[26px] bg-white p-6 text-center shadow-sm dark:bg-white/[0.05]">
         <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10"><Lock className="h-5 w-5" /></span>

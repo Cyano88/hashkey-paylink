@@ -104,10 +104,10 @@ async function circleSolanaApi<T>(payload: Record<string, unknown>): Promise<T> 
   const action = typeof payload.action === 'string' ? payload.action : ''
   const paymentAction = /^(execute|signPayment)/.test(action)
   const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.pathname.includes('/pocket'))
-  const approval = pocketClient ? takePocketPaymentApproval() : ''
+  const approval = pocketClient ? takePocketPaymentApproval() : null
   const res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(pocketClient ? { 'X-Pocket-Client': '1', ...(approval ? { 'X-Pocket-Payment-Approval': approval } : {}) } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(pocketClient ? { 'X-Pocket-Client': '1', ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}) } : {}) },
     body: JSON.stringify(payload),
   })
   const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number }

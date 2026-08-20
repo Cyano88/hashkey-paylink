@@ -26,6 +26,9 @@ const rootAppModule = isPocketHostname(window.location.hostname)
 const RootApp = lazy(() => rootAppModule)
 
 function AppBootFallback() {
+  if (isPocketNativeRuntime()) {
+    return <main aria-label="Opening Pocket" className="min-h-screen bg-[#F5F5F7]" />
+  }
   return <main aria-label="Opening app" className="min-h-screen bg-[#F5F5F7] dark:bg-[#0A0A0A]" />
 }
 

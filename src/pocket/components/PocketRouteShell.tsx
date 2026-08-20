@@ -158,7 +158,7 @@ export default function PocketRouteShell({
             onTouchCancel={() => { pullStartY.current = null; if (!refreshing) { pullDistanceRef.current = 0; setPullDistance(0) } }}
             className="absolute inset-x-0 bottom-0 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
             style={{
-              top: headerHeight > 0 ? headerHeight : 'max(env(safe-area-inset-top), var(--pocket-status-bar-inset, 0px))',
+              top: headerHeight > 0 ? headerHeight : 'var(--pocket-safe-top)',
               scrollPaddingTop: 16,
               scrollPaddingBottom: 'calc(7.5rem + var(--pocket-safe-bottom))',
             }}
@@ -167,7 +167,7 @@ export default function PocketRouteShell({
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-3.5 w-3.5 animate-spin" /></span>
             </div>
             <div
-              className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))]"
+              className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))]"
               style={{
                 minHeight: `calc(100dvh - ${headerHeight}px)`,
                 paddingTop: 16,

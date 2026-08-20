@@ -45,6 +45,7 @@ export type ProfileRepository = {
   ensure(identity: VerifiedProfileUser): Promise<ProfileSaveResult>
   updateProfile(userId: string, pocketId: string, avatarId: number, expectedUpdatedAt?: string, displayCurrency?: LocalCurrencyProfile['displayCurrency']): Promise<ProfileSaveResult>
   bindBankResolvedName(identity: VerifiedProfileUser, resolvedName: string): Promise<ProfileSaveResult>
+  deleteProfile(userId: string): Promise<boolean>
 }
 
 export type HandlerDependencies = {
@@ -361,6 +362,16 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
         }
         store.profiles[verified.userId] = profile
         return { profile, unchanged: false }
+      })
+    },
+    async deleteProfile(userId) {
+      return mutateStore(store => {
+        const existed = Boolean(store.profiles[userId])
+        delete store.profiles[userId]
+        for (const [pocketId, ownerId] of Object.entries(store.pocketIds)) {
+          if (ownerId === userId) delete store.pocketIds[pocketId]
+        }
+        return existed
       })
     },
   }

@@ -95,6 +95,11 @@ export async function writeDurableJson(key: string, value: unknown): Promise<voi
   )
 }
 
+export async function deleteDurableJson(key: string): Promise<void> {
+  await ensureSchema()
+  await requirePool().query('delete from render_durable_kv where store_key = $1', [key])
+}
+
 export async function mutateDurableJson<T>(key: string, mutate: (current: T | undefined) => T | Promise<T>): Promise<T> {
   await ensureSchema()
   const client = await requirePool().connect()

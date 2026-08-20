@@ -68,6 +68,7 @@ import polymarketSubmitOrderHandler from './api/polymarket-submit-order.js'
 import ngPosHandler from './api/ng-pos.js'
 import localCurrencyProfileHandler from './api/local-currency-profile.js'
 import pocketProfileHandler from './api/pocket/profile.js'
+import pocketAccountHandler from './api/pocket/account.js'
 import pocketPaymentSecurityHandler from './api/pocket/payment-security.js'
 import pocketPosHandler from './api/pocket/pos.js'
 import pocketBankReceiveHandler from './api/pocket/bank-receive.js'
@@ -240,6 +241,7 @@ app.post(
 app.use(express.json({ limit: '256kb' }))
 
 const strictLimiter = rateLimit({ name: 'strict', windowMs: 60_000, max: 20 })
+const circleEmailOtpLimiter = rateLimit({ name: 'circle-email-otp', windowMs: 10 * 60_000, max: 5 })
 const billsQuoteLimiter = rateLimit({ name: 'bills-quote', windowMs: 60_000, max: 12 })
 const billsPayLimiter = rateLimit({ name: 'bills-pay', windowMs: 60_000, max: 40 })
 const billsRefundLimiter = rateLimit({ name: 'bills-refund', windowMs: 10 * 60_000, max: 8 })
@@ -265,6 +267,11 @@ function billsBrowserBoundary(req: Request, res: Response, next: NextFunction) {
     }
   }
   return next()
+}
+
+function circleEmailOtpBoundary(req: Request, res: Response, next: NextFunction) {
+  if (String(req.body?.action ?? '') !== 'requestEmailOtp') return next()
+  return circleEmailOtpLimiter(req, res, next)
 }
 
 // ── API routes ────────────────────────────────────────────────────────────────
@@ -308,7 +315,7 @@ app.post('/api/solana-sweep',          relayLimiter, sweepSolanaVault)
 app.get('/api/fx-rate',                fxRateHandler)
 app.all('/api/relay-arbitrum-usdc',    relayArbitrumUsdcHandler)
 app.all('/api/base-paymaster',         basePaymasterHandler)
-app.post('/api/circle-solana-email',   circleSolanaEmailHandler)
+app.post('/api/circle-solana-email',   circleEmailOtpBoundary, circleSolanaEmailHandler)
 app.post('/api/privy-circle-link',     strictLimiter, privyCircleLinkHandler)
 app.all('/api/circle-recipient-wallet', strictLimiter, circleRecipientWalletHandler)
 app.all('/api/telegram-request',        strictLimiter, telegramRequestHandler)
@@ -322,6 +329,7 @@ app.post('/api/polymarket-submit-order', strictLimiter, polymarketSubmitOrderHan
 app.all('/api/ng-pos',                  strictLimiter, ngPosHandler)
 app.all('/api/local-currency-profile',  strictLimiter, localCurrencyProfileHandler)
 app.all('/api/pocket/profile',           strictLimiter, pocketProfileHandler)
+app.delete('/api/pocket/account',         strictLimiter, pocketAccountHandler)
 app.all('/api/pocket/payment-security',  strictLimiter, pocketPaymentSecurityHandler)
 app.all('/api/pocket/pos',               strictLimiter, pocketPosHandler)
 app.all('/api/pocket/bank-receive',      strictLimiter, pocketBankReceiveHandler)
@@ -427,6 +435,26 @@ app.get('/agent', (req, res, next) => {
 // stale frontend route, or missing API mount must return JSON to callers.
 app.use('/api', (req, res) => {
   res.status(404).json({ ok: false, error: `API route not found: ${req.method} ${req.originalUrl}` })
+})
+
+app.get('/.well-known/assetlinks.json', (_req, res) => {
+  const fingerprints = String(process.env.ANDROID_APP_LINK_SHA256_CERT_FINGERPRINTS ?? '')
+    .split(/[\n,]+/)
+    .map(value => value.trim().toUpperCase())
+    .filter(value => /^(?:[A-F0-9]{2}:){31}[A-F0-9]{2}$/.test(value))
+  res.setHeader('Cache-Control', 'public, max-age=3600')
+  res.setHeader('Content-Type', 'application/json')
+  if (!fingerprints.length) {
+    return res.status(503).json({ error: 'Android App Links certificate fingerprints are not configured.' })
+  }
+  return res.json([{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: 'com.hashpaylink.pocket',
+      sha256_cert_fingerprints: fingerprints,
+    },
+  }])
 })
 
 app.use(express.static(join(__dirname, 'dist'), {

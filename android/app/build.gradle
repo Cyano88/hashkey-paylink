@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
 
+def pocketUploadStoreFile = System.getenv('POCKET_UPLOAD_STORE_FILE')
+def pocketUploadStorePassword = System.getenv('POCKET_UPLOAD_STORE_PASSWORD')
+def pocketUploadKeyAlias = System.getenv('POCKET_UPLOAD_KEY_ALIAS')
+def pocketUploadKeyPassword = System.getenv('POCKET_UPLOAD_KEY_PASSWORD')
+def pocketUploadSigningReady = [pocketUploadStoreFile, pocketUploadStorePassword, pocketUploadKeyAlias, pocketUploadKeyPassword].every { it }
+
 android {
     namespace = "com.hashpaylink.pocket"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,11 +22,31 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (pocketUploadSigningReady) {
+            release {
+                storeFile file(pocketUploadStoreFile)
+                storePassword pocketUploadStorePassword
+                keyAlias pocketUploadKeyAlias
+                keyPassword pocketUploadKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (pocketUploadSigningReady) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def pocketReleaseRequested = graph.allTasks.any { task ->
+        task.project == project && (task.name == 'bundleRelease' || task.name == 'assembleRelease')
+    }
+    if (pocketReleaseRequested && !pocketUploadSigningReady) {
+        throw new GradleException('Pocket release signing is not configured. Set POCKET_UPLOAD_STORE_FILE, POCKET_UPLOAD_STORE_PASSWORD, POCKET_UPLOAD_KEY_ALIAS, and POCKET_UPLOAD_KEY_PASSWORD.')
     }
 }
 

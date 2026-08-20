@@ -7,6 +7,7 @@ import { PublicKey } from '@solana/web3.js'
 import { PrivyClient, type User } from '@privy-io/server-auth'
 import { listCircleUserWallets, type CircleUserWallet } from './circle-solana-email.js'
 import { requireCircleGasStationEvmWallet } from './circle-evm-gas-station.js'
+import { renderDurableStoreConnectionConfig } from './render-durable-store.js'
 
 const STORE_PATH = process.env.PRIVY_CIRCLE_LINK_STORE ?? './data/privy-circle-links.json'
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
@@ -14,12 +15,7 @@ const IS_RENDER = Boolean(process.env.RENDER || process.env.RENDER_SERVICE_ID ||
 
 const { Pool } = pg
 const pool = DATABASE_URL
-  ? new Pool({
-      connectionString: DATABASE_URL,
-      ssl: DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1')
-        ? false
-        : { rejectUnauthorized: false },
-    })
+  ? new Pool(renderDurableStoreConnectionConfig(DATABASE_URL))
   : null
 
 let schemaReady: Promise<void> | null = null
@@ -269,6 +265,61 @@ export async function readCircleLink(key: string): Promise<CircleLinkRecord | nu
   }
   const store = await readStore()
   return store.links[key] ?? null
+}
+
+export async function deleteCircleLinksForPrivyUser(privyUserId: string): Promise<number> {
+  const userId = String(privyUserId ?? '').trim()
+  if (!userId) return 0
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query('delete from privy_circle_links where privy_user_id = $1', [userId])
+    return result.rowCount ?? 0
+  }
+  if (IS_RENDER) throw Object.assign(new Error('Durable Circle wallet link storage is not configured. Add DATABASE_URL on Render.'), { status: 503 })
+  let deleted = 0
+  await mutateLocalStore(store => {
+    for (const [key, link] of Object.entries(store.links)) {
+      if (link.privyUserId === userId) { delete store.links[key]; deleted += 1 }
+    }
+  })
+  return deleted
+}
+
+export async function findPaymentCircleLinkByWallet(walletId: string, walletAddress = ''): Promise<CircleLinkRecord | null> {
+  const normalizedWalletId = String(walletId ?? '').trim()
+  const normalizedAddress = String(walletAddress ?? '').trim()
+  if (!normalizedWalletId) return null
+  if (pool) {
+    await ensureSchema()
+    const result = await pool.query(
+      `select * from privy_circle_links
+       where circle_wallet_id = $1 and coalesce(purpose, 'payment') = 'payment'
+       order by updated_at desc limit 2`,
+      [normalizedWalletId],
+    )
+    if (!result.rowCount) return null
+    const matches = result.rows.map(rowToRecord).filter(record => (
+      !normalizedAddress || sameAddress(record.chain, record.circleWalletAddress, normalizedAddress)
+    ))
+    if (!matches.length) return null
+    if (matches.some(record => record.privyUserId !== matches[0].privyUserId)) {
+      throw Object.assign(new Error('Circle wallet ownership is ambiguous. Reconnect the wallet before paying.'), { status: 409 })
+    }
+    return matches[0]
+  }
+  if (IS_RENDER) {
+    throw Object.assign(new Error('Durable Circle wallet link storage is not configured. Add DATABASE_URL on Render.'), { status: 503 })
+  }
+  const store = await readStore()
+  const matches = Object.values(store.links)
+    .filter(record => (record.purpose ?? 'payment') === 'payment' && record.circleWalletId === normalizedWalletId)
+    .filter(record => !normalizedAddress || sameAddress(record.chain, record.circleWalletAddress, normalizedAddress))
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+  if (!matches.length) return null
+  if (matches.some(record => record.privyUserId !== matches[0].privyUserId)) {
+    throw Object.assign(new Error('Circle wallet ownership is ambiguous. Reconnect the wallet before paying.'), { status: 409 })
+  }
+  return matches[0]
 }
 
 async function writeLink(key: string, record: CircleLinkRecord): Promise<void> {
