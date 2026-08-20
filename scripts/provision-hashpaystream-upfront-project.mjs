@@ -69,8 +69,13 @@ const source = sources[0]
 if ((source.checkoutMode ?? 'human') !== 'human' || !(source.capabilities ?? []).includes('arc_agreements')) {
   throw new Error('The source project is not the expected human Arc Agreements project.')
 }
-if (projects.some(project => project.ownerId === source.ownerId && project.name === projectName)) {
+const existingProjects = projects.filter(project => project.ownerId === source.ownerId && project.name === projectName)
+const rotateCredentials = String(process.env.HASHPAYSTREAM_UPFRONT_ROTATE_CREDENTIALS ?? '').toLowerCase() === 'true'
+if (!rotateCredentials && existingProjects.length) {
   throw new Error('HashPayStream Upfront already exists; refusing to create a duplicate or rotate recoverable credentials.')
+}
+if (rotateCredentials && existingProjects.length !== 1) {
+  throw new Error(`Credential rotation requires exactly one HashPayStream Upfront project; found ${existingProjects.length}.`)
 }
 if (String(process.env.HASHPAYSTREAM_UPFRONT_DRY_RUN ?? '').toLowerCase() === 'true') {
   await validatePublicWebhookDestination(webhookUrl)
@@ -104,6 +109,48 @@ const dependencies = {
   now: () => new Date(),
 }
 const handler = createDeveloperProjectsHandler(dependencies)
+
+if (rotateCredentials) {
+  const existing = existingProjects[0]
+  if (
+    existing.checkoutMode !== 'human'
+    || existing.settlementStatus !== 'ready'
+    || existing.operationalStatus !== 'active'
+    || existing.arcAgreementPilot?.status !== 'approved'
+    || existing.defaultNetwork !== 'arc'
+    || existing.networks?.length !== 1
+    || existing.networks[0] !== 'arc'
+    || String(existing.recipients?.arc ?? '').toLowerCase() !== arcRecipient.toLowerCase()
+    || existing.webhookUrl !== webhookUrl
+  ) throw new Error('Existing HashPayStream Upfront policy does not match the approved isolated route.')
+
+  const oldKeyIds = (existing.keys ?? []).filter(item => !item.revokedAt).map(item => item.id)
+  const webhook = await invoke(handler, 'POST', { action: 'rotate-webhook-secret', projectId: existing.id })
+  const key = await invoke(handler, 'POST', {
+    action: 'create-key', projectId: existing.id, name: 'HashPayStream Upfront production pilot', environment: 'test',
+  })
+  const sealed = seal({ apiKey: key.apiKey, webhookSecret: webhook.webhookSecret })
+  for (const keyId of oldKeyIds) {
+    await invoke(handler, 'POST', { action: 'revoke-key', projectId: existing.id, keyId })
+  }
+  const digest = createHmac('sha256', portalSecret).update(key.apiKey).digest('hex')
+  const finalStore = await readDurableJson(storeKey)
+  const stored = finalStore?.projects?.[existing.id]
+  if (
+    !stored?.keys?.some(item => item.digest === digest && !item.revokedAt)
+    || oldKeyIds.some(keyId => stored.keys.some(item => item.id === keyId && !item.revokedAt))
+  ) throw new Error('Rotated credentials could not be verified from durable storage.')
+  console.log(JSON.stringify({
+    ok: true,
+    rotated: true,
+    projectId: existing.id,
+    revokedPriorKeys: oldKeyIds.length,
+    webhookConfigured: Boolean(stored.webhookSecretCipher),
+    testKeyConfigured: true,
+    sealed,
+  }))
+  process.exit(0)
+}
 
 const created = await invoke(handler, 'POST', {
   action: 'create',
