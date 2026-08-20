@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useLoginWithEmail } from '@privy-io/react-auth'
-import { ArrowRight, Lock, Mail } from './PocketIcons'
+import { ArrowLeft, ArrowRight, Lock, Mail } from './PocketIcons'
 
 const CODE_LENGTH = 6
 const RESEND_SECONDS = 30
@@ -76,8 +76,18 @@ export default function PocketEmailLogin() {
     }
   }
 
+  const returnToEmail = () => {
+    if (busy) return
+    setStep('email')
+    setCode('')
+    setError('')
+  }
+
   if (step === 'code') return createPortal(
     <div role="dialog" aria-modal="true" aria-label="Verify your email" className="fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950">
+      <button type="button" disabled={busy} onClick={returnToEmail} aria-label="Back to email" className="fixed left-4 top-[calc(var(--pocket-safe-top)+0.75rem)] z-10 flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-950 shadow-sm transition active:scale-95 disabled:opacity-50">
+        <ArrowLeft className="h-5 w-5" />
+      </button>
       <main className="mx-auto flex min-h-[calc(100dvh-var(--pocket-safe-top)-var(--pocket-safe-bottom)-2.5rem)] w-full max-w-[430px] flex-col justify-center py-4">
         <div className="text-center">
           <h1 className="text-3xl font-black tracking-[-0.045em]">Check your email</h1>
@@ -121,7 +131,7 @@ export default function PocketEmailLogin() {
         <div className="mt-5 flex items-center justify-center gap-4 text-xs font-semibold">
           <button type="button" disabled={busy || resendIn > 0} onClick={() => void requestCode()} className="text-blue-600 disabled:text-gray-400">{resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}</button>
           <span className="h-3 w-px bg-gray-300" aria-hidden="true" />
-          <button type="button" disabled={busy} onClick={() => { setStep('email'); setCode(''); setError('') }} className="text-gray-600">Change email</button>
+          <button type="button" disabled={busy} onClick={returnToEmail} className="text-gray-600">Change email</button>
         </div>
         <div className="mt-9 text-center">
           <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500"><Lock className="h-4 w-4" strokeWidth={2} />Pocket will never ask you to share this code.</p>
