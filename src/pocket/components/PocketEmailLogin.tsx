@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useLoginWithEmail } from '@privy-io/react-auth'
 import { ArrowRight, Lock, Mail } from './PocketIcons'
-import PocketAuthBrand from './PocketAuthBrand'
 
 const CODE_LENGTH = 6
 const RESEND_SECONDS = 30
@@ -80,9 +79,8 @@ export default function PocketEmailLogin() {
   if (step === 'code') return createPortal(
     <div role="dialog" aria-modal="true" aria-label="Verify your email" className="fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950">
       <main className="mx-auto flex min-h-[calc(100dvh-var(--pocket-safe-top)-var(--pocket-safe-bottom)-2.5rem)] w-full max-w-[430px] flex-col justify-center py-4">
-        <PocketAuthBrand compact />
         <div className="text-center">
-          <h1 className="mt-10 text-3xl font-black tracking-[-0.045em]">Check your email</h1>
+          <h1 className="text-3xl font-black tracking-[-0.045em]">Check your email</h1>
           <p className="mt-3 text-sm font-medium leading-6 text-gray-500">
             Enter the code sent to<br /><strong className="font-bold text-gray-900">{email}</strong>
           </p>
@@ -92,7 +90,7 @@ export default function PocketEmailLogin() {
           <div className="relative" onClick={() => codeInputRef.current?.focus()}>
             <div className="grid grid-cols-6 gap-2" aria-hidden="true">
               {Array.from({ length: CODE_LENGTH }, (_, index) => (
-                <span key={index} className={`flex aspect-square items-center justify-center rounded-2xl border-2 bg-white text-2xl font-black text-gray-950 shadow-[0_2px_8px_rgba(15,23,42,0.08)] transition-[border-color,box-shadow] ${codeFocused && index === code.length ? 'border-blue-600 ring-4 ring-blue-500/15' : 'border-gray-300'}`}>{code[index] ?? ''}</span>
+                <span key={index} className={`flex aspect-square items-center justify-center rounded-2xl border-2 text-2xl font-black shadow-[0_2px_8px_rgba(15,23,42,0.08)] transition-[background-color,border-color,box-shadow] ${code[index] ? 'border-gray-950 bg-gray-950 text-white' : codeFocused && index === code.length ? 'border-blue-600 bg-white text-gray-950 ring-4 ring-blue-500/15' : 'border-gray-300 bg-white text-gray-950'}`}>{code[index] ?? ''}</span>
               ))}
             </div>
             <input

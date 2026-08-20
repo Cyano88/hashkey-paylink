@@ -46,6 +46,18 @@ function PinFields({ pin, confirm, onPin, onConfirm, disabled }: { pin: string; 
   </div>
 }
 
+function PaymentPinSlots({ value, focused }: { value: string; focused: boolean }) {
+  return <div className='grid grid-cols-6 gap-2' aria-hidden='true'>
+    {Array.from({ length: 6 }, (_, index) => {
+      const filled = index < value.length
+      const active = focused && index === value.length
+      return <span key={index} className={`flex aspect-square items-center justify-center rounded-2xl border-2 transition-[background-color,border-color,box-shadow] ${filled ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : active ? 'border-blue-600 bg-gray-50 ring-4 ring-blue-500/15 dark:bg-white/[0.06]' : 'border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]'}`}>
+        {filled && <span className='h-2.5 w-2.5 rounded-full bg-current' />}
+      </span>
+    })}
+  </div>
+}
+
 export default function PocketPaymentSecurityGate({ email, getAccessToken, onInitialStateResolved, children }: { email: string; getAccessToken(): Promise<string | null>; onInitialStateResolved?(): void; children: ReactNode }) {
   const [state, setState] = useState<'loading' | 'error' | 'setup' | 'offer' | 'ready'>(() => initialSecurityState(email))
   const [loadAttempt, setLoadAttempt] = useState(0)
@@ -55,6 +67,8 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
   const [setupPin, setSetupPin] = useState('')
   const [existingPin, setExistingPin] = useState('')
   const [approvalPin, setApprovalPin] = useState('')
+  const [approvalOpen, setApprovalOpen] = useState(false)
+  const [approvalFocused, setApprovalFocused] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [biometricsAvailable, setBiometricsAvailable] = useState(false)
@@ -100,8 +114,9 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
       if (!detail || pending.current) return detail?.reject(new Error('Another payment approval is already open.'))
       pending.current = detail
       setApprovalPin('')
+      setApprovalOpen(false)
       setError('')
-      const fallback = () => setApprovalPin(' ')
+      const fallback = () => setApprovalOpen(true)
       if (!pocketPaymentBiometricsEnabled()) return fallback()
       setBusy(true)
       void readPocketPinWithBiometrics(email)
@@ -110,6 +125,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
           setPocketPaymentApproval(result.approvalToken, result.expiresAt, result.authorization)
           pending.current?.resolve()
           pending.current = null
+          setApprovalOpen(false)
         })
         .catch(fallback)
         .finally(() => setBusy(false))
@@ -140,7 +156,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     try {
       const result = await verifyPocketPaymentPin(getAccessToken, value)
       setPocketPaymentApproval(result.approvalToken, result.expiresAt, result.authorization)
-      pending.current?.resolve(); pending.current = null; setApprovalPin('')
+      pending.current?.resolve(); pending.current = null; setApprovalPin(''); setApprovalOpen(false)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Payment approval failed.') }
     finally { setBusy(false) }
   }
@@ -161,19 +177,19 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
 
   const cancelApproval = () => {
     pending.current?.reject(new Error('Payment approval was cancelled.'))
-    pending.current = null; setApprovalPin(''); setError('')
+    pending.current = null; setApprovalPin(''); setApprovalOpen(false); setError('')
     window.dispatchEvent(new Event(POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT))
   }
 
   useEffect(() => {
     const handleNativeBack = (event: Event) => {
-      if (!pending.current || approvalPin === '') return
+      if (!pending.current || !approvalOpen) return
       event.preventDefault()
       if (!busy) cancelApproval()
     }
     window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
     return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
-  }, [approvalPin, busy])
+  }, [approvalOpen, busy])
 
   if (state === 'loading') return <PocketSecuritySurface><Loader2 className='h-6 w-6 animate-spin text-blue-600' /></PocketSecuritySurface>
   if (state === 'error') return <PocketSecuritySurface>
@@ -204,10 +220,13 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     </section>
   </PocketSecuritySurface>
 
-  return <>{children}{pending.current && approvalPin !== '' && <div className='fixed inset-0 z-[90] flex items-end justify-center bg-black/45 px-4 pb-[calc(1rem+var(--pocket-safe-bottom))] pt-[var(--pocket-safe-top)] sm:items-center'>
+  return <>{children}{pending.current && approvalOpen && <div className='fixed inset-0 z-[90] flex items-end justify-center bg-black/45 px-4 pb-[calc(1rem+var(--pocket-safe-bottom))] pt-[var(--pocket-safe-top)] sm:items-center'>
     <section className='w-full max-w-[390px] rounded-[28px] bg-white p-6 text-center text-gray-950 shadow-2xl dark:bg-[#17181c] dark:text-white'>
-      <h2 className='text-lg font-black'>Enter Pocket PIN</h2><p className='mt-2 text-xs leading-5 text-gray-500'>Approve this payment with your six-digit PIN.</p>
-      <input autoFocus value={approvalPin.trim()} onChange={event => setApprovalPin(event.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={event => { if (event.key === 'Enter') void approveWithPin() }} inputMode='numeric' type='password' autoComplete='current-password' className='mt-5 min-h-14 w-full rounded-2xl bg-gray-100 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:ring-2 focus:ring-blue-500 dark:bg-white/[0.07]' />
+      <h2 className='text-lg font-black'>Enter Pocket PIN</h2><p className='mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400'>Enter your six-digit PIN to approve this payment.</p>
+      <div className='relative mt-5' onClick={() => document.getElementById('pocket-payment-pin')?.focus()}>
+        <PaymentPinSlots value={approvalPin} focused={approvalFocused} />
+        <input id='pocket-payment-pin' autoFocus value={approvalPin} onFocus={() => setApprovalFocused(true)} onBlur={() => setApprovalFocused(false)} onChange={event => setApprovalPin(event.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={event => { if (event.key === 'Enter') void approveWithPin() }} inputMode='numeric' type='password' autoComplete='current-password' aria-label='Six-digit Pocket PIN' className='absolute inset-0 h-full w-full cursor-text opacity-[0.01]' />
+      </div>
       {error && <p className='mt-3 text-xs font-semibold text-red-500'>{error}</p>}
       <button type='button' onClick={() => void approveWithPin()} disabled={busy || approvalPin.trim().length !== 6} className='mt-5 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Confirming…' : 'Confirm payment'}</button>
       <button type='button' onClick={cancelApproval} disabled={busy} className='mt-2 min-h-11 w-full text-sm font-bold text-gray-500'>Cancel</button>
