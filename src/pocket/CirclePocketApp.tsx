@@ -18,7 +18,6 @@ import { POCKET_NATIVE_BACK_EVENT } from './lib/pocketNativeBack'
 import { reconnectPocketBaseWallet, restorePocketWalletSession } from './controllers/usePocketWalletController'
 import { Lock } from './components/PocketIcons'
 import PocketPaymentSecurityGate from './components/PocketPaymentSecurityGate'
-import PocketAuthBrand from './components/PocketAuthBrand'
 import PocketProgressDots from './components/PocketProgressDots'
 import usePocketLightSurface from './hooks/usePocketLightSurface'
 
@@ -56,8 +55,7 @@ function PocketWalletAccessScreen({ error, busy, onRetry }: { error: string; bus
   usePocketLightSurface()
   return <main className='fixed inset-0 z-[60] flex items-center justify-center bg-[#F5F5F7] px-6 pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-[max(1.5rem,var(--pocket-safe-top))] text-gray-950'>
     <section className='w-full max-w-[390px] text-center'>
-      <PocketAuthBrand compact />
-      <span className='mx-auto mt-9 flex h-16 w-16 items-center justify-center rounded-full border border-gray-200 bg-white text-blue-600 shadow-sm'><Lock className='h-6 w-6' /></span>
+      <span className='mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-gray-200 bg-white text-blue-600 shadow-sm'><Lock className='h-6 w-6' /></span>
       <p className='mt-6 text-[10px] font-black uppercase tracking-[0.22em] text-gray-400'>One final step</p>
       <h1 className='mx-auto mt-3 max-w-[320px] text-2xl font-black leading-tight tracking-[-0.035em]'>Sign in to your Circle Pocket wallet</h1>
       <p className='mx-auto mt-3 max-w-[310px] text-sm font-medium leading-6 text-gray-500'>Continue to your account and securely open all your Pocket wallets.</p>

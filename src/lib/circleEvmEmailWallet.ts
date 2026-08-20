@@ -170,6 +170,51 @@ function closeCircleSdkModal() {
   iframe?.parentNode?.removeChild(iframe)
 }
 
+function installCircleOtpCancelButton() {
+  const button = window.document.createElement('button')
+  button.id = 'pocket-circle-otp-cancel'
+  button.type = 'button'
+  button.setAttribute('aria-label', 'Cancel Circle sign in')
+  button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>'
+  Object.assign(button.style, {
+    alignItems: 'center',
+    background: '#FFFFFF',
+    border: '1px solid #E5E7EB',
+    borderRadius: '9999px',
+    boxShadow: '0 2px 10px rgba(15, 23, 42, 0.12)',
+    color: '#111827',
+    cursor: 'pointer',
+    display: 'flex',
+    height: '44px',
+    justifyContent: 'center',
+    padding: '0',
+    position: 'fixed',
+    right: '16px',
+    top: 'calc(max(env(safe-area-inset-top), var(--pocket-status-bar-inset, 0px)) + 12px)',
+    width: '44px',
+    zIndex: '2147483647',
+  })
+  const icon = button.querySelector('svg')
+  if (icon instanceof SVGElement) {
+    icon.style.height = '20px'
+    icon.style.width = '20px'
+  }
+  button.addEventListener('click', () => {
+    window.postMessage({ onClose: true, source: 'pocket-circle-otp-cancel' }, '*')
+  })
+  const mount = () => {
+    if (!window.document.getElementById('sdkIframe') || button.isConnected) return
+    window.document.body.appendChild(button)
+  }
+  const observer = new MutationObserver(mount)
+  observer.observe(window.document.body, { childList: true })
+  mount()
+  return () => {
+    observer.disconnect()
+    button.remove()
+  }
+}
+
 function isCircleCloseMessage(data: unknown) {
   if (!data || typeof data !== 'object') return false
   const record = data as Record<string, unknown>
@@ -656,15 +701,19 @@ export async function connectCircleEvmEmailWallet(
   let currentOtp = otp
   const restorePocketViewport = capturePocketViewport()
 
+  let removeCircleOtpCancel: () => void = () => undefined
   const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
     const handleClose = (event: MessageEvent) => {
       if (!event.data?.onClose) return
       window.removeEventListener('message', handleClose)
+      closeCircleSdkModal()
+      removeCircleOtpCancel()
       restorePocketViewport()
       reject(new Error('Payment cancelled.'))
     }
     const onLoginComplete = (error?: unknown, result?: CircleEmailLoginResult) => {
       window.removeEventListener('message', handleClose)
+      removeCircleOtpCancel()
       restorePocketViewport()
       if (error) {
         closeCircleSdkModal()
@@ -701,17 +750,21 @@ export async function connectCircleEvmEmailWallet(
       }).catch(err => {
         closeCircleSdkModal()
         window.removeEventListener('message', handleClose)
+        removeCircleOtpCancel()
         reject(new Error(emailVerificationError(err)))
       })
     })
+    removeCircleOtpCancel = installCircleOtpCancelButton()
     refreshOtpConfig()
     try {
       sdk.verifyOtp()
     } catch (err) {
       closeCircleSdkModal()
+      removeCircleOtpCancel()
       reject(new Error(emailVerificationError(err)))
     }
   }), CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS, 'Code expired. Request a new code.')
+    .finally(() => removeCircleOtpCancel())
 
   const ensured = chain === 'arc'
     ? await ensureArcTestnetWallet(sdk, login.userToken, login.encryptionKey, chain)
