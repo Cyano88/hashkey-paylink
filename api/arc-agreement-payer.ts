@@ -666,6 +666,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
           },
           payer: link.address,
           payerIdentity: identityValue,
+          payerSource: 'circle_linked_wallet',
           env: dependencies.env(),
         })
         return res.status(result.replayed ? 200 : 201).json({

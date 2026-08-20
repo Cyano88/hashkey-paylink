@@ -5,6 +5,7 @@ import {
   parseAbi,
   zeroAddress,
 } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 import {
   arcAgreementProjectCapacitySnapshot,
   arcAgreementCircleSmartWalletCall,
@@ -170,12 +171,32 @@ function clientState() {
 
 const memory = memoryDependencies()
 const chain = clientState()
+await assert.rejects(prepareArcAgreementActivationAttempt({
+  policy,
+  agreementId,
+  draft,
+  payer,
+  payerIdentity: 'privy:test-user-1234',
+  payerSource: 'agent_request',
+  env,
+}, memory.dependencies), /verified Circle Arc payment wallet/)
+const relayerKey = `0x${'1'.repeat(64)}`
+await assert.rejects(prepareArcAgreementActivationAttempt({
+  policy,
+  agreementId,
+  draft,
+  payer: privateKeyToAccount(relayerKey).address,
+  payerIdentity: 'privy:test-user-1234',
+  payerSource: 'circle_linked_wallet',
+  env: { ...env, RELAYER_PRIVATE_KEY_ARC: relayerKey },
+}, memory.dependencies), /server relayer/)
 const preparedResult = await prepareArcAgreementActivationAttempt({
   policy,
   agreementId,
   draft,
   payer,
   payerIdentity: 'privy:test-user-1234',
+  payerSource: 'circle_linked_wallet',
   env,
 }, memory.dependencies)
 
@@ -258,6 +279,7 @@ const replay = await prepareArcAgreementActivationAttempt({
   draft,
   payer,
   payerIdentity: 'privy:test-user-1234',
+  payerSource: 'circle_linked_wallet',
   env,
 }, memory.dependencies)
 assert.equal(replay.replayed, true)
@@ -268,6 +290,7 @@ await assert.rejects(prepareArcAgreementActivationAttempt({
   draft,
   payer,
   payerIdentity: 'privy:different-user-5678',
+  payerSource: 'circle_linked_wallet',
   env,
 }, memory.dependencies), /different durable activation commitment/)
 await assert.rejects(prepareArcAgreementActivationAttempt({
@@ -276,6 +299,7 @@ await assert.rejects(prepareArcAgreementActivationAttempt({
   draft: { ...draft, termsHash: `0x${'f'.repeat(64)}` },
   payer,
   payerIdentity: 'privy:test-user-1234',
+  payerSource: 'circle_linked_wallet',
   env,
 }, memory.dependencies), /different durable activation commitment/)
 
@@ -585,6 +609,7 @@ const secondPrepared = await prepareArcAgreementActivationAttempt({
   },
   payer,
   payerIdentity: 'privy:test-user-1234',
+  payerSource: 'circle_linked_wallet',
   env,
 }, memory.dependencies)
 assert.equal(secondPrepared.attempt.calls.approval.data, preparedResult.attempt.calls.approval.data)
@@ -745,6 +770,7 @@ async function prepareReadyAgreement(id, externalId) {
     },
     payer,
     payerIdentity: 'privy:test-user-1234',
+    payerSource: 'circle_linked_wallet',
     env,
   }, memory.dependencies)
   await memory.dependencies.mutate('ignored', store => {

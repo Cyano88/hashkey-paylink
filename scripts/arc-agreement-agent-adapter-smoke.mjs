@@ -504,6 +504,7 @@ const actualPrepared = await prepareArcAgreementActivationAttempt({
   draft: { clientReference: agreement.clientReference, termsHash: agreement.termsHash, chainTerms },
   payer,
   payerIdentity: identity,
+  payerSource: 'agent_request',
   env: activationEnv,
 }, memory.dependencies)
 assert.equal(actualPrepared.attempt.checkoutMode, 'agentic')

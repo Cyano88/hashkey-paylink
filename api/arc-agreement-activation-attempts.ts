@@ -9,6 +9,7 @@ import {
   type Address,
   type Hex,
 } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 import {
   authorizeArcAgreementActivation,
   type ArcAgreementActivationAuthorization,
@@ -1170,9 +1171,29 @@ export async function prepareArcAgreementActivationAttempt(input: {
   draft: ArcAgreementDraftBinding
   payer: string
   payerIdentity: string
+  payerSource: 'circle_linked_wallet' | 'agent_request'
   env?: NodeJS.ProcessEnv
 }, dependencies: Dependencies = defaults) {
   if (!dependencies.hasStore()) throw new Error('Arc Agreement activation storage is not configured.')
+  if (input.policy.checkoutMode === 'human' && input.payerSource !== 'circle_linked_wallet') {
+    throw new Error('Human Arc Agreement activation requires a verified Circle Arc payment wallet.')
+  }
+  if (input.policy.checkoutMode === 'agentic' && input.payerSource !== 'agent_request') {
+    throw new Error('Agentic Arc Agreement activation requires the dedicated agent payer route.')
+  }
+  if (input.policy.checkoutMode === 'human') {
+    const env = input.env ?? process.env
+    const relayerKey = String(env.RELAYER_PRIVATE_KEY_ARC ?? env.RELAYER_PRIVATE_KEY ?? '').trim()
+    if (relayerKey) {
+      if (!/^0x[0-9a-f]{64}$/i.test(relayerKey)) {
+        throw new Error('Configured Arc relayer private key is invalid.')
+      }
+      const relayer = privateKeyToAccount(relayerKey as `0x${string}`).address
+      if (getAddress(input.payer) === relayer) {
+        throw new Error('Human Arc Agreement payer cannot be the configured Arc server relayer.')
+      }
+    }
+  }
   const agreementId = requireAgreementId(input.agreementId)
   const id = attemptId(input.policy.partnerId, agreementId)
   const now = dependencies.now()

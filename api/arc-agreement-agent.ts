@@ -432,6 +432,7 @@ export function createArcAgreementAgentHandler(overrides: Partial<Dependencies> 
           },
           payer,
           payerIdentity: identity,
+          payerSource: 'agent_request',
           env: dependencies.env(),
         })
         return res.status(prepared.replayed ? 200 : 201).json({
