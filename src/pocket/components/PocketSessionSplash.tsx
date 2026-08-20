@@ -35,8 +35,9 @@ export default function PocketSessionSplash({
 
   useEffect(() => {
     if (!nativeRuntime) return
-    const style = state === 'idle'
-      ? (document.documentElement.classList.contains('dark') ? Style.Dark : Style.Light)
+    const lightSurface = document.documentElement.dataset.pocketLightSurface === 'true'
+    const style = state === 'idle' && !lightSurface && document.documentElement.classList.contains('dark')
+      ? Style.Dark
       : Style.Light
     void StatusBar.setStyle({ style }).catch(() => undefined)
   }, [nativeRuntime, state])
