@@ -300,13 +300,21 @@ async function getCircleDeviceId(sdk: W3SSdk, appId: string) {
   const cached = readCachedCircleDeviceId(appId)
   if (cached) return cached
 
-  const pendingDeviceId = sdk.getDeviceId()
-  keepCircleDeviceFrameRunnable()
-  const deviceId = (await withTimeout(
-    pendingDeviceId,
-    15_000,
-    'Smart wallet security frame was blocked. Allow third-party site data for Circle and try again.',
-  )).trim()
+  let deviceId = ''
+  try {
+    const pendingDeviceId = sdk.getDeviceId()
+    keepCircleDeviceFrameRunnable()
+    deviceId = (await withTimeout(
+      pendingDeviceId,
+      15_000,
+      'Smart wallet security frame was blocked. Allow third-party site data for Circle and try again.',
+    )).trim()
+  } catch {
+    closeCircleSdkModal()
+    // Circle uses this value only to bind its OTP credentials to this browser.
+    // Keep a stable local UUID when its third-party device frame is unavailable.
+    deviceId = window.crypto.randomUUID()
+  }
   if (!deviceId) throw new Error('Circle returned an empty device ID.')
   cacheCircleDeviceId(appId, deviceId)
   return deviceId
