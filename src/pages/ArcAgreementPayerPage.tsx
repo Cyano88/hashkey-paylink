@@ -656,7 +656,7 @@ export default function ArcAgreementPayerPage() {
       </div>
 
       <section className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#141416] dark:shadow-none">
-        {loading ? (
+        {!ready || loading ? (
           <div className="space-y-4 p-6 sm:p-8" aria-label="Loading agreement">
             <div className="h-3 w-24 animate-pulse rounded-full bg-gray-100 dark:bg-white/8" />
             <div className="h-8 w-3/4 animate-pulse rounded-xl bg-gray-100 dark:bg-white/8" />
