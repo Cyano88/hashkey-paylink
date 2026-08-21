@@ -50,6 +50,7 @@ const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefi
 const ARC_TESTNET_APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET as string | undefined
 const ENABLED = import.meta.env.VITE_CIRCLE_EVM_EMAIL_ENABLED !== 'false'
 const CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000
+const CIRCLE_DEVICE_ID_STORAGE_PREFIX = 'hashpaylink:circle-device-id:v1'
 const POCKET_NATIVE_ORIGIN = 'https://pocket.hashpaylink.com'
 let runtimeConfigPromise: Promise<{
   circle?: {
@@ -229,6 +230,9 @@ function isCircleCloseMessage(data: unknown) {
 function deviceIdError(err: unknown) {
   const message = readableError(err).toLowerCase()
   if (message.includes('cancel')) return 'Payment cancelled.'
+  if (message.includes('security frame') || message.includes('third-party site data')) {
+    return 'Circle Smart Wallet was blocked by browser privacy settings. Allow third-party site data for Circle, then try again.'
+  }
   if (
     message.includes('timeout') ||
     message.includes('timed out') ||
@@ -249,6 +253,63 @@ function deviceIdError(err: unknown) {
     return 'Circle Smart Wallet could not connect. Check your network and try again.'
   }
   return 'Circle Smart Wallet could not open. Refresh this page and try again.'
+}
+
+function circleDeviceIdStorageKey(appId: string) {
+  return `${CIRCLE_DEVICE_ID_STORAGE_PREFIX}:${appId}`
+}
+
+function readCachedCircleDeviceId(appId: string) {
+  try {
+    const deviceId = window.localStorage.getItem(circleDeviceIdStorageKey(appId))?.trim()
+    return deviceId || null
+  } catch {
+    return null
+  }
+}
+
+function cacheCircleDeviceId(appId: string, deviceId: string) {
+  try {
+    window.localStorage.setItem(circleDeviceIdStorageKey(appId), deviceId)
+  } catch {
+    // Circle can still use the device ID for this session when storage is unavailable.
+  }
+}
+
+function keepCircleDeviceFrameRunnable() {
+  const iframe = window.document.getElementById('sdkIframe')
+  if (!(iframe instanceof HTMLIFrameElement)) return
+  iframe.setAttribute('aria-hidden', 'true')
+  Object.assign(iframe.style, {
+    border: '0',
+    display: 'block',
+    height: '1px',
+    left: '-10000px',
+    opacity: '0',
+    pointerEvents: 'none',
+    position: 'fixed',
+    top: '0',
+    width: '1px',
+    zIndex: '-1',
+  })
+  iframe.width = '1'
+  iframe.height = '1'
+}
+
+async function getCircleDeviceId(sdk: W3SSdk, appId: string) {
+  const cached = readCachedCircleDeviceId(appId)
+  if (cached) return cached
+
+  const pendingDeviceId = sdk.getDeviceId()
+  keepCircleDeviceFrameRunnable()
+  const deviceId = (await withTimeout(
+    pendingDeviceId,
+    15_000,
+    'Smart wallet security frame was blocked. Allow third-party site data for Circle and try again.',
+  )).trim()
+  if (!deviceId) throw new Error('Circle returned an empty device ID.')
+  cacheCircleDeviceId(appId, deviceId)
+  return deviceId
 }
 
 function isHexHash(value: unknown): value is Hex {
@@ -671,11 +732,7 @@ export async function connectCircleEvmEmailWallet(
   })
   let deviceId: string
   try {
-    deviceId = await withTimeout(
-      sdk.getDeviceId(),
-      15_000,
-      'Smart wallet could not start. Refresh and try again.',
-    )
+    deviceId = await getCircleDeviceId(sdk, appId)
   } catch (err) {
     throw new Error(deviceIdError(err))
   }
