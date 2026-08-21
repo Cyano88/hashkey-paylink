@@ -815,6 +815,23 @@ export default function ArcAgreementPayerPage() {
             <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
               {error || 'Use the original private agreement link.'}
             </p>
+            {authenticated && error === 'This agreement is not available for this payer identity.' && (
+              <PrivyConnectButton
+                debugLabel="arc-agreement-unavailable-switch-payer"
+                loginOptions={{ loginMethods: ['email'] }}
+                onBeforeLogin={() => {
+                  setSession(null)
+                  setReview(null)
+                  setLoading(true)
+                  setError('')
+                  setConfirmLifecycle(null)
+                }}
+                className="mt-6 flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+              >
+                <span>Sign in with another email</span>
+                <ArrowRight className="h-4 w-4" />
+              </PrivyConnectButton>
+            )}
           </div>
         )}
       </section>
