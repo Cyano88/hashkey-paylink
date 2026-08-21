@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, Check, Copy, ExternalLink, LockKeyhole, ShieldCheck } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
-import { PrivyConnectButton } from '../lib/PrivyConnectButton'
+import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import {
   connectCircleEvmEmailWallet,
   executeCircleEvmEmailChallenge,
@@ -203,7 +203,7 @@ function statusCopy(attempt: Attempt | null, walletLinked: boolean) {
 
 export default function ArcAgreementPayerPage() {
   const { agreementId = '' } = useParams()
-  const { authenticated, ready, user, getAccessToken } = usePrivy()
+  const { authenticated, ready, user, getAccessToken, logout } = usePrivy()
   const [capability, setCapability] = useState(() => capabilityForAgreement(agreementId))
   const [review, setReview] = useState<ReviewResponse | null>(null)
   const [session, setSession] = useState<CircleEvmEmailSession | null>(null)
@@ -445,6 +445,21 @@ export default function ArcAgreementPayerPage() {
     }
   }
 
+  async function switchPayerEmail() {
+    if (busy) return
+    setBusy(true)
+    setSession(null)
+    setReview(null)
+    setError('')
+    setConfirmLifecycle(null)
+    setLoading(true)
+    try {
+      await logout()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function copyPayerAddress() {
     const address = review?.payer.walletAddress
     if (!address) return
@@ -654,15 +669,9 @@ export default function ArcAgreementPayerPage() {
             <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
               Continue with the payer email to open this private agreement.
             </p>
-            <PrivyConnectButton
-              logoutOnAuthenticated={false}
-              debugLabel="arc-agreement-payer-entry"
-              loginOptions={{ loginMethods: ['email'] }}
-              className="mt-6 flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
-            >
-              <span>Continue with email</span>
-              <ArrowRight className="h-4 w-4" />
-            </PrivyConnectButton>
+            <div className="mt-6 text-left">
+              <PocketEmailLogin context="agreement" />
+            </div>
           </div>
         ) : agreement ? (
           <>
@@ -718,21 +727,15 @@ export default function ArcAgreementPayerPage() {
                   </div>
                 </div>
                 {authenticated ? (
-                  <PrivyConnectButton
-                    debugLabel="arc-agreement-change-payer"
-                    loginOptions={{ loginMethods: ['email'] }}
+                  <button
+                    type="button"
+                    data-login-action="arc-agreement-change-payer"
                     disabled={busy}
-                    onBeforeLogin={() => {
-                      setSession(null)
-                      setReview(null)
-                      setLoading(true)
-                      setError('')
-                      setConfirmLifecycle(null)
-                    }}
+                    onClick={() => void switchPayerEmail()}
                     className="shrink-0 rounded-full border border-gray-200 px-3 py-2 text-[11px] font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-300 dark:hover:bg-white/5"
                   >
                     Use another email
-                  </PrivyConnectButton>
+                  </button>
                 ) : (
                   <PocketPillMark tone="subtle" />
                 )}
@@ -740,15 +743,7 @@ export default function ArcAgreementPayerPage() {
 
               <div className="mt-6">
                 {!authenticated ? (
-                  <PrivyConnectButton
-                    logoutOnAuthenticated={false}
-                    debugLabel="arc-agreement-payer"
-                    loginOptions={{ loginMethods: ['email'] }}
-                    className="flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
-                  >
-                    <span>{actionLabel}</span>
-                    <ArrowRight className="h-4 w-4" />
-                  </PrivyConnectButton>
+                  <PocketEmailLogin context="agreement" />
                 ) : creatorFundingBlocked ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-400/20 dark:bg-amber-400/10">
                     <p className="text-xs font-semibold text-amber-950 dark:text-amber-100">Use a different payer account</p>
@@ -816,21 +811,15 @@ export default function ArcAgreementPayerPage() {
               {error || 'Use the original private agreement link.'}
             </p>
             {authenticated && error === 'This agreement is not available for this payer identity.' && (
-              <PrivyConnectButton
-                debugLabel="arc-agreement-unavailable-switch-payer"
-                loginOptions={{ loginMethods: ['email'] }}
-                onBeforeLogin={() => {
-                  setSession(null)
-                  setReview(null)
-                  setLoading(true)
-                  setError('')
-                  setConfirmLifecycle(null)
-                }}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void switchPayerEmail()}
                 className="mt-6 flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
               >
                 <span>Sign in with another email</span>
                 <ArrowRight className="h-4 w-4" />
-              </PrivyConnectButton>
+              </button>
             )}
           </div>
         )}

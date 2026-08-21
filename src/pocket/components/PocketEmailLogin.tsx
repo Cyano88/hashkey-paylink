@@ -6,16 +6,20 @@ import { ArrowLeft, ArrowRight, Lock, Mail } from './PocketIcons'
 const CODE_LENGTH = 6
 const RESEND_SECONDS = 30
 
-function readableEmailAuthError(error: unknown, action: 'send' | 'verify') {
+function readableEmailAuthError(error: unknown, action: 'send' | 'verify', productName: string) {
   const message = error instanceof Error ? error.message.toLowerCase() : ''
   if (message.includes('rate') || message.includes('too many')) return 'Too many attempts. Wait a moment before trying again.'
   if (action === 'verify' && (message.includes('invalid') || message.includes('expired') || message.includes('code'))) return 'That code is invalid or expired. Request a new code and try again.'
   return action === 'send'
-    ? 'Pocket could not send the code. Check your connection and try again.'
-    : 'Pocket could not verify the code. Check your connection and try again.'
+    ? `${productName} could not send the code. Check your connection and try again.`
+    : `${productName} could not verify the code. Check your connection and try again.`
 }
 
-export default function PocketEmailLogin() {
+type PocketEmailLoginProps = {
+  context?: 'pocket' | 'agreement'
+}
+
+export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLoginProps) {
   const { sendCode, loginWithCode } = useLoginWithEmail()
   const [step, setStep] = useState<'email' | 'code'>('email')
   const [email, setEmail] = useState('')
@@ -25,6 +29,10 @@ export default function PocketEmailLogin() {
   const [resendIn, setResendIn] = useState(0)
   const [codeFocused, setCodeFocused] = useState(false)
   const codeInputRef = useRef<HTMLInputElement>(null)
+  const idPrefix = context === 'agreement' ? 'agreement-payer' : 'pocket'
+  const productName = context === 'agreement' ? 'Hash PayLink' : 'Pocket'
+  const emailInputId = `${idPrefix}-sign-in-email`
+  const codeInputId = `${idPrefix}-email-code`
 
   useEffect(() => {
     if (resendIn <= 0) return
@@ -51,7 +59,7 @@ export default function PocketEmailLogin() {
       setResendIn(RESEND_SECONDS)
       setStep('code')
     } catch (nextError) {
-      setError(readableEmailAuthError(nextError, 'send'))
+      setError(readableEmailAuthError(nextError, 'send', productName))
     } finally {
       setBusy(false)
     }
@@ -68,7 +76,7 @@ export default function PocketEmailLogin() {
     try {
       await loginWithCode({ code })
     } catch (nextError) {
-      setError(readableEmailAuthError(nextError, 'verify'))
+      setError(readableEmailAuthError(nextError, 'verify', productName))
       setCode('')
       window.requestAnimationFrame(() => codeInputRef.current?.focus())
     } finally {
@@ -97,7 +105,7 @@ export default function PocketEmailLogin() {
           </p>
         </div>
         <form onSubmit={verifyCode} className="mt-8">
-          <label className="sr-only" htmlFor="pocket-email-code">Six-digit email code</label>
+          <label className="sr-only" htmlFor={codeInputId}>Six-digit email code</label>
           <div className="relative" onClick={() => codeInputRef.current?.focus()}>
             <div className="grid grid-cols-6 gap-2" aria-hidden="true">
               {Array.from({ length: CODE_LENGTH }, (_, index) => (
@@ -106,7 +114,7 @@ export default function PocketEmailLogin() {
             </div>
             <input
               ref={codeInputRef}
-              id="pocket-email-code"
+              id={codeInputId}
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -134,7 +142,7 @@ export default function PocketEmailLogin() {
           <button type="button" disabled={busy} onClick={returnToEmail} className="text-gray-600">Change email</button>
         </div>
         <div className="mt-9 text-center">
-          <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500"><Lock className="h-4 w-4" strokeWidth={2} />Pocket will never ask you to share this code.</p>
+          <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500"><Lock className="h-4 w-4" strokeWidth={2} />{context === 'agreement' ? 'Hash PayLink will never ask you to share this code.' : 'Pocket will never ask you to share this code.'}</p>
           <p className="mt-3 flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400" aria-label="Secured by Privy">
             <span>Secured by</span>
             <img src="/privy-mark-logo.png" alt="" aria-hidden="true" className="h-3.5 w-3.5 object-contain" />
@@ -148,10 +156,10 @@ export default function PocketEmailLogin() {
 
   return (
     <form onSubmit={requestCode} className="space-y-2.5">
-      <label className="sr-only" htmlFor="pocket-sign-in-email">Email address</label>
+      <label className="sr-only" htmlFor={emailInputId}>Email address</label>
       <div className="relative">
         <Mail className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-        <input id="pocket-sign-in-email" type="email" inputMode="email" autoComplete="email" spellCheck={false} required value={email} disabled={busy} onChange={event => { setEmail(event.target.value); setError('') }} placeholder="Email address" className="min-h-14 w-full rounded-full border border-gray-200 bg-white px-12 text-sm font-semibold text-gray-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 disabled:opacity-60" />
+        <input id={emailInputId} type="email" inputMode="email" autoComplete="email" spellCheck={false} required value={email} disabled={busy} onChange={event => { setEmail(event.target.value); setError('') }} placeholder="Email address" className="min-h-14 w-full rounded-full border border-gray-200 bg-white px-12 text-sm font-semibold text-gray-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 disabled:opacity-60" />
       </div>
       {error && <p role="alert" className="px-3 text-center text-xs font-semibold text-red-600">{error}</p>}
       <button type="submit" disabled={busy || !email.trim()} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45">
