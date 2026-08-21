@@ -663,10 +663,13 @@ assert.match(serverSource, /app\.post\('\/api\/v2\/agreements\/payer',\s+strictL
 
 const appSource = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const payerPageSource = await readFile(new URL('../src/pages/ArcAgreementPayerPage.tsx', import.meta.url), 'utf8')
+const circleEvmEmailWalletSource = await readFile(new URL('../src/lib/circleEvmEmailWallet.ts', import.meta.url), 'utf8')
 assert.match(appSource, /path="agreements\/:agreementId"/)
 assert.match(payerPageSource, /x-arc-agreement-access/)
 assert.match(payerPageSource, /connectCircleEvmEmailWallet\(email,\s*'arc'\)/)
 assert.match(payerPageSource, /linkPocketWallet\(/)
+assert.doesNotMatch(circleEvmEmailWalletSource, /if \(wallet\) return wallet/)
+assert.match(circleEvmEmailWalletSource, /if \(wallet\) return \{ wallet \}/)
 assert.match(payerPageSource, /executeCircleEvmEmailChallenge\(/)
 assert.match(payerPageSource, /!isActive\s*&&\s*\(/)
 assert.match(payerPageSource, /Keep agreement/)

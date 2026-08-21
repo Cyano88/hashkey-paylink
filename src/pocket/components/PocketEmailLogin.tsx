@@ -6,21 +6,6 @@ import { ArrowLeft, ArrowRight, Lock, Mail } from './PocketIcons'
 const CODE_LENGTH = 6
 const RESEND_SECONDS = 30
 
-function pendingEmailStorageKey(context: 'pocket' | 'agreement') {
-  if (context !== 'agreement' || typeof window === 'undefined') return ''
-  return `hashpaylink:agreement-email-login:${window.location.pathname}`
-}
-
-function pendingEmailFor(context: 'pocket' | 'agreement') {
-  const key = pendingEmailStorageKey(context)
-  if (!key) return ''
-  try {
-    return window.sessionStorage.getItem(key) ?? ''
-  } catch {
-    return ''
-  }
-}
-
 function readableEmailAuthError(error: unknown, action: 'send' | 'verify', productName: string) {
   const message = error instanceof Error ? error.message.toLowerCase() : ''
   if (message.includes('rate') || message.includes('too many')) return 'Too many attempts. Wait a moment before trying again.'
@@ -35,21 +20,9 @@ type PocketEmailLoginProps = {
 }
 
 export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLoginProps) {
-  const initialPendingEmail = useRef(pendingEmailFor(context))
-  const clearPendingEmail = () => {
-    const key = pendingEmailStorageKey(context)
-    if (!key) return
-    try {
-      window.sessionStorage.removeItem(key)
-    } catch {
-      // Private browsing or a locked-down webview can reject session storage.
-    }
-  }
-  const { sendCode, loginWithCode } = useLoginWithEmail({
-    onComplete: clearPendingEmail,
-  })
-  const [step, setStep] = useState<'email' | 'code'>(() => initialPendingEmail.current ? 'code' : 'email')
-  const [email, setEmail] = useState(initialPendingEmail.current)
+  const { sendCode, loginWithCode } = useLoginWithEmail()
+  const [step, setStep] = useState<'email' | 'code'>('email')
+  const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -79,14 +52,6 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
     if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) return setError('Enter a valid email address.')
     setBusy(true)
     setError('')
-    const key = pendingEmailStorageKey(context)
-    if (key) {
-      try {
-        window.sessionStorage.setItem(key, normalizedEmail)
-      } catch {
-        // The in-memory step still works when session storage is unavailable.
-      }
-    }
     setEmail(normalizedEmail)
     setCode('')
     setResendIn(RESEND_SECONDS)
@@ -122,7 +87,6 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
 
   const returnToEmail = () => {
     if (busy) return
-    clearPendingEmail()
     setStep('email')
     setCode('')
     setError('')

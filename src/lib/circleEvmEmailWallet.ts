@@ -639,7 +639,7 @@ async function ensureArcTestnetWallet(
   } catch (err) {
     throw new Error(`${config.label} Circle wallet lookup failed. ${readableError(err)}`)
   }
-  if (wallet) return wallet
+  if (wallet) return { wallet }
 
   try {
     const init = await circleWalletApi<{ challengeId?: string }>({
@@ -658,7 +658,7 @@ async function ensureArcTestnetWallet(
   } catch (err) {
     throw new Error(`${config.label} Circle wallet lookup failed after initialization. ${readableError(err)}`)
   }
-  if (wallet) return wallet
+  if (wallet) return { wallet }
 
   let created: { challengeId?: string }
   try {
