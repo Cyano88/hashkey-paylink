@@ -278,7 +278,11 @@ function cacheCircleDeviceId(appId: string, deviceId: string) {
 
 function keepCircleDeviceFrameRunnable() {
   const iframe = window.document.getElementById('sdkIframe')
-  if (!(iframe instanceof HTMLIFrameElement)) return
+  if (!(iframe instanceof HTMLIFrameElement)) return () => undefined
+  const previousStyle = iframe.getAttribute('style')
+  const previousWidth = iframe.getAttribute('width')
+  const previousHeight = iframe.getAttribute('height')
+  const previousAriaHidden = iframe.getAttribute('aria-hidden')
   iframe.setAttribute('aria-hidden', 'true')
   Object.assign(iframe.style, {
     border: '0',
@@ -294,6 +298,16 @@ function keepCircleDeviceFrameRunnable() {
   })
   iframe.width = '1'
   iframe.height = '1'
+  return () => {
+    if (previousStyle === null) iframe.removeAttribute('style')
+    else iframe.setAttribute('style', previousStyle)
+    if (previousWidth === null) iframe.removeAttribute('width')
+    else iframe.setAttribute('width', previousWidth)
+    if (previousHeight === null) iframe.removeAttribute('height')
+    else iframe.setAttribute('height', previousHeight)
+    if (previousAriaHidden === null) iframe.removeAttribute('aria-hidden')
+    else iframe.setAttribute('aria-hidden', previousAriaHidden)
+  }
 }
 
 async function getCircleDeviceId(sdk: W3SSdk, appId: string) {
@@ -301,9 +315,10 @@ async function getCircleDeviceId(sdk: W3SSdk, appId: string) {
   if (cached) return cached
 
   let deviceId = ''
+  let restoreDeviceFrame = () => undefined
   try {
     const pendingDeviceId = sdk.getDeviceId()
-    keepCircleDeviceFrameRunnable()
+    restoreDeviceFrame = keepCircleDeviceFrameRunnable()
     deviceId = (await withTimeout(
       pendingDeviceId,
       15_000,
@@ -314,6 +329,8 @@ async function getCircleDeviceId(sdk: W3SSdk, appId: string) {
     // Circle uses this value only to bind its OTP credentials to this browser.
     // Keep a stable local UUID when its third-party device frame is unavailable.
     deviceId = window.crypto.randomUUID()
+  } finally {
+    restoreDeviceFrame()
   }
   if (!deviceId) throw new Error('Circle returned an empty device ID.')
   cacheCircleDeviceId(appId, deviceId)
