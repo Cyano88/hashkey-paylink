@@ -457,6 +457,23 @@ app.get('/.well-known/assetlinks.json', (_req, res) => {
   }])
 })
 
+app.get('/.well-known/apple-app-site-association', (_req, res) => {
+  const teamId = String(process.env.APPLE_TEAM_ID ?? '').trim().toUpperCase()
+  res.setHeader('Cache-Control', 'public, max-age=3600')
+  res.setHeader('Content-Type', 'application/json')
+  if (!/^[A-Z0-9]{10}$/.test(teamId)) {
+    return res.status(503).json({ error: 'Apple Team ID is not configured.' })
+  }
+  return res.json({
+    applinks: {
+      details: [{
+        appIDs: [`${teamId}.com.hashpaylink.pocket`],
+        components: [{ '/': '/*', comment: 'Open Hash PayLink Pocket links in the iOS app.' }],
+      }],
+    },
+  })
+})
+
 app.use(express.static(join(__dirname, 'dist'), {
   index: false,
   setHeaders(res, filePath) {
