@@ -79,21 +79,22 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
     if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) return setError('Enter a valid email address.')
     setBusy(true)
     setError('')
+    const key = pendingEmailStorageKey(context)
+    if (key) {
+      try {
+        window.sessionStorage.setItem(key, normalizedEmail)
+      } catch {
+        // The in-memory step still works when session storage is unavailable.
+      }
+    }
+    setEmail(normalizedEmail)
+    setCode('')
+    setResendIn(RESEND_SECONDS)
+    setStep('code')
     try {
       await sendCode({ email: normalizedEmail })
-      const key = pendingEmailStorageKey(context)
-      if (key) {
-        try {
-          window.sessionStorage.setItem(key, normalizedEmail)
-        } catch {
-          // The in-memory step still works when session storage is unavailable.
-        }
-      }
-      setEmail(normalizedEmail)
-      setCode('')
-      setResendIn(RESEND_SECONDS)
-      setStep('code')
     } catch (nextError) {
+      setResendIn(0)
       setError(readableEmailAuthError(nextError, 'send', productName))
     } finally {
       setBusy(false)
