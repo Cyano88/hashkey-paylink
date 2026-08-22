@@ -1,6 +1,7 @@
 import {
   createPublicClient,
   defineChain,
+  fallback,
   http,
   TransactionReceiptNotFoundError,
 } from 'viem'
@@ -14,9 +15,12 @@ export function createArcAgreementActivationClient(): ArcAgreementActivationClie
       id: 5_042_002,
       name: 'Arc Testnet',
       nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-      rpcUrls: { default: { http: [runtime.rpcUrl] } },
+      rpcUrls: { default: { http: runtime.rpcUrls } },
     }),
-    transport: http(runtime.rpcUrl, { timeout: 20_000, retryCount: 2 }),
+    transport: fallback(
+      runtime.rpcUrls.map(url => http(url, { timeout: 12_000, retryCount: 1 })),
+      { retryCount: 1 },
+    ),
   })
   return {
     getChainId: () => client.getChainId(),

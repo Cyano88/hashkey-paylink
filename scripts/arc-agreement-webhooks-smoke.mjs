@@ -26,6 +26,7 @@ const escrow = '0x5555555555555555555555555555555555555555'
 assert.equal(ARC_AGREEMENT_NETWORK.chainId, 5_042_002)
 assert.equal(ARC_AGREEMENT_NETWORK.circleDomain, 26)
 assert.equal(ARC_AGREEMENT_NETWORK.usdc, usdc)
+assert.equal(ARC_AGREEMENT_NETWORK.rpcFallbackUrl, 'https://arc-testnet.drpc.org')
 assert.deepEqual(assertArcAgreementNetwork({ chainId: 5_042_002, usdc }), { chainId: 5_042_002, usdc })
 assert.throws(
   () => assertArcAgreementNetwork({ chainId: 8453, usdc }),
@@ -44,6 +45,19 @@ const runtime = arcAgreementRuntimeConfig({
 assert.equal(runtime.factory, factory)
 assert.equal(runtime.operator, operator)
 assert.equal(runtime.confirmations, 7)
+assert.deepEqual(runtime.rpcUrls, [
+  'https://private-rpc.example/arc',
+  'https://rpc.testnet.arc.network/',
+  'https://arc-testnet.drpc.org/',
+])
+const publicRuntime = arcAgreementRuntimeConfig({
+  ARC_AGREEMENT_FACTORY_ADDRESS: factory,
+  ARC_AGREEMENT_OPERATOR_ADDRESS: operator,
+})
+assert.deepEqual(publicRuntime.rpcUrls, [
+  'https://rpc.testnet.arc.network/',
+  'https://arc-testnet.drpc.org/',
+])
 assert.throws(() => arcAgreementRuntimeConfig({
   ARC_AGREEMENT_FACTORY_ADDRESS: factory,
   ARC_AGREEMENT_OPERATOR_ADDRESS: factory,

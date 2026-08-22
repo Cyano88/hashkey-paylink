@@ -5,6 +5,7 @@ export const ARC_AGREEMENT_NETWORK = Object.freeze({
   chainId: 5_042_002,
   circleDomain: 26,
   rpcUrl: 'https://rpc.testnet.arc.network',
+  rpcFallbackUrl: 'https://arc-testnet.drpc.org',
   explorerUrl: 'https://testnet.arcscan.app',
   usdc: getAddress('0x3600000000000000000000000000000000000000'),
 })
@@ -49,6 +50,11 @@ export function arcAgreementRuntimeConfig(env: NodeJS.ProcessEnv = process.env) 
     factory,
     operator,
     rpcUrl: parsedRpc.toString(),
+    rpcUrls: Array.from(new Set([
+      parsedRpc.toString(),
+      ARC_AGREEMENT_NETWORK.rpcUrl,
+      ARC_AGREEMENT_NETWORK.rpcFallbackUrl,
+    ].map(value => new URL(value).toString()))),
     confirmations,
   }
 }
