@@ -350,7 +350,7 @@ function drawReceiptCanvas(
 ) {
   const view = paymentReceiptView(receipt)
   const brand = paymentReceiptBrand(receipt)
-  const sans = '"Plus Jakarta Sans", Inter, Arial, sans-serif'
+  const sans = '"Plus Jakarta Sans", Arial, sans-serif'
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
 

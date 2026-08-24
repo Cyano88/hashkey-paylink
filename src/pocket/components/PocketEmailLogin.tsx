@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useLoginWithEmail } from '@privy-io/react-auth'
-import { ArrowLeft, ArrowRight, Lock, Mail } from './PocketIcons'
+import { ArrowLeftIcon, ArrowRightIcon, EnvelopeIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 
 const CODE_LENGTH = 6
 const RESEND_SECONDS = 30
@@ -16,7 +16,7 @@ function readableEmailAuthError(error: unknown, action: 'send' | 'verify', produ
 }
 
 type PocketEmailLoginProps = {
-  context?: 'pocket' | 'agreement'
+  context?: 'pocket' | 'agreement' | 'hashpaystream'
 }
 
 export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLoginProps) {
@@ -29,8 +29,8 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
   const [resendIn, setResendIn] = useState(0)
   const [codeFocused, setCodeFocused] = useState(false)
   const codeInputRef = useRef<HTMLInputElement>(null)
-  const idPrefix = context === 'agreement' ? 'agreement-payer' : 'pocket'
-  const productName = context === 'agreement' ? 'Hash PayLink' : 'Pocket'
+  const idPrefix = context === 'hashpaystream' ? 'hashpaystream-payer' : context === 'agreement' ? 'agreement-payer' : 'pocket'
+  const productName = context === 'hashpaystream' ? 'HashPayStream' : context === 'agreement' ? 'Hash PayLink' : 'Pocket'
   const emailInputId = `${idPrefix}-sign-in-email`
   const codeInputId = `${idPrefix}-email-code`
 
@@ -95,7 +95,7 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
   if (step === 'code') return createPortal(
     <div role="dialog" aria-modal="true" aria-label="Verify your email" className="fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950">
       <button type="button" disabled={busy} onClick={returnToEmail} aria-label="Back to email" className="fixed left-4 top-[calc(var(--pocket-safe-top)+0.75rem)] z-10 flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 !bg-white !text-gray-950 shadow-sm transition active:scale-95 disabled:opacity-50">
-        <ArrowLeft className="h-5 w-5" />
+        <ArrowLeftIcon className="h-5 w-5" />
       </button>
       <main className="mx-auto flex min-h-[calc(100dvh-var(--pocket-safe-top)-var(--pocket-safe-bottom)-2.5rem)] w-full max-w-[430px] flex-col justify-center py-4">
         <div className="text-center">
@@ -143,7 +143,7 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
           <button type="button" disabled={busy} onClick={returnToEmail} className="text-gray-600">Change email</button>
         </div>
         <div className="mt-9 text-center">
-          <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500"><Lock className="h-4 w-4" strokeWidth={2} />{context === 'agreement' ? 'Hash PayLink will never ask you to share this code.' : 'Pocket will never ask you to share this code.'}</p>
+          <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-gray-500"><LockClosedIcon className="h-4 w-4" />{productName} will never ask you to share this code.</p>
           <p className="mt-3 flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400" aria-label="Secured by Privy">
             <span>Secured by</span>
             <img src="/privy-mark-logo.png" alt="" aria-hidden="true" className="h-3.5 w-3.5 object-contain" />
@@ -159,13 +159,13 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
     <form onSubmit={requestCode} className="space-y-2.5">
       <label className="sr-only" htmlFor={emailInputId}>Email address</label>
       <div className="relative">
-        <Mail className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+        <EnvelopeIcon className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
         <input id={emailInputId} type="email" inputMode="email" autoComplete="email" spellCheck={false} required value={email} disabled={busy} onChange={event => { setEmail(event.target.value); setError('') }} placeholder="Email address" className="min-h-14 w-full rounded-full border border-gray-200 bg-white px-12 text-sm font-semibold text-gray-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 disabled:opacity-60" />
       </div>
       {error && <p role="alert" className="px-3 text-center text-xs font-semibold text-red-600">{error}</p>}
       <button type="submit" disabled={busy || !email.trim()} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45">
         <span>{busy ? 'Sending code' : 'Continue with email'}</span>
-        <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">{busy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" />}</span>
+        <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5">{busy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" /> : <ArrowRightIcon className="h-4 w-4" />}</span>
       </button>
     </form>
   )

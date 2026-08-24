@@ -508,6 +508,10 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
         return res.json({
           ok: true,
           agreement: publicAgreement(agreement),
+          brand: {
+            merchantName: currentPolicy?.merchantName ?? 'Hash PayLink',
+            brandImageUrl: currentPolicy?.brandImageUrl ?? null,
+          },
           payer: {
             walletLinked: Boolean(linkedWallet),
             walletAddress: linkedWallet?.address ?? null,

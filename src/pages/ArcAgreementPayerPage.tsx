@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowRight, Check, Copy, ExternalLink, LockKeyhole, ShieldCheck } from 'lucide-react'
+import { ArrowRightIcon, ArrowTopRightOnSquareIcon, BanknotesIcon, CheckIcon, ClipboardIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 import { useParams } from 'react-router-dom'
 import { usePrivy } from '@privy-io/react-auth'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
@@ -11,6 +11,8 @@ import {
 import { PocketPillMark } from '../pocket/components/CPurseIcon'
 import { linkPocketWallet } from '../pocket/api/pocketWalletLinkClient'
 import UnifiedReceipt from '../components/UnifiedReceipt'
+import CheckoutSteps from '../components/CheckoutSteps'
+import { CheckoutTrustLine } from '../components/CheckoutChrome'
 import type { PaylinkReceipt } from '../lib/paymentReceiptPdf'
 
 type AgreementTemplate = 'fixed_unlock' | 'progressive_release' | 'milestone'
@@ -79,6 +81,7 @@ type DeliveryReview = {
 type ReviewResponse = {
   ok: true
   agreement: Agreement
+  brand: { merchantName: string; brandImageUrl: string | null }
   payer: {
     walletLinked: boolean
     walletAddress: string | null
@@ -650,9 +653,15 @@ export default function ArcAgreementPayerPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl pb-8">
-      <div className="mb-5 flex items-center justify-center gap-2 text-[12px] font-semibold text-gray-500 dark:text-gray-400">
-        <PocketPillMark size="sm" />
-        <span>Hash PayLink Agreement</span>
+      <div className="mb-5 flex items-center justify-center gap-2 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
+        {review?.brand.brandImageUrl ? (
+          <img src={review.brand.brandImageUrl} alt="" className="h-7 w-7 rounded-lg object-contain" />
+        ) : (
+          <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-lg bg-gray-950 text-[10px] font-bold text-white dark:bg-white dark:text-gray-950">
+            {(review?.brand.merchantName ?? 'Hash PayLink').slice(0, 1).toUpperCase()}
+          </span>
+        )}
+        <span>{review?.brand.merchantName ?? 'Hash PayLink'} protected checkout</span>
       </div>
 
       <section className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#141416] dark:shadow-none">
@@ -664,13 +673,13 @@ export default function ArcAgreementPayerPage() {
           </div>
         ) : !authenticated ? (
           <div className="p-8 text-center">
-            <LockKeyhole className="mx-auto h-6 w-6 text-gray-400" />
+            <LockClosedIcon className="mx-auto h-6 w-6 text-gray-400" />
             <h1 className="mt-4 text-lg font-semibold text-gray-950 dark:text-white">Review your agreement</h1>
             <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
               Continue with the payer email to open this private agreement.
             </p>
             <div className="mt-6 text-left">
-              <PocketEmailLogin context="agreement" />
+              <PocketEmailLogin context={review?.brand.merchantName === 'HashPayStream' ? 'hashpaystream' : 'agreement'} />
             </div>
           </div>
         ) : agreement ? (
@@ -720,7 +729,7 @@ export default function ArcAgreementPayerPage() {
                         onClick={() => void copyPayerAddress()}
                         className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-gray-500 transition hover:text-gray-950 dark:text-gray-400 dark:hover:text-white"
                       >
-                        <Copy className="h-3 w-3" />
+                        <ClipboardIcon className="h-3 w-3" />
                         {payerAddressCopied ? 'Copied' : 'Copy address'}
                       </button>
                     )}
@@ -741,9 +750,29 @@ export default function ArcAgreementPayerPage() {
                 )}
               </div>
 
+              {review.payer.walletAddress && !isActive && !creatorFundingBlocked && (
+                <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-400/20 dark:bg-blue-400/10">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+                      <BanknotesIcon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-blue-950 dark:text-blue-100">Add Arc Testnet USDC to your wallet</p>
+                      <p className="mt-1 text-[11px] leading-5 text-blue-800/80 dark:text-blue-200/80">
+                        Before approval, this Circle wallet needs at least {agreement.amount} test USDC. Copy the wallet address above, then use Circle's official faucet. Test USDC has no cash value.
+                      </p>
+                      <a href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-blue-600 px-4 text-xs font-bold text-white">
+                        Open Circle Faucet
+                        <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6">
                 {!authenticated ? (
-                  <PocketEmailLogin context="agreement" />
+                  <PocketEmailLogin context={review?.brand.merchantName === 'HashPayStream' ? 'hashpaystream' : 'agreement'} />
                 ) : creatorFundingBlocked ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-400/20 dark:bg-amber-400/10">
                     <p className="text-xs font-semibold text-amber-950 dark:text-amber-100">Use a different payer account</p>
@@ -786,7 +815,7 @@ export default function ArcAgreementPayerPage() {
                     className="flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
                   >
                     <span>{busy ? 'Please wait' : actionLabel}</span>
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRightIcon className="h-4 w-4" />
                   </button>
                 )}
                 {!creatorFundingBlocked && !review.delivery && review.lifecycle?.action?.status !== 'confirmed' && (
@@ -805,7 +834,7 @@ export default function ArcAgreementPayerPage() {
           </>
         ) : (
           <div className="p-8 text-center">
-            <LockKeyhole className="mx-auto h-6 w-6 text-gray-400" />
+            <LockClosedIcon className="mx-auto h-6 w-6 text-gray-400" />
             <h1 className="mt-4 text-lg font-semibold text-gray-950 dark:text-white">Agreement unavailable</h1>
             <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
               {error || 'Use the original private agreement link.'}
@@ -818,25 +847,18 @@ export default function ArcAgreementPayerPage() {
                 className="mt-6 flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
               >
                 <span>Sign in with another email</span>
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRightIcon className="h-4 w-4" />
               </button>
             )}
           </div>
         )}
       </section>
 
-      {!isActive && (
-        <section className="mt-5 rounded-[24px] border border-gray-200 bg-white p-5 dark:border-white/10 dark:bg-[#141416]">
-          <div className="mb-4 flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-gray-500 dark:text-gray-300" />
-            <h2 className="text-xs font-semibold text-gray-800 dark:text-gray-100">How it works</h2>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Step number="1" label="Review" />
-            <Step number="2" label="Approve USDC" />
-            <Step number="3" label="Fund escrow" />
-          </div>
-        </section>
+      {agreement && (
+        <>
+          <CheckoutSteps steps={['Review terms', 'Fund Arc wallet', 'Start protection']} className="mt-7" />
+          <CheckoutTrustLine />
+        </>
       )}
     </div>
   )
@@ -895,7 +917,7 @@ function ActiveAgreementPanel({
     return (
       <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3.5 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300">
         <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-600 text-white">
-          <Check className="h-4 w-4" />
+          <CheckIcon className="h-4 w-4" />
         </span>
         <div>
           <p className="text-sm font-semibold">
@@ -938,7 +960,7 @@ function ActiveAgreementPanel({
           className="flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
         >
           <span>{busy ? 'Please wait' : 'Continue refund'}</span>
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRightIcon className="h-4 w-4" />
         </button>
       )
     }
@@ -1038,7 +1060,7 @@ function ActiveAgreementPanel({
           className="mt-3 flex h-10 items-center justify-between rounded-xl bg-gray-50 px-3 text-xs font-semibold text-gray-700 dark:bg-white/[0.055] dark:text-gray-200"
         >
           <span className="truncate">Open proof · {deliveryHost(delivery.evidenceReference)}</span>
-          <ExternalLink className="ml-3 h-3.5 w-3.5 shrink-0" />
+          <ArrowTopRightOnSquareIcon className="ml-3 h-3.5 w-3.5 shrink-0" />
         </a>
         {issueMode ? (
           <div className="mt-4">
@@ -1095,7 +1117,7 @@ function ActiveAgreementPanel({
         className="flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950"
       >
         <span>{busy ? 'Please wait' : `Continue ${current.action === 'cancel' ? 'cancellation' : 'refund'}`}</span>
-        <ArrowRight className="h-4 w-4" />
+        <ArrowRightIcon className="h-4 w-4" />
       </button>
     )
   }
@@ -1143,7 +1165,7 @@ function ActiveAgreementPanel({
     <div>
       <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 px-4 py-3.5 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300">
         <span className="grid h-7 w-7 place-items-center rounded-full bg-emerald-600 text-white">
-          <Check className="h-4 w-4" />
+          <CheckIcon className="h-4 w-4" />
         </span>
         <div>
           <p className="text-sm font-semibold">Agreement funded</p>
@@ -1170,7 +1192,7 @@ function DeliveryState({ title, copy, tone }: { title: string; copy: string; ton
       ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-300'
       : 'bg-amber-50 text-amber-800 dark:bg-amber-400/10 dark:text-amber-200'}`}>
       <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-white ${success ? 'bg-emerald-600' : 'bg-amber-600'}`}>
-        {success ? <Check className="h-4 w-4" /> : <LockKeyhole className="h-3.5 w-3.5" />}
+        {success ? <CheckIcon className="h-4 w-4" /> : <LockClosedIcon className="h-3.5 w-3.5" />}
       </span>
       <div>
         <p className="text-sm font-semibold">{title}</p>
@@ -1196,17 +1218,6 @@ function Detail({ label, value, mono = false }: { label: string; value: string; 
       <p className={`mt-1 truncate text-xs font-semibold text-gray-800 dark:text-gray-100 ${mono ? 'font-mono' : ''}`}>
         {value}
       </p>
-    </div>
-  )
-}
-
-function Step({ number, label }: { number: string; label: string }) {
-  return (
-    <div>
-      <span className="grid h-6 w-6 place-items-center rounded-full bg-gray-950 text-[10px] font-semibold text-white dark:bg-white dark:text-gray-950">
-        {number}
-      </span>
-      <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">{label}</p>
     </div>
   )
 }
