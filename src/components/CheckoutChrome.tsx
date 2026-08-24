@@ -19,8 +19,8 @@ export function CheckoutTrustLine({ className, provider = 'circle' }: { classNam
         className={cn('mt-5 flex items-center justify-center gap-1.5 pb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500', className)}
       >
         <span>Powered by</span>
-        <span aria-hidden="true" className="grid h-3.5 w-3.5 place-items-center overflow-hidden rounded-[3px] bg-[#05060f]">
-          <img src="/hash-logo-modal-dark.png" alt="" className="h-3 w-3 object-contain" />
+        <span aria-hidden="true" className="grid h-3.5 w-3.5 place-items-center overflow-hidden bg-[#05060f]">
+          <img src="/hash-logo-modal-dark.png" alt="" className="h-[9px] w-[9px] object-contain" />
         </span>
         <span>Hash PayLink</span>
       </p>

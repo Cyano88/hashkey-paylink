@@ -715,8 +715,9 @@ assert.match(payerPageSource, /provider=\{hashPayStreamCheckout \? 'hashpaylink'
 const checkoutChromeSource = await readFile(new URL('../src/components/CheckoutChrome.tsx', import.meta.url), 'utf8')
 assert.match(checkoutChromeSource, /aria-label="Powered by Hash PayLink"/)
 assert.match(checkoutChromeSource, /src="\/hash-logo-modal-dark\.png"/)
-assert.match(checkoutChromeSource, /h-3\.5 w-3\.5 place-items-center overflow-hidden rounded-\[3px\] bg-\[#05060f\]/)
-assert.match(checkoutChromeSource, /h-3 w-3 object-contain/)
+assert.match(checkoutChromeSource, /h-3\.5 w-3\.5 place-items-center overflow-hidden bg-\[#05060f\]/)
+assert.doesNotMatch(checkoutChromeSource, /rounded-\[3px\]/)
+assert.match(checkoutChromeSource, /h-\[9px\] w-\[9px\] object-contain/)
 assert.doesNotMatch(payerPageSource, /Send via Address|ghost.?vault|deposit address/i)
 const activePanelSource = payerPageSource.slice(payerPageSource.indexOf('function ActiveAgreementPanel'))
 assert.ok(
