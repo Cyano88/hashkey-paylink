@@ -44,6 +44,7 @@ const agreement = {
   recipient,
   durationSeconds: 86_400,
   cancellationWindowSeconds: 900,
+  payerEmail: identity.email,
   termsHash: `0x${'1'.repeat(64)}`,
   clientReference: `0x${'2'.repeat(64)}`,
   chainTerms: {
@@ -373,6 +374,12 @@ assert.equal((await request(handler, { action: 'review', agreementId }, {
   ...headers,
   'x-arc-agreement-access': `agrp_${'b'.repeat(43)}`,
 })).statusCode, 404)
+
+currentIdentity = { ...identity, email: 'different@example.com' }
+const wrongCustomerEmail = await request(handler, { action: 'review', agreementId }, headers)
+assert.equal(wrongCustomerEmail.statusCode, 403)
+assert.match(wrongCustomerEmail.body.error, /payer email/)
+currentIdentity = identity
 
 currentLink = null
 const unlinkedReview = await request(handler, { action: 'review', agreementId }, headers)
@@ -707,7 +714,8 @@ assert.match(payerPageSource, /The agreement creator cannot also fund this agree
 assert.match(payerPageSource, /Your payer wallet/)
 assert.match(payerPageSource, /setSession\(null\)/)
 assert.match(payerPageSource, /action:\s*'brand'/)
-assert.match(payerPageSource, /Use original payer email/)
+assert.match(payerPageSource, /Use customer email/)
+assert.match(payerPageSource, /customer email named on this agreement/)
 assert.match(payerPageSource, /Contact support/)
 assert.match(payerPageSource, /mailto:support@hashpaylink\.com\?subject=HashPayStream%20agreement%20access/)
 assert.doesNotMatch(payerPageSource, /href="\/admin\/agreements"/)

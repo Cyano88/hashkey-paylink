@@ -646,7 +646,7 @@ export default function ArcAgreementPayerPage() {
 
   const agreement = review?.agreement
   const hashPayStreamCheckout = /^hash\s*pay\s*stream\b/i.test(brand.merchantName)
-  const payerIdentityMismatch = /not available for this payer identity|bound to another authenticated payer/i.test(error)
+  const payerIdentityMismatch = /not available for this payer (?:identity|email)|bound to another authenticated payer/i.test(error)
   const attempt = review?.attempt ?? null
   const walletLinked = review?.payer.walletLinked ?? false
   const creatorFundingBlocked = Boolean(review?.payer.creatorFundingBlocked && !attempt)
@@ -700,7 +700,7 @@ export default function ArcAgreementPayerPage() {
             <LockClosedIcon className="mx-auto h-6 w-6 text-gray-400" />
             <h1 className="mt-4 text-lg font-semibold text-gray-950 dark:text-white">Review your agreement</h1>
             <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
-              Continue with the payer email to open this private agreement.
+              Continue with the customer email named on this agreement.
             </p>
             <div className="mt-6 text-left">
               <PocketEmailLogin context={hashPayStreamCheckout ? 'hashpaystream' : 'agreement'} />
@@ -866,7 +866,7 @@ export default function ArcAgreementPayerPage() {
             {authenticated && payerIdentityMismatch && (
               <div className="mt-6 space-y-2">
                 <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
-                  The signed-in email does not match this private agreement.
+                  The signed-in email is not the customer email on this agreement.
                 </p>
                 <button
                   type="button"
@@ -874,7 +874,7 @@ export default function ArcAgreementPayerPage() {
                   onClick={() => void switchPayerEmail()}
                   className="flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
                 >
-                  <span>Use original payer email</span>
+                  <span>Use customer email</span>
                   <ArrowRightIcon className="h-4 w-4" />
                 </button>
                 <a

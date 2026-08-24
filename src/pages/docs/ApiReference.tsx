@@ -83,11 +83,12 @@ export default function ApiReference() {
     "title": "Premium report access",
     "description": "Unlock one premium research report.",
     "amount": "10",
+    "payerEmail": "customer@example.com",
     "recipient": "0xARC_RECIPIENT",
     "durationSeconds": 86400,
     "cancellationWindowSeconds": 900
   }'`}</CodeBlock>
-          <p>Progressive checkpoints must increase and end at 100 percent. Milestone percentages must total 100. Timing defaults to 24 hours with a 15-minute payer cancellation window. The response includes a domain-separated <code>termsHash</code>, project-scoped <code>clientReference</code>, normalized onchain schedule, one-time <code>payerReviewPath</code>, and <code>activationStatus: "private_pilot"</code>. Creating a draft never proves that funds moved.</p>
+          <p>Human agreements require the customer&apos;s verified email. Only that authenticated email can review, connect an Arc wallet, and fund the private agreement. Progressive checkpoints must increase and end at 100 percent. Milestone percentages must total 100. Timing defaults to 24 hours with a 15-minute payer cancellation window. The response includes a masked payer email, domain-separated <code>termsHash</code>, project-scoped <code>clientReference</code>, normalized onchain schedule, one-time <code>payerReviewPath</code>, and <code>activationStatus: "private_pilot"</code>. Creating a draft never proves that funds moved.</p>
         </SubSection>
         <SubSection title="GET /api/v2/agreements">
           <p>Lists the project&apos;s agreements with their authoritative Arc lifecycle, confirmed chain totals, current payer-review request, and unified terminal receipt when confirmation data is complete. Add <code>?id=agr_...</code> to read one agreement, <code>?ids=agr_...,agr_...</code> to read up to 100 known project agreements, or <code>?limit=50</code> to bound the newest-first list. Internal request hashes, evidence hashes, prepared operator calls, and payer-access hashes are never returned.</p>

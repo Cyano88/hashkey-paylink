@@ -45,6 +45,7 @@ export type ArcAgreement = {
   recipient: string
   durationSeconds: number
   cancellationWindowSeconds: number
+  payerEmail?: string
   checkpoints?: PercentageStep[]
   milestones?: Array<{ label: string; percentage: number }>
   termsHash: `0x${string}`
@@ -181,7 +182,20 @@ function wholeSeconds(value: unknown, fallback: number, label: string, minimum: 
   return parsed
 }
 
-function requestInput(body: unknown) {
+function normalizedEmail(value: unknown) {
+  const email = clean(value, 254).toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw Object.assign(new Error('payerEmail must be a valid customer email address.'), { status: 400 })
+  }
+  return email
+}
+
+function maskedEmail(value: string) {
+  const [local = '', domain = ''] = value.split('@')
+  return `${local.slice(0, 2)}${local.length > 2 ? '***' : '*'}@${domain}`
+}
+
+function requestInput(body: unknown, checkoutMode: DeveloperCheckoutMode) {
   const source = body && typeof body === 'object' ? body as Record<string, unknown> : {}
   const template = normalizedTemplate(source.template)
   const title = clean(source.title, 140)
@@ -212,6 +226,7 @@ function requestInput(body: unknown) {
     recipient: getAddress(rawRecipient),
     durationSeconds,
     cancellationWindowSeconds,
+    ...(checkoutMode === 'human' ? { payerEmail: normalizedEmail(source.payerEmail) } : {}),
   }
   if (template === 'progressive_release') {
     if (source.milestones !== undefined) throw Object.assign(new Error('Progressive release does not accept milestones.'), { status: 400 })
@@ -248,8 +263,11 @@ function idempotencyScope(partnerId: string, idempotencyKey: string) {
 }
 
 function publicAgreement(agreement: ArcAgreement) {
-  const { requestHash: _requestHash, payerAccessHash: _payerAccessHash, ...publicRecord } = agreement
-  return publicRecord
+  const { requestHash: _requestHash, payerAccessHash: _payerAccessHash, payerEmail, ...publicRecord } = agreement
+  return {
+    ...publicRecord,
+    ...(payerEmail ? { payerEmailMasked: maskedEmail(payerEmail) } : {}),
+  }
 }
 
 function payerAccessHash(token: string) {
@@ -496,7 +514,7 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
       if (idempotencyKey.length < 8) {
         return res.status(400).json({ ok: false, error: 'Idempotency-Key must contain at least 8 characters.' })
       }
-      const input = requestInput(req.body)
+      const input = requestInput(req.body, policy.checkoutMode)
       const configuredArcRecipient = policy.paymentOptions.find(option => option.network === 'arc')?.recipient ?? ''
       if (!isAddress(configuredArcRecipient) || getAddress(input.recipient) !== getAddress(configuredArcRecipient)) {
         throw Object.assign(

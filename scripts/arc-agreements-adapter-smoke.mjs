@@ -66,6 +66,7 @@ const fixed = {
   description: 'Unlock one premium research report.',
   amount: '10.500000',
   recipient: arcRoute[0].recipient,
+  payerEmail: 'Customer@Example.com',
 }
 const headers = { 'x-api-key': 'hpl_test_mock', 'idempotency-key': 'agreement:order-0001' }
 
@@ -98,6 +99,8 @@ assert.equal(created.body.agreement.network, 'arc')
 assert.equal(created.body.agreement.amount, '10.5')
 assert.equal(created.body.agreement.durationSeconds, 86400)
 assert.equal(created.body.agreement.cancellationWindowSeconds, 900)
+assert.equal(created.body.agreement.payerEmailMasked, 'cu***@example.com')
+assert.equal('payerEmail' in created.body.agreement, false)
 assert.match(created.body.agreement.termsHash, /^0x[a-f0-9]{64}$/)
 assert.match(created.body.agreement.clientReference, /^0x[a-f0-9]{64}$/)
 assert.equal(created.body.agreement.chainTerms.amountUsdcUnits, '10500000')
@@ -114,6 +117,7 @@ assert.equal(JSON.stringify(created.body).includes('checkoutUrl'), false)
 assert.equal(JSON.stringify(created.body).includes('depositAddress'), false)
 
 const originalPayerAccessToken = created.body.payerAccessToken
+assert.equal(store.agreements[created.body.agreement.id].payerEmail, 'customer@example.com')
 const originalPayerAccessHash = store.agreements[created.body.agreement.id].payerAccessHash
 const rotatedPayerAccessToken = `agrp_${'z'.repeat(43)}`
 const rotated = await rotateArcAgreementPayerAccess(
@@ -375,6 +379,13 @@ assert.equal(agentRotationBlocked.statusCode, 409)
 assert.match(agentRotationBlocked.body.error, /do not use human payer links/)
 
 policy = humanPolicy
+const missingPayerEmail = await request(handler, 'POST', {
+  body: { ...fixed, payerEmail: undefined, externalId: 'missing-payer-email' },
+  headers: { ...headers, 'idempotency-key': 'agreement:missing-payer-email' },
+})
+assert.equal(missingPayerEmail.statusCode, 400)
+assert.match(missingPayerEmail.body.error, /payerEmail/)
+
 const progressiveHeaders = { ...headers, 'idempotency-key': 'agreement:progressive-0001' }
 const progressive = {
   ...fixed,

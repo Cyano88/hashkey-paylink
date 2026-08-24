@@ -154,13 +154,23 @@ function payerIdentity(userId: string) {
   return `privy:${userId}`
 }
 
+function verifiedEmail(identity: VerifiedLinkUser) {
+  const email = clean(identity.email, 254).toLowerCase()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
+}
+
 function publicAgreement(agreement: ArcAgreement) {
   const {
     requestHash: _requestHash,
     payerAccessHash: _payerAccessHash,
+    payerEmail,
     ...record
   } = agreement
-  return record
+  const [local = '', domain = ''] = String(payerEmail ?? '').split('@')
+  return {
+    ...record,
+    ...(payerEmail ? { payerEmailMasked: `${local.slice(0, 2)}${local.length > 2 ? '***' : '*'}@${domain}` } : {}),
+  }
 }
 
 function publicAttempt(attempt: ArcAgreementActivationAttempt) {
@@ -448,6 +458,9 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
       if (!agreement) throw fail('Agreement payer access is invalid or expired.', 404)
       if (agreement.checkoutMode !== 'human') {
         throw fail('Agentic agreements require the dedicated agent activation flow.', 409)
+      }
+      if (agreement.payerEmail && verifiedEmail(identity) !== agreement.payerEmail) {
+        throw fail('This agreement is not available for this payer email.', 403)
       }
       const linkRecord = await dependencies.readLink(circleLinkKey(identity.userId, 'arc', 'payment'))
       const policy = await dependencies.resolvePolicy(agreement.partnerId)
