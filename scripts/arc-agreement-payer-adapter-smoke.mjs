@@ -358,6 +358,14 @@ const headers = {
   'x-arc-agreement-access': capability,
 }
 
+const publicBrand = await request(createArcAgreementPayerHandler({
+  ...dependencies,
+  verifyUser: async () => { throw new Error('Brand lookup must not require payer authentication.') },
+}), { action: 'brand', agreementId }, { 'x-arc-agreement-access': capability })
+assert.equal(publicBrand.statusCode, 200)
+assert.equal(publicBrand.body.brand.merchantName, policy.merchantName)
+assert.equal(publicBrand.body.brand.brandImageUrl, null)
+
 assert.equal((await request(handler, { action: 'review', agreementId }, {
   authorization: 'Bearer privy-token',
 })).statusCode, 400)
@@ -698,6 +706,10 @@ assert.match(payerPageSource, /creatorFundingBlocked/)
 assert.match(payerPageSource, /The agreement creator cannot also fund this agreement/)
 assert.match(payerPageSource, /Your payer wallet/)
 assert.match(payerPageSource, /setSession\(null\)/)
+assert.match(payerPageSource, /action:\s*'brand'/)
+assert.match(payerPageSource, /Open operator review/)
+assert.match(payerPageSource, /Use original payer email/)
+assert.match(payerPageSource, /provider=\{hashPayStreamCheckout \? 'hashpaylink' : 'circle'\}/)
 assert.doesNotMatch(payerPageSource, /Send via Address|ghost.?vault|deposit address/i)
 const activePanelSource = payerPageSource.slice(payerPageSource.indexOf('function ActiveAgreementPanel'))
 assert.ok(

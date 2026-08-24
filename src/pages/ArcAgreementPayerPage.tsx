@@ -81,7 +81,7 @@ type DeliveryReview = {
 type ReviewResponse = {
   ok: true
   agreement: Agreement
-  brand: { merchantName: string; brandImageUrl: string | null }
+  brand: CheckoutBrand
   payer: {
     walletLinked: boolean
     walletAddress: string | null
@@ -104,6 +104,8 @@ type ReviewResponse = {
   delivery?: DeliveryReview | null
   receipt?: PaylinkReceipt | null
 }
+
+type CheckoutBrand = { merchantName: string; brandImageUrl: string | null }
 
 type ActionResponse = {
   ok: true
@@ -209,6 +211,7 @@ export default function ArcAgreementPayerPage() {
   const { authenticated, ready, user, getAccessToken, logout } = usePrivy()
   const [capability, setCapability] = useState(() => capabilityForAgreement(agreementId))
   const [review, setReview] = useState<ReviewResponse | null>(null)
+  const [brand, setBrand] = useState<CheckoutBrand>({ merchantName: 'Hash PayLink', brandImageUrl: null })
   const [session, setSession] = useState<CircleEvmEmailSession | null>(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -234,6 +237,24 @@ export default function ArcAgreementPayerPage() {
   useEffect(() => {
     setCapability(capabilityForAgreement(agreementId))
   }, [agreementId])
+
+  useEffect(() => {
+    let cancelled = false
+    setBrand({ merchantName: 'Hash PayLink', brandImageUrl: null })
+    if (!agreementId) return () => { cancelled = true }
+    void fetch('/api/v2/agreements/payer', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(capability ? { 'x-arc-agreement-access': capability } : {}),
+      },
+      body: JSON.stringify({ agreementId, action: 'brand' }),
+    }).then(async response => {
+      const data = await response.json().catch(() => ({})) as { ok?: boolean; brand?: CheckoutBrand }
+      if (!cancelled && response.ok && data.ok && data.brand) setBrand(data.brand)
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [agreementId, capability])
 
   const recoverPayerAccess = useCallback(async () => {
     const identityToken = await getAccessToken()
@@ -297,6 +318,7 @@ export default function ArcAgreementPayerPage() {
       const next = await request<ReviewResponse>({ action: 'review' })
       if (mounted.current) {
         setReview(next)
+        setBrand(next.brand)
         setError('')
       }
     } catch (caught) {
@@ -623,6 +645,8 @@ export default function ArcAgreementPayerPage() {
   }
 
   const agreement = review?.agreement
+  const hashPayStreamCheckout = /^hash\s*pay\s*stream\b/i.test(brand.merchantName)
+  const payerIdentityMismatch = /not available for this payer identity|bound to another authenticated payer/i.test(error)
   const attempt = review?.attempt ?? null
   const walletLinked = review?.payer.walletLinked ?? false
   const creatorFundingBlocked = Boolean(review?.payer.creatorFundingBlocked && !attempt)
@@ -654,14 +678,14 @@ export default function ArcAgreementPayerPage() {
   return (
     <div className="mx-auto w-full max-w-xl pb-8">
       <div className="mb-5 flex items-center justify-center gap-2 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
-        {review?.brand.brandImageUrl ? (
-          <img src={review.brand.brandImageUrl} alt="" className="h-7 w-7 rounded-lg object-contain" />
+        {brand.brandImageUrl ? (
+          <img src={brand.brandImageUrl} alt="" className="h-7 w-7 rounded-lg object-contain" />
         ) : (
           <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-lg bg-gray-950 text-[10px] font-bold text-white dark:bg-white dark:text-gray-950">
-            {(review?.brand.merchantName ?? 'Hash PayLink').slice(0, 1).toUpperCase()}
+            {brand.merchantName.slice(0, 1).toUpperCase()}
           </span>
         )}
-        <span>{review?.brand.merchantName ?? 'Hash PayLink'} protected checkout</span>
+        <span>{brand.merchantName} checkout</span>
       </div>
 
       <section className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#141416] dark:shadow-none">
@@ -679,7 +703,7 @@ export default function ArcAgreementPayerPage() {
               Continue with the payer email to open this private agreement.
             </p>
             <div className="mt-6 text-left">
-              <PocketEmailLogin context={review?.brand.merchantName === 'HashPayStream' ? 'hashpaystream' : 'agreement'} />
+              <PocketEmailLogin context={hashPayStreamCheckout ? 'hashpaystream' : 'agreement'} />
             </div>
           </div>
         ) : agreement ? (
@@ -712,7 +736,7 @@ export default function ArcAgreementPayerPage() {
                   <Detail label="Release" value={releaseLabel(agreement)} />
                   <Detail label="Duration" value={durationLabel(agreement.durationSeconds)} />
                   <Detail label="Recipient" value={compactAddress(agreement.recipient)} mono />
-                  <Detail label="Cancel window" value={durationLabel(agreement.cancellationWindowSeconds)} />
+                  <Detail label="Payer can cancel for" value={durationLabel(agreement.cancellationWindowSeconds)} />
                 </div>
               </div>
 
@@ -772,7 +796,7 @@ export default function ArcAgreementPayerPage() {
 
               <div className="mt-6">
                 {!authenticated ? (
-                  <PocketEmailLogin context={review?.brand.merchantName === 'HashPayStream' ? 'hashpaystream' : 'agreement'} />
+                  <PocketEmailLogin context={hashPayStreamCheckout ? 'hashpaystream' : 'agreement'} />
                 ) : creatorFundingBlocked ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-400/20 dark:bg-amber-400/10">
                     <p className="text-xs font-semibold text-amber-950 dark:text-amber-100">Use a different payer account</p>
@@ -839,27 +863,34 @@ export default function ArcAgreementPayerPage() {
             <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">
               {error || 'Use the original private agreement link.'}
             </p>
-            {authenticated && error === 'This agreement is not available for this payer identity.' && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void switchPayerEmail()}
-                className="mt-6 flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-50 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
-              >
-                <span>Sign in with another email</span>
-                <ArrowRightIcon className="h-4 w-4" />
-              </button>
+            {authenticated && payerIdentityMismatch && (
+              <div className="mt-6 space-y-2">
+                <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
+                  This is a payer-only link. Operator emails review cancellation and release requests in Operations; they cannot open another payer's agreement.
+                </p>
+                <a
+                  href="/admin/agreements"
+                  className="flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+                >
+                  <span>Open operator review</span>
+                  <ArrowRightIcon className="h-4 w-4" />
+                </a>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void switchPayerEmail()}
+                  className="h-11 w-full rounded-full border border-gray-200 px-5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
+                >
+                  Use original payer email
+                </button>
+              </div>
             )}
           </div>
         )}
       </section>
 
-      {agreement && (
-        <>
-          <CheckoutSteps steps={['Review terms', 'Fund Arc wallet', 'Start protection']} className="mt-7" />
-          <CheckoutTrustLine />
-        </>
-      )}
+      {agreement && <CheckoutSteps steps={['Review terms', 'Fund Arc wallet', 'Start protection']} className="mt-7" />}
+      {(agreement || hashPayStreamCheckout) && <CheckoutTrustLine provider={hashPayStreamCheckout ? 'hashpaylink' : 'circle'} />}
     </div>
   )
 }

@@ -48,6 +48,18 @@ type OperatorAction = {
   updatedAt: string
 }
 
+async function evidenceDigest(input: { mode: 'release' | 'cancel'; partnerId: string; agreementId: string; reference: string }) {
+  const bytes = new TextEncoder().encode(JSON.stringify({
+    version: 1,
+    action: input.mode,
+    partnerId: input.partnerId,
+    agreementId: input.agreementId,
+    reference: input.reference.trim(),
+  }))
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return `0x${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`
+}
+
 type PayerAction = {
   action: 'cancel' | 'refund'
   status: string
@@ -151,7 +163,6 @@ export default function ArcAgreementOperationsPanel() {
   const [notice, setNotice] = useState('')
   const [requestMode, setRequestMode] = useState<'release' | 'cancel' | null>(null)
   const [evidenceReference, setEvidenceReference] = useState('')
-  const [evidenceHash, setEvidenceHash] = useState('')
   const [reviewNote, setReviewNote] = useState('')
 
   async function api(method: 'GET' | 'POST', body?: Record<string, unknown>) {
@@ -209,7 +220,6 @@ export default function ArcAgreementOperationsPanel() {
   useEffect(() => {
     setRequestMode(null)
     setEvidenceReference('')
-    setEvidenceHash('')
     setReviewNote('')
     setNotice('')
   }, [active?.agreementId])
@@ -220,6 +230,12 @@ export default function ArcAgreementOperationsPanel() {
     setError('')
     setNotice('')
     try {
+      const evidenceHash = await evidenceDigest({
+        mode: requestMode,
+        partnerId: active.partnerId,
+        agreementId: active.agreementId,
+        reference: evidenceReference,
+      })
       await api('POST', {
         action: requestMode === 'release' ? 'request-release' : 'request-cancel',
         agreementId: active.agreementId,
@@ -229,8 +245,7 @@ export default function ArcAgreementOperationsPanel() {
       })
       setRequestMode(null)
       setEvidenceReference('')
-      setEvidenceHash('')
-      setNotice('Action saved for independent evidence review. No transaction was submitted.')
+      setNotice('Review request saved. A different operator must approve it before any transaction is submitted.')
       await load({ quiet: true })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'The operator request could not be saved.')
@@ -327,11 +342,9 @@ export default function ArcAgreementOperationsPanel() {
               busy={busy}
               requestMode={requestMode}
               evidenceReference={evidenceReference}
-              evidenceHash={evidenceHash}
               reviewNote={reviewNote}
               onRequestMode={setRequestMode}
               onEvidenceReference={setEvidenceReference}
-              onEvidenceHash={setEvidenceHash}
               onReviewNote={setReviewNote}
               onRequest={() => void requestAction()}
               onApprove={action => void approve(action)}
@@ -354,11 +367,9 @@ function AgreementDetail({
   busy,
   requestMode,
   evidenceReference,
-  evidenceHash,
   reviewNote,
   onRequestMode,
   onEvidenceReference,
-  onEvidenceHash,
   onReviewNote,
   onRequest,
   onApprove,
@@ -369,11 +380,9 @@ function AgreementDetail({
   busy: boolean
   requestMode: 'release' | 'cancel' | null
   evidenceReference: string
-  evidenceHash: string
   reviewNote: string
   onRequestMode: (value: 'release' | 'cancel' | null) => void
   onEvidenceReference: (value: string) => void
-  onEvidenceHash: (value: string) => void
   onReviewNote: (value: string) => void
   onRequest: () => void
   onApprove: (action: OperatorAction) => void
@@ -471,10 +480,8 @@ function AgreementDetail({
         <RequestPanel
           mode={requestMode}
           evidenceReference={evidenceReference}
-          evidenceHash={evidenceHash}
           busy={busy}
           onEvidenceReference={onEvidenceReference}
-          onEvidenceHash={onEvidenceHash}
           onCancel={() => onRequestMode(null)}
           onSubmit={onRequest}
         />
@@ -537,7 +544,7 @@ function ReviewPanel({ action, currentUserId, reviewNote, busy, onReviewNote, on
             className="mt-3 flex h-10 items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-xs font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            Approve unchanged request
+            {action.action === 'cancel' ? 'Approve cancellation' : 'Approve release'}
           </button>
         </>
       )}
@@ -581,17 +588,14 @@ function ActionState({ action, workerEnabled }: { action: OperatorAction; worker
   )
 }
 
-function RequestPanel({ mode, evidenceReference, evidenceHash, busy, onEvidenceReference, onEvidenceHash, onCancel, onSubmit }: {
+function RequestPanel({ mode, evidenceReference, busy, onEvidenceReference, onCancel, onSubmit }: {
   mode: 'release' | 'cancel'
   evidenceReference: string
-  evidenceHash: string
   busy: boolean
   onEvidenceReference: (value: string) => void
-  onEvidenceHash: (value: string) => void
   onCancel: () => void
   onSubmit: () => void
 }) {
-  const validHash = /^0x[0-9a-f]{64}$/i.test(evidenceHash) && !/^0x0{64}$/i.test(evidenceHash)
   return (
     <section className="mt-5 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
       <div className="flex items-start justify-between gap-3">
@@ -607,17 +611,11 @@ function RequestPanel({ mode, evidenceReference, evidenceHash, busy, onEvidenceR
         placeholder={mode === 'release' ? 'Evidence reference' : 'Cancellation reason reference'}
         className="mt-4 h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-950 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
       />
-      <input
-        value={evidenceHash}
-        onChange={event => onEvidenceHash(event.target.value)}
-        placeholder="0x… evidence hash"
-        spellCheck={false}
-        className="mt-2 h-11 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 font-mono text-xs text-gray-950 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.05] dark:text-white"
-      />
+      <p className="mt-2 text-[11px] leading-5 text-gray-400">Hash PayLink creates the immutable evidence fingerprint automatically.</p>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button type="button" disabled={busy} onClick={onCancel} className="h-10 rounded-full bg-gray-100 text-xs font-semibold text-gray-700 dark:bg-white/8 dark:text-gray-200">Keep agreement</button>
-        <button type="button" disabled={busy || evidenceReference.trim().length < 6 || !validHash} onClick={onSubmit} className="flex h-10 items-center justify-center gap-2 rounded-full bg-gray-950 text-xs font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />} Save for review
+        <button type="button" disabled={busy || evidenceReference.trim().length < 6} onClick={onSubmit} className="flex h-10 items-center justify-center gap-2 rounded-full bg-gray-950 text-xs font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />} Request review
         </button>
       </div>
     </section>

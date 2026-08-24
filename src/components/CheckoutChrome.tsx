@@ -11,10 +11,10 @@ export function HashPayLinkCheckoutBrand({ className }: { className?: string }) 
   )
 }
 
-export function CheckoutTrustLine({ className }: { className?: string }) {
+export function CheckoutTrustLine({ className, provider = 'circle' }: { className?: string; provider?: 'circle' | 'hashpaylink' }) {
   return (
     <p className={cn('mt-5 pb-1 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500', className)}>
-      Powered by <strong className="font-semibold text-gray-500 dark:text-gray-400">Circle USDC</strong>
+      Powered by <strong className="font-semibold text-gray-500 dark:text-gray-400">{provider === 'hashpaylink' ? 'Hash PayLink' : 'Circle USDC'}</strong>
     </p>
   )
 }

@@ -391,6 +391,16 @@ async function existingAttempt(
   }
 }
 
+function publicCheckoutBrand(policy: DeveloperCheckoutPolicy | null) {
+  const configuredName = policy?.merchantName?.trim() || 'Hash PayLink'
+  const hashPayStream = /^hash\s*pay\s*stream\b/i.test(configuredName)
+  return {
+    merchantName: hashPayStream ? 'HashPayStream' : configuredName,
+    brandImageUrl: policy?.brandImageUrl?.trim()
+      || (hashPayStream ? 'https://hashpaystream.app/brand/hashpaystream-mark.png' : null),
+  }
+}
+
 export function createArcAgreementPayerHandler(dependencies: Dependencies = defaults) {
   return async function arcAgreementPayerHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
@@ -401,6 +411,21 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
       const capability = accessToken(req)
       if (!agreementId || !action) {
         throw fail('Agreement id and action are required.', 400)
+      }
+      if (action === 'brand') {
+        let partnerId = ''
+        if (capability) {
+          const agreement = await dependencies.readAgreement(agreementId, capability)
+          if (agreement?.checkoutMode === 'human') partnerId = agreement.partnerId
+        } else {
+          const attempts = await (dependencies.listAttempts ?? listArcAgreementActivationAttemptRecords)({ limit: 250 })
+          const attempt = attempts.find(item => item.agreementId === agreementId && item.checkoutMode === 'human')
+          partnerId = attempt?.partnerId ?? ''
+        }
+        if (!partnerId) throw fail('Agreement checkout branding is unavailable.', 404)
+        const policy = await dependencies.resolvePolicy(partnerId)
+        const currentPolicy = policy?.partnerId === partnerId && policy.checkoutMode === 'human' ? policy : null
+        return res.json({ ok: true, brand: publicCheckoutBrand(currentPolicy) })
       }
       const identity = await dependencies.verifyUser(req)
       const identityValue = payerIdentity(identity.userId)
@@ -508,10 +533,7 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
         return res.json({
           ok: true,
           agreement: publicAgreement(agreement),
-          brand: {
-            merchantName: currentPolicy?.merchantName ?? 'Hash PayLink',
-            brandImageUrl: currentPolicy?.brandImageUrl ?? null,
-          },
+          brand: publicCheckoutBrand(currentPolicy),
           payer: {
             walletLinked: Boolean(linkedWallet),
             walletAddress: linkedWallet?.address ?? null,
