@@ -866,23 +866,23 @@ export default function ArcAgreementPayerPage() {
             {authenticated && payerIdentityMismatch && (
               <div className="mt-6 space-y-2">
                 <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
-                  This is a payer-only link. Operator emails review cancellation and release requests in Operations; they cannot open another payer's agreement.
+                  The signed-in email does not match this private agreement.
                 </p>
-                <a
-                  href="/admin/agreements"
-                  className="flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
-                >
-                  <span>Open operator review</span>
-                  <ArrowRightIcon className="h-4 w-4" />
-                </a>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void switchPayerEmail()}
-                  className="h-11 w-full rounded-full border border-gray-200 px-5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
+                  className="flex h-12 w-full items-center justify-between rounded-full bg-gray-950 px-5 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
                 >
-                  Use original payer email
+                  <span>Use original payer email</span>
+                  <ArrowRightIcon className="h-4 w-4" />
                 </button>
+                <a
+                  href="mailto:support@hashpaylink.com?subject=HashPayStream%20agreement%20access"
+                  className="flex h-11 w-full items-center justify-center rounded-full border border-gray-200 px-5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
+                >
+                  Contact support
+                </a>
               </div>
             )}
           </div>

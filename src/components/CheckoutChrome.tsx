@@ -12,9 +12,21 @@ export function HashPayLinkCheckoutBrand({ className }: { className?: string }) 
 }
 
 export function CheckoutTrustLine({ className, provider = 'circle' }: { className?: string; provider?: 'circle' | 'hashpaylink' }) {
+  if (provider === 'hashpaylink') {
+    return (
+      <p
+        aria-label="Powered by Hash PayLink"
+        className={cn('mt-5 flex items-center justify-center gap-1.5 pb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500', className)}
+      >
+        <span>Powered by</span>
+        <img src="/hash-logo-transparent.png" alt="" aria-hidden="true" className="h-3.5 w-3.5 object-contain dark:invert" />
+        <span>Hash PayLink</span>
+      </p>
+    )
+  }
   return (
     <p className={cn('mt-5 pb-1 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500', className)}>
-      Powered by <strong className="font-semibold text-gray-500 dark:text-gray-400">{provider === 'hashpaylink' ? 'Hash PayLink' : 'Circle USDC'}</strong>
+      Powered by <strong className="font-semibold text-gray-500 dark:text-gray-400">Circle USDC</strong>
     </p>
   )
 }
