@@ -322,7 +322,7 @@ export async function findPaymentCircleLinkByWallet(walletId: string, walletAddr
   return matches[0]
 }
 
-async function writeLink(key: string, record: CircleLinkRecord): Promise<void> {
+export async function writeCircleLink(key: string, record: CircleLinkRecord): Promise<void> {
   if (pool) {
     await ensureSchema()
     await pool.query(
@@ -572,7 +572,7 @@ export function createPrivyCircleLinkHandler(dependencies: LinkHandlerDependenci
 export default createPrivyCircleLinkHandler({
   verifyUser: verifiedPrivyUser,
   read: readCircleLink,
-  write: writeLink,
+  write: writeCircleLink,
   remove: deleteLink,
   verifyWallet: verifyCircleLinkWallet,
 })

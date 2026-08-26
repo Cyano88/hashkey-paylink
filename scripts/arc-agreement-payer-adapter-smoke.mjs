@@ -151,6 +151,7 @@ const dependencies = {
   readAgreement: async (_id, token) => token === capability ? currentAgreement : null,
   resolvePolicy: async () => currentPolicy,
   readLink: async () => currentLink,
+  writeLink: async (_key, record) => { currentLink = record },
   verifyWallet: async input => {
     walletVerifications += 1
     assert.equal(input.wallet.address, payer)
@@ -391,6 +392,16 @@ assert.equal((await request(handler, {
   agreementId,
   circleUserToken: 'circle-user-token',
 }, headers)).statusCode, 409)
+const linkedInCheckout = await request(handler, {
+  action: 'link-wallet',
+  agreementId,
+  circleUserToken: 'circle-user-token',
+  wallet: { id: link.circleWalletId, address: payer, blockchain: 'ARC-TESTNET' },
+}, headers)
+assert.equal(linkedInCheckout.statusCode, 200)
+assert.equal(linkedInCheckout.body.payer.walletLinked, true)
+assert.equal(currentLink.privyUserId, identity.userId)
+walletVerifications = 0
 currentLink = link
 
 currentPolicy = { ...policy, ownerId: identity.userId }

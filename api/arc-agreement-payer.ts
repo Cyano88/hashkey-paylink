@@ -35,6 +35,7 @@ import {
   readCircleLink,
   verifiedPrivyUser,
   verifyCircleLinkWallet,
+  writeCircleLink,
   type CircleLinkRecord,
   type VerifiedLinkUser,
 } from './privy-circle-link.js'
@@ -67,6 +68,7 @@ type Dependencies = {
   readAgreement(id: string, accessToken: string): Promise<ArcAgreement | null>
   resolvePolicy(projectId: string): Promise<DeveloperCheckoutPolicy | null>
   readLink(key: string): Promise<CircleLinkRecord | null>
+  writeLink(key: string, record: CircleLinkRecord): Promise<void>
   verifyWallet(input: {
     userToken: string
     chain: 'arc'
@@ -106,6 +108,7 @@ const defaults: Dependencies = {
   readAgreement: readArcAgreementByPayerAccess,
   resolvePolicy: projectId => resolveDeveloperProjectPolicy(projectId, 'test'),
   readLink: readCircleLink,
+  writeLink: writeCircleLink,
   verifyWallet: verifyCircleLinkWallet,
   prepareAttempt: prepareArcAgreementActivationAttempt,
   readAttempt: readArcAgreementActivationAttempt,
@@ -411,7 +414,8 @@ function publicCheckoutBrand(policy: DeveloperCheckoutPolicy | null) {
   }
 }
 
-export function createArcAgreementPayerHandler(dependencies: Dependencies = defaults) {
+export function createArcAgreementPayerHandler(overrides: Partial<Dependencies> = {}) {
+  const dependencies: Dependencies = { ...defaults, ...overrides }
   return async function arcAgreementPayerHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
@@ -462,7 +466,8 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
       if (agreement.payerEmail && verifiedEmail(identity) !== agreement.payerEmail) {
         throw fail('This agreement is not available for this payer email.', 403)
       }
-      const linkRecord = await dependencies.readLink(circleLinkKey(identity.userId, 'arc', 'payment'))
+      const linkKey = circleLinkKey(identity.userId, 'arc', 'payment')
+      let linkRecord = await dependencies.readLink(linkKey)
       const policy = await dependencies.resolvePolicy(agreement.partnerId)
       const currentPolicy = policy?.partnerId === agreement.partnerId && policy.checkoutMode === agreement.checkoutMode
         ? policy
@@ -486,6 +491,38 @@ export function createArcAgreementPayerHandler(dependencies: Dependencies = defa
       const creatorFundingBlocked = currentPolicy?.ownerId === identity.userId && knownAttempt?.status !== 'active'
       if (creatorFundingBlocked && action !== 'review') {
         throw fail('Use a different payer account. The agreement creator cannot also fund this agreement.', 409)
+      }
+
+      if (action === 'link-wallet') {
+        const rawWallet = req.body?.wallet && typeof req.body.wallet === 'object'
+          ? req.body.wallet as Record<string, unknown>
+          : {}
+        const wallet = {
+          id: clean(rawWallet.id, 180),
+          address: clean(rawWallet.address, 42),
+          blockchain: clean(rawWallet.blockchain, 40).toUpperCase(),
+        }
+        const circleUserToken = clean(req.body?.circleUserToken, 8_000)
+        if (!circleUserToken) throw fail('A fresh Circle wallet session is required.', 401)
+        if (!wallet.id || !isAddress(wallet.address) || !['ARC', 'ARC-TESTNET', 'ARC_TESTNET'].includes(wallet.blockchain)) {
+          throw fail('A valid Circle Arc wallet is required.', 400)
+        }
+        await dependencies.verifyWallet({ userToken: circleUserToken, chain: 'arc', wallet })
+        linkRecord = {
+          privyUserId: identity.userId,
+          ...(verifiedEmail(identity) ? { email: verifiedEmail(identity) } : {}),
+          chain: 'arc',
+          purpose: 'payment',
+          circleWalletId: wallet.id,
+          circleWalletAddress: getAddress(wallet.address),
+          circleBlockchain: 'ARC-TESTNET',
+          updatedAt: Date.now(),
+        }
+        await dependencies.writeLink(linkKey, linkRecord)
+        return res.json({
+          ok: true,
+          payer: { walletLinked: true, walletAddress: linkRecord.circleWalletAddress, network: 'arc' },
+        })
       }
 
       if (action === 'review') {

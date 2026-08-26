@@ -134,6 +134,7 @@ import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import arcAgreementsHandler from './api/arc-agreements.js'
 import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
+import arcAgreementProjectPayerHandler from './api/arc-agreement-project-payer.js'
 import arcAgreementAgentHandler from './api/arc-agreement-agent.js'
 import arcAgreementOperationsHandler from './api/arc-agreement-operations.js'
 import { drainArcAgreementWebhookOutbox } from './api/arc-agreement-webhooks.js'
@@ -392,6 +393,7 @@ app.post('/api/partner-access',        strictLimiter, partnerAccessHandler)
 app.all('/api/developer-projects',     strictLimiter, developerProjectsHandler)
 app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHandler)
 app.post('/api/v2/agreements/payer',   strictLimiter, arcAgreementPayerHandler)
+app.post('/api/v2/agreements/project-payer', strictLimiter, arcAgreementProjectPayerHandler)
 app.post('/api/v2/agreements/agent',   strictLimiter, arcAgreementAgentHandler)
 app.get('/api/v2/agreements',          readLimiter, arcAgreementsHandler)
 app.post('/api/v2/agreements',         strictLimiter, arcAgreementsHandler)

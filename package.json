@@ -94,7 +94,7 @@
     "test:arc-agreement-activation-attempts": "node --import tsx scripts/arc-agreement-activation-attempts-smoke.mjs",
     "test:arc-agreement-activation-worker": "node --import tsx scripts/arc-agreement-activation-worker-smoke.mjs",
     "test:arc-agreement-lifecycle-worker": "node --import tsx scripts/arc-agreement-lifecycle-worker-smoke.mjs",
-    "test:arc-agreement-payer": "node --import tsx scripts/arc-agreement-payer-adapter-smoke.mjs",
+    "test:arc-agreement-payer": "node --import tsx scripts/arc-agreement-payer-adapter-smoke.mjs && node --import tsx scripts/arc-agreement-project-payer-smoke.mjs",
     "test:arc-agreement-agent": "node --import tsx scripts/arc-agreement-agent-adapter-smoke.mjs",
     "test:circle-cli-tuples": "node scripts/circle-cli-tuple-parameters-smoke.mjs",
     "test:circle-cli-call-data": "node scripts/circle-cli-call-data-smoke.mjs",
