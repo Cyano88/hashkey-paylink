@@ -234,6 +234,7 @@ export type ArcAgreementActivationClient = {
   getBlock: (args: { blockNumber: bigint }) => Promise<{ timestamp: bigint }>
   getTransaction: (args: { hash: Hex }) => Promise<TransactionObservation>
   getTransactionReceipt: (args: { hash: Hex }) => Promise<ReceiptObservation | null>
+  findAgreementCreationTransaction?: (args: { factory: Address; agreementId: Hex; fromBlock: bigint }) => Promise<Hex | null>
   readContract: (args: {
     address: Address
     abi: readonly unknown[]

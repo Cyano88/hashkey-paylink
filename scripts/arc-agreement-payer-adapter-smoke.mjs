@@ -144,6 +144,9 @@ let refundEligible = false
 let recordedTransactionInput
 let reconciliationResult
 let operatorAction
+let providerHash = `0x${'9'.repeat(64)}`
+let discoveredHash = null
+let discoveryInput
 const challengeOrder = []
 const providerTransactionId = '123e4567-e89b-42d3-a456-426614174002'
 const dependencies = {
@@ -260,7 +263,7 @@ const dependencies = {
   }),
   readTransaction: async input => {
     assert.equal(input.transactionId, providerTransactionId)
-    return { state: 'COMPLETE', txHash: `0x${'9'.repeat(64)}` }
+    return { state: 'COMPLETE', ...(providerHash ? { txHash: providerHash } : {}) }
   },
   reviewLifecycle: async () => ({
     eligibility: {
@@ -348,7 +351,9 @@ const dependencies = {
     operatorAction = { ...operatorAction, status: 'disputed', reviewedBy: input.reviewedBy, reviewNote: input.reviewNote }
     return operatorAction
   },
-  client: () => ({}),
+  client: () => ({
+    findAgreementCreationTransaction: async input => { discoveryInput = input; return discoveredHash },
+  }),
   env: () => ({
     ARC_AGREEMENTS_ENABLED: 'true',
     ARC_AGREEMENT_PAYER_LIFECYCLE_ENABLED: 'true',
@@ -523,6 +528,22 @@ assert.equal(currentJournal.status, 'recorded')
 const status = await request(handler, { action: 'status', agreementId }, headers)
 assert.equal(status.statusCode, 200)
 assert.equal(status.body.pending, true)
+
+// Circle may omit a transaction hash after Arc has already emitted the
+// authoritative AgreementCreated event. Recover from the confirmed approval
+// block, then run the same exact-transaction verification path.
+providerHash = ''
+discoveredHash = `0x${'9'.repeat(64)}`
+currentJournal = { ...currentJournal, stage: 'activation', status: 'transaction_pending', transactionHash: undefined }
+currentAttempt = { ...currentAttempt, status: 'ready_to_activate', transactions: [{ stage: 'approval', status: 'confirmed', blockNumber: '59046147' }], challenges: [currentJournal] }
+const discoveredRecovery = await request(handler, { action: 'recover', stage: 'activation', agreementId, circleUserToken: 'circle-user-token' }, headers)
+assert.ok([200, 202].includes(discoveredRecovery.statusCode))
+assert.equal(discoveryInput.factory, attempt.prepared.factory)
+assert.equal(discoveryInput.agreementId, attempt.prepared.agreementId)
+assert.equal(discoveryInput.fromBlock, 59046147n)
+assert.equal(discoveredRecovery.body.attempt.status, 'activation_submitted')
+providerHash = `0x${'9'.repeat(64)}`
+discoveredHash = null
 
 // Circle can complete after the browser session disappears. Recover the
 // already-bound Arc transaction with activation disabled and without a new OTP.

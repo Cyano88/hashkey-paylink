@@ -3,6 +3,7 @@ import {
   defineChain,
   fallback,
   http,
+  parseAbiItem,
   TransactionReceiptNotFoundError,
 } from 'viem'
 import type { ArcAgreementActivationClient } from './arc-agreement-activation-attempts.js'
@@ -47,6 +48,15 @@ export function createArcAgreementActivationClient(): ArcAgreementActivationClie
         if (error instanceof TransactionReceiptNotFoundError) return null
         throw error
       }
+    },
+    findAgreementCreationTransaction: async ({ factory, agreementId, fromBlock }) => {
+      const logs = await client.getLogs({
+        address: factory,
+        event: parseAbiItem('event AgreementCreated(bytes32 indexed agreementId,bytes32 indexed clientReference,bytes32 termsHash,address indexed escrow,address payer,address recipient,uint8 template,uint256 totalAmount,uint64 cancelUntil,uint64 expiresAt)'),
+        args: { agreementId },
+        fromBlock,
+      })
+      return logs[0]?.transactionHash ?? null
     },
     readContract: args => client.readContract(args as never),
   }

@@ -978,8 +978,16 @@ export function createArcAgreementPayerHandler(overrides: Partial<Dependencies> 
           transactionId,
         })
         const transactionState = providerState(transaction)
-        const transactionHash = providerTransactionHash(transaction)
-        if (PROVIDER_FAILURES.has(transactionState)) {
+        let transactionHash = providerTransactionHash(transaction)
+        let chainClient: ArcAgreementActivationClient | null = null
+        if (!transactionHash && stage === 'activation') {
+          const approvalBlock = [...knownAttempt.transactions].reverse().find(item => item.stage === 'approval' && item.status === 'confirmed')?.blockNumber
+          if (approvalBlock) {
+            chainClient = dependencies.client()
+            transactionHash = await chainClient.findAgreementCreationTransaction?.({ factory: knownAttempt.prepared.factory, agreementId: knownAttempt.prepared.agreementId, fromBlock: BigInt(approvalBlock) }) ?? ''
+          }
+        }
+        if (!transactionHash && PROVIDER_FAILURES.has(transactionState)) {
           await dependencies.observeChallenge({
             policy: currentPolicy,
             agreementId: agreement.id,
@@ -1007,7 +1015,7 @@ export function createArcAgreementPayerHandler(overrides: Partial<Dependencies> 
           return res.json({ ok: true, pending: true, attempt: publicAttempt(knownAttempt) })
         }
         const recorded = await dependencies.recordTransaction({
-          client: dependencies.client(),
+          client: chainClient ?? dependencies.client(),
           policy: currentPolicy,
           agreementId: agreement.id,
           payer: link.address,
