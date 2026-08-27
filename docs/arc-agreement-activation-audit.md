@@ -124,6 +124,12 @@ activation challenge.
 Code caps the pilot at 100 active agreements and 10,000 test USDC per project
 per UTC day.
 
+Projects with a durable Operations-approved Arc pilot use the limits stored on
+that project. The legacy `ARC_AGREEMENT_*` ceilings apply only to projects that
+do not yet have durable project policy. This keeps the Operations limits and
+the activation limits identical instead of silently applying a lower hidden
+runtime ceiling.
+
 The operator execution path is now implemented behind its own disabled
 `ARC_AGREEMENT_OPERATOR_WORKER_ENABLED` switch. An action is first persisted as
 `awaiting_review`; it cannot be claimed until a different operator identity

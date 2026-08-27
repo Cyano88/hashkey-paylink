@@ -140,13 +140,31 @@ assert.equal(durableAuthorized.authorization.dailyVolumeCeilingUsdcUnits, 30_000
 assert.equal(durableAuthorized.authorization.activeAgreementLimit, 2)
 assert.equal(durableAuthorized.authorization.durationCeilingSeconds, 86_400)
 
-const globallyCapped = authorizeArcAgreementActivation({
-  policy: { ...approvedPolicy, arcAgreementPilot: { ...approvedPolicy.arcAgreementPilot, maxAgreementUsdc: '40' } },
+const projectManagedLimits = authorizeArcAgreementActivation({
+  policy: {
+    ...approvedPolicy,
+    arcAgreementPilot: {
+      ...approvedPolicy.arcAgreementPilot,
+      maxAgreementUsdc: '40',
+      dailyVolumeUsdc: '60',
+      maxActiveAgreements: 100,
+      maxDurationSeconds: 604_800,
+    },
+  },
   draft,
   payer,
   activationTimestamp,
-  env,
+  env: {
+    ...env,
+    ARC_AGREEMENT_MAX_USDC: '0',
+    ARC_AGREEMENT_DAILY_VOLUME_USDC: '0',
+    ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT: '0',
+    ARC_AGREEMENT_MAX_DURATION_SECONDS: '0',
+  },
 })
-assert.equal(globallyCapped.authorization.amountCeilingUsdcUnits, 25_000_000n)
+assert.equal(projectManagedLimits.authorization.amountCeilingUsdcUnits, 40_000_000n)
+assert.equal(projectManagedLimits.authorization.dailyVolumeCeilingUsdcUnits, 60_000_000n)
+assert.equal(projectManagedLimits.authorization.activeAgreementLimit, 100)
+assert.equal(projectManagedLimits.authorization.durationCeilingSeconds, 604_800)
 
 console.log('Arc Agreement activation policy smoke checks passed.')

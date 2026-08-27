@@ -167,6 +167,9 @@ replay of the same challenge or transaction adds nothing. Required pilot
 settings are `ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT` and
 `ARC_AGREEMENT_DAILY_VOLUME_USDC`, with hard code ceilings of 100 active
 agreements and 10,000 test USDC per project per UTC day.
+These environment settings are legacy-project defaults. Once Operations stores
+an approved Arc pilot on a project, its durable limits are authoritative up to
+the same hard code ceilings.
 A definitive Circle failure with no provider transaction identity or Arc hash
 releases its reservation. Ambiguous provider failures keep the reservation
 and block replacement activation challenges until transaction recovery and

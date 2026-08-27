@@ -143,22 +143,18 @@ function requireLegacyProjectAllowlist(policy: DeveloperCheckoutPolicy, env: Nod
 }
 
 function projectPilotLimits(policy: DeveloperCheckoutPolicy, env: NodeJS.ProcessEnv) {
-  const globalAmount = usdcCeiling(env.ARC_AGREEMENT_MAX_USDC, 'ARC_AGREEMENT_MAX_USDC', MAX_PILOT_USDC_UNITS)
-  const globalDaily = usdcCeiling(
-    env.ARC_AGREEMENT_DAILY_VOLUME_USDC,
-    'ARC_AGREEMENT_DAILY_VOLUME_USDC',
-    MAX_PILOT_DAILY_VOLUME_USDC_UNITS,
-  )
-  const globalActive = activeAgreementLimit(env.ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT)
-  const globalDuration = durationCeiling(env.ARC_AGREEMENT_MAX_DURATION_SECONDS)
   const pilot = policy.arcAgreementPilot
   if (!pilot) {
     requireLegacyProjectAllowlist(policy, env)
     return {
-      amountCeilingUsdcUnits: globalAmount,
-      dailyVolumeCeilingUsdcUnits: globalDaily,
-      activeAgreementLimit: globalActive,
-      durationCeilingSeconds: globalDuration,
+      amountCeilingUsdcUnits: usdcCeiling(env.ARC_AGREEMENT_MAX_USDC, 'ARC_AGREEMENT_MAX_USDC', MAX_PILOT_USDC_UNITS),
+      dailyVolumeCeilingUsdcUnits: usdcCeiling(
+        env.ARC_AGREEMENT_DAILY_VOLUME_USDC,
+        'ARC_AGREEMENT_DAILY_VOLUME_USDC',
+        MAX_PILOT_DAILY_VOLUME_USDC_UNITS,
+      ),
+      activeAgreementLimit: activeAgreementLimit(env.ARC_AGREEMENT_MAX_ACTIVE_PER_PROJECT),
+      durationCeilingSeconds: durationCeiling(env.ARC_AGREEMENT_MAX_DURATION_SECONDS),
     }
   }
   if (pilot.status === 'draft_only') {
@@ -172,10 +168,10 @@ function projectPilotLimits(policy: DeveloperCheckoutPolicy, env: NodeJS.Process
   const projectActive = activeAgreementLimit(pilot.maxActiveAgreements)
   const projectDuration = durationCeiling(pilot.maxDurationSeconds)
   return {
-    amountCeilingUsdcUnits: projectAmount < globalAmount ? projectAmount : globalAmount,
-    dailyVolumeCeilingUsdcUnits: projectDaily < globalDaily ? projectDaily : globalDaily,
-    activeAgreementLimit: projectActive < globalActive ? projectActive : globalActive,
-    durationCeilingSeconds: projectDuration < globalDuration ? projectDuration : globalDuration,
+    amountCeilingUsdcUnits: projectAmount,
+    dailyVolumeCeilingUsdcUnits: projectDaily,
+    activeAgreementLimit: projectActive,
+    durationCeilingSeconds: projectDuration,
   }
 }
 
