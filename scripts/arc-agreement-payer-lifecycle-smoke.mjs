@@ -472,6 +472,16 @@ assert.equal(backfilledUserOperation.changed, true)
 assert.equal(backfilledUserOperation.action.status, 'confirmed')
 assert.equal(backfilledUserOperation.action.webhookEventId, queuedWebhookEvents[2].id)
 assert.equal(queuedWebhookEvents[2].id, queuedWebhookEvents[1].id)
+await assert.rejects(() => reserveArcAgreementPayerLifecycleAction({
+  client,
+  partnerId,
+  agreementId,
+  payerIdentity: identity,
+  walletId: 'circle-wallet-refund-terminal',
+  walletAddress: payer,
+  action: 'refund',
+  env: { ARC_AGREEMENT_PAYER_LIFECYCLE_ENABLED: 'true' },
+}, dependencies), /USDC has already been returned/)
 
 // Agent lifecycle calls use the same verified escrow rules, but the durable
 // journal is explicitly agent-direct and rejects Circle smart-wallet execution.

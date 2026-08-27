@@ -370,6 +370,8 @@ const PAYER_POLICY_CONFLICTS = [
   'Agreement duration exceeds the configured testnet activation ceiling.',
   'Agreement recipient must match the project Arc Testnet recipient.',
   'Operator action requires an independent reviewer.',
+  'The USDC has already been returned.',
+  'This agreement has already been cancelled and returned.',
 ]
 
 function payerFailure(error: unknown) {

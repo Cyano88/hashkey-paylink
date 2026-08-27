@@ -372,6 +372,12 @@ async function reservePayerLifecycleAction(input: {
   requireLifecycleEnabled(input.env ?? process.env)
   const reviewed = await reviewArcAgreementPayerLifecycle({ ...input, checkoutMode: input.checkoutMode }, dependencies)
   if (!reviewed.eligibility[input.action].eligible) {
+    if (input.action === 'refund' && reviewed.confirmed.snapshot.status === 4) {
+      throw new Error('The USDC has already been returned.')
+    }
+    if (input.action === 'cancel' && reviewed.confirmed.snapshot.status === 3) {
+      throw new Error('This agreement has already been cancelled and returned.')
+    }
     throw new Error(
       input.action === 'cancel'
         ? 'This agreement is no longer eligible for payer cancellation.'
