@@ -41,6 +41,7 @@ const humanPolicy = {
 let store
 let policy = humanPolicy
 let id = 0
+const verifiedRecipients = new Set()
 const handler = createArcAgreementsHandler({
   hasStore: () => true,
   read: async () => store,
@@ -56,6 +57,7 @@ const handler = createArcAgreementsHandler({
   createId: () => `agr_testagreement${(++id).toString().padStart(4, '0')}`,
   createPayerAccessToken: () => `agrp_${String(id + 1).padStart(43, 'a')}`,
   now: () => new Date('2026-07-28T12:00:00.000Z'),
+  isVerifiedRecipient: async (_partnerId, recipient) => verifiedRecipients.has(recipient.toLowerCase()),
 })
 
 const fixed = {
@@ -88,6 +90,14 @@ const recipientMismatch = await request(handler, 'POST', {
 })
 assert.equal(recipientMismatch.statusCode, 409)
 assert.equal(recipientMismatch.body.error, "Recipient must match this project's configured Arc Testnet receiving address.")
+
+verifiedRecipients.add('0x2222222222222222222222222222222222222222')
+const verifiedDirectRecipient = await request(handler, 'POST', {
+  body: { ...fixed, externalId: 'order-dynamic-recipient', resourceId: 'content:dynamic-recipient', recipient: '0x2222222222222222222222222222222222222222' },
+  headers: { ...headers, 'idempotency-key': 'agreement:dynamic-recipient' },
+})
+assert.equal(verifiedDirectRecipient.statusCode, 201)
+assert.equal(verifiedDirectRecipient.body.agreement.recipient, '0x2222222222222222222222222222222222222222')
 
 const created = await request(handler, 'POST', { body: fixed, headers })
 assert.equal(created.statusCode, 201)
@@ -160,10 +170,11 @@ assert.equal('requestHash' in read.body.agreement, false)
 
 const listed = await request(handler, 'GET', { query: { limit: '10' } })
 assert.equal(listed.statusCode, 200)
-assert.equal(listed.body.agreements.length, 1)
-assert.equal(listed.body.agreements[0].id, created.body.agreement.id)
-assert.equal('payerAccessHash' in listed.body.agreements[0], false)
-assert.equal(listed.body.agreements[0].releaseRequest, null)
+assert.equal(listed.body.agreements.length, 2)
+const listedCreated = listed.body.agreements.find(item => item.id === created.body.agreement.id)
+assert.ok(listedCreated)
+assert.equal('payerAccessHash' in listedCreated, false)
+assert.equal(listedCreated.releaseRequest, null)
 
 const completedAction = {
   id: `opa_${'4'.repeat(24)}`,
@@ -205,6 +216,7 @@ const completedRead = await request(createArcAgreementsHandler({
       recipient: created.body.agreement.recipient,
       totalAmount: '10500000',
       cumulativeReleaseBps: [10000],
+      expiresAt: '1785254400',
     },
     lifecycle: {
       status: 'completed',
@@ -220,6 +232,7 @@ const completedRead = await request(createArcAgreementsHandler({
 assert.equal(completedRead.statusCode, 200)
 assert.equal(completedRead.body.agreement.status, 'completed')
 assert.equal(completedRead.body.agreement.chain.releasedUsdcUnits, '10500000')
+assert.equal(completedRead.body.agreement.chain.expiresAt, '1785254400')
 assert.equal(completedRead.body.receipt.source, 'arc-agreement')
 assert.equal(completedRead.body.receipt.agreementStatus, 'completed')
 assert.equal(completedRead.body.receipt.txHash, completedAction.transactionHash)

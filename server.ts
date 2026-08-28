@@ -133,6 +133,7 @@ import publicConfigHandler from './api/public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import arcAgreementsHandler from './api/arc-agreements.js'
+import verifiedArcRecipientsHandler from './api/arc-agreement-verified-recipients.js'
 import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
 import arcAgreementProjectPayerHandler from './api/arc-agreement-project-payer.js'
 import arcAgreementAgentHandler from './api/arc-agreement-agent.js'
@@ -397,6 +398,7 @@ app.post('/api/v2/agreements/project-payer', strictLimiter, arcAgreementProjectP
 app.post('/api/v2/agreements/agent',   strictLimiter, arcAgreementAgentHandler)
 app.get('/api/v2/agreements',          readLimiter, arcAgreementsHandler)
 app.post('/api/v2/agreements',         strictLimiter, arcAgreementsHandler)
+app.post('/api/v2/agreements/verified-recipient', strictLimiter, verifiedArcRecipientsHandler)
 app.all('/api/v2/agreements',          strictLimiter, arcAgreementsHandler)
 app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
 app.post('/api/v2/checkouts/agent/pay', strictLimiter, agenticCheckoutWalletPayHandler)

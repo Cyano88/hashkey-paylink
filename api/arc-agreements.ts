@@ -19,6 +19,7 @@ import { listArcAgreementOperatorActions } from './arc-agreement-operator-action
 import { listArcAgreementPayerLifecycleActions } from './arc-agreement-payer-lifecycle.js'
 import { createArcAgreementDeveloperView } from './arc-agreement-developer-view.js'
 import { resolveDeveloperApiKeyPolicy, type DeveloperCheckoutMode, type DeveloperCheckoutPolicy } from './developer-projects.js'
+import { isVerifiedArcAgreementRecipient } from './arc-agreement-verified-recipients.js'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
 
 const STORE_KEY = process.env.ARC_AGREEMENT_STORE_KEY?.trim() || 'hashpaylink:arc-agreements:v1'
@@ -77,6 +78,7 @@ type Dependencies = {
   createId: () => string
   createPayerAccessToken: () => string
   now: () => Date
+  isVerifiedRecipient: (partnerId: string, recipient: string) => Promise<boolean>
 }
 
 const defaults: Dependencies = {
@@ -100,6 +102,7 @@ const defaults: Dependencies = {
   createId: () => `agr_${randomUUID().replace(/-/g, '').slice(0, 24)}`,
   createPayerAccessToken: () => `agrp_${randomBytes(32).toString('base64url')}`,
   now: () => new Date(),
+  isVerifiedRecipient: isVerifiedArcAgreementRecipient,
 }
 
 function clean(value: unknown, max: number) {
@@ -516,7 +519,9 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
       }
       const input = requestInput(req.body, policy.checkoutMode)
       const configuredArcRecipient = policy.paymentOptions.find(option => option.network === 'arc')?.recipient ?? ''
-      if (!isAddress(configuredArcRecipient) || getAddress(input.recipient) !== getAddress(configuredArcRecipient)) {
+      const fixedRecipientMatches = isAddress(configuredArcRecipient) && getAddress(input.recipient) === getAddress(configuredArcRecipient)
+      const verifiedDirectRecipient = policy.checkoutMode === 'human' && await dependencies.isVerifiedRecipient(policy.partnerId, input.recipient)
+      if (!fixedRecipientMatches && !verifiedDirectRecipient) {
         throw Object.assign(
           new Error("Recipient must match this project's configured Arc Testnet receiving address."),
           { status: 409 },

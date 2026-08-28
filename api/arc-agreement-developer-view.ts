@@ -131,6 +131,7 @@ export function createArcAgreementDeveloperView(input: {
       remainingUsdcUnits: terminal ? '0' : nonNegativeDifference(amountUsdcUnits, releasedUsdcUnits),
       nextStep: lifecycle?.nextStep ?? 0,
       releaseSteps: attempt.prepared.cumulativeReleaseBps.length,
+      expiresAt: attempt.prepared.expiresAt.toString(),
       observedBlockNumber: lifecycle?.observedBlockNumber ?? attempt.observedBlockNumber ?? '',
       observedAt: lifecycle?.observedAt ?? '',
     } : null,
