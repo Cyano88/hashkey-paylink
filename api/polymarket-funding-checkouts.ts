@@ -113,7 +113,6 @@ function publicRecord(record: FundingRecord, replayed = false) {
     funding: {
       provider: 'polymarket',
       targetWallet: record.targetWallet,
-      depositAddress: record.depositAddress,
       amount: record.amount,
       availableNetworks: record.networks,
     },
@@ -160,7 +159,7 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
         const completed = transactions.find(item => ['COMPLETE', 'COMPLETED'].includes(clean(item.status, 30).toUpperCase()))
         const latest = completed ?? transactions[0] ?? null
         const paymentStatus = checkout.payment?.status ?? (dependencies.now().getTime() >= Date.parse(checkout.expiresAt) ? 'expired' : 'pending')
-        const fundingStatus = completed ? 'funded' : latest || paymentStatus === 'paid' || paymentStatus === 'processing' ? 'bridging' : paymentStatus === 'expired' ? 'expired' : 'awaiting_payment'
+        const fundingStatus = completed ? 'funded' : paymentStatus === 'paid' || paymentStatus === 'processing' ? 'bridging' : paymentStatus === 'expired' ? 'expired' : 'awaiting_payment'
         if (checkout.payment) await dependencies.syncExecution?.(checkout, Boolean(completed))
         const attempt = hostedCheckoutPaymentAttempt(checkout)
         return res.json({
@@ -173,13 +172,6 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
           network: checkout.payment?.network ?? attempt.network,
           paymentTransaction: checkout.payment?.txHash,
           bridgeTransaction: latest?.txHash,
-          funding: {
-            provider: 'polymarket',
-            targetWallet: record.targetWallet,
-            depositAddress: record.depositAddress,
-            amount: record.amount,
-            availableNetworks: record.networks,
-          },
           receiptUrl: completed ? attempt.receiptUrl : undefined,
           returnUrl: completed ? record.returnUrl : undefined,
           updatedAt: dependencies.now().toISOString(),
