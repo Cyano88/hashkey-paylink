@@ -931,6 +931,7 @@ export async function sendCircleEvmEmailPayment(params: {
     chain: params.session.chain,
     recipient: params.recipient,
     totalUnits: totalUnits.toString(),
+    idempotencyKey: crypto.randomUUID(),
     feeMode: params.feeMode ?? 'net',
     feeBps: params.feeBps,
   }, { privyAccessToken: params.privyAccessToken })
