@@ -21,6 +21,7 @@ const depositAddress = '0x3333333333333333333333333333333333333333'
 const secret = 'hosted-checkout-test-secret-longer-than-thirty-two-characters'
 let store
 let checkoutPaid = false
+let bridgeStarted = false
 let bridgeComplete = false
 let capturedRouting
 const basePolicy = {
@@ -41,7 +42,11 @@ const handler = createPolymarketFundingCheckoutsHandler({
     return { addressType: 'evm', depositAddress, note: '' }
   },
   bridgeStatus: async () => ({
-    transactions: bridgeComplete ? [{ status: 'COMPLETED', txHash: '0xbridge', createdTimeMs: Date.parse('2026-07-22T12:03:00.000Z') }] : [],
+    transactions: bridgeComplete
+      ? [{ status: 'COMPLETED', txHash: '0xbridge', createdTimeMs: Date.parse('2026-07-22T12:03:00.000Z') }]
+      : bridgeStarted
+        ? [{ status: 'PROCESSING', txHash: '0xbridge', createdTimeMs: Date.parse('2026-07-22T12:03:00.000Z') }]
+        : [],
     latest: null,
   }),
   createCheckout: async (_req, res, routing) => {
@@ -76,6 +81,8 @@ const created = await request(handler, 'POST', { body: {
 } })
 assert.equal(created.statusCode, 201)
 assert.equal(created.body.funding.provider, 'polymarket')
+assert.equal(created.body.funding.targetWallet, targetWallet)
+assert.equal(created.body.funding.depositAddress, depositAddress)
 assert.deepEqual(created.body.funding.availableNetworks, ['base', 'arbitrum'])
 assert.deepEqual(capturedRouting.paymentOptions, [
   { network: 'base', recipient: depositAddress },
@@ -99,7 +106,15 @@ assert.equal(conflict.statusCode, 409)
 
 const pending = await request(handler, 'GET', { query: { id: created.body.fundingRequestId } })
 assert.equal(pending.body.status, 'awaiting_payment')
+assert.equal(pending.body.funding.targetWallet, targetWallet)
+assert.equal(pending.body.funding.depositAddress, depositAddress)
+assert.deepEqual(pending.body.funding.availableNetworks, ['base', 'arbitrum'])
 assert.equal(pending.body.receiptUrl, undefined)
+
+bridgeStarted = true
+const directBridging = await request(handler, 'GET', { query: { id: created.body.fundingRequestId } })
+assert.equal(directBridging.body.status, 'bridging')
+assert.equal(directBridging.body.paymentStatus, 'pending')
 
 checkoutPaid = true
 const bridging = await request(handler, 'GET', { query: { id: created.body.fundingRequestId } })

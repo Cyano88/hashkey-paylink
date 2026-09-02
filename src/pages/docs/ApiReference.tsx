@@ -132,10 +132,10 @@ export default function ApiReference() {
     "networks": ["base", "arbitrum"],
     "returnUrl": "https://your-allowlisted-domain.example/funding/complete"
   }'`}</CodeBlock>
-          <p>The response includes a hosted <code>checkoutUrl</code>, stable <code>fundingRequestId</code>, and authenticated <code>statusUrl</code>. The payer can select from the requested networks that are also enabled on the developer project. Base and Arbitrum are supported in this provider flow.</p>
+          <p>The response includes a provider-verified <code>funding.depositAddress</code>, hosted <code>checkoutUrl</code>, stable <code>fundingRequestId</code>, and authenticated <code>statusUrl</code>. A headless agent can transfer the exact USDC amount directly to the returned deposit address on one returned network; the hosted page remains an optional human fallback. Base and Arbitrum are supported in this provider flow.</p>
         </SubSection>
         <SubSection title="GET /api/v2/funding/polymarket/checkouts?id=pmf_...">
-          <p>Poll this endpoint from your server with the same API key. <code>awaiting_payment</code> means no accepted checkout payment, <code>bridging</code> means payment was received but provider delivery is not final, and <code>funded</code> means the provider reports completed delivery. Only <code>funded</code> returns the receipt and allowlisted return URL. Never grant access or credit a customer from the generic <code>payment.confirmed</code> webhook alone for a provider-funded checkout.</p>
+          <p>Poll this endpoint from your server with the same API key. <code>awaiting_payment</code> means no provider bridge was detected yet, <code>bridging</code> means checkout payment was received but provider delivery is not final, and <code>funded</code> means the provider reports completed delivery from either the hosted or direct-transfer path. Only <code>funded</code> returns the allowlisted return URL. Never grant access or credit a customer from the generic <code>payment.confirmed</code> webhook alone for a provider-funded checkout.</p>
         </SubSection>
       </Section>
 
