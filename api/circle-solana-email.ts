@@ -349,8 +349,10 @@ export default async function handler(req: Request, res: Response) {
         if (!link) return res.status(403).json({ ok: false, error: 'Reconnect your Pocket wallet before paying.' })
         const identity = await verifiedPrivyUser(req)
         if (identity.userId !== link.privyUserId) return res.status(403).json({ ok: false, error: 'This Pocket wallet belongs to a different signed-in account.' })
-        const approved = await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval'] ?? ''), identity.userId)
-        if (!approved) return res.status(401).json({ ok: false, error: 'Approve this payment with fingerprint, face, or your Pocket PIN.' })
+        if (declaredPocketClient) {
+          const approved = await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval'] ?? ''), identity.userId)
+          if (!approved) return res.status(401).json({ ok: false, error: 'Approve this payment with fingerprint, face, or your Pocket PIN.' })
+        }
       }
     }
     if (action === 'requestEmailOtp') {

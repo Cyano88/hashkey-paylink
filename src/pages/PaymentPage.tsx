@@ -2931,12 +2931,19 @@ export default function PaymentPage() {
         setCircleEvmPaymentProcessing(true)
         setCircleEvmAcceptedPending(false)
         await beginPaymentVerificationWindow()
+        const privyAccessToken = usePrivyCircleCheckout
+          ? await getAccessToken()
+          : null
+        if (usePrivyCircleCheckout && !privyAccessToken) {
+          throw new Error('Your secure checkout session expired. Sign in again before paying.')
+        }
         const txHash = await sendCircleEvmEmailPayment({
           session,
           recipient: paymentRecipient as `0x${string}`,
           amount: paymentAmount,
           feeMode: grossUpEvmPlatformCharges ? 'gross' : 'net',
           feeBps: hashPaylinkFeeBps,
+          privyAccessToken: privyAccessToken ?? undefined,
         })
         if (txHash) {
           setCirclePaymasterTxHash(txHash)

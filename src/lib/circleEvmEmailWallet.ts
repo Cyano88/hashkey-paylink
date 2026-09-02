@@ -388,7 +388,10 @@ function transactionFailureMessage(value: unknown) {
   return `Circle transaction failed (${detail.slice(0, 160)}).`
 }
 
-async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> {
+async function circleWalletApi<T>(
+  payload: Record<string, unknown>,
+  options: { privyAccessToken?: string } = {},
+): Promise<T> {
   const action = typeof payload.action === 'string' ? payload.action : 'request'
   const paymentAction = /^(execute|signPayment)/.test(action)
   const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.pathname.includes('/pocket'))
@@ -403,7 +406,14 @@ async function circleWalletApi<T>(payload: Record<string, unknown>): Promise<T> 
   try {
     res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(pocketClient ? { 'X-Pocket-Client': '1', ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}) } : {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.privyAccessToken ? { Authorization: `Bearer ${options.privyAccessToken}` } : {}),
+        ...(pocketClient ? {
+          'X-Pocket-Client': '1',
+          ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}),
+        } : {}),
+      },
       body: JSON.stringify(payload),
     })
   } catch (err) {
@@ -898,6 +908,7 @@ export async function sendCircleEvmEmailPayment(params: {
   amount: string
   feeMode?: 'net' | 'gross'
   feeBps?: number
+  privyAccessToken?: string
 }) {
   const sdk = authenticatedSdk(params.session)
   applyHashPayLinkCircleUi(sdk, {
@@ -922,7 +933,7 @@ export async function sendCircleEvmEmailPayment(params: {
     totalUnits: totalUnits.toString(),
     feeMode: params.feeMode ?? 'net',
     feeBps: params.feeBps,
-  })
+  }, { privyAccessToken: params.privyAccessToken })
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
   const result = await executeChallengeWithTimeout(
     sdk,
