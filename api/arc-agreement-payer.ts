@@ -242,6 +242,11 @@ function currentReleaseAction(
 ) {
   const releases = actions.filter(item => item.action === 'release')
   const nextStep = attempt.lifecycle?.nextStep
+  if (attempt.lifecycle?.status === 'completed') {
+    return releases
+      .filter(item => item.status === 'completed')
+      .sort((left, right) => (right.completedAt || right.updatedAt).localeCompare(left.completedAt || left.updatedAt))[0] ?? null
+  }
   if (attempt.lifecycle && attempt.lifecycle.status !== 'active') return null
   if (!Number.isInteger(nextStep)) {
     return releases.find(item => item.status !== 'completed') ?? null

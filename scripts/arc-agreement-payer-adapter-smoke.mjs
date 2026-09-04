@@ -603,13 +603,20 @@ assert.equal(activeReview.body.delivery.status, 'awaiting_review')
 assert.equal(activeReview.body.delivery.deliveryNote, 'Completed the agreed website delivery.')
 assert.equal(activeReview.body.delivery.canReview, true)
 assert.equal('requestHash' in activeReview.body.delivery, false)
+operatorAction = {
+  ...operatorAction,
+  status: 'completed',
+  completedAt: agreement.updatedAt,
+  transactionHash: `0x${'7'.repeat(64)}`,
+}
 currentAttempt = { ...currentAttempt, lifecycle: { status: 'completed', nextStep: 1 } }
 const completedReview = await request(handler, { action: 'review', agreementId }, headers)
 assert.equal(completedReview.statusCode, 200)
 assert.equal(completedReview.body.attempt.lifecycle.status, 'completed')
-assert.equal(completedReview.body.delivery, null)
+assert.equal(completedReview.body.delivery.status, 'completed')
+assert.equal(completedReview.body.delivery.evidenceReference, 'https://delivery.example/proof')
 currentAttempt = { ...currentAttempt, lifecycle: { status: 'active', nextStep: 0 } }
-operatorAction = { ...operatorAction, requestedBy: identity.userId }
+operatorAction = { ...operatorAction, status: 'awaiting_review', completedAt: undefined, transactionHash: undefined, requestedBy: identity.userId }
 currentPolicy = { ...policy, ownerId: identity.userId }
 const selfReview = await request(handler, { action: 'review', agreementId }, headers)
 assert.equal(selfReview.body.payer.creatorFundingBlocked, false)
