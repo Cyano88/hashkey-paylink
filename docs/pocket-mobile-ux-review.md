@@ -146,3 +146,11 @@ All 23 bounded Pocket release suites passed across the resumed runs, including t
 Render's existing live rollback reference is commit 32cecfc5c976ef95d335584bae1427c1c8bd0247 (deploy dep-dadkdebbc2fs73bljqcg). The service now has explicit Arc mainnet RPC settings and a dedicated server-only swap quote secret. Secret values are not stored in this report. The mainnet deployment template no longer requests a Circle test API key.
 
 Android 1.0.2 (versionCode 3) signed release packaging succeeded. Installation of the matching debug update is sequenced after backend deployment. No funded bridge/swap, store publication, or complete physical-device recovery drill is claimed by these checks.
+
+## Token logos and quote visibility correction - 2026-09-16
+
+Pocket 1.0.3 preserves validated HTTPS token logo URLs from discovery and renders them in both the selectors and token sheet, with an initials fallback for missing or failed images. USDC is prioritized for catalog balance lookup.
+
+Quote retrieval no longer discards a valid provider price when the input balance is insufficient or temporarily unreadable. The response includes balance state separately; the mobile screen updates Available and keeps the receive estimate visible. Confirmation stays disabled until sufficient funds are verified, and the server checks the balance again before simulation/signing. Automatic quotes and expiry refresh remain unchanged.
+
+Regression checks cover zero, exact, sufficient and unavailable balances, plus unsafe logo URL rejection. The 390px Playwright fixture verified automatic pricing with Available: 0 USDC and a disabled Insufficient balance button; the USDC image loaded successfully. Fixture only, no financial transaction executed.

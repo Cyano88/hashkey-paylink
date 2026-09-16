@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { encodeFunctionData, encodeEventTopics, encodeAbiParameters, parseAbi, parseAbiParameters, pad } from 'viem'
-import { ARC_SWAP_ROUTER, readArcSwapToken, quoteArcSwap, sealArcSwapQuote, openArcSwapQuote, validateArcSwapQuote, confirmedArcSwapAmount } from '../api/pocket/arc-swap-provider.ts'
+import { ARC_SWAP_ROUTER, swapToken, readArcSwapToken, quoteArcSwap, sealArcSwapQuote, openArcSwapQuote, validateArcSwapQuote, confirmedArcSwapAmount } from '../api/pocket/arc-swap-provider.ts'
 import { verifyEvmUsdcTransfer } from '../api/usdc-transfer-verify.ts'
 import { readCctpForwardQuote } from '../api/pocket/cctp.ts'
+import { arcSwapQuotePreview } from '../api/pocket/arc-swap.ts'
 const wallet='0x1111111111111111111111111111111111111111'
 const other='0x2222222222222222222222222222222222222222'
 const tokenIn={chainId:5042,address:'0x3600000000000000000000000000000000000000',symbol:'USDC',decimals:6}
@@ -21,6 +22,24 @@ for(const mutate of [
 ]){const changed=structuredClone(fixture);mutate(changed);assert.throws(()=>validateArcSwapQuote(changed,input))}
 const fetcher=async url=>new Response(JSON.stringify(String(url).includes('/tokens?')?{tokens:{'5042':[tokenIn,tokenOut]}}:fixture))
 const quote=await quoteArcSwap({ownerId:'owner',walletId:'wallet',walletAddress:wallet,tokenIn:tokenIn.address,tokenOut:tokenOut.address,amount:'10'},fetcher)
+
+assert.equal(swapToken({...tokenIn,logoURI:'https://example.com/usdc.png'}).logoURI,'https://example.com/usdc.png')
+for(const logoURI of ['javascript:alert(1)','data:image/svg+xml,bad','http://example.com/a.png','https://user:pass@example.com/a.png']) assert.equal(swapToken({...tokenIn,logoURI}).logoURI,undefined)
+process.env.POCKET_SWAP_QUOTE_SECRET='fixture-preview-secret-thirty-two-characters'
+for(const balance of [0n,10000000n,20000000n]) {
+ const preview=await arcSwapQuotePreview(quote,async()=>balance)
+ assert.equal(preview.ok,true)
+ assert.equal(preview.quote.expectedOut,quote.expectedOut,'Price stays visible even without funds')
+ assert.equal(preview.sufficientBalance,balance>=BigInt(quote.amountUnits))
+ assert.equal(preview.balanceStatus,'ok')
+ assert.ok(preview.quoteToken)
+}
+const unavailable=await arcSwapQuotePreview(quote,async()=>{throw Error('RPC unavailable')})
+assert.equal(unavailable.ok,true)
+assert.equal(unavailable.balance,null)
+assert.equal(unavailable.sufficientBalance,null)
+assert.equal(unavailable.balanceStatus,'unavailable')
+
 await assert.rejects(()=>quoteArcSwap({ownerId:'owner',walletId:'wallet',walletAddress:wallet,tokenIn:tokenIn.address,tokenOut:tokenOut.address,amount:'0.0000001'},fetcher),/precision/)
 await assert.rejects(() => readArcSwapToken('not-an-address', fetcher), /valid Arc/)
 await assert.rejects(() => readArcSwapToken(tokenIn.address, async () => new Response(JSON.stringify({...tokenIn,chainId:8453}))), /Unsupported Arc/)

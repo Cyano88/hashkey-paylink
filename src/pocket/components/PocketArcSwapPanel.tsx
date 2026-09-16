@@ -4,7 +4,7 @@ import PocketArcTokenPicker from './PocketArcTokenPicker'
 import PocketSlideAction from './PocketSlideAction'
 import { pocketApiUrl } from '../lib/pocketRoutes'
 
-type Token = { address: string; symbol: string; name: string; decimals: number; balance: string | null; balanceStatus: string }
+type Token = { address: string; symbol: string; name: string; decimals: number; balance: string | null; balanceStatus: string; logoURI?: string }
 type Quote = { id: string; amount: string; expectedOut: string; minimumOut: string; expiresAt: number; tokenIn: Token; tokenOut: Token; gasUsdc: string; fees: { name: string; amount: string; symbol: string; included: boolean }[] }
 type Pending = { quoteToken: string; quote: Quote; challengeId?: string; txHash?: string; walletAddress: string }
 type Props = { enabled?: boolean; onBusyChange?(busy: boolean): void; email: string; getAccessToken(): Promise<string | null>; ensureWallet(): Promise<{ address: string } | null>; getSession(address: string): Promise<CircleEvmEmailSession>; refresh(): Promise<unknown> }
@@ -15,7 +15,7 @@ export default function PocketArcSwapPanel(props: Props) {
   const [tokenIn, setTokenIn] = useState('0x3600000000000000000000000000000000000000')
   const [tokenOut, setTokenOut] = useState('')
   const [amount, setAmount] = useState('')
-  const [quoted, setQuoted] = useState<{ quote: Quote; quoteToken: string } | null>(null)
+  const [quoted, setQuoted] = useState<{ quote: Quote; quoteToken: string; sufficientBalance?: boolean | null } | null>(null)
   const [status, setStatus] = useState<'idle' | 'quoting' | 'pending' | 'submitted' | 'successful'>('idle')
   const [catalogError, setCatalogError] = useState('')
   const [loadingTokens, setLoadingTokens] = useState(true)
@@ -72,7 +72,9 @@ export default function PocketArcSwapPanel(props: Props) {
     try {
       const data = await api({ action: 'quote', tokenIn, tokenOut, amount })
       if (version !== requestVersion.current) return
-      setQuoted({ quote: data.quote, quoteToken: data.quoteToken }); setStatus('idle')
+      setQuoted({ quote: data.quote, quoteToken: data.quoteToken, sufficientBalance: data.sufficientBalance })
+      if (data.balanceStatus) setTokens(current => current.map(token => token.address.toLowerCase() === data.quote.tokenIn.address.toLowerCase() ? { ...token, balance: data.balance, balanceStatus: data.balanceStatus } : token))
+      setStatus('idle')
     } catch (reason) {
       if (version !== requestVersion.current) return
       setError((reason as Error).message); setStatus('idle')
@@ -129,7 +131,7 @@ export default function PocketArcSwapPanel(props: Props) {
     } else { setNotice(result.error || 'Swap submitted. Waiting for onchain confirmation.'); setStatus('idle') }
   }
   async function execute() {
-    if (locked.current || !quoted || quoted.quote.expiresAt <= Date.now()) return
+    if (locked.current || !quoted || quoted.sufficientBalance !== true || quoted.quote.expiresAt <= Date.now()) return
     locked.current = true; setStatus('pending'); setError('')
     let activePending: Pending | null = pending
     try {
@@ -160,7 +162,7 @@ export default function PocketArcSwapPanel(props: Props) {
         <div><p className="mb-2 text-xs text-gray-500">From</p><PocketArcTokenPicker label="Input Arc token" value={tokenIn} tokens={tokens} excluded={tokenOut} disabled={loadingTokens || !!catalogError || busy || approvalBusy} discover={discover} onChange={token => choose(token, 'in')} /></div>
         <div><p className="mb-2 text-xs text-gray-500">To</p><PocketArcTokenPicker label="Output Arc token" value={tokenOut} tokens={tokens} excluded={tokenIn} disabled={loadingTokens || !!catalogError || busy || approvalBusy} discover={discover} onChange={token => choose(token, 'out')} /></div>
       </div>
-      {loadingTokens && <p role="status" className="text-xs text-gray-400">Loading Arc tokens?</p>}
+      {loadingTokens && <p role="status" className="text-xs text-gray-400">Loading Arc tokens...</p>}
       {catalogError && <p role="alert" className="text-xs text-gray-500">{catalogError} <button type="button" onClick={() => void load()} className="font-bold text-blue-600">Try again</button></p>}
       <label className="block text-xs text-gray-500">Amount<input aria-label="Swap amount" inputMode="decimal" disabled={busy || approvalBusy || !!catalogError} value={amount} onChange={event => { invalidate(); setAmount(event.target.value) }} className="mt-2 w-full rounded-2xl border border-gray-200 bg-transparent p-4 text-base text-gray-950 dark:border-white/10 dark:text-white" placeholder="0.00" /></label>
       <p className="text-xs text-gray-500">Available: {selected?.balance ?? '—'} {selected?.symbol}</p>
@@ -171,10 +173,10 @@ export default function PocketArcSwapPanel(props: Props) {
         <p>Slippage limit: 0.5%</p>
         {quoted.quote.fees.map((fee, index) => <p key={index}>{fee.name}: {fee.amount} {fee.symbol}{fee.included ? ' (included)' : ''}</p>)}
         <p>Estimated network gas: {quoted.quote.gasUsdc} USDC · sponsorship applies if available</p>
-        <p>{quoted.quote.expiresAt > now ? 'Quote valid for ' + Math.ceil((quoted.quote.expiresAt - now) / 1000) + ' seconds' : 'Refreshing price?'}</p>
+        <p>{quoted.quote.expiresAt > now ? 'Quote valid for ' + Math.ceil((quoted.quote.expiresAt - now) / 1000) + ' seconds' : 'Refreshing price...'}</p>
       </div>}
       {error && !quoted && pairReady && amountValid && <button type="button" onClick={() => setQuoteRefresh(value => value + 1)} className="text-xs font-bold text-blue-600">Try price again</button>}
-      <PocketSlideAction approvalRequired={false} onApprovalBusyChange={setApprovalBusy} status={status === 'successful' ? 'successful' : busy ? status : 'idle'} disabled={!quoted || quoted.quote.expiresAt <= now || status === 'quoting'} onPrepare={prepare} onConfirm={() => void execute()} labels={{ idle: 'Confirm swap', disabled: catalogError ? 'Swaps unavailable' : !pairReady ? 'Select tokens' : !amountValid ? 'Enter amount' : status === 'quoting' ? 'Updating price?' : 'Price unavailable', pending: 'Preparing swap', submitted: 'Confirming swap', successful: 'Swapped' }} />
+      <PocketSlideAction approvalRequired={false} onApprovalBusyChange={setApprovalBusy} status={status === 'successful' ? 'successful' : busy ? status : 'idle'} disabled={!quoted || quoted.sufficientBalance !== true || quoted.quote.expiresAt <= now || status === 'quoting'} onPrepare={prepare} onConfirm={() => void execute()} labels={{ idle: 'Confirm swap', disabled: catalogError ? 'Swaps unavailable' : !pairReady ? 'Select tokens' : !amountValid ? 'Enter amount' : status === 'quoting' ? 'Updating price...' : quoted?.sufficientBalance === false ? 'Insufficient balance' : quoted && quoted.sufficientBalance !== true ? 'Balance unavailable' : 'Price unavailable', pending: 'Preparing swap', submitted: 'Confirming swap', successful: 'Swapped' }} />
     </>}
     {notice && <p className="text-xs text-emerald-600">{notice}</p>}
     {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700 dark:bg-red-400/10 dark:text-red-200">{error}</p>}

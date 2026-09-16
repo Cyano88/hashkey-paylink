@@ -4,11 +4,18 @@ import { arcChain } from '../../src/lib/chains.js'
 import { circleLinkKey, readCircleLink, verifiedPrivyUser } from '../privy-circle-link.js'
 import { createCircleGasStationEvmChallenge, readCircleArcSwapChallenge } from '../circle-solana-email.js'
 import { claimCirclePocketAction, listCirclePocketActions, findCirclePocketAction, recordCirclePocketAction } from '../circle-pocket-action-journal.js'
-import { confirmedArcSwapAmount, openArcSwapQuote, quoteArcSwap, readArcSwapToken, readArcSwapTokens, sealArcSwapQuote } from './arc-swap-provider.js'
+import { type ArcSwapQuote, confirmedArcSwapAmount, openArcSwapQuote, quoteArcSwap, readArcSwapToken, readArcSwapTokens, sealArcSwapQuote } from './arc-swap-provider.js'
 
 const TOKEN_ABI = parseAbi(['function balanceOf(address owner) view returns (uint256)'])
 const client = createPublicClient({ chain: arcChain, transport: http(process.env.PRIVATE_RPC_URL_ARC_MAINNET || 'https://rpc.mainnet.arc.io', { timeout: 15_000 }) })
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+
+export async function arcSwapQuotePreview(quote: ArcSwapQuote, readBalance: () => Promise<bigint> = () => client.readContract({ address: quote.tokenIn.address, abi: TOKEN_ABI, functionName: 'balanceOf', args: [quote.walletAddress] })) {
+  let balance: bigint | null = null
+  try { balance = await readBalance() } catch { /* Prices remain available during balance RPC outages. */ }
+  const { callData, ownerId, ...publicQuote } = quote
+  return { ok: true, quote: publicQuote, quoteToken: sealArcSwapQuote(quote), balance: balance === null ? null : formatUnits(balance, quote.tokenIn.decimals), balanceStatus: balance === null ? 'unavailable' : 'ok', sufficientBalance: balance === null ? null : balance >= BigInt(quote.amountUnits) }
+}
 
 export default async function arcSwapHandler(req: Request, res: Response) {
   try {
@@ -17,7 +24,7 @@ export default async function arcSwapHandler(req: Request, res: Response) {
     const link = await readCircleLink(circleLinkKey(identity.userId, 'arc'))
     if (req.method === 'GET') {
       const requested = typeof req.query.token === 'string' ? req.query.token.trim() : ''
-      const tokens = requested ? [await readArcSwapToken(requested)] : await readArcSwapTokens()
+      const tokens = requested ? [await readArcSwapToken(requested)] : (await readArcSwapTokens()).sort((a, b) => Number(same(b.address, '0x3600000000000000000000000000000000000000')) - Number(same(a.address, '0x3600000000000000000000000000000000000000')))
       const balances = link?.circleBlockchain === 'ARC'
         ? await Promise.all(tokens.map(async (token, index) => {
           if (index >= 50) return { ...token, balance: null, balanceStatus: 'unavailable' }
@@ -42,10 +49,7 @@ export default async function arcSwapHandler(req: Request, res: Response) {
     const action = req.body?.action
     if (action === 'quote') {
       const quote = await quoteArcSwap({ ownerId: identity.userId, walletId: link.circleWalletId, walletAddress: getAddress(link.circleWalletAddress), tokenIn: String(req.body.tokenIn ?? ''), tokenOut: String(req.body.tokenOut ?? ''), amount: String(req.body.amount ?? '') })
-      const balance = await client.readContract({ address: quote.tokenIn.address, abi: TOKEN_ABI, functionName: 'balanceOf', args: [quote.walletAddress] })
-      if (balance < BigInt(quote.amountUnits)) return res.status(409).json({ ok: false, error: 'Your Arc token balance is too low for this swap.' })
-      const { callData, ownerId, ...publicQuote } = quote
-      return res.json({ ok: true, quote: publicQuote, quoteToken: sealArcSwapQuote(quote) })
+      return res.json(await arcSwapQuotePreview(quote))
     }
     if (action !== 'execute' && action !== 'status') return res.status(400).json({ ok: false, error: 'Unsupported swap action.' })
     const quote = openArcSwapQuote(String(req.body.quoteToken ?? ''), identity.userId, action === 'status')
@@ -58,6 +62,8 @@ export default async function arcSwapHandler(req: Request, res: Response) {
       // Own-wallet swaps use Circle authorization; no additional Pocket payment PIN.
       const userToken = String(req.body.circleUserToken ?? '')
       if (!userToken || userToken.length > 8_000) return res.status(400).json({ ok: false, error: 'Reconnect your Circle wallet.' })
+      const balance = await client.readContract({ address: quote.tokenIn.address, abi: TOKEN_ABI, functionName: 'balanceOf', args: [quote.walletAddress] })
+      if (balance < BigInt(quote.amountUnits)) return res.status(409).json({ ok: false, error: 'Your Arc token balance is too low for this swap.' })
       // Simulate the exact atomic approval/swap/revoke batch before requesting signature.
       await client.call({ account: quote.walletAddress, to: quote.walletAddress, data: quote.callData })
       if (quote.expiresAt <= Date.now()) return res.status(409).json({ ok: false, error: 'Quote expired. Review a new quote.' })

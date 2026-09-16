@@ -8,7 +8,7 @@ const API = 'https://li.quest/v1'
 const APPROVE = parseAbi(['function approve(address spender,uint256 amount) returns (bool)'])
 export const SWAP_BATCH_ABI = parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 const SWAP_ABI = parseAbi(['function swapTokensMultipleV3ERC20ToERC20(bytes32 transactionId,string integrator,string referrer,address receiver,uint256 minAmount,(address callTo,address approveTo,address sendingAssetId,address receivingAssetId,uint256 fromAmount,bytes callData,bool requiresDeposit)[] swapData)', 'function swapTokensSingleV3ERC20ToERC20(bytes32 transactionId,string integrator,string referrer,address receiver,uint256 minAmount,(address callTo,address approveTo,address sendingAssetId,address receivingAssetId,uint256 fromAmount,bytes callData,bool requiresDeposit) swapData)', 'function swapTokensGeneric(bytes32 transactionId,string integrator,string referrer,address receiver,uint256 minAmount,(address callTo,address approveTo,address sendingAssetId,address receivingAssetId,uint256 fromAmount,bytes callData,bool requiresDeposit)[] swapData) payable'])
-export type ArcSwapToken = { address: Address; symbol: string; name: string; decimals: number; chainId: 5042 }
+export type ArcSwapToken = { address: Address; symbol: string; name: string; decimals: number; chainId: 5042; logoURI?: string }
 export type ArcSwapQuote = {
   id: string; ownerId: string; walletId: string; walletAddress: Address; chainId: 5042
   tokenIn: ArcSwapToken; tokenOut: ArcSwapToken; amount: string; amountUnits: string
@@ -22,7 +22,9 @@ export function swapToken(value: any): ArcSwapToken {
   if (!value || value.chainId !== ARC_SWAP_CHAIN_ID || !isAddress(value.address) || /^0x0{40}$/i.test(value.address)
     || !Number.isInteger(value.decimals) || value.decimals < 0 || value.decimals > 18
     || typeof value.symbol !== 'string' || !value.symbol || value.symbol.length > 40) fail('Unsupported Arc token.')
-  return { address: getAddress(value.address), symbol: value.symbol, name: String(value.name || value.symbol).slice(0, 100), decimals: value.decimals, chainId: 5042 }
+  let logoURI: string | undefined
+  try { const url = new URL(value.logoURI); if (url.protocol === 'https:' && !url.username && !url.password && url.href.length <= 2048) logoURI = url.href } catch { /* Missing logos use the client fallback. */ }
+  return { ...(logoURI ? { logoURI } : {}), address: getAddress(value.address), symbol: value.symbol, name: String(value.name || value.symbol).slice(0, 100), decimals: value.decimals, chainId: 5042 }
 }
 async function provider(path: string, fetcher = fetch) {
   const response = await fetcher(`${API}${path}`, { headers: process.env.LIFI_API_KEY ? { 'x-lifi-api-key': process.env.LIFI_API_KEY } : {}, signal: AbortSignal.timeout(20_000) })
