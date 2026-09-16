@@ -24,10 +24,10 @@ const NETWORKS = [
   {
     key:         'arc',
     name:        'Arc',
-    rpc:         'https://rpc.testnet.arc.network',
+    rpc:         'https://rpc.mainnet.arc.io',
     type:        'evm' as const,
     explorerName:'Arcscan',
-    explorerUrl: (h: string) => `https://testnet.arcscan.app/tx/${h}`,
+    explorerUrl: (h: string) => `https://explorer.arc.io/tx/${h}`,
     finalitySec: 2,
   },
   {

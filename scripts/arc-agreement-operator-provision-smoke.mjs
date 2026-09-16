@@ -6,7 +6,7 @@ import {
   readArcAgreementOperatorProvisionConfig,
 } from './lib/arc-agreement-operator-provision.mjs'
 
-const apiKey = 'TEST_API_KEY:test-id:test-secret'
+const apiKey = 'LIVE_API_KEY:fixture:fixture'
 const entitySecret = '11'.repeat(32)
 const walletSetIdempotencyKey = '0f4f3d9a-fb4c-4f4e-8f0d-79b5f83a2d75'
 const walletIdempotencyKey = 'f8cf7713-b53c-4f40-a35f-40c01f6c378d'
@@ -18,10 +18,10 @@ const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' })
 
 function validEnvironment(overrides = {}) {
   return {
-    CIRCLE_TEST_API_KEY: apiKey,
-    CIRCLE_ENTITY_SECRET: entitySecret,
-    ARC_AGREEMENT_OPERATOR_WALLET_SET_IDEMPOTENCY_KEY: walletSetIdempotencyKey,
-    ARC_AGREEMENT_OPERATOR_WALLET_IDEMPOTENCY_KEY: walletIdempotencyKey,
+    CIRCLE_API_KEY_ARC_MAINNET: apiKey,
+    CIRCLE_ENTITY_SECRET_ARC_MAINNET: entitySecret,
+    ARC_AGREEMENT_OPERATOR_WALLET_SET_IDEMPOTENCY_KEY_MAINNET: walletSetIdempotencyKey,
+    ARC_AGREEMENT_OPERATOR_WALLET_IDEMPOTENCY_KEY_MAINNET: walletIdempotencyKey,
     ...overrides,
   }
 }
@@ -43,7 +43,7 @@ function successfulFetch(calls, walletOverrides = {}) {
       return jsonResponse({ data: { wallets: [{
         id: walletId,
         address: walletAddress,
-        blockchain: 'ARC-TESTNET',
+        blockchain: 'ARC',
         custodyType: 'DEVELOPER',
         state: 'LIVE',
         walletSetId,
@@ -57,13 +57,13 @@ function successfulFetch(calls, walletOverrides = {}) {
 
 assert.throws(
   () => readArcAgreementOperatorProvisionConfig(validEnvironment({
-    CIRCLE_TEST_API_KEY: 'LIVE_API_KEY:live-id:live-secret',
+    CIRCLE_API_KEY_ARC_MAINNET: 'TEST_API_KEY:test-id:test-secret',
   })),
-  /TEST_API_KEY/,
+  /LIVE_API_KEY/,
 )
 assert.throws(
   () => readArcAgreementOperatorProvisionConfig(validEnvironment({
-    ARC_AGREEMENT_OPERATOR_WALLET_IDEMPOTENCY_KEY: walletSetIdempotencyKey,
+    ARC_AGREEMENT_OPERATOR_WALLET_IDEMPOTENCY_KEY_MAINNET: walletSetIdempotencyKey,
   })),
   /must be different/,
 )
@@ -75,7 +75,7 @@ await assert.rejects(
     confirmed: false,
     fetchImpl: successfulFetch(calls),
   }),
-  /confirm-create-arc-testnet-operator/,
+  /confirm-create-arc-mainnet-operator/,
 )
 assert.equal(calls.length, 0)
 
@@ -90,7 +90,7 @@ assert.deepEqual(wallet, {
   walletSetId,
   walletId,
   address: walletAddress,
-  blockchain: 'ARC-TESTNET',
+  blockchain: 'ARC',
   custodyType: 'DEVELOPER',
   state: 'LIVE',
   accountType: 'EOA',
@@ -108,7 +108,7 @@ const walletSetBody = JSON.parse(calls[1].init.body)
 const walletBody = JSON.parse(calls[3].init.body)
 assert.equal(walletSetBody.name, 'Hash PayLink Arc Agreements')
 assert.equal(walletSetBody.idempotencyKey, walletSetIdempotencyKey)
-assert.deepEqual(walletBody.blockchains, ['ARC-TESTNET'])
+assert.deepEqual(walletBody.blockchains, ['ARC'])
 assert.equal(walletBody.walletSetId, walletSetId)
 assert.equal(walletBody.accountType, 'EOA')
 assert.equal(walletBody.count, 1)
@@ -126,14 +126,14 @@ await assert.rejects(
     confirmed: true,
     fetchImpl: successfulFetch([], { blockchain: 'BASE' }),
   }),
-  /ARC-TESTNET/,
+  /ARC/,
 )
 
 const librarySource = readFileSync(new URL('./lib/arc-agreement-operator-provision.mjs', import.meta.url), 'utf8')
 const commandSource = readFileSync(new URL('./arc-agreement-operator-provision.mjs', import.meta.url), 'utf8')
 assert.doesNotMatch(librarySource, /POCKET_|CIRCLE_API_KEY\b|CIRCLE_CLI/)
-assert.match(librarySource, /CIRCLE_TEST_API_KEY/)
-assert.match(librarySource, /ARC-TESTNET/)
-assert.match(commandSource, /--confirm-create-arc-testnet-operator/)
+assert.match(librarySource, /CIRCLE_API_KEY_ARC_MAINNET/)
+assert.match(librarySource, /ARC/)
+assert.match(commandSource, /--confirm-create-arc-mainnet-operator/)
 
 console.log('Arc Agreement operator provisioning smoke checks passed.')

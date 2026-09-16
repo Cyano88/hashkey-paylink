@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
-const EXPECTED_VERSION = '0.0.6'
+const EXPECTED_VERSION = '1.1.0'
 const PATCHES = [
   [
     '  });\n  const estimate = args2.includes("--estimate");\n  const resolved = await resolveOrReport(signer, address, blockchain, args2);',

@@ -163,7 +163,7 @@ export function createAgenticCheckoutWalletPayHandler(dependencies: Dependencies
         sellerAgentSlug: agentSlug,
         serviceUrl,
         maxAmount: Number(record.amount),
-        paymentChain: record.network === 'arc' ? 'ARC-TESTNET' : 'BASE',
+        paymentChain: record.network === 'arc' ? 'ARC' : 'BASE',
         spendTitle: `Paid ${record.merchantName}`,
         spendDetail: `Paid ${record.amount} USDC for ${record.title}.`,
         appendResultActivity: false,

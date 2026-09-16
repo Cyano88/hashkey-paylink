@@ -153,8 +153,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
       ) : bills.availability === 'disabled' && !preview ? (
         <div className="rounded-[22px] bg-white p-5 text-center shadow-sm dark:bg-white/[0.05]">
           <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300"><BillIcon className="h-5 w-5" /></span>
-          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">Bills pilot is not open</h3>
-          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">Bill payments remain hidden until the protected provider and refund controls are enabled.</p>
+          <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">Bill payments are not available yet</h3>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">You can continue using Pocket to send and receive money. Check back here for bill payments.</p>
         </div>
       ) : !authenticated && !preview ? <SignInCard /> : !categoryEnabled && !preview ? (
         <div className="rounded-[22px] bg-white p-5 text-center shadow-sm dark:bg-white/[0.05]">

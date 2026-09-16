@@ -33,7 +33,7 @@ export default function ApiReference() {
     "memo": "Order 1042",
     "returnUrl": "https://your-allowlisted-domain.example/complete"
   }'`}</CodeBlock>
-          <p>The request <code>checkoutMode</code> must match the API key's immutable project mode. A human project can offer every enabled network; the payer selects one and that payment attempt is then locked to the matching network and recipient. An agentic project selects one exact network when each checkout is created and returns an agentic <code>checkoutUrl</code> plus its Circle Gateway x402 <code>agentPaymentUrl</code>; it never returns a human fallback. The response also includes a durable <code>paymentAttemptId</code>. Test keys route to Arc Testnet; live keys use the configured Base and Arbitrum routes. Recipient overrides are rejected. API keys stay server-side.</p>
+          <p>The request <code>checkoutMode</code> must match the API key's immutable project mode. A human project can offer every enabled network; the payer selects one and that payment attempt is then locked to the matching network and recipient. An agentic project selects one exact network when each checkout is created and returns an agentic <code>checkoutUrl</code> plus its Circle Gateway x402 <code>agentPaymentUrl</code>; it never returns a human fallback. The response also includes a durable <code>paymentAttemptId</code>. Live keys use configured Base, Arbitrum, and explicitly saved Arc mainnet routes. Test keys cannot authorize mainnet transactions. Recipient overrides are rejected. API keys stay server-side.</p>
         </SubSection>
         <SubSection title="Agent wallet path">
           <p>Create the checkout with <code>checkoutMode: "agentic"</code> and either <code>agenticType: "creator_earnings"</code> or <code>agenticType: "agent_treasury"</code>. Open <code>checkoutUrl</code> for the hosted Circle Agent Wallet payer flow: email identity, wallet restoration or creation, USDC and App Pay balances, Gateway funding, and payment all stay inside checkout. Autonomous agents can instead send a GET request to <code>agentPaymentUrl</code>. Its first response is HTTP 402 with a standard <code>PAYMENT-REQUIRED</code> challenge. After Gateway verification and settlement, Hash PayLink returns the checkout id, payment-attempt id, and authoritative paid state used by signed webhooks.</p>
@@ -55,7 +55,7 @@ export default function ApiReference() {
   -> agentPaymentUrl   (autonomous agent handles x402 challenge)
   -> paymentAttemptId  (immutable payment session)
   -> status + signed webhook confirm fulfillment`}</CodeBlock>
-          <p>Agentic payment is available only from an agentic-x402 project and only for fixed-price USDC service checkouts. Every agentic checkout selects exactly one network at creation: use <code>arc</code> with a test key, or <code>base</code>/<code>arbitrum</code> with a live key. If a project key exposes more than one eligible network, omitting <code>network</code> is rejected instead of silently selecting a route. Flexible requests, Polymarket funding and local-bank settlement require a separate human-checkout project.</p>
+          <p>Agentic payment is available only from an agentic-x402 project and only for fixed-price USDC service checkouts. Every agentic checkout selects exactly one network at creation: use <code>arc</code>, <code>base</code>, or <code>arbitrum</code> with a live key. If a project key exposes more than one eligible network, omitting <code>network</code> is rejected instead of silently selecting a route. Flexible requests, Polymarket funding and local-bank settlement require a separate human-checkout project.</p>
         </SubSection>
         <SubSection title="GET /api/v2/checkouts?purpose=status&amp;id=chk_...">
           <p>Returns the authoritative <code>pending</code>, <code>processing</code>, <code>paid</code>, or <code>expired</code> state, including the network paid. For Naira settlement, <code>processing</code> means the USDC deposit is confirmed but bank delivery is not final. Verify <code>paid</code> from your server before fulfillment.</p>
@@ -67,13 +67,13 @@ export default function ApiReference() {
         </SubSection>
       </Section>
 
-      <Section title="Arc Agreements API · Arc Testnet private pilot">
+      <Section title="Arc Agreements API · Arc Mainnet private pilot">
         <p>
-          Enable <code>Arc Agreements</code> on a test project to create durable fixed, progressive, or milestone USDC terms on Arc Testnet. Creation returns a private payer-review path once. Funding and lifecycle execution remain invite-only: the project must pass Hash PayLink's pilot authorization, limits, operator, and runtime gates before a payer can activate an escrow.
+          Enable <code>Arc Agreements</code> on a live project to create durable fixed, progressive, or milestone USDC terms on Arc Mainnet. Creation returns a private payer-review path once. Mainnet funding and lifecycle execution remain disabled pending a verified contract release: the project must pass Hash PayLink's pilot authorization, limits, operator, and runtime gates before a payer can activate an escrow.
         </p>
         <SubSection title="POST /api/v2/agreements">
           <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
-  -H "X-API-Key: YOUR_TEST_SERVER_KEY" \
+  -H "X-API-Key: YOUR_LIVE_SERVER_KEY" \
   -H "Idempotency-Key: agreement:your-unique-order-id" \
   -H "Content-Type: application/json" \
   -d '{
@@ -95,14 +95,14 @@ export default function ApiReference() {
         </SubSection>
         <SubSection title="Rotate an unused payer link">
           <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
-  -H "X-API-Key: YOUR_TEST_SERVER_KEY" \
+  -H "X-API-Key: YOUR_LIVE_SERVER_KEY" \
   -H "Content-Type: application/json" \
   -d '{"action":"rotate_payer_link","agreementId":"agr_..."}'`}</CodeBlock>
           <p>The prior private link is invalidated and a new one is returned. Rotation is rejected as soon as agreement activation has started. Keep this server-side; never place the project API key in browser code.</p>
         </SubSection>
         <SubSection title="Request payer review for a release">
           <CodeBlock lang="bash">{`curl -X POST https://app.hashpaylink.com/api/v2/agreements \
-  -H "X-API-Key: YOUR_TEST_SERVER_KEY" \
+  -H "X-API-Key: YOUR_LIVE_SERVER_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "action": "request_release",

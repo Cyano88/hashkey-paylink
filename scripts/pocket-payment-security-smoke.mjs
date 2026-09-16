@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { consumePocketPaymentApproval, createPocketPaymentSecurityHandler } from '../api/pocket/payment-security.ts'
+import { requiresPocketPaymentApproval, consumePocketPaymentApproval, createPocketPaymentSecurityHandler } from '../api/pocket/payment-security.ts'
 
 function response() {
   return { statusCode: 200, payload: undefined, headers: {}, setHeader(name, value) { this.headers[name] = value }, status(code) { this.statusCode = code; return this }, json(value) { this.payload = value; return this } }
@@ -13,8 +13,10 @@ async function call(handler, method, body = {}, headers = {}) {
 
 let now = 1_800_000_000_000
 let randomCounter = 0
+let sessionId = 'initial-session'
+let emailVerifiedAt = now - 60_000
 const handler = createPocketPaymentSecurityHandler({
-  verifyUser: async () => ({ userId: 'did:privy:pocket-pin-smoke', email: 'pin@example.com' }),
+  verifyUser: async () => ({ userId: 'did:privy:pocket-pin-smoke', email: 'pin@example.com', sessionId, emailVerifiedAt }),
   now: () => now,
   random: size => Buffer.alloc(size, ++randomCounter),
 })
@@ -36,7 +38,14 @@ assert.equal((await call(handler, 'POST', { action: 'verify', pin: '654321' })).
 const resetStarted = await call(handler, 'POST', { action: 'begin-reset' }, { authorization: 'Bearer session-before-reset' })
 assert.equal(resetStarted.statusCode, 200)
 assert.equal((await call(handler, 'POST', { action: 'reset', pin: '111111', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer session-before-reset' })).statusCode, 401)
+assert.equal((await call(handler, 'POST', { action: 'reset', pin: '111111', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer refreshed-token-same-session' })).statusCode, 401)
+sessionId = 'other-old-session'
+assert.equal((await call(handler, 'POST', { action: 'reset', pin: '111111', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer other-old-token' })).statusCode, 401)
+now += 2000; sessionId = 'fresh-reauth-session'; emailVerifiedAt = now
 assert.equal((await call(handler, 'POST', { action: 'reset', pin: '111111', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer session-after-reauth' })).statusCode, 200)
+for (const action of ['executeEvmWithdraw','executeEvmPayment','signPayment']) assert.equal(await requiresPocketPaymentApproval('did:privy:pocket-pin-smoke', action, false), true, 'Omitting the client header must not bypass approval')
+for (const action of ['executeEvmBridge','signOwnWalletBridge']) assert.equal(await requiresPocketPaymentApproval('did:privy:pocket-pin-smoke', action, true), false)
+assert.equal(await requiresPocketPaymentApproval('non-pocket-owner', 'executeEvmPayment', false), false)
 assert.equal((await call(handler, 'POST', { action: 'reset', pin: '222222', resetToken: resetStarted.payload.resetToken }, { authorization: 'Bearer another-session' })).statusCode, 401)
 
 const circleSource = await readFile(new URL('../api/circle-solana-email.ts', import.meta.url), 'utf8')
@@ -48,7 +57,7 @@ const clientSource = await readFile(new URL('../src/pocket/api/pocketPaymentSecu
 assert.match(circleSource, /x-pocket-payment-approval/)
 assert.match(circleSource, /findPaymentCircleLinkByWallet/)
 assert.match(circleSource, /identity\.userId !== link\.privyUserId/)
-assert.match(circleSource, /if \(declaredPocketClient\) \{[\s\S]*consumePocketPaymentApproval/)
+assert.match(circleSource, /requiresPocketPaymentApproval\(identity\.userId, action, declaredPocketClient\)/)
 assert.match(circleSource, /idempotencyKey,/)
 assert.match(circleEvmClientSource, /options\.privyAccessToken \? \{ Authorization: `Bearer \$\{options\.privyAccessToken\}` \}/)
 assert.match(circleEvmClientSource, /action: 'executeEvmPayment',[\s\S]*idempotencyKey: crypto\.randomUUID\(\)/)

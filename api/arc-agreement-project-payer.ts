@@ -29,7 +29,7 @@ export async function verifiedProjectPayer(
   },
 ) {
   const policy = await dependencies.resolvePolicy(req)
-  if (!policy || policy.environment !== 'test' || policy.checkoutMode !== 'human' || !policy.capabilities.includes('arc_agreements')) {
+  if (!policy || policy.environment !== 'live' || policy.checkoutMode !== 'human' || !policy.capabilities.includes('arc_agreements')) {
     fail('A valid human-checkout developer API key is required.', 401)
   }
   const agreementId = clean(req.body?.agreementId, 80)

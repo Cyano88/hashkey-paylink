@@ -35,7 +35,7 @@ export type PocketHomeNetwork = {
 export const POCKET_HOME_NETWORKS: PocketHomeNetwork[] = [
   { key: 'base', label: 'Base', logo: '/brand/base-logo.jpeg', logoCanvas: 'light' },
   { key: 'arbitrum', label: 'Arbitrum', logo: '/brand/arbitrum-logo.jpeg', logoCanvas: 'light' },
-  { key: 'arc', label: 'Arc', logo: '/brand/arc-logo.jpeg', logoCanvas: 'dark', comingSoon: true },
+  { key: 'arc', label: 'Arc', logo: '/brand/arc-logo.jpeg', logoCanvas: 'dark' },
   { key: 'solana', label: 'Solana', logo: '/brand/solana-logo.jpeg', logoCanvas: 'dark' },
 ]
 

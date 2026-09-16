@@ -34,12 +34,10 @@ type ArenaRoom = {
 const { Pool } = pg
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
 const PLATFORM_FEE_BPS = 50
-const ARC_RPC_URL = (process.env.PRIVATE_RPC_URL_ARC ?? process.env.VITE_RPC_URL_ARC ?? 'https://rpc.testnet.arc.network').trim()
-const ARENA_ESCROW_FACTORY_ADDRESS = (process.env.ARENA_ESCROW_FACTORY_ADDRESS ?? '').trim()
+const ARC_RPC_URL = (process.env.PRIVATE_RPC_URL_ARC_MAINNET ?? process.env.VITE_RPC_URL_ARC_MAINNET ?? 'https://rpc.mainnet.arc.io').trim()
+const ARENA_ESCROW_FACTORY_ADDRESS_MAINNET = (process.env.ARENA_ESCROW_FACTORY_ADDRESS_MAINNET ?? '').trim()
 const ARENA_RELAYER_KEY = (
-  process.env.ARENA_RELAYER_PRIVATE_KEY
-  ?? process.env.DEPLOYER_PRIVATE_KEY
-  ?? process.env.RELAYER_PRIVATE_KEY_ARC
+  process.env.ARENA_RELAYER_PRIVATE_KEY_MAINNET
   ?? ''
 ).trim()
 const ARC_USDC_DECIMALS = 6
@@ -307,7 +305,7 @@ function riskCurveIndex(value: RiskMode) {
 }
 
 function canDeployArenaEscrow() {
-  return /^0x[a-fA-F0-9]{40}$/.test(ARENA_ESCROW_FACTORY_ADDRESS) && !!ARENA_RELAYER_KEY
+  return /^0x[a-fA-F0-9]{40}$/.test(ARENA_ESCROW_FACTORY_ADDRESS_MAINNET) && !!ARENA_RELAYER_KEY
 }
 
 function requireRelayerWallet() {
@@ -327,7 +325,7 @@ async function deployRoomEscrow(room: {
 
   const provider = new ethers.JsonRpcProvider(ARC_RPC_URL)
   const wallet = new ethers.Wallet(normalizePrivateKey(ARENA_RELAYER_KEY), provider)
-  const factory = new ethers.Contract(ARENA_ESCROW_FACTORY_ADDRESS, ARENA_FACTORY_ABI, wallet)
+  const factory = new ethers.Contract(ARENA_ESCROW_FACTORY_ADDRESS_MAINNET, ARENA_FACTORY_ABI, wallet)
   const factoryRelayer = String(await factory.relayer()).toLowerCase()
 
   if (factoryRelayer !== wallet.address.toLowerCase()) {
@@ -407,7 +405,7 @@ async function createRoom(req: Request, res: Response) {
           [
             room.id,
             escrowAddress,
-            JSON.stringify({ escrowFactory: ARENA_ESCROW_FACTORY_ADDRESS, escrowDeployedAt: new Date().toISOString() }),
+            JSON.stringify({ escrowFactory: ARENA_ESCROW_FACTORY_ADDRESS_MAINNET, escrowDeployedAt: new Date().toISOString() }),
           ],
         )
         savedRoom = toRoom(update.rows[0])

@@ -141,6 +141,14 @@ export async function recordCirclePocketAction(input: {
       && record.idempotencyKey === input.idempotencyKey
       && record.action === input.action
     ))
+    // Bridge recovery can retry after a worker has already finalized the action.
+    // Keep terminal state and the event timestamp stable for ledger deduplication.
+    if (input.action === 'wallet.bridge' && existing) {
+      if (existing.metadata?.source !== input.metadata?.source || existing.metadata?.destination !== input.metadata?.destination || existing.metadata?.amount !== input.metadata?.amount) {
+        throw new Error('Bridge details do not match the saved transfer.')
+      }
+      if (existing.status === 'completed' || existing.status === 'failed' || existing.status === input.status) return existing
+    }
     const now = Date.now()
     const record: CirclePocketActionRecord = {
       id: existing?.id ?? crypto.randomUUID(),
@@ -158,10 +166,10 @@ export async function recordCirclePocketAction(input: {
   })
 }
 
-export async function listCirclePocketActions(ownerId: string, limit = 50) {
+export async function listCirclePocketActions(ownerId: string, limit = 50, action?: string, unresolvedOnly = false) {
   const store = await readStore()
   return Object.values(store.actions)
-    .filter(record => record.ownerId === ownerId)
+    .filter(record => record.ownerId === ownerId && (!action || record.action === action) && (!unresolvedOnly || record.status === 'started' || record.status === 'submitted'))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, Math.max(1, Math.min(limit, 500)))
 }
@@ -172,4 +180,9 @@ export async function listUnresolvedCirclePocketActions(action: string, limit = 
     .filter(record => record.action === action && (record.status === 'started' || record.status === 'submitted'))
     .sort((a, b) => a.updatedAt - b.updatedAt)
     .slice(0, Math.max(1, Math.min(limit, 1000)))
+}
+
+export async function findCirclePocketAction(ownerId: string, idempotencyKey: string, action: string) {
+  const store = await readStore()
+  return Object.values(store.actions).find(record => record.ownerId === ownerId && record.idempotencyKey === idempotencyKey && record.action === action) ?? null
 }

@@ -8,6 +8,7 @@ import { AlertCircle, ArrowLeftRight, Banknote, Check, CheckCircle2, Loader2, Se
 export type PocketSlideActionStatus = SlideActionStatus
 
 type PocketSlideActionProps = ComponentProps<typeof SlideAction> & {
+  onApprovalBusyChange?: (busy: boolean) => void
   approvalRequired?: boolean
   onPrepare?: () => Promise<void>
 }
@@ -21,12 +22,13 @@ const POCKET_DEFAULT_LABELS: NonNullable<PocketSlideActionProps['labels']> = {
   error: 'Withdrawal failed',
 }
 
-export default function PocketSlideAction({ labels, status, disabled, onConfirm, approvalRequired = true, onPrepare }: PocketSlideActionProps) {
+export default function PocketSlideAction({ labels, status, disabled, onConfirm, approvalRequired = true, onPrepare, onApprovalBusyChange }: PocketSlideActionProps) {
   const activationLocked = useRef(false)
   const unlockTimer = useRef<number | null>(null)
   const [optimisticPending, setOptimisticPending] = useState(false)
+  useEffect(() => { onApprovalBusyChange?.(optimisticPending); return () => onApprovalBusyChange?.(false) }, [optimisticPending, onApprovalBusyChange])
   const mergedLabels = { ...POCKET_DEFAULT_LABELS, ...labels }
-  const action = mergedLabels.idle.toLowerCase()
+  const action = (mergedLabels.idle ?? 'Confirm payment').toLowerCase()
   const ActionIcon = /swap|move|bridge/.test(action)
     ? ArrowLeftRight
     : /payout|withdraw/.test(action)
@@ -39,7 +41,7 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
   const awaitingApproval = status === 'idle' && optimisticPending
   const visualStatus = awaitingApproval ? 'pending' : status
   const label = awaitingApproval
-    ? 'Awaiting approval'
+    ? (approvalRequired ? 'Awaiting approval' : mergedLabels.pending)
     : visualStatus === 'error'
     ? mergedLabels.error
     : visualStatus === 'pending'

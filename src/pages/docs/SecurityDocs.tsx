@@ -21,7 +21,7 @@ export default function SecurityDocs() {
         <p>Relayer, Circle, 0G, Sportmonks, Resend, and admin credentials are server-side environment variables on Render. They are not exposed through browser code or committed files.</p>
         <ul className="list-none space-y-1 mt-2 font-mono text-xs text-gray-600 dark:text-gray-400">
           <li>- <Code>RELAYER_PRIVATE_KEY</Code> - Base and fallback EVM relayer</li>
-          <li>- <Code>RELAYER_PRIVATE_KEY_ARC</Code> - Arc relayer</li>
+          <li>- <Code>RELAYER_PRIVATE_KEY_ARC_MAINNET</Code> - Arc relayer</li>
           <li>- <Code>RELAYER_PRIVATE_KEY_ARB</Code> - Arbitrum relayer</li>
           <li>- <Code>RELAYER_PRIVATE_KEY_SOLANA</Code> - Solana relayer</li>
           <li>- <Code>ARENA_RELAYER_PRIVATE_KEY</Code> - legacy Arena test actions only</li>

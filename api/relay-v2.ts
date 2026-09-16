@@ -22,10 +22,10 @@ import { arbitrum as arbitrumChainDef, base } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 
 const arcChain = defineChain({
-  id: 5042002,
-  name: 'Arc Testnet',
+  id: 5042,
+  name: 'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls: { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
 const RELAY_ABI = parseAbi([
@@ -103,19 +103,19 @@ export default async function handler(req: Request, res: Response) {
   }
 
   const rawKey = chainKey === 'arc'
-    ? (process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY)
+    ? (process.env.RELAYER_PRIVATE_KEY_ARC_MAINNET)
     : chainKey === 'arbitrum'
     ? (process.env.RELAYER_PRIVATE_KEY_ARB ?? process.env.RELAYER_PRIVATE_KEY)
     : process.env.RELAYER_PRIVATE_KEY
 
   const rpcUrl = chainKey === 'arc'
-    ? (process.env.PRIVATE_RPC_URL_ARC ?? 'https://rpc.testnet.arc.network')
+    ? (process.env.PRIVATE_RPC_URL_ARC_MAINNET ?? 'https://rpc.mainnet.arc.io')
     : chainKey === 'arbitrum'
     ? (process.env.PRIVATE_RPC_URL_ARB ?? 'https://arb1.arbitrum.io/rpc')
     : process.env.PRIVATE_RPC_URL
 
   const factoryAddr = chainKey === 'arc'
-    ? (process.env.PAYLINK_FACTORY_V2_ARC ?? process.env.PAYLINK_FACTORY_V2)
+    ? process.env.PAYLINK_FACTORY_V2_ARC_MAINNET
     : chainKey === 'arbitrum'
     ? (process.env.PAYLINK_FACTORY_V2_ARB ?? process.env.PAYLINK_FACTORY_V2)
     : process.env.PAYLINK_FACTORY_V2

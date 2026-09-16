@@ -2170,7 +2170,7 @@ function SettlementDashboard({
                       {txHash ? (
                         <button
                           type="button"
-                          onClick={() => window.open(`https://testnet.arcscan.app/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
+                          onClick={() => window.open(`https://explorer.arc.io/tx/${txHash}`, '_blank', 'noopener,noreferrer')}
                           className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 py-2 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
                         >
                           <CheckIcon />Settled - View on Arcscan

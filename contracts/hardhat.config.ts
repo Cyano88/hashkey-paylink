@@ -33,9 +33,9 @@ const config: HardhatUserConfig = {
       accounts: PK,
     },
     arc: {
-      url:      'https://rpc.testnet.arc.network',
-      chainId:  5042002,
-      accounts: PK,
+      url:      'https://rpc.mainnet.arc.io',
+      chainId:  5042,
+      accounts: process.env.ARC_MAINNET_DEPLOYER_PRIVATE_KEY ? [process.env.ARC_MAINNET_DEPLOYER_PRIVATE_KEY] : [],
     },
     arbitrum: {
       url:      'https://arb1.arbitrum.io/rpc',
@@ -57,10 +57,10 @@ const config: HardhatUserConfig = {
     customChains: [
       {
         network: 'arc',
-        chainId: 5042002,
+        chainId: 5042,
         urls: {
-          apiURL:     'https://testnet.arcscan.app/api',
-          browserURL: 'https://testnet.arcscan.app',
+          apiURL:     'https://explorer.arc.io/api',
+          browserURL: 'https://explorer.arc.io',
         },
       },
     ],

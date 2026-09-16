@@ -20,15 +20,15 @@ import { getPolyWorldcupNewsFeed, polyWorldcupArticleId } from '../../../api/pol
 import { getPolyStreamFeed } from '../../../api/poly-stream.js'
 
 const arcChain = defineChain({
-  id:             5042002,
-  name:           'Arc Testnet',
+  id:             5042,
+  name:           'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls:        { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
 const arcClient = createPublicClient({
   chain: arcChain,
-  transport: http(process.env.PRIVATE_RPC_URL_ARC ?? 'https://rpc.testnet.arc.network'),
+  transport: http(process.env.PRIVATE_RPC_URL_ARC_MAINNET ?? 'https://rpc.mainnet.arc.io'),
 })
 
 const ARC_USDC = '0x3600000000000000000000000000000000000000' as const
@@ -103,16 +103,16 @@ const MAX_META_TEXT_LENGTH = 2_000
 const MAX_COMMENT_LENGTH = 800
 const MAX_CREATOR_PROOF_AGE_MS = 10 * 60 * 1000
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
-const CREATOR_X402_NETWORKS = (process.env.X402_CREATOR_ACCEPT_NETWORKS ?? 'eip155:5042002')
+const CREATOR_X402_NETWORKS = (process.env.X402_CREATOR_ACCEPT_NETWORKS_MAINNET ?? 'eip155:5042')
   .split(',')
   .map(network => network.trim())
   .filter(Boolean)
-const CREATOR_X402_FACILITATOR_URL = process.env.X402_CREATOR_FACILITATOR_URL?.trim()
-  || process.env.X402_FACILITATOR_URL?.trim()
-  || 'https://gateway-api-testnet.circle.com'
-const CREATOR_AGENT_X402_PAY_CHAIN = process.env.CREATOR_AGENT_X402_PAY_CHAIN?.trim() || 'ARC-TESTNET'
+const CREATOR_X402_FACILITATOR_URL = process.env.X402_CREATOR_FACILITATOR_URL_MAINNET?.trim()
+  || process.env.X402_FACILITATOR_URL_MAINNET?.trim()
+  || 'https://gateway-api.circle.com'
+const CREATOR_AGENT_X402_PAY_CHAIN = process.env.CREATOR_AGENT_X402_PAY_CHAIN_MAINNET?.trim() || 'ARC'
 const CREATOR_ADMIN_KEY = (process.env.CREATOR_ADMIN_KEY ?? '').trim()
-const CHECKPOINT_FACTORY_ADDRESS = (process.env.CHECKPOINT_FACTORY_ADDRESS ?? process.env.VITE_CHECKPOINT_FACTORY_ADDRESS ?? '').trim()
+const CHECKPOINT_FACTORY_ADDRESS_MAINNET = (process.env.CHECKPOINT_FACTORY_ADDRESS_MAINNET ?? process.env.VITE_CHECKPOINT_FACTORY_ADDRESS_MAINNET ?? '').trim()
 
 type PaidRequest = Request & {
   payment?: {
@@ -1275,7 +1275,7 @@ export async function findCheckpointReceipt(receiptId: string) {
     createdAt: unlock.createdAt,
     proof: {
       service: 'HashpayStream checkpoint escrow',
-      network: 'Arc Testnet',
+      network: 'Arc Mainnet',
       transaction: unlock.vaultAddress,
       payer: state.sender,
       seller: entry.creator,
@@ -1601,7 +1601,7 @@ function creatorProofMessage(params: {
     `Content ID: ${shortId(params.contentId)}`,
     `Creator wallet: ${params.creator}`,
     `Price: ${(params.capRaw / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')} USDC`,
-    'Network: Arc Testnet',
+    'Network: Arc Mainnet',
     '',
     'This signature proves you control the creator wallet.',
     'It does not move funds or approve spending.',
@@ -1643,7 +1643,7 @@ async function verifyCreatorProof(params: {
     domain: {
       name: 'HashpayStream Creator Studio',
       version: '1',
-      chainId: 5042002,
+      chainId: 5042,
       verifyingContract: params.creator,
     },
     types: CREATOR_PROOF_TYPES,
@@ -2336,7 +2336,7 @@ export async function getContent(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'viewer must be a valid EVM address' })
   }
 
-  const poaContract = process.env.ARC_POA_CONTRACT
+  const poaContract = process.env.ARC_POA_CONTRACT_MAINNET
   if (!poaContract || !isAddress(poaContract)) {
     return res.status(503).json({ ok: false, error: 'Content gate is not configured' })
   }
@@ -2445,7 +2445,7 @@ async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry
   const refundableAmount = info[7]
   const refunded = info[8]
   const funded = info[9]
-  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
+  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC_MAINNET
   if (!rawKey) throw new Error('Checkpoint relayer is not configured.')
   if (recipient.toLowerCase() !== entry.creator.toLowerCase()) {
     throw new Error('This checkpoint escrow does not pay the content creator.')
@@ -2471,10 +2471,10 @@ async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry
 
 async function findCheckpointUnlockOnChain(contentId: string, entry: ContentEntry, walletAddress: string) {
   const wallet = cleanWalletAddress(walletAddress)
-  if (!CHECKPOINT_FACTORY_ADDRESS || !isAddress(CHECKPOINT_FACTORY_ADDRESS) || !wallet || !isAddress(wallet)) return null
+  if (!CHECKPOINT_FACTORY_ADDRESS_MAINNET || !isAddress(CHECKPOINT_FACTORY_ADDRESS_MAINNET) || !wallet || !isAddress(wallet)) return null
   const targetContentId = toContentBytes32(contentId).toLowerCase()
   const logs = await arcClient.getLogs({
-    address: CHECKPOINT_FACTORY_ADDRESS as `0x${string}`,
+    address: CHECKPOINT_FACTORY_ADDRESS_MAINNET as `0x${string}`,
     event: CHECKPOINT_VAULT_CREATED_EVENT,
     args: { sender: wallet as `0x${string}` },
     fromBlock: 0n,

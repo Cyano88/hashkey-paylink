@@ -3,7 +3,7 @@ import { ensureAgentActivityArchived, findAgentActivity } from './agent-activity
 import { getAgentGovernanceProfile, getAgentLegalProfile } from './agent-legal.js'
 import { findCheckpointReceipt, findCreatorUnlockReceipt, updateCreatorUnlockOgProof } from '../modules/streampay/api/content.js'
 
-const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE ?? 'https://gateway-api-testnet.circle.com').replace(/\/+$/, '')
+const CIRCLE_GATEWAY_API_BASE = (process.env.CIRCLE_GATEWAY_API_BASE_MAINNET ?? 'https://gateway-api.circle.com').replace(/\/+$/, '')
 const CIRCLE_API_KEY = String(
   process.env.CIRCLE_X402_RECEIPT_API_KEY
   ?? process.env.CIRCLE_GATEWAY_API_KEY

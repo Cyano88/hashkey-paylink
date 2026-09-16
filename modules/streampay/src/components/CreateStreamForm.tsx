@@ -24,11 +24,10 @@ import {
 } from '../../../../src/lib/paymentReceiptPdf'
 import UnifiedReceipt from '../../../../src/components/UnifiedReceipt'
 
-const ARC_CHAIN_ID = 5042002
+const ARC_CHAIN_ID = 5042
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
-const ARC_EXPLORER = 'https://testnet.arcscan.app'
-const ARC_MEMO     = '0x5294E9927c3306DcBaDb03fe70b92e01cCede505' as const
-const DEFAULT_STREAM_FACTORY_ADDRESS = '0xBAecf54084A0cB65b77a88cbDEf2b663Be71c61b' as const
+const ARC_EXPLORER = 'https://explorer.arc.io'
+const ARC_MEMO = (import.meta.env.VITE_ARC_MEMO_ADDRESS_MAINNET ?? '') as `0x${string}`
 
 const ERC20_ABI = parseAbi([
   'function balanceOf(address) view returns (uint256)',
@@ -260,7 +259,7 @@ export function CreateStreamForm() {
   const publicClient           = usePublicClient({ chainId: ARC_CHAIN_ID })
 
   const isOnArc     = chainId === ARC_CHAIN_ID
-  const factoryAddr = ((import.meta.env.VITE_STREAM_FACTORY_ADDRESS ?? DEFAULT_STREAM_FACTORY_ADDRESS).trim()) as `0x${string}`
+  const factoryAddr = ((import.meta.env.VITE_STREAM_FACTORY_ADDRESS_MAINNET ?? '').trim()) as `0x${string}`
 
   const [recipient,      setRecipient]      = useState(prefill.recipient)
   const [amount,         setAmount]         = useState(prefill.amount)
@@ -320,12 +319,12 @@ export function CreateStreamForm() {
   const durationValid  = durationSecs > 0n
   const isCreatorStream = prefill.isCreatorStream
   const isFormValid    = recipientValid && amountValid && durationValid
-                         && isConnected && isOnArc && !!factoryAddr
+                         && isConnected && isOnArc && isAddress(factoryAddr) && isAddress(ARC_MEMO)
   const circleConfigured = canUseCircleEvmEmailWallet('arc')
   const circleAvailable = useCircleWallet && circleConfigured
   const recipientLocked = circleAvailable && !!prefill.recipient
   const usingCircleWalletFlow = circleAvailable
-  const circleReady = recipientValid && amountValid && durationValid && !!factoryAddr
+  const circleReady = recipientValid && amountValid && durationValid && isAddress(factoryAddr)
   const circleFundingAddress = circleSession?.wallet.address ?? linkedCircleAddress
   const circleNeedsFunds = circleBalance !== null && amountValid && circleBalance < amountBn
   const circleWithdrawAmountBn = parseUsdc(circleWithdrawAmount)

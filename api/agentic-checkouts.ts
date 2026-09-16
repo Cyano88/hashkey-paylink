@@ -34,7 +34,7 @@ type Dependencies = {
 const NETWORK_CONFIG: Record<HostedCheckoutNetwork, { caip: string; facilitatorUrl: string }> = {
   base: { caip: 'eip155:8453', facilitatorUrl: 'https://gateway-api.circle.com' },
   arbitrum: { caip: 'eip155:42161', facilitatorUrl: 'https://gateway-api.circle.com' },
-  arc: { caip: 'eip155:5042002', facilitatorUrl: 'https://gateway-api-testnet.circle.com' },
+  arc: { caip: 'eip155:5042', facilitatorUrl: 'https://gateway-api.circle.com' },
 }
 
 function clean(value: unknown, max: number) {

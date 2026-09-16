@@ -10,7 +10,7 @@ type PosNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
   base: 'Base',
   arbitrum: 'Arbitrum',
-  arc: 'Arc Testnet',
+  arc: 'Arc Mainnet',
   solana: 'Solana',
 }
 

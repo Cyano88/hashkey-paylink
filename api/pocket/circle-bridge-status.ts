@@ -2,6 +2,7 @@ import { CCTP_DOMAIN, type PocketBridgeNetwork } from './cctp.js'
 
 export type CircleBridgeStatus = {
   status: string
+  sourceConfirmed?: boolean
   destinationTxHash?: string
 }
 
@@ -24,6 +25,7 @@ export async function readCircleBridgeStatus(
     // Pocket uses Circle's forwarding hook. Attestation completion alone does
     // not prove that USDC reached the destination wallet.
     status: forwardState || (attestationState === 'complete' ? 'attested' : attestationState),
+    sourceConfirmed: attestationState === 'complete' || forwardState === 'confirmed' || forwardState === 'complete',
     destinationTxHash: typeof message?.forwardTxHash === 'string' ? message.forwardTxHash : undefined,
   }
 }

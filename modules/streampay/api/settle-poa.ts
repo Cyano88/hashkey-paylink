@@ -19,9 +19,9 @@
  *
  * Required env vars
  * ─────────────────
- *  RELAYER_PRIVATE_KEY_ARC   Arc relayer wallet
- *  PRIVATE_RPC_URL_ARC       Arc RPC (defaults to public endpoint if unset)
- *  ARC_POA_CONTRACT          Deployed PoASettlement contract address on Arc
+ *  RELAYER_PRIVATE_KEY_ARC_MAINNET   Arc relayer wallet
+ *  PRIVATE_RPC_URL_ARC_MAINNET       Arc RPC (defaults to public endpoint if unset)
+ *  ARC_POA_CONTRACT_MAINNET          Deployed PoASettlement contract address on Arc
  *                            ⚠️  Scaffold — deploy PoASettlement.sol on Arc
  *                            before this endpoint is functional.
  */
@@ -38,10 +38,10 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 
 const arcChain = defineChain({
-  id:             5042002,
-  name:           'Arc Testnet',
+  id:             5042,
+  name:           'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls:        { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
 // Minimal ABI for the PoA settlement contract (deploy PoASettlement.sol)
@@ -85,19 +85,19 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'sig must be a 65-byte 0x-prefixed hex string' })
   }
 
-  const contractAddr = process.env.ARC_POA_CONTRACT
+  const contractAddr = process.env.ARC_POA_CONTRACT_MAINNET
   if (!contractAddr || !isAddress(contractAddr)) {
     return res.status(503).json({
       ok:    false,
-      error: 'ARC_POA_CONTRACT not configured — deploy PoASettlement.sol on Arc first',
+      error: 'ARC_POA_CONTRACT_MAINNET not configured — deploy PoASettlement.sol on Arc first',
     })
   }
 
-  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
-  const rpcUrl = process.env.PRIVATE_RPC_URL_ARC    ?? 'https://rpc.testnet.arc.network'
+  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC_MAINNET
+  const rpcUrl = process.env.PRIVATE_RPC_URL_ARC_MAINNET    ?? 'https://rpc.mainnet.arc.io'
 
   if (!rawKey) {
-    return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY_ARC not configured' })
+    return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY_ARC_MAINNET not configured' })
   }
 
   const account      = privateKeyToAccount(rawKey as `0x${string}`)

@@ -9,10 +9,10 @@ function publicEnv(...names: string[]) {
   return ''
 }
 
-const CHECKPOINT_FACTORY_ADDRESS = publicEnv(
-  'VITE_CHECKPOINT_FACTORY_ADDRESS',
-  'CHECKPOINT_FACTORY_ADDRESS',
-) || '0x8eEc65a18f3b5deb0E9Fc5e1eCf8263587b02927'
+const CHECKPOINT_FACTORY_ADDRESS_MAINNET = publicEnv(
+  'VITE_CHECKPOINT_FACTORY_ADDRESS_MAINNET',
+  'CHECKPOINT_FACTORY_ADDRESS_MAINNET',
+)
 
 export default function handler(_req: Request, res: Response) {
   res.setHeader('Cache-Control', 'no-store')
@@ -28,13 +28,13 @@ export default function handler(_req: Request, res: Response) {
       privyEnabled: Boolean(privyAppId && authBridge !== 'legacy'),
     },
     streampay: {
-      checkpointFactoryAddress: CHECKPOINT_FACTORY_ADDRESS,
+      checkpointFactoryAddress: CHECKPOINT_FACTORY_ADDRESS_MAINNET,
     },
     circle: {
       userWalletAppId: publicEnv('VITE_CIRCLE_USER_WALLET_APP_ID', 'CIRCLE_USER_WALLET_APP_ID'),
-      arcTestnetUserWalletAppId: publicEnv(
-        'VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET',
-        'CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET',
+      arcUserWalletAppId: publicEnv(
+        'VITE_CIRCLE_USER_WALLET_APP_ID',
+        'CIRCLE_USER_WALLET_APP_ID',
       ),
       evmEmailEnabled: String(process.env.VITE_CIRCLE_EVM_EMAIL_ENABLED ?? 'true').toLowerCase() !== 'false',
     },

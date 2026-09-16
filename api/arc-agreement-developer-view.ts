@@ -122,7 +122,7 @@ export function createArcAgreementDeveloperView(input: {
     status,
     chain: attempt?.escrow ? {
       network: 'arc' as const,
-      chainId: 5_042_002,
+      chainId: 5_042,
       escrow: attempt.escrow,
       onchainAgreementId: attempt.prepared.agreementId,
       termsHash: attempt.prepared.termsHash,

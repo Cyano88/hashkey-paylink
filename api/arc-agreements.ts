@@ -1,3 +1,4 @@
+import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import type { Request, Response } from 'express'
 import { getAddress, isAddress, parseUnits } from 'viem'
@@ -22,7 +23,8 @@ import { resolveDeveloperApiKeyPolicy, type DeveloperCheckoutMode, type Develope
 import { isVerifiedArcAgreementRecipient } from './arc-agreement-verified-recipients.js'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
 
-const STORE_KEY = process.env.ARC_AGREEMENT_STORE_KEY?.trim() || 'hashpaylink:arc-agreements:v1'
+const STORE_KEY = arcMainnetStoreKey('agreements', process.env.ARC_AGREEMENT_STORE_KEY_MAINNET)
+
 const TEMPLATES = ['fixed_unlock', 'progressive_release', 'milestone'] as const
 type AgreementTemplate = typeof TEMPLATES[number]
 
@@ -35,7 +37,7 @@ export type ArcAgreement = {
   id: string
   partnerId: string
   checkoutMode: DeveloperCheckoutMode
-  environment: 'test'
+  environment: 'live'
   network: 'arc'
   template: AgreementTemplate
   externalId: string
@@ -374,11 +376,11 @@ function requirePreviewPolicy(policy: DeveloperCheckoutPolicy | null) {
   if (!policy.capabilities.includes('arc_agreements')) {
     throw Object.assign(new Error('This project has not enabled Arc Agreements.'), { status: 403 })
   }
-  if (policy.environment !== 'test') {
-    throw Object.assign(new Error('Arc Agreements is currently available with test keys only.'), { status: 403 })
+  if (policy.environment !== 'live') {
+    throw Object.assign(new Error('Arc Agreements is currently available with live keys only.'), { status: 403 })
   }
   if (policy.settlementMode !== 'usdc' || !policy.paymentOptions.some(option => option.network === 'arc')) {
-    throw Object.assign(new Error('Arc Agreements requires an Arc Testnet USDC project route.'), { status: 409 })
+    throw Object.assign(new Error('Arc Agreements requires an Arc Mainnet USDC project route.'), { status: 409 })
   }
   return policy
 }
@@ -523,7 +525,7 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
       const verifiedDirectRecipient = policy.checkoutMode === 'human' && await dependencies.isVerifiedRecipient(policy.partnerId, input.recipient)
       if (!fixedRecipientMatches && !verifiedDirectRecipient) {
         throw Object.assign(
-          new Error("Recipient must match this project's configured Arc Testnet receiving address."),
+          new Error("Recipient must match this project's configured Arc Mainnet receiving address."),
           { status: 409 },
         )
       }
@@ -563,7 +565,7 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
           id,
           partnerId: policy.partnerId,
           checkoutMode: policy.checkoutMode,
-          environment: 'test',
+          environment: 'live',
           network: 'arc',
           ...input,
           termsHash: chainTerms.termsHash,
@@ -591,8 +593,8 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
           payerReviewPath: `/agreements/${agreement.id}#access=${encodeURIComponent(payerAccessToken)}`,
         } : {}),
         nextAction: policy.checkoutMode === 'human'
-          ? 'Send payerReviewPath to the payer. Funding remains restricted to projects authorized for the private Arc Testnet pilot.'
-          : 'Prepare the agent payer calls through /api/v2/agreements/agent. Funding remains restricted to approved Arc Testnet pilot projects.',
+          ? 'Send payerReviewPath to the payer. Funding remains restricted to projects authorized for the private Arc Mainnet pilot.'
+          : 'Prepare the agent payer calls through /api/v2/agreements/agent. Funding remains restricted to approved Arc Mainnet pilot projects.',
       })
     } catch (error) {
       const status = Number((error as Error & { status?: number })?.status) || 500

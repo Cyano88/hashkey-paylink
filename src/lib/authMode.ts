@@ -20,8 +20,8 @@ const buildEnv = (import.meta as ImportMeta & { env?: Record<string, string | un
 export const AUTH_BRIDGE_MODE = runtimeConfig?.auth?.authBridge ?? buildEnv?.VITE_AUTH_BRIDGE ?? 'legacy'
 export const PRIVY_APP_ID = runtimeConfig?.auth?.privyAppId ?? buildEnv?.VITE_PRIVY_APP_ID
 export const PRIVY_AUTH_ENABLED = !!PRIVY_APP_ID && AUTH_BRIDGE_MODE !== 'legacy'
-export const CHECKPOINT_FACTORY_ADDRESS = (
+export const CHECKPOINT_FACTORY_ADDRESS_MAINNET = (
   runtimeConfig?.streampay?.checkpointFactoryAddress
-    ?? buildEnv?.VITE_CHECKPOINT_FACTORY_ADDRESS
-    ?? '0x8eEc65a18f3b5deb0E9Fc5e1eCf8263587b02927'
+    ?? buildEnv?.VITE_CHECKPOINT_FACTORY_ADDRESS_MAINNET
+    ?? ''
 ) as `0x${string}`

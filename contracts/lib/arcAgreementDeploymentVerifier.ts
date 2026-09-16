@@ -12,7 +12,7 @@ import { buildArcAgreementDeploymentManifest } from './arcAgreementDeploymentMan
 
 const TX_HASH = /^0x[0-9a-f]{64}$/i
 const FULL_COMMIT = /^[0-9a-f]{40}$/i
-const ARC_EXPLORER_API = 'https://testnet.arcscan.app/api/v2'
+const ARC_EXPLORER_API = 'https://explorer.arc.io/api/v2'
 const verifiedExplorerProofs = new WeakSet<object>()
 const FACTORY_READ_ABI = [
   'function usdc() view returns (address)',
@@ -245,7 +245,7 @@ export function verifyArcAgreementDeployment(input: {
   }
   const observations = input.observations
   if (observations.chainId !== manifest.network.chainId) {
-    throw new Error('Deployment is not on the approved Arc Testnet chain.')
+    throw new Error('Deployment is not on the approved Arc Mainnet chain.')
   }
   const factoryAddress = requiredAddress(observations.factoryAddress, 'Deployed factory address')
   const runtimeBytecode = requiredHex(observations.runtimeBytecode, 'Deployed factory runtime bytecode')
@@ -253,7 +253,7 @@ export function verifyArcAgreementDeployment(input: {
     throw new Error('Deployed factory runtime bytecode does not match the approved manifest.')
   }
   if (requiredAddress(observations.factoryUsdc, 'Deployed factory USDC') !== manifest.network.usdc) {
-    throw new Error('Deployed factory does not use official Arc Testnet USDC.')
+    throw new Error('Deployed factory does not use official Arc Mainnet USDC.')
   }
   if (requiredAddress(observations.factoryOperator, 'Deployed factory operator') !== manifest.operator) {
     throw new Error('Deployed factory operator does not match the approved manifest.')

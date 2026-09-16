@@ -13,6 +13,7 @@ export function pocketBridgeApiErrorMessage(value: unknown, fallback: string) {
 }
 
 export async function bridgeCircleSolanaWallet(input: {
+  onBeforeSubmit?: () => void
   session: PocketSolanaEmailSession
   destination: Exclude<PocketBridgeNetwork, 'solana'>
   destinationAddress: string
@@ -40,9 +41,11 @@ export async function bridgeCircleSolanaWallet(input: {
 
   const signedTransaction = await signCircleSolanaTransaction({
     session: input.session,
+    bridge: { destination: input.destination, destinationAddress: input.destinationAddress, amount: input.amount, accessToken: input.accessToken },
     rawTransaction: prepared.transaction,
     memo: `Circle Pocket bridge ${input.amount} USDC from Solana to ${input.destination === 'base' ? 'Base' : 'Arbitrum'}`,
   })
+  input.onBeforeSubmit?.()
   const submitResponse = await fetch(POCKET_API.solanaCctpSubmit, {
     method: 'POST',
     headers: { authorization: `Bearer ${input.accessToken}`, 'content-type': 'application/json' },

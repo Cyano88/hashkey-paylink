@@ -131,7 +131,7 @@ const paid = await request(handler)
 assert.equal(paid.statusCode, 200)
 assert.equal(paid.body.status, 'paid')
 assert.equal(payCalls.length, 1)
-assert.equal(payCalls[0].paymentChain, 'ARC-TESTNET')
+assert.equal(payCalls[0].paymentChain, 'ARC')
 assert.equal(
   payCalls[0].serviceUrl,
   `https://app.hashpaylink.com/api/v2/checkouts/agent?id=${checkoutId}&attempt=${paymentAttemptId}`,

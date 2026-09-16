@@ -5,7 +5,7 @@ import { createPocketBalancesHandler } from '../api/pocket/balances.ts'
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 const handler = createPocketBalancesHandler({
   verifyUser: async () => ({ userId: 'load-user' }),
-  readLink: async key => ({ privyUserId: 'load-user', chain: key.split(':').at(-1), purpose: 'payment', circleWalletId: key, circleWalletAddress: key, circleBlockchain: 'ETH', updatedAt: Date.now() }),
+  readLink: async key => ({ privyUserId: 'load-user', chain: key.split(':').at(-1).replace('arc-mainnet', 'arc'), purpose: 'payment', circleWalletId: key, circleWalletAddress: key, circleBlockchain: 'ETH', updatedAt: Date.now() }),
   readBalance: async () => { await delay(50); return 1 },
 })
 const request = async () => {
@@ -16,6 +16,6 @@ const request = async () => {
 const started = performance.now()
 const results = await Promise.all(Array.from({ length: 25 }, request))
 const elapsed = performance.now() - started
-assert.ok(results.every(result => result.statusCode === 200 && result.body.total === 3))
+assert.ok(results.every(result => result.statusCode === 200 && result.body.total === 4))
 assert.ok(elapsed < 1_000, `Concurrent balance read took ${Math.round(elapsed)}ms`)
 console.log(`Pocket load smoke passed: 25 concurrent snapshots in ${Math.round(elapsed)}ms.`)

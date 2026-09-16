@@ -719,7 +719,7 @@ export default function ArcAgreementPayerPage() {
                   </h1>
                 </div>
                 <span className="shrink-0 rounded-full bg-[#111827] px-3 py-1.5 text-[10px] font-semibold text-white dark:bg-white dark:text-gray-950">
-                  Arc Testnet
+                  Arc Mainnet
                 </span>
               </div>
 
@@ -781,14 +781,10 @@ export default function ArcAgreementPayerPage() {
                       <BanknotesIcon className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-blue-950 dark:text-blue-100">Add Arc Testnet USDC to your wallet</p>
+                      <p className="text-xs font-bold text-blue-950 dark:text-blue-100">Arc mainnet wallet balance</p>
                       <p className="mt-1 text-[11px] leading-5 text-blue-800/80 dark:text-blue-200/80">
-                        Before approval, this Circle wallet needs at least {agreement.amount} test USDC. Copy the wallet address above, then use Circle's official faucet. Test USDC has no cash value.
+                        When funding is available, this Circle wallet needs at least {agreement.amount} USDC on Arc mainnet to approve the agreement.
                       </p>
-                      <a href="https://faucet.circle.com/" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-full bg-blue-600 px-4 text-xs font-bold text-white">
-                        Open Circle Faucet
-                        <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-                      </a>
                     </div>
                   </div>
                 </div>

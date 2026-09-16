@@ -176,6 +176,7 @@ export type PocketActivityRow = {
   activityLabel?: string
   direction?: 'in' | 'out'
   recipient?: string
+  destinationTxHash?: string
   destination?: string
   bankName?: string
   bankLast4?: string
@@ -509,13 +510,7 @@ export function isPocketBalancesReadData(value: unknown): value is PocketBalance
     return row.status === 'error' || row.error === undefined
   })
   if (!validRows) return false
-  // Arc is currently a testnet wallet. Keep its balance visible in the network
-  // breakdown, but never include test funds in the spendable mainnet total.
-  const calculatedTotal = value.rows.reduce((sum, row) => (
-    (row as Record<string, unknown>).key === 'arc'
-      ? sum
-      : sum + Number((row as Record<string, unknown>).balance)
-  ), 0)
+  const calculatedTotal = value.rows.reduce((sum, row) => sum + Number((row as Record<string, unknown>).balance), 0)
   return Math.abs(calculatedTotal - value.total) < 1e-9
 }
 

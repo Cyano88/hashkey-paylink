@@ -20,6 +20,7 @@ assert.throws(() => parseUsdcAmount('1.0000001'))
 const records = []
 const ledgerEvents = []
 const handler = createPocketBridgeHandler({
+  verifyRecord: async () => {},
   verifyUser: async () => ({ userId: 'privy-bridge-user', email: 'bridge@example.com' }),
   readLink: async key => ({ circleWalletAddress: key.endsWith(':solana') ? '4QW6qgCGxSFi1zTb1nrqdjuQFCbVuxLiCLNTZb8qovCE' : '0x1111111111111111111111111111111111111111' }),
   readSolanaRecipient: async () => ({ needsSetup: true }),
@@ -68,6 +69,6 @@ assert.equal(status.body.status, 'confirmed')
 assert.equal(status.body.destinationTxHash, '0xdestination')
 
 const arc = await request(handler, { body: { action: 'quote', source: 'arc', destination: 'base', amount: '1' } })
-assert.equal(arc.statusCode, 400)
+assert.equal(arc.statusCode, 200)
 
 console.log('Circle Pocket bridge adapter smoke tests passed.')

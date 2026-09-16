@@ -5,6 +5,8 @@ import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import { cn, formatNgnAmount } from '../../../lib/utils'
 import type { PocketActivityRow } from '../../models/pocketActivity'
 import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
+import PocketBridgeActivityDetails from '../../components/PocketBridgeActivityDetails'
+import type { PocketPendingBridge } from '../../lib/pocketPendingBridge'
 import UnifiedReceipt from '../../../components/UnifiedReceipt'
 import { pocketActivityReceipt, pocketActivityStatus } from '../../lib/pocketReceipt'
 
@@ -15,6 +17,10 @@ export type PocketActivityView = 'all' | 'purchases' | 'bank' | 'pos' | 'collect
 type ActivityKind = 'bank' | 'pos' | 'purchases' | 'collections' | 'wallet'
 
 type PocketActivityPanelProps = {
+  onBridgeCheck?: (bridge: PocketPendingBridge) => Promise<void>
+  bridgeChecking?: (id: string) => boolean
+  bridgeMessages?: Record<string, string>
+  onNewBridge?: () => void
   view: PocketActivityView
   rows: PocketActivityRow[]
   authenticated: boolean
@@ -27,7 +33,7 @@ function activityKind(row: PocketActivityRow): ActivityKind {
   const source = String(row.source ?? '').toLowerCase()
   const settlement = String(row.settlementType ?? '').toLowerCase()
   if (source === 'collection' || source === 'request') return 'collections'
-  if (source === 'wallet-deposit' || source === 'wallet-withdrawal' || source === 'wallet-bridge' || settlement === 'wallet_transfer' || settlement === 'wallet_bridge') return 'wallet'
+  if (source === 'wallet-deposit' || source === 'wallet-withdrawal' || (source === 'wallet-bridge' || source === 'wallet-swap') || settlement === 'wallet_transfer' || settlement === 'wallet_bridge') return 'wallet'
   if (source === 'purchase' || source === 'bills' || settlement === 'bill_payment' || settlement === 'hosted_checkout' || settlement === 'service_funding') return 'purchases'
   if (source === 'bank-send' || source === 'bank_send' || settlement === 'paycrest_onramp') return 'bank'
   if (source === 'bank-receive' || source === 'bank_receive' || source === 'bank-withdraw' || source === 'bank_withdraw') return 'bank'
@@ -44,7 +50,7 @@ function supportedRows(rows: PocketActivityRow[]) {
       || source === 'request'
       || source === 'wallet-deposit'
       || source === 'wallet-withdrawal'
-      || source === 'wallet-bridge'
+      || (source === 'wallet-bridge' || source === 'wallet-swap')
       || settlement === 'wallet_transfer'
       || settlement === 'wallet_bridge'
       || source === 'ngpos'
@@ -77,7 +83,7 @@ function monthLabel(key: string) {
     : 'Earlier activity'
 }
 
-export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefund }: PocketActivityPanelProps) {
+export default function PocketActivityPanel({ view, rows, authenticated, busy, error, onRefund, onBridgeCheck, bridgeChecking, bridgeMessages, onNewBridge }: PocketActivityPanelProps) {
   const [expandedActivityId, setExpandedActivityId] = useState('')
   const [refundBusy, setRefundBusy] = useState('')
   const [refundMessage, setRefundMessage] = useState<Record<string, string>>({})
@@ -129,8 +135,8 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const refundIntentId = row.source === 'bills' ? row.merchantId || '' : ''
                 const claimingRefund = refundBusy === refundIntentId
                 const receipt = pocketActivityReceipt(row)
-                const recordId = `${row.txHash || row.eventId}-${row.ts}-${index}`
-                const collapsible = Boolean(receipt)
+                const recordId = row.bridge ? `bridge:${row.bridge.id}` : `${row.txHash || row.eventId}-${row.ts}-${index}`
+                const collapsible = Boolean(receipt || row.bridge)
                 const expanded = collapsible && expandedActivityId === recordId
                 const supportReference = row.supportReference || row.providerReference || row.billReference || row.receiptId || row.txHash || row.eventId
                 return (
@@ -165,7 +171,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                       </span>
                       <span className="shrink-0 text-right">
                         <span className="block text-xs font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-gray-100">
-                          {amountNgn ? `NGN ${amountNgn}` : Number.isFinite(amountUsdc) ? `${formatPocketDisplayAmount(amountUsdc)} USDC` : 'Receipt'}
+                          {row.source === 'wallet-swap' ? 'Swap' : amountNgn ? `NGN ${amountNgn}` : Number.isFinite(amountUsdc) ? `${formatPocketDisplayAmount(amountUsdc)} USDC` : 'Receipt'}
                         </span>
                         <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{pocketActivityStatus(row)}</span>
                         {supportReference && <button type="button" onClick={event => { event.stopPropagation(); void navigator.clipboard.writeText(supportReference).then(() => { setCopiedReference(recordId); window.setTimeout(() => setCopiedReference(''), 1200) }) }} className="ml-auto mt-1 inline-flex items-center gap-1 font-mono text-[9px] font-semibold text-gray-400" aria-label="Copy full support reference">{supportReference.length > 10 ? `${supportReference.slice(0, 3)}…${supportReference.slice(-3)}` : supportReference}{copiedReference === recordId ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}</button>}
@@ -177,6 +183,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                         {timestamp.toLocaleDateString()} at {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     )}
+                    {row.bridge && expanded && <PocketBridgeActivityDetails bridge={row.bridge} checking={bridgeChecking?.(row.bridge.id) || false} message={bridgeMessages?.[row.bridge.id] || ''} onCheck={() => { if (row.bridge) void onBridgeCheck?.(row.bridge) }} onNewBridge={onNewBridge} />}
                     {receipt && expanded && (
                       <div className="mt-2 space-y-3">
                         <UnifiedReceipt receipt={receipt} />

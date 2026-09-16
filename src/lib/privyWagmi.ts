@@ -6,7 +6,7 @@ import { arcChain } from './chains'
 
 const RPC_URLS = {
   base:     import.meta.env.VITE_RPC_URL_BASE    ?? import.meta.env.VITE_RPC_URL,
-  arc:      import.meta.env.VITE_RPC_URL_ARC     ?? 'https://rpc.testnet.arc.network',
+  arc:      import.meta.env.VITE_RPC_URL_ARC_MAINNET     ?? 'https://rpc.mainnet.arc.io',
   arbitrum: import.meta.env.VITE_RPC_URL_ARB     ?? 'https://arb1.arbitrum.io/rpc',
   polygon:  import.meta.env.VITE_RPC_URL_POLYGON ?? 'https://polygon-rpc.com',
 } as const

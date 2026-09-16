@@ -13,7 +13,7 @@ export type CircleGasStationWalletRecord = {
 export const CIRCLE_GAS_STATION_EVM_NETWORKS = {
   base: { blockchain: 'BASE', environment: 'mainnet' },
   arbitrum: { blockchain: 'ARB', environment: 'mainnet' },
-  arc: { blockchain: 'ARC-TESTNET', environment: 'testnet' },
+  arc: { blockchain: 'ARC', environment: 'mainnet' },
 } as const satisfies Record<CircleGasStationEvmChain, {
   blockchain: string
   environment: 'mainnet' | 'testnet'
@@ -25,7 +25,7 @@ function blockchainMatches(chain: CircleGasStationEvmChain, blockchain: string) 
   if (chain === 'arbitrum') {
     return ['ARB', 'ARBITRUM', 'ARBITRUM-ONE', 'ARBITRUM_ONE', 'ARBITRUMONE'].includes(normalized)
   }
-  return ['ARC-TESTNET', 'ARC_TESTNET', 'ARC'].includes(normalized)
+  return ['ARC'].includes(normalized)
 }
 
 function fail(message: string, status = 409) {

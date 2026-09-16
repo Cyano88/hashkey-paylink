@@ -131,7 +131,7 @@ export function buildArcAgreementDeploymentManifest(input: {
   })
   const canonical = JSON.stringify([
     2,
-    5_042_002,
+    5_042,
     usdc,
     operator,
     sourceCommit,
@@ -148,11 +148,11 @@ export function buildArcAgreementDeploymentManifest(input: {
     status: 'candidate-not-approved',
     broadcastAllowed: false,
     network: {
-      name: 'Arc Testnet',
-      chainId: 5_042_002,
+      name: 'Arc Mainnet',
+      chainId: 5_042,
       circleDomain: 26,
-      rpcUrl: 'https://rpc.testnet.arc.network',
-      explorerUrl: 'https://testnet.arcscan.app',
+      rpcUrl: 'https://rpc.mainnet.arc.io',
+      explorerUrl: 'https://explorer.arc.io',
       usdc,
     },
     operator,

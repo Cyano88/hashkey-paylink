@@ -19,21 +19,21 @@ import * as dotenv from 'dotenv'
 dotenv.config()
 
 const arc = defineChain({
-  id: 5042002,
-  name: 'Arc Testnet',
+  id: 5042,
+  name: 'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls: { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
 const USDC_ARC  = '0x3600000000000000000000000000000000000000' as const
 const TREASURY  = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as const
 
 async function main() {
-  const rawKey = process.env.DEPLOYER_PRIVATE_KEY ?? process.env.RELAYER_PRIVATE_KEY_ARC
-  if (!rawKey) throw new Error('Missing DEPLOYER_PRIVATE_KEY or RELAYER_PRIVATE_KEY_ARC')
+  const rawKey = process.env.ARC_MAINNET_DEPLOYER_PRIVATE_KEY
+  if (!rawKey) throw new Error('Missing ARC_MAINNET_DEPLOYER_PRIVATE_KEY')
 
   const account = privateKeyToAccount(`0x${rawKey.replace(/^0x/, '')}` as `0x${string}`)
-  const rpcUrl  = 'https://rpc.testnet.arc.network'
+  const rpcUrl  = 'https://rpc.mainnet.arc.io'
 
   const publicClient = createPublicClient({ chain: arc, transport: http(rpcUrl) })
   const walletClient = createWalletClient({ account, chain: arc, transport: http(rpcUrl) })

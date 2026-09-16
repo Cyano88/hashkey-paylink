@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { consumePocketPaymentApproval } from './pocket/payment-security.js'
+import { consumePocketPaymentApproval, requiresPocketPaymentApproval } from './pocket/payment-security.js'
 import crypto from 'crypto'
 import { PublicKey } from '@solana/web3.js'
 import { encodeFunctionData, isAddress, parseAbi } from 'viem'
@@ -26,7 +26,7 @@ const EVM_CHAINS = {
     tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
   },
   arc: {
-    blockchain: 'ARC-TESTNET',
+    blockchain: 'ARC',
     tokenAddress: '0x3600000000000000000000000000000000000000',
   },
 } as const
@@ -74,16 +74,15 @@ function solanaBlockchain() {
 
 function circleApiKey(input?: { chain?: string; blockchain?: string }) {
   const chain = input?.chain?.toLowerCase()
-  const needsTestKey = chain === 'arc' || isTestnetBlockchain(input?.blockchain)
+  const needsTestKey = isTestnetBlockchain(input?.blockchain)
   const mainnetKey = circleMainnetApiKey()
   const testnetKey = circleTestnetApiKey()
   if (needsTestKey) {
     if (testnetKey) return testnetKey
     if (mainnetKey?.startsWith('TEST_API')) return mainnetKey
-    throw new Error('Arc Testnet email wallet is not configured')
+    throw new Error('Arc Mainnet email wallet is not configured')
   }
-  if (mainnetKey) return mainnetKey
-  if (testnetKey) return testnetKey
+  if (mainnetKey && !mainnetKey.startsWith('TEST_')) return mainnetKey
   throw new Error('CIRCLE_API_KEY not configured')
 }
 
@@ -132,7 +131,7 @@ async function circleJson<T extends Record<string, unknown> = Record<string, unk
 
 function circleError(res: Response, err: unknown) {
   const e = err as Error & { status?: number; code?: number; body?: CircleResponse }
-  if (e.message === 'CIRCLE_API_KEY not configured' || e.message === 'Arc Testnet email wallet is not configured') {
+  if (e.message === 'CIRCLE_API_KEY not configured' || e.message === 'Arc Mainnet email wallet is not configured') {
     return res.status(503).json({ ok: false, error: e.message })
   }
   const detail = (() => {
@@ -171,7 +170,7 @@ function evmWallet(wallets: CircleUserWallet[], chain: keyof typeof EVM_CHAINS) 
   const aliases: Record<keyof typeof EVM_CHAINS, string[]> = {
     base: ['BASE'],
     arbitrum: ['ARB', 'ARBITRUM', 'ARBITRUM-ONE', 'ARBITRUM_ONE', 'ARBITRUMONE'],
-    arc: ['ARC-TESTNET', 'ARC_TESTNET', 'ARC'],
+    arc: ['ARC'],
   }
   return wallets.find((wallet) => {
     const blockchain = String(wallet.blockchain ?? '').trim().toUpperCase()
@@ -217,7 +216,7 @@ async function readCircleUserWallet(userToken: string, chain: string, walletId: 
   return data.wallet ?? null
 }
 
-async function createCircleGasStationEvmChallenge(input: {
+export async function createCircleGasStationEvmChallenge(input: {
   userToken: string
   walletId: string
   walletAddress: string
@@ -340,16 +339,16 @@ export default async function handler(req: Request, res: Response) {
   if (!action) return res.status(400).json({ ok: false, error: 'Missing action' })
 
   try {
-    if (/^(execute|signPayment)/.test(action)) {
+    if (/^(execute|signPayment|signOwnWalletBridge)/.test(action)) {
       const walletId = String(params.walletId ?? '').trim()
       const walletAddress = String(params.walletAddress ?? params.fromAddress ?? '').trim()
       const link = await findPaymentCircleLinkByWallet(walletId, walletAddress)
       const declaredPocketClient = req.headers['x-pocket-client'] === '1'
-      if (declaredPocketClient || link) {
+      if (declaredPocketClient || link || action === 'executeEvmBridge' || action === 'signOwnWalletBridge') {
         if (!link) return res.status(403).json({ ok: false, error: 'Reconnect your Pocket wallet before paying.' })
         const identity = await verifiedPrivyUser(req)
         if (identity.userId !== link.privyUserId) return res.status(403).json({ ok: false, error: 'This Pocket wallet belongs to a different signed-in account.' })
-        if (declaredPocketClient) {
+        if (await requiresPocketPaymentApproval(identity.userId, action, declaredPocketClient)) {
           const approved = await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval'] ?? ''), identity.userId)
           if (!approved) return res.status(401).json({ ok: false, error: 'Approve this payment with fingerprint, face, or your Pocket PIN.' })
         }
@@ -621,18 +620,19 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'executeEvmBridge') {
-      const { userToken, walletId, walletAddress, chain, destination, destinationAddress, amountUnits } = params
+      const { userToken, walletId, walletAddress, chain, destination, destinationAddress, amountUnits, idempotencyKey } = params
       if (!userToken || !walletId || !walletAddress || !chain || !destination || !destinationAddress || !amountUnits) {
         return res.status(400).json({ ok: false, error: 'Missing bridge parameters' })
       }
-      if ((chain !== 'base' && chain !== 'arbitrum') || (destination !== 'base' && destination !== 'arbitrum' && destination !== 'solana') || chain === destination) {
+      if (idempotencyKey && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) return res.status(400).json({ ok: false, error: 'Invalid bridge idempotency key.' })
+      if ((chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') || (destination !== 'base' && destination !== 'arbitrum' && destination !== 'arc' && destination !== 'solana') || chain === destination) {
         return res.status(400).json({ ok: false, error: 'Unsupported mainnet bridge route' })
       }
       if (!isAddress(walletAddress) || (destination !== 'solana' && !isAddress(destinationAddress))) {
         return res.status(400).json({ ok: false, error: 'Invalid bridge wallet address' })
       }
       const ownedWallets = await listCircleUserWallets(userToken, chain)
-      if (!ownedWallets.some(wallet => wallet.address.toLowerCase() === destinationAddress.toLowerCase())) {
+      if (!ownedWallets.some(wallet => wallet.address.toLowerCase() === destinationAddress.toLowerCase() && wallet.blockchain === (destination === 'solana' ? 'SOL' : EVM_CHAINS[destination as keyof typeof EVM_CHAINS].blockchain))) {
         return res.status(403).json({ ok: false, error: 'Bridge destination must be one of your Circle Pocket wallets' })
       }
       const transferUnits = BigInt(amountUnits)
@@ -678,11 +678,16 @@ export default async function handler(req: Request, res: Response) {
         walletAddress,
         chain,
         refId: `circle-pocket-${chain}-to-${destination}`,
+        idempotencyKey,
         callData: batchCallData,
       })
       return res.json({ ok: true, ...data })
     }
 
+    // Legacy vault calls require independently verified mainnet deployments.
+    if (['executeArcStream', 'executeArcCheckpointVault', 'executeArcCheckpointRefund', 'executeArcArenaJoin', 'executeArcArenaRefund'].includes(action)) {
+      return res.status(503).json({ ok: false, error: 'This Arc contract feature is awaiting its verified mainnet deployment.' })
+    }
     if (action === 'executeArcStream') {
       const { userToken, walletId, walletAddress, factoryAddress, recipient, amountUnits, startTime, endTime, salt, predictedVault } = params
       if (!userToken || !walletId || !walletAddress || !factoryAddress || !recipient || !amountUnits || !startTime || !endTime || !salt || !predictedVault) {
@@ -963,7 +968,11 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...result })
     }
 
-    if (action === 'signPayment') {
+    if (action === 'signOwnWalletBridge') {
+      const { validatePocketSolanaBridgeSigning } = await import('./pocket/solana-cctp-relay.js')
+      await validatePocketSolanaBridgeSigning(req, params)
+    }
+    if (action === 'signPayment' || action === 'signOwnWalletBridge') {
       const { userToken, walletId, rawTransaction, memo } = params
       if (!userToken || !walletId || !rawTransaction) {
         return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, or rawTransaction' })
@@ -1018,4 +1027,23 @@ function normalizeSolanaUsdcAmount(value: string | undefined) {
     throw Object.assign(new Error('USDC amount must be greater than zero.'), { status: 400 })
   }
   return fractionText ? `${whole}.${fractionText}` : whole.toString()
+}
+
+export async function readCircleArcSwapChallenge(input: { userToken: string; walletId: string; walletAddress: string; challengeId: string }) {
+  const owned = await readCircleUserWallet(input.userToken, 'arc', input.walletId)
+  requireCircleGasStationEvmWallet({ chain: 'arc', walletId: input.walletId, walletAddress: input.walletAddress, wallets: owned ? [owned] : [] })
+  const response = await circleJson<{ challenge?: Record<string, unknown> }>('/v1/w3s/user/challenges/' + encodeURIComponent(input.challengeId), { method: 'GET', userToken: input.userToken })
+  const challenge = response.challenge
+  if (!challenge) return { status: 'pending' as const }
+  const ids = challenge.correlationIds
+  const transactionId = Array.isArray(ids) && typeof ids[0] === 'string' ? ids[0] : ''
+  if (!transactionId) {
+    const state = String(challenge.status ?? challenge.state ?? '').toUpperCase()
+    return { status: ['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state) ? 'failed' as const : 'pending' as const }
+  }
+  const data = await circleJson<{ transaction?: Record<string, unknown> }>('/v1/w3s/transactions/' + encodeURIComponent(transactionId), { method: 'GET', userToken: input.userToken })
+  const tx = data.transaction
+  if (!tx || tx.walletId !== input.walletId || tx.blockchain !== 'ARC') return { status: 'pending' as const }
+  if (String(tx.state ?? tx.status).toUpperCase() === 'FAILED') return { status: 'failed' as const }
+  return { status: 'pending' as const, txHash: typeof tx.txHash === 'string' ? tx.txHash : undefined }
 }

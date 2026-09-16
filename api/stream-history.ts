@@ -4,13 +4,13 @@ import { createPublicClient, defineChain, http, isAddress, parseAbi, type Addres
 const DEFAULT_LOG_CHUNK_SIZE = 10_000n
 const DEFAULT_LOOKBACK_BLOCKS = 50_000n
 const MAX_ROWS = 25
-const PUBLIC_ARC_RPC = 'https://rpc.testnet.arc.network'
+const PUBLIC_ARC_RPC = 'https://rpc.mainnet.arc.io'
 
 const arcChain = defineChain({
-  id: 5042002,
-  name: 'Arc Testnet',
+  id: 5042,
+  name: 'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls: { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
 const STREAM_FACTORY_ABI = parseAbi([
@@ -83,8 +83,8 @@ export default async function handler(req: Request, res: Response) {
   if (sender && !isAddress(sender)) return res.status(400).json({ ok: false, error: 'Invalid sender address' })
   if (!recipient && !sender) return res.status(400).json({ ok: false, error: 'recipient or sender is required' })
 
-  const factory = process.env.STREAM_FACTORY_ADDRESS
-  if (!factory || !isAddress(factory)) return res.status(500).json({ ok: false, error: 'STREAM_FACTORY_ADDRESS is not configured' })
+  const factory = process.env.STREAM_FACTORY_ADDRESS_MAINNET
+  if (!factory || !isAddress(factory)) return res.status(500).json({ ok: false, error: 'STREAM_FACTORY_ADDRESS_MAINNET is not configured' })
 
   const client = createPublicClient({
     chain: arcChain,

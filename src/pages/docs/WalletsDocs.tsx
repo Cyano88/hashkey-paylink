@@ -21,7 +21,7 @@ export default function WalletsDocs() {
 
       <Section title="Connected wallets">
         <SubSection title="EVM">
-          <p>Base, Arbitrum, and Arc Testnet support EVM wallet addresses. Existing connected-wallet paths remain available where the checkout flow needs them.</p>
+          <p>Base, Arbitrum, and Arc Mainnet support EVM wallet addresses. Existing connected-wallet paths remain available where the checkout flow needs them.</p>
         </SubSection>
         <SubSection title="Solana">
           <p>Solana recipients use base58 public keys. Phantom and Solflare are common wallets for Solana USDC payments.</p>
@@ -32,13 +32,13 @@ export default function WalletsDocs() {
         <InfoBox type="warning">The older Send via Address checkout is not currently offered. Its backend implementation is retained for a possible future rollout if there is verified demand.</InfoBox>
       </Section>
 
-      <Section title="Arc Testnet setup">
-        <p>For Arc Testnet testing, add the network manually if your wallet does not detect it:</p>
+      <Section title="Arc Mainnet setup">
+        <p>For Arc Mainnet, add the network manually if your wallet does not detect it:</p>
         <ul className="list-none space-y-1 mt-2 font-mono text-xs text-gray-600 dark:text-gray-400">
-          <li>Network name: <Code>Arc Testnet</Code></li>
-          <li>RPC URL: <Code>https://rpc.testnet.arc.network</Code></li>
-          <li>Chain ID: <Code>5042002</Code></li>
-          <li>Explorer: <Code>https://testnet.arcscan.app</Code></li>
+          <li>Network name: <Code>Arc Mainnet</Code></li>
+          <li>RPC URL: <Code>https://rpc.mainnet.arc.io</Code></li>
+          <li>Chain ID: <Code>5042</Code></li>
+          <li>Explorer: <Code>https://explorer.arc.io</Code></li>
         </ul>
       </Section>
 

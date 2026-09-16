@@ -384,7 +384,7 @@ function ProjectOperations({ project, busy, reason, setReason, onOperate, pilotL
       </div>
       <div className="mt-4 space-y-2">
         {project.settlementMode === 'usdc'
-          ? project.networks.map(network => <RouteRow key={network} label={network === 'arc' ? 'Arc Testnet' : network[0].toUpperCase() + network.slice(1)} value={project.recipients[network] ?? 'Missing'} />)
+          ? project.networks.map(network => <RouteRow key={network} label={network === 'arc' ? 'Arc Mainnet' : network[0].toUpperCase() + network.slice(1)} value={project.recipients[network] ?? 'Missing'} />)
           : <>
             <RouteRow label="Verified bank" value={`${project.bankName || 'Missing'} · ${project.bankAccountName || 'Account unavailable'} · ••••${project.bankAccountLast4 || '----'}`} />
             <RouteRow label="Base refund" value={project.refundAddress || 'Missing'} />
@@ -431,13 +431,13 @@ function ArcPilotControl({ project, busy, limits, setLimits, reason, setReason, 
   if (!project.capabilities.includes('arc_agreements')) return null
   const pilot = project.arcAgreementPilot
   const status = pilot?.status === 'approved' ? 'Activation approved' : pilot?.status === 'disabled' ? 'Activation disabled' : pilot ? 'Draft only' : 'Legacy pilot'
-  const activeTestKey = project.keys.some(key => !key.revokedAt && (key.environment === 'test' || key.prefix.startsWith('hpl_test_')))
-  const ready = (project.checkoutMode === 'human' || project.checkoutMode === 'agentic') && project.settlementMode === 'usdc' && project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended' && project.networks.includes('arc') && Boolean(project.recipients.arc) && project.webhookConfigured && activeTestKey
+  const activeLiveKey = project.keys.some(key => !key.revokedAt && (key.environment === 'live' || key.prefix.startsWith('hpl_test_')))
+  const ready = (project.checkoutMode === 'human' || project.checkoutMode === 'agentic') && project.settlementMode === 'usdc' && project.settlementStatus === 'ready' && project.operationalStatus !== 'suspended' && project.networks.includes('arc') && Boolean(project.recipients.arc) && project.webhookConfigured && activeLiveKey
   const update = (key: keyof typeof limits, value: string) => setLimits({ ...limits, [key]: value })
   return <section className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-400/20 dark:bg-blue-400/[0.07]">
     <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-gray-950 dark:text-white">Arc Agreement pilot</p><p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Durable project approval. Global runtime controls remain the emergency ceiling.</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-blue-200">{status}</span></div>
     <div className="mt-4 grid grid-cols-2 gap-2 text-[10px] text-gray-500 dark:text-gray-400 sm:grid-cols-5">
-      {[[project.checkoutMode === 'agentic' ? 'Agentic' : 'Human', project.checkoutMode === 'human' || project.checkoutMode === 'agentic'], ['USDC ready', project.settlementMode === 'usdc' && project.settlementStatus === 'ready'], ['Arc route', project.networks.includes('arc') && Boolean(project.recipients.arc)], ['Webhook', project.webhookConfigured], ['Test key', activeTestKey]].map(([label, ok]) => <span key={String(label)} className={cn('rounded-lg border px-2 py-2 text-center', ok ? 'border-emerald-200 text-emerald-700 dark:border-emerald-400/20 dark:text-emerald-300' : 'border-amber-200 text-amber-700 dark:border-amber-400/20 dark:text-amber-300')}>{label}</span>)}
+      {[[project.checkoutMode === 'agentic' ? 'Agentic' : 'Human', project.checkoutMode === 'human' || project.checkoutMode === 'agentic'], ['USDC ready', project.settlementMode === 'usdc' && project.settlementStatus === 'ready'], ['Arc route', project.networks.includes('arc') && Boolean(project.recipients.arc)], ['Webhook', project.webhookConfigured], ['Live key', activeLiveKey]].map(([label, ok]) => <span key={String(label)} className={cn('rounded-lg border px-2 py-2 text-center', ok ? 'border-emerald-200 text-emerald-700 dark:border-emerald-400/20 dark:text-emerald-300' : 'border-amber-200 text-amber-700 dark:border-amber-400/20 dark:text-amber-300')}>{label}</span>)}
     </div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <PilotField label="Per agreement · USDC" value={limits.maxAgreementUsdc} onChange={value => update('maxAgreementUsdc', value)} />

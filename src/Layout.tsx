@@ -307,7 +307,7 @@ export default function Layout() {
     { label: 'World Cup', id: 'worldcup', to: makePolyDeskNavTo('worldcup'), active: activePolyDeskNav === 'worldcup' },
     { label: 'LP Scout', id: 'lp-scout', to: makePolyDeskNavTo('lp-scout'), active: activePolyDeskNav === 'lp-scout' },
   ] as const
-  const agentNetworks = [CHAIN_META.base, CHAIN_META.arbitrum, { label: 'Arc Testnet', explorerUrl: CHAIN_META.arc.explorerUrl }] as const
+  const agentNetworks = [CHAIN_META.base, CHAIN_META.arbitrum, { label: 'Arc Mainnet', explorerUrl: CHAIN_META.arc.explorerUrl }] as const
   // Both the pay page and the dashboard show a locked chain pill from the URL param
   const pageNetParam = (isPayPage || isDashPage) ? (getPaylinkParam(searchParams, 'net', 'n') as ChainKey | '') : ''
   const activeNet = (pageNetParam && SUPPORTED_NETWORK_KEYS.has(pageNetParam)) ? pageNetParam : null

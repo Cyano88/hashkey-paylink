@@ -7,14 +7,14 @@ const capability = `agrp_${'p'.repeat(43)}`
 const email = 'payer@example.com'
 const policy = {
   partnerId,
-  environment: 'test',
+  environment: 'live',
   checkoutMode: 'human',
   capabilities: ['arc_agreements'],
 }
 const agreement = { id: agreementId, partnerId, checkoutMode: 'human', payerEmail: email }
 const request = (payerEmail = email) => ({
   body: { agreementId, payerEmail },
-  headers: { 'x-api-key': 'hpl_test_project', 'x-arc-agreement-access': capability },
+  headers: { 'x-api-key': 'hpl_live_project', 'x-arc-agreement-access': capability },
 })
 const dependencies = {
   resolvePolicy: async () => policy,
@@ -35,8 +35,10 @@ await assert.rejects(
   error => error.status === 404,
 )
 await assert.rejects(
-  verifiedProjectPayer({ ...request(), headers: { 'x-api-key': 'hpl_test_project' } }, dependencies),
+  verifiedProjectPayer({ ...request(), headers: { 'x-api-key': 'hpl_live_project' } }, dependencies),
   error => error.status === 400,
 )
 
 console.log('Arc Agreement project payer smoke test passed.')
+
+await assert.rejects(() => verifiedProjectPayer(request(), { ...dependencies, resolvePolicy: async () => ({ ...policy, environment: 'test' }) }), error => error.status === 401)

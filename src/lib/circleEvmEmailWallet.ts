@@ -44,10 +44,11 @@ export type CircleEvmEmailSession = {
   chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
   appId?: string
   productionEvmTopology?: PocketProductionEvmTopology
+  arcMainnetWallet?: CircleEvmWallet
 }
 
 const APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID as string | undefined
-const ARC_TESTNET_APP_ID = import.meta.env.VITE_CIRCLE_USER_WALLET_APP_ID_ARC_TESTNET as string | undefined
+
 const ENABLED = import.meta.env.VITE_CIRCLE_EVM_EMAIL_ENABLED !== 'false'
 const CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS = 10 * 60 * 1000
 const CIRCLE_DEVICE_ID_STORAGE_PREFIX = 'hashpaylink:circle-device-id:v1'
@@ -55,7 +56,7 @@ const POCKET_NATIVE_ORIGIN = 'https://pocket.hashpaylink.com'
 let runtimeConfigPromise: Promise<{
   circle?: {
     userWalletAppId?: string
-    arcTestnetUserWalletAppId?: string
+    arcUserWalletAppId?: string
     evmEmailEnabled?: boolean
   }
 }> | null = null
@@ -63,7 +64,7 @@ let runtimeConfigPromise: Promise<{
 const CHAIN_CONFIG = {
   base: { blockchain: 'BASE', label: 'Base' },
   arbitrum: { blockchain: 'ARB', label: 'Arbitrum' },
-  arc: { blockchain: 'ARC-TESTNET', label: 'Arc' },
+  arc: { blockchain: 'ARC', label: 'Arc' },
 } as const
 
 function circleRuntimeUrl(path: string) {
@@ -75,7 +76,7 @@ export function canUseCircleEvmEmailWallet(chain: ChainKey) {
 }
 
 function appIdForChain(chain: ChainKey) {
-  return chain === 'arc' ? (ARC_TESTNET_APP_ID ?? APP_ID) : APP_ID
+  return APP_ID
 }
 
 async function runtimePublicConfig() {
@@ -99,7 +100,7 @@ async function appIdForChainAsync(chain: ChainKey) {
   const config = await runtimePublicConfig().catch(() => null)
   const circle = config?.circle
   if (circle?.evmEmailEnabled === false) return ''
-  if (chain === 'arc') return circle?.arcTestnetUserWalletAppId || circle?.userWalletAppId || baked || ''
+  if (chain === 'arc') return circle?.arcUserWalletAppId || circle?.userWalletAppId || baked || ''
   return circle?.userWalletAppId || baked || ''
 }
 
@@ -395,7 +396,7 @@ async function circleWalletApi<T>(
   const action = typeof payload.action === 'string' ? payload.action : 'request'
   const paymentAction = /^(execute|signPayment)/.test(action)
   const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.pathname.includes('/pocket'))
-  const approval = pocketClient ? takePocketPaymentApproval() : null
+  const approval = pocketClient && action !== 'executeEvmBridge' ? takePocketPaymentApproval() : null
   const scope = typeof payload.chain === 'string'
     ? payload.chain
     : typeof payload.blockchain === 'string'
@@ -514,6 +515,7 @@ function executeChallengeWithTimeout(sdk: W3SSdk, challengeId: string, message: 
 }
 
 function authenticatedSdk(session: CircleEvmEmailSession) {
+  if (session.chain === 'arc' && session.wallet.blockchain !== 'ARC') throw new Error('Reconnect this wallet on Arc mainnet.')
   const appId = session.appId ?? appIdForChain(session.chain)
   if (!appId) throw new Error('Circle email wallet is not configured.')
   const sdk = new W3SSdk({ appSettings: { appId } })
@@ -635,7 +637,7 @@ async function getWalletSnapshot(userToken: string, chain: Extract<ChainKey, 'ba
   return { wallet: data.wallet ?? null, wallets: data.wallets ?? [] }
 }
 
-async function ensureArcTestnetWallet(
+async function ensureArcMainnetWallet(
   sdk: W3SSdk,
   userToken: string,
   encryptionKey: string,
@@ -753,6 +755,13 @@ async function ensureProductionEvmWallet(
   return { wallet, productionEvmTopology: topology }
 }
 
+export async function resumeCircleArcMainnetWallet(session: CircleEvmEmailSession): Promise<CircleEvmEmailSession> {
+  if (session.chain === 'arc' && session.wallet.blockchain !== 'ARC') throw new Error('Reconnect your wallet on Arc mainnet.')
+  const sdk = authenticatedSdk(session)
+  const { wallet } = await ensureArcMainnetWallet(sdk, session.userToken, session.encryptionKey, 'arc')
+  return { ...session, chain: 'arc', wallet, arcMainnetWallet: wallet }
+}
+
 export async function connectCircleEvmEmailWallet(
   email: string,
   chain: ChainKey,
@@ -859,7 +868,7 @@ export async function connectCircleEvmEmailWallet(
     .finally(() => removeCircleOtpCancel())
 
   const ensured = chain === 'arc'
-    ? await ensureArcTestnetWallet(sdk, login.userToken, login.encryptionKey, chain)
+    ? await ensureArcMainnetWallet(sdk, login.userToken, login.encryptionKey, chain)
     : await ensureProductionEvmWallet(sdk, login.userToken, login.encryptionKey, chain)
   return {
     userToken: login.userToken,
@@ -1085,9 +1094,25 @@ async function pollChallengeTransactionId(session: CircleEvmEmailSession, challe
   return null
 }
 
+export async function readCircleEvmBridgeChallenge(session: CircleEvmEmailSession, challengeId: string) {
+  const data = await circleWalletApi<{ challenge?: Record<string, unknown> }>({ action: 'getChallenge', userToken: session.userToken, challengeId, chain: session.chain })
+  const challenge = data.challenge
+  const state = transactionState(challenge)
+  const transactionId = challengeCorrelationId(challenge)
+  const failedWithoutTransaction = Boolean(challenge && !transactionId && ['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state))
+  if (!transactionId) return { failedWithoutTransaction, sourceFailed: false }
+  const result = await circleWalletApi<{ transaction?: Record<string, unknown> }>({ action: 'getTransaction', userToken: session.userToken, transactionId, chain: session.chain })
+  const transaction = result.transaction
+  const sourceFailed = Boolean(transaction && transaction.walletId === session.wallet.id && transaction.blockchain === session.wallet.blockchain && transactionState(transaction) === 'FAILED')
+  return { failedWithoutTransaction, sourceFailed }
+}
+
 export async function bridgeCircleEvmEmailWallet(params: {
+  privyAccessToken?: string
+  idempotencyKey?: string
+  onChallenge?: (challengeId: string) => void
   session: CircleEvmEmailSession
-  destination: 'base' | 'arbitrum' | 'solana'
+  destination: 'base' | 'arbitrum' | 'arc' | 'solana'
   destinationAddress: string
   amount: string
 }) {
@@ -1106,6 +1131,7 @@ export async function bridgeCircleEvmEmailWallet(params: {
     transaction?: Record<string, unknown>
   }>({
     action: 'executeEvmBridge',
+    idempotencyKey: params.idempotencyKey,
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
     walletAddress: params.session.wallet.address,
@@ -1113,8 +1139,9 @@ export async function bridgeCircleEvmEmailWallet(params: {
     destination: params.destination,
     destinationAddress: params.destinationAddress,
     amountUnits: amountUnits.toString(),
-  })
+  }, { privyAccessToken: params.privyAccessToken })
   if (!challenge.challengeId) throw new Error('Circle did not return a bridge confirmation challenge.')
+  params.onChallenge?.(challenge.challengeId)
   const result = await executeChallengeWithTimeout(
     sdk,
     challenge.challengeId,
@@ -1420,7 +1447,7 @@ export async function signCircleArcStreamClaim(params: {
     domain: {
       name: 'StreamVault',
       version: '1',
-      chainId: 5042002,
+      chainId: 5042,
       verifyingContract: params.vaultAddress,
     },
     message: {
@@ -1473,7 +1500,7 @@ export async function signCircleArcStreamCancel(params: {
     domain: {
       name: 'StreamVault',
       version: '1',
-      chainId: 5042002,
+      chainId: 5042,
       verifyingContract: params.vaultAddress,
     },
     message: {

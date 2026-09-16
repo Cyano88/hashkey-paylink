@@ -322,7 +322,7 @@ export default function AgreementDashboard() {
     <section className="w-full max-w-5xl py-8 sm:py-12">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Arc Testnet</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">Arc Mainnet</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-gray-950 dark:text-white">Agreements</h1>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Protected USDC agreements on Arc.</p>
         </div>
@@ -398,7 +398,7 @@ export default function AgreementDashboard() {
                   </div>
                   {active.chain?.escrow && (
                     <a
-                      href={`https://testnet.arcscan.app/address/${active.chain.escrow}`}
+                      href={`https://explorer.arc.io/address/${active.chain.escrow}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label="View escrow on Arcscan"
@@ -422,7 +422,7 @@ export default function AgreementDashboard() {
                   <UnifiedReceipt receipt={active.receipt} className="mt-5" />
                 ) : active.chain?.escrow && ['completed', 'cancelled', 'refunded'].includes(active.status) && (
                   <a
-                    href={`https://testnet.arcscan.app/address/${active.chain.escrow}`}
+                    href={`https://explorer.arc.io/address/${active.chain.escrow}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 transition-colors hover:text-gray-950 dark:text-gray-300 dark:hover:text-white"

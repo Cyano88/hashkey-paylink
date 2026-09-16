@@ -1,10 +1,10 @@
+import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { Request, Response } from 'express'
 import { getAddress, isAddress } from 'viem'
 import { resolveDeveloperApiKeyPolicy, type DeveloperCheckoutPolicy } from './developer-projects.js'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
 
-const DEFAULT_STORE_KEY = 'hashpaylink:arc-agreement-verified-recipients:v1'
 const MAX_CLOCK_SKEW_SECONDS = 300
 const MAX_RECIPIENTS_PER_PROJECT = 10_000
 
@@ -22,7 +22,7 @@ const defaults: Dependencies = { hasStore: hasRenderDurableStore, read: readDura
 
 function clean(value: unknown, maximum: number) { return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, maximum) }
 function fail(message: string, status: number): never { throw Object.assign(new Error(message), { status }) }
-function storeKey(env: NodeJS.ProcessEnv) { return clean(env.ARC_AGREEMENT_VERIFIED_RECIPIENT_STORE_KEY ?? DEFAULT_STORE_KEY, 160) }
+function storeKey(env: NodeJS.ProcessEnv) { return arcMainnetStoreKey('verified-recipients', env.ARC_AGREEMENT_VERIFIED_RECIPIENT_STORE_KEY_MAINNET) }
 function safeStore(value?: RecipientStore): RecipientStore { return value?.schema === 1 && value.projects ? { schema: 1, projects: { ...value.projects } } : { schema: 1, projects: {} } }
 function signaturePayload(apiKey: string, timestamp: string, recipient: string, accountReference: string) { return 'v1\n' + createHash('sha256').update(apiKey).digest('hex') + '\n' + timestamp + '\n' + recipient.toLowerCase() + '\n' + accountReference }
 
@@ -46,7 +46,7 @@ export function createVerifiedArcRecipientsHandler(overrides: Partial<Dependenci
       if (!dependencies.hasStore()) fail('Verified recipient storage is unavailable.', 503)
       const policy = await dependencies.policy(req)
       if (!policy) fail('A valid developer API key is required.', 401)
-      if (policy.environment !== 'test' || policy.checkoutMode !== 'human' || !policy.capabilities.includes('arc_agreements')) fail('Verified recipients are available only to human Arc Agreement projects.', 403)
+      if (policy.environment !== 'live' || policy.checkoutMode !== 'human' || !policy.capabilities.includes('arc_agreements')) fail('Verified recipients are available only to human Arc Agreement projects.', 403)
       const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body as Record<string, unknown> : {}
       const recipientText = clean(body.recipient, 42)
       const accountReference = clean(body.accountReference, 64).toLowerCase()

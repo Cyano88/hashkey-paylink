@@ -158,7 +158,7 @@ function sessionForNetwork(
   walletAddress: string,
 ) {
   const expectedAddress = walletAddress.toLowerCase()
-  if (session.chain === network && session.wallet.address.toLowerCase() === expectedAddress) return session
+  if ((network !== 'arc' || session.wallet.blockchain === 'ARC') && session.chain === network && session.wallet.address.toLowerCase() === expectedAddress) return session
   if (network === 'base' || network === 'arbitrum') {
     const wallet = session.productionEvmTopology?.wallets?.[network]
     if (wallet?.address?.toLowerCase() === expectedAddress) return { ...session, chain: network, wallet }

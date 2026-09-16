@@ -106,7 +106,7 @@ type Dependencies = {
 const defaults: Dependencies = {
   verifyUser: verifiedPrivyUser,
   readAgreement: readArcAgreementByPayerAccess,
-  resolvePolicy: projectId => resolveDeveloperProjectPolicy(projectId, 'test'),
+  resolvePolicy: projectId => resolveDeveloperProjectPolicy(projectId, 'live'),
   readLink: readCircleLink,
   writeLink: writeCircleLink,
   verifyWallet: verifyCircleLinkWallet,
@@ -312,7 +312,7 @@ function linkedArcWallet(link: CircleLinkRecord | null, identity: VerifiedLinkUs
     || link.privyUserId !== identity.userId
     || link.chain !== 'arc'
     || (link.purpose ?? 'payment') !== 'payment'
-    || link.circleBlockchain !== 'ARC-TESTNET'
+    || link.circleBlockchain !== 'ARC'
     || !isAddress(link.circleWalletAddress)
   ) {
     return null
@@ -371,9 +371,9 @@ const PAYER_POLICY_CONFLICTS = [
   'Arc Agreement activation is disabled.',
   'This developer project has reached its active Arc Agreement limit.',
   'This developer project has reached its Arc Agreement daily-volume limit.',
-  'Agreement amount exceeds the configured testnet activation ceiling.',
-  'Agreement duration exceeds the configured testnet activation ceiling.',
-  'Agreement recipient must match the project Arc Testnet recipient.',
+  'Agreement amount exceeds the configured mainnet activation ceiling.',
+  'Agreement duration exceeds the configured mainnet activation ceiling.',
+  'Agreement recipient must match the project Arc Mainnet recipient.',
   'Operator action requires an independent reviewer.',
   'The USDC has already been returned.',
   'This agreement has already been cancelled and returned.',
@@ -388,8 +388,8 @@ function payerFailure(error: unknown) {
       status: 409,
       message: message === 'Arc Agreement activation is disabled.'
         ? 'Agreement activation is currently paused.'
-        : message === 'Agreement recipient must match the project Arc Testnet recipient.'
-          ? "Agreement recipient does not match this project's configured Arc Testnet receiving address. Create a new agreement with the configured recipient."
+        : message === 'Agreement recipient must match the project Arc Mainnet recipient.'
+          ? "Agreement recipient does not match this project's configured Arc Mainnet receiving address. Create a new agreement with the configured recipient."
         : message === 'Operator action requires an independent reviewer.'
           ? 'Use the payer account that funded this agreement to review the delivery.'
         : message,
@@ -511,7 +511,7 @@ export function createArcAgreementPayerHandler(overrides: Partial<Dependencies> 
         }
         const circleUserToken = clean(req.body?.circleUserToken, 8_000)
         if (!circleUserToken) throw fail('A fresh Circle wallet session is required.', 401)
-        if (!wallet.id || !isAddress(wallet.address) || !['ARC', 'ARC-TESTNET', 'ARC_TESTNET'].includes(wallet.blockchain)) {
+        if (!wallet.id || !isAddress(wallet.address) || !['ARC'].includes(wallet.blockchain)) {
           throw fail('A valid Circle Arc wallet is required.', 400)
         }
         await dependencies.verifyWallet({ userToken: circleUserToken, chain: 'arc', wallet })
@@ -522,7 +522,7 @@ export function createArcAgreementPayerHandler(overrides: Partial<Dependencies> 
           purpose: 'payment',
           circleWalletId: wallet.id,
           circleWalletAddress: getAddress(wallet.address),
-          circleBlockchain: 'ARC-TESTNET',
+          circleBlockchain: 'ARC',
           updatedAt: Date.now(),
         }
         await dependencies.writeLink(linkKey, linkRecord)

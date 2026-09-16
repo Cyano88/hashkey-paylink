@@ -28,8 +28,8 @@ type PocketHomeControlsProps = {
   activityRows: PocketActivityRow[]
   activityBusy: boolean
   activityError: string
-  bridgeDestinations: Array<'base' | 'arbitrum' | 'solana'>
-  bridgeDestination: 'base' | 'arbitrum' | 'solana'
+  bridgeDestinations: Array<'base' | 'arbitrum' | 'arc' | 'solana'>
+  bridgeDestination: 'base' | 'arbitrum' | 'arc' | 'solana'
   bridgeAmount: string
   bridgeQuote: { fee: string; total: string; receive: string } | null
   bridgeStatus: 'idle' | 'quoting' | 'confirming' | 'bridging' | 'successful'
@@ -43,7 +43,7 @@ type PocketHomeControlsProps = {
   onWithdrawAmountChange: (amount: string) => void
   onWithdrawMax: () => void
   onWithdraw: () => void
-  onBridgeDestinationChange: (network: 'base' | 'arbitrum' | 'solana') => void
+  onBridgeDestinationChange: (network: 'base' | 'arbitrum' | 'arc' | 'solana') => void
   onBridgeAmountChange: (amount: string) => void
   onBridgeMax: () => void
   onBridge: () => void
@@ -172,7 +172,6 @@ export default function PocketHomeControls({
                 <img src={network.logo} alt="" className="h-full w-full object-contain grayscale" />
               </span>
               <span className="truncate">{network.label}</span>
-              {network.key === 'arc' && <span className="rounded-full bg-blue-500/10 px-1.5 text-[7px] font-black uppercase tracking-wide text-blue-600 dark:text-blue-300">Test</span>}
             </button>
           ))}
           </div>
@@ -319,7 +318,7 @@ export default function PocketHomeControls({
                   value: destination,
                   label: networks.find(item => item.key === destination)?.label ?? destination,
                 }))}
-                onChange={value => onBridgeDestinationChange(value as 'base' | 'arbitrum' | 'solana')}
+                onChange={value => onBridgeDestinationChange(value as 'base' | 'arbitrum' | 'arc' | 'solana')}
                 ariaLabel="Select bridge destination network"
                 buttonClassName="min-h-12 rounded-2xl px-3 font-black"
               />

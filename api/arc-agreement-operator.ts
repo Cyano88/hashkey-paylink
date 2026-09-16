@@ -23,7 +23,7 @@ export type ArcAgreementPreparedOperatorCall = Readonly<{
   idempotencyKey: string
   walletId: string
   operatorAddress: `0x${string}`
-  network: 'ARC-TESTNET'
+  network: 'ARC'
   contractAddress: `0x${string}`
   feeLevel: 'MEDIUM'
   refId: string
@@ -92,7 +92,7 @@ function baseRequest(input: {
     idempotencyKey: requiredIdempotencyKey(input.idempotencyKey),
     walletId: operatorWallet.walletId,
     operatorAddress: operatorWallet.address,
-    network: 'ARC-TESTNET' as const,
+    network: 'ARC' as const,
     contractAddress: getAddress(snapshot.escrow),
     feeLevel: 'MEDIUM' as const,
     refId: input.refId,
@@ -232,7 +232,7 @@ export function restoreArcAgreementOperatorCallForStatus(input: {
     idempotencyKey,
     walletId: operatorWallet.walletId,
     operatorAddress: operatorWallet.address,
-    network: 'ARC-TESTNET',
+    network: 'ARC',
     contractAddress: getAddress(snapshot.escrow),
     feeLevel: 'MEDIUM',
     refId: input.persistedCall.refId,

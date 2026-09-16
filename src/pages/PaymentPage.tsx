@@ -165,7 +165,7 @@ const CHAIN_DISPLAY_NAMES: Record<number, string> = {
   8453:    'Base',
   42161:   'Arbitrum',
   43114:   'Avalanche',
-  5042002: 'Arc',
+  5042: 'Arc',
 }
 
 // ─── Multicall3 ──────────────────────────────────────────────────────────────
@@ -479,7 +479,7 @@ export default function PaymentPage() {
   const humanCheckoutNetworkOptions = [
     ...availableChains.map(value => ({
       value,
-      label: value === 'arc' ? 'Arc Test' : CHAIN_META[value].label,
+      label: value === 'arc' ? 'Arc' : CHAIN_META[value].label,
     })),
     ...(hasHostedCheckoutParam && !availableChains.includes('solana')
       ? [{ value: 'solana' as const, label: 'Solana Soon', disabled: true }]
@@ -1020,7 +1020,7 @@ export default function PaymentPage() {
     chain === 'solana' ? 'Solana' :
     chain === 'arc' ? 'Arc' :
     meta.label
-  const pocketFundingNetworkName = chain === 'arc' ? 'Arc Testnet' : 'Base'
+  const pocketFundingNetworkName = chain === 'arc' ? 'Arc Mainnet' : 'Base'
   const bankSendDestinationLabel = bankSendDestinationNetwork === 'base' ? 'Base' : 'Polygon'
   const circlePaymasterConfig = getCirclePaymasterConfig(chain)
   const showCirclePaymasterButton = !!circlePaymasterConfig && (chain === 'base' || chain === 'arbitrum')
@@ -4347,7 +4347,7 @@ export default function PaymentPage() {
                   </p>
                   {isWalletManagerFunding && chain === 'arc' && (
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                      Arc Testnet
+                      Arc Mainnet
                     </span>
                   )}
                 </div>

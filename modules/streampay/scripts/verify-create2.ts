@@ -32,10 +32,10 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 // ── Chain ─────────────────────────────────────────────────────────────────────
 const arc = defineChain({
-  id:             5042002,
-  name:           'Arc Testnet',
+  id:             5042,
+  name:           'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls:        { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
 // ── ABIs ──────────────────────────────────────────────────────────────────────
@@ -71,7 +71,7 @@ async function main() {
 
   // ── Env ───────────────────────────────────────────────────────────────────
   const rawKey      = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
-  const rpcUrl      = process.env.PRIVATE_RPC_URL_ARC     ?? 'https://rpc.testnet.arc.network'
+  const rpcUrl      = process.env.PRIVATE_RPC_URL_ARC     ?? 'https://rpc.mainnet.arc.io'
   const factoryAddr = process.env.STREAM_FACTORY_ADDRESS  as `0x${string}` | undefined
 
   if (!rawKey)      { console.error('Missing RELAYER_PRIVATE_KEY_ARC'); process.exit(1) }

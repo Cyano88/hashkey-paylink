@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { useLoginWithEmail } from '@privy-io/react-auth'
 import { ArrowLeftIcon, ArrowRightIcon, EnvelopeIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 
+import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
+
 const CODE_LENGTH = 6
 const RESEND_SECONDS = 30
 
@@ -91,6 +93,16 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
     setCode('')
     setError('')
   }
+
+  useEffect(() => {
+    if (step !== 'code') return
+    const handleBack = (event: Event) => {
+      event.preventDefault()
+      if (!busy) { setStep('email'); setCode(''); setError('') }
+    }
+    window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleBack)
+    return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleBack)
+  }, [busy, step])
 
   if (step === 'code') return createPortal(
     <div role="dialog" aria-modal="true" aria-label="Verify your email" className="fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950">

@@ -109,8 +109,8 @@ function fail(message: string, status: number) {
 
 function requireAgentPolicy(policy: DeveloperCheckoutPolicy | null) {
   if (!policy) throw fail('A valid developer API key is required.', 401)
-  if (policy.environment !== 'test' || policy.checkoutMode !== 'agentic') {
-    throw fail('Agent agreement activation requires an agentic test project.', 403)
+  if (policy.environment !== 'live' || policy.checkoutMode !== 'agentic') {
+    throw fail('Agent agreement activation requires an agentic live project.', 403)
   }
   if (!policy.capabilities.includes('arc_agreements')) {
     throw fail('This project has not enabled Arc Agreements.', 403)
@@ -164,8 +164,8 @@ async function circleAgentIdentity(
     if (!wallet?.walletAddress || !wallet.sessionId) {
       throw fail('Connect an Arc Circle Agent Wallet to this developer account first.', 409)
     }
-    if (!['ARC-TESTNET', 'ARC_TESTNET', 'ARC'].includes(String(wallet.chain ?? '').trim().toUpperCase())) {
-      throw fail('The connected agent wallet is not configured for Arc Testnet.', 409)
+    if (!['ARC'].includes(String(wallet.chain ?? '').trim().toUpperCase())) {
+      throw fail('The connected agent wallet is not configured for Arc Mainnet.', 409)
     }
     if (wallet.walletAddress.toLowerCase() !== payer.toLowerCase()) throw fail('Agreement not found.', 404)
     return { ownerId: policy.ownerId, agentSlug, walletAddress: getAddress(wallet.walletAddress) }
@@ -173,8 +173,8 @@ async function circleAgentIdentity(
   if (link.privyUserId !== policy.ownerId || link.chain !== 'arc' || link.purpose !== 'agent') {
     throw fail('The connected Arc Circle Agent Wallet binding is invalid.', 409)
   }
-  if (!['ARC-TESTNET', 'ARC_TESTNET', 'ARC'].includes(link.circleBlockchain.trim().toUpperCase())) {
-    throw fail('The connected agent wallet is not configured for Arc Testnet.', 409)
+  if (!['ARC'].includes(link.circleBlockchain.trim().toUpperCase())) {
+    throw fail('The connected agent wallet is not configured for Arc Mainnet.', 409)
   }
   if (link.circleWalletAddress.toLowerCase() !== payer.toLowerCase()) throw fail('Agreement not found.', 404)
   const agentSlug = circleAgentWalletSlug(link.email ?? '')

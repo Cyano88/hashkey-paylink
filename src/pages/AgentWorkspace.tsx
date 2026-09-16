@@ -320,7 +320,7 @@ type AgentTreasuryNetwork = Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
 const AGENT_TREASURY_NETWORKS: Array<{ key: AgentTreasuryNetwork; label: string }> = [
   { key: 'base', label: 'Base' },
   { key: 'arbitrum', label: 'Arbitrum' },
-  { key: 'arc', label: 'Arc Testnet' },
+  { key: 'arc', label: 'Arc Mainnet' },
 ]
 
 function isAgentTreasuryNetwork(value: string): value is AgentTreasuryNetwork {
@@ -1030,7 +1030,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
           agentSlug: requestAgentSlug,
           email,
           otp: walletOtp,
-          testnet: agentNetwork === 'arc',
+          testnet: false,
           expectedWallet: walletExpectedAddress.trim()
             || (embeddedWalletManager
               ? undefined
@@ -1085,7 +1085,7 @@ export default function AgentWorkspace({ embedded = false, forceProfile = false 
               wallet: {
                 id: `agent:${requestAgentSlug}:${data.walletAddress.toLowerCase()}`,
                 address: data.walletAddress as `0x${string}`,
-                blockchain: data.chain ?? (agentNetwork === 'arc' ? 'ARC-TESTNET' : agentNetwork.toUpperCase()),
+                blockchain: data.chain ?? (agentNetwork === 'arc' ? 'ARC' : agentNetwork.toUpperCase()),
               },
             })
           }

@@ -16,7 +16,7 @@ async function request(handler, { body = {}, headers = {}, method = 'POST' } = {
 }
 
 const secret = 'registry-secret-that-is-longer-than-thirty-two-bytes'
-const apiKey = 'hpl_test_registry_project_key'
+const apiKey = 'hpl_live_registry_project_key'
 const recipient = '0x2222222222222222222222222222222222222222'
 const accountReference = 'a'.repeat(64)
 const now = new Date('2026-08-28T12:00:00.000Z')
@@ -28,7 +28,7 @@ const humanPolicy = {
   defaultNetwork: 'arc',
   paymentOptions: [{ network: 'arc', recipient: '0x1111111111111111111111111111111111111111' }],
   settlementMode: 'usdc',
-  environment: 'test',
+  environment: 'live',
   checkoutMode: 'human',
   capabilities: ['arc_agreements'],
   webhookConfigured: true,
@@ -65,7 +65,7 @@ const otherSignature = signVerifiedArcRecipientRegistration({ secret, apiKey, ti
 const conflict = await request(handler, { body: { recipient, accountReference: otherReference }, headers: { ...headers, 'x-recipient-signature': otherSignature } })
 assert.equal(conflict.statusCode, 409)
 
-const crossProjectKey = 'hpl_test_other_project_key'
+const crossProjectKey = 'hpl_live_other_project_key'
 policy = { ...humanPolicy, partnerId: 'dev_other_project' }
 const replayedAcrossProject = await request(handler, { body: { recipient, accountReference }, headers: { ...headers, 'x-api-key': crossProjectKey } })
 assert.equal(replayedAcrossProject.statusCode, 401)
@@ -73,6 +73,10 @@ assert.equal(replayedAcrossProject.statusCode, 401)
 policy = { ...humanPolicy, checkoutMode: 'agentic' }
 const agentRejected = await request(handler, { body: { recipient, accountReference }, headers })
 assert.equal(agentRejected.statusCode, 403)
+
+policy = { ...humanPolicy, environment: 'test' }
+const testKeyRejected = await request(handler, { body: { recipient, accountReference }, headers })
+assert.equal(testKeyRejected.statusCode, 403)
 
 policy = humanPolicy
 const staleTimestamp = String(Number(timestamp) - 301)

@@ -20,9 +20,9 @@
  *
  * Required env vars
  * ─────────────────
- *  RELAYER_PRIVATE_KEY_ARC   Arc deployer wallet (registered as relayer in factory)
- *  PRIVATE_RPC_URL_ARC       Arc RPC — defaults to public endpoint if unset
- *  STREAM_FACTORY_ADDRESS    Deployed StreamVaultFactory on Arc (informational;
+ *  RELAYER_PRIVATE_KEY_ARC_MAINNET   Arc deployer wallet (registered as relayer in factory)
+ *  PRIVATE_RPC_URL_ARC_MAINNET       Arc RPC — defaults to public endpoint if unset
+ *  STREAM_FACTORY_ADDRESS_MAINNET    Deployed StreamVaultFactory on Arc (informational;
  *                            vault address comes from the caller)
  */
 
@@ -42,10 +42,10 @@ import { privateKeyToAccount } from 'viem/accounts'
 
 // ── Arc chain (mirrors src/lib/chains.ts — no import to keep module isolated) ─
 const arcChain = defineChain({
-  id: 5042002,
-  name: 'Arc Testnet',
+  id: 5042,
+  name: 'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls: { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
 // ── Minimal ABI — only what the relayer needs ─────────────────────────────────
@@ -109,11 +109,11 @@ export default async function handler(req: Request, res: Response) {
   }
 
   // ── Env checks ──────────────────────────────────────────────────────────────
-  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
-  const rpcUrl = process.env.PRIVATE_RPC_URL_ARC    ?? 'https://rpc.testnet.arc.network'
+  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC_MAINNET
+  const rpcUrl = process.env.PRIVATE_RPC_URL_ARC_MAINNET    ?? 'https://rpc.mainnet.arc.io'
 
   if (!rawKey) {
-    return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY_ARC not configured' })
+    return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY_ARC_MAINNET not configured' })
   }
 
   // ── Clients ─────────────────────────────────────────────────────────────────

@@ -31,13 +31,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // ── Arc RPC (public — no key needed for read-only calls) ─────────────────────
 const arc = defineChain({
-  id:             5042002,
-  name:           'Arc Testnet',
+  id:             5042,
+  name:           'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls:        { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
-const rpc = process.env.PRIVATE_RPC_URL_ARC ?? 'https://rpc.testnet.arc.network'
+const rpc = process.env.PRIVATE_RPC_URL_ARC_MAINNET ?? 'https://rpc.mainnet.arc.io'
 const publicClient = createPublicClient({ chain: arc, transport: http(rpc) })
 
 const VAULT_ABI = parseAbi([

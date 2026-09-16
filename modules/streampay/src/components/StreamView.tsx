@@ -23,12 +23,12 @@ import {
 // ── Standalone Arc public client ──────────────────────────────────────────────
 const arcClient = createPublicClient({
   chain: defineChain({
-    id:             5042002,
-    name:           'Arc Testnet',
+    id:             5042,
+    name:           'Arc Mainnet',
     nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-    rpcUrls:        { default: { http: ['https://rpc.testnet.arc.network'] } },
+    rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
   }),
-  transport: http('https://rpc.testnet.arc.network'),
+  transport: http('https://rpc.mainnet.arc.io'),
 })
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -50,8 +50,8 @@ type ActionState = 'idle' | 'signing' | 'relaying' | 'pending' | 'confirmed' | '
 type ActionKind = 'claim' | 'cancel' | null
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const ARC_CHAIN_ID = 5042002
-const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const ARC_CHAIN_ID = 5042
+const ARC_EXPLORER = 'https://explorer.arc.io'
 const nowSec = () => BigInt(Math.floor(Date.now() / 1000))
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

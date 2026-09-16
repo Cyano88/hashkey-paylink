@@ -6,8 +6,8 @@ import { useAccount, useSignTypedData } from 'wagmi'
 const POA_DOMAIN = {
   name:              'ArcPoA',
   version:           '1',
-  chainId:           5042002,
-  verifyingContract: (import.meta.env.VITE_POA_CONTRACT ?? '0x91DbDb49c8C68e5775554D42A1B5ce15C89C814B') as `0x${string}`,
+  chainId:           5042,
+  verifyingContract: (import.meta.env.VITE_POA_CONTRACT_MAINNET ?? '') as `0x${string}`,
 } as const
 
 const POA_TYPES = {
@@ -36,14 +36,14 @@ export type GhostVaultEntry = {
 
 export function readGhostVault(contentId: string, viewer: string): GhostVaultEntry | null {
   try {
-    const raw = localStorage.getItem(`sp_poa_${contentId}_${viewer.toLowerCase()}`)
+    const raw = localStorage.getItem(`sp_poa_arc5042_${contentId}_${viewer.toLowerCase()}`)
     return raw ? (JSON.parse(raw) as GhostVaultEntry) : null
   } catch { return null }
 }
 
 function writeGhostVault(entry: GhostVaultEntry) {
   localStorage.setItem(
-    `sp_poa_${entry.contentId}_${entry.viewer.toLowerCase()}`,
+    `sp_poa_arc5042_${entry.contentId}_${entry.viewer.toLowerCase()}`,
     JSON.stringify(entry),
   )
 }
@@ -150,6 +150,9 @@ export function usePoAStream(config: PoAConfig): PoAState {
       const nonce     = BigInt(nonceRef.current)
       const deadline  = BigInt(Math.floor(Date.now() / 1000) + 7_200)
 
+      if (!/^0x[0-9a-fA-F]{40}$/.test(POA_DOMAIN.verifyingContract) || /^0x0{40}$/i.test(POA_DOMAIN.verifyingContract)) {
+        throw new Error('Arc mainnet settlement contract is not configured.')
+      }
       const sig = await signTypedDataAsync({
         domain:      POA_DOMAIN,
         types:       POA_TYPES,

@@ -46,7 +46,7 @@ type Institution = { code: string; name: string; type?: string }
 const NETWORKS: Array<{ key: Network | 'solana'; label: string; note?: string; disabled?: boolean }> = [
   { key: 'base', label: 'Base' },
   { key: 'arbitrum', label: 'Arbitrum' },
-  { key: 'arc', label: 'Arc', note: 'Test' },
+  { key: 'arc', label: 'Arc', note: 'Mainnet' },
   { key: 'solana', label: 'Solana', note: 'Soon', disabled: true },
 ]
 
@@ -67,7 +67,7 @@ export default function DeveloperPortalPage() {
   const [creatingNew, setCreatingNew] = useState(false)
   const [newKey, setNewKey] = useState<{ value: string; environment: 'test' | 'live' } | null>(null)
   const [newWebhookSecret, setNewWebhookSecret] = useState('')
-  const [keyNames, setKeyNames] = useState({ test: 'Arc sandbox', live: 'Production backend' })
+  const [keyNames, setKeyNames] = useState({ test: 'Arc mainnet', live: 'Production backend' })
   const [createForm, setCreateForm] = useState<CreateProjectForm>({ name: '', website: '', useCase: '', checkoutMode: '', capabilities: ['hosted_checkout'] })
   const [institutions, setInstitutions] = useState<Institution[]>([])
   const [institutionsLoading, setInstitutionsLoading] = useState(false)
@@ -151,7 +151,7 @@ export default function DeveloperPortalPage() {
         action: 'configure', projectId: draft.id, name: draft.name, website: draft.website, brandImageUrl: draft.brandImageUrl, useCase: draft.useCase,
         checkoutMode: draft.checkoutMode, capabilities: draft.capabilities,
         settlementMode: draft.settlementMode, networks: draft.networks, defaultNetwork: draft.defaultNetwork,
-        recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins,
+        arcMainnetChainId: draft.networks.includes('arc') ? 5042 : undefined, recipients: draft.recipients, refundAddress: draft.refundAddress, allowedOrigins: draft.allowedOrigins,
         webhookUrl: draft.webhookUrl, bankCode: draft.bankCode, bankName: draft.bankName,
         bankAccountName: draft.bankAccountName, bankAccountNumber: draft.bankAccountNumber ?? '',
       })
@@ -320,7 +320,7 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
   const allOptions: Array<{ key: Capability; title: string; copy: string }> = [
     { key: 'hosted_checkout', title: checkoutMode === 'agentic' ? 'Agentic x402 checkout' : 'Hosted checkout', copy: checkoutMode === 'agentic' ? 'Accept fixed-price service payments from compatible agent wallets.' : 'Accept payments through the hosted human payer experience.' },
     { key: 'polymarket_funding', title: 'Polymarket funding', copy: 'Create verified bridge-backed checkouts for a customer Polymarket wallet.' },
-    { key: 'arc_agreements', title: 'Arc Agreements · Private pilot', copy: 'Create fixed, progressive, or milestone USDC agreements on Arc Testnet. Funding and lifecycle execution require an authorized pilot project.' },
+    { key: 'arc_agreements', title: 'Arc Agreements · Private pilot', copy: 'Create fixed, progressive, or milestone USDC agreements on Arc Mainnet. Funding and lifecycle execution require an authorized pilot project.' },
   ]
   const options = allOptions.filter(option => checkoutMode === 'human' || option.key !== 'polymarket_funding')
   function toggle(key: Capability) {
@@ -404,13 +404,13 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     </div>
 
     <div className="mt-5 space-y-3">
-      {draft.settlementMode === 'usdc' && draft.networks.map(network => <Field key={network} label={`${network === 'arc' ? 'Arc Test' : network[0].toUpperCase() + network.slice(1)} receiving address`}>
+      {draft.settlementMode === 'usdc' && draft.networks.map(network => <Field key={network} label={`${network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)} receiving address`}>
         <input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder="0x..." />
       </Field>)}
       {draft.settlementMode === 'usdc' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">Enter the treasury or Circle wallet address that should receive payments on each enabled network.</p>}
     </div>
 
-    {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect value={draft.defaultNetwork} options={draft.networks.map(network => ({ value: network, label: network === 'arc' ? 'Arc Test' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
+    {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect value={draft.defaultNetwork} options={draft.networks.map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
     <Field label="Allowed return origin" className="mt-4"><input className={fieldClass()} value={draft.allowedOrigins[0] ?? ''} onChange={event => setDraft({ ...draft, allowedOrigins: [event.target.value] })} placeholder="https://yourplatform.com" /></Field>
 
     {draft.settlementMode === 'ngn' && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
@@ -437,7 +437,7 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
       {newKey?.environment === environment && <SecretReveal label="Copy this key now" value={newKey.value} />}
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
         <input className={fieldClass()} value={keyNames[environment]} onChange={event => setKeyNames({ ...keyNames, [environment]: event.target.value })} placeholder="Key name" />
-        <button type="button" disabled={busy || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create key</button>
+        <button type="button" disabled={environment === 'test' || busy || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create key</button>
       </div>
       <div className="mt-4 space-y-2">{keys.length ? keys.map(key => <div key={key.id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm dark:bg-white/[0.06] dark:text-gray-300"><KeyRound className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{key.name}</p><p className="mt-0.5 font-mono text-[10px] text-gray-400">{key.prefix}••••</p></div>{key.revokedAt ? <span className="text-[10px] font-semibold text-gray-400">Revoked</span> : <button type="button" onClick={() => onRevoke(key.id)} className="text-[10px] font-semibold text-red-500">Revoke</button>}</div>) : <EmptyState icon={KeyRound} text={`No ${environment} keys yet.`} />}</div>
     </section>
@@ -448,8 +448,8 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
     {project.settlementStatus !== 'ready' && <p className="mt-5 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
     {project.operationalStatus === 'suspended' && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">This project is suspended. {project.suspensionReason || 'Contact Hash PayLink operations before creating new credentials.'}</p>}
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
-      {environmentSection('test', 'Test keys', `Arc Testnet only. Restricted to ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
-      {environmentSection('live', 'Live keys', `Base and Arbitrum mainnet only. Restricted to ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
+      {environmentSection('test', 'Test keys', `Sandbox keys do not authorize mainnet. Restricted to ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
+      {environmentSection('live', 'Live keys', `Base, Arbitrum, and configured Arc mainnet routes. Restricted to ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
     </div>
   </div>
 }
@@ -488,7 +488,7 @@ function QuickstartPanel({ project }: { project: Project }) {
     ? `${createCode}\n\n// Send a person to Hash PayLink's hosted checkout.\nwindow.location.assign(new URL(checkout.checkoutUrl, "https://app.hashpaylink.com"));`
     : `${createCode}\n\n// Send an agent-wallet user to the hosted Circle wallet checkout.\nconst payerUrl = new URL(checkout.checkoutUrl, "https://app.hashpaylink.com").toString();\n\n// Autonomous agents can use the protocol endpoint directly.\n// The first GET returns HTTP 402 + PAYMENT-REQUIRED.\nconst agentPaymentUrl = new URL(\n  checkout.agentPaymentUrl,\n  "https://app.hashpaylink.com"\n).toString();`
   const agreementPayerEmail = paymentPath === 'human' ? '\n    payerEmail: customer.email,' : ''
-  const agreementCode = `const agreement = await fetch("https://app.hashpaylink.com/api/v2/agreements", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASH_PAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    template: "fixed_unlock",\n    externalId: order.id,\n    resourceId: "content:premium-report",\n    title: "Premium report access",\n    description: "Unlock one premium research report.",\n    amount: "10",${agreementPayerEmail}\n    recipient: process.env.HASH_PAYLINK_ARC_RECIPIENT,\n    durationSeconds: 86400,\n    cancellationWindowSeconds: 900\n  })\n}).then(res => res.json());\n\n${paymentPath === 'human' ? '// Send agreement.payerReviewPath only to the named customer.' : '// Prepare this agreement through the dedicated agent payer route.'}\n// Funding remains restricted to authorized Arc Testnet pilot projects.`
+  const agreementCode = `const agreement = await fetch("https://app.hashpaylink.com/api/v2/agreements", {\n  method: "POST",\n  headers: {\n    "X-API-Key": process.env.HASH_PAYLINK_API_KEY,\n    "Idempotency-Key": order.id,\n    "Content-Type": "application/json"\n  },\n  body: JSON.stringify({\n    template: "fixed_unlock",\n    externalId: order.id,\n    resourceId: "content:premium-report",\n    title: "Premium report access",\n    description: "Unlock one premium research report.",\n    amount: "10",${agreementPayerEmail}\n    recipient: process.env.HASH_PAYLINK_ARC_RECIPIENT,\n    durationSeconds: 86400,\n    cancellationWindowSeconds: 900\n  })\n}).then(res => res.json());\n\n${paymentPath === 'human' ? '// Send agreement.payerReviewPath only to the named customer.' : '// Prepare this agreement through the dedicated agent payer route.'}\n// Funding remains restricted to authorized Arc Mainnet pilot projects.`
   return <div><PanelHeader eyebrow="Integration" title={hasCheckout ? 'Create your first checkout' : 'Create your first agreement draft'} copy={`This project and its keys are restricted to the ${paymentPath === 'agentic' ? 'agentic' : 'human'} path.`} />
     {hasCheckout && <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Checkout · server only</span><CopyButton value={checkoutCode} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-[11px] leading-5 text-white/70">{checkoutCode}</pre></div>}
     {hasAgreements && <div className="mt-4 rounded-2xl bg-[#08090c] p-4 text-white"><div className="flex items-center justify-between"><span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Arc Agreements · private pilot</span><CopyButton value={agreementCode} /></div><pre className="mt-4 overflow-x-auto whitespace-pre text-[11px] leading-5 text-white/70">{agreementCode}</pre></div>}
@@ -497,7 +497,7 @@ function QuickstartPanel({ project }: { project: Project }) {
       <p className="mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400">{paymentPath === 'agentic' ? <>Create with <code>checkoutMode: "agentic"</code> and one enabled <code>network</code>. Open <code>checkoutUrl</code> for the authenticated Circle Agent Wallet payer flow, or give <code>agentPaymentUrl</code> to an autonomous x402 client. No human-wallet fallback is issued.</> : <>Create with <code>checkoutMode: "human"</code>, then open <code>checkoutUrl</code>. The payer chooses from this project's enabled human payment routes.</>}</p>
     </div>}
     {hasAgreements && <ArcPilotStatus project={project} />}
-    <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="text-xs font-semibold text-gray-900 dark:text-white">Environment</p><code className="mt-2 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_test_... # Arc Testnet</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=arc</code><code className="mt-3 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_live_... # Base or Arbitrum</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=base</code></div>
+    <div className="mt-4 rounded-2xl border border-gray-200 p-4 dark:border-white/10"><p className="text-xs font-semibold text-gray-900 dark:text-white">Environment</p><code className="mt-2 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_live_... # Arc Mainnet</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=arc</code><code className="mt-3 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_API_KEY=hpl_live_... # Base, Arbitrum, or Arc</code><code className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">HASH_PAYLINK_NETWORK=base</code></div>
     <Link to="/docs/api" className="mt-5 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-300">Open API reference <ChevronRight className="h-3.5 w-3.5" /></Link>
   </div>
 }
@@ -505,7 +505,7 @@ function QuickstartPanel({ project }: { project: Project }) {
 function ArcPilotStatus({ project }: { project: Project }) {
   const pilot = project.arcAgreementPilot
   const label = pilot?.status === 'approved' ? 'Activation approved' : pilot?.status === 'disabled' ? 'Activation disabled' : pilot ? 'Draft only' : 'Legacy pilot'
-  return <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-400/20 dark:bg-blue-400/10"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Arc Agreements · Private pilot</p><span className="rounded-full bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-blue-200">{label}</span></div><p className="mt-2 text-[11px] leading-5 text-blue-800/80 dark:text-blue-100/70">Test keys create durable Arc agreement terms and a private payer path. Signed webhooks, not browser state, are the fulfillment source.</p>{pilot?.status === 'approved' && <p className="mt-3 text-[10px] leading-5 text-blue-700/70 dark:text-blue-200/60">Up to {pilot.maxAgreementUsdc} USDC per agreement · {pilot.dailyVolumeUsdc} USDC daily · {pilot.maxActiveAgreements} active · {Math.round(pilot.maxDurationSeconds / 3600)}h maximum</p>}</div>
+  return <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-400/20 dark:bg-blue-400/10"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Arc Agreements · Private pilot</p><span className="rounded-full bg-white/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-blue-200">{label}</span></div><p className="mt-2 text-[11px] leading-5 text-blue-800/80 dark:text-blue-100/70">Live keys create durable Arc agreement terms and a private payer path. Signed webhooks, not browser state, are the fulfillment source.</p>{pilot?.status === 'approved' && <p className="mt-3 text-[10px] leading-5 text-blue-700/70 dark:text-blue-200/60">Up to {pilot.maxAgreementUsdc} USDC per agreement · {pilot.dailyVolumeUsdc} USDC daily · {pilot.maxActiveAgreements} active · {Math.round(pilot.maxDurationSeconds / 3600)}h maximum</p>}</div>
 }
 
 function PortalTop({ onLogout }: { onLogout: () => Promise<void> }) { return <header className="flex items-center justify-between"><Link to="/" className="text-sm font-bold text-gray-950 dark:text-white">Hash PayLink <span className="font-medium text-gray-400">Developers</span></Link><button type="button" onClick={() => void onLogout()} className="flex h-9 items-center gap-1.5 rounded-full border border-gray-200 px-3 text-xs font-semibold text-gray-500 dark:border-white/10 dark:text-gray-300"><LogOut className="h-3.5 w-3.5" /> Sign out</button></header> }

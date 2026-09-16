@@ -1,12 +1,13 @@
 import { Connection, PublicKey } from '@solana/web3.js'
 import { getAssociatedTokenAddress } from '../solana-token.js'
 
-export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'solana'
+export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 
 export const CCTP_DOMAIN: Record<PocketBridgeNetwork, number> = {
   base: 6,
   arbitrum: 3,
   solana: 5,
+  arc: 26,
 }
 
 export const CCTP_TOKEN_MESSENGER_V2 = '0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d'
@@ -36,18 +37,22 @@ export async function readCctpForwardQuote(source: PocketBridgeNetwork, destinat
   const response = await fetch(`https://iris-api.circle.com/v2/burn/USDC/fees/${CCTP_DOMAIN[source]}/${CCTP_DOMAIN[destination]}?${query}`)
   const rows = await response.json().catch(() => []) as Array<{ finalityThreshold?: number; minimumFee?: number | string; forwardFee?: { med?: number | string } }>
   if (!response.ok) throw new Error('Circle could not quote this bridge route right now.')
-  const fast = rows.find(row => Number(row.finalityThreshold) === 1000) ?? rows[0]
+  const fast = rows.find(row => Number(row.finalityThreshold) === (source === 'arc' ? 2000 : 1000)) ?? rows.find(row => Number(row.finalityThreshold) === 2000)
+  if (!fast || ![1000, 2000].includes(Number(fast.finalityThreshold))) throw new Error('Circle did not return a supported finality threshold.')
   const forwardFee = BigInt(String(fast?.forwardFee?.med ?? ''))
   const rate = decimalRateParts(fast?.minimumFee ?? 0)
-  const protocolFee = transferUnits * rate.numerator / rate.denominator
-  const maxFeeUnits = forwardFee + protocolFee
+  if (forwardFee < 0n || rate.numerator >= rate.denominator) throw new Error('Circle returned an invalid fee.')
+  const divisor = rate.denominator - rate.numerator
+  const totalUnits = ((transferUnits + forwardFee) * rate.denominator + divisor - 1n) / divisor
+  const maxFeeUnits = totalUnits - transferUnits
+  const protocolFee = maxFeeUnits - forwardFee
   return {
     transferUnits,
     forwardFeeUnits: forwardFee,
     protocolFeeUnits: protocolFee,
     maxFeeUnits,
     totalUnits: transferUnits + maxFeeUnits,
-    finalityThreshold: 1000,
+    finalityThreshold: Number(fast.finalityThreshold),
   }
 }
 

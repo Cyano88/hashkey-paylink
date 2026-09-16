@@ -139,7 +139,9 @@
     "test:pocket-support-lifecycle": "node --import tsx scripts/pocket-support-lifecycle-smoke.mjs",
     "test:pocket": "npm run test:pocket-contracts && npm run test:pocket-profile && npm run test:pocket-profile-adapter && npm run test:circle-link && npm run test:pocket-wallet-link-adapter && npm run test:pocket-wallets-read-adapter && npm run test:pocket-balances-adapter && npm run test:pocket-recipient-balance-adapter && npm run test:pocket-activity-adapter && npm run test:pocket-receipts && npm run test:pocket-bridge-adapter && npm run test:pocket-solana-rpc-adapter && npm run test:pocket-pos-adapter && npm run test:pocket-bank-receive-adapter && npm run test:pocket-bank-adapter && npm run test:pocket-bank-send-adapter && npm run test:pocket-bank-fund-adapter && npm run test:pocket-bank-withdraw-adapter && npm run test:pocket-solana-transfer-adapter && npm run test:pocket-evm-transfer-client && npm run test:payment-tx-lookup && npm run test:pocket-x402-adapter && npm run test:pocket-x402-connect-adapter && npm run test:pocket-x402-activate-adapter && npm run test:pocket-marketplace-adapter && npm run test:pocket-agent-ask-adapter && node --import tsx scripts/circle-pocket-agent-security-smoke.mjs && node --import tsx scripts/agent-hash-payments-parser-smoke.mjs",
     "preview": "vite preview --host 127.0.0.1",
-    "start": "tsx server-entry.ts"
+    "start": "tsx server-entry.ts",
+    "test:pocket-mobile-recovery": "node --import tsx scripts/pocket-wallet-readiness-smoke.mjs && node --import tsx scripts/pocket-bridge-recovery-smoke.mjs && node --import tsx scripts/pocket-bridge-journal-smoke.mjs && node --import tsx scripts/pocket-solana-recovery-smoke.mjs && node --import tsx scripts/pocket-bridge-activity-smoke.mjs",
+    "test:pocket-bridge-proof": "node --import tsx scripts/pocket-bridge-proof-smoke.mjs"
   },
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.8",
@@ -157,7 +159,7 @@
     "@capgo/capacitor-native-biometric": "^8.4.14",
     "@circle-fin/adapter-solana": "^1.6.3",
     "@circle-fin/bridge-kit": "^1.12.1",
-    "@circle-fin/cli": "0.0.6",
+    "@circle-fin/cli": "1.1.0",
     "@circle-fin/modular-wallets-core": "^1.0.13",
     "@circle-fin/unified-balance-kit": "^1.1.0",
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",

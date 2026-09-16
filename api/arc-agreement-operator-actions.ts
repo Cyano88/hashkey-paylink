@@ -1,3 +1,4 @@
+import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash } from 'node:crypto'
 import type { Hex } from 'viem'
 import {
@@ -10,8 +11,8 @@ import {
   readDurableJson,
 } from './render-durable-store.js'
 
-const STORE_KEY = (process.env.ARC_AGREEMENT_OPERATOR_ACTION_STORE_KEY
-  ?? 'hashpaylink:arc-agreement-operator-actions:v1').trim()
+const STORE_KEY = arcMainnetStoreKey('operator-actions', process.env.ARC_AGREEMENT_OPERATOR_ACTION_STORE_KEY_MAINNET)
+
 const ACTION_ID = /^opa_[a-f0-9]{24}$/
 const AGREEMENT_ID = /^agr_[a-z0-9]{12,64}$/i
 const PARTNER_ID = /^dev_[a-z0-9]{8,64}$/i

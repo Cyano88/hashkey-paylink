@@ -58,7 +58,7 @@ export function pocketReceiptKind(row: PocketActivityRow): PocketReceiptKind | n
   const source = normalizedSource(row)
   const settlement = normalizedSettlement(row)
 
-  if (source === 'wallet-bridge' || settlement === 'wallet_bridge') return null
+  if ((source === 'wallet-bridge' || source === 'wallet-swap') || settlement === 'wallet_bridge') return null
   if (source === 'bills' || settlement === 'bill_payment' || settlement.startsWith('bill_payment:')) return 'bill_purchase'
   if (source === 'purchase' || source === 'app-pay' || settlement === 'app_pay' || settlement === 'hosted_checkout' || settlement === 'service_funding') return 'app_purchase'
   if (source === 'wallet-deposit') return 'money_in'

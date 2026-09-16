@@ -17,50 +17,26 @@ export { base as baseMainnet }
 
 // ─── Arc Chain (Economic OS) ─────────────────────────────────────────────────
 //
-// STATUS: TESTNET (Chain ID 5042002, public since Oct 2025)
-//
-// TO UPGRADE TO MAINNET when Arc goes live:
-//   1. Update id, rpcUrls, blockExplorers below (swap testnet → mainnet values)
-//   2. Update CHAIN_META.arc.tokenAddress to the mainnet Circle USDC deployment
-//   3. Update CHAIN_META.arc.explorerUrl / explorerName
-//   4. Update wagmi.ts transport to the mainnet RPC
-//
-// Arc uses USDC as its native gas token (not ETH).
-// nativeCurrency.decimals = 18 (gas accounting), ERC-20 USDC uses 6 decimals.
-//
+// Arc mainnet: native gas uses 18 decimals; ERC-20 USDC uses 6.
 export const arcChain = defineChain({
-  id: 5042002,
-  name: 'Arc Testnet',
+  id: 5042,
+  name: 'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
   rpcUrls: {
-    default: { http: ['https://rpc.testnet.arc.network'] },
-    public:  { http: ['https://rpc.testnet.arc.network', 'https://arc-testnet.drpc.org'] },
+    default: { http: ['https://rpc.mainnet.arc.io'] },
+    public:  { http: ['https://rpc.mainnet.arc.io', 'https://rpc.drpc.mainnet.arc.io'] },
   },
   blockExplorers: {
     default: {
       name: 'Arcscan',
-      url: 'https://testnet.arcscan.app',
-      apiUrl: 'https://testnet.arcscan.app/api',
+      url: 'https://explorer.arc.io',
+      apiUrl: 'https://explorer.arc.io/api',
     },
   },
-  testnet: true,
+  testnet: false,
 })
 
-// ─── Mainnet values — uncomment + swap in above when Arc mainnet launches ─────
-// export const arcChain = defineChain({
-//   id: /* Arc Mainnet Chain ID — TBA */,
-//   name: 'Arc',
-//   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-//   rpcUrls: {
-//     default: { http: ['https://rpc.arc.network'] },
-//     public:  { http: ['https://rpc.arc.network'] },
-//   },
-//   blockExplorers: {
-//     default: { name: 'Arcscan', url: 'https://arcscan.app', apiUrl: 'https://arcscan.app/api' },
-//   },
-// })
-
-// ─── Per-chain metadata ──────────────────────────────────────────────────────
+// Per-chain metadata ──────────────────────────────────────────────────────
 export const CHAIN_META = {
   base: {
     key: 'base' as const,
@@ -87,11 +63,11 @@ export const CHAIN_META = {
     label: 'Arc',
     asset: 'USDC',
     decimals: 6,
-    chainId: 5042002,
+    chainId: 5042,
     // Arc native USDC precompile — symbol=USDC, decimals=6
     // Ref: https://docs.arc.network/arc/references/contract-addresses
     tokenAddress: '0x3600000000000000000000000000000000000000' as `0x${string}`,
-    explorerUrl: 'https://testnet.arcscan.app',
+    explorerUrl: 'https://explorer.arc.io',
     explorerName: 'Arcscan',
     // Glow: Deep Teal #008080
     glowStyle: '0 0 52px -8px rgba(0,128,128,0.30), 0 0 0 1px rgba(0,128,128,0.14)',
@@ -102,8 +78,8 @@ export const CHAIN_META = {
     toggleActive: 'bg-[#008080] text-white shadow-sm',
     headerBg: 'from-teal-50 to-cyan-50',
     dotColor: 'bg-[#008080]',
-    engineLabel: 'Arc Testnet · Native USDC Gas',
-    isTestnet: true,
+    engineLabel: 'Arc Mainnet · Native USDC Gas',
+    isTestnet: false,
   },
   solana: {
     key:          'solana' as const,

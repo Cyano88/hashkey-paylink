@@ -75,7 +75,7 @@ const stack = [
     copy: 'USDC, smart-wallet sessions, App Pay, balances, and receipts.',
   },
   {
-    name: 'Arc Testnet',
+    name: 'Arc Mainnet',
     copy: 'Wallet and checkout testing inside Circle Pocket.',
   },
   {
@@ -195,7 +195,7 @@ const faqs = [
   {
     question: 'Which networks and settlement options are available?',
     answer:
-      'Hosted checkout supports Base and Arbitrum mainnet, with Arc available for testnet flows and Solana planned for partner checkout. Merchants can keep USDC in Circle Pocket or use verified local bank settlement where available. Nigeria is active first, with Ghana and Kenya planned.',
+      'Hosted checkout supports Base, Arbitrum, and configured Arc mainnet routes and Solana planned for partner checkout. Merchants can keep USDC in Circle Pocket or use verified local bank settlement where available. Nigeria is active first, with Ghana and Kenya planned.',
   },
   {
     question: 'How does the infrastructure fit together?',

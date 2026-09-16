@@ -8,7 +8,7 @@ import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
 import { STREAM_VAULT_ABI }   from '../../lib/streamVaultAbi'
 import { CHECKPOINT_VAULT_FACTORY_ABI } from '../../lib/checkpointVaultAbi'
-import { CHECKPOINT_FACTORY_ADDRESS, PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
+import { CHECKPOINT_FACTORY_ADDRESS_MAINNET, PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 import { resolvePrivyCircleLink } from '../../../../../src/lib/privyCircleLink'
 import {
   connectCircleEvmEmailWallet,
@@ -22,17 +22,17 @@ import UnifiedReceipt from '../../../../../src/components/UnifiedReceipt'
 // ── Arc standalone client ─────────────────────────────────────────────────────
 const arcClient = createPublicClient({
   chain: defineChain({
-    id:             5042002,
-    name:           'Arc Testnet',
+    id:             5042,
+    name:           'Arc Mainnet',
     nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-    rpcUrls:        { default: { http: ['https://rpc.testnet.arc.network'] } },
+    rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
   }),
-  transport: http('https://rpc.testnet.arc.network'),
+  transport: http('https://rpc.mainnet.arc.io'),
 })
 
-const ARC_CHAIN_ID = 5042002
+const ARC_CHAIN_ID = 5042
 const ARC_USDC     = '0x3600000000000000000000000000000000000000' as const
-const POA_CONTRACT = (import.meta.env.VITE_POA_CONTRACT ?? '') as `0x${string}`
+const POA_CONTRACT = (import.meta.env.VITE_POA_CONTRACT_MAINNET ?? '') as `0x${string}`
 const POLYMARKET_LOGO = '/brand/polymarket-logo.png'
 
 function sleep(ms: number) {
@@ -134,8 +134,8 @@ type AgentOption = AgentProfile & {
   source?: 'platform' | 'saved' | 'linked' | 'env' | 'store'
 }
 type UnlockStep = 'intro' | 'choose' | 'email' | 'otp' | 'fund'
-const CREATOR_X402_GATEWAY_LABEL = 'Arc Testnet'
-const ARC_TESTNET_FAUCET_URL = 'https://faucet.circle.com/'
+const CREATOR_X402_GATEWAY_LABEL = 'Arc Mainnet'
+const ARC_FUNDING_URL = '/pocket/home/swap'
 
 function hasWorldCupScore(match: WorldCupScoreMatch) {
   const home = String(match.homeScore ?? '').trim().toLowerCase()
@@ -1135,7 +1135,7 @@ export function StreamGate() {
       setCheckpointError('Pay-as-you-read is only available for articles and books.')
       return
     }
-    if (!CHECKPOINT_FACTORY_ADDRESS || !/^0x[a-fA-F0-9]{40}$/.test(CHECKPOINT_FACTORY_ADDRESS)) {
+    if (!CHECKPOINT_FACTORY_ADDRESS_MAINNET || !/^0x[a-fA-F0-9]{40}$/.test(CHECKPOINT_FACTORY_ADDRESS_MAINNET)) {
       setCheckpointError('Checkpoint escrow is not configured yet.')
       return
     }
@@ -1158,7 +1158,7 @@ export function StreamGate() {
       const saltSeed = `${contentId}:${session.wallet.address}:${Date.now()}:${Math.random()}`
       const salt = keccak256(toBytes(saltSeed))
       const predicted = await arcClient.readContract({
-        address: CHECKPOINT_FACTORY_ADDRESS,
+        address: CHECKPOINT_FACTORY_ADDRESS_MAINNET,
         abi: CHECKPOINT_VAULT_FACTORY_ABI,
         functionName: 'getVaultAddress',
         args: [session.wallet.address, creator, contentId32, amountUnits, salt],
@@ -1167,7 +1167,7 @@ export function StreamGate() {
       setCircleNotice('Confirm checkpoint escrow in Circle.')
       const txHash = await sendCircleArcCheckpointVault({
         session,
-        factoryAddress: CHECKPOINT_FACTORY_ADDRESS,
+        factoryAddress: CHECKPOINT_FACTORY_ADDRESS_MAINNET,
         recipient: creator,
         amountUnits: amountUnits.toString(),
         contentId: contentId32,
@@ -1269,7 +1269,7 @@ export function StreamGate() {
       const res = await fetch('/api/agent-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'init', agentSlug: slug, email, testnet: true, expectedWallet }),
+        body: JSON.stringify({ action: 'init', agentSlug: slug, email, testnet: false, expectedWallet }),
       })
       const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string }
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not send the sign-in code.')
@@ -1310,7 +1310,7 @@ export function StreamGate() {
           agentSlug: context.slug,
           email: context.email,
           otp,
-          testnet: true,
+          testnet: false,
           expectedWallet: agentOptions.find(agent => agent.slug === context.slug)?.walletAddress,
         }),
       })
@@ -1888,10 +1888,10 @@ export function StreamGate() {
                 </button>
 
                 <div className="rounded-xl border border-gray-100 bg-white/80 px-3 py-2.5 text-[11px] leading-5 text-gray-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400">
-                  Need test funds? Get Arc Testnet USDC, then move it to x402 for fixed unlocks.
+                  Need test funds? Get Arc Mainnet USDC, then move it to x402 for fixed unlocks.
                   <span className="mt-2 flex flex-wrap gap-2">
                     <a
-                      href={ARC_TESTNET_FAUCET_URL}
+                      href={ARC_FUNDING_URL}
                       target="_blank"
                       rel="noreferrer"
                       className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[10px] font-bold text-gray-600 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300"
@@ -2138,7 +2138,7 @@ export function StreamGate() {
                           <div className="min-w-0">
                             <p className="text-[13px] font-bold text-gray-900">Activate x402</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
-                              Move Arc Testnet USDC into the reader payment balance, then unlock.
+                              Move Arc Mainnet USDC into the reader payment balance, then unlock.
                             </p>
                           </div>
                           <button
@@ -2212,7 +2212,7 @@ export function StreamGate() {
                           </div>
                           {selectedAgent.balanceChecked && numericBalance(selectedAgent.balance) <= 0 && (
                             <p className="mt-2 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-[11px] font-medium leading-relaxed text-amber-700">
-                              Fund this reader wallet with Arc Testnet USDC before activating x402.
+                              Fund this reader wallet with Arc Mainnet USDC before activating x402.
                             </p>
                           )}
                           {fundingAmountExceedsBalance && (
@@ -2225,11 +2225,11 @@ export function StreamGate() {
                       <div className="rounded-xl border border-gray-100 bg-white px-3 py-3">
                         <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">Funding steps</p>
                         <p className="mt-1 text-[11px] leading-5 text-gray-500">
-                          1. Fund the reader wallet with Arc Testnet USDC. 2. Move a small amount into x402 payment balance. 3. Unlock.
+                          1. Fund the reader wallet with Arc Mainnet USDC. 2. Move a small amount into x402 payment balance. 3. Unlock.
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <a
-                            href={ARC_TESTNET_FAUCET_URL}
+                            href={ARC_FUNDING_URL}
                             target="_blank"
                             rel="noreferrer"
                             className="rounded-full border border-gray-200 px-2.5 py-1 text-[10px] font-bold text-gray-600"
@@ -2443,7 +2443,7 @@ export function StreamGate() {
               <>
                 {!POA_CONTRACT ? (
                   <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-center text-[12px] text-amber-700">
-                    Contract not configured — set VITE_POA_CONTRACT on Render
+                    Contract not configured — set VITE_POA_CONTRACT_MAINNET on Render
                   </div>
                 ) : approvePending ? (
                   <div className="space-y-2 w-full max-w-[260px]">
@@ -2453,7 +2453,7 @@ export function StreamGate() {
                     {approveTx && (
                       <button
                         type="button"
-                        onClick={() => window.open(`https://testnet.arcscan.app/tx/${approveTx}`, '_blank', 'noopener,noreferrer')}
+                        onClick={() => window.open(`https://explorer.arc.io/tx/${approveTx}`, '_blank', 'noopener,noreferrer')}
                         className="flex w-full items-center justify-center gap-1.5 text-[11px] font-semibold text-gray-500 hover:text-gray-800 underline underline-offset-2 transition-colors"
                       >
                         <ExtLinkIcon />Track on Arcscan
@@ -2799,7 +2799,7 @@ export function StreamGate() {
                 {gatewayTxIsExplorerHash && (
                   <button
                     type="button"
-                    onClick={() => window.open(`https://testnet.arcscan.app/tx/${gatewayTx}`, '_blank', 'noopener,noreferrer')}
+                    onClick={() => window.open(`https://explorer.arc.io/tx/${gatewayTx}`, '_blank', 'noopener,noreferrer')}
                     className="flex items-center justify-center rounded-xl border border-emerald-200 bg-white px-3 py-2.5 text-[12px] font-semibold text-emerald-700 transition-colors hover:bg-emerald-50"
                   >
                     ArcScan

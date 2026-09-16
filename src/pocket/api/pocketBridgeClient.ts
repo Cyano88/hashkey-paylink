@@ -1,6 +1,6 @@
 import { POCKET_API } from '../lib/pocketSchemas'
 
-export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'solana'
+export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
 export type PocketBridgeQuote = {
   source: PocketBridgeNetwork
   destination: PocketBridgeNetwork
@@ -30,7 +30,7 @@ export async function readPocketBridgeQuote(input: { accessToken: string; source
 export async function readPocketBridgeStatus(input: { accessToken: string; source: PocketBridgeNetwork; txHash: string; fetcher?: typeof fetch }) {
   const query = new URLSearchParams({ action: 'status', source: input.source, txHash: input.txHash })
   const response = await (input.fetcher ?? fetch)(`${POCKET_API.bridge}?${query}`, { headers: { authorization: `Bearer ${input.accessToken}` } })
-  const data = await response.json().catch(() => ({})) as { ok?: boolean; status?: string; destinationTxHash?: string; error?: unknown }
+  const data = await response.json().catch(() => ({})) as { ok?: boolean; status?: string; sourceConfirmed?: boolean; destinationTxHash?: string; error?: unknown }
   if (!response.ok || data.ok !== true) throw new Error(message(data))
   return data
 }
@@ -43,4 +43,11 @@ export async function recordPocketBridge(input: { accessToken: string; source: P
   })
   const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: unknown }
   if (!response.ok || data.ok !== true) throw new Error(message(data))
+}
+
+export async function readPendingPocketBridges(input: { accessToken: string; fetcher?: typeof fetch }) {
+  const response = await (input.fetcher ?? fetch)(`${POCKET_API.bridge}?action=pending`, { headers: { authorization: `Bearer ${input.accessToken}` } })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || data.ok !== true || !Array.isArray(data.pending)) throw new Error(message(data))
+  return data.pending as unknown[]
 }

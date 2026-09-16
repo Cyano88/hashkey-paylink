@@ -12,7 +12,7 @@ const localStore = new Map<string, unknown>()
 
 type PinRecord = { version: 1; salt: string; hash: string; failedAttempts: number; lockedUntil: number; createdAt: number; updatedAt: number }
 type ApprovalRecord = { version: 1; ownerId: string; expiresAt: number; uses: number }
-type ResetRecord = { version: 1; ownerId: string; previousAuthorizationHash: string; expiresAt: number; used: boolean }
+type ResetRecord = { version: 1; ownerId: string; previousAuthorizationHash: string; previousSessionId?: string; previousEmailVerifiedAt?: number; startedAt?: number; expiresAt: number; used: boolean }
 type Dependencies = { verifyUser(req: Request): Promise<VerifiedLinkUser>; now(): number; random(size: number): Buffer }
 
 function pepper() {
@@ -53,7 +53,9 @@ export async function deletePocketPaymentSecurity(ownerId: string) {
 
 async function pinHash(pin: string, salt: Buffer) {
   const hardened = createHmac('sha256', pepper()).update(pin).digest()
-  return Buffer.from(await scrypt(hardened, salt, 32)).toString('base64')
+  const derived = await scrypt(hardened, salt, 32)
+  if (!Buffer.isBuffer(derived)) throw new Error('PIN key derivation failed.')
+  return derived.toString('base64')
 }
 async function newPinRecord(pin: string, now: number, random: Dependencies['random']): Promise<PinRecord> {
   const salt = random(16)
@@ -69,6 +71,11 @@ function cleanPin(value: unknown) {
   const pin = String(value ?? '').trim()
   if (!PIN_PATTERN.test(pin)) throw Object.assign(new Error('Enter your six-digit Pocket PIN.'), { status: 400 })
   return pin
+}
+
+export async function requiresPocketPaymentApproval(ownerId: string, action: string, declaredPocketClient: boolean) {
+  if (action === 'executeEvmBridge' || action === 'signOwnWalletBridge') return false
+  return declaredPocketClient || Boolean(await readStore<PinRecord>(ownerKey(ownerId)))
 }
 
 export async function consumePocketPaymentApproval(token: string, ownerId: string, now = Date.now()) {
@@ -105,20 +112,21 @@ export function createPocketPaymentSecurityHandler(overrides: Partial<Dependenci
       if (!current) return res.status(428).json({ ok: false, error: 'Create your Pocket PIN first.' })
       if (action === 'begin-reset') {
         const previousAuthorizationHash = authorizationHash(req)
-        if (!previousAuthorizationHash) return res.status(401).json({ ok: false, error: 'Sign in again to reset your Pocket PIN.' })
+        if (!previousAuthorizationHash || !identity.sessionId) return res.status(401).json({ ok: false, error: 'Sign in again to reset your Pocket PIN.' })
         const resetToken = dependencies.random(32).toString('base64url')
         const expiresAt = now + RESET_TTL_MS
-        await writeStore(resetKey(resetToken), { version: 1, ownerId: identity.userId, previousAuthorizationHash, expiresAt, used: false } satisfies ResetRecord)
+        await writeStore(resetKey(resetToken), { version: 1, ownerId: identity.userId, previousAuthorizationHash, previousSessionId: identity.sessionId, previousEmailVerifiedAt: identity.emailVerifiedAt ?? 0, startedAt: now, expiresAt, used: false } satisfies ResetRecord)
         return res.json({ ok: true, resetToken, expiresAt })
       }
       if (current.lockedUntil > now) return res.status(429).json({ ok: false, error: 'Too many incorrect attempts. Try again shortly.', lockedUntil: current.lockedUntil })
       if (action === 'reset') {
+        const nextPin = cleanPin(req.body?.pin)
         const token = String(req.body?.resetToken ?? '').trim()
         const nextAuthorizationHash = authorizationHash(req)
         let resetAccepted = false
         if (/^[A-Za-z0-9_-]{32,160}$/.test(token) && nextAuthorizationHash) {
           await mutateStore<ResetRecord>(resetKey(token), record => {
-            if (!record || record.used || record.expiresAt <= now || record.ownerId !== identity.userId || record.previousAuthorizationHash === nextAuthorizationHash) {
+            if (!record || record.used || record.expiresAt <= now || record.ownerId !== identity.userId || record.previousAuthorizationHash === nextAuthorizationHash || !record.previousSessionId || !identity.sessionId || identity.sessionId === record.previousSessionId || !record.startedAt || !identity.emailVerifiedAt || identity.emailVerifiedAt <= (record.previousEmailVerifiedAt ?? 0) || identity.emailVerifiedAt < Math.floor(record.startedAt / 1000) * 1000 || identity.emailVerifiedAt > now + 30_000) {
               return record ?? { version: 1, ownerId: '', previousAuthorizationHash: '', expiresAt: 0, used: true }
             }
             resetAccepted = true
@@ -126,7 +134,7 @@ export function createPocketPaymentSecurityHandler(overrides: Partial<Dependenci
           })
         }
         if (!resetAccepted) return res.status(401).json({ ok: false, error: 'Sign out and verify your email again before resetting your PIN.' })
-        await writeStore(key, await newPinRecord(cleanPin(req.body?.pin), now, dependencies.random))
+        await writeStore(key, await newPinRecord(nextPin, now, dependencies.random))
         return res.json({ ok: true, configured: true, reset: true })
       }
       const enteredPin = cleanPin(req.body?.pin ?? req.body?.currentPin)

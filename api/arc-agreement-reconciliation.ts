@@ -11,7 +11,7 @@ import { assertArcAgreementReleasePayouts } from './arc-agreement-terms.js'
 import { ARC_AGREEMENT_NETWORK, assertArcAgreementNetwork } from './arc-agreement-config.js'
 
 const DEPLOYMENT_DOMAIN = keccak256(toBytes('HASH_PAYLINK_ARC_AGREEMENT_DEPLOYMENT_V1'))
-const ARC_TESTNET_CHAIN_ID = BigInt(ARC_AGREEMENT_NETWORK.chainId)
+const ARC_MAINNET_CHAIN_ID = BigInt(ARC_AGREEMENT_NETWORK.chainId)
 
 const escrowReadAbi = [
   { type: 'function', name: 'agreementId', stateMutability: 'view', inputs: [], outputs: [{ type: 'bytes32' }] },
@@ -56,7 +56,7 @@ export type ArcAgreementDraftBinding = {
 }
 
 export type ArcAgreementPreparedDeployment = {
-  chainId: 5042002
+  chainId: 5042
   agreementId: Hex
   deploymentHash: Hex
   clientReference: Hex
@@ -118,7 +118,7 @@ function deploymentCommitment(input: Omit<ArcAgreementPreparedDeployment, 'chain
     { type: 'uint64' },
   ], [
     DEPLOYMENT_DOMAIN,
-    ARC_TESTNET_CHAIN_ID,
+    ARC_MAINNET_CHAIN_ID,
     input.factory,
     input.termsHash,
     input.clientReference,
@@ -261,7 +261,7 @@ export async function readArcAgreementSnapshot(
     ...(options.blockNumber === undefined ? {} : { blockNumber: options.blockNumber }),
   })
   return {
-    chainId: chainId as 5042002,
+    chainId: chainId as 5042,
     escrow,
     agreementId: agreementId as Hex,
     clientReference: clientReference as Hex,

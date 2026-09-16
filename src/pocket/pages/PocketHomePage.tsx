@@ -13,19 +13,19 @@ import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRou
 import { cn } from '../../lib/utils'
 import PocketRecentActivitySkeleton from '../components/PocketRecentActivitySkeleton'
 
-type HomeNetwork = 'base' | 'arbitrum' | 'solana'
+type HomeNetwork = 'base' | 'arbitrum' | 'solana' | 'arc'
 const NETWORK_KEY = 'pocket.home.network'
 const BALANCE_VISIBLE_KEY = 'pocket.balanceVisible'
 const NETWORKS = [
   { key: 'base', label: 'Base', logo: '/brand/base-logo.jpeg', dark: false },
   { key: 'arbitrum', label: 'Arbitrum', logo: '/brand/arbitrum-logo.jpeg', dark: false },
   { key: 'solana', label: 'Solana', logo: '/brand/solana-logo.jpeg', dark: true },
-  { key: 'arc', label: 'Arc', logo: '/brand/arc-logo.jpeg', dark: true, soon: true },
+  { key: 'arc', label: 'Arc', logo: '/brand/arc-logo.jpeg', dark: true },
 ] as const
 
 function initialNetwork(): HomeNetwork {
   const saved = window.localStorage.getItem(NETWORK_KEY)
-  return saved === 'arbitrum' || saved === 'solana' ? saved : 'base'
+  return saved === 'arbitrum' || saved === 'solana' || saved === 'arc' ? saved : 'base'
 }
 
 function navPath(tab: PocketNavTab) {
@@ -64,7 +64,7 @@ export default function PocketHomePage() {
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50 dark:text-gray-500">Total available</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50 dark:text-gray-500">Total USDC</p>
             <button type="button" onClick={toggleBalance} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/65 hover:bg-white/10 dark:text-gray-500 dark:hover:bg-gray-950/[0.06]" aria-label={balanceVisible ? 'Hide balances' : 'Show balances'}>
               {balanceVisible ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             </button>
@@ -81,9 +81,9 @@ export default function PocketHomePage() {
         </div>
       </div>
       <div className="mt-4 grid grid-cols-4 gap-2">
-        {NETWORKS.map(network => <button key={network.key} type="button" disabled={network.soon} onClick={() => !network.soon && setSelected(network.key)} className={cn('relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl transition', network.soon ? 'cursor-default opacity-35' : selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={network.soon ? network.label + ', coming soon' : 'Show ' + network.label + ' balance'} aria-pressed={!network.soon && selected === network.key}>
+        {NETWORKS.map(network => <button key={network.key} type="button" onClick={() => setSelected(network.key)} className={cn('relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl transition', selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={'Show ' + network.label + ' balance'} aria-pressed={selected === network.key}>
           <img src={network.logo} alt="" className={cn('h-6 w-6 rounded-md object-cover grayscale contrast-200', network.dark ? 'invert dark:invert-0' : 'dark:invert')} />
-          {network.soon && <span className="text-[8px] font-black uppercase tracking-wider">Soon</span>}
+          <span className="text-[9px] font-semibold">{network.label}</span>
         </button>)}
       </div>
       <div className="mt-3 border-t border-white/10 pt-3 text-center dark:border-gray-950/10">

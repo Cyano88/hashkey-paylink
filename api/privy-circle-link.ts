@@ -61,7 +61,7 @@ export type CircleLinkChain = CircleLinkRecord['chain']
 export type CircleLinkPurpose = NonNullable<CircleLinkRecord['purpose']>
 export type CircleLinkWallet = { id: string; address: string; blockchain: string }
 
-export type VerifiedLinkUser = { userId: string; email?: string }
+export type VerifiedLinkUser = { userId: string; email?: string; sessionId?: string; emailVerifiedAt?: number }
 
 type LinkHandlerDependencies = {
   verifyUser(req: Request): Promise<VerifiedLinkUser>
@@ -85,7 +85,8 @@ export class CircleLinkVersionConflictError extends Error {
 }
 
 export function circleLinkKey(privyUserId: string, chain: string, purpose = 'payment') {
-  return purpose === 'payment' ? `${privyUserId}:${chain}` : `${privyUserId}:${purpose}:${chain}`
+  const network = chain === 'arc' ? 'arc-mainnet' : chain
+  return purpose === 'payment' ? `${privyUserId}:${network}` : `${privyUserId}:${purpose}:${network}`
 }
 
 function sameLink(left: CircleLinkRecord, right: CircleLinkRecord) {
@@ -152,7 +153,7 @@ function isSolanaAddress(address: string) {
 function expectedBlockchain(chain: CircleLinkChain) {
   if (chain === 'base') return 'BASE'
   if (chain === 'arbitrum') return 'ARB'
-  if (chain === 'arc') return 'ARC-TESTNET'
+  if (chain === 'arc') return 'ARC'
   return (process.env.CIRCLE_SOLANA_BLOCKCHAIN ?? 'SOL').trim().toUpperCase()
 }
 
@@ -162,7 +163,7 @@ function blockchainMatchesChain(chain: CircleLinkChain, blockchain: string) {
   if (chain === 'arbitrum') {
     return ['ARB', 'ARBITRUM', 'ARBITRUM-ONE', 'ARBITRUM_ONE', 'ARBITRUMONE'].includes(normalized)
   }
-  if (chain === 'arc') return ['ARC-TESTNET', 'ARC_TESTNET', 'ARC'].includes(normalized)
+  if (chain === 'arc') return ['ARC'].includes(normalized)
   return normalized === expectedBlockchain(chain)
 }
 
@@ -468,7 +469,10 @@ export async function verifiedPrivyUser(req: Request): Promise<VerifiedLinkUser>
   const client = new PrivyClient(privyAppId, privyAppSecret)
   const claims = await client.verifyAuthToken(token)
   const user = await client.getUserById(claims.userId)
-  return { userId: claims.userId, email: linkedEmail(user) }
+  const email = linkedEmail(user)
+  const emailAccount = user.linkedAccounts.find(account => account.type === 'email' && account.address?.toLowerCase() === email?.toLowerCase())
+  const emailVerifiedAt = emailAccount?.latestVerifiedAt?.getTime()
+  return { userId: claims.userId, email, sessionId: claims.sessionId, ...(Number.isFinite(emailVerifiedAt) ? { emailVerifiedAt } : {}) }
 }
 
 export function createPrivyCircleLinkHandler(dependencies: LinkHandlerDependencies) {

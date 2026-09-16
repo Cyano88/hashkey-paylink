@@ -34,7 +34,6 @@ const context = createUnifiedBalanceKitContext()
 
 const CIRCLE_CHAIN_BY_KEY: Partial<Record<UnifiedBalanceChainKey, UnifiedBalanceChainIdentifier>> = {
   base: 'Base',
-  arc: 'Arc_Testnet',
   arbitrum: 'Arbitrum',
   solana: 'Solana',
 }

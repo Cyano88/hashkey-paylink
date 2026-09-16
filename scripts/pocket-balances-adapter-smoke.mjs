@@ -30,7 +30,7 @@ const handler = createPocketBalancesHandler({
   readLink: async key => {
     readKeys.push(key)
     if (key.endsWith(':arbitrum')) return null
-    const chain = key.split(':').at(-1)
+    const chain = key.split(':').at(-1).replace('arc-mainnet', 'arc')
     return {
       privyUserId: 'privy-user-1',
       email: 'ada@example.com',
@@ -60,7 +60,7 @@ assert.equal(isPocketBalancesReadData(loaded.body), true)
 assert.deepEqual(readKeys, [
   'privy-user-1:base',
   'privy-user-1:arbitrum',
-  'privy-user-1:arc',
+  'privy-user-1:arc-mainnet',
   'privy-user-1:solana',
 ])
 assert.deepEqual(balanceCalls, [
@@ -82,10 +82,10 @@ assert.equal(serialized.includes('wallet-address'), false)
 assert.equal(serialized.includes('privy-user-1'), false)
 assert.equal(serialized.includes('ada@example.com'), false)
 
-const testnetBalanceHandler = createPocketBalancesHandler({
+const mainnetBalanceHandler = createPocketBalancesHandler({
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   readLink: async key => {
-    const chain = key.split(':').at(-1)
+    const chain = key.split(':').at(-1).replace('arc-mainnet', 'arc')
     return {
       privyUserId: 'privy-user-1',
       chain,
@@ -98,15 +98,15 @@ const testnetBalanceHandler = createPocketBalancesHandler({
   },
   readBalance: async network => network === 'arc' ? 66 : 1,
 })
-const testnetBalance = await request(testnetBalanceHandler)
-assert.equal(testnetBalance.body.rows.find(row => row.key === 'arc').balance, 66)
-assert.equal(testnetBalance.body.total, 3)
-assert.equal(testnetBalance.body.totalComplete, true)
-assert.equal(isPocketBalancesReadData(testnetBalance.body), true)
+const mainnetBalance = await request(mainnetBalanceHandler)
+assert.equal(mainnetBalance.body.rows.find(row => row.key === 'arc').balance, 66)
+assert.equal(mainnetBalance.body.total, 69)
+assert.equal(mainnetBalance.body.totalComplete, true)
+assert.equal(isPocketBalancesReadData(mainnetBalance.body), true)
 
-const invalidTestnetTotal = structuredClone(testnetBalance.body)
-invalidTestnetTotal.total += invalidTestnetTotal.rows.find(row => row.key === 'arc').balance
-assert.equal(isPocketBalancesReadData(invalidTestnetTotal), false)
+const invalidMainnetTotal = structuredClone(mainnetBalance.body)
+invalidMainnetTotal.total += invalidMainnetTotal.rows.find(row => row.key === 'arc').balance
+assert.equal(isPocketBalancesReadData(invalidMainnetTotal), false)
 
 const unauthorizedHandler = createPocketBalancesHandler({
   verifyUser: async () => { throw Object.assign(new Error('Missing Privy access token.'), { status: 401 }) },

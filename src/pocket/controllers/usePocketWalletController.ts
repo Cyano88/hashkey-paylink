@@ -3,6 +3,7 @@ import { PRIVY_AUTH_ENABLED } from '../../lib/authMode'
 import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
+  resumeCircleArcMainnetWallet,
   type CircleEvmEmailSession,
 } from '../../lib/circleEvmEmailWallet'
 import {
@@ -38,6 +39,7 @@ function solanaSessionKey(email: string, walletAddress: string) {
 }
 
 function cacheEvmSession(email: string, session: CircleEvmEmailSession) {
+  if (session.chain === 'arc' && session.wallet.blockchain !== 'ARC') return
   sharedEvmSessions.set(evmSessionKey(email, session.chain, session.wallet.address), session)
   if (session.chain === 'base' || session.chain === 'arbitrum') {
     const topology = session.productionEvmTopology?.wallets
@@ -162,7 +164,7 @@ export async function ensurePocketWallet({
       network,
       circleUserToken: session.userToken,
       wallet: session.wallet,
-    }).catch(() => null)
+    })
     return {
       address: session.wallet.address,
       walletId: session.wallet.id,
@@ -180,7 +182,8 @@ export async function ensurePocketWallet({
   const resumedSession = storedSession && storedWallet
     ? secureSessionForNetwork(storedSession, network as Exclude<PocketNetwork, 'solana'>, storedWallet.address)
     : null
-  const session = resumedSession ?? await dependencies.connectEvm(email, network)
+  const mainnetSession = network === 'arc' ? await readPocketSecureWalletSession(email) : null
+  const session = resumedSession ?? (mainnetSession && mainnetSession.wallet.blockchain !== 'ARC-TESTNET' ? await resumeCircleArcMainnetWallet(mainnetSession) : await dependencies.connectEvm(email, network))
   if (!shouldContinue()) return null
   await onEvmSession?.(session)
   const productionWallets = session.productionEvmTopology?.wallets
@@ -192,7 +195,7 @@ export async function ensurePocketWallet({
     network: targetNetwork,
     circleUserToken: session.userToken,
     wallet,
-  }).catch(() => null)))
+  })))
   const linked = linkedRecords[linkTargets.findIndex(([targetNetwork]) => targetNetwork === network)] ?? linkedRecords.find(Boolean)
   return {
     address: session.wallet.address,

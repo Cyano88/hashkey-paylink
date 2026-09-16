@@ -31,7 +31,7 @@ const humanPolicy = {
   defaultNetwork: 'arc',
   paymentOptions: arcRoute,
   settlementMode: 'usdc',
-  environment: 'test',
+  environment: 'live',
   checkoutMode: 'human',
   capabilities: ['arc_agreements'],
   webhookConfigured: false,
@@ -70,26 +70,26 @@ const fixed = {
   recipient: arcRoute[0].recipient,
   payerEmail: 'Customer@Example.com',
 }
-const headers = { 'x-api-key': 'hpl_test_mock', 'idempotency-key': 'agreement:order-0001' }
+const headers = { 'x-api-key': 'hpl_live_mock', 'idempotency-key': 'agreement:order-0001' }
 
 policy = { ...humanPolicy, capabilities: ['hosted_checkout'] }
 assert.equal((await request(handler, 'POST', { body: fixed, headers })).statusCode, 403)
 
-policy = { ...humanPolicy, environment: 'live' }
+policy = { ...humanPolicy, environment: 'test' }
 assert.equal((await request(handler, 'POST', { body: fixed, headers })).statusCode, 403)
 
 policy = { ...humanPolicy, paymentOptions: [{ network: 'base', recipient: arcRoute[0].recipient }], defaultNetwork: 'base' }
 assert.equal((await request(handler, 'POST', { body: fixed, headers })).statusCode, 409)
 
 policy = humanPolicy
-assert.equal((await request(handler, 'POST', { body: fixed, headers: { 'x-api-key': 'hpl_test_mock' } })).statusCode, 400)
+assert.equal((await request(handler, 'POST', { body: fixed, headers: { 'x-api-key': 'hpl_live_mock' } })).statusCode, 400)
 
 const recipientMismatch = await request(handler, 'POST', {
   body: { ...fixed, recipient: '0x2222222222222222222222222222222222222222' },
   headers,
 })
 assert.equal(recipientMismatch.statusCode, 409)
-assert.equal(recipientMismatch.body.error, "Recipient must match this project's configured Arc Testnet receiving address.")
+assert.equal(recipientMismatch.body.error, "Recipient must match this project's configured Arc Mainnet receiving address.")
 
 verifiedRecipients.add('0x2222222222222222222222222222222222222222')
 const verifiedDirectRecipient = await request(handler, 'POST', {
@@ -104,7 +104,7 @@ assert.equal(created.statusCode, 201)
 assert.equal(created.headers['cache-control'], 'no-store')
 assert.equal(created.body.replayed, false)
 assert.equal(created.body.agreement.checkoutMode, 'human')
-assert.equal(created.body.agreement.environment, 'test')
+assert.equal(created.body.agreement.environment, 'live')
 assert.equal(created.body.agreement.network, 'arc')
 assert.equal(created.body.agreement.amount, '10.5')
 assert.equal(created.body.agreement.durationSeconds, 86400)
@@ -122,7 +122,7 @@ assert.equal('payerAccessHash' in created.body.agreement, false)
 assert.match(created.body.payerAccessToken, /^agrp_[A-Za-z0-9_-]{40,100}$/)
 assert.equal(created.body.payerReviewPath, `/agreements/${created.body.agreement.id}#access=${created.body.payerAccessToken}`)
 assert.match(created.body.nextAction, /Send payerReviewPath to the payer/)
-assert.match(created.body.nextAction, /private Arc Testnet pilot/)
+assert.match(created.body.nextAction, /private Arc Mainnet pilot/)
 assert.equal(JSON.stringify(created.body).includes('checkoutUrl'), false)
 assert.equal(JSON.stringify(created.body).includes('depositAddress'), false)
 
@@ -264,7 +264,7 @@ const apiRotated = await request(createArcAgreementsHandler({
   now: () => new Date('2026-07-28T14:00:00.000Z'),
 }), 'POST', {
   body: { action: 'rotate_payer_link', agreementId: created.body.agreement.id },
-  headers: { 'x-api-key': 'hpl_test_mock' },
+  headers: { 'x-api-key': 'hpl_live_mock' },
 })
 assert.equal(apiRotated.statusCode, 200)
 assert.equal(apiRotated.body.payerAccessToken, apiRotatedToken)
@@ -277,7 +277,7 @@ const apiRotationBlocked = await request(createArcAgreementsHandler({
   hasActivationAttempt: async () => true,
 }), 'POST', {
   body: { action: 'rotate_payer_link', agreementId: created.body.agreement.id },
-  headers: { 'x-api-key': 'hpl_test_mock' },
+  headers: { 'x-api-key': 'hpl_live_mock' },
 })
 assert.equal(apiRotationBlocked.statusCode, 409)
 assert.match(apiRotationBlocked.body.error, /activation has started/)
@@ -319,7 +319,7 @@ const publicRelease = await request(createArcAgreementsHandler({
     deliveryNote: 'Completed the protected delivery.',
     evidenceReference: 'https://delivery.example/proof',
   },
-  headers: { 'x-api-key': 'hpl_test_mock' },
+  headers: { 'x-api-key': 'hpl_live_mock' },
 })
 assert.equal(publicRelease.statusCode, 201)
 assert.equal(publicRelease.body.releaseRequest.status, 'awaiting_review')
@@ -340,7 +340,7 @@ const foreignRelease = await request(createArcAgreementsHandler({
     deliveryNote: 'Completed the protected delivery.',
     evidenceReference: 'https://delivery.example/proof',
   },
-  headers: { 'x-api-key': 'hpl_test_mock' },
+  headers: { 'x-api-key': 'hpl_live_mock' },
 })
 assert.equal(foreignRelease.statusCode, 404)
 
@@ -385,7 +385,7 @@ assert.equal('payerReviewPath' in agentCreated.body, false)
 assert.match(agentCreated.body.nextAction, /\/api\/v2\/agreements\/agent/)
 assert.equal(store.agreements[agentCreated.body.agreement.id].payerAccessHash, '')
 const agentRotationBlocked = await request(handler, 'POST', {
-  headers: { 'x-api-key': 'hpl_test_mock' },
+  headers: { 'x-api-key': 'hpl_live_mock' },
   body: { action: 'rotate_payer_link', agreementId: agentCreated.body.agreement.id },
 })
 assert.equal(agentRotationBlocked.statusCode, 409)

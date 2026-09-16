@@ -14,8 +14,8 @@ import {
   evaluateArcAgreementDeploymentSimulation,
 } from '../lib/arcAgreementDeploymentSimulation'
 
-const ARC_RPC_URL = 'https://rpc.testnet.arc.network'
-const ARC_CHAIN_ID = 5_042_002
+const ARC_RPC_URL = 'https://rpc.mainnet.arc.io'
+const ARC_CHAIN_ID = 5_042
 const USDC_READ_ABI = ['function decimals() view returns (uint8)'] as const
 
 function required(value: unknown, name: string) {
@@ -104,7 +104,7 @@ async function main() {
   const usdc = new Contract(manifest.network.usdc, USDC_READ_ABI, provider)
   const usdcDecimals = await readWithBoundedRetry(() => usdc.decimals() as Promise<bigint>)
   if (usdcDecimals !== 6n) {
-    throw new Error('Arc Testnet USDC precision does not match the reviewed network configuration.')
+    throw new Error('Arc Mainnet USDC precision does not match the reviewed network configuration.')
   }
 
   let estimatedGas: bigint | null = null

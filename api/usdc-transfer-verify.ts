@@ -1,6 +1,9 @@
 import { formatUnits, isAddress, pad, parseUnits, type Address } from 'viem'
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+const ARC_USDC_EMITTER = '0xfffffffffffffffffffffffffffffffffffffffe'
+const usdcEventAddress = (chain: EvmUsdcChain) => chain === 'arc' ? ARC_USDC_EMITTER : USDC_TOKENS[chain]
+const usdcEventUnits = (chain: EvmUsdcChain, data?: string) => BigInt(data || '0x0') / (chain === 'arc' ? 1_000_000_000_000n : 1n)
 const BASE_PUBLIC_RPC = 'https://mainnet.base.org'
 
 const USDC_TOKENS = {
@@ -34,7 +37,7 @@ type TransferLog = {
 }
 
 function rpcFor(chain: EvmUsdcChain) {
-  if (chain === 'arc') return process.env.PRIVATE_RPC_URL_ARC
+  if (chain === 'arc') return process.env.PRIVATE_RPC_URL_ARC_MAINNET || 'https://rpc.mainnet.arc.io'
   if (chain === 'arbitrum') return process.env.PRIVATE_RPC_URL_ARB
   return process.env.PRIVATE_RPC_URL
 }
@@ -92,7 +95,7 @@ async function getTransferLogs(input: {
   for (let from = input.fromBlock; from <= input.toBlock; from += input.chunkSize) {
     const end = from + input.chunkSize - 1n > input.toBlock ? input.toBlock : from + input.chunkSize - 1n
     logs.push(...await rpcCall<TransferLog[]>(input.rpcUrl, 'eth_getLogs', [{
-      address: USDC_TOKENS[input.chain],
+      address: usdcEventAddress(input.chain),
       fromBlock: `0x${from.toString(16)}`,
       toBlock: `0x${end.toString(16)}`,
       topics: [TRANSFER_TOPIC, payerTopic, recipientTopic],
@@ -231,7 +234,7 @@ export async function findEvmUsdcTransfer(input: {
     logs = await getTransferLogs({ rpcUrl: discoveryRpcUrl, chain: input.chain, payer: input.payer, recipient: input.recipient, fromBlock, toBlock, chunkSize })
   }
   const candidates = logs.filter(log => {
-    const value = log.data ? BigInt(log.data) : 0n
+    const value = usdcEventUnits(input.chain, log.data)
     return !!log.transactionHash && (input.exactAmount ? value === minUnits : value >= minUnits)
   })
   let match: TransferLog | undefined
@@ -297,7 +300,7 @@ export async function verifyEvmUsdcTransfer(input: {
     confirmedAt = new Date(confirmedAtMs).toISOString()
   }
 
-  const token = USDC_TOKENS[input.chain].toLowerCase()
+  const token = usdcEventAddress(input.chain).toLowerCase()
   const recipientTopic = pad(input.recipient as Address, { size: 32 }).toLowerCase()
   const payerTopic = input.payer ? pad(input.payer as Address, { size: 32 }).toLowerCase() : ''
   const minUnits = usdcAmountUnits(input.minAmount)
@@ -309,7 +312,7 @@ export async function verifyEvmUsdcTransfer(input: {
     if (topics[0] !== TRANSFER_TOPIC) continue
     if (payerTopic && topics[1] !== payerTopic) continue
     if (topics[2] !== recipientTopic) continue
-    const value = log.data ? BigInt(log.data) : 0n
+    const value = usdcEventUnits(input.chain, log.data)
     if (value > matchedUnits) matchedUnits = value
     if (value >= minUnits) {
       return {

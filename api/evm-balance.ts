@@ -11,14 +11,14 @@ const ERC20_BALANCE_OF_ABI = [{
 }] as const
 
 const arc = defineChain({
-  id: 5042002,
-  name: 'Arc Testnet',
+  id: 5042,
+  name: 'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
   rpcUrls: {
-    default: { http: ['https://rpc.testnet.arc.network'] },
-    public: { http: ['https://rpc.testnet.arc.network'] },
+    default: { http: ['https://rpc.mainnet.arc.io'] },
+    public: { http: ['https://rpc.mainnet.arc.io'] },
   },
-  testnet: true,
+  testnet: false,
 })
 
 const CHAIN_CONFIG = {
@@ -40,11 +40,11 @@ const CHAIN_CONFIG = {
   },
   arc: {
     chain: arc,
-    label: 'Arc Testnet',
+    label: 'Arc Mainnet',
     tokenAddress: '0x3600000000000000000000000000000000000000',
     decimals: 6,
-    rpcEnv: 'PRIVATE_RPC_URL_ARC',
-    fallbackRpc: 'https://rpc.testnet.arc.network',
+    rpcEnv: 'PRIVATE_RPC_URL_ARC_MAINNET',
+    fallbackRpc: 'https://rpc.mainnet.arc.io',
   },
   arbitrum: {
     chain: arbitrum,

@@ -1,3 +1,4 @@
+import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash } from 'node:crypto'
 import {
   decodeFunctionData,
@@ -31,8 +32,8 @@ import {
   readDurableJson,
 } from './render-durable-store.js'
 
-const STORE_KEY = (process.env.ARC_AGREEMENT_PAYER_LIFECYCLE_STORE_KEY
-  ?? 'hashpaylink:arc-agreement-payer-lifecycle:v1').trim()
+const STORE_KEY = arcMainnetStoreKey('payer-lifecycle', process.env.ARC_AGREEMENT_PAYER_LIFECYCLE_STORE_KEY_MAINNET)
+
 const AGREEMENT_ID = /^agr_[a-z0-9]{12,64}$/i
 const PARTNER_ID = /^dev_[a-z0-9]{8,64}$/i
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -166,7 +167,7 @@ function confirmationBlocks(value: number | undefined) {
 }
 
 function directCall(
-  chainId: 5042002,
+  chainId: 5042,
   escrow: Address,
   action: ArcAgreementPayerLifecycleActionName,
 ): ArcAgreementPayerCall {
@@ -635,8 +636,8 @@ async function verifyPayerLifecycleTransaction(input: {
   action: ArcAgreementPayerLifecycleAction
   transactionHash: Hex
 }) {
-  if (await input.client.getChainId() !== 5_042_002) {
-    throw new Error('Payer lifecycle transaction is not on Arc Testnet.')
+  if (await input.client.getChainId() !== 5_042) {
+    throw new Error('Payer lifecycle transaction is not on Arc Mainnet.')
   }
   const transaction = await input.client.getTransaction({ hash: input.transactionHash })
   if (transaction.hash.toLowerCase() !== input.transactionHash || transaction.value !== 0n) {

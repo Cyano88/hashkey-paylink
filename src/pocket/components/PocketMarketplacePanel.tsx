@@ -152,7 +152,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
       {network === 'arc' ? (
         <div className="p-3.5">
           <p className="text-sm font-semibold text-gray-900 dark:text-white">Marketplace payments use mainnet App Pay</p>
-          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Circle Gateway routes purchases from your unified mainnet balance. Arc Testnet is not used for live purchases.</p>
+          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Circle Gateway routes purchases from your unified mainnet balance. Arc Mainnet is not used for live purchases.</p>
           <button type="button" onClick={onUseBase} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-semibold text-white dark:bg-white dark:text-gray-950"><ArrowRight className="h-4 w-4" /> Use mainnet App Pay</button>
         </div>
       ) : (

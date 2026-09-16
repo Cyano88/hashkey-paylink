@@ -222,7 +222,7 @@ function readableBankPayoutError(err: unknown, fallback: string) {
 const POS_NETWORK_OPTIONS: Array<{ key: PosNetwork; label: string; badge?: string }> = [
   { key: 'base', label: 'Base' },
   { key: 'arbitrum', label: 'Arbitrum' },
-  { key: 'arc', label: 'Arc', badge: 'Testnet' },
+  { key: 'arc', label: 'Arc', badge: 'Mainnet' },
   { key: 'solana', label: 'Solana' },
 ]
 
@@ -1765,8 +1765,8 @@ export default function CreateLink({
     : isBankSend
       ? 'Enter the Naira amount the payer will send from their bank.'
       : multiChainMode
-        ? 'USDC on Base, Arc Testnet, Solana, or Arbitrum — payer chooses the chain'
-        : `USDC on ${selectedNet === 'arc' ? 'Arc Testnet' : CHAIN_META[selectedNet].label}`
+        ? 'USDC on Base, Arc Mainnet, Solana, or Arbitrum — payer chooses the chain'
+        : `USDC on ${selectedNet === 'arc' ? 'Arc Mainnet' : CHAIN_META[selectedNet].label}`
   const pocketAddressGuidance = !isBankReceive && !isBankSend && !canGenerate && (
     multiChainMode ? !evmDirty && !solanaDirty : selectedNet === 'solana' ? !solanaDirty : !evmDirty
   )
@@ -2502,7 +2502,7 @@ export default function CreateLink({
               selectedNetworkLabel={CHAIN_META[selectedNet].label}
               options={VISIBLE_CREATE_CHAINS.map(network => ({
                 value: network,
-                label: `${CHAIN_META[network].label}${network === 'arc' ? ' Testnet' : ''}`,
+                label: `${CHAIN_META[network].label}${network === 'arc' ? ' Mainnet' : ''}`,
               }))}
               multiChain={multiChainMode}
               emailReceive={receiveMode === 'email'}
@@ -2868,7 +2868,7 @@ export default function CreateLink({
             flexible={flexAmount}
             localCurrency={isBankReceive || isBankSend}
             amountLabel={isBankReceive || isBankSend ? formatNgnAmount(amt) : formatAmount(amt, 6)}
-            networkLabel={multiChainMode ? 'Base · Arc Testnet · Arbitrum' : CHAIN_META[selectedNet].label}
+            networkLabel={multiChainMode ? 'Base · Arc Mainnet · Arbitrum' : CHAIN_META[selectedNet].label}
             evmAddress={evmValid ? evmAddr : undefined}
             solanaAddress={solanaValid ? solanaAddr : undefined}
             memo={memo}

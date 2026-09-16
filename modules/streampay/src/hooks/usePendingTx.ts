@@ -3,10 +3,10 @@ import { createPublicClient, http, defineChain } from 'viem'
 
 // ── Arc public RPC (frontend-safe, no key) ────────────────────────────────────
 const arc = defineChain({
-  id:             5042002,
-  name:           'Arc Testnet',
+  id:             5042,
+  name:           'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls:        { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
 const client = createPublicClient({ chain: arc, transport: http() })

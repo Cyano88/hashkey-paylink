@@ -1,3 +1,4 @@
+import { requireArcMainnetCircleKey } from './arc-mainnet-boundary.js'
 import { randomUUID } from 'node:crypto'
 import { encryptCircleEntitySecret } from './circle-developer-treasury.js'
 import {
@@ -66,13 +67,10 @@ export function createArcAgreementOperatorClient(input: {
   fetchImpl?: typeof fetch
   timeoutMs?: number
 } = {}): ArcAgreementOperatorClient {
-  const apiKey = required(input.apiKey ?? process.env.CIRCLE_TEST_API_KEY, 'Circle test API key')
-  if (!apiKey.startsWith('TEST_API_KEY:')) {
-    throw new Error('Arc Agreement operator execution requires a Circle test API key.')
-  }
-  const entitySecret = required(input.entitySecret ?? process.env.CIRCLE_ENTITY_SECRET, 'Circle entity secret')
+  const apiKey = requireArcMainnetCircleKey(input.apiKey ?? process.env.CIRCLE_API_KEY_ARC_MAINNET)
+  const entitySecret = required(input.entitySecret ?? process.env.CIRCLE_ENTITY_SECRET_ARC_MAINNET, 'Circle entity secret')
   const operatorWalletId = required(
-    input.operatorWalletId ?? process.env.ARC_AGREEMENT_OPERATOR_WALLET_ID,
+    input.operatorWalletId ?? process.env.ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET,
     'Arc Agreement operator wallet id',
   )
   const fetchImpl = input.fetchImpl ?? fetch

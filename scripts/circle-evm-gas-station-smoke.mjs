@@ -18,7 +18,7 @@ const wallet = {
 assert.deepEqual(Object.keys(CIRCLE_GAS_STATION_EVM_NETWORKS), ['base', 'arbitrum', 'arc'])
 assert.equal(CIRCLE_GAS_STATION_EVM_NETWORKS.base.blockchain, 'BASE')
 assert.equal(CIRCLE_GAS_STATION_EVM_NETWORKS.arbitrum.blockchain, 'ARB')
-assert.equal(CIRCLE_GAS_STATION_EVM_NETWORKS.arc.blockchain, 'ARC-TESTNET')
+assert.equal(CIRCLE_GAS_STATION_EVM_NETWORKS.arc.blockchain, 'ARC')
 
 const verified = requireCircleGasStationEvmWallet({
   chain: 'base',
@@ -67,3 +67,5 @@ assert.match(checkoutSource, /function circleEvmPaymentBreakdown/)
 assert.match(checkoutSource, /circleEvmPaymentBreakdown\(totalUnits\)\.requiredUnits/)
 
 console.log('Circle EVM Gas Station policy smoke tests passed.')
+
+assert.throws(() => requireCircleGasStationEvmWallet({chain:'arc',walletId:wallet.id,walletAddress:wallet.address,wallets:[{...wallet,blockchain:'ARC-TESTNET'}]}), /ownership/)

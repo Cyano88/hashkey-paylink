@@ -57,6 +57,7 @@ type DeveloperProject = {
   suspendedAt?: string
   suspendedBy?: string
   suspensionReason?: string
+  arcMainnetChainId?: 5042
   arcAgreementPilot?: ArcAgreementPilotPolicy
   networks: DeveloperNetwork[]
   defaultNetwork: DeveloperNetwork
@@ -357,6 +358,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     settlementStatus: project.settlementStatus,
     operationalStatus: project.operationalStatus === 'suspended' ? 'suspended' : 'active',
     arcAgreementPilot,
+    arcMainnetChainId: project.arcMainnetChainId,
     suspendedAt: project.suspendedAt,
     suspensionReason: project.suspensionReason,
     ...(includeOperations ? {
@@ -509,7 +511,7 @@ function pilotInteger(value: unknown, name: string, minimum: number, maximum: nu
 
 function projectArcPilotReady(project: DeveloperProject) {
   const hasArcRecipient = project.networks.includes('arc') && validRecipient(project.recipients.arc)
-  const hasTestKey = project.keys.some(key => !key.revokedAt && (key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')) === 'test')
+  const hasLiveKey = project.keys.some(key => !key.revokedAt && (key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')) === 'live')
   return (projectCheckoutMode(project) === 'human' || projectCheckoutMode(project) === 'agentic')
     && project.settlementMode === 'usdc'
     && project.settlementStatus === 'ready'
@@ -517,7 +519,7 @@ function projectArcPilotReady(project: DeveloperProject) {
     && Boolean(project.capabilities?.includes('arc_agreements'))
     && Boolean(project.webhookUrl && project.webhookSecretCipher)
     && Boolean(hasArcRecipient)
-    && hasTestKey
+    && hasLiveKey
 }
 
 function adminProjectIndex(store: DeveloperStore | undefined) {
@@ -609,7 +611,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const approving = action === 'admin-arc-pilot-approve'
         const reason = clean(req.body?.reason, 300)
         if (approving && !projectArcPilotReady(currentProject)) {
-          return res.status(409).json({ ok: false, error: 'Arc pilot approval requires a ready USDC project with Arc routing, an active test key, and a signed webhook.' })
+          return res.status(409).json({ ok: false, error: 'Arc pilot approval requires a ready USDC project with Arc routing, an active live key, and a signed webhook.' })
         }
         if (!approving && reason.length < 8) {
           return res.status(400).json({ ok: false, error: 'Add a clear reason for disabling Arc Agreement activation.' })
@@ -643,7 +645,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const latest = current?.projects?.[projectId]
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           if (approving && !projectArcPilotReady(latest)) {
-            throw Object.assign(new Error('Arc pilot approval requires a ready USDC project with Arc routing, an active test key, and a signed webhook.'), { status: 409 })
+            throw Object.assign(new Error('Arc pilot approval requires a ready USDC project with Arc routing, an active live key, and a signed webhook.'), { status: 409 })
           }
           const pilot: ArcAgreementPilotPolicy = {
             status: approving ? 'approved' : 'disabled',
@@ -793,6 +795,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const next: DeveloperProject = {
             ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, settlementMode,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
+            arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,
             networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
             bankCode, bankName, bankAccountName: verifiedBankName, bankVerifiedAt: settlementMode === 'ngn' ? bankVerifiedAt : undefined,
             bankAccountLast4: settlementMode === 'ngn' ? (bankAccountNumber.slice(-4) || latest.bankAccountLast4) : '',
@@ -815,12 +818,12 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.status(409).json({ ok: false, error: 'Complete checkout routing before creating a key.' })
         }
         const environment: DeveloperEnvironment = clean(req.body?.environment, 10).toLowerCase() === 'test' ? 'test' : 'live'
-        const environmentNetworks: DeveloperNetwork[] = environment === 'test' ? ['arc'] : ['base', 'arbitrum']
+        const environmentNetworks: DeveloperNetwork[] = environment === 'test' ? [] : ['base', 'arbitrum', 'arc']
         if (currentProject.settlementMode === 'ngn' && environment === 'test') {
           return res.status(409).json({ ok: false, error: 'Naira settlement requires a live key.' })
         }
         if (currentProject.settlementMode === 'usdc' && !currentProject.networks.some(network => environmentNetworks.includes(network))) {
-          return res.status(409).json({ ok: false, error: `Configure ${environment === 'test' ? 'Arc Testnet' : 'Base or Arbitrum'} before creating this key.` })
+          return res.status(409).json({ ok: false, error: `Configure ${environment === 'test' ? 'a supported sandbox (Arc now requires live keys)' : 'Base, Arbitrum, or Arc Mainnet'} before creating this key.` })
         }
         const rawKey = dependencies.createSecret(environment === 'test' ? 'hpl_test' : 'hpl_live')
         const key: DeveloperKey = {
@@ -886,13 +889,13 @@ function policyForDeveloperProject(
 ): DeveloperCheckoutPolicy | null {
   if (secret.length < 32 || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
   const allowedNetworks = environment === 'test'
-    ? new Set<DeveloperNetwork>(['arc'])
-    : new Set<DeveloperNetwork>(['base', 'arbitrum'])
+    ? new Set<DeveloperNetwork>()
+    : new Set<DeveloperNetwork>(['base', 'arbitrum', 'arc'])
   if (project.settlementMode === 'ngn' && environment !== 'live') return null
   const paymentOptions = project.settlementMode === 'ngn'
     ? (project.refundAddress ? [{ network: 'base' as const, recipient: project.refundAddress }] : [])
     : project.networks.flatMap(network => (
-        allowedNetworks.has(network) && project.recipients[network]
+        allowedNetworks.has(network) && (network !== 'arc' || project.arcMainnetChainId === 5042) && project.recipients[network]
           ? [{ network, recipient: project.recipients[network]! }]
           : []
       ))

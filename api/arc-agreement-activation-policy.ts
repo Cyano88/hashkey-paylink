@@ -1,3 +1,4 @@
+import { requireArcMainnetAgreementRelease, requireArcMainnetCircleKey } from './arc-mainnet-boundary.js'
 import { getAddress, isAddress, type Address } from 'viem'
 import {
   ARC_AGREEMENT_NETWORK,
@@ -9,13 +10,10 @@ import {
 } from './arc-agreement-reconciliation.js'
 import type { DeveloperCheckoutMode, DeveloperCheckoutPolicy } from './developer-projects.js'
 
-export const REVIEWED_ARC_AGREEMENT_FACTORY = getAddress('0xe828795f52b3d6902b982ab7266aaae404d7cea5')
-export const REVIEWED_ARC_AGREEMENT_OPERATOR = getAddress('0xd55d6ba98eABeCeCD24C84e715b13157ee4fCb49')
 
 const PROJECT_ID = /^dev_[a-z0-9]{8,64}$/i
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ENTITY_SECRET = /^[0-9a-f]{64}$/i
-const TEST_API_KEY = /^TEST_API_KEY:[^:\s]+:[^:\s]+$/
 const MAX_PILOT_USDC_UNITS = 1_000_000_000n
 const MAX_PILOT_DAILY_VOLUME_USDC_UNITS = 10_000_000_000n
 const MAX_PILOT_DURATION_SECONDS = 2_592_000
@@ -82,7 +80,7 @@ function usdcCeiling(value: unknown, name: string, maximum: bigint) {
   const [whole, fraction = ''] = normalized.split('.')
   const units = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'))
   if (units <= 0n || units > maximum) {
-    throw new Error(`${name} must be greater than 0 and no more than ${maximum / 1_000_000n} test USDC.`)
+    throw new Error(`${name} must be greater than 0 and no more than ${maximum / 1_000_000n} USDC.`)
   }
   return units
 }
@@ -104,13 +102,13 @@ function durationCeiling(value: unknown) {
 }
 
 function requireOperatorConfiguration(env: NodeJS.ProcessEnv) {
-  const walletId = required(env.ARC_AGREEMENT_OPERATOR_WALLET_ID, 'ARC_AGREEMENT_OPERATOR_WALLET_ID')
-  if (!UUID.test(walletId)) throw new Error('ARC_AGREEMENT_OPERATOR_WALLET_ID is invalid.')
-  if (!TEST_API_KEY.test(required(env.CIRCLE_TEST_API_KEY, 'CIRCLE_TEST_API_KEY'))) {
-    throw new Error('CIRCLE_TEST_API_KEY must be a Circle test API key.')
+  const walletId = required(env.ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET, 'ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET')
+  if (!UUID.test(walletId)) throw new Error('ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET is invalid.')
+  if (!TEST_API_KEY.test(required(env.CIRCLE_API_KEY, 'CIRCLE_API_KEY'))) {
+    throw new Error('CIRCLE_API_KEY must be a Circle mainnet API key.')
   }
-  if (!ENTITY_SECRET.test(required(env.CIRCLE_ENTITY_SECRET, 'CIRCLE_ENTITY_SECRET'))) {
-    throw new Error('CIRCLE_ENTITY_SECRET must be the registered 32-byte hexadecimal entity secret.')
+  if (!ENTITY_SECRET.test(required(env.CIRCLE_ENTITY_SECRET_ARC_MAINNET, 'CIRCLE_ENTITY_SECRET_ARC_MAINNET'))) {
+    throw new Error('CIRCLE_ENTITY_SECRET_ARC_MAINNET must be the registered 32-byte hexadecimal entity secret.')
   }
 }
 
@@ -121,7 +119,7 @@ function requireProjectPolicy(
   if (!allowedModes.has(policy.checkoutMode)) {
     throw new Error('This checkout mode is not allowlisted for Arc Agreement activation.')
   }
-  if (policy.environment !== 'test') throw new Error('Arc Agreement activation requires a test API key.')
+  if (policy.environment !== 'live') throw new Error('Arc Agreement activation requires a live API key.')
   if (policy.settlementMode !== 'usdc') throw new Error('Arc Agreement activation requires USDC settlement.')
   if (!policy.capabilities.includes('arc_agreements')) {
     throw new Error('This developer project has not enabled Arc Agreements.')
@@ -131,7 +129,7 @@ function requireProjectPolicy(
   }
   const arcRoute = policy.paymentOptions.find(option => option.network === 'arc')
   if (!arcRoute || !isAddress(arcRoute.recipient)) {
-    throw new Error('Arc Agreement activation requires a configured Arc Testnet recipient.')
+    throw new Error('Arc Agreement activation requires a configured Arc Mainnet recipient.')
   }
   return getAddress(arcRoute.recipient)
 }
@@ -187,12 +185,13 @@ export function auditArcAgreementInvitePilot(input: {
     throw new Error(`Invite pilot preflight requires runtime switches explicitly set to false: ${nonDisabledFlags.join(', ')}.`)
   }
 
+  const release = requireArcMainnetAgreementRelease()
   const runtime = arcAgreementRuntimeConfig(env)
-  if (runtime.factory !== REVIEWED_ARC_AGREEMENT_FACTORY) {
-    throw new Error('ARC_AGREEMENT_FACTORY_ADDRESS does not match the reviewed Arc Testnet factory.')
+  if (runtime.factory !== release.factory) {
+    throw new Error('ARC_AGREEMENT_FACTORY_ADDRESS_MAINNET cannot activate until a mainnet factory deployment has been reviewed and pinned.')
   }
-  if (runtime.operator !== REVIEWED_ARC_AGREEMENT_OPERATOR) {
-    throw new Error('ARC_AGREEMENT_OPERATOR_ADDRESS does not match the reviewed immutable operator.')
+  if (runtime.operator !== release.operator) {
+    throw new Error('ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET does not match the reviewed immutable operator.')
   }
   if (runtime.confirmations < 5) {
     throw new Error('Arc Agreement activation requires at least 5 confirmation blocks.')
@@ -256,12 +255,13 @@ export function authorizeArcAgreementActivation(input: {
   if (String(env.ARC_AGREEMENTS_ENABLED ?? '').trim().toLowerCase() !== 'true') {
     throw new Error('Arc Agreement activation is disabled.')
   }
+  const release = requireArcMainnetAgreementRelease()
   const runtime = arcAgreementRuntimeConfig(env)
-  if (runtime.factory !== REVIEWED_ARC_AGREEMENT_FACTORY) {
-    throw new Error('ARC_AGREEMENT_FACTORY_ADDRESS does not match the reviewed Arc Testnet factory.')
+  if (runtime.factory !== release.factory) {
+    throw new Error('ARC_AGREEMENT_FACTORY_ADDRESS_MAINNET cannot activate until a mainnet factory deployment has been reviewed and pinned.')
   }
-  if (runtime.operator !== REVIEWED_ARC_AGREEMENT_OPERATOR) {
-    throw new Error('ARC_AGREEMENT_OPERATOR_ADDRESS does not match the reviewed immutable operator.')
+  if (runtime.operator !== release.operator) {
+    throw new Error('ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET does not match the reviewed immutable operator.')
   }
   if (runtime.confirmations < 5) {
     throw new Error('Arc Agreement activation requires at least 5 confirmation blocks.')
@@ -273,15 +273,15 @@ export function authorizeArcAgreementActivation(input: {
   const configuredRecipient = requireProjectPolicy(input.policy, allowedModes)
 
   if (getAddress(input.draft.chainTerms.recipient) !== configuredRecipient) {
-    throw new Error('Agreement recipient must match the project Arc Testnet recipient.')
+    throw new Error('Agreement recipient must match the project Arc Mainnet recipient.')
   }
   const amount = BigInt(input.draft.chainTerms.amountUsdcUnits)
-  if (amount > limits.amountCeilingUsdcUnits) throw new Error('Agreement amount exceeds the configured testnet activation ceiling.')
+  if (amount > limits.amountCeilingUsdcUnits) throw new Error('Agreement amount exceeds the configured mainnet activation ceiling.')
   if (amount > limits.dailyVolumeCeilingUsdcUnits) {
     throw new Error('Agreement amount exceeds the configured project daily-volume ceiling.')
   }
   if (input.draft.chainTerms.durationSeconds > limits.durationCeilingSeconds) {
-    throw new Error('Agreement duration exceeds the configured testnet activation ceiling.')
+    throw new Error('Agreement duration exceeds the configured mainnet activation ceiling.')
   }
 
   const prepared = prepareArcAgreementDeployment({

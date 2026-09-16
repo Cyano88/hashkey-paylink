@@ -5,7 +5,7 @@ export default function Chains() {
     <DocPage>
       <DocHeader
         title="Supported Chains"
-        description="Current public Hash PayLink flows focus on Circle USDC across Base, Arbitrum, Arc Testnet, and Solana."
+        description="Current public Hash PayLink flows focus on Circle USDC across Base, Arbitrum, Arc Mainnet, and Solana."
       />
 
       <Section title="Public chain overview">
@@ -14,7 +14,7 @@ export default function Chains() {
           rows={[
             ['Base', 'USDC', 'Payment links, Telegram checkout, PolyDesk funding, retail POS', '8453'],
             ['Arbitrum', 'USDC', 'Payment links, retail POS, and sponsored EVM checkout paths', '42161'],
-            ['Arc Testnet', 'USDC', 'Arc Agreements API and agentic payment testing', '5042002'],
+            ['Arc Mainnet', 'USDC', 'Pocket bridging, Arc token swaps, and USDC payments', '5042'],
             ['Solana', 'USDC', 'Payment links and retail POS through the Solana relay path', 'mainnet-beta'],
           ]}
         />
@@ -33,14 +33,14 @@ export default function Chains() {
         <InfoBox type="warning">Use native Arbitrum USDC at <Code>0xaf88d065e77c8cC2239327C5EDb3A432268e5831</Code>. Do not send bridged USDC.e to Hash PayLink Arbitrum vaults.</InfoBox>
       </Section>
 
-      <Section title="Arc Testnet">
-        <p>Arc powers the Hash PayLink Agreements API. Privy provides email identity, Circle wallet sessions handle payer wallet access, and each funded agreement uses its own Arc Testnet USDC escrow.</p>
+      <Section title="Arc Mainnet">
+        <p>Arc mainnet supports USDC payments and Pocket token swaps where a liquidity route exists. Agreements require a separately verified mainnet escrow deployment before activation.</p>
         <Table
           headers={['Property', 'Value']}
           rows={[
-            ['Chain ID', '5042002'],
-            ['RPC', 'https://rpc.testnet.arc.network'],
-            ['Explorer', 'https://testnet.arcscan.app'],
+            ['Chain ID', '5042'],
+            ['RPC', 'https://rpc.mainnet.arc.io'],
+            ['Explorer', 'https://explorer.arc.io'],
           ]}
         />
       </Section>

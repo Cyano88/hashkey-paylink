@@ -103,20 +103,18 @@ await verifyCircleLinkWallet({
   wallet,
   listWallets: async () => [sponsoredWallet],
 })
-await verifyCircleLinkWallet({
-  userToken: 'arc-alias-token',
-  chain: 'arc',
-  wallet: { ...wallet, blockchain: 'ARC_TESTNET' },
-  listWallets: async () => [{ ...sponsoredWallet, blockchain: 'ARC' }],
-})
+await assert.rejects(verifyCircleLinkWallet({
+  userToken: 'arc-alias-token', chain: 'arc', wallet: { ...wallet, blockchain: 'ARC_TESTNET' },
+  listWallets: async () => [{ ...sponsoredWallet, blockchain: 'ARC' }], attempts: 1,
+}), error => error.status === 403)
 let transientWalletLists = 0
 await verifyCircleLinkWallet({
   userToken: 'transient-token',
   chain: 'arc',
-  wallet: { ...wallet, blockchain: 'ARC-TESTNET' },
+  wallet: { ...wallet, blockchain: 'ARC' },
   listWallets: async () => {
     transientWalletLists += 1
-    return transientWalletLists === 1 ? [] : [{ ...sponsoredWallet, blockchain: 'ARC-TESTNET' }]
+    return transientWalletLists === 1 ? [] : [{ ...sponsoredWallet, blockchain: 'ARC' }]
   },
   wait: async () => undefined,
 })

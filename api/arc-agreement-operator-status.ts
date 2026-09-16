@@ -70,7 +70,7 @@ function requiredRequestId(value: unknown) {
 
 function requiredApiKey(value: unknown) {
   const apiKey = String(value ?? '').trim()
-  if (apiKey.length < 16) throw new Error('Circle test API key is required for operator transaction status.')
+  if (apiKey.length < 16) throw new Error('Circle mainnet API key is required for operator transaction status.')
   return apiKey
 }
 

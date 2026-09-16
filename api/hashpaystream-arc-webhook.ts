@@ -1,3 +1,4 @@
+import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { Request, Response } from 'express'
 import {
@@ -5,7 +6,6 @@ import {
   mutateDurableJson,
 } from './render-durable-store.js'
 
-const DEFAULT_STORE_KEY = 'hashpaylink:hashpaystream-arc-webhooks:v1'
 const SIGNATURE_TOLERANCE_SECONDS = 300
 const PROJECT_ID = /^dev_[a-z0-9]{8,64}$/i
 const EVENT_ID = /^evt_[a-z0-9]{12,64}$/i
@@ -79,7 +79,7 @@ function safeEqualHex(left: string, right: string) {
 function configuration(env: NodeJS.ProcessEnv) {
   const projectId = String(env.HASHPAYSTREAM_ARC_PROJECT_ID ?? '').trim()
   const signingSecret = String(env.HASHPAYSTREAM_ARC_WEBHOOK_SECRET ?? '').trim()
-  const storeKey = String(env.HASHPAYSTREAM_ARC_WEBHOOK_STORE_KEY ?? DEFAULT_STORE_KEY).trim()
+  const storeKey = arcMainnetStoreKey('hashpaystream-webhooks', env.HASHPAYSTREAM_ARC_WEBHOOK_STORE_KEY_MAINNET)
   if (!PROJECT_ID.test(projectId)) {
     throw new WebhookError('Hash PayStream Arc webhook project is unavailable.', 503, 'WEBHOOK_NOT_CONFIGURED')
   }
@@ -153,8 +153,8 @@ function verifiedPayload(
   if (projectId !== config.projectId) {
     throw new WebhookError('Webhook project does not match this receiver.', 403, 'PROJECT_MISMATCH')
   }
-  if (data.network !== 'arc' || data.chainId !== 5_042_002) {
-    throw new WebhookError('Webhook is not an Arc Testnet agreement event.', 400, 'NETWORK_MISMATCH')
+  if (data.network !== 'arc' || data.chainId !== 5_042) {
+    throw new WebhookError('Webhook is not an Arc Mainnet agreement event.', 400, 'NETWORK_MISMATCH')
   }
   return {
     id,

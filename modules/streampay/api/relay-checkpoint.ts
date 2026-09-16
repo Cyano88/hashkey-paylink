@@ -17,10 +17,10 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 
 const arcChain = defineChain({
-  id: 5042002,
-  name: 'Arc Testnet',
+  id: 5042,
+  name: 'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
-  rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
+  rpcUrls: { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
 const CHECKPOINT_VAULT_ABI = parseAbi([
@@ -50,9 +50,9 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: 'checkpointPct must be one of 25, 50, 75, or 100.' })
   }
 
-  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC ?? process.env.RELAYER_PRIVATE_KEY
-  const rpcUrl = process.env.PRIVATE_RPC_URL_ARC ?? 'https://rpc.testnet.arc.network'
-  if (!rawKey) return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY_ARC not configured' })
+  const rawKey = process.env.RELAYER_PRIVATE_KEY_ARC_MAINNET
+  const rpcUrl = process.env.PRIVATE_RPC_URL_ARC_MAINNET ?? 'https://rpc.mainnet.arc.io'
+  if (!rawKey) return res.status(500).json({ ok: false, error: 'RELAYER_PRIVATE_KEY_ARC_MAINNET not configured' })
 
   const account = privateKeyToAccount(rawKey as `0x${string}`)
   const publicClient = createPublicClient({ chain: arcChain, transport: http(rpcUrl) })

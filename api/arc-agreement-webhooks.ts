@@ -1,3 +1,4 @@
+import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash } from 'node:crypto'
 import {
   reconcileArcAgreementSnapshot,
@@ -11,7 +12,8 @@ import {
 import { dispatchDeveloperWebhook } from './developer-projects.js'
 import { hasRenderDurableStore, mutateDurableJson } from './render-durable-store.js'
 
-const STORE_KEY = (process.env.ARC_AGREEMENT_WEBHOOK_STORE_KEY ?? 'hashpaylink:arc-agreement-webhooks:v1').trim()
+const STORE_KEY = arcMainnetStoreKey('webhooks', process.env.ARC_AGREEMENT_WEBHOOK_STORE_KEY_MAINNET)
+
 const WEBHOOK_LEASE_MS = 60_000
 const WEBHOOK_MAX_ATTEMPTS = 8
 const WEBHOOK_RETRY_DELAYS_MS = [30_000, 120_000, 600_000, 1_800_000, 3_600_000, 7_200_000, 21_600_000, 43_200_000]

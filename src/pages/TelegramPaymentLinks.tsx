@@ -222,7 +222,7 @@ type RequestNetwork = 'base' | 'arc' | 'solana' | 'arbitrum' | 'all'
 
 const requestNetworks: Array<{ key: RequestNetwork; label: string; badge?: string }> = [
   { key: 'base', label: 'Base' },
-  { key: 'arc', label: 'Arc', badge: 'Testnet' },
+  { key: 'arc', label: 'Arc', badge: 'Mainnet' },
   { key: 'solana', label: 'Solana' },
   { key: 'arbitrum', label: 'Arbitrum' },
   { key: 'all', label: 'All' },

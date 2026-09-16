@@ -43,6 +43,12 @@ type PocketActivityHandlerDependencies = {
 type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
+  if (record.action === 'wallet.swap' && record.metadata?.txHash) return {
+    eventId: 'pocket-swap:' + record.id, txHash: record.metadata.txHash, chain: 'arc', payer: record.metadata.walletAddress || 'Pocket wallet',
+    memo: record.metadata.tokenIn + ' to ' + record.metadata.tokenOut, amount: '0', ts: record.updatedAt,
+    source: 'wallet-swap', contextLabel: record.metadata.amount + ' ' + record.metadata.tokenIn + ' → ' + record.metadata.amountOut + ' ' + record.metadata.tokenOut,
+    settlementType: 'wallet_swap', paycrestStatus: record.status, activityLabel: 'Token swap', direction: 'out', destination: 'Arc wallet',
+  }
   if (record.action !== 'wallet.bridge' || !record.metadata?.txHash) return undefined
   const source = record.metadata.source || 'USDC'
   const destination = record.metadata.destination || 'destination'
@@ -59,7 +65,8 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
     contextLabel: `${source} to ${destination}`,
     settlementType: 'wallet_bridge',
     paycrestStatus: record.status === 'completed' ? 'completed' : record.status === 'failed' ? 'failed' : 'processing',
-    activityLabel: 'USDC moved',
+    activityLabel: 'USDC bridge',
+    destinationTxHash: record.metadata.destinationTxHash,
     direction: 'out',
     recipient: destination,
     destination,

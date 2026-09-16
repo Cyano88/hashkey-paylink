@@ -24,7 +24,7 @@ export default function StreamPayLanding() {
         <div className="max-w-2xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[11px] font-semibold text-blue-700 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-300">
             <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-            Arc Testnet private pilot
+            Arc Mainnet private pilot
           </div>
           <h1 className="mt-7 text-balance text-5xl font-semibold leading-[1.02] tracking-[-0.045em] text-gray-950 dark:text-white sm:text-6xl lg:text-7xl">
             USDC payments protected until the work is approved.

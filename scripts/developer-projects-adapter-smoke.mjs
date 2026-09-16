@@ -126,7 +126,7 @@ const ready = await request(handler, 'PUT', {
   brandImageUrl: 'https://polydesk.trade/brand/polydesk-mark-bw-transparent.png',
   useCase: 'Sell individual market data and analysis requests through hosted checkout.', settlementMode: 'usdc',
   capabilities: ['hosted_checkout', 'polymarket_funding', 'arc_agreements'],
-  networks: ['base', 'arbitrum', 'arc'], defaultNetwork: 'base', recipients: { base: linkedWallet, arbitrum: linkedWallet, arc: linkedWallet },
+  arcMainnetChainId: 5042, networks: ['base', 'arbitrum', 'arc'], defaultNetwork: 'base', recipients: { base: linkedWallet, arbitrum: linkedWallet, arc: linkedWallet },
   allowedOrigins: ['https://polydesk.trade', 'javascript:alert(1)'], webhookUrl: 'https://polydesk.trade/webhooks/hashpaylink',
 })
 assert.equal(ready.body.project.settlementStatus, 'ready')
@@ -145,16 +145,11 @@ assert.equal(policy.checkoutMode, 'human')
 assert.deepEqual(policy.capabilities, ['hosted_checkout', 'polymarket_funding', 'arc_agreements'])
 assert.equal(policy.webhookConfigured, false)
 assert.equal(policy.environment, 'live')
-assert.deepEqual(policy.paymentOptions.map(option => option.network), ['base', 'arbitrum'])
+assert.deepEqual(policy.paymentOptions.map(option => option.network), ['base', 'arbitrum', 'arc'])
 assert.equal(developerPolicyFromStore(store, `${generated.body.apiKey}tampered`, portalSecret), null)
 const testKey = await request(handler, 'POST', { action: 'create-key', projectId: created.body.project.id, name: 'Arc sandbox', environment: 'test' })
-assert.equal(testKey.statusCode, 201)
-assert.match(testKey.body.apiKey, /^hpl_test_/)
-assert.equal(testKey.body.key.environment, 'test')
-const testPolicy = developerPolicyFromStore(store, testKey.body.apiKey, portalSecret)
-assert.deepEqual(testPolicy.paymentOptions.map(option => option.network), ['arc'])
-assert.equal(testPolicy.defaultNetwork, 'arc')
-assert.equal(testPolicy.environment, 'test')
+assert.equal(testKey.statusCode, 409)
+
 
 const invalidAgenticProduct = await request(handler, 'POST', {
   action: 'create', name: 'PolyDesk Agent API', website: 'https://polydesk.trade',
@@ -181,18 +176,18 @@ const agenticReady = await request(handler, 'PUT', {
   action: 'configure', projectId: agenticProject.body.project.id, checkoutMode: 'agentic',
   name: 'PolyDesk Agent API', website: 'https://polydesk.trade',
   useCase: 'Sell fixed-price LP Scout research to compatible agent wallets.',
-  capabilities: ['hosted_checkout', 'arc_agreements'], settlementMode: 'usdc', networks: ['arc'], defaultNetwork: 'arc',
+  capabilities: ['hosted_checkout', 'arc_agreements'], settlementMode: 'usdc', arcMainnetChainId: 5042, networks: ['arc'], defaultNetwork: 'arc',
   recipients: { arc: linkedWallet }, allowedOrigins: ['https://polydesk.trade'], webhookUrl: 'https://polydesk.trade/webhooks/hashpaylink-agent',
 })
 assert.equal(agenticReady.body.project.settlementStatus, 'ready')
-const agenticKey = await request(handler, 'POST', { action: 'create-key', projectId: agenticProject.body.project.id, name: 'Agent sandbox', environment: 'test' })
+const agenticKey = await request(handler, 'POST', { action: 'create-key', projectId: agenticProject.body.project.id, name: 'Agent mainnet', environment: 'live' })
 assert.equal(agenticKey.statusCode, 201)
 const agenticWebhook = await request(handler, 'POST', { action: 'rotate-webhook-secret', projectId: agenticProject.body.project.id })
 assert.equal(agenticWebhook.statusCode, 201)
 const agenticPolicy = developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret)
 assert.equal(agenticPolicy.checkoutMode, 'agentic')
 assert.deepEqual(agenticPolicy.capabilities, ['hosted_checkout', 'arc_agreements'])
-assert.equal(agenticPolicy.environment, 'test')
+assert.equal(agenticPolicy.environment, 'live')
 
 activeIdentity = { userId: 'did:privy:operations', email: 'operations@example.com' }
 const operationsProjects = await request(handler, 'GET', undefined, { resource: 'admin' })
@@ -252,7 +247,7 @@ assert.equal(pilotApproved.body.project.operations.at(-1).action, 'arc_pilot_app
 assert.deepEqual(pilotApproved.body.project.operations.at(-1).details, {
   status: 'approved', maxAgreementUsdc: '2.5', dailyVolumeUsdc: '5', maxActiveAgreements: 2, maxDurationSeconds: 86400,
 })
-assert.equal(developerPolicyFromStore(store, testKey.body.apiKey, portalSecret).arcAgreementPilot.status, 'approved')
+assert.equal(developerPolicyFromStore(store, generated.body.apiKey, portalSecret).arcAgreementPilot.status, 'approved')
 const pilotDisabled = await request(handler, 'POST', {
   action: 'admin-arc-pilot-disable', projectId: created.body.project.id, reason: 'Private pilot paused for review.',
 })
@@ -310,7 +305,7 @@ assert.equal((await request(otherOwner, 'PUT', { action: 'configure', projectId:
 
 const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const operationsSource = readFileSync(new URL('../src/pages/DeveloperOperationsPage.tsx', import.meta.url), 'utf8')
-assert.ok(appSource.includes('path="admin/developers"') && appSource.includes('<DeveloperOperationsPage />'))
+assert.ok(appSource.includes('path="admin/developers"') && appSource.includes('<DeveloperOperationsPage surface="projects" />'))
 assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("'admin-list'") && operationsSource.includes("'admin-suspend'") && operationsSource.includes("'admin-reactivate'") && operationsSource.includes("'admin-arc-pilot-approve'"))
 assert.equal(/localStorage|sessionStorage|x-[a-z-]*admin-key/i.test(operationsSource), false)
 

@@ -1,3 +1,4 @@
+import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash } from 'node:crypto'
 import type { Request, Response } from 'express'
 import {
@@ -34,7 +35,6 @@ import {
 } from './developer-projects.js'
 import { hasRenderDurableStore, readDurableJson } from './render-durable-store.js'
 
-const DEFAULT_EVENT_STORE_KEY = 'hashpaylink:hashpaystream-arc-webhooks:v1'
 const PROJECT_ID = /^dev_[a-z0-9]{8,64}$/i
 
 type StoredEvent = {
@@ -78,7 +78,7 @@ const defaults: Dependencies = {
   authorize: verifyDeveloperProjectOwner,
   readEvents: readDurableJson,
   listAgreements: input => listArcAgreementRecords(input),
-  projectPolicy: projectId => resolveDeveloperProjectPolicy(projectId, 'test'),
+  projectPolicy: projectId => resolveDeveloperProjectPolicy(projectId, 'live'),
   createAgreement: (req, res, policy) => createArcAgreementsHandler({ policy: async () => policy })(req, res),
   hasActivationAttempt: async (partnerId, agreementId) => {
     try {
@@ -201,7 +201,7 @@ function agreementRecord(agreementId: string, draft: ArcAgreement | undefined, e
     status,
     chain: latest ? {
       network: 'arc',
-      chainId: 5_042_002,
+      chainId: 5_042,
       escrow: safeAddress(data.escrow),
       onchainAgreementId: safeHash(data.onchainAgreementId),
       termsHash: safeHash(data.termsHash),
@@ -236,7 +236,7 @@ export function createHashPayStreamArcAgreementsHandler(dependencies: Dependenci
     try {
       if (!dependencies.hasStore()) throw Object.assign(new Error('Agreement storage is unavailable.'), { status: 503 })
       const projectId = String(dependencies.env().HASHPAYSTREAM_ARC_PROJECT_ID ?? '').trim()
-      const storeKey = String(dependencies.env().HASHPAYSTREAM_ARC_WEBHOOK_STORE_KEY ?? DEFAULT_EVENT_STORE_KEY).trim()
+      const storeKey = arcMainnetStoreKey('hashpaystream-webhooks', dependencies.env().HASHPAYSTREAM_ARC_WEBHOOK_STORE_KEY_MAINNET)
       if (!PROJECT_ID.test(projectId) || !storeKey || storeKey.length > 160) {
         throw Object.assign(new Error('Hash PayStream Agreements is not configured.'), { status: 503 })
       }

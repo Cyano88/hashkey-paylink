@@ -34,22 +34,22 @@ const MAX_SERVICE_AMOUNT = Number(process.env.AGENT_WALLET_MAX_SERVICE_AMOUNT ??
 const MAX_GATEWAY_DEPOSIT_AMOUNT = Number(process.env.AGENT_WALLET_MAX_GATEWAY_DEPOSIT_AMOUNT ?? '5')
 const GATEWAY_BALANCE_CHAIN = process.env.AGENT_WALLET_GATEWAY_BALANCE_CHAIN ?? 'MATIC'
 const GATEWAY_DEPOSIT_CHAIN = process.env.AGENT_WALLET_GATEWAY_DEPOSIT_CHAIN ?? 'BASE'
-const ARC_TESTNET_GATEWAY_CHAIN = 'ARC-TESTNET'
+const ARC_MAINNET_GATEWAY_CHAIN = 'ARC'
 const GATEWAY_DEPOSIT_VERIFY_ATTEMPTS = Math.max(1, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_ATTEMPTS ?? '6') || 6)
 const GATEWAY_DEPOSIT_VERIFY_DELAY_MS = Math.max(500, Number(process.env.AGENT_WALLET_GATEWAY_DEPOSIT_VERIFY_DELAY_MS ?? '5000') || 5000)
 const CIRCLE_GATEWAY_X402_API_BASE = (process.env.CIRCLE_GATEWAY_X402_API_BASE ?? 'https://gateway-api.circle.com').replace(/\/+$/, '')
 const CIRCLE_GATEWAY_BALANCE_API_MAINNET = (process.env.CIRCLE_GATEWAY_API_BASE_MAINNET ?? 'https://gateway-api.circle.com').replace(/\/+$/, '')
-const CIRCLE_GATEWAY_BALANCE_API_TESTNET = (process.env.CIRCLE_GATEWAY_API_BASE_TESTNET ?? 'https://gateway-api-testnet.circle.com').replace(/\/+$/, '')
 
-const ARC_TESTNET = defineChain({
-  id: 5042002,
-  name: 'Arc Testnet',
+
+const ARC_MAINNET = defineChain({
+  id: 5042,
+  name: 'Arc Mainnet',
   nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
   rpcUrls: {
-    default: { http: ['https://rpc.testnet.arc.network'] },
-    public: { http: ['https://rpc.testnet.arc.network'] },
+    default: { http: ['https://rpc.mainnet.arc.io'] },
+    public: { http: ['https://rpc.mainnet.arc.io'] },
   },
-  testnet: true,
+  testnet: false,
 })
 
 const USDC_BALANCE_ABI = [{
@@ -79,11 +79,11 @@ const USDC_CHAIN_CONFIG = {
     rpcEnv: 'PRIVATE_RPC_URL_ARB',
     fallbackRpc: 'https://arb1.arbitrum.io/rpc',
   },
-  'ARC-TESTNET': {
-    chain: ARC_TESTNET,
+  'ARC': {
+    chain: ARC_MAINNET,
     token: '0x3600000000000000000000000000000000000000',
-    rpcEnv: 'PRIVATE_RPC_URL_ARC',
-    fallbackRpc: 'https://rpc.testnet.arc.network',
+    rpcEnv: 'PRIVATE_RPC_URL_ARC_MAINNET',
+    fallbackRpc: 'https://rpc.mainnet.arc.io',
   },
 } as const
 
@@ -97,6 +97,7 @@ type PendingSession = {
   requestId?: string
   expectedWallet?: string
   testnet: boolean
+  network?: 'arc' | 'base'
   createdAt: number
 }
 
@@ -460,9 +461,9 @@ function normalizeBalanceChain(value: unknown, fallback = 'BASE') {
   if (key === 'base') return 'BASE'
   if (key === 'base-sepolia' || key === 'base_sepolia' || key === 'basesepolia') return 'BASE-SEPOLIA'
   if (key === 'arbitrum' || key === 'arb') return 'ARBITRUM'
-  if (key === 'arc' || key === 'arc-testnet' || key === 'arc_testnet') return 'ARC-TESTNET'
+  if (key === 'arc') return 'ARC'
   const upper = key.toUpperCase()
-  if (upper === 'BASE' || upper === 'BASE-SEPOLIA' || upper === 'ARBITRUM' || upper === 'ARC-TESTNET') return upper
+  if (upper === 'BASE' || upper === 'BASE-SEPOLIA' || upper === 'ARBITRUM' || upper === 'ARC') return upper
   return fallback
 }
 
@@ -478,11 +479,11 @@ function normalizeGatewayDepositChain(value: unknown) {
 
 function normalizeGatewayBalanceChain(value: unknown) {
   const key = String(value ?? '').trim().toLowerCase()
-  if (key === 'arc' || key === 'arc-testnet' || key === 'arc_testnet') return 'ARC-TESTNET'
+  if (key === 'arc') return 'ARC'
   if (key === 'base') return 'BASE'
   if (key === 'arbitrum' || key === 'arb') return 'ARBITRUM'
   const fallback = String(value || GATEWAY_BALANCE_CHAIN).trim().toUpperCase()
-  if (fallback === 'ARC-TESTNET' || fallback === 'ARC_TESTNET' || fallback === 'ARC') return 'ARC-TESTNET'
+  if (fallback === 'ARC') return 'ARC'
   if (fallback === 'ARBITRUM' || fallback === 'ARB') return 'ARBITRUM'
   if (fallback === 'BASE') return 'BASE'
   return fallback || 'MATIC'
@@ -760,7 +761,7 @@ export async function executeArcAgreementAgentWalletCall(params: {
       '--address',
       record.walletAddress,
       '--chain',
-      'ARC-TESTNET',
+      'ARC',
       '--output',
       'json',
     ], serviceKey, 120_000)
@@ -1011,7 +1012,7 @@ export function parseCircleGatewayBalanceResponse(value: unknown, address: strin
 }
 
 async function readGatewayBalance(address: string, network: 'base' | 'arc') {
-  const apiBase = network === 'arc' ? CIRCLE_GATEWAY_BALANCE_API_TESTNET : CIRCLE_GATEWAY_BALANCE_API_MAINNET
+  const apiBase = CIRCLE_GATEWAY_BALANCE_API_MAINNET
   const domain = network === 'arc' ? 26 : 6
   const response = await fetch(`${apiBase}/v1/balances`, {
     method: 'POST',
@@ -1039,7 +1040,7 @@ async function readAgentGatewayBalance(
   network: 'base' | 'arc',
   serviceKey: string,
 ) {
-  const chain = network === 'arc' ? ARC_TESTNET_GATEWAY_CHAIN : 'BASE'
+  const chain = network === 'arc' ? ARC_MAINNET_GATEWAY_CHAIN : 'BASE'
   const output = await runCircle([
     'gateway',
     'balance',
@@ -1228,7 +1229,7 @@ export async function readAgentWalletSnapshot(params: {
 }): Promise<AgentWalletReadSnapshot> {
   const store = await readStore()
   const record = resolveAgentRecord(store, params.agentSlug)
-  const balanceChain = params.network === 'arc' ? 'ARC-TESTNET' : 'BASE'
+  const balanceChain = params.network === 'arc' ? 'ARC' : 'BASE'
   let walletBalance: string | undefined
   let walletBalanceError: string | undefined
   let gatewayBalance: string | undefined
@@ -1360,7 +1361,7 @@ export async function connectAgentWallet(params: {
   if (params.expectedWallet && !expectedWallet) throw connectionFailure(400, 'invalid_expected_wallet', 'Expected wallet must be a valid EVM address.')
   const id = sessionId(agentSlug, email)
   const key = `${agentSlug}_${id}`
-  const testnet = params.network === 'arc'
+  const testnet = false
 
   if (params.action === 'init') {
     let output = ''
@@ -1378,6 +1379,7 @@ export async function connectAgentWallet(params: {
       requestId,
       expectedWallet: expectedWallet || undefined,
       testnet,
+      network: params.network,
       createdAt: Date.now(),
     }
     await writeStore(store)
@@ -1391,7 +1393,7 @@ export async function connectAgentWallet(params: {
   if (!pending || pending.agentSlug !== agentSlug || pending.emailHash !== emailHash(email)) {
     throw connectionFailure(400, 'connection_not_started', 'Resend OTP and use the newest code.')
   }
-  if (pending.testnet !== testnet) {
+  if (pending.testnet !== testnet || (pending.network ?? 'base') !== params.network) {
     throw connectionFailure(400, 'connection_network_changed', 'This code was requested for another network. Resend OTP and use the newest code.')
   }
   if (!pending.requestId) throw connectionFailure(400, 'request_id_missing', 'Resend OTP and use the newest code.')
@@ -1401,7 +1403,8 @@ export async function connectAgentWallet(params: {
   } catch (error) {
     rethrowConnectionProviderError(error)
   }
-  const chain = pending.testnet ? 'ARC-TESTNET' : 'BASE'
+  if (pending.testnet) throw new Error('Reconnect this wallet with a mainnet session.')
+  const chain = params.network === 'arc' ? 'ARC' : 'BASE'
   let listOutput = ''
   try {
     try {
@@ -1497,7 +1500,7 @@ export async function activateAgentGateway(params: {
   if (!normalizedEmail || !record.emailHash || record.emailHash !== emailHash(normalizedEmail)) {
     throw connectionFailure(403, 'wallet_identity_mismatch', 'Reconnect the Circle wallet with the email currently signed in to Hash PayLink.')
   }
-  const depositChain = params.network === 'arc' ? ARC_TESTNET_GATEWAY_CHAIN : 'BASE'
+  const depositChain = params.network === 'arc' ? ARC_MAINNET_GATEWAY_CHAIN : 'BASE'
   // A checkout's App Pay balance must remain on the network it advertises.
   // Circle Eco deposits settle on Polygon, so both Arc and Base use a direct
   // Gateway deposit here.
@@ -1591,7 +1594,7 @@ export async function activateAgentGateway(params: {
       network: depositChain,
       wallet: record.walletAddress,
       detail: params.network === 'arc'
-        ? 'Deposited from Arc Testnet via direct Gateway deposit'
+        ? 'Deposited from Arc Mainnet via direct Gateway deposit'
         : 'Deposited from BASE',
     })
   }
@@ -1711,7 +1714,7 @@ export default async function handler(req: Request, res: Response) {
   const action = String(req.body?.action ?? '').trim().toLowerCase()
   const agentSlug = normalizeSlug(req.body?.agentSlug)
   const email = normalizeEmail(req.body?.email)
-  const testnet = req.body?.testnet !== false
+  const testnet = false
   if (!agentSlug) return res.status(400).json({ ok: false, error: 'Missing agent name.' })
 
   const id = email ? sessionId(agentSlug, email) : ''
@@ -1725,7 +1728,7 @@ export default async function handler(req: Request, res: Response) {
       const requestId = parseRequestId(output)
       const store = await readStore()
       const expectedWallet = normalizeExpectedWallet(req.body?.expectedWallet)
-      store.pending[id] = { agentSlug, emailHash: emailHash(email), requestId, expectedWallet, testnet, createdAt: Date.now() }
+      store.pending[id] = { agentSlug, emailHash: emailHash(email), requestId, expectedWallet, testnet, network: req.body?.network === 'arc' ? 'arc' : 'base', createdAt: Date.now() }
       await writeStore(store)
       return res.json({ ok: true, sessionId: id, requestId, message: 'OTP sent by Circle.' })
     }
@@ -1743,8 +1746,10 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Circle did not return a request id. Use the CLI fallback.' })
       }
 
+      if (pending.testnet || (pending.network ?? 'base') !== (req.body?.network === 'arc' ? 'arc' : 'base')) throw new Error('Reconnect this wallet on the selected mainnet network.')
       await runCircle(['wallet', 'login', '--request', pending.requestId, '--otp', otp, ...(pending.testnet ? ['--testnet'] : [])], key)
-      const chain = pending.testnet ? 'ARC-TESTNET' : 'BASE'
+      if (pending.testnet) throw new Error('Reconnect this wallet with a mainnet session.')
+  const chain = req.body?.network === 'arc' ? 'ARC' : 'BASE'
       let listOutput = ''
       try {
         listOutput = await runCircle(['wallet', 'list', '--type', 'agent', '--chain', chain, '--output', 'json'], key)
@@ -1890,7 +1895,7 @@ export default async function handler(req: Request, res: Response) {
           '--address',
           record.walletAddress,
           '--chain',
-          ARC_TESTNET_GATEWAY_CHAIN,
+          ARC_MAINNET_GATEWAY_CHAIN,
           '--method',
           'direct',
         ], serviceKey, 120_000)
@@ -1911,9 +1916,9 @@ export default async function handler(req: Request, res: Response) {
       for (let attempt = 1; attempt <= GATEWAY_DEPOSIT_VERIFY_ATTEMPTS; attempt += 1) {
         try {
           try {
-            balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', ARC_TESTNET_GATEWAY_CHAIN, '--output', 'json'], serviceKey, 30_000)
+            balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', ARC_MAINNET_GATEWAY_CHAIN, '--output', 'json'], serviceKey, 30_000)
           } catch {
-            balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', ARC_TESTNET_GATEWAY_CHAIN], serviceKey, 30_000)
+            balanceOutput = await runCircle(['gateway', 'balance', '--address', record.walletAddress, '--chain', ARC_MAINNET_GATEWAY_CHAIN], serviceKey, 30_000)
           }
           gatewayBalance = parseBalance(balanceOutput)
           balanceError = undefined
@@ -1929,7 +1934,7 @@ export default async function handler(req: Request, res: Response) {
           ok: false,
           code: 'arc_gateway_balance_verify_failed',
           error: balanceError instanceof Error ? balanceError.message.slice(0, 240) : 'Arc Gateway balance verification failed after deposit.',
-          depositChain: ARC_TESTNET_GATEWAY_CHAIN,
+          depositChain: ARC_MAINNET_GATEWAY_CHAIN,
           raw: output.slice(0, 3000),
         })
       }
@@ -1940,7 +1945,7 @@ export default async function handler(req: Request, res: Response) {
           code: 'arc_gateway_deposit_pending',
           error: `Arc Gateway deposit was submitted, but Circle Gateway has not made ${amount} USDC available yet. Wait a moment, then check activation again.`,
           gatewayBalance: gatewayBalance ?? '0',
-          gatewayBalanceChain: ARC_TESTNET_GATEWAY_CHAIN,
+          gatewayBalanceChain: ARC_MAINNET_GATEWAY_CHAIN,
           raw: output.slice(0, 3000),
           balanceRaw: balanceOutput.slice(0, 1200),
         })
@@ -1953,9 +1958,9 @@ export default async function handler(req: Request, res: Response) {
         amount: String(amount),
         asset: 'USDC',
         direction: 'in',
-        network: 'Arc Testnet',
+        network: 'Arc Mainnet',
         wallet: record.walletAddress,
-        detail: 'Deposited from Arc Testnet via direct Gateway deposit',
+        detail: 'Deposited from Arc Mainnet via direct Gateway deposit',
       })
 
       return res.json({
@@ -1963,8 +1968,8 @@ export default async function handler(req: Request, res: Response) {
         agentSlug,
         walletAddress: record.walletAddress,
         amount: String(amount),
-        depositChain: ARC_TESTNET_GATEWAY_CHAIN,
-        gatewayBalanceChain: ARC_TESTNET_GATEWAY_CHAIN,
+        depositChain: ARC_MAINNET_GATEWAY_CHAIN,
+        gatewayBalanceChain: ARC_MAINNET_GATEWAY_CHAIN,
         gatewayBalance,
         response: extractJsonFromCliOutput(output),
         raw: output.slice(0, 3000),

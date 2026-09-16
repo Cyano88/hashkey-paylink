@@ -8,7 +8,7 @@ const SOLANA_USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyT
 const EVM = {
   base: { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', rpc: 'PRIVATE_RPC_URL', fallback: 'https://mainnet.base.org' },
   arbitrum: { token: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', rpc: 'PRIVATE_RPC_URL_ARB', fallback: 'https://arb1.arbitrum.io/rpc' },
-  arc: { token: '0x3600000000000000000000000000000000000000', rpc: 'PRIVATE_RPC_URL_ARC', fallback: 'https://rpc.testnet.arc.network' },
+  arc: { token: '0xfffffffffffffffffffffffffffffffffffffffe', rpc: 'PRIVATE_RPC_URL_ARC_MAINNET', fallback: 'https://rpc.mainnet.arc.io' },
 } as const
 
 type EvmNetwork = keyof typeof EVM
@@ -112,7 +112,7 @@ async function evmActivity(network: EvmNetwork, wallet: string): Promise<PocketA
       chain: network,
       payer: outgoingTransfer ? wallet : sender,
       memo: outgoingTransfer ? 'USDC sent' : 'USDC deposit',
-      amount: (Number(units) / 1_000_000).toFixed(6).replace(/\.?0+$/, ''),
+      amount: (Number(units) / (network === 'arc' ? 1e18 : 1e6)).toFixed(6).replace(/\.?0+$/, ''),
       ts: timestamps.get(log.blockNumber || '') || Date.now(),
       source: outgoingTransfer ? 'wallet-withdrawal' : 'wallet-deposit',
       contextLabel: outgoingTransfer ? `To ${shortAddress(recipient)}` : `From ${shortAddress(sender)}`,

@@ -1,3 +1,4 @@
+import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash } from 'node:crypto'
 import {
   decodeFunctionData,
@@ -33,8 +34,8 @@ import {
   readDurableJson,
 } from './render-durable-store.js'
 
-const STORE_KEY = (process.env.ARC_AGREEMENT_ACTIVATION_STORE_KEY
-  ?? 'hashpaylink:arc-agreement-activation-attempts:v1').trim()
+const STORE_KEY = arcMainnetStoreKey('activation-attempts', process.env.ARC_AGREEMENT_ACTIVATION_STORE_KEY_MAINNET)
+
 const AGREEMENT_ID = /^agr_[a-z0-9]{12,64}$/i
 const TRANSACTION_HASH = /^0x[0-9a-f]{64}$/i
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -70,7 +71,7 @@ export type ArcAgreementActivationStatus =
   | 'reconciliation_failed'
 
 type StoredPreparedDeployment = {
-  chainId: 5042002
+  chainId: 5042
   agreementId: Hex
   deploymentHash: Hex
   clientReference: Hex
@@ -88,7 +89,7 @@ type StoredPreparedDeployment = {
 }
 
 export type ArcAgreementPayerCall = Readonly<{
-  chainId: 5042002
+  chainId: 5042
   to: Address
   data: Hex
   value: '0'
@@ -1071,7 +1072,7 @@ async function verifiedPayerTransaction(input: {
   transactionHash: Hex
   recoverSubmittedChallenge?: boolean
 }) {
-  if (await input.client.getChainId() !== 5_042_002) throw new Error('Payer transaction is not on Arc Testnet.')
+  if (await input.client.getChainId() !== 5_042) throw new Error('Payer transaction is not on Arc Mainnet.')
   const transaction = await input.client.getTransaction({ hash: input.transactionHash })
   const expected = expectedCall(input.attempt, input.stage)
   if (transaction.hash.toLowerCase() !== input.transactionHash) {
@@ -1184,7 +1185,7 @@ export async function prepareArcAgreementActivationAttempt(input: {
   }
   if (input.policy.checkoutMode === 'human') {
     const env = input.env ?? process.env
-    const relayerKey = String(env.RELAYER_PRIVATE_KEY_ARC ?? env.RELAYER_PRIVATE_KEY ?? '').trim()
+    const relayerKey = String(env.RELAYER_PRIVATE_KEY_ARC_MAINNET ?? '').trim()
     if (relayerKey) {
       if (!/^0x[0-9a-f]{64}$/i.test(relayerKey)) {
         throw new Error('Configured Arc relayer private key is invalid.')
@@ -1893,7 +1894,7 @@ export async function reconcileArcAgreementActivationAttempt(input: {
   if (!dependencies.hasStore()) throw new Error('Arc Agreement activation storage is not configured.')
   const agreementId = requireAgreementId(input.agreementId)
   const confirmations = confirmationBlocks(input.confirmationBlocks)
-  if (await input.client.getChainId() !== 5_042_002) throw new Error('Activation reconciliation requires Arc Testnet.')
+  if (await input.client.getChainId() !== 5_042) throw new Error('Activation reconciliation requires Arc Mainnet.')
   const snapshot = await dependencies.read(STORE_KEY)
   if (!snapshot) throw new Error('Arc Agreement activation attempt was not found for this project.')
   const attempt = requireProjectAttempt(snapshot, input.policy, agreementId)

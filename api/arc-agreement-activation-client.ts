@@ -13,8 +13,8 @@ export function createArcAgreementActivationClient(): ArcAgreementActivationClie
   const runtime = arcAgreementRuntimeConfig()
   const client = createPublicClient({
     chain: defineChain({
-      id: 5_042_002,
-      name: 'Arc Testnet',
+      id: 5_042,
+      name: 'Arc Mainnet',
       nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
       rpcUrls: { default: { http: runtime.rpcUrls } },
     }),

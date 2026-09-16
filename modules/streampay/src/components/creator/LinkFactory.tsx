@@ -11,7 +11,7 @@ import {
 } from '../../../../../src/lib/circleEvmEmailWallet'
 import { PRIVY_AUTH_ENABLED } from '../../../../../src/lib/authMode'
 
-const ARC_CHAIN_ID = 5042002
+const ARC_CHAIN_ID = 5042
 type CreatorCategory = 'worldcup-news' | 'live-scores' | 'ebooks' | 'crypto' | 'developers' | 'hashwatch'
 type CreatorReviewStatus = 'pending' | 'approved' | 'rejected'
 
@@ -70,7 +70,7 @@ function creatorProofMessage(params: {
     `Content ID: ${shortId(params.contentId)}`,
     `Creator wallet: ${params.creator}`,
     `Price: ${(params.capRaw / 1_000_000).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')} USDC`,
-    'Network: Arc Testnet',
+    'Network: Arc Mainnet',
     '',
     'This signature proves you control the creator wallet.',
     'It does not move funds or approve spending.',

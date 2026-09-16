@@ -68,7 +68,7 @@ type WalletPayResponse = {
 const NETWORK_LABELS: Record<string, string> = {
   base: 'Base',
   arbitrum: 'Arbitrum',
-  arc: 'Arc Testnet',
+  arc: 'Arc Mainnet',
 }
 
 function CheckoutShell({ children, footer }: { children: ReactNode; footer?: ReactNode }) {

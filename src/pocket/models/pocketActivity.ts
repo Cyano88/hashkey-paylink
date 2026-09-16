@@ -1,4 +1,7 @@
+import type { PocketPendingBridge } from '../lib/pocketPendingBridge'
+
 export type PocketActivityRow = {
+  bridge?: PocketPendingBridge
   eventId: string
   txHash: string
   chain: string
@@ -15,6 +18,7 @@ export type PocketActivityRow = {
   activityLabel?: string
   direction?: 'in' | 'out'
   recipient?: string
+  destinationTxHash?: string
   destination?: string
   bankName?: string
   bankLast4?: string

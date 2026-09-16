@@ -53,7 +53,7 @@ function readOptionalBlock(value: unknown) {
 }
 
 function rpcFor(chain: ChainKey) {
-  if (chain === 'arc') return process.env.PRIVATE_RPC_URL_ARC
+  if (chain === 'arc') return process.env.PRIVATE_RPC_URL_ARC_MAINNET
   if (chain === 'arbitrum') return process.env.PRIVATE_RPC_URL_ARB
   return process.env.PRIVATE_RPC_URL
 }

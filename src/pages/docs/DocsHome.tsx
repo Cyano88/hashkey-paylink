@@ -14,7 +14,7 @@ const cards = [
   {
     icon: Globe,
     title: 'Supported Chains',
-    description: 'Base, Arbitrum, Arc Testnet, and Solana payment rails.',
+    description: 'Base, Arbitrum, Arc Mainnet, and Solana payment rails.',
     path: '/docs/chains/base',
     color: 'text-blue-500',
     bg: 'bg-blue-50 dark:bg-blue-950/40',

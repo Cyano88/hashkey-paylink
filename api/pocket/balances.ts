@@ -39,7 +39,7 @@ const LABELS: Record<PocketNetwork, string> = {
 const CIRCLE_CHAINS: Record<PocketNetwork, UnifiedBalanceChainIdentifier> = {
   base: 'Base',
   arbitrum: 'Arbitrum',
-  arc: 'Arc_Testnet',
+  arc: 'Arc',
   solana: 'Solana',
 }
 
@@ -134,7 +134,7 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
           }
         }
       }))
-      const mainnetTotal = rows.reduce((sum, row) => row.key === 'arc' ? sum : sum + row.balance, 0)
+      const mainnetTotal = rows.reduce((sum, row) => sum + row.balance, 0)
       const unavailableNetworks = rows.filter(row => row.status === 'error').map(row => row.key)
       return res.json({ ok: true, total: mainnetTotal, totalComplete: unavailableNetworks.length === 0, unavailableNetworks, rows })
     } catch (error) {

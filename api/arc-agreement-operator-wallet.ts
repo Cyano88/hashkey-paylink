@@ -22,7 +22,7 @@ export type ArcAgreementVerifiedOperatorWallet = Readonly<{
   verified: true
   walletId: string
   address: Address
-  blockchain: 'ARC-TESTNET'
+  blockchain: 'ARC'
   custodyType: 'DEVELOPER'
   state: 'LIVE'
   accountType: 'EOA' | 'SCA'
@@ -57,7 +57,7 @@ function verifyArcAgreementOperatorWalletResponse(input: {
   if (!wallet || String(wallet.id ?? '').trim().toLowerCase() !== walletId.toLowerCase()) {
     throw new Error('Circle operator wallet response does not match the configured wallet id.')
   }
-  if (wallet.blockchain !== 'ARC-TESTNET') throw new Error('Circle operator wallet must be on ARC-TESTNET.')
+  if (wallet.blockchain !== 'ARC') throw new Error('Circle operator wallet must be on ARC.')
   if (wallet.custodyType !== 'DEVELOPER') throw new Error('Circle operator wallet must be developer-controlled.')
   if (wallet.state !== 'LIVE') throw new Error('Circle operator wallet must be live.')
   if (wallet.accountType !== 'EOA' && wallet.accountType !== 'SCA') {
@@ -71,7 +71,7 @@ function verifyArcAgreementOperatorWalletResponse(input: {
     verified: true,
     walletId,
     address: expectedOperator,
-    blockchain: 'ARC-TESTNET',
+    blockchain: 'ARC',
     custodyType: 'DEVELOPER',
     state: 'LIVE',
     accountType: wallet.accountType,

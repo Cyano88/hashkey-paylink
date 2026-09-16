@@ -153,7 +153,7 @@ type LocalHistoryFilter = 'all' | 'pos' | 'bank' | 'send' | 'bills'
 const POS_NETWORK_LABELS: Record<PosNetwork, string> = {
   base: 'Base',
   arbitrum: 'Arbitrum',
-  arc: 'Arc Testnet',
+  arc: 'Arc Mainnet',
   solana: 'Solana',
 }
 const POS_RECEIPT_PAGE_SIZE = 20

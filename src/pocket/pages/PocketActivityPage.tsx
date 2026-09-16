@@ -6,6 +6,8 @@ import PocketLoadingState from '../components/PocketLoadingState'
 import PocketActivityPanel from '../features/activity/PocketActivityPanel'
 import PocketResourceActivityPanel from '../features/activity/PocketResourceActivityPanel'
 import usePocketActivity from '../hooks/usePocketActivity'
+import usePocketBridgeActivity from '../hooks/usePocketBridgeActivity'
+import usePocketWalletController from '../controllers/usePocketWalletController'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_BASE_PATH, pocketPathFor, type PocketActivityView } from '../lib/pocketRoutes'
 import { processPocketBillRefund } from '../api/pocketBillsClient'
@@ -39,10 +41,12 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const activity = usePocketActivity({ authenticated, email, enabled: true, getAccessToken })
+  const walletController = usePocketWalletController({ authenticated, email, getAccessToken })
+  const bridges = usePocketBridgeActivity({ owner: email, authenticated, rows: activity.rows, getAccessToken, getEvmSession: walletController.getEvmSession })
   const [requests, setRequests] = useState<PocketRequestItem[]>([])
   const [requestsError, setRequestsError] = useState('')
   const [requestsResolved, setRequestsResolved] = useState(!authenticated)
-  const rowsWithRequests = useMemo(() => requestActivityRows(activity.rows, requests), [activity.rows, requests])
+  const rowsWithRequests = useMemo(() => requestActivityRows(bridges.rows, requests), [bridges.rows, requests])
 
   const refreshRequests = useCallback(async () => {
     if (!authenticated) { setRequests([]); setRequestsResolved(true); return }
@@ -99,7 +103,7 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
-  if (authenticated && !activity.resolved) return <PocketLoadingState active="activity" />
+  if (authenticated && !activity.resolved && !bridges.rows.length) return <PocketLoadingState active="activity" />
 
   return (
     <PocketRouteShell active="activity" onSelect={selectNav}>
@@ -116,8 +120,12 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
         rows={rowsWithRequests}
         authenticated={authenticated}
         busy={activity.busy || !requestsResolved}
-        error={view === 'all' ? activity.error || requestsError : activity.error}
+        error={view === 'all' ? activity.error || requestsError || bridges.error : activity.error}
         onRefund={handleBillsRefund}
+        onBridgeCheck={bridges.check}
+        bridgeChecking={bridges.isChecking}
+        bridgeMessages={bridges.messages}
+        onNewBridge={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'home', view: 'swap' }))}
       />}
     </PocketRouteShell>
   )

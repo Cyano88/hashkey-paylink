@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
-const EXPECTED_VERSION = '0.0.6'
+const EXPECTED_VERSION = '1.1.0'
 const ORIGINAL = '  const abiParameters = pos.slice(1);'
 const PATCHED = `  const abiParameters = pos.slice(1).map((value2) => {
     if (!value2.startsWith("[")) return value2;

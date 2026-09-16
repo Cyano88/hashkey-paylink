@@ -91,6 +91,7 @@ export type CheckoutRecord = {
   network: HostedCheckoutNetwork
   recipient: string
   paymentOptions?: HostedCheckoutPaymentOption[]
+  arcMainnetChainId?: 5042
   memo: string
   returnUrl: string
   createdAt: string
@@ -318,6 +319,7 @@ function canonical(record: Omit<CheckoutRecord, 'integrity'>) {
       record.providerFunding.depositAddress,
     ])
   }
+  if (record.arcMainnetChainId !== undefined) fields.push(['arcMainnetChainId', record.arcMainnetChainId])
   if (record.brandImageUrl !== undefined) fields.push(record.brandImageUrl)
   return JSON.stringify(fields)
 }
@@ -327,6 +329,7 @@ function sign(record: Omit<CheckoutRecord, 'integrity'>, secret: string) {
 }
 
 function integrityValid(record: CheckoutRecord, secret: string) {
+  if ((record.network === 'arc' || record.paymentOptions?.some(option => option.network === 'arc')) && record.arcMainnetChainId !== 5042) return false
   if (!validCheckoutRouting(record)) return false
   if (!/^[a-f0-9]{64}$/.test(record.integrity)) return false
   const { integrity, ...unsigned } = record
@@ -1114,6 +1117,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
         amount: flexible ? '' : nairaOrder?.payableUsdc ?? amount,
         flexible,
         network: routedNetwork as CheckoutRecord['network'],
+        ...((routedNetwork === 'arc' || routingOptions?.some(option => option.network === 'arc')) ? { arcMainnetChainId: 5042 as const } : {}),
         recipient: routedRecipient,
         memo,
         returnUrl,

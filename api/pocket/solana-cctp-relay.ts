@@ -37,7 +37,7 @@ const BRIDGE_WITH_HOOK_DISCRIMINATOR = Buffer.from('f2113f250ab3a918', 'hex')
 const CCTP_EVENT_RENT_LAMPORTS = 3_900_000n
 const RELAYER_OPERATIONAL_BUFFER_LAMPORTS = 100_000n
 const MAX_TRANSACTION_BYTES = 16_384
-const DESTINATION_DOMAINS = { arbitrum: 3, base: 6 } as const
+const DESTINATION_DOMAINS = { arbitrum: 3, base: 6, arc: 26 } as const
 
 type Destination = keyof typeof DESTINATION_DOMAINS
 type ExpectedBridge = { destination: Destination; destinationAddress: string; amount: string }
@@ -412,7 +412,7 @@ export async function validatePocketSolanaCctpSignedTransaction(input: {
 function parseExpected(body: unknown): ExpectedBridge & { transaction?: string; lastValidBlockHeight?: number } {
   if (!body || typeof body !== 'object') throw fail(400, 'Solana CCTP bridge request is invalid.')
   const value = body as Record<string, unknown>
-  if (value.destination !== 'base' && value.destination !== 'arbitrum') throw fail(400, 'Solana CCTP destination is invalid.')
+  if (value.destination !== 'base' && value.destination !== 'arbitrum' && value.destination !== 'arc') throw fail(400, 'Solana CCTP destination is invalid.')
   if (typeof value.destinationAddress !== 'string' || typeof value.amount !== 'string') {
     throw fail(400, 'Solana CCTP bridge request is invalid.')
   }
@@ -427,12 +427,16 @@ function parseExpected(body: unknown): ExpectedBridge & { transaction?: string; 
   }
 }
 
-async function linkedWallet(dependencies: Dependencies, req: Request) {
+async function linkedWallet(dependencies: Dependencies, req: Request, expected: ExpectedBridge) {
   const identity = await dependencies.verifyUser(req)
   const link = await dependencies.readLink(circleLinkKey(identity.userId, 'solana', 'payment'))
   if (!link) throw fail(404, 'Link a Circle Solana wallet before bridging.')
   if (link.chain !== 'solana' || (link.purpose ?? 'payment') !== 'payment') {
     throw fail(500, 'Stored Circle wallet link did not match the Solana payment wallet.')
+  }
+  const destination = await dependencies.readLink(circleLinkKey(identity.userId, expected.destination, 'payment'))
+  if (!destination || destination.chain !== expected.destination || (destination.purpose ?? 'payment') !== 'payment' || destination.circleWalletAddress.toLowerCase() !== expected.destinationAddress.toLowerCase()) {
+    throw fail(403, 'Bridge destination must be your linked Pocket wallet.')
   }
   return link.circleWalletAddress
 }
@@ -455,7 +459,7 @@ export function createPocketSolanaCctpPrepareHandler(dependencies: Dependencies)
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Method not allowed.', retryable: false } })
     try {
       const body = parseExpected(req.body)
-      const walletAddress = await linkedWallet(dependencies, req)
+      const walletAddress = await linkedWallet(dependencies, req, body)
       const prepared = await preparePocketSolanaCctpTransaction({
         walletAddress,
         expected: body,
@@ -474,7 +478,7 @@ export function createPocketSolanaCctpSubmitHandler(dependencies: Dependencies) 
       const body = parseExpected(req.body)
       if (!body.transaction) throw fail(400, 'Solana CCTP signed transaction is required.')
       if (!Number.isSafeInteger(body.lastValidBlockHeight)) throw fail(400, 'Solana CCTP block height is required.')
-      const walletAddress = await linkedWallet(dependencies, req)
+      const walletAddress = await linkedWallet(dependencies, req, body)
       await validatePocketSolanaCctpSignedTransaction({
         transaction: body.transaction,
         walletAddress,
@@ -498,3 +502,13 @@ const dependencies: Dependencies = {
 
 export const pocketSolanaCctpPrepareHandler = createPocketSolanaCctpPrepareHandler(dependencies)
 export const pocketSolanaCctpSubmitHandler = createPocketSolanaCctpSubmitHandler(dependencies)
+
+// Validate the exact own-wallet CCTP transaction before Circle asks for a signature.
+export async function validatePocketSolanaBridgeSigning(req: Request, params: Record<string, string>) {
+  const expected = parseExpected(params)
+  const walletAddress = await linkedWallet(dependencies, req, expected)
+  const source = await dependencies.readLink(circleLinkKey((await dependencies.verifyUser(req)).userId, 'solana', 'payment'))
+  if (!source || source.circleWalletId !== params.walletId) throw fail(403, 'Reconnect your linked Pocket wallet.')
+  const transaction = decodeTransaction(params.rawTransaction)
+  await validateSignedTransaction({ transaction, wallet: new PublicKey(walletAddress), relayer: loadRelayer().publicKey, expected, requireAllSignatures: false })
+}

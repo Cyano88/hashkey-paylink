@@ -48,7 +48,7 @@ export function StreamPayLayout() {
       <footer className="w-full max-w-[480px] mx-auto px-4 pb-5">
         <p className="border-t border-gray-100 pt-4 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-gray-300 dark:border-white/10 dark:text-gray-600">
           <a
-            href="https://testnet.arcscan.app"
+            href="https://explorer.arc.io"
             target="_blank"
             rel="noopener noreferrer"
             className="transition-colors hover:text-gray-500 dark:hover:text-gray-400"

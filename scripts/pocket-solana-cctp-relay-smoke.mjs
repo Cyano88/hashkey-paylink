@@ -11,6 +11,8 @@ import {
   SOLANA_TOKEN_PROGRAM_ID,
 } from '../api/solana-token.ts'
 import {
+  createPocketSolanaCctpPrepareHandler,
+  createPocketSolanaCctpSubmitHandler,
   preparePocketSolanaCctpTransaction,
   validatePocketSolanaCctpSignedTransaction,
 } from '../api/pocket/solana-cctp-relay.ts'
@@ -134,3 +136,15 @@ await assert.rejects(() => preparePocketSolanaCctpTransaction({
 }), /replenishing its SOL fee wallet/)
 
 console.log('Pocket Solana CCTP relay smoke checks passed.')
+
+// Both preparation and relay reject an external destination before touching providers.
+for (const createHandler of [createPocketSolanaCctpPrepareHandler, createPocketSolanaCctpSubmitHandler]) {
+  let relayed = false
+  const handler = createHandler({verifyUser:async()=>({userId:'fixture-owner'}), readLink:async()=>({chain:'solana',purpose:'payment',circleWalletAddress:wallet.publicKey.toBase58()}), relay:async()=>{relayed=true}})
+  const response = {statusCode:200,status(code){this.statusCode=code;return this},json(body){this.body=body;return this}}
+  await handler({method:'POST',body:{...expected,transaction:'fixture',lastValidBlockHeight:123}},response)
+  assert.equal(response.statusCode,403, JSON.stringify(response.body))
+  assert.match(response.body.error.message,/your linked Pocket wallet/)
+  assert.equal(relayed,false)
+}
+console.log('External Solana bridge destinations rejected without relaying.')

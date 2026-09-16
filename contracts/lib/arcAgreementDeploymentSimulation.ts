@@ -9,7 +9,7 @@ import {
   type ArcAgreementDeploymentManifest,
 } from './arcAgreementDeploymentManifest'
 
-const ARC_TESTNET_CHAIN_ID = 5_042_002
+const ARC_MAINNET_CHAIN_ID = 5_042
 const EMPTY_CODE = '0x'
 const FULL_COMMIT = /^[0-9a-f]{40}$/
 
@@ -88,8 +88,8 @@ export function evaluateArcAgreementDeploymentSimulation(input: {
     manifest: input.manifest,
     expectedSourceCommit: input.expectedSourceCommit,
   })
-  if (input.chainId !== ARC_TESTNET_CHAIN_ID || input.chainId !== manifest.network.chainId) {
-    throw new Error('Simulation provider is not Arc Testnet.')
+  if (input.chainId !== ARC_MAINNET_CHAIN_ID || input.chainId !== manifest.network.chainId) {
+    throw new Error('Simulation provider is not Arc Mainnet.')
   }
   const deployer = requiredAddress(input.deployer, 'Deployer')
   const deployerCode = requiredHex(input.deployerCode, 'Deployer code', true)

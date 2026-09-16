@@ -100,14 +100,14 @@ function isCircleCloseMessage(data: unknown) {
   })
 }
 
-async function circleSolanaApi<T>(payload: Record<string, unknown>): Promise<T> {
+async function circleSolanaApi<T>(payload: Record<string, unknown>, privyAccessToken?: string): Promise<T> {
   const action = typeof payload.action === 'string' ? payload.action : ''
-  const paymentAction = /^(execute|signPayment)/.test(action)
+  const paymentAction = /^(execute|signPayment|signOwnWalletBridge)/.test(action)
   const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.pathname.includes('/pocket'))
-  const approval = pocketClient ? takePocketPaymentApproval() : null
+  const approval = pocketClient && action !== 'signOwnWalletBridge' ? takePocketPaymentApproval() : null
   const res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(pocketClient ? { 'X-Pocket-Client': '1', ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}) } : {}) },
+    headers: { 'Content-Type': 'application/json', ...(privyAccessToken ? { Authorization: 'Bearer ' + privyAccessToken } : {}), ...(pocketClient ? { 'X-Pocket-Client': '1', ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}) } : {}) },
     body: JSON.stringify(payload),
   })
   const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number }
@@ -522,6 +522,7 @@ export async function sendCircleSolanaTransfer(params: {
 }
 
 export async function signCircleSolanaTransaction(params: {
+  bridge?: { destination: 'base' | 'arbitrum' | 'arc'; destinationAddress: string; amount: string; accessToken: string }
   session: SolanaEmailSession
   rawTransaction: string
   memo: string
@@ -535,12 +536,13 @@ export async function signCircleSolanaTransaction(params: {
     },
   })
   const challenge = await circleSolanaApi<{ challengeId?: string }>({
-    action: 'signPayment',
+    action: params.bridge ? 'signOwnWalletBridge' : 'signPayment',
+    ...(params.bridge ? { destination: params.bridge.destination, destinationAddress: params.bridge.destinationAddress, amount: params.bridge.amount } : {}),
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
     rawTransaction: params.rawTransaction,
     memo: params.memo,
-  })
+  }, params.bridge?.accessToken)
   if (!challenge.challengeId) throw new Error('Circle did not return a signing challenge.')
   const result = await executeChallenge(sdk, challenge.challengeId)
   if (result.type !== 'SIGN_TRANSACTION' || !result.data?.signedTransaction) {

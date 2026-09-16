@@ -7,13 +7,13 @@ import {
 const walletId = '9d1a0e42-8c5f-4a77-bc1c-592236e53dde'
 const requestId = '64dfb137-b434-47b7-a72e-d83eea43b430'
 const operatorAddress = '0x1111111111111111111111111111111111111111'
-const apiKey = 'TEST_API_KEY_NOT_A_REAL_SECRET_123456'
+const apiKey = 'LIVE_API_KEY:fixture:fixture'
 
 function validEnvironment(overrides = {}) {
   return {
-    CIRCLE_TEST_API_KEY: apiKey,
-    ARC_AGREEMENT_OPERATOR_WALLET_ID: walletId,
-    ARC_AGREEMENT_OPERATOR_ADDRESS: operatorAddress,
+    CIRCLE_API_KEY_ARC_MAINNET: apiKey,
+    ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET: walletId,
+    ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET: operatorAddress,
     ARC_AGREEMENT_OPERATOR_PREFLIGHT_TIMEOUT_MS: '5000',
     ...overrides,
   }
@@ -25,7 +25,7 @@ function validCircleResponse(overrides = {}) {
       wallet: {
         id: walletId,
         address: operatorAddress,
-        blockchain: 'ARC-TESTNET',
+        blockchain: 'ARC',
         custodyType: 'DEVELOPER',
         state: 'LIVE',
         accountType: 'SCA',
@@ -60,7 +60,7 @@ assert.deepEqual(result, {
   ok: true,
   walletId: '9d1a0e42...3dde',
   operatorAddress,
-  network: 'ARC-TESTNET',
+  network: 'ARC',
   custodyType: 'DEVELOPER',
   state: 'LIVE',
   accountType: 'SCA',
@@ -78,43 +78,43 @@ const blockedFetch = async () => {
 
 await assert.rejects(
   () => runArcAgreementOperatorPreflight({
-    env: validEnvironment({ CIRCLE_TEST_API_KEY: '', CIRCLE_API_KEY: apiKey }),
+    env: validEnvironment({ CIRCLE_API_KEY_ARC_MAINNET: '', CIRCLE_API_KEY: apiKey }),
     fetchImpl: blockedFetch,
     requestId,
   }),
-  /CIRCLE_TEST_API_KEY is required/,
+  /CIRCLE_API_KEY_ARC_MAINNET is required/,
 )
 await assert.rejects(
   () => runArcAgreementOperatorPreflight({
-    env: validEnvironment({ ARC_AGREEMENT_OPERATOR_WALLET_ID: '' }),
+    env: validEnvironment({ ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET: '' }),
     fetchImpl: blockedFetch,
     requestId,
   }),
-  /ARC_AGREEMENT_OPERATOR_WALLET_ID is required/,
+  /ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET is required/,
 )
 await assert.rejects(
   () => runArcAgreementOperatorPreflight({
-    env: validEnvironment({ ARC_AGREEMENT_OPERATOR_ADDRESS: '' }),
+    env: validEnvironment({ ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET: '' }),
     fetchImpl: blockedFetch,
     requestId,
   }),
-  /ARC_AGREEMENT_OPERATOR_ADDRESS is required/,
+  /ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET is required/,
 )
 await assert.rejects(
   () => runArcAgreementOperatorPreflight({
-    env: validEnvironment({ ARC_AGREEMENT_OPERATOR_WALLET_ID: 'not-a-wallet-id' }),
+    env: validEnvironment({ ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET: 'not-a-wallet-id' }),
     fetchImpl: blockedFetch,
     requestId,
   }),
-  /ARC_AGREEMENT_OPERATOR_WALLET_ID is invalid/,
+  /ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET is invalid/,
 )
 await assert.rejects(
   () => runArcAgreementOperatorPreflight({
-    env: validEnvironment({ ARC_AGREEMENT_OPERATOR_ADDRESS: 'not-an-address' }),
+    env: validEnvironment({ ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET: 'not-an-address' }),
     fetchImpl: blockedFetch,
     requestId,
   }),
-  /ARC_AGREEMENT_OPERATOR_ADDRESS is invalid/,
+  /ARC_AGREEMENT_OPERATOR_ADDRESS_MAINNET is invalid/,
 )
 await assert.rejects(
   () => runArcAgreementOperatorPreflight({

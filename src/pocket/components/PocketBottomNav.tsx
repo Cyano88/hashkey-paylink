@@ -20,7 +20,7 @@ const items = [
 export default function PocketBottomNav({ active, disabled = false, keyboardOpen = false, onSelect }: PocketBottomNavProps) {
   return (
     <nav
-      aria-label="Circle Pocket navigation"
+      aria-label="Pocket navigation"
       className={cn(
         'pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 pb-[max(0.35rem,var(--pocket-safe-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] transition-transform duration-200 dark:border-white/[0.08] dark:bg-[#111114] dark:shadow-[0_-10px_30px_rgba(0,0,0,0.24)]',
         keyboardOpen && 'translate-y-full',

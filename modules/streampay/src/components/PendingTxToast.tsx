@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PendingTx } from '../hooks/usePendingTx'
 
-const ARC_EXPLORER = 'https://testnet.arcscan.app'
+const ARC_EXPLORER = 'https://explorer.arc.io'
 
 interface PendingTxToastProps {
   txs:       PendingTx[]

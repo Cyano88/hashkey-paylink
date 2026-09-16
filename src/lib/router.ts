@@ -12,7 +12,7 @@ import { arcChain } from './chains'
 
 const RPC_URLS = {
   base:     import.meta.env.VITE_RPC_URL_BASE     ?? import.meta.env.VITE_RPC_URL     ?? 'https://mainnet.base.org',
-  arc:      import.meta.env.VITE_RPC_URL_ARC      ?? 'https://rpc.testnet.arc.network',
+  arc:      import.meta.env.VITE_RPC_URL_ARC_MAINNET      ?? 'https://rpc.mainnet.arc.io',
   arbitrum: import.meta.env.VITE_RPC_URL_ARB      ?? 'https://arb1.arbitrum.io/rpc',
 } as const
 
@@ -48,7 +48,7 @@ export const ERC20_BALANCE_OF_ABI = [{
  */
 export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'arbitrum', `0x${string}`>> = {
   base:     (import.meta.env.VITE_FACTORY_V2         ?? '') as `0x${string}`,
-  arc:      (import.meta.env.VITE_FACTORY_V2_ARC     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
+  arc:      (import.meta.env.VITE_FACTORY_V2_ARC_MAINNET ?? '') as `0x${string}`,
   arbitrum: (import.meta.env.VITE_FACTORY_V2_ARB     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
 }
 

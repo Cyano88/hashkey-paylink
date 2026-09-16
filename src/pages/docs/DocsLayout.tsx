@@ -26,7 +26,7 @@ const NAV = [
     items: [
       { label: 'Base',          path: '/docs/chains/base' },
       { label: 'Arbitrum',      path: '/docs/chains/arbitrum' },
-      { label: 'Arc Testnet',   path: '/docs/chains/arc' },
+      { label: 'Arc Mainnet',   path: '/docs/chains/arc' },
       { label: 'Solana',        path: '/docs/chains/solana' },
     ],
   },

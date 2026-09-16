@@ -34,10 +34,10 @@ async function main() {
   const rpcUrl = String(process.env.PRIVATE_RPC_URL_ARC ?? '').trim()
   if (!rpcUrl) throw new Error('PRIVATE_RPC_URL_ARC is required for the invite pilot.')
   const client = createPublicClient({
-    chain: { ...arcTestnet, id: 5_042_002, name: 'Arc Testnet' },
+    chain: { ...arcTestnet, id: 5_042, name: 'Arc Mainnet' },
     transport: http(rpcUrl, { timeout: 15_000, retryCount: 2 }),
   })
-  if (await client.getChainId() !== 5_042_002) throw new Error('PRIVATE_RPC_URL_ARC is not Arc Testnet.')
+  if (await client.getChainId() !== 5_042) throw new Error('PRIVATE_RPC_URL_ARC is not Arc Mainnet.')
   const bytecode = await client.getBytecode({ address: gate.factory })
   if (!bytecode || bytecode === '0x') throw new Error('Reviewed Arc Agreement factory bytecode is unavailable.')
 
@@ -61,8 +61,8 @@ async function main() {
       durationSeconds: gate.durationCeilingSeconds,
     },
     chain: {
-      network: 'ARC-TESTNET',
-      chainId: 5_042_002,
+      network: 'ARC',
+      chainId: 5_042,
       factory: gate.factory,
       confirmationBlocks: gate.confirmationBlocks,
       factoryCodeVerified: true,
