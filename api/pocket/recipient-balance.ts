@@ -1,9 +1,12 @@
 import type { Request, Response } from 'express'
+import { isAddress } from 'viem'
+import { readEvmUsdcBalanceUnits } from '../evm-balance.js'
 import { PublicKey } from '@solana/web3.js'
 import { readSolanaUsdcBalance } from '../solana-balance.js'
 import type { PocketErrorCode } from '../../src/pocket/lib/pocketSchemas.js'
 
 type PocketRecipientBalanceDependencies = {
+  readEvmBalance?: typeof readEvmUsdcBalanceUnits
   isValidAddress(address: string): boolean
   readBalance(address: string): Promise<{ balance: bigint }>
 }
@@ -36,19 +39,20 @@ export function createPocketRecipientBalanceHandler(overrides: PocketRecipientBa
 
     if (req.method !== 'POST') return fail(405, 'Method not allowed.', false)
     const body = (req.body ?? {}) as Record<string, unknown>
-    if (body.network !== 'solana') return fail(400, 'Recipient balance network must be solana.', false)
+    const network = body.network
+    if (network !== 'solana' && network !== 'base' && network !== 'arc' && network !== 'arbitrum') return fail(400, 'Unsupported recipient balance network.', false)
     const address = typeof body.address === 'string' ? body.address.trim() : ''
-    if (!address || address.length > 64 || !overrides.isValidAddress(address)) {
-      return fail(400, 'Enter a valid Solana wallet address.', false)
+    if (!address || address.length > 64 || !(network === 'solana' ? overrides.isValidAddress(address) : isAddress(address))) {
+      return fail(400, 'Enter a valid wallet address.', false)
     }
 
     try {
-      const result = await overrides.readBalance(address)
-      return res.json({ ok: true, network: 'solana', balance: result.balance.toString() })
+      const balance = network === 'solana'
+        ? (await overrides.readBalance(address)).balance
+        : await (overrides.readEvmBalance ?? readEvmUsdcBalanceUnits)(network, address as `0x${string}`)
+      return res.json({ ok: true, network, balance: balance.toString() })
     } catch (reason) {
-      console.error('[pocket-recipient-balance] Solana balance query failed', {
-        message: reason instanceof Error ? reason.message : 'Solana balance query failed',
-      })
+      console.warn('[pocket-recipient-balance] balance query failed', { network })
       return fail(503, 'Recipient balance is temporarily unavailable.')
     }
   }

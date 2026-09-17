@@ -1,7 +1,5 @@
 import React, { lazy, Suspense, useMemo, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
-import { WagmiProvider } from 'wagmi'
-import { WagmiProvider as PrivyWagmiProvider } from '@privy-io/wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PrivyProvider, type PrivyClientConfig } from '@privy-io/react-auth'
 import '@fontsource/plus-jakarta-sans/400.css'
@@ -12,7 +10,6 @@ import '@fontsource/plus-jakarta-sans/800.css'
 
 import './index.css'
 
-import { privyWagmiConfig } from './lib/privyWagmi'
 import { ThemeProvider, useTheme } from './lib/ThemeContext'
 import { arcChain, baseMainnet } from './lib/chains'
 import { arbitrum, polygon } from 'viem/chains'
@@ -22,6 +19,8 @@ import { isPocketNativeRuntime, pocketRuntimeOrigin } from './pocket/lib/pocketR
 import { installPocketNativeFetch } from './pocket/lib/pocketNativeFetch'
 
 import { resolveAppSurface } from './lib/appSurface'
+
+const WalletProviders = lazy(() => import('./lib/WalletProviders'))
 
 const BRAND_ORIGIN = 'https://hashpaylink.com'
 if (isPocketNativeRuntime()) document.documentElement.dataset.pocketRuntime = 'native'
@@ -114,13 +113,12 @@ function AppProviders() {
   // Public documentation has no wallet or authenticated API dependencies.
   if (surface === 'docs') return app
 
-  if (!PRIVY_AUTH_ENABLED) {
-    return (
-      <WagmiProvider config={privyWagmiConfig}>
-        <QueryClientProvider client={queryClient}>{app}</QueryClientProvider>
-      </WagmiProvider>
-    )
-  }
+  if (surface === 'developer') return <PrivyProvider appId={PRIVY_APP_ID!} config={privyConfig}>
+    <PrivyLoginProvider><QueryClientProvider client={queryClient}>{app}</QueryClientProvider></PrivyLoginProvider>
+  </PrivyProvider>
+
+  const walletApp = <Suspense fallback={<AppBootFallback />}><WalletProviders privy={PRIVY_AUTH_ENABLED}>{app}</WalletProviders></Suspense>
+  if (!PRIVY_AUTH_ENABLED) return <QueryClientProvider client={queryClient}>{walletApp}</QueryClientProvider>
 
   return (
     <PrivyProvider
@@ -129,7 +127,7 @@ function AppProviders() {
     >
       <PrivyLoginProvider>
         <QueryClientProvider client={queryClient}>
-          <PrivyWagmiProvider config={privyWagmiConfig}>{app}</PrivyWagmiProvider>
+          {walletApp}
         </QueryClientProvider>
       </PrivyLoginProvider>
     </PrivyProvider>

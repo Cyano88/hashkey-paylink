@@ -70,17 +70,42 @@ function safeBalanceError(chainLabel: string) {
   return `${chainLabel} balance is temporarily unavailable. Try again in a moment.`
 }
 
-export async function readEvmUsdcBalance(chainKey: EvmBalanceChain, address: `0x${string}`) {
+async function fetchEvmUsdcBalanceUnits(chainKey: EvmBalanceChain, address: `0x${string}`) {
   const config = CHAIN_CONFIG[chainKey]
   const rpcUrl = process.env[config.rpcEnv]?.trim() || config.fallbackRpc
-  const client = createPublicClient({ chain: config.chain, transport: http(rpcUrl) })
+  const client = createPublicClient({ chain: config.chain, transport: http(rpcUrl, { retryCount: 0, timeout: 10_000 }) })
   const raw = await client.readContract({
     address: config.tokenAddress as `0x${string}`,
     abi: ERC20_BALANCE_OF_ABI,
     functionName: 'balanceOf',
     args: [address],
   } as never)
-  return Number(raw) / 10 ** config.decimals
+  return raw as bigint
+}
+
+// Short-lived shared reads retain exact token units and never cache failures.
+export function createEvmBalanceReader(read = fetchEvmUsdcBalanceUnits, now = Date.now) {
+  const cache = new Map<string, { value: bigint; expires: number }>()
+  const pending = new Map<string, Promise<bigint>>()
+  return async (chain: EvmBalanceChain, address: `0x${string}`) => {
+    const key = chain + ':' + address.toLowerCase()
+    const hit = cache.get(key)
+    if (hit && hit.expires > now()) return hit.value
+    const flight = pending.get(key)
+    if (flight) return flight
+    if (pending.size >= 64) throw new Error('Balance reader is busy.')
+    const work = Promise.resolve().then(() => read(chain, address)).then(value => {
+      if (cache.size >= 512) cache.delete(cache.keys().next().value as string)
+      cache.set(key, { value, expires: now() + 5_000 })
+      return value
+    }).finally(() => pending.delete(key))
+    pending.set(key, work)
+    return work
+  }
+}
+export const readEvmUsdcBalanceUnits = createEvmBalanceReader()
+export async function readEvmUsdcBalance(chain: EvmBalanceChain, address: `0x${string}`) {
+  return Number(await readEvmUsdcBalanceUnits(chain, address)) / 10 ** CHAIN_CONFIG[chain].decimals
 }
 
 export default async function handler(req: Request, res: Response) {
@@ -104,7 +129,6 @@ export default async function handler(req: Request, res: Response) {
   } catch (error) {
     console.error('[evm-balance] balance lookup failed', {
       chain: chainKey,
-      message: error instanceof Error ? error.message.slice(0, 220) : 'Unknown balance error',
     })
     return res.status(502).json({ ok: false, error: safeBalanceError(config.label) })
   }

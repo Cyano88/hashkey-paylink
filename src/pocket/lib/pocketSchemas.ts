@@ -112,7 +112,7 @@ export type PocketBalancesReadData = {
 }
 
 export type PocketRecipientBalanceReadData = {
-  network: 'solana'
+  network: 'solana' | 'base' | 'arc' | 'arbitrum'
   balance: string
 }
 
@@ -515,7 +515,7 @@ export function isPocketBalancesReadData(value: unknown): value is PocketBalance
 }
 
 export function isPocketRecipientBalanceReadData(value: unknown): value is PocketRecipientBalanceReadData {
-  if (!isRecord(value) || value.network !== 'solana' || typeof value.balance !== 'string') return false
+  if (!isRecord(value) || !['solana', 'base', 'arc', 'arbitrum'].includes(String(value.network)) || typeof value.balance !== 'string') return false
   return /^\d+$/.test(value.balance)
 }
 

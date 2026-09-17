@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query'
+import { readPocketRecipientBalanceUnits } from '../pocket/api/pocketReadClient'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams, Link, useOutletContext, useNavigate } from 'react-router-dom'
 import type { LayoutOutletContext } from '../Layout'
@@ -928,24 +930,14 @@ export default function PaymentPage() {
     data: circleWalletBalance,
     isFetching: isCircleWalletBalanceFetching,
     refetch: refetchCircleWalletBalance,
-  } = useReadContract({
-    address: chain === 'arc'
-      ? CHAIN_META.arc.tokenAddress
-      : chain === 'arbitrum'
-      ? CHAIN_META.arbitrum.tokenAddress
-      : CHAIN_META.base.tokenAddress,
-    abi: ERC20_BALANCE_OF_ABI,
-    functionName: 'balanceOf',
-    args: [circleSmartAccount ?? '0x0000000000000000000000000000000000000000'],
-    chainId: chain === 'arc'
-      ? CHAIN_META.arc.chainId
-      : chain === 'arbitrum'
-      ? CHAIN_META.arbitrum.chainId
-      : CHAIN_META.base.chainId,
-    query: {
-      enabled: !!circleSmartAccount && (chain === 'base' || chain === 'arc' || chain === 'arbitrum'),
-      refetchInterval: 3_000,
-    },
+  } = useQuery({
+    queryKey: ['checkout-usdc-balance', chain, circleSmartAccount],
+    queryFn: () => readPocketRecipientBalanceUnits({ network: chain, address: circleSmartAccount! }),
+    enabled: !!circleSmartAccount && (chain === 'base' || chain === 'arc' || chain === 'arbitrum'),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    retry: false,
   })
 
 

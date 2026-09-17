@@ -770,13 +770,13 @@ let recipientEvmRequest
 const recipientEvmBalance = await readPocketRecipientBalance({
   network: 'base',
   address: '0xrecipient',
-  evmReader: async input => {
-    recipientEvmRequest = input
-    return 4_500_000n
+  fetcher: async (url, init) => {
+    recipientEvmRequest = { url, body: JSON.parse(init.body) }
+    return { ok: true, json: async () => ({ ok: true, network: 'base', balance: '4500000' }) }
   },
 })
 assert.equal(recipientEvmBalance, 4.5)
-assert.deepEqual(recipientEvmRequest, { network: 'base', address: '0xrecipient' })
+assert.deepEqual(recipientEvmRequest, { url: '/api/pocket/balances/recipient', body: { network: 'base', address: '0xrecipient' } })
 
 const pocketPosPanelsSource = await readFile(new URL('../src/pocket/features/move/PocketPosPanels.tsx', import.meta.url), 'utf8')
 assert.match(pocketPosPanelsSource, /One QR for every sale/)
@@ -814,7 +814,7 @@ assert.doesNotMatch(pocketReadClientSource, /resolvePrivyCircleLink/)
 assert.doesNotMatch(pocketReadClientSource, /balanceReader = queryBalances/)
 assert.match(pocketReadClientSource, /POCKET_API\.recipientBalance/)
 assert.doesNotMatch(pocketReadClientSource, /\/api\/solana-balance|accountAddress/)
-assert.match(pocketReadClientSource, /functionName: 'balanceOf'/)
+assert.doesNotMatch(pocketReadClientSource, /EVM_CLIENTS|readContract/)
 assert.doesNotMatch(pocketReadClientSource, /savePrivyCircleLink|unlinkPrivyCircleLink|verifyAccount|createMerchant|createBankReceive|transfer|submit/i)
 const pocketPayLinkBuilderSource = await readFile(new URL('../src/pocket/lib/pocketPayLinkBuilder.ts', import.meta.url), 'utf8')
 assert.match(pocketPayLinkBuilderSource, /new URLSearchParams\(\{ x: '1' \}\)/)
