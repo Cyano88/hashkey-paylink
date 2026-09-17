@@ -16,6 +16,7 @@ import { createBundlerClient, toSimple7702SmartAccount } from 'viem/account-abst
 import { arbitrum, base } from 'viem/chains'
 import type { ChainKey } from './chains'
 import { CHAIN_META } from './chains'
+import { backendEvmTransport } from './backendEvmTransport'
 import { getCirclePaymasterConfig } from './circlePaymaster'
 
 const EIP2612_ABI = [
@@ -185,7 +186,7 @@ export async function sendCirclePaymasterPayment({
   if (!config || !viemChain) return { status: 'unavailable', reason: 'Circle Paymaster is not enabled for this chain' }
 
   try {
-    const client = createPublicClient({ chain: viemChain, transport: http() })
+    const client = createPublicClient({ chain: viemChain, transport: backendEvmTransport(chain as 'base' | 'arbitrum') })
     const owner = await createWalletOwner(walletClient, payer)
     const account = await toSimple7702SmartAccount({ client: client as never, owner })
     const usdc = getContract({ client, address: config.usdcAddress, abi: erc20Abi })

@@ -1,8 +1,9 @@
+import { backendEvmTransport } from '../../../../src/lib/backendEvmTransport'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { ArrowLeft, Check, Clock3, Copy, Crown, LockKeyhole, Play, RotateCcw, Settings, Share2, Sparkles, Trophy, Users, WalletCards } from 'lucide-react'
-import { createPublicClient, formatUnits, http, parseUnits, type Address } from 'viem'
+import { createPublicClient, formatUnits, parseUnits, type Address } from 'viem'
 import { arcChain, CHAIN_META } from '../../../../src/lib/chains'
 import {
   canUseCircleEvmEmailWallet,
@@ -79,7 +80,7 @@ function inRange(n: number, bounds: { min: number; max: number }) {
   return Number.isFinite(n) && n >= bounds.min && n <= bounds.max
 }
 const PLATFORM_FEE_BPS = 50
-const ARC_PUBLIC_CLIENT = createPublicClient({ chain: arcChain, transport: http() })
+const ARC_PUBLIC_CLIENT = createPublicClient({ chain: arcChain, transport: backendEvmTransport('arc') })
 const ARC_USDC_ADDRESS = CHAIN_META.arc.tokenAddress
 const ARC_USDC_DECIMALS = CHAIN_META.arc.decimals
 const USDC_BALANCE_ABI = [

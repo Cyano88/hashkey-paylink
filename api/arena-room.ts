@@ -34,7 +34,7 @@ type ArenaRoom = {
 const { Pool } = pg
 const DATABASE_URL = (process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? '').trim()
 const PLATFORM_FEE_BPS = 50
-const ARC_RPC_URL = (process.env.PRIVATE_RPC_URL_ARC_MAINNET ?? process.env.VITE_RPC_URL_ARC_MAINNET ?? 'https://rpc.mainnet.arc.io').trim()
+const ARC_RPC_URL = (process.env.PRIVATE_RPC_URL_ARC_MAINNET ?? 'https://rpc.mainnet.arc.io').trim()
 const ARENA_ESCROW_FACTORY_ADDRESS_MAINNET = (process.env.ARENA_ESCROW_FACTORY_ADDRESS_MAINNET ?? '').trim()
 const ARENA_RELAYER_KEY = (
   process.env.ARENA_RELAYER_PRIVATE_KEY_MAINNET

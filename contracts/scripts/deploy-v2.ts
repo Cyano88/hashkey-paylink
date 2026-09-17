@@ -61,7 +61,7 @@ async function main() {
   console.log(`  VITE_FACTORY_V2=${factoryAddress}`)
   console.log(`  RELAYER_PRIVATE_KEY=<your deployer private key>`)
   console.log(`  PRIVATE_RPC_URL=https://base-mainnet.g.alchemy.com/v2/KgWG_lzGfTgnnrtFL0Yws`)
-  console.log(`  VITE_RPC_URL=https://base-mainnet.g.alchemy.com/v2/ALSFqIARRLtU5cbbOv420`)
+  console.log('  Configure PRIVATE_RPC_URL on the backend only.')
   console.log('═════════════════════════════════════════════')
 }
 

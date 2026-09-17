@@ -17,6 +17,7 @@ import { dirname, join, sep } from 'path'
 import relayV2Handler         from './api/relay-v2.js'
 import txStatusHandler        from './api/tx-status.js'
 import solanaBalanceHandler   from './api/solana-balance.js'
+import evmReadHandler from './api/evm-read.js'
 import evmBalanceHandler      from './api/evm-balance.js'
 // ── Streampay module ──────────────────────────────────────────────────────────
 import relayStreamHandler               from './modules/streampay/api/relay-stream.js'
@@ -281,6 +282,7 @@ function circleEmailOtpBoundary(req: Request, res: Response, next: NextFunction)
 app.post('/api/relay-v2',              relayLimiter, relayV2Handler)
 app.post('/api/tx-status',             readLimiter, txStatusHandler)
 app.post('/api/solana-balance',        readLimiter, solanaBalanceHandler)
+app.post('/api/evm-read/:network', readLimiter, evmReadHandler)
 app.post('/api/evm-balance',           readLimiter, evmBalanceHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
 app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)

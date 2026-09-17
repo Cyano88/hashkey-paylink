@@ -1,5 +1,6 @@
+import { backendEvmTransport } from '../../../../src/lib/backendEvmTransport'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createPublicClient, http, defineChain } from 'viem'
+import { createPublicClient, defineChain } from 'viem'
 
 // ── Arc public RPC (frontend-safe, no key) ────────────────────────────────────
 const arc = defineChain({
@@ -9,7 +10,7 @@ const arc = defineChain({
   rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
 })
 
-const client = createPublicClient({ chain: arc, transport: http() })
+const client = createPublicClient({ chain: arc, transport: backendEvmTransport('arc') })
 
 const STORAGE_KEY = 'streampay:pending_txs'
 const POLL_MS     = 4_000   // check every 4 seconds

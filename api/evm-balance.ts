@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
-import { createPublicClient, defineChain, http } from 'viem'
+import { readEvmRpc } from './evm-read.js'
+import { createPublicClient, defineChain, http, encodeFunctionData } from 'viem'
 import { base, baseSepolia, arbitrum } from 'viem/chains'
 
 const ERC20_BALANCE_OF_ABI = [{
@@ -72,6 +73,11 @@ function safeBalanceError(chainLabel: string) {
 
 async function fetchEvmUsdcBalanceUnits(chainKey: EvmBalanceChain, address: `0x${string}`) {
   const config = CHAIN_CONFIG[chainKey]
+  if (chainKey !== 'base-sepolia') {
+    const result = await readEvmRpc(chainKey, 'eth_call', [{ to: config.tokenAddress, data: encodeFunctionData({ abi: ERC20_BALANCE_OF_ABI, functionName: 'balanceOf', args: [address] }) }, 'latest'])
+    if (typeof result !== 'string' || !/^0x[\da-f]{64}$/i.test(result)) throw new Error('Invalid balance result.')
+    return BigInt(result)
+  }
   const rpcUrl = process.env[config.rpcEnv]?.trim() || config.fallbackRpc
   const client = createPublicClient({ chain: config.chain, transport: http(rpcUrl, { retryCount: 0, timeout: 10_000 }) })
   const raw = await client.readContract({

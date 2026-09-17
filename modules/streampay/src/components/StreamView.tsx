@@ -1,3 +1,4 @@
+import { backendEvmTransport } from '../../../../src/lib/backendEvmTransport'
 import { useEffect, useMemo, useRef, useState, Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -5,7 +6,7 @@ import {
   useAccount, useChainId, useSwitchChain, useSignTypedData,
 } from 'wagmi'
 import { useQuery } from '@tanstack/react-query'
-import { createPublicClient, http, defineChain } from 'viem'
+import { createPublicClient, defineChain } from 'viem'
 import { useStreamState }    from '../hooks/useStreamState'
 import { TriStateBar, formatUsdc, formatUsdcFull } from './TriStateBar'
 import { CreateStreamForm, HashPayLinkBadge } from './CreateStreamForm'
@@ -28,7 +29,7 @@ const arcClient = createPublicClient({
     nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
     rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
   }),
-  transport: http('https://rpc.mainnet.arc.io'),
+  transport: backendEvmTransport('arc'),
 })
 
 // ── Types ─────────────────────────────────────────────────────────────────────

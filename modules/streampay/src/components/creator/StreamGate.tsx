@@ -1,9 +1,10 @@
+import { backendEvmTransport } from '../../../../../src/lib/backendEvmTransport'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { useSearchParams }    from 'react-router-dom'
 import { useAccount, useChainId, useSwitchChain, useWriteContract } from 'wagmi'
 import { useQuery }           from '@tanstack/react-query'
-import { createPublicClient, http, defineChain, parseAbi, keccak256, toBytes } from 'viem'
+import { createPublicClient, defineChain, parseAbi, keccak256, toBytes } from 'viem'
 import { usePoAStream }       from '../../hooks/usePoAStream'
 import { usePasskey }         from '../../hooks/usePasskey'
 import { STREAM_VAULT_ABI }   from '../../lib/streamVaultAbi'
@@ -27,7 +28,7 @@ const arcClient = createPublicClient({
     nativeCurrency: { decimals: 18, name: 'USD Coin', symbol: 'USDC' },
     rpcUrls:        { default: { http: ['https://rpc.mainnet.arc.io'] } },
   }),
-  transport: http('https://rpc.mainnet.arc.io'),
+  transport: backendEvmTransport('arc'),
 })
 
 const ARC_CHAIN_ID = 5042

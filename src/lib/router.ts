@@ -6,20 +6,15 @@
  * and CREATE2 ghost-vault relays.
  */
 
-import { createPublicClient, http } from 'viem'
+import { createPublicClient } from 'viem'
 import { base, arbitrum } from 'viem/chains'
 import { arcChain } from './chains'
-
-const RPC_URLS = {
-  base:     import.meta.env.VITE_RPC_URL_BASE     ?? import.meta.env.VITE_RPC_URL     ?? 'https://mainnet.base.org',
-  arc:      import.meta.env.VITE_RPC_URL_ARC_MAINNET      ?? 'https://rpc.mainnet.arc.io',
-  arbitrum: import.meta.env.VITE_RPC_URL_ARB      ?? 'https://arb1.arbitrum.io/rpc',
-} as const
+import { backendEvmTransport } from './backendEvmTransport'
 
 export const EVM_CLIENTS = {
-  base:     createPublicClient({ chain: base,           transport: http(RPC_URLS.base) }),
-  arc:      createPublicClient({ chain: arcChain,       transport: http(RPC_URLS.arc) }),
-  arbitrum: createPublicClient({ chain: arbitrum,       transport: http(RPC_URLS.arbitrum) }),
+  base:     createPublicClient({ chain: base,           transport: backendEvmTransport('base') }),
+  arc:      createPublicClient({ chain: arcChain,       transport: backendEvmTransport('arc') }),
+  arbitrum: createPublicClient({ chain: arbitrum,       transport: backendEvmTransport('arbitrum') }),
 } as const
 
 /** Standard ERC-20 Transfer, used for direct recipient receipt detection. */

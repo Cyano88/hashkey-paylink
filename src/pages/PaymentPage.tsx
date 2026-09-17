@@ -1541,7 +1541,8 @@ export default function PaymentPage() {
         abi:             ERC20_TRANSFER_ABI,
         eventName:       'Transfer',
         args:            { from: expectedPayer, to: watchTarget },
-        pollingInterval: 2_000,
+        pollingInterval: 10_000,
+        fromBlock: paymentVerificationStartBlockRef.current ?? undefined,
         onLogs(logs) {
           if (detectedRef.current) return
           const log   = logs[0]
@@ -1869,22 +1870,21 @@ export default function PaymentPage() {
           args: { value?: bigint }
           transactionHash?: `0x${string}` | null
         }
-        const getTransferLogs = client.getLogs as unknown as (args: {
-          address: `0x${string}`
-          abi: typeof ERC20_TRANSFER_ABI
-          eventName: 'Transfer'
-          args: { from: `0x${string}`; to: `0x${string}` }
-          fromBlock: bigint
-          toBlock: bigint
-        }) => Promise<TransferLog[]>
-        const logs = await getTransferLogs({
-          address: tokenAddress,
-          abi: ERC20_TRANSFER_ABI,
-          eventName: 'Transfer',
-          args: { from: expectedPayer, to: target },
-          fromBlock,
-          toBlock: latestBlock,
-        })
+        // Bound each provider scan and preserve the whole payment attempt window.
+        if (latestBlock - fromBlock >= 32_768n) throw new Error('Use the transaction receipt to verify this older payment.')
+        const logs: TransferLog[] = []
+        for (let cursor = fromBlock; cursor <= latestBlock; cursor += 2048n) {
+          const end = cursor + 2047n < latestBlock ? cursor + 2047n : latestBlock
+          const page = await client.getContractEvents({
+            address: tokenAddress,
+            abi: ERC20_TRANSFER_ABI,
+            eventName: 'Transfer',
+            args: { from: expectedPayer, to: target },
+            fromBlock: cursor,
+            toBlock: end,
+          })
+          logs.push(...page as TransferLog[])
+        }
         const match = [...logs].reverse().find(log => {
           const value = (log.args as { value?: bigint }).value ?? 0n
           return value >= (isHostedCheckout ? scanUnits : scanUnits * 98n / 100n)
