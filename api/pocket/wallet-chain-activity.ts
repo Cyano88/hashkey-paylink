@@ -1,4 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js'
+import { readEvmRpc, ReadRpcError } from '../evm-read.js'
+import { createWalletActivityReader } from './wallet-activity-cache.js'
 import { getAssociatedTokenAddress } from '../solana-token.js'
 import { circleLinkKey, readCircleLink } from '../privy-circle-link.js'
 import type { PocketActivityRow } from '../../src/pocket/lib/pocketSchemas.js'
@@ -6,26 +8,14 @@ import type { PocketActivityRow } from '../../src/pocket/lib/pocketSchemas.js'
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const SOLANA_USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const EVM = {
-  base: { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', rpc: 'PRIVATE_RPC_URL', fallback: 'https://mainnet.base.org' },
-  arbitrum: { token: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', rpc: 'PRIVATE_RPC_URL_ARB', fallback: 'https://arb1.arbitrum.io/rpc' },
-  arc: { token: '0xfffffffffffffffffffffffffffffffffffffffe', rpc: 'PRIVATE_RPC_URL_ARC_MAINNET', fallback: 'https://rpc.mainnet.arc.io' },
+  base: { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
+  arbitrum: { token: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' },
+  arc: { token: '0xfffffffffffffffffffffffffffffffffffffffe' },
 } as const
 
 type EvmNetwork = keyof typeof EVM
 type RpcLog = { transactionHash?: string; blockNumber?: string; logIndex?: string; topics?: string[]; data?: string }
 type SolanaTokenBalance = { mint?: string; owner?: string; uiTokenAmount?: { uiAmountString?: string | null } }
-
-async function rpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-    signal: AbortSignal.timeout(8_000),
-  })
-  const data = await response.json() as { result?: T; error?: { message?: string } }
-  if (!response.ok || data.error || data.result == null) throw new Error(data.error?.message || `${method} failed`)
-  return data.result
-}
 
 function addressTopic(address: string) {
   return `0x${address.toLowerCase().replace(/^0x/, '').padStart(64, '0')}`
@@ -71,22 +61,30 @@ export function evmTransferTouchesTopic(topics: readonly string[] | undefined, w
   return topics?.[1]?.toLowerCase() === normalized || topics?.[2]?.toLowerCase() === normalized
 }
 
-async function evmActivity(network: EvmNetwork, wallet: string): Promise<PocketActivityRow[]> {
+export async function evmActivity(network: EvmNetwork, wallet: string, signal: AbortSignal, read = readEvmRpc): Promise<PocketActivityRow[]> {
+  if (!/^0x[\da-f]{40}$/i.test(wallet)) throw new Error('Invalid activity wallet.')
+  async function rpc<T>(method: string, params: any[]): Promise<T> {
+    signal.throwIfAborted()
+    const result = await read(network, method, params, signal)
+    signal.throwIfAborted()
+    return result as T
+  }
   const config = EVM[network]
-  const rpcUrl = process.env[config.rpc]?.trim() || config.fallback
-  const latest = BigInt(await rpc<string>(rpcUrl, 'eth_blockNumber', []))
-  const lookback = BigInt(positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOOKBACK_BLOCKS, 120))
-  const blockRange = BigInt(positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, 10))
-  const maxChunks = positiveInteger(process.env.POCKET_ACTIVITY_EVM_MAX_LOG_CHUNKS, 12)
+  const latest = BigInt(await rpc<string>('eth_blockNumber', []))
+  const lookback = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOOKBACK_BLOCKS, 120)))
+  const blockRange = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, 10)))
+  const maxChunks = Math.min(12, positiveInteger(process.env.POCKET_ACTIVITY_EVM_MAX_LOG_CHUNKS, 12))
   const ranges = evmLogBlockRanges(latest, lookback, blockRange, maxChunks)
   const topic = addressTopic(wallet)
   const logs: RpcLog[] = []
   for (const range of ranges) {
-    logs.push(...await rpc<RpcLog[]>(rpcUrl, 'eth_getLogs', [{
-      address: config.token,
-      ...range,
-      topics: [TRANSFER_TOPIC],
-    }]))
+    // Indexed from/to filters exclude unrelated transfers at the provider.
+    // A self-transfer appears in both sets and is deduplicated below.
+    const matches = await Promise.all([[TRANSFER_TOPIC, topic], [TRANSFER_TOPIC, null, topic]].map(topics =>
+      rpc<RpcLog[]>('eth_getLogs', [{ address: config.token, ...range, topics }]),
+    ))
+    logs.push(...matches.flat())
+    if (logs.length > 2_000) throw new Error('Activity result limit reached.')
   }
   const byId = new Map<string, RpcLog>()
   for (const log of logs) {
@@ -95,10 +93,12 @@ async function evmActivity(network: EvmNetwork, wallet: string): Promise<PocketA
   }
   const blockNumbers = [...new Set([...byId.values()].map(log => log.blockNumber).filter(Boolean) as string[])].slice(0, 30)
   const timestamps = new Map<string, number>()
-  await Promise.all(blockNumbers.map(async block => {
-    const value = await rpc<{ timestamp?: string }>(rpcUrl, 'eth_getBlockByNumber', [block, false]).catch(() => null)
-    if (value?.timestamp) timestamps.set(block, Number(BigInt(value.timestamp)) * 1000)
-  }))
+  for (let index = 0; index < blockNumbers.length; index += 4) {
+    await Promise.all(blockNumbers.slice(index, index + 4).map(async block => {
+      const value = await rpc<{ timestamp?: string }>('eth_getBlockByNumber', [block, false])
+      if (value?.timestamp) timestamps.set(block, Number(BigInt(value.timestamp)) * 1000)
+    }))
+  }
   return [...byId.entries()].flatMap(([id, log]) => {
     const topics = log.topics ?? []
     const sender = topics[1] ? `0x${topics[1].slice(-40)}` : ''
@@ -177,13 +177,26 @@ export async function findSolanaUsdcTransfer(input: {
   }
   return null
 }
-async function solanaActivity(wallet: string): Promise<PocketActivityRow[]> {
+export async function solanaActivity(wallet: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<PocketActivityRow[]> {
   const rpcUrl = process.env.SOLANA_RPC_URL?.trim() || 'https://api.mainnet-beta.solana.com'
-  const connection = new Connection(rpcUrl, 'confirmed')
+  const connection = new Connection(rpcUrl, {
+    commitment: 'confirmed', disableRetryOnRateLimit: true,
+    fetch: async (url, init) => {
+      signal.throwIfAborted()
+      const response = await fetcher(url, { ...init, signal })
+      if (!response.ok) {
+        await response.body?.cancel()
+        throw new ReadRpcError(response.status === 429 || response.status >= 500 ? -32004 : -32003, 'Activity provider unavailable.')
+      }
+      return response
+    },
+  })
   const owner = new PublicKey(wallet)
   const ata = await getAssociatedTokenAddress(SOLANA_USDC_MINT, owner, true)
   const signatures = await connection.getSignaturesForAddress(ata, { limit: 20 }, 'confirmed')
+  signal.throwIfAborted()
   const transactions = await connection.getParsedTransactions(signatures.map(row => row.signature), { maxSupportedTransactionVersion: 0, commitment: 'confirmed' })
+  signal.throwIfAborted()
   return transactions.flatMap((transaction, index) => {
     if (!transaction || transaction.meta?.err) return []
     const ownerText = owner.toBase58()
@@ -215,6 +228,12 @@ async function solanaActivity(wallet: string): Promise<PocketActivityRow[]> {
   })
 }
 
+const readWalletActivity = createWalletActivityReader((network, wallet, signal) => {
+  if (network === 'solana') return solanaActivity(wallet, signal)
+  if (!Object.hasOwn(EVM, network)) throw new Error('Unsupported activity network.')
+  return evmActivity(network as EvmNetwork, wallet, signal)
+})
+
 export async function readPocketWalletChainActivity(
   ownerId: string,
   options: { timeoutMs?: number; limit?: number } = {},
@@ -222,22 +241,9 @@ export async function readPocketWalletChainActivity(
   const timeoutMs = Math.max(500, Math.min(Math.trunc(options.timeoutMs ?? 10_000), 10_000))
   const limit = Math.max(1, Math.min(Math.trunc(options.limit ?? 100), 100))
   const links = await readPocketLinkedWalletAddresses(ownerId)
-  const results = await Promise.all(links.map(async ({ network, walletAddress }) => {
-    const link = { circleWalletAddress: walletAddress }
-    if (!link) return []
-    try {
-      const read = network === 'solana'
-        ? solanaActivity(link.circleWalletAddress)
-        : evmActivity(network as EvmNetwork, link.circleWalletAddress)
-      return await Promise.race([
-        read,
-        new Promise<PocketActivityRow[]>((_, reject) => setTimeout(() => reject(new Error('chain activity lookup timed out')), timeoutMs)),
-      ])
-    } catch (reason) {
-      console.warn('[pocket-activity] wallet chain history unavailable', { network, message: reason instanceof Error ? reason.message : 'lookup failed' })
-      return []
-    }
-  }))
+  const results = await Promise.all(links.map(({ network, walletAddress }) =>
+    readWalletActivity(ownerId, network, walletAddress, timeoutMs),
+  ))
   return results.flat().sort((a, b) => b.ts - a.ts).slice(0, limit)
 }
 

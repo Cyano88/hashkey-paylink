@@ -61,15 +61,17 @@ export function validateRead(method: unknown, input: unknown): { method: string;
 // Limits are per server process. This endpoint is not a general developer RPC product.
 export function createReadService(fetcher: typeof fetch = fetch, now = Date.now) {
   const cache = new Map<string, { expires: number; result: unknown }>()
-  const pending = new Map<string, Promise<unknown>>()
+  const pending = new Map<string | symbol, Promise<unknown>>()
   const cooldown = new Map<string, number>()
   let windowStart = now(), used = 0
-  async function upstream(url: string, method: string, params: any[]) {
+  async function upstream(url: string, method: string, params: any[], signal?: AbortSignal) {
+    signal?.throwIfAborted()
     if (now() - windowStart >= 60_000) { windowStart = now(); used = 0 }
     if (++used > 300) throw new ReadRpcError(-32005, 'Read capacity reached. Try again shortly.')
     const response = await fetcher(url, {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: AbortSignal.timeout(8_000),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(8_000)]) : AbortSignal.timeout(8_000),
     })
     if (response.status === 429 || response.status >= 500) throw new ReadRpcError(-32004, 'Upstream temporarily unavailable.')
     if (!response.ok) throw new ReadRpcError(-32003, 'Upstream configuration unavailable.')
@@ -93,7 +95,8 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now)
     if (!Object.hasOwn(data, 'result')) throw new ReadRpcError(-32004, 'Invalid upstream response.')
     return data.result
   }
-  return async (network: ReadNetwork, method: string, params: any[]) => {
+  return async (network: ReadNetwork, method: string, params: any[], signal?: AbortSignal) => {
+    signal?.throwIfAborted()
     const validated = validateRead(method, params)
     const config = NETWORKS[network]
     if (!config) throw new ReadRpcError(-32602, 'Unsupported network.')
@@ -101,26 +104,31 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now)
     const key = JSON.stringify([network, validated])
     const hit = cache.get(key)
     if (hit && hit.expires > now()) return hit.result
-    if (pending.has(key)) return pending.get(key)
+    // Cancellable scans share work at the wallet level; their abort must not
+    // cancel an unrelated checkout read with identical RPC parameters.
+    if (!signal && pending.has(key)) return pending.get(key)
+    const pendingKey = signal ? Symbol(key) : key
     if (pending.size >= 16) throw new ReadRpcError(-32005, 'Read service busy. Try again shortly.')
     const work = (async () => {
       const configured = process.env[config.env]?.trim() || config.fallback
       const primary = (cooldown.get(network) ?? 0) > now() ? config.fallback : configured
       let result: unknown
-      try { result = await upstream(primary, method, validated.params) }
+      try { result = await upstream(primary, method, validated.params, signal) }
       catch (error) {
+        signal?.throwIfAborted()
         if (primary === config.fallback || (error instanceof ReadRpcError && error.code !== -32004)) throw error
         cooldown.set(network, now() + 60_000)
         console.warn('[evm-read] provider cooldown', { network })
-        result = await upstream(config.fallback, method, validated.params)
+        result = await upstream(config.fallback, method, validated.params, signal)
       }
+      signal?.throwIfAborted()
       if (cache.size >= 256) cache.delete(cache.keys().next().value!)
       // Never reuse a nonce or an arbitrary contract-state read when preparing signatures.
       const cacheable = method !== 'eth_getTransactionCount' && (method !== 'eth_call' || validated.params[0].data.startsWith('0x70a08231'))
       if (cacheable && JSON.stringify(result).length <= 65_536) cache.set(key, { result, expires: now() + (result === null ? 1_000 : 3_000) })
       return result
-    })().finally(() => pending.delete(key))
-    pending.set(key, work)
+    })().finally(() => pending.delete(pendingKey))
+    pending.set(pendingKey, work)
     return work
   }
 }
