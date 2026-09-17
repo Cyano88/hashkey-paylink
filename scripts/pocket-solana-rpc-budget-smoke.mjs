@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict'
+import { createPocketSolanaRpcHandler } from '../api/pocket/solana-rpc.ts'
+const response = () => ({ statusCode: 200, headers: {}, status(n){this.statusCode=n;return this},setHeader(k,v){this.headers[k]=v;return this},json(v){this.body=v;return this},type(){return this},send(v){this.body=v;return this} })
+const item=(method='getBalance',id=1)=>({jsonrpc:'2.0',id,method,params:[]})
+let calls=0,now=0
+const make=(extra={})=>createPocketSolanaRpcHandler({verifyUser:async req=>({userId:req.user??'user-a'}),rpcUrl:()=> 'https://rpc.example.test',now:()=>now,fetcher:async()=>{calls++;return new Response('{}')},...extra})
+const run=async(handler,body,user)=>{const res=response();await handler({method:'POST',body,user},res);return res}
+const h=make();const batch=Array.from({length:20},(_,i)=>item('getBalance',i))
+for(let i=0;i<6;i++)assert.equal((await run(h,batch)).statusCode,200)
+assert.equal(calls,6)
+assert.equal((await run(h,item())).statusCode,429)
+assert.equal(calls,6,'blocked batch operations never reach provider')
+assert.equal((await run(h,item('sendTransaction'))).statusCode,200,'reads do not exhaust transaction budget')
+assert.equal((await run(h,item(),'user-b')).statusCode,200,'budgets are per authenticated user')
+now=60_000;assert.equal((await run(h,item())).statusCode,200,'window resets')
+const tx=make();assert.equal((await run(tx,Array.from({length:20},()=>item('simulateTransaction')))).statusCode,200)
+assert.equal((await run(tx,item('sendTransaction'))).statusCode,429)
+assert.equal((await run(tx,item())).statusCode,200)
+const oversized=make();const before=calls;assert.equal((await run(oversized,{...item(),params:['x'.repeat(65536)]})).statusCode,413);assert.equal(calls,before)
+const fail=make({fetcher:async()=>{throw Object.assign(new Error('https://rpc.example.test/secret-key'),{status:418})}})
+const failed=await run(fail,item());assert.equal(failed.statusCode,503);assert.doesNotMatch(JSON.stringify(failed.body),/secret-key|rpc.example/)
+for(let i=0;i<5;i++)assert.equal((await run(fail,item())).statusCode,503,'exception releases concurrency slot')
+const unauth=make({verifyUser:async()=>{throw Object.assign(Error('sensitive auth detail'),{status:401})}})
+const rejected=await run(unauth,item());assert.equal(rejected.statusCode,401);assert.doesNotMatch(JSON.stringify(rejected.body),/sensitive/)
+const pending=[];const concurrent=make({fetcher:()=>new Promise(resolve=>pending.push(resolve))});const work=Array.from({length:4},()=>run(concurrent,item()));await new Promise(resolve=>setImmediate(resolve));assert.equal(pending.length,4);const busy=await run(concurrent,item());assert.equal(busy.statusCode,429);assert.equal(busy.headers['Retry-After'],'1');for(const resolve of pending)resolve(new Response('{}'));await Promise.all(work)
+console.log('Pocket Solana RPC operation budgets, isolation, concurrency, payload and redaction checks passed')

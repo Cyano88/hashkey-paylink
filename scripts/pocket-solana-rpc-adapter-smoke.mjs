@@ -20,7 +20,7 @@ const handler = createPocketSolanaRpcHandler({
   fetcher: async (url, init) => {
     forwarded = { url, init }
     const request = JSON.parse(init.body)
-    const result = request.method === 'getGenesisHash' ? '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp' : { value: 123 }
+    const result = request.method === 'getGenesisHash' ? '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d' : { value: 123 }
     return new Response(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }), { status: 200 })
   },
 })
@@ -36,7 +36,7 @@ assert.equal(JSON.parse(ok.body).result.value, 123)
 const genesis = response()
 await handler({ method: 'POST', body: { jsonrpc: '2.0', id: 2, method: 'getGenesisHash', params: [] } }, genesis)
 assert.equal(genesis.statusCode, 200)
-assert.equal(JSON.parse(genesis.body).result, '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp')
+assert.equal(JSON.parse(genesis.body).result, '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d')
 assert.equal(JSON.parse(forwarded.init.body).method, 'getGenesisHash')
 
 const blocked = response()
@@ -51,6 +51,6 @@ const unavailable = createPocketSolanaRpcHandler({
 const unavailableResponse = response()
 await unavailable({ method: 'POST', body: { jsonrpc: '2.0', id: 3, method: 'getBalance', params: ['wallet'] } }, unavailableResponse)
 assert.equal(unavailableResponse.statusCode, 503)
-assert.match(unavailableResponse.body.error.message, /not configured/i)
+assert.match(unavailableResponse.body.error.message, /temporarily unavailable/i)
 
 console.log('pocket solana RPC adapter smoke passed')
