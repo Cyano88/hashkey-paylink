@@ -1101,6 +1101,7 @@ export function StreamGate() {
     if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) return false
     const res = await fetch(`/api/creator-checkpoint-vault?contentId=${encodeURIComponent(contentId)}&walletAddress=${encodeURIComponent(wallet)}`)
     const data = await res.json().catch(() => ({})) as { ok?: boolean; vaultAddress?: string; totalAmount?: string; releasedAmount?: string }
+    if (!res.ok && res.status !== 404) throw new Error('Previous session lookup is not complete. Please try again shortly.')
     if (!res.ok || !data.ok || !data.vaultAddress || !/^0x[a-fA-F0-9]{40}$/.test(data.vaultAddress)) return false
     setCheckpointVault(data.vaultAddress)
     setGatewayTx(data.vaultAddress)

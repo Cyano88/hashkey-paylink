@@ -1,3 +1,5 @@
+import { CheckpointRecoveryPending, checkpointRecoveryDeploymentBlock, createCheckpointRecoveryScan } from '../../../api/checkpoint-recovery-scan.js'
+import { readEvmRpc } from '../../../api/evm-read.js'
 import { readMainnetCheckpointFactory } from '../../../api/runtime-public-config.js'
 /**
  * /api/store-content  POST - creator uploads content/URL before sharing gate link
@@ -10,7 +12,7 @@ import type { Request, Response } from 'express'
 import { createHash, randomUUID } from 'node:crypto'
 import pg from 'pg'
 import {
-  createPublicClient, http, defineChain,
+  createPublicClient, http, custom, defineChain,
   parseAbi, parseAbiItem, isAddress, keccak256, toBytes, verifyMessage, verifyTypedData, hashTypedData,
   type Address, type Hex,
 } from 'viem'
@@ -2425,17 +2427,21 @@ export async function getContentStreamEscrow(req: Request, res: Response) {
   return res.status(200).json({ ok: true, type: entry.type, content: entry.content, coverImage: entry.coverImage })
 }
 
-async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry, vault: string, options: { allowRefunded?: boolean } = {}) {
-  const code = await arcClient.getBytecode({ address: vault as `0x${string}` }).catch(() => undefined)
+class CheckpointVerificationUnavailable extends Error {
+  constructor() { super('Could not verify the previous session. Please try again shortly.') }
+}
+
+async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry, vault: string, options: { allowRefunded?: boolean } = {}, client: Pick<typeof arcClient, 'getBytecode' | 'readContract'> = arcClient) {
+  const code = await client.getBytecode({ address: vault as `0x${string}` }).catch(() => { throw new CheckpointVerificationUnavailable() })
   if (!code || code === '0x') {
     throw new Error('Checkpoint escrow is not active on Arc yet. Start pay-as-you-read again.')
   }
 
-  const info = await arcClient.readContract({
+  const info = await client.readContract({
     address: vault as `0x${string}`,
     abi: CHECKPOINT_VAULT_ABI,
     functionName: 'vaultInfo',
-  }) as readonly [`0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, bigint, bigint, bigint, boolean, boolean]
+  }).catch(() => { throw new CheckpointVerificationUnavailable() }) as readonly [`0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, `0x${string}`, bigint, bigint, bigint, boolean, boolean]
 
   const sender = info[0]
   const recipient = info[1]
@@ -2470,32 +2476,54 @@ async function verifyCheckpointVaultState(contentId: string, entry: ContentEntry
   }
 }
 
+const scanCheckpointRecovery = createCheckpointRecoveryScan()
+
 async function findCheckpointUnlockOnChain(contentId: string, entry: ContentEntry, walletAddress: string) {
   const wallet = cleanWalletAddress(walletAddress)
-  if (!CHECKPOINT_FACTORY_ADDRESS_MAINNET || !isAddress(CHECKPOINT_FACTORY_ADDRESS_MAINNET) || !wallet || !isAddress(wallet)) return null
+  if (!CHECKPOINT_FACTORY_ADDRESS_MAINNET || !wallet || !isAddress(wallet)) return null
+  const floor = checkpointRecoveryDeploymentBlock()
+  if (floor === null) throw new CheckpointRecoveryPending()
   const targetContentId = toContentBytes32(contentId).toLowerCase()
-  const logs = await arcClient.getLogs({
-    address: CHECKPOINT_FACTORY_ADDRESS_MAINNET as `0x${string}`,
-    event: CHECKPOINT_VAULT_CREATED_EVENT,
-    args: { sender: wallet as `0x${string}` },
-    fromBlock: 0n,
-    toBlock: 'latest',
-  }).catch(() => [])
-
-  for (const log of logs.reverse()) {
-    const vault = log.args.vault
-    const logContentId = String(log.args.contentId ?? '').toLowerCase()
-    if (!vault || logContentId !== targetContentId) continue
-    try {
-      const state = await verifyCheckpointVaultState(contentId, entry, vault)
-      if (state.sender.toLowerCase() !== wallet) continue
-      await writeCheckpointUnlock({ contentId, walletAddress: wallet, vaultAddress: vault, createdAt: Date.now() })
-      return { vaultAddress: vault, state }
-    } catch {
-      continue
-    }
-  }
-  return null
+  const endpoint = process.env.PRIVATE_RPC_URL_ARC_MAINNET?.trim()
+  const span = !endpoint || /^https:\/\/rpc\.mainnet\.arc\.io\/?$/.test(endpoint) ? 120n : 10n
+  const key = JSON.stringify([CHECKPOINT_FACTORY_ADDRESS_MAINNET.toLowerCase(), floor.toString(), contentId, wallet, entry.creator.toLowerCase(), entry.capRaw])
+  const clientFor = (signal: AbortSignal, onFailure: () => void) => createPublicClient({
+    chain: arcChain,
+    transport: custom({ request: async ({ method, params }) => {
+      try { return await readEvmRpc('arc', method, (params ?? []) as any[], signal) }
+      catch (error) { onFailure(); throw error }
+    } }, { retryCount: 0 }),
+  })
+  return scanCheckpointRecovery(key, floor, span,
+    signal => clientFor(signal, () => {}).getBlockNumber({ cacheTime: 0 }),
+    async (fromBlock, toBlock, signal) => {
+      let failed = false
+      const client = clientFor(signal, () => { failed = true })
+      const logs = await client.getLogs({
+        address: CHECKPOINT_FACTORY_ADDRESS_MAINNET as Address,
+        event: CHECKPOINT_VAULT_CREATED_EVENT,
+        args: { sender: wallet as Address, recipient: entry.creator as Address },
+        fromBlock, toBlock,
+      })
+      const candidates = logs.filter(log => String(log.args.contentId ?? '').toLowerCase() === targetContentId).reverse()
+      for (const log of candidates.slice(0, 8)) {
+        const vault = log.args.vault
+        if (!vault) continue
+        let state: Awaited<ReturnType<typeof verifyCheckpointVaultState>>
+        try {
+          state = await verifyCheckpointVaultState(contentId, entry, vault, {}, client)
+        } catch (error) {
+          // A failed RPC must never advance the history cursor or become a 404.
+          if (failed || signal.aborted || error instanceof CheckpointVerificationUnavailable) throw error
+          continue
+        }
+        if (state.sender.toLowerCase() !== wallet) continue
+        await writeCheckpointUnlock({ contentId, walletAddress: wallet, vaultAddress: vault, createdAt: Date.now() })
+        return { vaultAddress: vault, state }
+      }
+      if (candidates.length > 8) throw new CheckpointRecoveryPending()
+      return null
+    })
 }
 
 export async function getContentCheckpointEscrow(req: Request, res: Response) {
@@ -2538,7 +2566,13 @@ export async function getCreatorCheckpointVault(req: Request, res: Response) {
   if (!entry) return res.status(404).json({ ok: false, error: 'Content not found.' })
   const saved = await readCheckpointUnlock(contentId, wallet)
   if (!saved || !isAddress(saved.vaultAddress)) {
-    const discovered = await findCheckpointUnlockOnChain(contentId, entry, wallet)
+    let discovered: Awaited<ReturnType<typeof findCheckpointUnlockOnChain>>
+    try { discovered = await findCheckpointUnlockOnChain(contentId, entry, wallet) }
+    catch {
+      res.setHeader('Retry-After', '60')
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(503).json({ ok: false, code: 'CHECKPOINT_RECOVERY_PENDING', error: 'Previous session lookup is not complete. Please try again shortly.' })
+    }
     if (!discovered) return res.status(404).json({ ok: false, error: 'No previous pay-as-you-read session found.' })
     return res.json({ ok: true, vaultAddress: discovered.vaultAddress, ...discovered.state })
   }
@@ -2547,6 +2581,11 @@ export async function getCreatorCheckpointVault(req: Request, res: Response) {
     if (state.sender.toLowerCase() !== wallet) return res.status(403).json({ ok: false, error: 'This checkpoint belongs to another reader wallet.' })
     return res.json({ ok: true, vaultAddress: saved.vaultAddress, ...state })
   } catch (err) {
+    if (err instanceof CheckpointVerificationUnavailable) {
+      res.setHeader('Retry-After', '60')
+      res.setHeader('Cache-Control', 'no-store')
+      return res.status(503).json({ ok: false, code: 'CHECKPOINT_RECOVERY_PENDING', error: err.message })
+    }
     const message = err instanceof Error ? err.message : String(err)
     return res.status(404).json({ ok: false, error: message.slice(0, 180) })
   }
