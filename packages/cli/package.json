@@ -1,0 +1,20 @@
+{
+  "name": "@hashpaylink/cli",
+  "version": "0.1.0",
+  "description": "Project-scoped Hash PayLink checkout CLI for builders and agents",
+  "type": "module",
+  "bin": {
+    "hashpaylink": "bin/hashpaylink.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

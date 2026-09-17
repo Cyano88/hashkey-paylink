@@ -149,6 +149,7 @@ import { drainArcAgreementLifecycleReconciliations } from './api/arc-agreement-l
 import { drainArcAgreementOperatorActions } from './api/arc-agreement-operator-worker.js'
 import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
 import agenticCheckoutsHandler from './api/agentic-checkouts.js'
+import developerCliProjectHandler from './api/developer-cli-project.js'
 import agenticCheckoutWalletPayHandler from './api/agentic-checkout-wallet-pay.js'
 import polymarketFundingCheckoutsHandler from './api/polymarket-funding-checkouts.js'
 import { pocketBillsCatalogHandler, pocketBillsPayHandler, pocketBillsQuoteHandler, pocketBillsVerifyHandler } from './api/pocket/bills.js'
@@ -406,6 +407,7 @@ app.post('/api/v2/agreements/verified-recipient', strictLimiter, verifiedArcReci
 app.all('/api/v2/agreements',          strictLimiter, arcAgreementsHandler)
 app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
 app.post('/api/v2/checkouts/agent/pay', strictLimiter, agenticCheckoutWalletPayHandler)
+app.all('/api/v2/project', strictLimiter, developerCliProjectHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
 app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)
 app.all('/api/v2/checkouts',           strictLimiter, hostedCheckoutsHandler)

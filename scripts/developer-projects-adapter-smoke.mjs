@@ -303,7 +303,7 @@ const otherOwner = createDeveloperProjectsHandler({
 })
 assert.equal((await request(otherOwner, 'PUT', { action: 'configure', projectId: created.body.project.id })).statusCode, 404)
 
-const appSource = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const appSource = readFileSync(new URL('../src/surfaces/DeveloperApp.tsx', import.meta.url), 'utf8')
 const operationsSource = readFileSync(new URL('../src/pages/DeveloperOperationsPage.tsx', import.meta.url), 'utf8')
 assert.ok(appSource.includes('path="admin/developers"') && appSource.includes('<DeveloperOperationsPage surface="projects" />'))
 assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("'admin-list'") && operationsSource.includes("'admin-suspend'") && operationsSource.includes("'admin-reactivate'") && operationsSource.includes("'admin-arc-pilot-approve'"))
