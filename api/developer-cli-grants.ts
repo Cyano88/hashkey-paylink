@@ -3,7 +3,7 @@ import type { Request, Response } from 'express'
 import { hasRenderDurableStore, readDurableJson, mutateDurableJson } from './render-durable-store.js'
 
 const STORE = 'hashpaylink:cli-grants:v1'
-export const CLI_SCOPES = ['project:read', 'checkout:read', 'checkout:create'] as const
+export const CLI_SCOPES = ['project:read', 'checkout:read', 'checkout:create', 'keys:manage'] as const
 export type CliScope = typeof CLI_SCOPES[number]
 type Grant = {
   id: string; projectId: string; challenge: string; codeHash: string; scopes: CliScope[];
@@ -42,6 +42,7 @@ export function cliRequestScope(req: Partial<Pick<Request, 'method' | 'originalU
   let url: URL
   try { url = new URL(req.originalUrl ?? '', 'https://developer.hashpaylink.com') } catch { return null }
   if (req.method === 'GET' && url.pathname === '/api/v2/project' && !url.search) return 'project:read'
+  if (req.method === 'POST' && url.pathname === '/api/v2/cli/keys' && !url.search) return 'keys:manage'
   if (url.pathname !== '/api/v2/checkouts') return null
   if (req.method === 'GET' && url.searchParams.getAll('purpose').length === 1
     && url.searchParams.get('purpose') === 'status' && req.query?.purpose === 'status') return 'checkout:read'

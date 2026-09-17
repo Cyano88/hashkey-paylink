@@ -151,6 +151,7 @@ import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/
 import agenticCheckoutsHandler from './api/agentic-checkouts.js'
 import developerCliProjectHandler from './api/developer-cli-project.js'
 import developerCliAuthHandler from './api/developer-cli-auth.js'
+import developerCliKeysHandler from './api/developer-cli-keys.js'
 import { cliRequestScope } from './api/developer-cli-grants.js'
 import agenticCheckoutWalletPayHandler from './api/agentic-checkout-wallet-pay.js'
 import polymarketFundingCheckoutsHandler from './api/polymarket-funding-checkouts.js'
@@ -250,9 +251,9 @@ app.use(express.json({ limit: '256kb' }))
 // A CLI credential must not activate a different API surface, including public
 // mutations that do not otherwise resolve a developer policy.
 app.use('/api', (req, res, next) => {
-  const usesCli = [req.headers.authorization, req.headers['x-api-key']].some(value => String(value ?? '').includes('hpl_cli_'))
-  if (usesCli && req.path !== '/v2/cli/auth' && !cliRequestScope(req)) {
-    return res.status(403).json({ ok: false, error: 'CLI credentials are not permitted on this route.' })
+  const usesScoped = [req.headers.authorization, req.headers['x-api-key']].some(value => /hpl_(?:cli|app)_/.test(String(value ?? '')))
+  if (usesScoped && req.path !== '/v2/cli/auth' && !cliRequestScope(req)) {
+    return res.status(403).json({ ok: false, error: 'Scoped credentials are not permitted on this route.' })
   }
   next()
 })
@@ -419,6 +420,7 @@ app.post('/api/v2/agreements/verified-recipient', strictLimiter, verifiedArcReci
 app.all('/api/v2/agreements',          strictLimiter, arcAgreementsHandler)
 app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
 app.post('/api/v2/checkouts/agent/pay', strictLimiter, agenticCheckoutWalletPayHandler)
+app.all('/api/v2/cli/keys', strictLimiter, developerCliKeysHandler)
 app.all('/api/v2/cli/auth', strictLimiter, developerCliAuthHandler)
 app.all('/api/v2/project', strictLimiter, developerCliProjectHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)

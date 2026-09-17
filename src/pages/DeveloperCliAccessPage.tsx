@@ -8,6 +8,7 @@ const labels: Record<string, string> = {
   'project:read': 'Read project configuration',
   'checkout:read': 'Read checkout payment status',
   'checkout:create': 'Create hosted checkouts',
+  'keys:manage': 'Create and revoke scoped backend keys (up to 30 days)',
 }
 export default function DeveloperCliAccessPage() {
   const { ready, authenticated, getAccessToken } = usePrivy()
@@ -68,13 +69,14 @@ export default function DeveloperCliAccessPage() {
         <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">Hash PayLink CLI</p>
         <h1 className="mt-5 text-3xl font-semibold">{id ? 'Approve CLI access' : 'Manage CLI access'}</h1>
         <p className="mt-4 text-sm leading-6 text-white/60">Access lasts one hour and applies to one project. You can revoke it here at any time.</p>
-        <p className="mt-4 text-sm leading-6 text-white/60">This access cannot create API keys, change receiving wallets, sign payments, move funds, or access Render or Railway.</p>
+        <p className="mt-4 text-sm leading-6 text-white/60">Receiving wallets and money movement stay outside this access. Render and Railway require their own authorization.</p>
         {id && <p className="mt-8 text-sm leading-6 text-white/80">Approve only a request you started. Enter the confirmation code from your own terminal or trusted agent session.</p>}
       </div>
       <div className="p-8 sm:p-10">
         {!ready ? <p>Loading sign-in...</p> : !authenticated ? <><h2 className="mb-6 text-xl font-semibold">Sign in to review access</h2><PocketEmailLogin context="developer" /></> : <>
           {grant && <><h2 className="text-xl font-semibold">{name}</h2><p className="mt-2 break-all text-xs text-gray-500">{grant.projectId}</p>
             <ul className="my-5 space-y-2 text-sm">{grant.scopes.map(scope => <li key={scope}>{labels[scope] ?? scope}</li>)}</ul>
+            {grant.scopes.includes('keys:manage') && <p className="mb-5 text-sm">Backend keys may outlive this one-hour session, for up to 30 days. Revoking CLI access stops future key management; revoke issued keys separately in the project's Keys tab.</p>}
             <p className="mb-5 text-sm">Status: {grant.state}{grant.expiresAt ? ' · Expires ' + new Date(grant.expiresAt).toLocaleString() : ''}</p>
             {grant.state === 'pending' && <><label htmlFor="cli-code" className="block text-sm">Confirmation code</label><input id="cli-code" autoComplete="off" value={code} maxLength={12} onChange={event => setCode(event.target.value.toUpperCase())} className="my-3 h-11 w-full rounded-xl border border-gray-200 bg-transparent px-3 font-mono dark:border-white/20" />
               <button className={button} disabled={busy || !/^[A-F0-9]{12}$/.test(code)} onClick={() => void act('approve')}>Approve for one hour</button></>}

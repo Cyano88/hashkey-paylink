@@ -1,7 +1,9 @@
 import { authCommand } from './auth.mjs'
-import { createSessionStore } from './session.mjs'
+import { keyCommand } from './key-management.mjs'
+import { hostingCommand } from './hosting.mjs'
+import { createSessionStore, createVaultStore } from './session.mjs'
 const ORIGIN = 'https://developer.hashpaylink.com'
-const HELP = `Hash PayLink CLI 0.2.0
+const HELP = `Hash PayLink CLI 0.3.0
 Commands:
   auth login --project <project-id> [--scopes project:read,checkout:read,checkout:create]
   auth complete
@@ -13,13 +15,20 @@ Commands:
     [--title <text>] [--description <text>] [--return-url <https-url>]
     [--expires-in-minutes 60] [--dry-run]
   checkout status --id <checkout-id>
+  keys create --name <name> --idempotency-key <stable-key> [--scopes project:read,checkout:read] [--expires-in-days 30]
+  keys list
+  keys revoke --key-id <id>
+  hosting plan --provider <render|railway> --service <id> --key-id <id> --backend
+    [--project <railway-id> --environment <railway-id>] [--replace]
+  hosting apply --plan <reviewed-plan-id>
   agent-prompt
 Options: --json --no-interactive --help --version
 Authentication: owner-approved CLI login, or HASHPAYLINK_API_KEY from a secret manager.
 CLI login credentials are protected locally. Keys are never accepted as arguments.
 Creation uses human hosted checkout with dashboard-managed settlement routing.
 Status reads server-recorded payment state; it does not initiate verification.
-No automatic retries, polling, signing, transfers, swaps or key administration.
+No automatic retries, polling, signing, transfers, swaps or deployment.
+Key management requires owner-approved keys:manage; hosting requires separate provider access.
 `
 class CliError extends Error {
   constructor(code, message, status) { super(message); this.code = code; this.status = status }
@@ -27,8 +36,8 @@ class CliError extends Error {
 const invalid = message => { throw new CliError('INVALID_ARGUMENT', message) }
 function parse(argv) {
   const words = [], options = Object.create(null)
-  const booleans = new Set(['json', 'no-interactive', 'help', 'version', 'dry-run'])
-  const values = new Set(['amount', 'idempotency-key', 'title', 'description', 'return-url', 'expires-in-minutes', 'id', 'project', 'scopes'])
+  const booleans = new Set(['json', 'no-interactive', 'help', 'version', 'dry-run', 'replace', 'backend'])
+  const values = new Set(['amount', 'idempotency-key', 'title', 'description', 'return-url', 'expires-in-minutes', 'id', 'project', 'scopes', 'name', 'expires-in-days', 'key-id', 'provider', 'service', 'environment', 'plan'])
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (!arg.startsWith('--')) { words.push(arg); continue }
@@ -68,7 +77,7 @@ function createBody(options) {
   return body
 }
 async function request(path, { key, fetcher, body, idempotencyKey }) {
-  if (!/^(?:hpl_live_[a-zA-Z0-9_-]+|hpl_cli_[a-f0-9]{64})$/.test(key ?? '') || key.length > 240) throw new CliError('AUTH_REQUIRED', 'Complete auth login or inject a live project key as HASHPAYLINK_API_KEY.')
+  if (!/^(?:hpl_live_[a-zA-Z0-9_-]+|hpl_app_[a-f0-9]{64}|hpl_cli_[a-f0-9]{64})$/.test(key ?? '') || key.length > 240) throw new CliError('AUTH_REQUIRED', 'Complete auth login or inject a live project key as HASHPAYLINK_API_KEY.')
   let response, data
   try {
     response = await fetcher(ORIGIN + path, {
@@ -96,22 +105,24 @@ async function request(path, { key, fetcher, body, idempotencyKey }) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new CliError('INVALID_RESPONSE', 'Invalid API response.')
   return data
 }
-export async function run(argv, { env = process.env, fetcher = globalThis.fetch, stdout = process.stdout, stderr = process.stderr, sessionStore = createSessionStore() } = {}) {
+export async function run(argv, { env = process.env, fetcher = globalThis.fetch, stdout = process.stdout, stderr = process.stderr, sessionStore = createSessionStore(), vaultStore = createVaultStore(), provider } = {}) {
   const json = argv.includes('--json')
   let key = env.HASHPAYLINK_API_KEY
   const emit = (value, error = false) => {
     let text = typeof value === 'string' ? value : JSON.stringify(value, null, json ? 0 : 2)
-    if (key) text = text.split(key).join('[REDACTED]')
-    text = text.replace(/hpl_(?:live|test|cli)_[a-zA-Z0-9_-]+/g, '[REDACTED]')
+    for (const secret of [key, env.RENDER_API_KEY, env.RAILWAY_TOKEN, env.RAILWAY_API_TOKEN]) if (secret) text = text.split(secret).join('[REDACTED]')
+    text = text.replace(/hpl_(?:live|test|cli|app)_[a-zA-Z0-9_-]+/g, '[REDACTED]')
     ;(error && !json ? stderr : stdout).write(text + '\n')
   }
   try {
     const { command, options } = parse(argv)
     if (options.help || !command && !options.version) { emit(json ? { ok: true, help: HELP } : HELP); return 0 }
-    if (options.version) { emit(json ? { ok: true, version: '0.2.0' } : '0.2.0'); return 0 }
+    if (options.version) { emit(json ? { ok: true, version: '0.3.0' } : '0.3.0'); return 0 }
     const allowed = {
       'project show': [], doctor: [], 'agent-prompt': [],
       'auth login': ['project', 'scopes'], 'auth complete': [], 'auth status': [], 'auth logout': [],
+      'keys create': ['name', 'scopes', 'expires-in-days', 'idempotency-key'], 'keys list': [], 'keys revoke': ['key-id'],
+      'hosting plan': ['provider', 'service', 'project', 'environment', 'key-id', 'replace', 'backend'], 'hosting apply': ['plan'],
       'checkout status': ['id'],
       'checkout create': ['amount', 'idempotency-key', 'title', 'description', 'return-url', 'expires-in-minutes', 'dry-run'],
     }
@@ -122,8 +133,17 @@ export async function run(argv, { env = process.env, fetcher = globalThis.fetch,
       catch { throw new CliError('AUTH_FAILED', 'Authorization did not complete. Check the project, permissions and approval state. Existing sessions require auth logout before a new login. No secrets were printed.') }
       return 0
     }
+    if (command.startsWith('keys ') || command.startsWith('hosting ')) {
+      try {
+        const operation = () => (command.startsWith('keys ') ? keyCommand : hostingCommand)(command, options, { fetcher, env, sessionStore, vaultStore, provider })
+        emit(await vaultStore.withLock(operation))
+      } catch (error) {
+        throw new CliError(command.startsWith('keys ') ? 'KEY_OPERATION_FAILED' : 'HOSTING_FAILED', error?.safeForCli === true ? error.message : 'Operation failed. Check permissions, inputs, target and provider access. Reuse the same key operation or hosting plan when retrying.')
+      }
+      return 0
+    }
     if (command === 'agent-prompt') {
-      emit({ ok: true, instructions: 'Use hashpaylink with --json --no-interactive. Prefer owner-approved auth login for one project with minimum scopes; default scopes are read-only. Request checkout:create only when needed. Never print credentials or put them in arguments. Run doctor first. Before checkout create, use --dry-run and obtain task authorization. Use one stable idempotency key per order and retain it for retries. Read checkout status on demand; do not continuously poll. Pending is not paid. Do not infer payment from redirects, checkout creation or a transaction hash. This CLI cannot sign, transfer, swap, change settlement or administer keys.' })
+      emit({ ok: true, instructions: 'Use hashpaylink with --json --no-interactive. Prefer owner-approved auth login for one project with minimum scopes; default scopes are read-only. Request checkout:create only when needed. Never print credentials or put them in arguments. Run doctor first. Before checkout create, use --dry-run and obtain task authorization. Use one stable idempotency key per order and retain it for retries. Read checkout status on demand; do not continuously poll. Pending is not paid. Do not infer payment from redirects, checkout creation or a transaction hash. Use keys:manage only with owner approval. Backend keys last up to 30 days and must be revoked separately. Review hosting plan target before hosting apply. This CLI cannot sign, transfer, swap or change settlement.' })
       return 0
     }
     if (!options['dry-run']) {

@@ -14,8 +14,9 @@ function dpapi(value, decrypt = false) {
   if (result.error || result.status !== 0 || !result.stdout) throw new Error('Protected credential storage is unavailable.')
   return result.stdout
 }
-export function createSessionStore({ directory = join(homedir(), '.hashpaylink'), platform = process.platform, protect = value => dpapi(value), unprotect = value => dpapi(value, true) } = {}) {
-  const path = join(directory, 'cli-session.json')
+export function createSessionStore({ directory = join(homedir(), '.hashpaylink'), platform = process.platform, protect = value => dpapi(value), unprotect = value => dpapi(value, true), filename = 'cli-session.json', validate = session => /^hpl_cli_[a-f0-9]{64}$/.test(session.token) && Boolean(session.grant?.id) } = {}) {
+  if (!['cli-session.json', 'cli-vault.json'].includes(filename)) throw new Error('Invalid credential store.')
+  const path = join(directory, filename)
   async function safeDirectory() {
     await mkdir(directory, { recursive: true, mode: 0o700 })
     const stat = await lstat(directory)
@@ -29,7 +30,7 @@ export function createSessionStore({ directory = join(homedir(), '.hashpaylink')
       const envelope = JSON.parse(await readFile(path, 'utf8'))
       if (envelope.protection !== (platform === 'win32' ? 'dpapi-user' : 'file-mode-0600')) throw new Error('Credential protection does not match this operating system.')
       const session = JSON.parse(platform === 'win32' ? unprotect(envelope.value) : envelope.value)
-      if (!/^hpl_cli_[a-f0-9]{64}$/.test(session.token) || !session.grant?.id) throw new Error('Credential file is invalid.')
+      if (!validate(session)) throw new Error('Credential file is invalid.')
       return session
     } catch (error) {
       if (error.code === 'ENOENT') return null
@@ -38,7 +39,9 @@ export function createSessionStore({ directory = join(homedir(), '.hashpaylink')
   }
   async function write(session) {
     await safeDirectory()
+    if (!validate(session)) throw new Error('Invalid credential data.')
     const value = JSON.stringify(session)
+    if (Buffer.byteLength(value, 'utf8') > 20000) throw new Error('Protected credential store is full.')
     const envelope = JSON.stringify({ protection: platform === 'win32' ? 'dpapi-user' : 'file-mode-0600', value: platform === 'win32' ? protect(value) : value })
     const temporary = path + '.' + randomBytes(8).toString('hex') + '.tmp'
     let handle
@@ -52,5 +55,16 @@ export function createSessionStore({ directory = join(homedir(), '.hashpaylink')
       await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error })
     }
   }
-  return { read, write, async clear() { await safeDirectory(); await unlink(path).catch(error => { if (error.code !== 'ENOENT') throw error }) } }
+  return { read, write, async withLock(operation) {
+    await safeDirectory()
+    let lock
+    try { lock = await open(path + '.lock', 'wx', 0o600) }
+    catch { throw new Error('Credential store is locked by another operation. Retry after it completes.') }
+    try { await lock.writeFile(String(process.pid)); return await operation() }
+    finally { await lock.close(); await unlink(path + '.lock') }
+  }, async clear() { await safeDirectory(); await unlink(path).catch(error => { if (error.code !== 'ENOENT') throw error }) } }
+}
+
+export function createVaultStore(options = {}) {
+  return createSessionStore({ ...options, filename: 'cli-vault.json', validate: value => Array.isArray(value?.keys) && Array.isArray(value?.plans) })
 }

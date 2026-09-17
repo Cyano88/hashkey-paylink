@@ -40,6 +40,11 @@ type DeveloperKey = {
   createdAt: string
   lastUsedAt?: string
   revokedAt?: string
+  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create'>
+  expiresAt?: string
+  createdByGrant?: string
+  operationId?: string
+  requestDigest?: string
 }
 
 type DeveloperProject = {
@@ -76,7 +81,7 @@ type DeveloperProject = {
   keys: DeveloperKey[]
   operations?: Array<{
     id: string
-    action: 'activated' | 'suspended' | 'reactivated' | 'arc_pilot_approved' | 'arc_pilot_disabled'
+    action: 'activated' | 'suspended' | 'reactivated' | 'arc_pilot_approved' | 'arc_pilot_disabled' | 'cli_key_created' | 'cli_key_revoked'
     actor: string
     reason?: string
     details?: Record<string, string | number | boolean>
@@ -378,7 +383,7 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     bankAccountName: project.bankAccountName,
     bankAccountLast4: project.bankAccountLast4,
     bankVerifiedAt: project.bankVerifiedAt,
-    keys: project.keys.map(key => ({ id: key.id, name: key.name, prefix: key.prefix, environment: key.environment, createdAt: key.createdAt, lastUsedAt: key.lastUsedAt, revokedAt: key.revokedAt })),
+    keys: project.keys.map(key => ({ id: key.id, name: key.name, prefix: key.prefix, environment: key.environment, createdAt: key.createdAt, lastUsedAt: key.lastUsedAt, revokedAt: key.revokedAt, scopes: key.scopes, expiresAt: key.expiresAt, createdByGrant: key.createdByGrant })),
     webhookDeliveries: (project.webhookDeliveries ?? []).slice(-20),
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
@@ -835,7 +840,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         await dependencies.mutate(STORE_KEY, current => {
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
-          if (latest.keys.filter(item => !item.revokedAt).length >= 10) throw Object.assign(new Error('Revoke an active API key before creating another.'), { status: 409 })
+          if (latest.keys.filter(item => !item.revokedAt && (!item.expiresAt || Date.parse(item.expiresAt) > dependencies.now().getTime())).length >= 10) throw Object.assign(new Error('Revoke an active API key before creating another.'), { status: 409 })
           next = { ...latest, keys: [...latest.keys, key].slice(-50), updatedAt: dependencies.now().toISOString() }
           return { projects: { ...(current?.projects ?? {}), [projectId]: next } }
         })
@@ -950,13 +955,16 @@ function policyForDeveloperProject(
   }
 }
 
-export function developerPolicyFromStore(store: DeveloperStore | undefined, apiKey: string, secret: string): DeveloperCheckoutPolicy | null {
-  const requestedEnvironment: DeveloperEnvironment | null = apiKey.startsWith('hpl_live_') ? 'live' : apiKey.startsWith('hpl_test_') ? 'test' : null
+export function developerPolicyFromStore(store: DeveloperStore | undefined, apiKey: string, secret: string, scope: ReturnType<typeof cliRequestScope> = null, now = Date.now()): DeveloperCheckoutPolicy | null {
+  const requestedEnvironment: DeveloperEnvironment | null = (apiKey.startsWith('hpl_live_') || apiKey.startsWith('hpl_app_')) ? 'live' : apiKey.startsWith('hpl_test_') ? 'test' : null
   if (!requestedEnvironment || secret.length < 32) return null
   const digest = keyDigest(secret, apiKey)
   for (const project of Object.values(store?.projects ?? {})) {
     const key = project.keys.find(item => !item.revokedAt && safeDigestEqual(item.digest, digest))
     if (!key) continue
+    if (apiKey.startsWith('hpl_app_') && (!scope || scope === 'keys:manage' || !key.scopes?.includes(scope)
+      || !key.expiresAt || !Number.isFinite(Date.parse(key.expiresAt)) || Date.parse(key.expiresAt) <= now
+      || projectCheckoutMode(project) !== 'human')) return null
     const keyEnvironment: DeveloperEnvironment = key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')
     if (keyEnvironment !== requestedEnvironment) continue
     return policyForDeveloperProject(project, keyEnvironment, secret)
@@ -964,19 +972,27 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
   return null
 }
 
-export async function resolveDeveloperProjectPolicy(
-  projectId: string,
-  environment: DeveloperEnvironment,
-): Promise<DeveloperCheckoutPolicy | null> {
-  const secret = defaults.portalSecret()
-  if (!defaults.hasStore() || secret.length < 32) return null
-  const project = (await defaults.read(STORE_KEY))?.projects?.[projectId]
+// Agreement/project integrations require a general key, never a scoped checkout key.
+export function developerGeneralProjectPolicyFromStore(
+  store: DeveloperStore | undefined, projectId: string, environment: DeveloperEnvironment,
+  secret: string, now = Date.now(),
+): DeveloperCheckoutPolicy | null {
+  const project = store?.projects?.[projectId]
   if (!project) return null
   const hasActiveEnvironmentKey = project.keys.some(key => {
-    if (key.revokedAt) return false
+    if (key.revokedAt || key.scopes || key.prefix.startsWith('hpl_app_')
+      || (key.expiresAt && !(Date.parse(key.expiresAt) > now))) return false
     return (key.environment ?? (key.prefix.startsWith('hpl_test_') ? 'test' : 'live')) === environment
   })
   return hasActiveEnvironmentKey ? policyForDeveloperProject(project, environment, secret) : null
+}
+
+export async function resolveDeveloperProjectPolicy(
+  projectId: string, environment: DeveloperEnvironment,
+): Promise<DeveloperCheckoutPolicy | null> {
+  const secret = defaults.portalSecret()
+  if (!defaults.hasStore() || secret.length < 32) return null
+  return developerGeneralProjectPolicyFromStore(await defaults.read(STORE_KEY), projectId, environment, secret)
 }
 
 export function developerWebhookSignature(signingSecret: string, timestamp: string, rawBody: string) {
@@ -1098,7 +1114,93 @@ export async function resolveDeveloperApiKeyPolicy(req: Pick<Request, 'headers'>
     if (!project || project.ownerId !== grant.ownerId || projectCheckoutMode(project) !== 'human') return null
     return policyForDeveloperProject(project, 'live', secret)
   }
-  return developerPolicyFromStore(await defaults.read(STORE_KEY), apiKey, secret)
+  return developerPolicyFromStore(await defaults.read(STORE_KEY), apiKey, secret, cliRequestScope(req))
 }
 
 export default createDeveloperProjectsHandler()
+
+
+// Scoped backend keys are deliberately separate from ordinary developer keys.
+export function createScopedDeveloperKeysHandler(
+  dependencies: Dependencies = defaults,
+  grantResolver = resolveCliGrant,
+) {
+  const publicKey = (key: DeveloperKey) => ({
+    id: key.id, name: key.name, scopes: key.scopes, expiresAt: key.expiresAt,
+    createdAt: key.createdAt, revokedAt: key.revokedAt, createdByGrant: key.createdByGrant,
+  })
+  return async (req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store')
+    if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
+    try {
+      if (!dependencies.hasStore() || dependencies.portalSecret().length < 32) throw Object.assign(new Error(), { status: 503 })
+      const token = String(req.headers.authorization ?? '').match(/^Bearer (hpl_cli_[a-f0-9]{64})$/)?.[1] ?? ''
+      const grant = await grantResolver(token, 'keys:manage')
+      if (!grant) return res.status(403).json({ ok: false, error: 'Owner-approved keys:manage access is required.' })
+      const action = req.body?.action
+      if (!['create', 'list', 'revoke'].includes(action)) return res.status(400).json({ ok: false, error: 'Unsupported key action.' })
+      const store = await dependencies.read(STORE_KEY)
+      const project = findOwnedProject(store, grant.projectId, grant.ownerId)
+      if (!project) return res.status(404).json({ ok: false, error: 'Project not found.' })
+      if (action === 'list') return res.json({ ok: true, projectId: project.id, keys: project.keys.filter(key => key.scopes).map(publicKey) })
+      const at = dependencies.now().toISOString()
+      const keyId = clean(req.body?.keyId, 80)
+      const operationId = clean(req.body?.operationId, 128)
+      const name = clean(req.body?.name, 60)
+      const rawKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey : ''
+      const scopes = req.body?.scopes
+      const days = Number(req.body?.expiresInDays)
+      let requestDigest = ''
+      if (action === 'create') {
+        if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId) || !/^hpl_app_[a-f0-9]{64}$/.test(rawKey)
+          || !name || !Number.isInteger(days) || days < 1 || days > 30
+          || !Array.isArray(scopes) || !scopes.length || scopes.length > 3 || new Set(scopes).size !== scopes.length
+          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create'].includes(scope) || !grant.scopes.includes(scope))) {
+          return res.status(400).json({ ok: false, error: 'Use a unique operation id, a scoped key, 1-30 days, and permissions included in the approved grant.' })
+        }
+        requestDigest = keyDigest(dependencies.portalSecret(), JSON.stringify([rawKey, name, [...scopes].sort(), days]))
+      }
+      let result!: DeveloperKey
+      let replayed = false
+      await dependencies.mutate(STORE_KEY, current => {
+        const latest = findOwnedProject(current, grant.projectId, grant.ownerId)
+        if (!latest) throw Object.assign(new Error('Project not found.'), { status: 404 })
+        if (action === 'create') {
+          if (projectCheckoutMode(latest) !== 'human' || !policyForDeveloperProject(latest, 'live', dependencies.portalSecret())) {
+            throw Object.assign(new Error('An active, ready human checkout project is required.'), { status: 409 })
+          }
+          const previous = latest.keys.find(key => key.operationId === operationId)
+          if (previous) {
+            if (previous.requestDigest !== requestDigest || previous.revokedAt || Date.parse(previous.expiresAt ?? '') <= dependencies.now().getTime()) {
+              throw Object.assign(new Error('The operation id is already used or its key is inactive.'), { status: 409 })
+            }
+            result = previous; replayed = true
+            return current!
+          }
+          const digest = keyDigest(dependencies.portalSecret(), rawKey)
+          if (latest.keys.some(key => safeDigestEqual(key.digest, digest))) throw Object.assign(new Error('Key material is already registered.'), { status: 409 })
+          if (latest.keys.filter(key => !key.revokedAt && (!key.expiresAt || Date.parse(key.expiresAt) > dependencies.now().getTime())).length >= 10) {
+            throw Object.assign(new Error('Revoke an active key before creating another.'), { status: 409 })
+          }
+          result = { id: dependencies.createKeyId(), name, prefix: rawKey.slice(0, 18), digest, environment: 'live',
+            createdAt: at, expiresAt: new Date(dependencies.now().getTime() + days * 86400000).toISOString(),
+            scopes: [...scopes].sort(), createdByGrant: grant.id, operationId, requestDigest }
+        } else {
+          const previous = latest.keys.find(key => key.id === keyId && key.scopes)
+          if (!previous) throw Object.assign(new Error('Scoped key not found.'), { status: 404 })
+          result = { ...previous, revokedAt: previous.revokedAt ?? at }
+        }
+        const next = { ...latest,
+          keys: action === 'create' ? [...latest.keys, result].slice(-50) : latest.keys.map(key => key.id === result.id ? result : key),
+          operations: [...(latest.operations ?? []), { id: randomUUID(), action: action === 'create' ? 'cli_key_created' as const : 'cli_key_revoked' as const,
+            actor: grant.ownerId, reason: 'Owner-approved CLI access', details: { grantId: grant.id, keyId: result.id }, createdAt: at }].slice(-100),
+          updatedAt: at }
+        return { projects: { ...(current?.projects ?? {}), [latest.id]: next } }
+      })
+      return res.status(action === 'create' && !replayed ? 201 : 200).json({ ok: true, projectId: project.id, replayed, key: publicKey(result) })
+    } catch (error) {
+      const status = statusCode(error)
+      return res.status(status).json({ ok: false, error: status < 500 ? (error as Error).message : 'Scoped keys are temporarily unavailable.' })
+    }
+  }
+}
