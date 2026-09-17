@@ -47,6 +47,29 @@ export type PocketActivityReadResult = {
 
 const POCKET_BALANCE_NETWORKS: UnifiedBalanceChainKey[] = ['base', 'arbitrum', 'arc', 'solana']
 
+type PocketRecipientEvmNetwork = Exclude<ChainKey, 'solana'>
+
+type PocketRecipientEvmReader = (input: {
+  network: PocketRecipientEvmNetwork
+  address: string
+}) => Promise<bigint>
+
+async function readPocketRecipientEvmTokenBalance({
+  network,
+  address,
+}: {
+  network: PocketRecipientEvmNetwork
+  address: string
+}): Promise<bigint> {
+  const { EVM_CLIENTS, ERC20_BALANCE_OF_ABI } = await import('../../lib/router')
+  return EVM_CLIENTS[network].readContract({
+    address: CHAIN_META[network].tokenAddress,
+    abi: ERC20_BALANCE_OF_ABI,
+    functionName: 'balanceOf',
+    args: [address as `0x${string}`],
+  })
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -223,22 +246,30 @@ export async function readPocketLinkedWallets({
   }, {})
 }
 
-export async function readPocketRecipientBalanceUnits({ network, address, fetcher = fetch }: {
+export async function readPocketRecipientBalance({
+  network,
+  address,
+  fetcher = fetch,
+  evmReader = readPocketRecipientEvmTokenBalance,
+}: {
   network: ChainKey
   address: string
   fetcher?: typeof fetch
-}): Promise<bigint> {
-  const response = await fetcher(POCKET_API.recipientBalance, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ network, address }),
-  })
-  const data = await response.json().catch(() => undefined)
-  if (!response.ok || !isRecord(data) || data.ok !== true || !isPocketRecipientBalanceReadData(data) || data.network !== network) {
-    throw new Error(pocketErrorMessage(data, 'Balance unavailable'))
+  evmReader?: PocketRecipientEvmReader
+}): Promise<number> {
+  if (network === 'solana') {
+    const response = await fetcher(POCKET_API.recipientBalance, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ network, address }),
+    })
+    const data = await response.json().catch(() => undefined)
+    if (!response.ok || !isRecord(data) || data.ok !== true || !isPocketRecipientBalanceReadData(data)) {
+      throw new Error(pocketErrorMessage(data, 'Balance unavailable'))
+    }
+    return Number(BigInt(data.balance)) / 1_000_000
   }
-  return BigInt(data.balance)
-}
 
-export async function readPocketRecipientBalance(input: Parameters<typeof readPocketRecipientBalanceUnits>[0]): Promise<number> {
-  return Number(await readPocketRecipientBalanceUnits(input)) / 10 ** CHAIN_META[input.network].decimals
+  const raw = await evmReader({ network, address })
+  return Number(raw) / 10 ** CHAIN_META[network].decimals
 }

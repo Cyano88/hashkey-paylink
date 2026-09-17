@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { createEvmBalanceReader } from '../api/evm-balance.ts'
 import { createPocketRecipientBalanceHandler } from '../api/pocket/recipient-balance.ts'
-import { readPocketRecipientBalanceUnits } from '../src/pocket/api/pocketReadClient.ts'
 const address='0x1111111111111111111111111111111111111111'
 const precise=9007199254740993n
 let calls=0,now=0
@@ -17,6 +16,4 @@ const handler=createPocketRecipientBalanceHandler(deps)
 const response=()=>({code:200,status(c){this.code=c;return this},json(b){this.body=b;return this}})
 for(const network of ['base','arc','arbitrum']){const res=response();await handler({method:'POST',body:{network,address}},res);assert.equal(res.code,200);assert.equal(res.body.balance,precise.toString());assert.equal(res.body.network,network)}
 for(const body of [{network:'base-sepolia',address},{network:'arc',address:'invalid'}]){const res=response();await handler({method:'POST',body},res);assert.equal(res.code,400)}
-const raw=await readPocketRecipientBalanceUnits({network:'arc',address,fetcher:async(url,init)=>{assert.equal(url,'/api/pocket/balances/recipient');assert.equal(JSON.parse(init.body).network,'arc');return {ok:true,json:async()=>({ok:true,network:'arc',balance:precise.toString()})}}});assert.equal(raw,precise)
-await assert.rejects(readPocketRecipientBalanceUnits({network:'arc',address,fetcher:async()=>({ok:true,json:async()=>({ok:true,network:'base',balance:'10'})})}))
 console.log('Backend balance exact units, cache, deduplication, network isolation, retry and validation checks passed')
