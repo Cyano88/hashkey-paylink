@@ -119,17 +119,19 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
     return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleBack)
   }, [busy, step])
 
-  if (step === 'code') return createPortal(
-    <div role="dialog" aria-modal="true" aria-label="Verify your email" className="fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950">
-      <button type="button" disabled={busy} onClick={returnToEmail} aria-label="Back to email" className="fixed left-4 top-[calc(var(--pocket-safe-top)+0.75rem)] z-10 flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 !bg-white !text-gray-950 shadow-sm transition active:scale-95 disabled:opacity-50">
+  if (step === 'code') {
+    const inline = context === 'developer'
+    const verification = (
+    <div role={inline ? 'region' : 'dialog'} aria-modal={inline ? undefined : true} aria-label="Verify your email" className={inline ? 'w-full min-w-0 text-gray-950 dark:text-white' : 'fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950'}>
+      {!inline && <button type="button" disabled={busy} onClick={returnToEmail} aria-label="Back to email" className="fixed left-4 top-[calc(var(--pocket-safe-top)+0.75rem)] z-10 flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 !bg-white !text-gray-950 shadow-sm transition active:scale-95 disabled:opacity-50">
         <ArrowLeftIcon className="h-5 w-5" />
-      </button>
-      <main className="mx-auto flex min-h-[calc(100dvh-var(--pocket-safe-top)-var(--pocket-safe-bottom)-2.5rem)] w-full max-w-[430px] flex-col justify-center py-4">
+      </button>}
+      <div className={inline ? 'w-full min-w-0' : 'mx-auto flex min-h-[calc(100dvh-var(--pocket-safe-top)-var(--pocket-safe-bottom)-2.5rem)] w-full max-w-[430px] flex-col justify-center py-4'}>
         <div className="text-center">
-          <h1 className="text-3xl font-black tracking-[-0.045em]">Check your email</h1>
+          <h2 className={inline ? 'text-xl font-semibold tracking-tight' : 'text-3xl font-black tracking-[-0.045em]'}>Check your email</h2>
           <p className="mt-3 text-sm font-medium leading-6 text-gray-500">
             Enter the code sent to
-            <strong className="mx-auto mt-1.5 block max-w-full break-all text-base font-extrabold leading-6 text-gray-950">{email}</strong>
+            <strong className={inline ? "mx-auto mt-1.5 block max-w-full break-all text-base font-extrabold leading-6 text-gray-950 dark:text-white" : "mx-auto mt-1.5 block max-w-full break-all text-base font-extrabold leading-6 text-gray-950"}>{email}</strong>
           </p>
         </div>
         <form onSubmit={event => event.preventDefault()} className="mt-8">
@@ -178,10 +180,11 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
             <span>Privy</span>
           </p>
         </div>
-      </main>
-    </div>,
-    document.body,
-  )
+      </div>
+    </div>
+    )
+    return inline ? verification : createPortal(verification, document.body)
+  }
 
   return (
     <form onSubmit={requestCode} className="space-y-2.5">
