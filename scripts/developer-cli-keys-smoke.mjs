@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHmac } from 'node:crypto'
 import { createScopedDeveloperKeysHandler, developerPolicyFromStore, developerGeneralProjectPolicyFromStore } from '../api/developer-projects.ts'
 import { keyCommand } from '../packages/cli/src/key-management.mjs'
 const secret = 'fixture-portal-secret-more-than-thirty-two-characters'
@@ -65,3 +66,14 @@ assert.ok(store.projects[id].operations.some(event=>event.action==='cli_key_revo
 grant=null
 assert.equal((await call({action:'list'})).statusCode,403)
 console.log('Scoped keys passed: protected creation, idempotency, no raw server storage/output, expiry, scope/owner checks, revocation and audit.')
+
+grant=original
+const legacyRaw='hpl_live_fixture_legacy_backend'
+const legacyKey={id:'key_legacy0001',name:'Existing backend',prefix:legacyRaw.slice(0,18),digest:createHmac('sha256',secret).update(legacyRaw).digest('hex'),environment:'live',createdAt:new Date(now).toISOString()}
+store.projects[id].keys=[legacyKey,...Array.from({length:49},(_,i)=>({...legacyKey,id:'key_revoked'+i,digest:'revoked-'+i,revokedAt:new Date(now).toISOString()}))]
+assert.equal((await call({...spec,expiresInDays:1})).statusCode,201)
+assert.ok(store.projects[id].keys.some(key=>key.id===legacyKey.id))
+assert.equal(store.projects[id].keys.length,50)
+assert.ok(developerPolicyFromStore(store,legacyRaw,secret))
+assert.ok(developerGeneralProjectPolicyFromStore(store,id,'live',secret,now))
+console.log('Active legacy keys survive scoped-key rotation and bounded history pruning.')

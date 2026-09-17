@@ -338,6 +338,14 @@ function safeDigestEqual(left: string, right: string) {
   return timingSafeEqual(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
 }
 
+function retainDeveloperKeys(keys: DeveloperKey[], now: number) {
+  const active = keys.filter(key => !key.revokedAt && (!key.expiresAt || Date.parse(key.expiresAt) > now))
+  const activeIds = new Set(active.map(key => key.id))
+  const inactive = keys.filter(key => !activeIds.has(key.id)).slice(-Math.max(1, 50 - active.length))
+  const retained = new Set([...active, ...inactive].map(key => key.id))
+  return keys.filter(key => retained.has(key.id))
+}
+
 function projectPublic(project: DeveloperProject, includeOperations = false) {
   const arcAgreementPilot = project.arcAgreementPilot
     ? includeOperations
@@ -841,7 +849,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           if (latest.keys.filter(item => !item.revokedAt && (!item.expiresAt || Date.parse(item.expiresAt) > dependencies.now().getTime())).length >= 10) throw Object.assign(new Error('Revoke an active API key before creating another.'), { status: 409 })
-          next = { ...latest, keys: [...latest.keys, key].slice(-50), updatedAt: dependencies.now().toISOString() }
+          next = { ...latest, keys: retainDeveloperKeys([...latest.keys, key], dependencies.now().getTime()), updatedAt: dependencies.now().toISOString() }
           return { projects: { ...(current?.projects ?? {}), [projectId]: next } }
         })
         if (!next) throw new Error('API key could not be stored.')
@@ -1191,7 +1199,7 @@ export function createScopedDeveloperKeysHandler(
           result = { ...previous, revokedAt: previous.revokedAt ?? at }
         }
         const next = { ...latest,
-          keys: action === 'create' ? [...latest.keys, result].slice(-50) : latest.keys.map(key => key.id === result.id ? result : key),
+          keys: action === 'create' ? retainDeveloperKeys([...latest.keys, result], dependencies.now().getTime()) : latest.keys.map(key => key.id === result.id ? result : key),
           operations: [...(latest.operations ?? []), { id: randomUUID(), action: action === 'create' ? 'cli_key_created' as const : 'cli_key_revoked' as const,
             actor: grant.ownerId, reason: 'Owner-approved CLI access', details: { grantId: grant.id, keyId: result.id }, createdAt: at }].slice(-100),
           updatedAt: at }
