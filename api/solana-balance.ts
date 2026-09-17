@@ -11,6 +11,7 @@
 
 import type { Request, Response } from 'express'
 import { Connection, PublicKey } from '@solana/web3.js'
+import { solanaReadFetch } from './solana-read.js'
 import {
   getAssociatedTokenAddress,
   readTokenAccountAmount,
@@ -19,32 +20,14 @@ import {
 const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const PUBLIC_SOLANA_RPC_URL = 'https://api.mainnet-beta.solana.com'
 
-function solanaRpcUrls() {
-  const configured = process.env.SOLANA_RPC_URL?.trim()
-  return configured && configured !== PUBLIC_SOLANA_RPC_URL
-    ? [configured, PUBLIC_SOLANA_RPC_URL]
-    : [PUBLIC_SOLANA_RPC_URL]
-}
-
-export async function readSolanaUsdcBalance(accountAddress: string) {
+export async function readSolanaUsdcBalance(accountAddress: string, fetcher: typeof fetch = solanaReadFetch) {
   const owner = new PublicKey(accountAddress)
   const ata = await getAssociatedTokenAddress(USDC_MINT, owner, true)
-  let lastError: unknown
-  for (const [index, rpcUrl] of solanaRpcUrls().entries()) {
-    try {
-      const connection = new Connection(rpcUrl, 'confirmed')
-      const amount = await readTokenAccountAmount(connection, ata)
-      if (amount === null) return { balance: 0n, ata: null }
-      return { balance: amount, ata: ata.toBase58() }
-    } catch (error) {
-      lastError = error
-      console.error('[solana-balance] balance RPC failed', {
-        rpc: index === 0 && solanaRpcUrls().length > 1 ? 'configured' : 'public',
-        errorType: error instanceof Error ? error.name : 'UnknownError',
-      })
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error('Solana balance query failed')
+  const connection = new Connection(PUBLIC_SOLANA_RPC_URL, {
+    commitment: 'confirmed', disableRetryOnRateLimit: true, fetch: fetcher,
+  })
+  const amount = await readTokenAccountAmount(connection, ata)
+  return amount === null ? { balance: 0n, ata: null } : { balance: amount, ata: ata.toBase58() }
 }
 
 export default async function handler(req: Request, res: Response) {

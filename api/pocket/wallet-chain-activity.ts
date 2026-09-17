@@ -1,5 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js'
-import { readEvmRpc, ReadRpcError } from '../evm-read.js'
+import { readEvmRpc } from '../evm-read.js'
+import { solanaReadFetch } from '../solana-read.js'
 import { createWalletActivityReader } from './wallet-activity-cache.js'
 import { getAssociatedTokenAddress } from '../solana-token.js'
 import { circleLinkKey, readCircleLink } from '../privy-circle-link.js'
@@ -177,7 +178,7 @@ export async function findSolanaUsdcTransfer(input: {
   }
   return null
 }
-export async function solanaActivity(wallet: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<PocketActivityRow[]> {
+export async function solanaActivity(wallet: string, signal: AbortSignal, fetcher: typeof fetch = solanaReadFetch): Promise<PocketActivityRow[]> {
   const rpcUrl = process.env.SOLANA_RPC_URL?.trim() || 'https://api.mainnet-beta.solana.com'
   const connection = new Connection(rpcUrl, {
     commitment: 'confirmed', disableRetryOnRateLimit: true,
@@ -186,7 +187,7 @@ export async function solanaActivity(wallet: string, signal: AbortSignal, fetche
       const response = await fetcher(url, { ...init, signal })
       if (!response.ok) {
         await response.body?.cancel()
-        throw new ReadRpcError(response.status === 429 || response.status >= 500 ? -32004 : -32003, 'Activity provider unavailable.')
+        throw Object.assign(new Error('Activity provider unavailable.'), { code: response.status === 429 || response.status >= 500 ? -32004 : -32003 })
       }
       return response
     },
@@ -194,6 +195,7 @@ export async function solanaActivity(wallet: string, signal: AbortSignal, fetche
   const owner = new PublicKey(wallet)
   const ata = await getAssociatedTokenAddress(SOLANA_USDC_MINT, owner, true)
   const signatures = await connection.getSignaturesForAddress(ata, { limit: 20 }, 'confirmed')
+  if (!signatures.length) return []
   signal.throwIfAborted()
   const transactions = await connection.getParsedTransactions(signatures.map(row => row.signature), { maxSupportedTransactionVersion: 0, commitment: 'confirmed' })
   signal.throwIfAborted()
