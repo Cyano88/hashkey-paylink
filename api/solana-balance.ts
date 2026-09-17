@@ -40,7 +40,7 @@ export async function readSolanaUsdcBalance(accountAddress: string) {
       lastError = error
       console.error('[solana-balance] balance RPC failed', {
         rpc: index === 0 && solanaRpcUrls().length > 1 ? 'configured' : 'public',
-        message: error instanceof Error ? error.message : 'Solana balance query failed',
+        errorType: error instanceof Error ? error.name : 'UnknownError',
       })
     }
   }
@@ -53,7 +53,7 @@ export default async function handler(req: Request, res: Response) {
   }
 
   const { accountAddress } = (req.body ?? {}) as Record<string, string>
-  if (!accountAddress) {
+  if (typeof accountAddress !== 'string' || !accountAddress.trim()) {
     return res.status(400).json({ ok: false, error: 'accountAddress required' })
   }
 
@@ -61,11 +61,10 @@ export default async function handler(req: Request, res: Response) {
     const result = await readSolanaUsdcBalance(accountAddress)
     return res.json({ ok: true, balance: result.balance.toString(), ata: result.ata })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Invalid Solana wallet address'
     const invalidAddress = (() => {
       try { new PublicKey(accountAddress); return false } catch { return true }
     })()
-    if (!invalidAddress) console.error('[solana-balance] balance query failed', { message })
-    return res.status(invalidAddress ? 400 : 500).json({ ok: false, error: message || (invalidAddress ? 'Invalid Solana wallet address' : 'Solana balance query failed') })
+    if (!invalidAddress) console.error('[solana-balance] balance query failed', { errorType: error instanceof Error ? error.name : 'UnknownError' })
+    return res.status(invalidAddress ? 400 : 500).json({ ok: false, error: invalidAddress ? 'Invalid Solana wallet address' : 'Solana balance query failed' })
   }
 }

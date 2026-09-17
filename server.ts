@@ -279,8 +279,8 @@ function circleEmailOtpBoundary(req: Request, res: Response, next: NextFunction)
 
 // ── API routes ────────────────────────────────────────────────────────────────
 app.post('/api/relay-v2',              relayLimiter, relayV2Handler)
-app.post('/api/tx-status',             txStatusHandler)
-app.post('/api/solana-balance',        solanaBalanceHandler)
+app.post('/api/tx-status',             readLimiter, txStatusHandler)
+app.post('/api/solana-balance',        readLimiter, solanaBalanceHandler)
 app.post('/api/evm-balance',           readLimiter, evmBalanceHandler)
 // ── Streampay routes ──────────────────────────────────────────────────────────
 app.post('/api/relay-stream',          relayLimiter, relayStreamHandler)
