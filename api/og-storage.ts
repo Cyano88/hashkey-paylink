@@ -16,6 +16,7 @@
  *   OG_INDEXER_RPC_URL  Preferred 0G storage indexer endpoint
  */
 
+import { archiveRootHash } from './og-archive-proof.js'
 import { ZgFile, Indexer }  from '@0gfoundation/0g-ts-sdk'
 import { ethers }            from 'ethers'
 import { writeFile, unlink } from 'fs/promises'
@@ -104,7 +105,7 @@ export async function archivePayment(entry: ArchiveRecord): Promise<ArchiveResul
       await file.close()
       return null
     }
-    const rootHash = tree.rootHash() as string
+    const rootHash = archiveRootHash(tree.rootHash())
 
     const indexer = new Indexer(INDEXER_RPC)
     const [, uploadErr] = await withTimeout(
@@ -132,7 +133,7 @@ export async function archivePayment(entry: ArchiveRecord): Promise<ArchiveResul
       const tx = await withTimeout(
         contract.archive(
           entry.eventId,
-          ethers.hexlify(ethers.toUtf8Bytes(rootHash).slice(0, 32)).padEnd(66, '0') as `0x${string}`,
+          rootHash,
           entry.chain,
           entry.payer,
           entry.amount,
