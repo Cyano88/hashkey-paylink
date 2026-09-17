@@ -1,3 +1,4 @@
+import { readMainnetCheckpointFactory } from '../../../api/runtime-public-config.js'
 /**
  * /api/store-content  POST - creator uploads content/URL before sharing gate link
  * /api/get-content    GET  - viewer fetches after USDC approval is verified on Arc
@@ -112,7 +113,7 @@ const CREATOR_X402_FACILITATOR_URL = process.env.X402_CREATOR_FACILITATOR_URL_MA
   || 'https://gateway-api.circle.com'
 const CREATOR_AGENT_X402_PAY_CHAIN = process.env.CREATOR_AGENT_X402_PAY_CHAIN_MAINNET?.trim() || 'ARC'
 const CREATOR_ADMIN_KEY = (process.env.CREATOR_ADMIN_KEY ?? '').trim()
-const CHECKPOINT_FACTORY_ADDRESS_MAINNET = (process.env.CHECKPOINT_FACTORY_ADDRESS_MAINNET ?? process.env.VITE_CHECKPOINT_FACTORY_ADDRESS_MAINNET ?? '').trim()
+const CHECKPOINT_FACTORY_ADDRESS_MAINNET = readMainnetCheckpointFactory()
 
 type PaidRequest = Request & {
   payment?: {

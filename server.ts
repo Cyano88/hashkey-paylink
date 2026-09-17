@@ -132,6 +132,7 @@ import checkAgentUrlHandler from './api/check-agent-url.js'
 import dashboardPaymentsHandler from './api/dashboard-payments.js'
 import paymentTxLookupHandler from './api/payment-tx-lookup.js'
 import publicConfigHandler from './api/public-config.js'
+import { runtimePublicConfigScript } from './api/runtime-public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import arcAgreementsHandler from './api/arc-agreements.js'
@@ -168,35 +169,6 @@ const app = express()
 // Render terminates TLS behind one trusted proxy. Express derives req.ip from
 // that boundary instead of application code trusting arbitrary forwarded headers.
 app.set('trust proxy', 1)
-
-function publicEnv(...names: string[]) {
-  for (const name of names) {
-    const value = process.env[name]?.trim()
-    if (value) return value
-  }
-  return ''
-}
-
-const CHECKPOINT_FACTORY_ADDRESS = publicEnv(
-  'VITE_CHECKPOINT_FACTORY_ADDRESS',
-  'CHECKPOINT_FACTORY_ADDRESS',
-) || '0x8eEc65a18f3b5deb0E9Fc5e1eCf8263587b02927'
-
-function runtimePublicConfigScript() {
-  const privyAppId = publicEnv('VITE_PRIVY_APP_ID', 'PRIVY_APP_ID')
-  const authBridge = publicEnv('VITE_AUTH_BRIDGE', 'AUTH_BRIDGE') || 'legacy'
-  const payload = JSON.stringify({
-    auth: {
-      authBridge,
-      privyAppId,
-      privyEnabled: Boolean(privyAppId && authBridge !== 'legacy'),
-    },
-    streampay: {
-      checkpointFactoryAddress: CHECKPOINT_FACTORY_ADDRESS,
-    },
-  }).replace(/</g, '\\u003c')
-  return `<script>window.__HASH_PAYLINK_CONFIG__=${payload};</script>`
-}
 
 function sendSpaIndex(res: Response) {
   const indexPath = join(__dirname, 'dist', 'index.html')

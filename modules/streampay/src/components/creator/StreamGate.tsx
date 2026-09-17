@@ -1136,10 +1136,6 @@ export function StreamGate() {
       setCheckpointError('Pay-as-you-read is only available for articles and books.')
       return
     }
-    if (!CHECKPOINT_FACTORY_ADDRESS_MAINNET || !/^0x[a-fA-F0-9]{40}$/.test(CHECKPOINT_FACTORY_ADDRESS_MAINNET)) {
-      setCheckpointError('Checkpoint escrow is not configured yet.')
-      return
-    }
     if (!email && !checkpointSession) {
       setCheckpointError('Enter your email to open your Circle reader wallet.')
       return
@@ -1151,6 +1147,11 @@ export function StreamGate() {
       setReaderWalletAddress(session.wallet.address)
 
       if (!checkpointVault && await restoreCheckpointVaultForWallet(session.wallet.address)) {
+        return
+      }
+
+      if (!CHECKPOINT_FACTORY_ADDRESS_MAINNET || !/^0x[a-fA-F0-9]{40}$/.test(CHECKPOINT_FACTORY_ADDRESS_MAINNET)) {
+        setCheckpointError('Checkpoint escrow is not configured yet.')
         return
       }
 
