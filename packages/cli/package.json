@@ -1,6 +1,6 @@
 {
   "name": "@hashpaylink/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Project-scoped Hash PayLink checkout CLI for builders and agents",
   "type": "module",
   "bin": {

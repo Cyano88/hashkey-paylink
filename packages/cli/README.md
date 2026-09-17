@@ -1,28 +1,68 @@
 # Hash PayLink CLI
 
-A small Node.js CLI for builders and agents using **human hosted checkouts**.
-Version 0.1.0 uses existing project API keys. It does not contain a wallet,
-sign transactions, configure settlement, or administer accounts.
+Version 0.2.0 adds owner-approved, project-scoped CLI access. It creates human
+hosted checkouts and reads their recorded payment state. It cannot sign or
+transfer funds, configure settlement, create API keys, or manage hosting.
 
-## Install from this repository
+## Install
 
-Requires Node.js 20.19 or newer. This package is not yet published to npm.
+Requires Node.js 20.19 or newer. Not yet published to npm.
 
 ```sh
 npm install -g ./packages/cli
 hashpaylink --help
 ```
 
-Inject a live developer project key into `HASHPAYLINK_API_KEY` with your
-secret manager or protected process environment. Do not put keys into command
-arguments, shell history, chat, frontend variables, or committed files.
-The CLI neither saves credentials nor reads local .env files.
-Revoke the underlying key through the developer portal when access should end.
+## Owner-approved login
 
-## Commands
+Create and configure your project in the developer portal first. Copy its
+project ID; it is not a secret.
 
 ```sh
+hashpaylink auth login --project dev_YOUR_PROJECT_ID --json
+```
+
+Open the returned verification URL, sign in with the existing inline email
+flow, review the project and permissions, and enter the confirmation code
+shown by your own CLI or trusted agent session. Do not approve an unsolicited
+request. The request expires after ten minutes. Then run:
+
+```sh
+hashpaylink auth complete --json
 hashpaylink doctor --json
+hashpaylink auth status --json
+hashpaylink auth logout --json
+```
+
+Default permissions are `project:read,checkout:read`. To request creation:
+
+```sh
+hashpaylink auth login --project dev_YOUR_PROJECT_ID --scopes project:read,checkout:read,checkout:create --json
+```
+
+Access expires one hour after approval. There is no refresh token, background
+polling, or automatic renewal. Start another owner-approved login after expiry.
+Log out before changing the selected project or requesting different scopes.
+Owners can inspect and revoke requests at
+`https://developer.hashpaylink.com/cli/authorize`, also linked from the portal.
+
+Credentials are stored under `~/.hashpaylink/cli-session.json`. Windows uses
+DPAPI encryption tied to the current Windows user. Other systems use a private
+0700 directory and 0600 credential file; those systems do not use a keychain
+or encryption in this release. Protect the operating-system account.
+Neither the CLI token nor the owner's Privy token appears in command output.
+The Privy token stays in the browser and is never passed to the CLI.
+The server stores only a SHA-256 token challenge, never the CLI token.
+
+If a local session exists, it takes precedence over an environment API key.
+Pending or expired local access fails rather than falling back to a broader
+key. For trusted backend automation without a local session, inject an existing
+live key as `HASHPAYLINK_API_KEY` through your secret manager. Such ordinary
+keys retain their existing backend permissions, not the CLI scopes.
+
+## Checkout commands
+
+```sh
 hashpaylink project show --json
 hashpaylink checkout create --amount 2 --title "Order 1042" --idempotency-key order_1042_checkout --dry-run --json
 hashpaylink checkout create --amount 2 --title "Order 1042" --idempotency-key order_1042_checkout --json
@@ -30,64 +70,64 @@ hashpaylink checkout status --id chk_REPLACE_WITH_ID --json
 hashpaylink agent-prompt --json
 ```
 
-The project must have an active live key, approved settlement configuration,
-and human checkout mode. The API enforces that mode and the merchant's pinned
-routing. A CLI operated by an agent still creates a **human payment checkout**;
-it does not enable the separate agent-wallet payment product.
+Project settlement must be ready, active, and configured for human checkout.
+The API enforces the selected project's pinned routing. An agent operating
+the CLI still creates a human hosted checkout, not an agent-wallet payment.
 
-`doctor` and `project show` use the new read-only `GET /api/v2/project`
-route, which must be deployed with this change. Creation and status use
-`/api/v2/checkouts`. The destination is fixed to
-`https://developer.hashpaylink.com`; redirects are refused.
+Optional creation flags: `--description`, `--return-url` (HTTPS and allowlisted
+in the portal), `--expires-in-minutes` (5-1440). USDC amounts are decimal
+strings with at most six fractional digits. No recipient/network override flags.
 
-Optional creation flags: `--description`, `--return-url` (HTTPS and
-allowlisted in the portal), `--expires-in-minutes` (5-1440).
-USDC amounts stay decimal strings with at most six fractional digits.
-There are no recipient/network override flags.
-
-Dry-run performs **local input validation only**, without authentication or
-network activity. It does not validate project readiness, return URL
-allowlisting, balances, or whether the server will accept the request.
+Dry-run performs local validation only, with no authentication or network
+request. It does not verify project readiness or server acceptance.
 
 ## Automation contract
 
-- `--json` emits a single JSON object to stdout, including on failure.
-- Exit status is 0 for a successful command, 1 for an error.
-- All commands are noninteractive; `--no-interactive` is accepted explicitly.
-- Errors include a stable `error.code`: INVALID_ARGUMENT, AUTH_REQUIRED,
+- `--json` emits one JSON object to stdout, including failures.
+- Exit status is 0 for command success and 1 for error.
+- Commands are noninteractive; `--no-interactive` is accepted.
+- Login returns a pending approval request. An owner must approve it before
+  `auth complete` can succeed. CLI output never contains the bearer token.
+- Errors use stable `error.code`: INVALID_ARGUMENT, AUTH_REQUIRED, AUTH_FAILED,
   ACCESS_DENIED, CONFLICT, RATE_LIMITED, API_ERROR, REQUEST_FAILED,
-  INVALID_RESPONSE, or INTERNAL_ERROR. HTTP errors include `error.status`.
-- Use a stable idempotency key per order (16-128 letters, digits, colons,
-  underscores, or hyphens). Persist it in the caller's order record.
-  Reuse the **same key and payload** after a timeout or uncertain response.
-  A changed payload with the same key is a conflict.
-- No automatic retry, polling, RPC request, or background job is performed.
-- Status reports server-recorded payment state. Pending is not paid.
-  Successful checkout creation, redirects, and transaction hashes are not
-  proof of payment. Payment and settlement status remain separate API fields.
-- Upstream error bodies are not printed, and project keys are redacted.
-  Successful checkout/status output can contain transaction or customer data;
-  treat saved output as sensitive.
+  INVALID_RESPONSE, or INTERNAL_ERROR.
+- Keep a stable idempotency key per order (16-128 letters, digits, colons,
+  underscores, or hyphens). Reuse the same key and payload after uncertainty.
+- No automatic retry, polling, RPC request, or background job.
+- Status reports server-recorded payment state; it does not trigger on-chain
+  verification. Pending, redirects, and transaction hashes are not proof of
+  payment. Payment and settlement remain separate API fields.
+- API destinations are fixed to `https://developer.hashpaylink.com`;
+  redirects are refused. Secrets are never accepted as arguments.
+- Successful status output can include customer/transaction data. Treat saved
+  output as sensitive. Upstream error bodies are not echoed.
 
-Project API keys retain their existing backend permissions. This release does
-**not** introduce narrower delegated agent credentials. Only supply a key to
-a trusted agent/process; limiting CLI commands does not reduce that key's API
-permissions outside the CLI.
+## Server boundary
 
-## Deliberately deferred
+`POST /api/v2/cli/auth` supports begin, status, logout and owner-only inspect,
+approve, revoke, list. Owner operations require a verified Privy owner session.
+Grant scope and current project owner, mode, readiness, and suspension are
+checked when resolving API permissions. Server-side route restrictions reject
+CLI credentials on other product surfaces. Revocation affects subsequent
+authorization checks; an already-authorized request may finish.
 
-Browser/device login, account-wide project listing/creation, key rotation,
-webhook management, bridge/swap commands, and agreement commands are not in
-this release. Browser login needs a reviewed, revocable delegation flow;
-the CLI does not accept or export Privy session tokens.
+Authorization actions have bounded audit records (the latest 2,000 events in
+the shared CLI store). This is operational history, not an immutable compliance
+log. Pending and expired grant records are pruned on new login requests.
+No new database or infrastructure service is required.
 
-## Validate and package
+## Next stages
+
+Scoped project/key management and authorized Render/Railway secret injection
+are not implemented yet. Hosting authorization must remain separate from
+Hash PayLink authorization. CLI access cannot be used as a provider API token.
+npm publication is also a separate release step.
+
+## Validate
 
 ```sh
 npm --prefix packages/cli test
+node --import tsx scripts/developer-cli-grants-smoke.mjs
 node --import tsx scripts/developer-cli-project-smoke.mjs
 npm pack ./packages/cli
 ```
-
-No dependencies or build step are required. npm publication is a separate
-release step.

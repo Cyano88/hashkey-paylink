@@ -8,7 +8,7 @@ async function invoke(args, responder, env = { HASHPAYLINK_API_KEY: key }) {
   let output = '', errors = ''
   const calls = []
   const code = await run([...args, '--json', '--no-interactive'], {
-    env, stdout: { write(value) { output += value } }, stderr: { write(value) { errors += value } },
+    sessionStore: { read: async () => null }, env, stdout: { write(value) { output += value } }, stderr: { write(value) { errors += value } },
     fetcher: async (url, init) => {
       calls.push({ url, init })
       return responder ? responder(url, init) : Response.json({ ok: true, checkoutId: 'chk_12345678', checkoutUrl: 'https://app.hashpaylink.com/c/fixture' })
@@ -114,4 +114,29 @@ test('agent guidance makes no requests', async () => {
   const result = await invoke(['agent-prompt'], undefined, {})
   assert.equal(result.code, 0)
   assert.equal(result.calls.length, 0)
+})
+
+test('an expired local session never falls back to a broader environment key', async () => {
+  let calls = 0, output = ''
+  const code = await run(['doctor', '--json'], {
+    env: { HASHPAYLINK_API_KEY: key },
+    sessionStore: { read: async () => ({ token: 'hpl_cli_' + 'a'.repeat(64), grant: { state: 'approved', expiresAt: '2000-01-01T00:00:00Z' } }) },
+    fetcher: async () => { calls++; throw Error('unexpected') },
+    stdout: { write(value) { output += value } }, stderr: { write() {} },
+  })
+  assert.equal(code, 1)
+  assert.equal(JSON.parse(output).error.code, 'AUTH_REQUIRED')
+  assert.equal(calls, 0)
+})
+test('an approved local session takes precedence over a broader environment key', async () => {
+  let usedKey
+  const token = 'hpl_cli_' + 'b'.repeat(64)
+  const code = await run(['doctor', '--json'], {
+    env: { HASHPAYLINK_API_KEY: key },
+    sessionStore: { read: async () => ({ token, grant: { state: 'approved', expiresAt: new Date(Date.now() + 60000).toISOString() } }) },
+    fetcher: async (_url, init) => { usedKey = init.headers['X-API-Key']; return Response.json({ ok: true, project: { id: 'fixture' } }) },
+    stdout: { write() {} }, stderr: { write() {} },
+  })
+  assert.equal(code, 0)
+  assert.equal(usedKey, token)
 })

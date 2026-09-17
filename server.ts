@@ -150,6 +150,8 @@ import { drainArcAgreementOperatorActions } from './api/arc-agreement-operator-w
 import hostedCheckoutsHandler, { drainHostedCheckoutWebhookOutbox } from './api/hosted-checkouts.js'
 import agenticCheckoutsHandler from './api/agentic-checkouts.js'
 import developerCliProjectHandler from './api/developer-cli-project.js'
+import developerCliAuthHandler from './api/developer-cli-auth.js'
+import { cliRequestScope } from './api/developer-cli-grants.js'
 import agenticCheckoutWalletPayHandler from './api/agentic-checkout-wallet-pay.js'
 import polymarketFundingCheckoutsHandler from './api/polymarket-funding-checkouts.js'
 import { pocketBillsCatalogHandler, pocketBillsPayHandler, pocketBillsQuoteHandler, pocketBillsVerifyHandler } from './api/pocket/bills.js'
@@ -244,6 +246,16 @@ app.post(
 // Parse JSON bodies before any route handler sees req.body. Creator Studio
 // publish payloads can include sanitized article HTML plus a compressed cover.
 app.use(express.json({ limit: '256kb' }))
+
+// A CLI credential must not activate a different API surface, including public
+// mutations that do not otherwise resolve a developer policy.
+app.use('/api', (req, res, next) => {
+  const usesCli = [req.headers.authorization, req.headers['x-api-key']].some(value => String(value ?? '').includes('hpl_cli_'))
+  if (usesCli && req.path !== '/v2/cli/auth' && !cliRequestScope(req)) {
+    return res.status(403).json({ ok: false, error: 'CLI credentials are not permitted on this route.' })
+  }
+  next()
+})
 
 const strictLimiter = rateLimit({ name: 'strict', windowMs: 60_000, max: 20 })
 const circleEmailOtpLimiter = rateLimit({ name: 'circle-email-otp', windowMs: 10 * 60_000, max: 5 })
@@ -407,6 +419,7 @@ app.post('/api/v2/agreements/verified-recipient', strictLimiter, verifiedArcReci
 app.all('/api/v2/agreements',          strictLimiter, arcAgreementsHandler)
 app.get('/api/v2/checkouts/agent',     strictLimiter, agenticCheckoutsHandler)
 app.post('/api/v2/checkouts/agent/pay', strictLimiter, agenticCheckoutWalletPayHandler)
+app.all('/api/v2/cli/auth', strictLimiter, developerCliAuthHandler)
 app.all('/api/v2/project', strictLimiter, developerCliProjectHandler)
 app.get('/api/v2/checkouts',           readLimiter, hostedCheckoutsHandler)
 app.post('/api/v2/checkouts',          strictLimiter, hostedCheckoutsHandler)

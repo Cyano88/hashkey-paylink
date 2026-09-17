@@ -1,3 +1,4 @@
+import { cliRequestScope, resolveCliGrant } from './developer-cli-grants.js'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { BlockList, type LookupFunction } from 'node:net'
@@ -1085,11 +1086,18 @@ export async function dispatchDeveloperWebhook(
   return { status: 'sent', eventId, responseStatus: responseStatus! }
 }
 
-export async function resolveDeveloperApiKeyPolicy(req: Pick<Request, 'headers'>): Promise<DeveloperCheckoutPolicy | null> {
+export async function resolveDeveloperApiKeyPolicy(req: Pick<Request, 'headers'> & Partial<Pick<Request, 'method' | 'originalUrl' | 'query' | 'body'>>): Promise<DeveloperCheckoutPolicy | null> {
   const secret = defaults.portalSecret()
   if (!defaults.hasStore() || secret.length < 32) return null
   const bearer = String(req.headers.authorization ?? '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
   const apiKey = clean(req.headers['x-api-key'], 240) || bearer || ''
+  if (apiKey.startsWith('hpl_cli_')) {
+    const grant = await resolveCliGrant(apiKey, cliRequestScope(req))
+    if (!grant) return null
+    const project = (await defaults.read(STORE_KEY))?.projects[grant.projectId]
+    if (!project || project.ownerId !== grant.ownerId || projectCheckoutMode(project) !== 'human') return null
+    return policyForDeveloperProject(project, 'live', secret)
+  }
   return developerPolicyFromStore(await defaults.read(STORE_KEY), apiKey, secret)
 }
 

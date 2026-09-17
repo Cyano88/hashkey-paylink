@@ -224,6 +224,7 @@ export default function DeveloperPortalPage() {
     return (
       <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-2xl px-4 py-12">
         <PortalTop onLogout={logout} />
+        <Link to="/cli/authorize" className="mt-3 inline-block text-xs text-blue-600">Manage CLI access</Link>
         <CreateProjectCard form={createForm} setForm={setCreateForm} busy={busy} error={error} onCreate={createProject} emptyAccount />
       </main>
     )
@@ -232,6 +233,7 @@ export default function DeveloperPortalPage() {
   return (
     <main className="mx-auto min-h-[calc(100dvh-7rem)] max-w-6xl px-4 py-8 sm:py-10">
       <PortalTop onLogout={logout} />
+      <Link to="/cli/authorize" className="mt-3 inline-block text-xs text-blue-600">Manage CLI access</Link>
       <div className="mt-7 flex flex-col gap-5 lg:flex-row lg:items-start">
         <aside className="rounded-[1.5rem] border border-gray-200 bg-white p-3 shadow-card dark:border-white/10 dark:bg-[#111216] lg:sticky lg:top-24 lg:w-64">
           <PocketSelect value={active?.id ?? ''} options={projects.map(project => ({ value: project.id, label: `${project.name} · ${project.checkoutMode === 'agentic' ? 'Agentic' : 'Human'}` }))} onChange={value => { setActiveId(value); setCreatingNew(false) }} ariaLabel="Developer project" buttonClassName="shadow-none" />

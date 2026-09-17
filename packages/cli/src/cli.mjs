@@ -1,6 +1,12 @@
+import { authCommand } from './auth.mjs'
+import { createSessionStore } from './session.mjs'
 const ORIGIN = 'https://developer.hashpaylink.com'
-const HELP = `Hash PayLink CLI 0.1.0
+const HELP = `Hash PayLink CLI 0.2.0
 Commands:
+  auth login --project <project-id> [--scopes project:read,checkout:read,checkout:create]
+  auth complete
+  auth status
+  auth logout
   project show
   doctor
   checkout create --amount 2 --idempotency-key <stable-order-key>
@@ -9,8 +15,8 @@ Commands:
   checkout status --id <checkout-id>
   agent-prompt
 Options: --json --no-interactive --help --version
-Authentication: inject HASHPAYLINK_API_KEY through your environment/secret manager.
-Keys are never accepted as arguments or saved by this CLI.
+Authentication: owner-approved CLI login, or HASHPAYLINK_API_KEY from a secret manager.
+CLI login credentials are protected locally. Keys are never accepted as arguments.
 Creation uses human hosted checkout with dashboard-managed settlement routing.
 Status reads server-recorded payment state; it does not initiate verification.
 No automatic retries, polling, signing, transfers, swaps or key administration.
@@ -22,7 +28,7 @@ const invalid = message => { throw new CliError('INVALID_ARGUMENT', message) }
 function parse(argv) {
   const words = [], options = Object.create(null)
   const booleans = new Set(['json', 'no-interactive', 'help', 'version', 'dry-run'])
-  const values = new Set(['amount', 'idempotency-key', 'title', 'description', 'return-url', 'expires-in-minutes', 'id'])
+  const values = new Set(['amount', 'idempotency-key', 'title', 'description', 'return-url', 'expires-in-minutes', 'id', 'project', 'scopes'])
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (!arg.startsWith('--')) { words.push(arg); continue }
@@ -62,7 +68,7 @@ function createBody(options) {
   return body
 }
 async function request(path, { key, fetcher, body, idempotencyKey }) {
-  if (!/^hpl_live_[a-zA-Z0-9_-]+$/.test(key ?? '') || key.length > 240) throw new CliError('AUTH_REQUIRED', 'Inject a live project key as HASHPAYLINK_API_KEY. Create or revoke keys in the developer portal.')
+  if (!/^(?:hpl_live_[a-zA-Z0-9_-]+|hpl_cli_[a-f0-9]{64})$/.test(key ?? '') || key.length > 240) throw new CliError('AUTH_REQUIRED', 'Complete auth login or inject a live project key as HASHPAYLINK_API_KEY.')
   let response, data
   try {
     response = await fetcher(ORIGIN + path, {
@@ -90,29 +96,42 @@ async function request(path, { key, fetcher, body, idempotencyKey }) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new CliError('INVALID_RESPONSE', 'Invalid API response.')
   return data
 }
-export async function run(argv, { env = process.env, fetcher = globalThis.fetch, stdout = process.stdout, stderr = process.stderr } = {}) {
+export async function run(argv, { env = process.env, fetcher = globalThis.fetch, stdout = process.stdout, stderr = process.stderr, sessionStore = createSessionStore() } = {}) {
   const json = argv.includes('--json')
-  const key = env.HASHPAYLINK_API_KEY
+  let key = env.HASHPAYLINK_API_KEY
   const emit = (value, error = false) => {
     let text = typeof value === 'string' ? value : JSON.stringify(value, null, json ? 0 : 2)
     if (key) text = text.split(key).join('[REDACTED]')
-    text = text.replace(/hpl_(?:live|test)_[a-zA-Z0-9_-]+/g, '[REDACTED]')
+    text = text.replace(/hpl_(?:live|test|cli)_[a-zA-Z0-9_-]+/g, '[REDACTED]')
     ;(error && !json ? stderr : stdout).write(text + '\n')
   }
   try {
     const { command, options } = parse(argv)
     if (options.help || !command && !options.version) { emit(json ? { ok: true, help: HELP } : HELP); return 0 }
-    if (options.version) { emit(json ? { ok: true, version: '0.1.0' } : '0.1.0'); return 0 }
+    if (options.version) { emit(json ? { ok: true, version: '0.2.0' } : '0.2.0'); return 0 }
     const allowed = {
       'project show': [], doctor: [], 'agent-prompt': [],
+      'auth login': ['project', 'scopes'], 'auth complete': [], 'auth status': [], 'auth logout': [],
       'checkout status': ['id'],
       'checkout create': ['amount', 'idempotency-key', 'title', 'description', 'return-url', 'expires-in-minutes', 'dry-run'],
     }
     if (!Object.hasOwn(allowed, command)) invalid('Unknown command. Use --help for supported commands.')
     if (Object.keys(options).some(name => !['json', 'no-interactive'].includes(name) && !allowed[command].includes(name))) invalid('An option is not supported for this command.')
-    if (command === 'agent-prompt') {
-      emit({ ok: true, instructions: 'Use hashpaylink with --json --no-interactive. Inject HASHPAYLINK_API_KEY through a secret manager; never print it or put it in arguments. Run doctor first. Before checkout create, use --dry-run and obtain task authorization. Use one stable idempotency key per order and retain it for retries. Read checkout status on demand; do not continuously poll. Pending is not paid. Do not infer payment from redirects, checkout creation or a transaction hash. This CLI cannot sign, transfer, swap, change settlement or administer keys.' })
+    if (command.startsWith('auth ')) {
+      try { emit(await authCommand(command, options, { fetcher, sessionStore })) }
+      catch { throw new CliError('AUTH_FAILED', 'Authorization did not complete. Check the project, permissions and approval state. Existing sessions require auth logout before a new login. No secrets were printed.') }
       return 0
+    }
+    if (command === 'agent-prompt') {
+      emit({ ok: true, instructions: 'Use hashpaylink with --json --no-interactive. Prefer owner-approved auth login for one project with minimum scopes; default scopes are read-only. Request checkout:create only when needed. Never print credentials or put them in arguments. Run doctor first. Before checkout create, use --dry-run and obtain task authorization. Use one stable idempotency key per order and retain it for retries. Read checkout status on demand; do not continuously poll. Pending is not paid. Do not infer payment from redirects, checkout creation or a transaction hash. This CLI cannot sign, transfer, swap, change settlement or administer keys.' })
+      return 0
+    }
+    if (!options['dry-run']) {
+      const session = await sessionStore.read()
+      if (session) {
+        if (session.grant.state !== 'approved' || !(Date.parse(session.grant.expiresAt) > Date.now())) throw new CliError('AUTH_REQUIRED', 'CLI access is pending or expired. Complete approval or log out before using another credential.')
+        key = session.token
+      }
     }
     const context = { key, fetcher }
     if (command === 'project show' || command === 'doctor') {
