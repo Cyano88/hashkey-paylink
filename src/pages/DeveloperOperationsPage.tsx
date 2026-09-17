@@ -14,7 +14,7 @@ import {
   RotateCcw,
   ShieldCheck,
 } from 'lucide-react'
-import { PrivyConnectButton } from '../lib/PrivyConnectButton'
+import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { cn } from '../lib/utils'
 import ArcAgreementOperationsPanel from '../components/ArcAgreementOperationsPanel'
@@ -510,9 +510,7 @@ function OperationsSignIn() {
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300"><ShieldCheck className="h-5 w-5" /></span>
         <h2 className="mt-5 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">Restricted operations</h2>
         <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">Sign in with an allowlisted operator email. Payer agreement links use the payer's separate email and cannot approve operator requests.</p>
-        <PrivyConnectButton logoutOnAuthenticated={false} debugLabel="developer-operations" className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-semibold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200">
-          Sign in to operations <ChevronRight className="h-4 w-4" />
-        </PrivyConnectButton>
+        <div className="mt-7"><PocketEmailLogin context="developer" /></div>
         <p className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-gray-400"><Lock className="h-3 w-3" /> Privy identity and server allowlist required.</p>
       </div>
     </section>

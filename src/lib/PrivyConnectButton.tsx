@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { useModalStatus, usePrivy, type LoginModalOptions } from '@privy-io/react-auth'
+import { usePrivy, type LoginModalOptions } from '@privy-io/react-auth'
 import { usePrivyLoginLauncher } from './PrivyLoginProvider'
 
 type PrivyConnectButtonProps = {
@@ -22,8 +22,8 @@ export function PrivyConnectButton({
   children,
 }: PrivyConnectButtonProps) {
   const { authenticated, ready, logout } = usePrivy()
-  const { isOpen } = useModalStatus()
   const launcher = usePrivyLoginLauncher()
+  const isOpen = launcher?.isOpen ?? false
   const [reopenAfterLogout, setReopenAfterLogout] = useState(false)
 
   useEffect(() => {

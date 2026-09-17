@@ -18,23 +18,28 @@ function readableEmailAuthError(error: unknown, action: 'send' | 'verify', produ
 }
 
 type PocketEmailLoginProps = {
-  context?: 'pocket' | 'agreement' | 'hashpaystream'
+  context?: 'pocket' | 'agreement' | 'hashpaystream' | 'hashpaylink' | 'developer'
+  onStepChange?: (step: 'email' | 'code') => void
 }
 
-export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLoginProps) {
+export default function PocketEmailLogin({ context = 'pocket', onStepChange }: PocketEmailLoginProps) {
   const { sendCode, loginWithCode } = useLoginWithEmail()
   const [step, setStep] = useState<'email' | 'code'>('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const submittedCode = useRef('')
   const [error, setError] = useState('')
   const [resendIn, setResendIn] = useState(0)
   const [codeFocused, setCodeFocused] = useState(false)
   const codeInputRef = useRef<HTMLInputElement>(null)
-  const idPrefix = context === 'hashpaystream' ? 'hashpaystream-payer' : context === 'agreement' ? 'agreement-payer' : 'pocket'
-  const productName = context === 'hashpaystream' ? 'HashPayStream' : context === 'agreement' ? 'Hash PayLink' : 'Pocket'
+  const idPrefix = context === 'hashpaystream' ? 'hashpaystream-payer' : context === 'agreement' ? 'agreement-payer' : context
+  const productName = context === 'pocket' ? 'Pocket' : context === 'hashpaystream' ? 'HashPayStream' : 'Hash PayLink'
   const emailInputId = `${idPrefix}-sign-in-email`
   const codeInputId = `${idPrefix}-email-code`
+
+  useEffect(() => { onStepChange?.(step) }, [onStepChange, step])
 
   useEffect(() => {
     if (resendIn <= 0) return
@@ -68,14 +73,16 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
     }
   }
 
-  const verifyCode = async (event: FormEvent) => {
-    event.preventDefault()
+  const verifyCode = async (event?: FormEvent) => {
+    event?.preventDefault()
+    if (busy) return
     if (code.length !== CODE_LENGTH) {
       setError('Enter the six-digit code sent to your email.')
       return codeInputRef.current?.focus()
     }
     setBusy(true)
     setError('')
+    setVerifying(true)
     try {
       await loginWithCode({ code })
     } catch (nextError) {
@@ -83,9 +90,17 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
       setCode('')
       window.requestAnimationFrame(() => codeInputRef.current?.focus())
     } finally {
+      setVerifying(false)
       setBusy(false)
     }
   }
+
+  useEffect(() => {
+    if (code.length < CODE_LENGTH) submittedCode.current = ''
+    if (step !== 'code' || busy || code.length !== CODE_LENGTH || submittedCode.current === code) return
+    submittedCode.current = code
+    void verifyCode()
+  }, [busy, code, step]) // verifyCode submits the code captured by this render.
 
   const returnToEmail = () => {
     if (busy) return
@@ -117,7 +132,7 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
             <strong className="mx-auto mt-1.5 block max-w-full break-all text-base font-extrabold leading-6 text-gray-950">{email}</strong>
           </p>
         </div>
-        <form onSubmit={verifyCode} className="mt-8">
+        <form onSubmit={event => event.preventDefault()} className="mt-8">
           <label className="sr-only" htmlFor={codeInputId}>Six-digit email code</label>
           <div className="relative" onClick={() => codeInputRef.current?.focus()}>
             <div className="grid grid-cols-6 gap-2" aria-hidden="true">
@@ -145,9 +160,10 @@ export default function PocketEmailLogin({ context = 'pocket' }: PocketEmailLogi
             />
           </div>
           {error && <p role="alert" className="mt-4 text-center text-sm font-semibold leading-5 text-red-600">{error}</p>}
-          <button type="submit" disabled={busy || code.length !== CODE_LENGTH} className="mt-6 flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-6 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45">
-            {busy ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-label="Verifying code" /> : 'Continue'}
-          </button>
+          {busy && <p role="status" className="mt-6 flex min-h-8 items-center justify-center gap-2 text-sm font-semibold text-gray-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-950" aria-hidden="true" />
+            {verifying ? 'Verifying code…' : 'Sending code…'}
+          </p>}
         </form>
         <div className="mt-5 flex items-center justify-center gap-4 text-xs font-semibold">
           <button type="button" disabled={busy || resendIn > 0} onClick={() => void requestCode()} className="text-blue-600 disabled:text-gray-400">{resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}</button>

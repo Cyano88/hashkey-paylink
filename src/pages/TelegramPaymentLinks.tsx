@@ -2426,6 +2426,8 @@ export function TelegramHelperPanel({
   }
 
   async function polishLocalHelperResult(prompt: string, fallback: string, memorySummaryOverride?: string) {
+    // Pocket already has a precise local acknowledgement; no legacy AI call is needed.
+    if (helperMode === 'circle-pocket') return fallback
     try {
       const res = await fetch('/api/agent-ask', {
         method: 'POST',

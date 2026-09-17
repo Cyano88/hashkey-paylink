@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom'
-import { Bot, Code2, Database, Globe, MessageCircle, Shield, Store, Zap } from 'lucide-react'
+import { Bot, Code2, Database, Globe, Shield, Zap } from 'lucide-react'
 import { DocPage, DocHeader } from './components'
 
 const cards = [
   {
     icon: Zap,
     title: 'Getting Started',
-    description: 'Create your first hosted payment link from /app in under a minute.',
+    description: 'Configure a developer project and integrate hosted checkout.',
     path: '/docs/getting-started',
     color: 'text-amber-500',
     bg: 'bg-amber-50 dark:bg-amber-950/40',
@@ -18,22 +18,6 @@ const cards = [
     path: '/docs/chains/base',
     color: 'text-blue-500',
     bg: 'bg-blue-50 dark:bg-blue-950/40',
-  },
-  {
-    icon: MessageCircle,
-    title: 'PolyDesk',
-    description: 'Polymarket funding, portfolio alerts, LP Scout, and World Cup market context from Telegram.',
-    path: '/polymarket',
-    color: 'text-cyan-500',
-    bg: 'bg-cyan-50 dark:bg-cyan-950/40',
-  },
-  {
-    icon: Store,
-    title: 'Retail POS',
-    description: 'Country-aware static QR checkout, starting with Nigeria USDC and Spenda wallet paths.',
-    path: '/app',
-    color: 'text-teal-500',
-    bg: 'bg-teal-50 dark:bg-teal-950/40',
   },
   {
     icon: Database,
@@ -74,19 +58,19 @@ export default function DocsHome() {
     <DocPage>
       <DocHeader
         title="Hash PayLink Documentation"
-        description="Programmable USDC payment infrastructure for hosted checkout, Telegram workflows, PolyDesk, retail POS, Arc agreements, and agent commerce."
+        description="Programmable USDC payment infrastructure for hosted checkout, application funding, Arc agreements, and agent commerce."
       />
 
       <div>
         <h2 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">What is Hash PayLink?</h2>
         <p className="mb-4 leading-relaxed text-gray-600 dark:text-gray-400">
-          Hash PayLink is programmable payment infrastructure for collecting USDC, running hosted checkout and retail POS, funding integrated applications, operating Arc agreements, and supporting agent commerce.
+          Hash PayLink is programmable payment infrastructure for collecting USDC, running hosted checkout, funding integrated applications, operating Arc agreements, and supporting agent commerce.
         </p>
         <p className="mb-4 leading-relaxed text-gray-600 dark:text-gray-400">
           Every confirmed multi-payer record can be archived to <strong className="text-gray-800 dark:text-gray-200">0G decentralized storage</strong> and anchored on-chain through the <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm dark:bg-gray-800">PayLinkArchive</code> contract. This creates payment proofs that AI agents, APIs, dashboards, and receipt pages can verify without trusting an application database.
         </p>
         <p className="leading-relaxed text-gray-600 dark:text-gray-400">
-          The root domain is the foundation page. The working app lives at <strong className="text-gray-800 dark:text-gray-200">/app</strong>, with direct routes for checkout, Telegram, PolyDesk, agents, receipts, and docs.
+          Manage projects at <a href="https://developer.hashpaylink.com" className="font-semibold underline">developer.hashpaylink.com</a>. Payment links and receipts open on app.hashpaylink.com. Documentation lives on docs.hashpaylink.com.
         </p>
       </div>
 
@@ -95,7 +79,6 @@ export default function DocsHome() {
         <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
           <li>- <strong className="text-gray-800 dark:text-gray-200">Payment archive:</strong> confirmed multi-payer records are uploaded to 0G Storage and anchored on 0G Mainnet.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Agent verification:</strong> paid AI services call <code className="rounded bg-white px-1 py-0.5 font-mono text-xs dark:bg-gray-900">/api/agent-verify</code> before responding.</li>
-          <li>- <strong className="text-gray-800 dark:text-gray-200">Telegram paid access:</strong> Photon requests use Hash PayLink payments, then unlock answers only after the 0G proof exists.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Arc Agreements:</strong> confirmed agreement outcomes use the shared durable receipt and proof pattern.</li>
         </ul>
       </div>

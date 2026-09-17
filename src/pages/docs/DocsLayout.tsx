@@ -95,13 +95,13 @@ export default function DocsLayout() {
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
-            <Link
-              to="/"
+            <a
+              href="https://developer.hashpaylink.com"
               className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Go to app
-            </Link>
+              Developer portal
+            </a>
           </div>
         </div>
       </header>

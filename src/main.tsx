@@ -18,14 +18,19 @@ import { arcChain, baseMainnet } from './lib/chains'
 import { arbitrum, polygon } from 'viem/chains'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyLoginProvider } from './lib/PrivyLoginProvider'
-import { isPocketHostname, isPocketNativeRuntime, pocketRuntimeOrigin } from './pocket/lib/pocketRoutes'
+import { isPocketNativeRuntime, pocketRuntimeOrigin } from './pocket/lib/pocketRoutes'
 import { installPocketNativeFetch } from './pocket/lib/pocketNativeFetch'
+
+import { resolveAppSurface } from './lib/appSurface'
 
 const BRAND_ORIGIN = 'https://hashpaylink.com'
 if (isPocketNativeRuntime()) document.documentElement.dataset.pocketRuntime = 'native'
 installPocketNativeFetch()
-const rootAppModule = isPocketHostname(window.location.hostname)
-  ? import('./pocket/PocketHostApp')
+const surface = resolveAppSurface(window.location.hostname, isPocketNativeRuntime())
+const rootAppModule = surface === 'pocket' ? import('./pocket/PocketHostApp')
+  : surface === 'checkout' ? import('./surfaces/CheckoutApp')
+  : surface === 'developer' ? import('./surfaces/DeveloperApp')
+  : surface === 'docs' ? import('./surfaces/DocsApp')
   : import('./App')
 const RootApp = lazy(() => rootAppModule)
 
@@ -105,6 +110,9 @@ function AppProviders() {
   }), [theme])
 
   const app = <Suspense fallback={<AppBootFallback />}><RootApp /></Suspense>
+
+  // Public documentation has no wallet or authenticated API dependencies.
+  if (surface === 'docs') return app
 
   if (!PRIVY_AUTH_ENABLED) {
     return (

@@ -7,6 +7,7 @@ import {
 } from '@privy-io/react-auth/solana'
 import { Transaction } from '@solana/web3.js'
 import { PRIVY_AUTH_ENABLED } from './authMode'
+import { usePrivyLoginLauncher } from './PrivyLoginProvider'
 
 // ── Injected provider type (Phantom / Solflare / Backpack) ───────────────────
 type SolanaProvider = {
@@ -95,7 +96,8 @@ function LegacySolanaProvider({ children }: { children: ReactNode }) {
 }
 
 function PrivySolanaProvider({ children }: { children: ReactNode }) {
-  const { authenticated, login, logout } = usePrivy()
+  const { authenticated, logout } = usePrivy()
+  const loginLauncher = usePrivyLoginLauncher()
   const { ready, wallets } = usePrivySolanaWallets()
   const { signTransaction: signPrivyTransaction } = usePrivySolanaSignTransaction()
   const [isConnecting, setIsConnecting] = useState(false)
@@ -110,7 +112,7 @@ function PrivySolanaProvider({ children }: { children: ReactNode }) {
     setIsConnecting(true)
     try {
       if (!authenticated) {
-        login({ loginMethods: ['email'] })
+        loginLauncher?.requestLogin({ debugLabel: 'solana-connect' })
       }
     } finally {
       setIsConnecting(false)

@@ -7,7 +7,6 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { CPurseIcon } from '../pocket/components/CPurseIcon'
 
-const APP_URL = 'https://app.hashpaylink.com'
 const POCKET_URL = 'https://pocket.hashpaylink.com'
 
 const products = [
@@ -17,7 +16,7 @@ const products = [
     meta: 'Hosted payments',
     copy: 'Share a USDC request. The payer selects an available network; you track payment status.',
     action: 'Create link',
-    href: `${APP_URL}?product=payment`,
+    href: `${POCKET_URL}/move/usdc`,
   },
   {
     index: '02',
@@ -25,7 +24,7 @@ const products = [
     meta: 'Retail settlement',
     copy: 'Accept USDC with one reusable QR. Keep USDC or use verified local settlement where available.',
     action: 'Open POS',
-    href: `${APP_URL}?product=payment&tab=pos`,
+    href: `${POCKET_URL}/move/pos`,
   },
   {
     index: '03',
@@ -39,9 +38,9 @@ const products = [
     index: '04',
     title: 'Agent Hash',
     meta: 'Assistant intelligence',
-    copy: 'Ask about checkout, Circle Pocket, Bills, App Pay, activity, and research with ZeroScout intelligence.',
+    copy: 'Get help with Pocket balances, payments, bills, activity, and account support.',
     action: 'Ask Agent Hash',
-    href: `${APP_URL}?agent=hash`,
+    href: `${POCKET_URL}/assistant`,
   },
   {
     index: '05',
@@ -76,7 +75,7 @@ const stack = [
   },
   {
     name: 'Arc Mainnet',
-    copy: 'Wallet and checkout testing inside Circle Pocket.',
+    copy: 'USDC wallet and checkout network.',
   },
   {
     name: '0G Storage',
@@ -121,7 +120,7 @@ const proofStats = [
     index: '01',
     label: 'Wallet coverage',
     value: 'Base · Arbitrum · Solana',
-    copy: 'Arc remains available as a testnet wallet.',
+    copy: 'View supported wallet networks in Pocket.',
     href: POCKET_URL,
   },
   {
@@ -129,14 +128,14 @@ const proofStats = [
     label: 'Checkout surfaces',
     value: 'Payment links · Retail QR',
     copy: 'Review the amount and network before payment.',
-    href: APP_URL,
+    href: POCKET_URL,
   },
   {
     index: '03',
     label: 'Merchant settlement',
     value: 'Pocket USDC · Local bank',
     copy: 'Nigeria is active; more African markets are planned.',
-    href: APP_URL,
+    href: POCKET_URL,
   },
   {
     index: '04',
@@ -158,7 +157,6 @@ const partnerRail: Array<{ name: string; logo?: string; mark?: string }> = [
   { name: 'Solana', logo: '/brand/solana-logo.jpeg' },
   { name: 'Paycrest', mark: 'P' },
   { name: 'VTpass', mark: 'VT' },
-  { name: 'Telegram', logo: '/brand/telegram-logo.jpeg' },
 ]
 
 const faqs = [
@@ -1136,10 +1134,10 @@ export default function FoundationPage() {
             </nav>
             <div className="flex items-center gap-2">
               <a
-                href={APP_URL}
+                href={POCKET_URL}
                 className="inline-flex h-10 min-w-max items-center justify-center rounded-full border border-white/[.14] bg-white/[.07] px-4 text-[11px] font-semibold text-white/[.86] transition hover:border-white/[.28] hover:bg-white/[.10] hover:text-white"
               >
-                Open app
+                Open Pocket
               </a>
               <button
                 type="button"
@@ -1200,10 +1198,10 @@ export default function FoundationPage() {
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <a
-                  href={APP_URL}
+                  href={POCKET_URL}
                   className="foundation-primary-cta inline-flex h-12 w-full items-center justify-center gap-2 px-5 text-sm font-semibold shadow-[0_18px_48px_rgba(15,23,42,.16)] transition hover:bg-blue-700 sm:w-auto"
                 >
-                  Open App <ArrowRight className="h-4 w-4" />
+                  Open Pocket <ArrowRight className="h-4 w-4" />
                 </a>
                 <a
                   href="#api"
@@ -1361,7 +1359,7 @@ export default function FoundationPage() {
                 </p>
 
                 <a
-                  href={`${APP_URL}?product=payment&tab=pos`}
+                  href={`${POCKET_URL}/move/pos`}
                   className="section-detail-reveal mt-7 inline-flex min-h-12 w-fit items-center gap-4 rounded-full bg-white py-1.5 pl-5 pr-1.5 text-xs font-semibold text-slate-950 shadow-[0_16px_40px_rgba(0,0,0,.22)] transition hover:bg-cyan-50"
                   style={{ '--section-reveal-delay': '230ms' } as CSSProperties}
                 >
@@ -1678,10 +1676,10 @@ export default function FoundationPage() {
             </p>
             <div className="mt-8 flex flex-col gap-3 max-sm:hidden sm:flex-row">
               <a
-                href={APP_URL}
+                href={POCKET_URL}
                 className="foundation-primary-cta inline-flex h-11 items-center justify-center gap-2 px-5 text-sm font-semibold shadow-[0_18px_50px_rgba(15,23,42,.12)] transition hover:bg-gray-800"
               >
-                Open platform <ArrowRight className="h-4 w-4" />
+                Open Pocket <ArrowRight className="h-4 w-4" />
               </a>
               <Link
                 to="/developers"
