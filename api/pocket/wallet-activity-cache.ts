@@ -38,7 +38,9 @@ export function createWalletActivityReader(scan: Scan, now = Date.now, deadlineM
         if (cache.size >= 256 && !cache.has(key)) cache.delete(cache.keys().next().value!)
         cache.set(key, { rows: previous, freshUntil: 0, retainUntil: hit?.retainUntil ?? 0, retryAfter: now() + 15_000 })
         // Never emit provider messages, endpoint URLs, keys or wallet addresses.
-        console.warn('[pocket-activity] wallet scan unavailable', { network, reason: controller.signal.aborted ? 'deadline' : 'provider', code: typeof code === 'number' && Number.isInteger(code) ? code : undefined })
+        const category = (error as { reason?: unknown } | null)?.reason
+        const safeCategory = typeof category === 'string' && ['quota', 'network', 'configuration', 'response', 'rpc', 'capacity', 'scope'].includes(category) ? category : 'provider'
+        console.warn('[pocket-activity] wallet scan unavailable', { network, reason: controller.signal.aborted ? 'deadline' : safeCategory, code: typeof code === 'number' && Number.isInteger(code) ? code : undefined })
         return previous
       }).finally(() => { controller.abort(); clearTimeout(deadline); pending.delete(key) })
       pending.set(key, work)

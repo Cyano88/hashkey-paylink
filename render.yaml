@@ -206,8 +206,6 @@ services:
         sync: false                   # server-side Privy secret for authenticated PolyDesk APIs
       - key: HASH_PAYLINK_POLYDESK_SERVICE_TOKEN
         sync: false                   # scoped server token for PolyDesk funding checkout creation
-      - key: CIRCLE_RECIPIENT_WALLET_KEY_PREFIX
-        value: "circle-recipient-wallet"
       - key: RESEND_API_KEY
         sync: false                   # Resend API key for Hash PayLink transactional emails
       - key: STREAM_INVITE_FROM_EMAIL
@@ -216,8 +214,6 @@ services:
         value: "StreamPay"
       - key: AGENTIC_STREAMING_FROM_EMAIL
         value: "no-reply@mail.hashpaylink.com"
-      - key: AGENTIC_STREAMING_FROM_NAME
-        value: "Hash PayLink Agent"
       - key: ALERT_FROM_EMAIL
         value: "no-reply@mail.hashpaylink.com"
       - key: ZEROSCOUT_API_URL

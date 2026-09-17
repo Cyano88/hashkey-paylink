@@ -73,7 +73,11 @@ export async function evmActivity(network: EvmNetwork, wallet: string, signal: A
   const config = EVM[network]
   const latest = BigInt(await rpc<string>('eth_blockNumber', []))
   const lookback = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOOKBACK_BLOCKS, 120)))
-  const blockRange = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, 10)))
+  // The public Arc endpoint accepts the full bounded lookback. Keep small
+  // chunks for private providers unless their range limit is configured.
+  const arcEndpoint = process.env.PRIVATE_RPC_URL_ARC_MAINNET?.trim()
+  const publicArc = network === 'arc' && (!arcEndpoint || /^https:\/\/rpc\.mainnet\.arc\.io\/?$/.test(arcEndpoint))
+  const blockRange = BigInt(Math.min(2048, positiveInteger(process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE, publicArc ? 120 : 10)))
   const maxChunks = Math.min(12, positiveInteger(process.env.POCKET_ACTIVITY_EVM_MAX_LOG_CHUNKS, 12))
   const ranges = evmLogBlockRanges(latest, lookback, blockRange, maxChunks)
   const topic = addressTopic(wallet)

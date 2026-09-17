@@ -10,7 +10,7 @@ const incoming = log('a', other, wallet), outgoing = log('b', wallet, other), se
 const calls = []
 const scanRead = async (network, method, params, signal) => {
   validateRead(method, params); signal.throwIfAborted(); calls.push({ network, method, params })
-  if (method === 'eth_blockNumber') return '0x64'
+  if (method === 'eth_blockNumber') return '0x100'
   if (method === 'eth_getLogs') return params[0].topics[1] === topic(wallet) ? [outgoing, self, unrelated] : [incoming, self]
   return { timestamp: '0x65' }
 }
@@ -21,6 +21,28 @@ assert.equal(rows.filter(x => x.direction === 'out').length, 2)
 assert(rows.every(x => x.amount === '1' && x.ts === 101000))
 assert.equal(calls.filter(x => x.method === 'eth_getBlockByNumber').length, 1)
 assert(calls.filter(x => x.method === 'eth_getLogs').every(x => x.params[0].topics.includes(topic(wallet))))
+// Public Arc scans retain coverage while reducing default log queries to two.
+const savedArc = process.env.PRIVATE_RPC_URL_ARC_MAINNET
+const savedRange = process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE
+delete process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE
+delete process.env.PRIVATE_RPC_URL_ARC_MAINNET
+try {
+ calls.length = 0
+ await evmActivity('arc', wallet, new AbortController().signal, scanRead)
+ assert.equal(calls.filter(x => x.method === 'eth_getLogs').length, 2)
+ process.env.PRIVATE_RPC_URL_ARC_MAINNET = 'https://private-provider.invalid'
+ calls.length = 0
+ await evmActivity('arc', wallet, new AbortController().signal, scanRead)
+ assert.equal(calls.filter(x => x.method === 'eth_getLogs').length, 24)
+ process.env.PRIVATE_RPC_URL_ARC_MAINNET = 'https://rpc.mainnet.arc.io'
+ process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE = '10'
+ calls.length = 0
+ await evmActivity('arc', wallet, new AbortController().signal, scanRead)
+ assert.equal(calls.filter(x => x.method === 'eth_getLogs').length, 24)
+} finally {
+ if(savedArc===undefined)delete process.env.PRIVATE_RPC_URL_ARC_MAINNET;else process.env.PRIVATE_RPC_URL_ARC_MAINNET=savedArc
+ if(savedRange===undefined)delete process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE;else process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE=savedRange
+}
 // Abort after one response stops the next chunk/direction/timestamp request.
 const abort = new AbortController(); let scanned = 0
 await assert.rejects(evmActivity('base', wallet, abort.signal, async (_n, method) => {
