@@ -59,6 +59,7 @@ import circleSolanaEmailHandler from './api/circle-solana-email.js'
 import privyCircleLinkHandler from './api/privy-circle-link.js'
 import circleRecipientWalletHandler from './api/circle-recipient-wallet.js'
 import telegramRequestHandler from './api/telegram-request.js'
+import pocketPaylinksHandler from './api/pocket/paylinks.js'
 import polymarketBridgeHandler from './api/polymarket-bridge.js'
 import polymarketBuilderHandoffHandler from './api/polymarket-builder-handoff.js'
 import polymarketBuilderSignerHandler from './api/polymarket-builder-signer.js'
@@ -340,6 +341,7 @@ app.get('/api/pocket/spending-limits',   readLimiter, pocketSpendingLimitsHandle
 app.all('/api/pocket/balances/recipient', readLimiter, pocketRecipientBalanceHandler)
 app.all('/api/pocket/activity',          readLimiter, pocketActivityHandler)
 app.get('/api/pocket/ledger',            readLimiter, pocketLedgerHandler)
+app.all('/api/pocket/paylinks',          strictLimiter, pocketPaylinksHandler)
 app.all('/api/pocket/paylinks',          strictLimiter, pocketPaylinksHandler)
 app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)
