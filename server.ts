@@ -420,7 +420,7 @@ app.get('/stream/:vaultAddress',       streamOgHandler)
 app.get('/stream',                     streamOgHandler)
 
 // /agent — dual-purpose: browser gets SPA, API clients get JSON verification
-app.get('/agent', (req, res, next) => {
+app.get('/agent', strictLimiter, (req, res, next) => {
   const { eventId, payer } = req.query as Record<string, string>
   const acceptsJson = (req.headers.accept ?? '').includes('application/json')
   if (eventId && payer && acceptsJson) return agentVerifyHandler(req, res)

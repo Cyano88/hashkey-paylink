@@ -17,7 +17,7 @@
  */
 
 import type { Request, Response } from 'express'
-import { ethers }                  from 'ethers'
+import { lookupLegacyArchive } from './legacy-archive-lookup.js'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
@@ -37,14 +37,6 @@ import { routeCirclePocketQuestion } from './pocket/agent-router.js'
 import { readHelperProfileMemory } from './helper-profile.js'
 
 // ─── 0G Mainnet config ────────────────────────────────────────────────────────
-const OG_RPC       = (process.env.OG_RPC_URL ?? process.env.OG_EVM_RPC_URL ?? process.env.ZG_RPC_URL ?? 'https://evmrpc.0g.ai').trim()
-const ARCHIVE_ADDR = '0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a'
-const FROM_BLOCK   = parseInt(process.env.OG_FROM_BLOCK ?? '32498000', 10)
-
-const ARCHIVE_ABI = [
-  'event PaymentArchived(string indexed eventId, bytes32 indexed rootHash, string chain, string payer, string amount, uint256 ts)',
-]
-
 const MAX_EVENT_ID_LENGTH = 128
 const MAX_PAYER_LENGTH = 128
 const MAX_QUESTION_LENGTH = 4_000
@@ -715,40 +707,7 @@ async function getHelperPromptUsageStatus(eventId: string, payer: string, tier: 
   return { allowed: true, remaining: Math.max(0, limit - current.count - 1), resetAt: current.resetAt, limit, tier }
 }
 
-async function verifyPayment(eventId: string, payer: string) {
-  const provider = new ethers.JsonRpcProvider(OG_RPC)
-  const contract = new ethers.Contract(ARCHIVE_ADDR, ARCHIVE_ABI, provider)
-  const latest   = await withTimeout(provider.getBlockNumber(), '0G payment verification')
-
-  const events = await withTimeout(contract.queryFilter(
-    contract.filters.PaymentArchived(eventId),
-    FROM_BLOCK,
-    latest,
-  ), '0G payment proof lookup')
-
-  const match = events.find(
-    e => 'args' in e && (e.args[3] as string).toLowerCase() === payer.toLowerCase(),
-  )
-
-  if (!match || !('args' in match)) return null
-
-  return {
-    payment: {
-      eventId,
-      payer:  match.args[3] as string,
-      chain:  match.args[2] as string,
-      amount: match.args[4] as string,
-      ts:     Number(match.args[5]),
-    },
-    proof: {
-      ogTxHash:   match.transactionHash,
-      ogExplorer: `https://chainscan.0g.ai/tx/${match.transactionHash}`,
-      rootHash:   match.args[1] as string,
-      contract:   ARCHIVE_ADDR,
-      network:    '0G Mainnet (Chain ID 16661)',
-    },
-  }
-}
+const verifyPayment = lookupLegacyArchive
 
 // ─── AI response ──────────────────────────────────────────────────────────────
 

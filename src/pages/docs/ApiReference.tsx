@@ -141,11 +141,11 @@ export default function ApiReference() {
 
       <Section title="0G verification">
         <SubSection title="GET /api/agent-verify">
-          <p>Verifies archived payment proofs against the 0G proof layer.</p>
+          <p>Looks up a historical archive event. The legacy verified field does not authenticate the caller or verify source-chain settlement or stored payload integrity. Do not use it alone to authorize access.</p>
           <CodeBlock lang="bash">{`GET /api/agent-verify?eventId=YOUR_EVENT_ID&payer=Alice`}</CodeBlock>
         </SubSection>
         <SubSection title="POST /api/agent-ask">
-          <p>Payment-gated assistant endpoint. Verifies access before returning the AI response.</p>
+          <p>Legacy assistant compatibility endpoint. Not a recommended authorization pattern for new integrations; Pocket uses its dedicated assistant route.</p>
         </SubSection>
       </Section>
 

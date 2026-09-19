@@ -78,7 +78,7 @@ export default function DocsHome() {
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">0G across the ecosystem</h2>
         <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
           <li>- <strong className="text-gray-800 dark:text-gray-200">Payment archive:</strong> confirmed multi-payer records are uploaded to 0G Storage and anchored on 0G Mainnet.</li>
-          <li>- <strong className="text-gray-800 dark:text-gray-200">Agent verification:</strong> paid AI services call <code className="rounded bg-white px-1 py-0.5 font-mono text-xs dark:bg-gray-900">/api/agent-verify</code> before responding.</li>
+          <li>- <strong className="text-gray-800 dark:text-gray-200">Agent verification:</strong> historical archive lookups use <code className="rounded bg-white px-1 py-0.5 font-mono text-xs dark:bg-gray-900">/api/agent-verify</code> for archive-event evidence, not payment authorization.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Arc Agreements:</strong> confirmed agreement outcomes use the shared durable receipt and proof pattern.</li>
         </ul>
       </div>
