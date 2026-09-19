@@ -7,7 +7,7 @@ for (const key of ['DATABASE_URL','POSTGRES_URL','RENDER','RENDER_SERVICE_ID','R
 process.env.TELEGRAM_REQUEST_STORE = join(dir, 'requests.json')
 process.env.CIRCLE_POCKET_ACTION_STORE = join(dir, 'actions.json')
 process.env.PUBLIC_PAYLINK_ORIGIN = 'https://checkout.example'
-const {default: pocket} = await import('../api/pocket/paylinks.ts')
+const {default: pocket} = await import('../api/pocket/paylink-requests.ts')
 const {default: legacy} = await import('../api/telegram-request.ts')
 assert.equal(pocket, legacy, 'Both endpoints must share one module and mutation queue')
 async function call(handler, overrides={}) {
@@ -40,9 +40,9 @@ for(const handler of [pocket,legacy]) {
 const stored=JSON.parse(await readFile(process.env.TELEGRAM_REQUEST_STORE,'utf8'))
 assert.equal(Object.keys(stored.requests).length,1)
 const panel=await readFile(new URL('../src/components/AgentHashPanel.tsx',import.meta.url),'utf8')
-assert.ok(panel.includes("fetch(pocketApiUrl('/api/pocket/paylinks'), {"))
+assert.ok(panel.includes("fetch(pocketApiUrl('/api/pocket/paylink-requests'), {"))
 assert.ok(!panel.includes("fetch('/api/telegram-request'"))
 const server=await readFile(new URL('../server.ts',import.meta.url),'utf8')
-assert.match(server,/app.all\('\/api\/pocket\/paylinks',\s+strictLimiter, pocketPaylinksHandler\)/)
+assert.match(server,/app.all\('\/api\/pocket\/paylink-requests',\s+strictLimiter, pocketPaylinkRequestsHandler\)/)
 assert.match(server,/app.all\('\/api\/telegram-request',\s+strictLimiter, telegramRequestHandler\)/)
 console.log('Pocket PayLinks compatibility passed: shared records, concurrent idempotency, auth, validation, native URL routing and legacy reads')

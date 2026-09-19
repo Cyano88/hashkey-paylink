@@ -1674,7 +1674,7 @@ export function TelegramHelperPanel({
       target: draft.mode === 'group' ? draft.target || draft.label || 'Group collection' : draft.target,
       amount: draft.amount,
     }
-    const res = await fetch(pocketApiUrl('/api/pocket/paylinks'), {
+    const res = await fetch(pocketApiUrl('/api/pocket/paylink-requests'), {
       method: 'POST',
       headers: {
         ...await helperProfileHeaders(true),
