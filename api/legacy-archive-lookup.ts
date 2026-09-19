@@ -29,19 +29,19 @@ async function readArchive(eventId: string, payer: string) {
   try {
     const contract = new ethers.Contract(ARCHIVE_ADDR, ARCHIVE_ABI, provider)
     const latest   = await withTimeout(provider.getBlockNumber(), '0G payment verification')
-  
+
     const events = await withTimeout(contract.queryFilter(
       contract.filters.PaymentArchived(eventId),
       FROM_BLOCK,
       latest,
     ), '0G payment proof lookup')
-  
+
     const match = events.find(
       e => 'args' in e && (e.args[3] as string).toLowerCase() === payer.toLowerCase(),
     )
-  
+
     if (!match || !('args' in match)) return null
-  
+
     return {
       payment: {
         eventId,
