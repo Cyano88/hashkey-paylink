@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
-import { TelegramHelperPanel } from '../../pages/TelegramPaymentLinks'
+import { TelegramHelperPanel as PocketAgentHashPanel } from '../../components/AgentHashPanel'
 
 const WELCOME_TEXT = 'Pocket Support is ready. Ask me about balances, sending or receiving USDC, requests, bank payouts, POS, bills, activity, receipts, or account support.'
 
@@ -27,7 +27,7 @@ export default function PocketAssistantPage() {
           <span className='h-10 w-10' />
         </header>
         <section className='flex min-h-0 flex-1 flex-col overflow-hidden pt-2'>
-          <TelegramHelperPanel
+          <PocketAgentHashPanel
             telegramName={displayName}
             ownerKey={ownerKey}
             telegramId=''

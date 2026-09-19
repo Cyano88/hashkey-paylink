@@ -1964,7 +1964,7 @@ assert.doesNotMatch(paymentPageSource, /Arc x402 Funding|Funding Arc Testnet x40
 assert.match(pocketX402ControllerSource, /silent = false/)
 assert.match(pocketX402ControllerSource, /setInterval\(refreshInBackground, 30_000\)/)
 assert.match(pocketX402ControllerSource, /refresh\(\{ silent: true \}\)/)
-const telegramPaymentLinksSource = await readFile(new URL('../src/pages/TelegramPaymentLinks.tsx', import.meta.url), 'utf8')
+const telegramPaymentLinksSource = await readFile(new URL('../src/components/AgentHashPanel.tsx', import.meta.url), 'utf8')
 assert.doesNotMatch(telegramPaymentLinksSource, /id: 'streampay'/)
 assert.match(telegramPaymentLinksSource, /pocketApiUrl\('\/api\/pocket\/support\/cases'\)/)
 assert.doesNotMatch(telegramPaymentLinksSource, /fetch\('\/api\/pocket\/support\/cases/)

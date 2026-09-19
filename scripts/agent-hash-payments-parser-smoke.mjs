@@ -221,7 +221,8 @@ assert.equal(__testAgentAskPaymentEnrichment.normalizePaymentEnrichmentContext('
 assert.equal(__testAgentAskPaymentEnrichment.normalizeHelperMode('payments'), 'circle-pocket')
 assert.equal(__testAgentAskPaymentEnrichment.normalizeHelperMode('circle-pocket'), 'circle-pocket')
 
-const pocketOrigin = 'https://pocket.hashpaylink.com'
+// Actions are relative in-app routes, shared by native and web Pocket.
+const pocketOrigin = ''
 const circlePocketCases = [
   ['show my wallet balance', 'wallet-overview', `${pocketOrigin}/home`],
   ['create a PayLink to receive USDC', 'receive-usdc', `${pocketOrigin}/move/usdc`],
@@ -234,7 +235,8 @@ const circlePocketCases = [
   ['collect NGN 25,000 from Ada for catering', 'bank-payout', `${pocketOrigin}/move/bank`],
   ['create a static merchant POS QR', 'retail-pos', `${pocketOrigin}/move/pos`],
   ['set up a contactless terminal for my shop', 'retail-pos', `${pocketOrigin}/move/pos`],
-  ['buy airtime and pay electricity bills', 'bills', `${pocketOrigin}/bills/airtime`],
+  ['buy airtime', 'bills', `${pocketOrigin}/bills/airtime`],
+  ['pay electricity bills', 'bills', `${pocketOrigin}/bills/electricity`],
   ['check my transaction receipt', 'receipts', `${pocketOrigin}/activity`],
 ]
 for (const [question, capability, url] of circlePocketCases) {
@@ -246,7 +248,7 @@ for (const [question, capability, url] of circlePocketCases) {
 const signedInRoute = __testAgentAskPaymentEnrichment.routeCirclePocketQuestion('I already signed in', 'circle-pocket')
 assert.equal(signedInRoute?.supported, true)
 assert.equal(signedInRoute?.capability, 'profile-support')
-assert.match(signedInRoute?.answer ?? '', /active signed-in session/i)
+assert.match(signedInRoute?.answer ?? '', /active signed-in Pocket identity/i)
 const nameAnswer = __testAgentAskPaymentEnrichment.getHelperResponse(
   'Hi my name is shy',
   'Circle Pocket user',
