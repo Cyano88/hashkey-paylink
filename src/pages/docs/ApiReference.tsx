@@ -167,11 +167,11 @@ export default function ApiReference() {
         </SubSection>
       </Section>
 
-      <Section title="Telegram and PolyDesk">
+      <Section title="Pocket requests and funding">
         <Table
           headers={['Endpoint', 'Purpose']}
           rows={[
-            ['/api/telegram-request', 'Durable Telegram payment request state'],
+            ['/api/pocket/paylink-requests', 'Pocket shareable payment requests; /api/telegram-request remains an older-client compatibility alias'],
             ['/api/polymarket-bridge', 'Polymarket funding bridge proxy with builder attribution'],
             ['/api/polymarket-portfolio', 'Postgres-backed PolyDesk profile, alert, watchlist, and funding state'],
             ['/api/worldcup-scores', 'World Cup live score and Polymarket market context'],

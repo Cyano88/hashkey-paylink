@@ -152,10 +152,7 @@ await assert.rejects(
 
 const linkClientSource = await readFile(new URL('../src/lib/privyCircleLink.ts', import.meta.url), 'utf8')
 assert.match(linkClientSource, /circleUserToken:\s*params\.circleUserToken/)
-const agentWorkspaceSource = await readFile(new URL('../src/pages/AgentWorkspace.tsx', import.meta.url), 'utf8')
-assert.match(agentWorkspaceSource, /savePrivyCircleLink\(\{/)
-assert.match(agentWorkspaceSource, /purpose:\s*'agent'/)
-for (const relativePath of ['../src/pages/CreateLink.tsx', '../src/pages/PaymentPage.tsx']) {
+for (const relativePath of ['../src/pages/PaymentPage.tsx']) {
   const source = await readFile(new URL(relativePath, import.meta.url), 'utf8')
   assert.doesNotMatch(source, /savePrivyCircleLink|unlinkPrivyCircleLink/)
   for (const call of source.matchAll(/\blinkPocketWallet\(\{/g)) {

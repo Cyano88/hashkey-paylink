@@ -288,12 +288,9 @@ const activityKindBody = pocketActivitySource.match(/function activityKind[\s\S]
 assert.ok(activityKindBody.indexOf("source === 'ngpos'") < activityKindBody.indexOf("settlement === 'instant_fiat'"))
 
 const layoutSource = await readFile(new URL('../src/Layout.tsx', import.meta.url), 'utf8')
-const createLinkSource = await readFile(new URL('../src/pages/CreateLink.tsx', import.meta.url), 'utf8')
 assert.match(layoutSource, /viewport\?\.offsetTop \?\? 0/)
 assert.match(layoutSource, /transform: `translate3d\(0, \$\{agentHashViewportTop\}px, 0\)`/)
 assert.doesNotMatch(layoutSource, /TelegramHelperPanel|onComposerFocusChange|agent-hash-mode/)
-assert.match(createLinkSource, /onComposerFocusChange=\{setServiceHubAgentComposerActive\}/)
-assert.match(createLinkSource, /new CustomEvent\('hashpaylink-agent-composer-focus'/)
 
 const requestStoreDir = await mkdtemp(join(tmpdir(), 'hashpaylink-agent-hash-'))
 process.env.TELEGRAM_REQUEST_STORE = join(requestStoreDir, 'telegram-requests.json')

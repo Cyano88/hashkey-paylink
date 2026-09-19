@@ -18,23 +18,7 @@ import { isPocketHostname, POCKET_BASE_PATH, pocketPathFor, resolvePocketRoute, 
 // ─── Input detection ─────────────────────────────────────────────────────────
 const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
 const SOLANA_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
-const TELEGRAM_CHAT_URL = (() => {
-  const base = String(import.meta.env.VITE_TELEGRAM_AGENT_URL || 'https://t.me/HashPayLinkBot').trim().replace(/\/+$/, '')
-  return base.includes('?') ? `${base}&start=payment_links` : `${base}?start=payment_links`
-})()
 const fmtAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
-
-function TelegramMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none">
-      <path
-        d="M20.7 3.45 3.9 9.93c-1.15.46-1.14 1.1-.21 1.38l4.31 1.35 1.66 5.08c.2.57.1.8.7.8.46 0 .66-.21.91-.46l2.07-2.01 4.3 3.18c.79.44 1.36.21 1.56-.73l2.83-13.34c.29-1.16-.44-1.69-1.33-1.33Z"
-        fill="currentColor"
-      />
-      <path d="m9.13 12.35 8.4-5.3c.42-.26.8-.12.49.16l-6.93 6.25-.27 2.84-1.69-3.95Z" fill="white" fillOpacity=".92" />
-    </svg>
-  )
-}
 
 function PolymarketMark({ className }: { className?: string }) {
   return (
@@ -202,7 +186,6 @@ export default function Layout() {
   const isCheckoutPage = pathname === '/pay' || isAgentCheckoutPage || isHostedCheckoutEntryPage
   const isPayPage = isCheckoutPage || isAgreementPayerPage
   const isNgPosPage = pathname === '/pos/ng'
-  const isTelegramPaymentLinksPage = pathname === '/telegram/payment-links'
   const isReceiptPage = pathname.startsWith('/receipt/')
   const isDashPage = pathname === '/event' || pathname === '/dashboard'
   const isNgPosDashboard = pathname === '/dashboard' && (searchParams.get('src') === 'ngpos' || (searchParams.get('id') ?? '').startsWith('ngpos-'))
@@ -212,7 +195,6 @@ export default function Layout() {
     !!searchParams.get('wallet') ||
     !!searchParams.get('e')
   )
-  const [showTelegramHomeFab, setShowTelegramHomeFab] = useState(false)
   const [showPaymentHistoryShortcut, setShowPaymentHistoryShortcut] = useState(false)
   const [agentHashComposerFocused, setAgentHashComposerFocused] = useState(false)
   const [agentHashViewportTop, setAgentHashViewportTop] = useState(0)
@@ -234,10 +216,6 @@ export default function Layout() {
   }
 
   useEffect(() => {
-    const handleHomeSurfaceChange = (event: Event) => {
-      const detail = (event as CustomEvent<{ visible?: boolean }>).detail
-      setShowTelegramHomeFab(Boolean(detail?.visible))
-    }
     const handleHistoryVisibilityChange = (event: Event) => {
       const detail = (event as CustomEvent<{ visible?: boolean }>).detail
       setShowPaymentHistoryShortcut(Boolean(detail?.visible))
@@ -246,14 +224,11 @@ export default function Layout() {
       const detail = (event as CustomEvent<{ focused?: boolean }>).detail
       setAgentHashComposerFocused(Boolean(detail?.focused))
     }
-    window.addEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
     window.addEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
     window.addEventListener('hashpaylink-agent-composer-focus', handleAgentHashComposerFocus)
     return () => {
-      window.removeEventListener('hashpaylink-home-surface', handleHomeSurfaceChange)
       window.removeEventListener('hashpaylink-history-visibility', handleHistoryVisibilityChange)
       window.removeEventListener('hashpaylink-agent-composer-focus', handleAgentHashComposerFocus)
-      setShowTelegramHomeFab(false)
       setShowPaymentHistoryShortcut(false)
       setAgentHashComposerFocused(false)
     }
@@ -620,20 +595,6 @@ export default function Layout() {
             </p>
           </div>
         </footer>
-
-      {/* Telegram FAB */}
-      {showTelegramHomeFab && (
-        <a
-          href={TELEGRAM_CHAT_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="fixed bottom-5 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#229ED9] text-white shadow-[0_12px_30px_rgba(34,158,217,0.35)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#178dcc] active:scale-95 sm:right-6"
-          title="Open Telegram chat"
-          aria-label="Open Hash PayLink in Telegram"
-        >
-          <TelegramMark className="h-7 w-7" />
-        </a>
-      )}
 
       <style>{`
         @keyframes bounce {
