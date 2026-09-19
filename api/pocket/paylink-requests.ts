@@ -1,7 +1,7 @@
+import { PaylinkRequestStorageError } from './paylink-request-file-store.js'
+import { createPaylinkRequestStore } from './paylink-request-store.js'
 import type { Request, Response } from 'express'
 import { randomBytes } from 'crypto'
-import { mkdir, readFile, writeFile } from 'fs/promises'
-import { dirname, resolve } from 'path'
 import { isAddress } from 'viem'
 import { PublicKey } from '@solana/web3.js'
 import {
@@ -11,7 +11,6 @@ import {
 } from '../circle-pocket-identity.js'
 import { recordCirclePocketAction } from '../circle-pocket-action-journal.js'
 
-const STORE_PATH = process.env.TELEGRAM_REQUEST_STORE ?? './data/telegram-requests.json'
 const MAX_TEXT = 80
 
 type TelegramRequestMode = 'person' | 'group'
@@ -38,27 +37,11 @@ type TelegramRequestRecord = {
   idempotencyKey?: string
 }
 
-type Store = {
-  requests: Record<string, TelegramRequestRecord>
-}
 type TelegramRequestDraft = Omit<TelegramRequestRecord, 'id' | 'payUrl' | 'createdAt' | 'ownerId' | 'idempotencyKey'>
 
-let storeMutationQueue: Promise<void> = Promise.resolve()
-
-async function mutateStore<T>(mutation: (store: Store) => Promise<T> | T) {
-  let release!: () => void
-  const previous = storeMutationQueue
-  storeMutationQueue = new Promise<void>(resolveQueue => { release = resolveQueue })
-  await previous
-  try {
-    const store = await readStore()
-    const result = await mutation(store)
-    await writeStore(store)
-    return result
-  } finally {
-    release()
-  }
-}
+const requestStore = createPaylinkRequestStore<TelegramRequestRecord>()
+const readStore = requestStore.read
+const mutateStore = requestStore.mutate
 
 function cleanText(value: unknown, fallback = '') {
   return String(value ?? fallback).replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT)
@@ -96,22 +79,6 @@ function originFromRequest(req: Request) {
   const proto = String(req.headers['x-forwarded-proto'] ?? req.protocol ?? 'https').split(',')[0].trim()
   const host = req.headers['x-forwarded-host'] ?? req.headers.host
   return `${proto}://${host}`
-}
-
-async function readStore(): Promise<Store> {
-  try {
-    const raw = await readFile(resolve(STORE_PATH), 'utf8')
-    const parsed = JSON.parse(raw) as Partial<Store>
-    return { requests: parsed.requests ?? {} }
-  } catch {
-    return { requests: {} }
-  }
-}
-
-async function writeStore(store: Store) {
-  const path = resolve(STORE_PATH)
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, `${JSON.stringify(store, null, 2)}\n`, 'utf8')
 }
 
 function buildPayUrl(req: Request, record: TelegramRequestDraft) {
@@ -278,6 +245,7 @@ export default async function handler(req: Request, res: Response) {
     })
     return res.json({ ok: true, request: publicRequest(saved.record), botPayload: `share_${saved.record.id}`, replayed: saved.replayed })
   } catch (err) {
+    if (err instanceof PaylinkRequestStorageError) return res.status(503).json({ ok: false, error: err.message })
     const message = err instanceof Error ? err.message : 'Telegram request failed'
     return res.status(500).json({ ok: false, error: message })
   }
