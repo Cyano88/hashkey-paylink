@@ -24,6 +24,7 @@ export interface UnifiedBalanceQuery {
 }
 
 export interface UnifiedBalanceResult {
+  walletUpdate?: 'hidden' | 'available' | 'resume'
   total: number
   rows: UnifiedBalanceBreakdown[]
   totalComplete?: boolean

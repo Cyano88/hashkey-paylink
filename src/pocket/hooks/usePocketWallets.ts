@@ -4,6 +4,8 @@ import { readPocketBalances, readPocketLinkedWallets } from '../api/pocketReadCl
 import type { CirclePocketWallets } from '../models/pocketWallet'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
+import { parsePocketWalletUpdateNotice, type PocketWalletUpdateNotice } from '../lib/pocketWalletUpdate'
+
 type PocketAccessTokenReader = () => Promise<string | null>
 
 type PocketWalletCacheEntry = {
@@ -19,6 +21,7 @@ const POCKET_BALANCE_REFRESH_INTERVAL_MS = 45_000
 const POCKET_BALANCE_FOCUS_THROTTLE_MS = 10_000
 
 type PocketWalletReadState = {
+  walletUpdate: PocketWalletUpdateNotice
   wallets: CirclePocketWallets
   setWallets: Dispatch<SetStateAction<CirclePocketWallets>>
   rows: UnifiedBalanceBreakdown[]
@@ -85,6 +88,7 @@ export default function usePocketWallets({
   getAccessToken: PocketAccessTokenReader
 }): PocketWalletReadState {
   const cached = authenticated && email ? pocketWalletCache.get(email) : undefined
+  const [walletUpdate, setWalletUpdate] = useState<PocketWalletUpdateNotice>('hidden')
   const [wallets, setWallets] = useState<CirclePocketWallets>(() => cached?.wallets ?? {})
   const [rows, setRows] = useState<UnifiedBalanceBreakdown[]>(() => cached?.rows ?? [])
   const [total, setTotal] = useState(() => cached?.total ?? 0)
@@ -104,6 +108,7 @@ export default function usePocketWallets({
       const token = await getAccessToken()
       if (!token) throw new Error('Email session is not ready. Sign in again and retry.')
       const result = await readPocketBalances({ accessToken: token })
+      setWalletUpdate(parsePocketWalletUpdateNotice(result.walletUpdate))
       setRows(result.rows)
       setTotal(result.total)
       setTotalComplete(result.totalComplete !== false)
@@ -123,6 +128,7 @@ export default function usePocketWallets({
   }, [email, getAccessToken, wallets])
 
   useEffect(() => {
+    setWalletUpdate('hidden')
     if (!authenticated || !email) {
       setWallets({})
       setRows([])
@@ -162,6 +168,7 @@ export default function usePocketWallets({
         const balanceOutcome = await balancesRequest
         if (cancelled) return
         if ('result' in balanceOutcome) {
+          setWalletUpdate(parsePocketWalletUpdateNotice(balanceOutcome.result.walletUpdate))
           setRows(balanceOutcome.result.rows)
           setTotal(balanceOutcome.result.total)
           setTotalComplete(balanceOutcome.result.totalComplete !== false)
@@ -237,5 +244,5 @@ export default function usePocketWallets({
     return registerPocketRefreshHandler(refreshBalances)
   }, [authenticated, email, refreshBalances])
 
-  return { wallets, setWallets, rows, total, totalComplete, balanceBusy, resolved, error, setError, refreshBalances }
+  return { walletUpdate: walletUpdate === 'resume' ? 'resume' : error || !resolved ? 'hidden' : walletUpdate, wallets, setWallets, rows, total, totalComplete, balanceBusy, resolved, error, setError, refreshBalances }
 }

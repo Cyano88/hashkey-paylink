@@ -1,3 +1,4 @@
+import type { MigrationPlan } from './wallet-migration-plan.js'
 import { mutateDurableJson, readDurableJson } from '../render-durable-store.js'
 import type { CircleLinkRecord } from '../privy-circle-link.js'
 import type { PocketBalanceRow } from '../../src/pocket/lib/pocketSchemas.js'
@@ -36,10 +37,24 @@ export async function saveVerifiedPocketWalletUpdate(next: PocketWalletUpdateRec
 export function pocketWalletUpdateNotice(input: {
   userId: string
   record?: PocketWalletUpdateRecord
+  migrationPlan?: MigrationPlan
   links: Partial<Record<Network, CircleLinkRecord>>
   rows: PocketBalanceRow[]
 }): PocketWalletUpdateNotice {
   const { record, links, rows } = input
+  if (record?.userId === input.userId && (record.phase === 'completed' || record.completedAt)) return 'hidden'
+  const plan=input.migrationPlan
+  // An owned saved migration is resumable even before execution verification,
+  // after USDC reaches zero, or while a balance provider is unavailable.
+  if(plan?.version===1 && plan.userId===input.userId && ['review','transferring'].includes(plan.phase) && Number.isFinite(plan.reviewedAt) && plan.reviewedAt>0 && plan.rows.length===3 && new Set(plan.rows.map(row=>row.network)).size===3) {
+    const currentSources=plan.rows.every(row=>{
+      if(!['base','arbitrum','arc'].includes(row.network))return false
+      const link=links[row.network]
+      return !!link && link.privyUserId===input.userId && link.chain===row.network && (link.purpose??'payment')==='payment' && link.circleWalletId===row.source.walletId && link.circleWalletAddress.toLowerCase()===row.source.address.toLowerCase()
+    })
+    if(currentSources)return 'resume'
+  }
+
   if (!record || record.version !== 2 || record.userId !== input.userId || record.phase === 'completed' || record.completedAt) return 'hidden'
   if (!Number.isFinite(record.replacementVerifiedAt) || record.replacementVerifiedAt! <= 0 || !Number.isFinite(record.executionVerifiedAt) || record.executionVerifiedAt! <= 0 || !['ready', 'in_progress', 'failed'].includes(record.phase)) return 'hidden'
   const sources = Object.entries(record.sources ?? {}) as [Network, { walletId: string; address: string }][]

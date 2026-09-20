@@ -105,6 +105,7 @@ export type PocketBalanceRow = {
 }
 
 export type PocketBalancesReadData = {
+  walletUpdate?: 'hidden' | 'available' | 'resume'
   total: number
   totalComplete: boolean
   unavailableNetworks: PocketNetwork[]

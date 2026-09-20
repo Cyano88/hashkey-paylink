@@ -1,3 +1,6 @@
+import { readDurableJson } from '../render-durable-store.js'
+import type { MigrationPlan } from './wallet-migration-plan.js'
+import { pocketWalletUpdateNotice, readPocketWalletUpdate, type PocketWalletUpdateRecord } from './wallet-update-state.js'
 import type { Request, Response } from 'express'
 import {
   createUnifiedBalanceKitContext,
@@ -24,6 +27,8 @@ import {
 } from '../../src/pocket/lib/pocketSchemas.js'
 
 type PocketBalancesHandlerDependencies = {
+  readMigrationPlan?(userId:string):Promise<MigrationPlan|undefined>
+  readWalletUpdate?(userId: string): Promise<PocketWalletUpdateRecord | undefined>
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   readLink(key: string): Promise<CircleLinkRecord | null>
   readBalance(network: PocketNetwork, address: string): Promise<number>
@@ -112,6 +117,11 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
 
     try {
       const identity = await dependencies.verifyUser(req)
+      const updatePromise = dependencies.readWalletUpdate
+        ? withTimeout(Promise.resolve().then(() => dependencies.readWalletUpdate!(identity.userId)), 'Wallet update', 500).catch(() => undefined)
+        : Promise.resolve(undefined)
+      const planPromise=dependencies.readMigrationPlan ? withTimeout(Promise.resolve().then(()=>dependencies.readMigrationPlan!(identity.userId)), 'Migration status', 1500).catch(()=>undefined) : Promise.resolve(undefined)
+      const links: Partial<Record<'base' | 'arbitrum' | 'arc', CircleLinkRecord>> = {}
       const rows = await Promise.all(POCKET_NETWORKS.map(async (network): Promise<PocketBalanceRow> => {
         const link = await dependencies.readLink(circleLinkKey(identity.userId, network, 'payment'))
         if (!link) {
@@ -121,6 +131,7 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
           throw Object.assign(new Error('Stored Circle wallet link did not match its payment network.'), { status: 500 })
         }
         try {
+          if (network !== 'solana') links[network] = link
           const balance = await dependencies.readBalance(network, link.circleWalletAddress)
           if (!Number.isFinite(balance) || balance < 0) throw new Error('Balance reader returned an invalid amount.')
           return { key: network, label: LABELS[network], balance, status: 'ok' }
@@ -136,7 +147,9 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
       }))
       const mainnetTotal = rows.reduce((sum, row) => sum + row.balance, 0)
       const unavailableNetworks = rows.filter(row => row.status === 'error').map(row => row.key)
-      return res.json({ ok: true, total: mainnetTotal, totalComplete: unavailableNetworks.length === 0, unavailableNetworks, rows })
+      let walletUpdate: 'hidden' | 'available' | 'resume' = 'hidden'
+      try { walletUpdate = pocketWalletUpdateNotice({ userId: identity.userId, record: await updatePromise, migrationPlan: await planPromise, links, rows }) } catch { /* Optional notice must not interrupt balances. */ }
+      return res.json({ ok: true, total: mainnetTotal, totalComplete: unavailableNetworks.length === 0, unavailableNetworks, rows, walletUpdate })
     } catch (error) {
       const normalized = error as Error & { status?: number }
       if (normalized.status === 401) return fail(401, 'AUTH_REQUIRED', normalized.message, false)
@@ -152,4 +165,6 @@ export default createPocketBalancesHandler({
   verifyUser: verifiedPrivyUser,
   readLink: readCircleLink,
   readBalance: readPocketNetworkBalance,
+  readWalletUpdate: readPocketWalletUpdate,
+  readMigrationPlan:userId=>readDurableJson<MigrationPlan>('pocket:wallet-migration-plan:v1:'+userId),
 })
