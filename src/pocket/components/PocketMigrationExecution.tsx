@@ -28,7 +28,7 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
   if(!pending || !active.current)return
   const checked=await request<{snapshot:PocketMigrationSnapshot;state:string;resume?:{action:'resume'|'recover';network:string;amount:string;source:string;target:string}}>({action:'reconcile',network:pending.network,revision:result.snapshot.revision,userToken:session.userToken})
   accept(checked.snapshot)
-  if(active.current){setResume((checked.state==='approval_required'||checked.state==='recovery_required')?checked.resume??null:null);if(checked.state==='needs_review')setError('This saved transfer needs review before approval can continue.')}
+  if(active.current){setResume((checked.state==='approval_required'||checked.state==='recovery_required')?checked.resume??null:null);if(checked.state==='needs_review')setError('This saved transfer needs review before approval can continue.');else if(checked.state==='pending'||checked.state==='confirmed')setError('')}
  }
  useEffect(()=>{
   active.current=true;locked.current=true;controller.current=new AbortController()
@@ -43,6 +43,18 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
  },[quote])
  const pending=snapshot?.rows.find(row=>row.state==='pending')
  const next=snapshot?.rows.find(row=>row.state==='ready')
+ // Reconcile only the saved request while it awaits network confirmation.
+ // Polling never starts, resumes, recovers, signs or activates a transfer.
+ useEffect(()=>{
+  if(!pending || resume || quote)return
+  const timer=window.setInterval(()=>{
+   if(!active.current || locked.current || document.visibilityState!=='visible')return
+   locked.current=true;setBusy(true)
+   void refresh().catch(reason=>{if(active.current)setError(reason instanceof Error?reason.message:'Migration status is unavailable.')}).finally(()=>{locked.current=false;if(active.current)setBusy(false)})
+  },10_000)
+  return()=>window.clearInterval(timer)
+ },[pending?.network,snapshot?.revision,!!resume,!!quote,session.userToken,getAccessToken])
+
  async function run() {
   if(locked.current)return
   locked.current=true;setBusy(true);setError('')

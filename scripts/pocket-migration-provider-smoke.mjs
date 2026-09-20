@@ -75,7 +75,7 @@ await assert.rejects(inspector.inspectChallenge(row,id),/transaction reference/)
 challenge={id,status:'PENDING',correlationIds:[txid],errorCode:155123,errorMessage:'sensitive provider detail'}
 await assert.rejects(inspector.inspectChallenge(row,id),error=>error.message.includes('155123')&&!error.message.includes('sensitive provider detail'))
 challenge={id,status:'COMPLETE',correlationIds:[txid]}
-await assert.rejects(inspector.inspectChallenge(row,id),/no longer pending/)
+assert.equal(await inspector.inspectChallenge(row,id),'pending')
 console.log('PASS: provider resume status checks reject expired, failed, mismatched and uncertain challenges. Read-only synthetic checks.')
 
 assert.deepEqual(migrationChallengeBody(row,id),sent.body)
@@ -119,5 +119,17 @@ assert.equal(await quiet.noPending(row,since),true)
 for(const change of [{createDate:'2026-02-01T00:00:00Z'},{createDate:undefined},{createDate:'invalid'},{state:'INITIATED'},{state:'STUCK'}]){const old=historyTx;historyTx={...old,...change};assert.equal(await quiet.noPending(row,since),false);historyTx=old}
 console.log('PASS: expiry retirement history blocks recent, pending and undated activity.')
 
-for(const status of ['FAILED','EXPIRED']){challenge={id,status,correlationIds:[txid],errorCode:155123};await assert.rejects(inspector.inspectChallenge(row,id),/155123/);delete challenge.errorCode;await assert.rejects(inspector.inspectChallenge(row,id),/no longer pending/)}
+for(const status of ['FAILED','EXPIRED']){challenge={id,status,correlationIds:[txid],errorCode:155123};await assert.rejects(inspector.inspectChallenge(row,id),/155123/);delete challenge.errorCode;if(status==='EXPIRED')assert.equal(await inspector.inspectChallenge(row,id),'expired');else await assert.rejects(inspector.inspectChallenge(row,id),/FAILED status/)}
 console.log('PASS: documented PENDING, FAILED and EXPIRED with explicit expiry code are eligible for verification; active, complete, unknown and non-expiry failures remain blocked.')
+
+// Complete schema matrix, including absent optional error fields.
+transaction={id:txid,walletId:'source',blockchain:'BASE',state:'INITIATED',contractAddress:row.source.address}
+for(const [status,expected] of [['PENDING','approval_required'],['IN_PROGRESS','pending'],['COMPLETE','pending'],['FAILED',null],['EXPIRED','expired'],['UNKNOWN',null]]) {
+ for(const code of [undefined,155121,155123]) {
+  challenge={id,status,correlationIds:[txid],...(code===undefined?{}:{errorCode:code})}
+  const state=code===undefined?expected:code===155121&&['PENDING','FAILED','EXPIRED'].includes(status)?'expired':null
+  if(state)assert.equal(await inspector.inspectChallenge(row,id),state,status+' / '+code)
+  else await assert.rejects(inspector.inspectChallenge(row,id),undefined,status+' / '+code)
+ }
+}
+console.log('PASS: complete Circle status/error matrix; EXPIRED without error fields retires only through verified reconciliation, COMPLETE never requests a second approval.')
