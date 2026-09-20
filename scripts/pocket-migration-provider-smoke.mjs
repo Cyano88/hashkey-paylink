@@ -54,17 +54,23 @@ let challenge={id,status:'PENDING',correlationIds:[txid]}, transaction={id:txid,
 const inspector=createMigrationProvider('synthetic',async(n,p,b)=>p.includes('/challenges/')?{challenge}:p.endsWith('/'+txid)?{transaction}:json(n,p,b))
 assert.equal(await inspector.inspectChallenge(row,id),'approval_required')
 challenge={...challenge,errorCode:155121}
-assert.equal(await inspector.inspectChallenge(row,id),'needs_review')
+await assert.rejects(inspector.inspectChallenge(row,id),/expired/)
 delete challenge.errorCode;challenge.status='IN_PROGRESS'
 assert.equal(await inspector.inspectChallenge(row,id),'pending')
 challenge.status='PENDING';transaction={...transaction,walletId:'other'}
-assert.equal(await inspector.inspectChallenge(row,id),'needs_review')
+await assert.rejects(inspector.inspectChallenge(row,id),/does not match/)
 transaction={...transaction,walletId:'source',state:'FAILED'}
-assert.equal(await inspector.inspectChallenge(row,id),'needs_review')
+await assert.rejects(inspector.inspectChallenge(row,id),/failed/)
 transaction={...transaction,state:'SENT',txHash:'0x'+'a'.repeat(64)}
 assert.equal(await inspector.inspectChallenge(row,id),'pending')
 challenge={...challenge,id:txid}
 await assert.rejects(inspector.inspectChallenge(row,id),/match/)
+challenge={id,status:'PENDING',correlationIds:[]}
+await assert.rejects(inspector.inspectChallenge(row,id),/transaction reference/)
+challenge={id,status:'PENDING',correlationIds:[txid],errorCode:155123,errorMessage:'sensitive provider detail'}
+await assert.rejects(inspector.inspectChallenge(row,id),error=>error.message.includes('155123')&&!error.message.includes('sensitive provider detail'))
+challenge={id,status:'COMPLETE',correlationIds:[txid]}
+await assert.rejects(inspector.inspectChallenge(row,id),/no longer pending/)
 console.log('PASS: provider resume status checks reject expired, failed, mismatched and uncertain challenges. Read-only synthetic checks.')
 
 assert.deepEqual(migrationChallengeBody(row,id),sent.body)

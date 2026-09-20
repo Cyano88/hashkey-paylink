@@ -110,16 +110,22 @@ export function createMigrationProvider(userToken: string, request?: Json) {
       const data=await json(row.network,'/v1/w3s/user/challenges/'+encodeURIComponent(challengeId))
       const challenge=data.challenge
       if(!challenge || challenge.id!==challengeId) throw new Error('Migration challenge lookup did not match.')
-      if(challenge.errorCode || challenge.errorMessage) return 'needs_review'
+      if(challenge.errorCode || challenge.errorMessage) {
+        if(String(challenge.errorCode)==='155121') throw new Error('The saved Circle approval expired. No replacement transfer has been created.')
+        const code=String(challenge.errorCode??'')
+        throw new Error('Circle could not continue the saved approval'+(/^\d{1,9}$/.test(code)?' (code '+code+')':'')+'. No replacement transfer has been created.')
+      }
       if(challenge.status==='IN_PROGRESS') return 'pending'
-      if(challenge.status!=='PENDING') return 'needs_review'
+      if(challenge.status!=='PENDING') throw new Error('The saved Circle approval is no longer pending. Its transaction must be reconciled before another transfer can be reviewed.')
       const ids=challenge.correlationIds
-      if(!Array.isArray(ids)||ids.length!==1||!uuid(ids[0])) return 'needs_review'
+      if(!Array.isArray(ids)||ids.length!==1||!uuid(ids[0])) throw new Error('Circle has not provided one valid transaction reference for this saved approval. No replacement transfer has been created.')
       const result=await json(row.network,'/v1/w3s/transactions/'+encodeURIComponent(ids[0]))
       const tx=result.transaction
-      if(!tx || tx.id!==ids[0] || tx.walletId!==row.source.walletId || tx.blockchain!==chains[row.network] || String(tx.contractAddress??'').toLowerCase()!==row.source.address.toLowerCase()) return 'needs_review'
+      if(!tx || tx.id!==ids[0] || tx.walletId!==row.source.walletId || tx.blockchain!==chains[row.network] || String(tx.contractAddress??'').toLowerCase()!==row.source.address.toLowerCase()) throw new Error('The saved Circle transaction does not match the reviewed wallet transfer. Approval is paused for review.')
       if(tx.state==='INITIATED' && !tx.txHash) return 'approval_required'
-      return ['CLEARED','QUEUED','SENT','STUCK','CONFIRMED','COMPLETE'].includes(tx.state)?'pending':'needs_review'
+      if(['CLEARED','QUEUED','SENT','STUCK','CONFIRMED','COMPLETE'].includes(tx.state))return 'pending'
+      const state=['FAILED','DENIED','CANCELLED'].includes(tx.state)?tx.state.toLowerCase():'unverified'
+      throw new Error('The saved Circle transaction is '+state+'. No replacement transfer has been created.')
     },
     async resolveChallenge(row: Row,challengeId: string) {
       if(!uuid(challengeId)) throw new Error('Invalid migration challenge.')
