@@ -95,3 +95,39 @@ allowRecovery=false
 await assert.rejects(approvalRecovery.executor.recover(approvalRecovery.context,approvalRecovery.stored),/Approve/)
 assert.equal(denialCalls,1)
 console.log('PASS: lost-response recovery cannot contact the mutation endpoint without fresh Pocket approval.')
+
+function expiryFixture({checkChange={},...overrides}={}) {
+ let invalidations=0
+ const f=fixture({challengeFingerprint:()=> 'bound-request',inspectChallenge:async()=> 'expired',verifyExpiry:async(plan)=>({revision:plan.revision,checkedAt:101_000,providerExpired:true,ownershipVerified:true,noPendingOperations:true,sourceUnits:'2000000',...checkChange}),invalidateFeeQuote:async()=>{invalidations++},...overrides})
+ return {f,get invalidations(){return invalidations}}
+}
+const expiry=expiryFixture();await expiry.f.executor.start(expiry.f.context,expiry.f.snapshot)
+const oldTransfer=structuredClone(expiry.f.stored.transfers.base)
+assert.equal((await expiry.f.executor.reconcile(expiry.f.context,expiry.f.stored)).state,'review_required')
+assert.equal(expiry.f.stored.transfers.base,undefined)
+assert.equal(expiry.f.stored.expiredTransfers.length,1)
+assert.equal(expiry.f.stored.expiredTransfers[0].challengeId,oldTransfer.challengeId)
+assert.equal((await expiry.f.ledger.get('owner',oldTransfer.executionId)).state,'expired')
+assert.equal(expiry.invalidations,1)
+assert.equal(expiry.f.providerCalls,1,'expiry reconciliation must not create a replacement')
+assert.equal(migrationTransfersConfirmed(expiry.f.stored),false)
+await expiry.f.executor.start(expiry.f.context,expiry.f.stored)
+assert.notEqual(expiry.f.stored.transfers.base.idempotencyKey,oldTransfer.idempotencyKey)
+assert.equal(expiry.f.providerCalls,2)
+assert.equal(expiry.f.approvals,2,'replacement requires a separate fresh approval')
+for(const checkChange of [{providerExpired:false},{ownershipVerified:false},{noPendingOperations:false},{sourceUnits:'1'},{revision:'stale'},{checkedAt:0},{checkedAt:102_000}]){
+ const {f:blocked}=expiryFixture({checkChange});await blocked.executor.start(blocked.context,blocked.snapshot)
+ await assert.rejects(blocked.executor.reconcile(blocked.context,blocked.stored),/needs reconciliation/)
+ assert.ok(blocked.stored.transfers.base);assert.equal(blocked.stored.expiredTransfers,undefined);assert.equal(blocked.providerCalls,1)
+ assert.equal((await blocked.ledger.get('owner',blocked.stored.transfers.base.executionId)).state,'authorized')
+}
+const missing=expiryFixture({challengeFingerprint:undefined}).f;await missing.executor.start(missing.context,missing.snapshot)
+await assert.rejects(missing.executor.reconcile(missing.context,missing.stored),/verified transfer review/)
+const partial=expiryFixture().f;await partial.executor.start(partial.context,partial.snapshot)
+const partialId=partial.stored.transfers.base.executionId
+await partial.ledger.update({ownerId:'owner',intentId:partialId,state:'expired',expectedState:'authorized',failureCode:'MIGRATION_APPROVAL_EXPIRED'})
+assert.equal((await partial.executor.reconcile(partial.context,partial.stored)).state,'review_required','retry safely completes ledger-first retirement')
+const hashed=expiryFixture().f;await hashed.executor.start(hashed.context,hashed.snapshot)
+await hashed.ledger.update({ownerId:'owner',intentId:hashed.stored.transfers.base.executionId,transactionHash:'0x'+'a'.repeat(64)})
+assert.equal((await hashed.executor.reconcile(hashed.context,hashed.stored)).state,'pending');assert.ok(hashed.stored.transfers.base)
+console.log('PASS: verified expiry archives without submission, invalidates fees, requires new approval, survives partial writes and blocks changed evidence or hashes.')

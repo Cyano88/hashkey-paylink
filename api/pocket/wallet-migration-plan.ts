@@ -11,6 +11,7 @@ type Wallet = { walletId: string; address: string }
 export type MigrationPlan = {
   version: 1; userId: string; attemptId: string; revision: string; reviewedAt: number
   phase: 'review' | 'transferring' | 'confirmed'
+  expiredTransfers?: Array<{ network: Network; idempotencyKey: string; executionId: string; challengeId: string; requestFingerprint: string; units: string; expiredAt: number }>
   rows: Array<{ network: Network; source: Wallet; target: Wallet; units: string }>
   transfers: Partial<Record<Network, { idempotencyKey: string; units: string; state: 'reserved' | 'submitted' | 'confirmed'; requestFingerprint?: string; recoveryAfter?: number; executionId?: string; challengeId?: string; transactionHash?: string; submittedAt?: number; confirmedAt?: number }>>
 }
@@ -44,7 +45,7 @@ export function retainMigrationPlan(current: MigrationPlan | undefined, next: Mi
   if (current.revision === next.revision) return current
   // A timeout is not a failed transfer. Never replace any reserved operation.
   if (current.phase !== 'review' || Object.keys(current.transfers).length) throw new Error('An existing migration must be reconciled before preparing another.')
-  return next
+  return { ...next, ...(current.expiredTransfers?.length ? { expiredTransfers: current.expiredTransfers } : {}) }
 }
 
 export const saveMigrationPlan = (plan: MigrationPlan) => mutateDurableJson<MigrationPlan>(

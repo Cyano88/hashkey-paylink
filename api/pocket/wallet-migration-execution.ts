@@ -20,7 +20,9 @@ export type MigrationExecutionDependencies = {
   challengeFingerprint?(row: Row, idempotencyKey: string): string
   createChallenge(row: Row, idempotencyKey: string): Promise<{ challengeId: string }>
   verifyReceipt(row: Row, transfer: Transfer): Promise<{ transactionHash: string; confirmedAt: number } | null>
-  inspectChallenge?(row: Row, challengeId: string): Promise<'approval_required'|'pending'|'needs_review'>
+  inspectChallenge?(row: Row, challengeId: string): Promise<'approval_required'|'pending'|'needs_review'|'expired'>
+  verifyExpiry?(plan: MigrationPlan, row: Row, transfer: Transfer, createdAt: number): Promise<{ revision: string; checkedAt: number; providerExpired: boolean; ownershipVerified: boolean; noPendingOperations: boolean; sourceUnits: string }>
+  invalidateFeeQuote?(userId: string, network: Network): Promise<void>
   now(): number
 }
 
@@ -133,7 +135,26 @@ export function createMigrationExecutor(io: MigrationExecutionDependencies) {
       if (!intent || intent.idempotencyKey !== transfer.idempotencyKey || intent.metadata.migrationRevision !== context.revision) throw new Error('Migration ledger binding mismatch.')
       if(!transfer.challengeId)return {state:intent.state==='authorized' && !intent.transactionHash && transfer.state==='reserved' && !transfer.transactionHash && transfer.requestFingerprint && io.challengeFingerprint?.(row,transfer.idempotencyKey)===transfer.requestFingerprint ? 'recovery_required' as const : 'needs_review' as const}
       const proof = await io.verifyReceipt(row, transfer)
-      if (!proof) return { state: intent.state==='authorized' && !intent.transactionHash && !transfer.transactionHash && io.inspectChallenge ? await io.inspectChallenge(row,transfer.challengeId) : 'pending' as const }
+      if (!proof) {
+        const previouslyExpired=intent.state==='expired' && intent.failureCode==='MIGRATION_APPROVAL_EXPIRED'
+        const state=(intent.state==='authorized'||previouslyExpired) && !intent.transactionHash && !transfer.transactionHash && io.inspectChallenge ? await io.inspectChallenge(row,transfer.challengeId) : 'pending' as const
+        if(state!=='expired')return {state}
+        if(transfer.state!=='reserved' || transfer.units!==row.units || !transfer.requestFingerprint || !io.challengeFingerprint || io.challengeFingerprint(row,transfer.idempotencyKey)!==transfer.requestFingerprint || !io.verifyExpiry || !io.invalidateFeeQuote)throw new Error('The expired approval needs a verified transfer review before it can be retired.')
+        const check=await io.verifyExpiry(snapshot,row,transfer,intent.createdAt), age=io.now()-check.checkedAt
+        if(check.revision!==context.revision || !Number.isFinite(age) || age<0 || age>30_000 || !check.providerExpired || !check.ownershipVerified || !check.noPendingOperations || check.sourceUnits!==row.units)throw new Error('The approval expired, but transfer activity or the balance still needs reconciliation. No replacement transfer has been created.')
+        // Invalidate the old fee before releasing the reservation. A subsequent
+        // start still requires a new quote, fresh preflight and user approval.
+        await io.invalidateFeeQuote(context.userId,context.network)
+        const expired=previouslyExpired?intent:await io.ledger.update({ownerId:context.userId,intentId:intent.id,state:'expired',expectedState:'authorized',failureCode:'MIGRATION_APPROVAL_EXPIRED'})
+        if(expired.state!=='expired' || expired.failureCode!=='MIGRATION_APPROVAL_EXPIRED' || expired.transactionHash)throw new Error('Migration ledger changed during expiry review.')
+        await io.mutate(context.userId,current=>{
+          const {plan}=owned(current,context), entry=plan.transfers[context.network]
+          if(!entry || entry.executionId!==transfer.executionId || entry.challengeId!==transfer.challengeId || entry.idempotencyKey!==transfer.idempotencyKey || entry.requestFingerprint!==transfer.requestFingerprint || entry.state!=='reserved' || entry.transactionHash)throw new Error('Migration reservation changed during expiry review.')
+          const transfers={...plan.transfers};delete transfers[context.network]
+          return {...plan,phase:Object.keys(transfers).length?'transferring':'review',transfers,expiredTransfers:[...(plan.expiredTransfers??[]),{network:context.network,idempotencyKey:entry.idempotencyKey,executionId:entry.executionId!,challengeId:entry.challengeId!,requestFingerprint:entry.requestFingerprint!,units:entry.units,expiredAt:io.now()}]}
+        })
+        return {state:'review_required' as const}
+      }
       if (!/^0x[0-9a-f]{64}$/i.test(proof.transactionHash) || !Number.isFinite(proof.confirmedAt) || proof.confirmedAt < Math.floor(intent.createdAt / 1000) * 1000 || proof.confirmedAt > io.now()) throw new Error('Invalid migration receipt.')
       if ((transfer.transactionHash && transfer.transactionHash.toLowerCase() !== proof.transactionHash.toLowerCase()) || (intent.transactionHash && intent.transactionHash.toLowerCase() !== proof.transactionHash.toLowerCase())) throw new Error('Migration receipt changed.')
       if (intent.state === 'authorized') await io.ledger.update({ ownerId: context.userId, intentId: intent.id, state: 'submitted', expectedState: 'authorized', transactionHash: proof.transactionHash })

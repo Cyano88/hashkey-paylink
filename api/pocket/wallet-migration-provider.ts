@@ -70,7 +70,7 @@ export function createMigrationProvider(userToken: string, request?: Json) {
       const otherAssets=balances.filter(item=> /[1-9]/.test(item.amount) && String(item.token.tokenAddress??'').toLowerCase()!==tokens[row.network].toLowerCase())
       return {balances,otherAssets}
     },
-    async noPending(row: Row) {
+    async noPending(row: Row, noActivitySince?: number) {
       let path='/v1/w3s/transactions?'+new URLSearchParams({walletIds:row.source.walletId,includeAll:'true',pageSize:'50'})
       const pages=new Set<string>(),seen=new Set<string>()
       while(true) {
@@ -81,6 +81,7 @@ export function createMigrationProvider(userToken: string, request?: Json) {
         for(const tx of data.transactions) {
           if(!uuid(tx?.id)||tx.walletId!==row.source.walletId||tx.blockchain!==chains[row.network]||seen.has(tx.id))throw new Error('Migration transaction history is inconsistent.')
           seen.add(tx.id)
+          if(noActivitySince!==undefined && (!Number.isFinite(noActivitySince) || typeof tx.createDate!=='string' || !Number.isFinite(Date.parse(tx.createDate)) || Date.parse(tx.createDate)>=noActivitySince))return false
           if(!['COMPLETE','FAILED','DENIED','CANCELLED'].includes(tx.state))return false
         }
         const next=migrationNextPage(data,path)
@@ -104,14 +105,17 @@ export function createMigrationProvider(userToken: string, request?: Json) {
       if(!uuid(data.challengeId)) throw new Error('Migration challenge requires reconciliation.')
       return {challengeId:data.challengeId}
     },
-    async inspectChallenge(row: Row,challengeId: string): Promise<'approval_required'|'pending'|'needs_review'> {
+    async inspectChallenge(row: Row,challengeId: string): Promise<'approval_required'|'pending'|'needs_review'|'expired'> {
       if(!uuid(challengeId)) throw new Error('Invalid migration challenge.')
       await own(row)
       const data=await json(row.network,'/v1/w3s/user/challenges/'+encodeURIComponent(challengeId))
       const challenge=data.challenge
       if(!challenge || challenge.id!==challengeId) throw new Error('Migration challenge lookup did not match.')
       if(challenge.errorCode || challenge.errorMessage) {
-        if(String(challenge.errorCode)==='155121') throw new Error('The saved Circle approval expired. No replacement transfer has been created.')
+        if(String(challenge.errorCode)==='155121') {
+          if(challenge.status==='PENDING')return 'expired'
+          throw new Error('Circle reports an expired approval with an uncertain transaction status. Check progress before reviewing another transfer.')
+        }
         const code=String(challenge.errorCode??'')
         throw new Error('Circle could not continue the saved approval'+(/^\d{1,9}$/.test(code)?' (code '+code+')':'')+'. No replacement transfer has been created.')
       }

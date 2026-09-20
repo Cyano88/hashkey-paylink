@@ -54,7 +54,10 @@ let challenge={id,status:'PENDING',correlationIds:[txid]}, transaction={id:txid,
 const inspector=createMigrationProvider('synthetic',async(n,p,b)=>p.includes('/challenges/')?{challenge}:p.endsWith('/'+txid)?{transaction}:json(n,p,b))
 assert.equal(await inspector.inspectChallenge(row,id),'approval_required')
 challenge={...challenge,errorCode:155121}
-await assert.rejects(inspector.inspectChallenge(row,id),/expired/)
+assert.equal(await inspector.inspectChallenge(row,id),'expired')
+challenge.status='IN_PROGRESS'
+await assert.rejects(inspector.inspectChallenge(row,id),/uncertain transaction status/)
+challenge.status='PENDING'
 delete challenge.errorCode;challenge.status='IN_PROGRESS'
 assert.equal(await inspector.inspectChallenge(row,id),'pending')
 challenge.status='PENDING';transaction={...transaction,walletId:'other'}
@@ -105,3 +108,11 @@ assert.equal(await terminal.noPending(row),true)
 const missingPages=createMigrationProvider('synthetic',async()=>({transactions:[]}))
 await assert.rejects(missingPages.noPending(row),/pagination/)
 console.log('PASS: provider Link cursors, final inventory page, pagination scope, later-page pending and unknown states, and missing metadata fail closed.')
+
+// An expired approval can retire only when history is quiet since reservation.
+let historyTx={id:txid,walletId:'source',blockchain:'BASE',state:'COMPLETE',createDate:'2026-01-01T00:00:00Z'}
+const quiet=createMigrationProvider('synthetic',async()=>({transactions:[historyTx],migrationPageLink:null}))
+const since=Date.parse('2026-02-01T00:00:00Z')
+assert.equal(await quiet.noPending(row,since),true)
+for(const change of [{createDate:'2026-02-01T00:00:00Z'},{createDate:undefined},{createDate:'invalid'},{state:'INITIATED'},{state:'STUCK'}]){const old=historyTx;historyTx={...old,...change};assert.equal(await quiet.noPending(row,since),false);historyTx=old}
+console.log('PASS: expiry retirement history blocks recent, pending and undated activity.')

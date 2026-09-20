@@ -3,7 +3,7 @@ import {holdMigrationWallets,withMigrationOperation,releaseUnstartedMigration} f
 import { readLegacyPaymentWallets } from './wallet-migration-history.js'
 import { randomUUID } from 'node:crypto'
 import { parseUnits } from 'viem'
-import { readDurableJson, writeDurableJson, mutateDurableJson } from '../render-durable-store.js'
+import { readDurableJson, writeDurableJson, mutateDurableJson, deleteDurableJson } from '../render-durable-store.js'
 import { circleLinkKey, readCircleLink } from '../privy-circle-link.js'
 import { readFreshMigrationUsdcUnits } from '../evm-balance.js'
 import { consumePocketPaymentApproval } from './payment-security.js'
@@ -58,9 +58,24 @@ export function createPocketMigrationExecutor(input:{ userId:string; userToken:s
     challengeFingerprint:migrationChallengeFingerprint,
     createChallenge:(row,id)=>provider.createChallenge(row,id),
     inspectChallenge:(row,id)=>provider.inspectChallenge(row,id),
+    invalidateFeeQuote:(userId,network)=>deleteDurableJson(quoteKey(userId,network)),
+    verifyExpiry:async(plan,row,transfer,createdAt)=>{
+      const checkedAt=Date.now()
+      if(plan.userId!==input.userId || !Number.isFinite(createdAt) || createdAt<=0 || createdAt>checkedAt)throw new Error('Migration expiry review owner or time does not match.')
+      const link=await readCircleLink(circleLinkKey(input.userId,row.network,'payment'))
+      const expected=input.legacyRecovery?row.target:row.source
+      const ownershipVerified=!!link && link.privyUserId===input.userId && link.chain===row.network && (link.purpose??'payment')==='payment' && link.circleWalletId===expected.walletId && link.circleWalletAddress.toLowerCase()===expected.address.toLowerCase()
+      const [state,noActivity,units]=await Promise.all([provider.inspectChallenge(row,transfer.challengeId!),provider.noPending(row,createdAt-60_000),readFreshMigrationUsdcUnits(row.network,row.source.address as Parameters<typeof readFreshMigrationUsdcUnits>[1])])
+      return {revision:plan.revision,checkedAt,providerExpired:state==='expired',ownershipVerified,noPendingOperations:noActivity,sourceUnits:units.toString()}
+    },
     verifyReceipt:(row,transfer)=>verifyMigrationReceipt(row,transfer,{resolveChallenge:id=>provider.resolveChallenge(row,id)}),
   })
-  return {...executor,start:async(context:Parameters<typeof executor.start>[0],plan:MigrationPlan)=>{
+  return {...executor,reconcile:async(context:Parameters<typeof executor.reconcile>[0],_snapshot:MigrationPlan)=>withMigrationOperation(input.userId,async()=>{
+    const current=await readDurableJson<MigrationPlan>((input.legacyRecovery?'pocket:wallet-recovery-plan:v1:':'pocket:wallet-migration-plan:v1:')+input.userId)
+    if(!current || current.userId!==input.userId || context.userId!==input.userId || current.revision!==context.revision)throw new Error('Migration review changed.')
+    if(!current.transfers[context.network])return {state:'review_required' as const}
+    return executor.reconcile(context,current)
+  }),start:async(context:Parameters<typeof executor.start>[0],plan:MigrationPlan)=>{
     if(input.legacyRecovery)return executor.start(context,plan)
     return withMigrationOperation(input.userId,async()=>{
       await holdMigrationWallets(plan)
