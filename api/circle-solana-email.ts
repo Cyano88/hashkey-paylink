@@ -134,6 +134,9 @@ async function circleJson<T extends Record<string, unknown> = Record<string, unk
     ;(err as Error & { status?: number; code?: number; body?: CircleResponse }).body = body
     throw err
   }
+  if (migrationInternal && (!init.method || init.method === 'GET')) {
+    return { ...body.data, migrationPageLink: res.headers.get('link') } as T
+  }
   return body.data as T
 }
 
