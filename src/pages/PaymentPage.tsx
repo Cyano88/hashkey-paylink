@@ -1,3 +1,4 @@
+import { assertPocketScanPayoutPayable, pocketScanPayoutNeedsReview } from '../pocket/lib/pocketScanPayout'
 import { requestPocketPaymentApproval } from '../pocket/lib/pocketPaymentApproval'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link, useOutletContext, useNavigate } from 'react-router-dom'
@@ -2721,8 +2722,8 @@ export default function PaymentPage({ pocketScan }: { pocketScan?: { params: str
 
   async function prepareNgPosPaycrestOrder(session: CircleEvmEmailSession) {
     if (!isNgPosPaycrestOfframp) return null
-    if (paycrestOrder?.receive_address && paycrestOrder.amount_usdc) return paycrestOrder
-    let settlementIntentId = ngPosPaycrestIntentId
+    if (!pocketScan && paycrestOrder?.receive_address && paycrestOrder.amount_usdc) return paycrestOrder
+    let settlementIntentId = paycrestOrder?.intent_id || ngPosPaycrestIntentId
     setPaycrestPreparing(true)
     setPaycrestStatusText('Preparing Naira payout...')
     try {
@@ -2759,6 +2760,7 @@ export default function PaymentPage({ pocketScan }: { pocketScan?: { params: str
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           action: 'createOfframpOrder',
+          ...(pocketScan ? { ensure_payable: true } : {}),
           intent_id: settlementIntentId,
           refund_address: session.wallet.address,
           payer_wallet: session.wallet.address,
@@ -2768,10 +2770,12 @@ export default function PaymentPage({ pocketScan }: { pocketScan?: { params: str
       })
       const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string }
       if (!response.ok || !data.ok || !data.order) throw new Error(data.error || 'Could not prepare Naira payout.')
+      if (pocketScan) assertPocketScanPayoutPayable(data.order)
+      const needsReview = !!pocketScan && pocketScanPayoutNeedsReview(paycrestOrder, data.order)
       setPaycrestOrder(data.order)
       setPaycrestStatusText('Naira payout ready. Review the bank account, then pay.')
       await refetchCircleWalletBalance()
-      return data.order
+      return needsReview ? null : data.order
     } catch (err) {
       setPaycrestStatusText('')
       setCirclePasskeyError(readableErrorMsg(err, 'Could not prepare Naira payout.'))
@@ -2953,6 +2957,7 @@ export default function PaymentPage({ pocketScan }: { pocketScan?: { params: str
           throw new Error('Your secure checkout session expired. Sign in again before paying.')
         }
         if(pocketScan)await requestPocketPaymentApproval()
+        if (pocketScan && preparedPaycrestOrder) assertPocketScanPayoutPayable(preparedPaycrestOrder)
         const txHash = await sendCircleEvmEmailPayment({
           session,
           recipient: paymentRecipient as `0x${string}`,
