@@ -1,4 +1,5 @@
 import { isAddress } from 'viem'
+import { isEvmReplacementCandidate } from './circleEvmReplacement'
 
 export type CircleEvmWalletRecord = {
   id: string
@@ -40,7 +41,7 @@ function productionChain(blockchain: string): PocketProductionEvmChain | null {
 }
 
 function eligibleWallet(wallet: CircleEvmWalletRecord) {
-  return isAddress(wallet.address)
+  return !isEvmReplacementCandidate(wallet) && isAddress(wallet.address)
     && wallet.accountType?.trim().toUpperCase() === 'SCA'
     && (!wallet.state || wallet.state.trim().toUpperCase() === 'LIVE')
     && productionChain(wallet.blockchain) !== null

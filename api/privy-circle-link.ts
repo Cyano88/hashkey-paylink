@@ -1,3 +1,4 @@
+import { isEvmReplacementCandidate } from '../src/lib/circleEvmReplacement.js'
 import type { Request, Response } from 'express'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
@@ -185,6 +186,9 @@ export async function verifyCircleLinkWallet(input: {
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const wallets = await listWallets(input.userToken, input.chain)
+    if (wallets.some(wallet => wallet.id === input.wallet.id && isEvmReplacementCandidate(wallet))) {
+      throw Object.assign(new Error('Replacement wallets cannot be linked before balance migration is verified.'), { status: 409 })
+    }
     if (input.chain !== 'solana' && blockchainMatchesChain(input.chain, input.wallet.blockchain)) {
       try {
         requireCircleGasStationEvmWallet({

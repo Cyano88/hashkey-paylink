@@ -1,3 +1,4 @@
+import { prepareEvmReplacement } from './circleEvmReplacement'
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
 import { Capacitor } from '@capacitor/core'
 import { takePocketPaymentApproval } from '../pocket/lib/pocketPaymentApproval'
@@ -1524,4 +1525,25 @@ export async function signCircleArcStreamCancel(params: {
     throw new Error('Circle did not return a usable EVM signature for this cancellation.')
   }
   return signature
+}
+
+
+// Operator preparation only. The caller retains attemptId for safe retries.
+// Returns candidate metadata; never saves it as the active wallet session.
+export async function prepareCircleEvmReplacement(session: CircleEvmEmailSession, attemptId: string, privyAccessToken: string, shouldContinue: () => boolean = () => true) {
+  if (session.chain !== 'base' || session.wallet.blockchain !== 'BASE') throw new Error('Unlock the current Base wallet first.')
+  const sdk = authenticatedSdk(session)
+  const checkActive = () => { if (!shouldContinue()) throw new Error('Wallet preparation was closed.') }
+  checkActive()
+  return prepareEvmReplacement(attemptId, {
+    list: async () => (await circleWalletApi<{ wallets: CircleEvmWallet[] }>({
+      action: 'listEvmReplacement', userToken: session.userToken, attemptId,
+      walletId: session.wallet.id, walletAddress: session.wallet.address,
+    }, { privyAccessToken })).wallets,
+    create: request => { checkActive(); return circleWalletApi<{ challengeId?: string }>({
+      action: 'prepareEvmReplacement', userToken: session.userToken, attemptId: request.idempotencyKey,
+      walletId: session.wallet.id, walletAddress: session.wallet.address,
+    }, { privyAccessToken }) },
+    approve: challengeId => { checkActive(); return executeChallengeWithTimeout(sdk, challengeId, 'Wallet preparation timed out. Recheck this attempt before trying again.') },
+  })
 }

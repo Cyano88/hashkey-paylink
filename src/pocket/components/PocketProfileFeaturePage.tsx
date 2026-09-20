@@ -1,3 +1,4 @@
+import PocketWalletPreparation from './PocketWalletPreparation'
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Bell, Loader2 } from './PocketIcons'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
@@ -9,7 +10,7 @@ import { updatePocketPaymentSecurity, verifyPocketPaymentPin } from '../api/pock
 import { disablePocketPaymentBiometrics, enablePocketPaymentBiometrics, pocketPaymentBiometricsAvailable, pocketPaymentBiometricsEnabled } from '../lib/pocketPaymentBiometrics'
 import { reconnectPocketBaseWallet } from '../controllers/usePocketWalletController'
 
-export type PocketProfileFeature = 'rates' | 'limits' | 'notifications' | 'security'
+export type PocketProfileFeature = 'rates' | 'limits' | 'notifications' | 'security' | 'wallet-setup'
 
 function ngn(value: number, maximumFractionDigits = 0) {
   return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits }).format(value)
@@ -200,10 +201,11 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
     }
   }
   useEffect(() => { if (feature === 'limits') void refreshLimits() }, [feature]) // eslint-disable-line react-hooks/exhaustive-deps
-  const title = feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
+  const title = feature === 'wallet-setup' ? 'Wallet preparation' : feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
   return <div className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white'>
     <main className='mx-auto min-h-full w-full max-w-[480px] px-5 pb-[max(2.5rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]'>
       <header className='flex h-12 items-center justify-between'><button type='button' onClick={onBack} className='flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]' aria-label='Back'><ArrowLeft className='h-4 w-4' /></button><p className='text-sm font-black'>{title}</p><span className='h-10 w-10' /></header>
+      {feature === 'wallet-setup' && <PocketWalletPreparation key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={setCurrency} />}
       {feature === 'limits' && <LimitsPanel usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
       {feature === 'notifications' && <NotificationsPanel enabled={pushEnabled} onChange={enabled => { setPocketPushEnabled(enabled); setPushEnabled(enabled) }} />}

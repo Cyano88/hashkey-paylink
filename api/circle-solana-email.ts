@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { consumePocketPaymentApproval, requiresPocketPaymentApproval } from './pocket/payment-security.js'
 import crypto from 'crypto'
+import { isEvmReplacementCandidate, replacementBatchRequest } from '../src/lib/circleEvmReplacement.js'
 import { PublicKey } from '@solana/web3.js'
 import { encodeFunctionData, isAddress, parseAbi } from 'viem'
 import { CCTP_DOMAIN, CCTP_FORWARD_HOOK, CCTP_TOKEN_MESSENGER_V2, cctpForwardHookForSolana, cctpMintRecipient, readCctpForwardQuote, solanaRecipient, type PocketBridgeNetwork } from './pocket/cctp.js'
@@ -173,6 +174,7 @@ function evmWallet(wallets: CircleUserWallet[], chain: keyof typeof EVM_CHAINS) 
     arc: ['ARC'],
   }
   return wallets.find((wallet) => {
+    if (isEvmReplacementCandidate(wallet)) return false
     const blockchain = String(wallet.blockchain ?? '').trim().toUpperCase()
     const accountType = String(wallet.accountType ?? '').trim().toUpperCase()
     const state = String(wallet.state ?? '').trim().toUpperCase()
@@ -184,6 +186,7 @@ function evmWallet(wallets: CircleUserWallet[], chain: keyof typeof EVM_CHAINS) 
 }
 
 export type CircleUserWallet = {
+  refId?: string
   id: string
   address: string
   blockchain: string
@@ -442,6 +445,29 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...data })
     }
 
+    if (action === 'prepareEvmReplacement' || action === 'listEvmReplacement') {
+      if (!/^Bearer .+/i.test(String(req.headers.authorization ?? ''))) return res.status(401).json({ ok: false, error: 'Sign in to prepare replacement wallets.' })
+      const { userToken, attemptId, walletId, walletAddress } = params
+      if (!userToken || !attemptId || !walletId || !walletAddress) return res.status(400).json({ ok: false, error: 'Missing replacement preparation details.' })
+      let body: ReturnType<typeof replacementBatchRequest>
+      try { body = replacementBatchRequest(attemptId) } catch { return res.status(400).json({ ok: false, error: 'Invalid replacement attempt ID.' }) }
+      const identity = await verifiedPrivyUser(req)
+      const link = await findPaymentCircleLinkByWallet(walletId, walletAddress)
+      if (!link || link.privyUserId !== identity.userId || link.chain !== 'base') return res.status(403).json({ ok: false, error: 'Reconnect your current Pocket Base wallet first.' })
+      const owned = await readCircleUserWallet(userToken, 'base', walletId)
+      if (!owned || owned.state !== 'LIVE' || isEvmReplacementCandidate(owned) || owned.blockchain !== 'BASE' || owned.accountType !== 'SCA' || owned.address.toLowerCase() !== link.circleWalletAddress.toLowerCase()) return res.status(403).json({ ok: false, error: 'Circle could not verify the current wallet.' })
+      if (action === 'listEvmReplacement') {
+        const data = await circleJson<{ wallets: CircleUserWallet[] }>('/v1/w3s/wallets?pageSize=50&refId=' + encodeURIComponent(body.metadata[0].refId), {
+          method: 'GET', userToken, apiKey: circleApiKey({ chain: 'base' }),
+        })
+        return res.json({ ok: true, wallets: data.wallets ?? [] })
+      }
+      const data = await circleJson('/v1/w3s/user/wallets', {
+        method: 'POST', userToken, apiKey: circleApiKey({ chain: 'base' }), body: JSON.stringify(body),
+      })
+      return res.json({ ok: true, ...data })
+    }
+
     if (action === 'createUnifiedEvmWallets') {
       const { userToken } = params
       if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
@@ -465,7 +491,8 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'listWallets') {
       const { userToken, chain } = params
       if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
-      const wallets = await listCircleUserWallets(userToken, chain)
+      // Older installed clients must not discover candidates through normal recovery.
+      const wallets = (await listCircleUserWallets(userToken, chain)).filter(wallet => !isEvmReplacementCandidate(wallet))
       const wallet = chain === 'base' || chain === 'arbitrum' || chain === 'arc'
         ? evmWallet(wallets, chain)
         : solanaWallet(wallets)

@@ -34,7 +34,7 @@ export default function PocketProfilePage() {
   const [deleteError, setDeleteError] = useState('')
   const [feature, setFeature] = useState<PocketProfileFeature | null>(() => {
     const requested = new URLSearchParams(window.location.search).get('feature')
-    return requested === 'rates' || requested === 'limits' || requested === 'notifications' || requested === 'security' ? requested : null
+    return requested === 'rates' || requested === 'limits' || requested === 'notifications' || requested === 'security' || requested === 'wallet-setup' ? requested : null
   })
   const quickApprovalAvailable = false
   const quickApprovalBusy = false
