@@ -59,7 +59,7 @@ export function validateRead(method: unknown, input: unknown): { method: string;
 }
 
 // Limits are per server process. This endpoint is not a general developer RPC product.
-export function createReadService(fetcher: typeof fetch = fetch, now = Date.now) {
+export function createReadService(fetcher: typeof fetch = fetch, now = Date.now, options: { publicOnly?: boolean } = {}) {
   const cache = new Map<string, { expires: number; result: unknown }>()
   const pending = new Map<string | symbol, Promise<unknown>>()
   const cooldown = new Map<string, number>()
@@ -111,7 +111,7 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now)
     const pendingKey = signal ? Symbol(key) : key
     if (pending.size >= 16) throw new ReadRpcError(-32005, 'Read service busy. Try again shortly.')
     const work = (async () => {
-      const configured = process.env[config.env]?.trim() || config.fallback
+      const configured = options.publicOnly ? config.fallback : process.env[config.env]?.trim() || config.fallback
       const primary = (cooldown.get(network) ?? 0) > now() ? config.fallback : configured
       let result: unknown
       try { result = await upstream(primary, method, validated.params, signal) }
@@ -134,6 +134,8 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now)
   }
 }
 export const readEvmRpc = createReadService()
+// Internal independent reader; endpoints remain pinned to the network allowlist.
+export const readPublicEvmRpc = createReadService(fetch, Date.now, { publicOnly: true })
 
 export function createReadHandler(read = readEvmRpc) {
  return async function handler(req: Request, res: Response) {

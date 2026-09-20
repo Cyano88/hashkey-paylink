@@ -46,3 +46,14 @@ const work=Array.from({length:16},(_,i)=>busy('arc','eth_getTransactionReceipt',
 await assert.rejects(()=>busy('arc','eth_getTransactionReceipt',['0x'+'ff'.repeat(32)]),e=>e.code===-32005)
 release();await Promise.all(work);assert.equal(inflight,16)
 console.log('EVM read scope, exact units, cache, deduplication, cooldown, sanitized errors and concurrency: passed')
+
+const priorPrivate=process.env.PRIVATE_RPC_URL
+try {
+ process.env.PRIVATE_RPC_URL='https://private.invalid/must-not-be-used'
+ const destinations=[]
+ const publicOnly=createReadService(async url=>{destinations.push(url);return Response.json({result:{number:'0x1'}})},Date.now,{publicOnly:true})
+ await publicOnly('base','eth_getBlockByNumber',['finalized',false])
+ assert.deepEqual(destinations,['https://mainnet.base.org'])
+ await assert.rejects(publicOnly('base','eth_sendRawTransaction',['0x']),error=>error.code===-32601)
+} finally {if(priorPrivate===undefined)delete process.env.PRIVATE_RPC_URL;else process.env.PRIVATE_RPC_URL=priorPrivate}
+console.log('PASS: independent public reader uses pinned network endpoint and retains read-only method restrictions.')

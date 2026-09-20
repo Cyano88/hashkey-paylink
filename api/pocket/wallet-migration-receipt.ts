@@ -1,4 +1,4 @@
-import { readEvmRpc } from '../evm-read.js'
+import { readEvmRpc, readPublicEvmRpc } from '../evm-read.js'
 import type { MigrationPlan } from './wallet-migration-plan.js'
 
 type Row = MigrationPlan['rows'][number]
@@ -34,6 +34,7 @@ export async function verifyMigrationReceipt(row: Row, transfer: Transfer, io: {
   // Resolve through the saved challenge in the authenticated Circle user session.
   resolveChallenge(challengeId: string): Promise<{ walletId: string; transactionHash: string } | null>
   rpc?: typeof readEvmRpc
+  publicRpc?: typeof readPublicEvmRpc
 }) {
   if (!transfer.challengeId) return null
   const transaction = await io.resolveChallenge(transfer.challengeId)
@@ -45,5 +46,19 @@ export async function verifyMigrationReceipt(row: Row, transfer: Transfer, io: {
     rpc(row.network, 'eth_getBlockByNumber', [receipt.blockNumber, false]),
     rpc(row.network, 'eth_getBlockByNumber', ['finalized', false]),
   ])
-  return inspectMigrationReceipt(row, transaction.transactionHash, receipt, block as Block, finalized as Block)
+  const proof = inspectMigrationReceipt(row, transaction.transactionHash, receipt, block as Block, finalized as Block)
+  if (proof) return proof
+  // A healthy RPC can still lag on the finalized tag. Only try the independent
+  // reader when the exact canonical transfer is valid and finality height lags.
+  const primaryBlock = block as Block | null, primaryFinalized = finalized as Block | null
+  if (!primaryFinalized || !quantity(primaryFinalized.number) || BigInt(primaryFinalized.number!) >= BigInt(receipt.blockNumber!)) return null
+  if (!inspectMigrationReceipt(row, transaction.transactionHash, receipt, primaryBlock, primaryBlock)) return null
+  const independent = io.publicRpc ?? readPublicEvmRpc
+  const [publicReceipt, publicBlock, publicFinalized] = await Promise.all([
+    independent(row.network, 'eth_getTransactionReceipt', [transaction.transactionHash]),
+    independent(row.network, 'eth_getBlockByNumber', [receipt.blockNumber, false]),
+    independent(row.network, 'eth_getBlockByNumber', ['finalized', false]),
+  ]) as [Receipt | null, Block | null, Block | null]
+  if (publicBlock?.hash?.toLowerCase() !== primaryBlock?.hash?.toLowerCase()) return null
+  return inspectMigrationReceipt(row, transaction.transactionHash, publicReceipt, publicBlock, publicFinalized)
 }

@@ -23,3 +23,18 @@ const proof=await verifyMigrationReceipt(row,{challengeId:'saved'},{resolveChall
 assert.equal(proof.transactionHash,tx)
 assert.equal(methods.length,3)
 console.log('PASS: exact finalized transfer, correct token/sender/recipient, reverted receipt, reorg, wrong transaction, Arc precision, challenge ownership and bounded RPC reads. Synthetic only.')
+
+let publicCalls=0
+const stalePrimary=async(_network,method,params)=>method==='eth_getTransactionReceipt'?receipt:params[0]==='finalized'?{...final,number:'0x9'}:block
+const freshPublic=async(_network,method,params)=>{publicCalls++;return method==='eth_getTransactionReceipt'?receipt:params[0]==='finalized'?final:block}
+const finalityIo={resolveChallenge:async()=>({walletId:'old',transactionHash:tx}),rpc:stalePrimary,publicRpc:freshPublic}
+assert.equal((await verifyMigrationReceipt(row,{challengeId:'saved'},finalityIo)).transactionHash,tx)
+assert.equal(publicCalls,3)
+assert.equal(await verifyMigrationReceipt(row,{challengeId:'saved'},{...finalityIo,publicRpc:stalePrimary}),null)
+assert.equal(await verifyMigrationReceipt(row,{challengeId:'saved'},{...finalityIo,publicRpc:async(n,m,p)=>m==='eth_getBlockByNumber'&&p[0]!=='finalized'?{...block,hash:tx}:freshPublic(n,m,p)}),null)
+assert.equal(await verifyMigrationReceipt(row,{challengeId:'saved'},{...finalityIo,publicRpc:async(n,m,p)=>m==='eth_getTransactionReceipt'?{...receipt,logs:[]}:freshPublic(n,m,p)}),null)
+await assert.rejects(verifyMigrationReceipt(row,{challengeId:'saved'},{...finalityIo,publicRpc:async()=>{throw Error('Provider unavailable')}}),/Provider unavailable/)
+publicCalls=0
+assert.equal(await verifyMigrationReceipt(row,{challengeId:'saved'},{...finalityIo,rpc:async(n,m,p)=>m==='eth_getTransactionReceipt'?{...receipt,logs:[]}:stalePrimary(n,m,p)}),null)
+assert.equal(publicCalls,0,'invalid primary transfer cannot trigger alternative confirmation')
+console.log('PASS: lagging finalized tag uses independent canonical receipt and finalized height; both lagging, reorg, wrong transfer, outage and invalid primary evidence stay blocked.')
