@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { consumePocketPaymentApproval, requiresPocketPaymentApproval } from './pocket/payment-security.js'
 import crypto from 'crypto'
-import { isEvmReplacementCandidate, replacementBatchRequest } from '../src/lib/circleEvmReplacement.js'
+import { inspectEvmReplacement, isEvmReplacementCandidate, replacementBatchRequest } from '../src/lib/circleEvmReplacement.js'
 import { PublicKey } from '@solana/web3.js'
 import { encodeFunctionData, isAddress, parseAbi } from 'viem'
 import { CCTP_DOMAIN, CCTP_FORWARD_HOOK, CCTP_TOKEN_MESSENGER_V2, cctpForwardHookForSolana, cctpMintRecipient, readCctpForwardQuote, solanaRecipient, type PocketBridgeNetwork } from './pocket/cctp.js'
@@ -10,7 +10,7 @@ import {
   type CircleGasStationEvmChain,
 } from './circle-evm-gas-station.js'
 import { requireCircleSolanaGasStationWallet } from './circle-solana-gas-station.js'
-import { findPaymentCircleLinkByWallet, verifiedPrivyUser } from './privy-circle-link.js'
+import { circleLinkKey, readCircleLink, findPaymentCircleLinkByWallet, verifiedPrivyUser } from './privy-circle-link.js'
 
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
@@ -445,7 +445,7 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...data })
     }
 
-    if (action === 'prepareEvmReplacement' || action === 'listEvmReplacement') {
+    if (action === 'prepareEvmReplacement' || action === 'listEvmReplacement' || action === 'reviewEvmReplacement') {
       if (!/^Bearer .+/i.test(String(req.headers.authorization ?? ''))) return res.status(401).json({ ok: false, error: 'Sign in to prepare replacement wallets.' })
       const { userToken, attemptId, walletId, walletAddress } = params
       if (!userToken || !attemptId || !walletId || !walletAddress) return res.status(400).json({ ok: false, error: 'Missing replacement preparation details.' })
@@ -456,10 +456,26 @@ export default async function handler(req: Request, res: Response) {
       if (!link || link.privyUserId !== identity.userId || link.chain !== 'base') return res.status(403).json({ ok: false, error: 'Reconnect your current Pocket Base wallet first.' })
       const owned = await readCircleUserWallet(userToken, 'base', walletId)
       if (!owned || owned.state !== 'LIVE' || isEvmReplacementCandidate(owned) || owned.blockchain !== 'BASE' || owned.accountType !== 'SCA' || owned.address.toLowerCase() !== link.circleWalletAddress.toLowerCase()) return res.status(403).json({ ok: false, error: 'Circle could not verify the current wallet.' })
-      if (action === 'listEvmReplacement') {
+      if (action === 'listEvmReplacement' || action === 'reviewEvmReplacement') {
         const data = await circleJson<{ wallets: CircleUserWallet[] }>('/v1/w3s/wallets?pageSize=50&refId=' + encodeURIComponent(body.metadata[0].refId), {
           method: 'GET', userToken, apiKey: circleApiKey({ chain: 'base' }),
         })
+        if (action === 'reviewEvmReplacement') {
+          const candidates = inspectEvmReplacement((data.wallets ?? []) as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[], attemptId)
+          if (candidates.status !== 'matching') return res.status(409).json({ ok: false, error: 'Verify all three replacement wallets before reviewing balances.' })
+          const { readPocketNetworkBalance } = await import('./pocket/balances.js')
+          const rows = await Promise.all((['base', 'arbitrum', 'arc'] as const).map(async network => {
+            const source = await readCircleLink(circleLinkKey(identity.userId, network, 'payment'))
+            if (!source) return { network, balance: 0, status: 'ok' }
+            if (source.privyUserId !== identity.userId || source.chain !== network) throw new Error('Wallet review ownership mismatch.')
+            try {
+              const balance = await readPocketNetworkBalance(network, source.circleWalletAddress)
+              if (!Number.isFinite(balance) || balance < 0) throw new Error('Invalid balance')
+              return { network, balance, status: 'ok' }
+            } catch { return { network, balance: null, status: 'unavailable' } }
+          }))
+          return res.json({ ok: true, phase: 'review', rows, transferAvailable: false })
+        }
         return res.json({ ok: true, wallets: data.wallets ?? [] })
       }
       const data = await circleJson('/v1/w3s/user/wallets', {
