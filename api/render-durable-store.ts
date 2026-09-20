@@ -135,3 +135,18 @@ export async function mutateDurableJson<T>(key: string, mutate: (current: T | un
 export async function queryDurablePostgres<T extends pg.QueryResultRow = pg.QueryResultRow>(text: string, values: unknown[] = []) {
   return requirePool().query<T>(text, values)
 }
+
+// Shared transaction boundary for wallet links and their durable migration journal.
+export async function withDurablePostgresTransaction<T>(run: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  await ensureSchema()
+  const client = await requirePool().connect()
+  try {
+    await client.query('begin')
+    const result = await run(client)
+    await client.query('commit')
+    return result
+  } catch (error) {
+    await client.query('rollback').catch(() => undefined)
+    throw error
+  } finally { client.release() }
+}

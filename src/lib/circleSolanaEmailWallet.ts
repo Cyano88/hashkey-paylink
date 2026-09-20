@@ -489,7 +489,7 @@ export async function sendCircleSolanaTransfer(params: {
   try {
     result = await withTimeout(executeChallenge(sdk, challenge.challengeId), 120_000, 'Payment confirmation is taking longer than usual.')
   } catch (reason) {
-    if (isCircleCancellationError(reason)) throw reason
+    if (reason instanceof Error && /\bcancel(?:led|ed)\b/i.test(reason.message)) throw reason
     const transactionId = await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId, 8_000).catch(() => null)
     const txHash = transactionId ? await pollCircleSolanaTransaction(params.session.userToken, transactionId, 8_000).catch(() => null) : null
     if (transactionId || txHash) {

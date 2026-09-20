@@ -1,0 +1,24 @@
+﻿import { activateMigration } from './wallet-migration-activation.js'
+import { createMigrationProvider } from './wallet-migration-provider.js'
+import { readFreshMigrationUsdcUnits } from '../evm-balance.js'
+import { paymentExecutionRepository } from './payment-execution-intents.js'
+import { holdMigrationWallets, withMigrationOperation, releaseUnstartedMigration } from './wallet-migration-guard.js'
+import type { MigrationPlan } from './wallet-migration-plan.js'
+export async function activateVerifiedMigration(plan:MigrationPlan,userToken:string) {
+ return withMigrationOperation(plan.userId,async()=>{
+  await holdMigrationWallets(plan)
+  try {
+   return await activateMigration(plan,{verify:async current=>{
+    const checkedAt=Date.now(),provider=createMigrationProvider(userToken)
+    const [checks,intents]=await Promise.all([
+     Promise.all(current.rows.map(async row=>{
+      const [units,inventory,pending]=await Promise.all([readFreshMigrationUsdcUnits(row.network,row.source.address as `0x${string}`),provider.inventory(row),provider.noPending(row)])
+      return {empty:units===0n,accounted:inventory.otherAssets.length===0,noPending:pending}
+     })),
+     paymentExecutionRepository.listOwned(current.userId,undefined,['prepared','authorized','submitted','processing','needs_review']),
+    ])
+    return {revision:current.revision,checkedAt,oldBalancesEmpty:checks.every(c=>c.empty),assetsAccountedFor:checks.every(c=>c.accounted),noPendingOperations:checks.every(c=>c.noPending)&&!intents.some(i=>current.rows.some(r=>i.sourceNetwork===r.network||i.settlementNetwork===r.network)),legacyAccessReady:true}
+   }})
+  } catch(error){await releaseUnstartedMigration(plan);throw error}
+ })
+}

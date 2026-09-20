@@ -1,3 +1,4 @@
+import { readLegacyPaymentWallets } from './wallet-migration-history.js'
 import { Connection, PublicKey } from '@solana/web3.js'
 import { readEvmRpc } from '../evm-read.js'
 import { solanaReadFetch } from '../solana-read.js'
@@ -259,4 +260,10 @@ export async function readPocketLinkedWalletAddresses(ownerId: string) {
     link: await readCircleLink(circleLinkKey(ownerId, network, 'payment')),
   })))
   return links.flatMap(({ network, link }) => link ? [{ network, walletAddress: link.circleWalletAddress }] : [])
+}
+
+// Durable purchase lookup only. Do not add legacy wallets to automatic RPC scans.
+export async function readPocketPurchaseWalletAddresses(ownerId: string) {
+  const [active, legacy] = await Promise.all([readPocketLinkedWalletAddresses(ownerId), readLegacyPaymentWallets(ownerId)])
+  return [...new Set([...active, ...legacy].map(row => row.network === 'solana' ? row.walletAddress : row.walletAddress.toLowerCase()))]
 }

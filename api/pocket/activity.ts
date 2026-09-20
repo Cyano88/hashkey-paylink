@@ -9,7 +9,7 @@ import {
   type PocketActivityRow,
   type PocketErrorCode,
 } from '../../src/pocket/lib/pocketSchemas.js'
-import { readPocketLinkedWalletAddresses, readPocketWalletChainActivity } from './wallet-chain-activity.js'
+import { readPocketPurchaseWalletAddresses, readPocketWalletChainActivity } from './wallet-chain-activity.js'
 import { createPocketBillsStore, PocketBillsStoreError, type PocketBillsIntent } from './bills-store.js'
 import { readVtpassPhase0Config } from '../vtpass-config.js'
 import { listRegisteredPaymentsForEventIds, paymentReceiptId } from '../event-registry.js'
@@ -336,7 +336,7 @@ export default createPocketActivityHandler({
     limit: options?.recent ? 8 : 100,
   }),
   readActions: (ownerId, options) => listCirclePocketActions(ownerId, options?.recent ? 20 : 500),
-  readWalletAddresses: async ownerId => (await readPocketLinkedWalletAddresses(ownerId)).map(item => item.walletAddress),
+  readWalletAddresses: readPocketPurchaseWalletAddresses,
   readExternalPayments: async walletAddresses => {
     const matches = await Promise.all(walletAddresses.map(walletAddress =>
       paymentExecutionRepository.listByMetadata('payerWallet', walletAddress, ['hosted_checkout', 'service_funding'])

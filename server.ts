@@ -1,3 +1,4 @@
+import pocketMigrationLegacyFlowHandler from './api/pocket/wallet-migration-legacy-flow.js'
 /**
  * Express server for Render deployment.
  *
@@ -97,6 +98,7 @@ import pocketArcSwapHandler from './api/pocket/arc-swap.js'
 import pocketSolanaRpcHandler from './api/pocket/solana-rpc.js'
 import pocketBalancesHandler from './api/pocket/balances.js'
 import pocketWalletUpdateStatusHandler from './api/pocket/wallet-update-status.js'
+import pocketMigrationFlowHandler from './api/pocket/wallet-migration-flow.js'
 import pocketFxQuoteHandler from './api/pocket/fx-quote.js'
 import pocketSpendingLimitsHandler from './api/pocket/spending-limits.js'
 import pocketRecipientBalanceHandler from './api/pocket/recipient-balance.js'
@@ -338,6 +340,8 @@ app.all('/api/pocket/bridge/solana/submit', relayLimiter, pocketSolanaCctpSubmit
 app.all('/api/pocket/wallets',           readLimiter, pocketWalletsHandler)
 app.all('/api/pocket/balances',          readLimiter, pocketBalancesHandler)
 app.all('/api/pocket/wallet-update/status', readLimiter, pocketWalletUpdateStatusHandler)
+app.all('/api/pocket/wallet-update/flow', strictLimiter, pocketMigrationFlowHandler)
+app.all('/api/pocket/wallet-update/recovery', strictLimiter, pocketMigrationLegacyFlowHandler)
 app.all('/api/pocket/fx-quote',          readLimiter, pocketFxQuoteHandler)
 app.get('/api/pocket/spending-limits',   readLimiter, pocketSpendingLimitsHandler)
 app.all('/api/pocket/balances/recipient', readLimiter, pocketRecipientBalanceHandler)

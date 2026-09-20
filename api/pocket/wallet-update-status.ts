@@ -9,7 +9,7 @@ export function migrationActivationComplete(userId: string, record: PocketWallet
   return networks.every((network,index) => {
     const target = record.targets?.[network]
     const link = links[index]
-    return Boolean(target && link && link.privyUserId === userId && link.chain === network && link.circleWalletId === target.walletId && link.circleWalletAddress.toLowerCase() === target.address.toLowerCase())
+    return Boolean(target && link && link.privyUserId === userId && link.chain === network && (link.purpose ?? 'payment') === 'payment' && link.circleWalletId === target.walletId && link.circleWalletAddress.toLowerCase() === target.address.toLowerCase())
   })
 }
 export default async function handler(req: Request, res: Response) {

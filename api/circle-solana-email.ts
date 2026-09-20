@@ -1,3 +1,4 @@
+import { withOrdinaryWalletMutation } from './pocket/wallet-migration-guard.js'
 import type { Request, Response } from 'express'
 import { consumePocketPaymentApproval, requiresPocketPaymentApproval } from './pocket/payment-security.js'
 import crypto from 'crypto'
@@ -97,6 +98,8 @@ function circleHeaders(userToken?: string, apiKey = circleApiKey()) {
 }
 
 type CircleInit = {
+  migrationInternal?: boolean
+  signal?: AbortSignal
   method?: string
   body?: string
   userToken?: string
@@ -105,7 +108,11 @@ type CircleInit = {
 }
 
 async function circleJson<T extends Record<string, unknown> = Record<string, unknown>>(path: string, init: CircleInit = {}) {
-  const { apiKey, ...requestInit } = init
+  const { apiKey, migrationInternal, ...requestInit } = init
+  if(!migrationInternal && init.method==='POST' && /^\/v1\/w3s\/user\/(transactions|sign)/.test(path) && init.body) {
+    const request=JSON.parse(init.body)
+    if(typeof request.walletId==='string' && request.walletId)return withOrdinaryWalletMutation(request.walletId,()=>circleJson<T>(path,{...init,migrationInternal:true,signal:init.signal??AbortSignal.timeout(15_000)}))
+  }
   const res = await fetch(`${circleBaseUrl()}${path}`, {
     ...requestInit,
     headers: {
@@ -445,6 +452,20 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...data })
     }
 
+    if (action === 'restoreActivatedEvmWallets') {
+      res.setHeader('Cache-Control', 'no-store')
+      if (!/^Bearer .+/i.test(String(req.headers.authorization ?? ''))) return res.status(401).json({ ok: false, error: 'Sign in to restore your Pocket wallets.' })
+      const identity = await verifiedPrivyUser(req)
+      const { userToken } = params
+      if (!userToken || userToken.length > 8_000) return res.status(400).json({ ok: false, error: 'A valid Circle wallet session is required.' })
+      const { readPocketWalletUpdate } = await import('./pocket/wallet-update-state.js')
+      const { restoreActivatedMigrationWallets } = await import('./pocket/wallet-migration-session.js')
+      const record = await readPocketWalletUpdate(identity.userId)
+      const links = await Promise.all((['base', 'arbitrum', 'arc'] as const).map(network => readCircleLink(circleLinkKey(identity.userId, network, 'payment'))))
+      const wallets = await restoreActivatedMigrationWallets({ userId: identity.userId, record, links, readOwnedWallet: (network, id) => readCircleUserWallet(userToken, network, id) })
+      return res.json({ ok: true, wallets })
+    }
+
     if (action === 'prepareEvmReplacement' || action === 'listEvmReplacement' || action === 'reviewEvmReplacement') {
       if (!/^Bearer .+/i.test(String(req.headers.authorization ?? ''))) return res.status(401).json({ ok: false, error: 'Sign in to prepare replacement wallets.' })
       const { userToken, attemptId, walletId, walletAddress } = params
@@ -463,17 +484,29 @@ export default async function handler(req: Request, res: Response) {
         if (action === 'reviewEvmReplacement') {
           const candidates = inspectEvmReplacement((data.wallets ?? []) as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[], attemptId)
           if (candidates.status !== 'matching') return res.status(409).json({ ok: false, error: 'Verify all three replacement wallets before reviewing balances.' })
-          const { readPocketNetworkBalance } = await import('./pocket/balances.js')
-          const rows = await Promise.all((['base', 'arbitrum', 'arc'] as const).map(async network => {
+          const { readFreshMigrationUsdcUnits } = await import('./evm-balance.js')
+          const { buildMigrationPlan, saveMigrationPlan, migrationNetworks, existingMigrationReview } = await import('./pocket/wallet-migration-plan.js')
+          const {readDurableJson}=await import('./render-durable-store.js')
+          const saved=await readDurableJson<import('./pocket/wallet-migration-plan.js').MigrationPlan>('pocket:wallet-migration-plan:v1:'+identity.userId)
+          const resumed=existingMigrationReview(saved,identity.userId,attemptId,Object.values(candidates.wallets))
+          if(resumed)return res.json({ok:true,...resumed})
+          const links = {} as Record<'base' | 'arbitrum' | 'arc', import('./privy-circle-link.js').CircleLinkRecord | null>
+          const units = {} as Record<'base' | 'arbitrum' | 'arc', bigint>
+          const rows = await Promise.all(migrationNetworks.map(async network => {
             const source = await readCircleLink(circleLinkKey(identity.userId, network, 'payment'))
-            if (!source) return { network, balance: 0, status: 'ok' }
-            if (source.privyUserId !== identity.userId || source.chain !== network) throw new Error('Wallet review ownership mismatch.')
+            links[network] = source
+            // A missing source is unknown, never evidence of an empty wallet.
+            if (!source) return { network, balance: null, status: 'unavailable' }
+            if (source.privyUserId !== identity.userId || source.chain !== network || (source.purpose ?? 'payment') !== 'payment') throw new Error('Wallet review ownership mismatch.')
             try {
-              const balance = await readPocketNetworkBalance(network, source.circleWalletAddress)
-              if (!Number.isFinite(balance) || balance < 0) throw new Error('Invalid balance')
-              return { network, balance, status: 'ok' }
+              const exact = await readFreshMigrationUsdcUnits(network, source.circleWalletAddress as `0x${string}`)
+              units[network] = exact
+              return { network, balance: Number(exact) / 1_000_000, amountUnits: exact.toString(), status: 'ok' }
             } catch { return { network, balance: null, status: 'unavailable' } }
           }))
+          if (rows.every(row => row.status === 'ok')) {
+            await saveMigrationPlan(buildMigrationPlan({ userId: identity.userId, attemptId, wallets: Object.values(candidates.wallets), links, units }))
+          }
           return res.json({ ok: true, phase: 'review', rows, transferAvailable: false })
         }
         return res.json({ ok: true, wallets: data.wallets ?? [] })
@@ -1089,4 +1122,10 @@ export async function readCircleArcSwapChallenge(input: { userToken: string; wal
   if (!tx || tx.walletId !== input.walletId || tx.blockchain !== 'ARC') return { status: 'pending' as const }
   if (String(tx.state ?? tx.status).toUpperCase() === 'FAILED') return { status: 'failed' as const }
   return { status: 'pending' as const, txHash: typeof tx.txHash === 'string' ? tx.txHash : undefined }
+}
+
+// Internal migration transport. HTTP callers cannot supply these paths.
+export async function circleMigrationRequest<T extends Record<string, unknown>>(userToken: string, chain: CircleGasStationEvmChain, path: string, body?: Record<string, unknown>) {
+  if (!userToken || userToken.length > 8_000 || !path.startsWith('/v1/w3s/')) throw new Error('Invalid migration provider request.')
+  return circleJson<T>(path, { migrationInternal:true, method: body ? 'POST' : 'GET', signal: AbortSignal.timeout(15_000), userToken, apiKey: circleApiKey({chain}), ...(body ? {body: JSON.stringify(body)} : {}) })
 }

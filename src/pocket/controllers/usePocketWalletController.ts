@@ -4,6 +4,7 @@ import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
   resumeCircleArcMainnetWallet,
+  restoreActivatedCircleEvmSession,
   type CircleEvmEmailSession,
 } from '../../lib/circleEvmEmailWallet'
 import {
@@ -78,11 +79,21 @@ async function connectFreshEvmSession(
   email: string,
   network: Exclude<PocketNetwork, 'solana'>,
   walletAddress: string,
+  getAccessToken: PocketAccessTokenReader,
 ) {
   const stored = await restorePocketWalletSession(email)
   const secured = stored ? secureSessionForNetwork(stored, network, walletAddress) : null
   if (secured) return secured
-  if (stored) throw new PocketWalletSessionRecoveryRequiredError('The saved Circle session does not match this Pocket wallet. Reconnect it before making a payment.')
+  if (stored) {
+    const token = await getAccessToken()
+    if (!token) throw new PocketWalletSessionRecoveryRequiredError('Sign in again to restore your updated wallets.')
+    const restored = await restoreActivatedCircleEvmSession(stored, token)
+    const matching = secureSessionForNetwork(restored, network, walletAddress)
+    if (!matching) throw new PocketWalletSessionRecoveryRequiredError('The updated session does not match this Pocket wallet.')
+    await savePocketSecureWalletSession(email, restored)
+    cacheEvmSession(email, restored)
+    return matching
+  }
   if (await pocketQuickApprovalCredentialSaved(email)) {
     const migrated = await readPocketEvmQuickSession(email, network, walletAddress, { allowDisabled: true })
     if (migrated) {
@@ -228,8 +239,15 @@ async function unlockPocketBaseWalletOnce({
   if (forceReconnect) await deletePocketSecureWalletSession(email)
   const storedSession = approvedSession || forceReconnect ? null : await readPocketSecureWalletSession(email)
   const secured = storedSession ? secureSessionForNetwork(storedSession, 'base', wallet.address) : null
-  if (storedSession && !secured) throw new PocketWalletSessionRecoveryRequiredError('The saved Circle session does not match this Pocket wallet.')
-  const session = approvedSession ?? secured ?? await connectCircleEvmEmailWallet(email, 'base')
+  let session = approvedSession ?? secured ?? storedSession ?? await connectCircleEvmEmailWallet(email, 'base')
+  if (session.wallet.address.toLowerCase() !== wallet.address.toLowerCase() || (wallet.walletId && session.wallet.id !== wallet.walletId)) {
+    const token = await getAccessToken()
+    if (!token) throw new PocketWalletSessionRecoveryRequiredError('Sign in again to restore your updated wallets.')
+    const restored = await restoreActivatedCircleEvmSession(session, token)
+    const matching = secureSessionForNetwork(restored, 'base', wallet.address)
+    if (!matching || (wallet.walletId && matching.wallet.id !== wallet.walletId)) throw new PocketWalletSessionRecoveryRequiredError('The updated session does not match this Pocket wallet.')
+    session = matching
+  }
   if (session.wallet.address.toLowerCase() !== wallet.address.toLowerCase()) {
     throw new Error('The unlocked Circle wallet does not match this Pocket account.')
   }
@@ -314,7 +332,7 @@ export default function usePocketWalletController({
     }
     const pending = sharedPendingEvmSessions.get(key)
     if (pending) return pending
-    const request = connectFreshEvmSession(email, network, walletAddress)
+    const request = connectFreshEvmSession(email, network, walletAddress, getAccessToken)
       .then(session => {
         evmSessionRef.current = session
         setEvmSession(session)
@@ -324,7 +342,7 @@ export default function usePocketWalletController({
       .finally(() => sharedPendingEvmSessions.delete(key))
     sharedPendingEvmSessions.set(key, request)
     return request
-  }, [email, evmSession])
+  }, [email, evmSession, getAccessToken])
 
   const getSolanaSession = useCallback(async (walletAddress: string) => {
     if (solanaSession?.wallet.address === walletAddress) return solanaSession

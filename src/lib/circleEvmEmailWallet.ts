@@ -868,7 +868,7 @@ export async function connectCircleEvmEmailWallet(
   }), CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS, 'Code expired. Request a new code.')
     .finally(() => removeCircleOtpCancel())
 
-  const ensured = chain === 'arc'
+  const ensured: { wallet: CircleEvmWallet; productionEvmTopology?: PocketProductionEvmTopology } = chain === 'arc'
     ? await ensureArcMainnetWallet(sdk, login.userToken, login.encryptionKey, chain)
     : await ensureProductionEvmWallet(sdk, login.userToken, login.encryptionKey, chain)
   return {
@@ -1553,4 +1553,15 @@ export async function reviewCircleEvmReplacement(session: CircleEvmEmailSession,
     action: 'reviewEvmReplacement', userToken: session.userToken, attemptId,
     walletId: session.wallet.id, walletAddress: session.wallet.address,
   }, { privyAccessToken })
+}
+
+export async function restoreActivatedCircleEvmSession(session: CircleEvmEmailSession, privyAccessToken: string) {
+  const result = await circleWalletApi<{wallets: Record<'base' | 'arbitrum' | 'arc', CircleEvmWallet>}>({ action: 'restoreActivatedEvmWallets', userToken: session.userToken }, { privyAccessToken })
+  const { applyActivatedWalletSession } = await import('../pocket/lib/pocketActivatedWalletSession')
+  return applyActivatedWalletSession(session, result.wallets)
+}
+
+export async function approveCircleMigrationChallenge(session: CircleEvmEmailSession, challengeId: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(challengeId)) throw new Error('Invalid wallet migration challenge.')
+  return executeChallengeWithTimeout(authenticatedSdk(session), challengeId, 'Confirmation is taking longer than expected. Check migration progress before trying again.')
 }

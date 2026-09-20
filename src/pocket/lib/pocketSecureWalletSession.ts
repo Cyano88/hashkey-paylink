@@ -75,9 +75,12 @@ async function readSession(email: string) {
   let savedAt = 0
   try {
     const parsed = JSON.parse(credentials.password.slice(SESSION_PREFIX.length)) as CircleEvmEmailSession | StoredSessionPayload
-    const wrapped = parsed && typeof parsed === 'object' && 'session' in parsed
-    stored = wrapped ? parsed.session : parsed
-    savedAt = wrapped && typeof parsed.savedAt === 'number' ? parsed.savedAt : 0
+    if ('session' in parsed) {
+      stored = parsed.session
+      savedAt = typeof parsed.savedAt === 'number' ? parsed.savedAt : 0
+    } else {
+      stored = parsed
+    }
   } catch {
     throw new PocketWalletSessionRecoveryRequiredError()
   }
