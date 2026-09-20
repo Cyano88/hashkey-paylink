@@ -1,3 +1,4 @@
+import { pocketScanDestination } from '../lib/pocketScanCode'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as CapacitorApp } from '@capacitor/app'
@@ -8,6 +9,8 @@ import { isPocketNativeRuntime, POCKET_HOSTNAME } from '../lib/pocketRoutes'
 
 function nativePocketDestination(rawUrl: string) {
   try {
+    const scan=pocketScanDestination(rawUrl)
+    if(scan)return scan
     const url = new URL(rawUrl)
     if (url.hostname !== POCKET_HOSTNAME && url.protocol !== 'pocket:') return ''
     return `${url.pathname || '/'}${url.search}${url.hash}`

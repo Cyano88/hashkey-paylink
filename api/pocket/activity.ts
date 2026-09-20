@@ -12,7 +12,7 @@ import {
 import { readPocketPurchaseWalletAddresses, readPocketWalletChainActivity } from './wallet-chain-activity.js'
 import { createPocketBillsStore, PocketBillsStoreError, type PocketBillsIntent } from './bills-store.js'
 import { readVtpassPhase0Config } from '../vtpass-config.js'
-import { listRegisteredPaymentsForEventIds, paymentReceiptId } from '../event-registry.js'
+import { listRegisteredPaymentsForEventIds, listRegisteredPosPurchases, paymentReceiptId } from '../event-registry.js'
 import { pocketPaylinkRepository, type PocketCollectionLink } from './paylink-store.js'
 import { paymentExecutionRepository, type PaymentExecutionIntent } from './payment-execution-intents.js'
 import { listCirclePocketActions, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
@@ -34,6 +34,7 @@ type PocketActivityHandlerDependencies = {
   readBillsRefundPolicy?(): { enabled: boolean; treasuryAddress: string }
   readCollections?(ownerId: string, options?: PocketActivityReadOptions): Promise<PocketCollectionLink[]>
   readCollectionPayments?(eventIds: string[], options?: PocketActivityReadOptions): Promise<unknown[]>
+  readPosPurchases?(walletAddresses: string[], options?: PocketActivityReadOptions): Promise<unknown[]>
   readExternalPayments?(walletAddresses: string[], options?: PocketActivityReadOptions): Promise<PaymentExecutionIntent[]>
   readClosedBankPayouts?(ownerId: string, options?: PocketActivityReadOptions): Promise<PaymentExecutionIntent[]>
   readWalletAddresses?(ownerId: string, options?: PocketActivityReadOptions): Promise<string[]>
@@ -260,9 +261,10 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
         dependencies.readClosedBankPayouts?.(identity.userId, options) ?? Promise.resolve([]),
       ])
       const collectionTitles = new Map(collections.map(link => [link.eventId, link.title]))
-      const [collectionPaymentRecords, externalPaymentIntents] = await Promise.all([
+      const [collectionPaymentRecords, externalPaymentIntents, posPurchaseRecords] = await Promise.all([
         dependencies.readCollectionPayments?.(collections.map(link => link.eventId), options) ?? Promise.resolve([]),
         dependencies.readExternalPayments?.(walletAddresses, options) ?? Promise.resolve([]),
+        dependencies.readPosPurchases?.(walletAddresses, options) ?? Promise.resolve([]),
       ])
       const collectionPayments = collectionPaymentRecords
         .map(sanitizedActivityRow)
@@ -295,9 +297,10 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
         const row = billActivityRow(intent, refundPolicy)
         return row ? [row] : []
       })
-      const contextualTxHashes = new Set(externalPayments.map(row => row.txHash.toLowerCase()))
-      const allPayments = [...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
-        .filter(row => row.source === 'purchase' || !contextualTxHashes.has(row.txHash.toLowerCase()))
+      const posPurchases=posPurchaseRecords.map(sanitizedActivityRow).map(row=>({...row,source:'purchase',direction:'out' as const,settlementType:'pos_payment',activityLabel:'POS payment',recipient:row.contextLabel||'Merchant',receiptId:paymentReceiptId(row.eventId,row.txHash),receiptUrl:'/receipt/'+paymentReceiptId(row.eventId,row.txHash)}))
+      const contextualTxHashes = new Set([...externalPayments,...posPurchases].map(row => row.txHash.toLowerCase()))
+      const allPayments = [...posPurchases, ...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
+        .filter(row => row.source === 'purchase' || row.direction === 'in' || !contextualTxHashes.has(row.txHash.toLowerCase()))
         .filter((row, index, rows) => rows.findIndex(candidate => candidate.txHash === row.txHash && (
           candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
         )) === index)
@@ -337,6 +340,7 @@ export default createPocketActivityHandler({
   }),
   readActions: (ownerId, options) => listCirclePocketActions(ownerId, options?.recent ? 20 : 500),
   readWalletAddresses: readPocketPurchaseWalletAddresses,
+  readPosPurchases: listRegisteredPosPurchases,
   readExternalPayments: async walletAddresses => {
     const matches = await Promise.all(walletAddresses.map(walletAddress =>
       paymentExecutionRepository.listByMetadata('payerWallet', walletAddress, ['hosted_checkout', 'service_funding'])

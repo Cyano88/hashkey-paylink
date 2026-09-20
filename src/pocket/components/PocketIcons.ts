@@ -50,6 +50,7 @@ export {
   PresentationChartBarIcon as LayoutDashboard,
   CpuChipIcon as Bot,
   QueueListIcon as History,
+  QrCodeIcon as QrCode,
   SignalIcon as Wifi,
   SignalIcon as Radio,
   Squares2X2Icon as Activity,
@@ -61,6 +62,7 @@ export {
   UserGroupIcon as Users,
   WrenchScrewdriverIcon as Sliders,
   XCircleIcon as XCircle,
+  XMarkIcon as X,
 } from '@heroicons/react/24/outline'
 
 export { CurrencyDollarIcon as Coins, PaperAirplaneIcon as Send, TvIcon as Tv } from '@heroicons/react/24/outline'

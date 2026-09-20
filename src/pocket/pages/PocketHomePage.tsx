@@ -1,7 +1,7 @@
 import PocketWalletUpdateCard from '../components/PocketWalletUpdateCard'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Banknote, ChevronRight, Eye, EyeOff, Send, Store, Users, Wallet } from '../components/PocketIcons'
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Banknote, ChevronRight, Eye, EyeOff, QrCode, Send, Store, Users, Wallet } from '../components/PocketIcons'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -79,6 +79,7 @@ export default function PocketHomePage() {
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => open(POCKET_ROUTES.send)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><Send className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Send</span></button>
+          <button type="button" onClick={() => open(POCKET_ROUTES.scan)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><QrCode className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Scan</span></button>
           <button type="button" onClick={() => open(POCKET_ROUTES.swap)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><ArrowLeftRight className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Swap</span></button>
         </div>
       </div>

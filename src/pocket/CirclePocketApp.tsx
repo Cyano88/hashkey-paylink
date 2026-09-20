@@ -30,6 +30,7 @@ const PocketProfilePage = lazy(() => import('./pages/PocketProfilePage'))
 const PocketVerifyNamePage = lazy(() => import('./pages/PocketVerifyNamePage'))
 const PocketDepositPage = lazy(() => import('./pages/PocketDepositPage'))
 const PocketSwapPage = lazy(() => import('./pages/PocketSwapPage'))
+const PocketScanPage = lazy(() => import('./pages/PocketScanPage'))
 const PocketSendPage = lazy(() => import('./pages/PocketSendPage'))
 const PocketNotificationsPage = lazy(() => import('./pages/PocketNotificationsPage'))
 const PocketMoveBankPage = lazy(() => import('./pages/PocketMoveBankPage'))
@@ -280,6 +281,7 @@ export default function CirclePocketApp() {
   else if (!authenticated) content = <PocketPageBoundary active='home'><PocketLandingPage /></PocketPageBoundary>
   else if (landing) content = <PocketPageBoundary active="home"><PocketLandingPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'deposit') content = <PocketPageBoundary active="home"><PocketDepositPage /></PocketPageBoundary>
+  else if (route?.section === 'home' && route.view === 'scan') content = <PocketPageBoundary active='home'><PocketScanPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'send') content = <PocketPageBoundary active="home"><PocketSendPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'swap') content = <PocketPageBoundary active="home"><PocketSwapPage /></PocketPageBoundary>
   else if (route?.section === 'home') content = <PocketPageBoundary active="home"><PocketHomePage /></PocketPageBoundary>

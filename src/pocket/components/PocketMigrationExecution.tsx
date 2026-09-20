@@ -11,24 +11,26 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
  const active=useRef(false),locked=useRef(false),controller=useRef<AbortController|null>(null)
  const completedCallback=useRef(onComplete);completedCallback.current=onComplete
  async function request<T>(body:Record<string,unknown>,payment=false) {
+  const signal=controller.current?.signal
   const token=await getAccessToken()
-  if(!active.current)throw new Error('Migration screen was closed.')
+  if(signal?.aborted || !active.current)throw new Error('Migration screen was closed.')
   if(!token)throw new Error('Sign in again to continue your wallet update.')
-  return pocketMigrationRequest<T>(token,body,{payment,signal:controller.current?.signal,recovery})
+  return pocketMigrationRequest<T>(token,body,{payment,signal,recovery})
  }
  function accept(next:PocketMigrationSnapshot) {
   if(!active.current)return
   setSnapshot(next)
   setQuote(current=>current && current.revision===next.revision && next.rows.find(row=>row.network===current.network)?.state==='ready' ? current : null)
-  if(next.phase==='completed')completedCallback.current()
+  if(next.phase==='completed'){setResume(null);setError('');completedCallback.current()}
  }
- async function refresh() {
+ async function refresh(preserveError=false) {
   const result=await request<{snapshot:PocketMigrationSnapshot}>({action:'status'});accept(result.snapshot)
   const pending=result.snapshot.rows.find(row=>row.state==='pending')
-  if(!pending || !active.current)return
+  if(!active.current)return
+  if(!pending){setResume(null);if(!preserveError)setError('');return}
   const checked=await request<{snapshot:PocketMigrationSnapshot;state:string;resume?:{action:'resume'|'recover';network:string;amount:string;source:string;target:string}}>({action:'reconcile',network:pending.network,revision:result.snapshot.revision,userToken:session.userToken})
   accept(checked.snapshot)
-  if(active.current){setResume((checked.state==='approval_required'||checked.state==='recovery_required')?checked.resume??null:null);if(checked.state==='needs_review')setError('This saved transfer needs review before approval can continue.');else if(checked.state==='pending'||checked.state==='confirmed')setError('')}
+  if(active.current){setResume((checked.state==='approval_required'||checked.state==='recovery_required')?checked.resume??null:null);if(checked.state==='needs_review')setError('This saved transfer needs review before approval can continue.');else if(!preserveError || checked.state==='confirmed')setError('')}
  }
  useEffect(()=>{
   active.current=true;locked.current=true;controller.current=new AbortController()
@@ -92,9 +94,10 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
     accept(result.snapshot)
    } else await refresh()
   } catch(reason) {
-   if(active.current){setQuote(null);setResume(null);setError(reason instanceof Error?reason.message:'Migration could not continue.');await refresh().catch(()=>undefined)}
+   if(active.current){setQuote(null);setResume(null);setError(reason instanceof Error?reason.message:'Migration could not continue.');await refresh(true).catch(()=>undefined)}
   } finally {locked.current=false;if(active.current)setBusy(false)}
  }
+ if(snapshot?.phase==='completed')return <p role='status' className='mt-4 text-sm'>Wallet update complete.</p>
  const unavailable=!!snapshot&&!snapshot.enabled&&(!!resume||(!!quote&&!expired)||snapshot.phase==='ready-to-activate')
  const label=busy?'Checking...':!snapshot?'Check again':resume?(resume.action==='recover'?'Recover transfer status':'Continue approval'):quote?(expired?'Refresh fee':'Confirm transfer'):pending?'Check progress':next?'Review transfer':snapshot.phase==='ready-to-activate'?'Activate updated wallets':'Check progress'
  return <div className='mt-5'>

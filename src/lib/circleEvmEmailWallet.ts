@@ -397,7 +397,7 @@ async function circleWalletApi<T>(
 ): Promise<T> {
   const action = typeof payload.action === 'string' ? payload.action : 'request'
   const paymentAction = /^(execute|signPayment)/.test(action)
-  const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.pathname.includes('/pocket'))
+  const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.hostname === 'pocket.hashpaylink.com' || window.location.pathname.includes('/pocket'))
   const approval = pocketClient && action !== 'executeEvmBridge' ? takePocketPaymentApproval() : null
   const scope = typeof payload.chain === 'string'
     ? payload.chain

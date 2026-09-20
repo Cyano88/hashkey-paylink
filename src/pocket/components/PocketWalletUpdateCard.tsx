@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { X } from './PocketIcons'
 import type { PocketWalletUpdateNotice } from '../lib/pocketWalletUpdate'
 export default function PocketWalletUpdateCard({ notice, onReview }: { notice: PocketWalletUpdateNotice; onReview(): void }) {
   const [dismissed, setDismissed] = useState(false)
@@ -8,6 +9,6 @@ export default function PocketWalletUpdateCard({ notice, onReview }: { notice: P
       <span className='block text-xs font-bold'>{notice === 'resume' ? 'Resume wallet update' : 'Wallet update available'}</span>
       <span className='mt-1 block text-[11px] text-gray-500'>{notice === 'resume' ? 'Your wallet update is unfinished. Continue from your saved progress.' : 'Review moving your previous wallet balance.'}</span>
     </button>
-    {notice !== 'resume' && <button type='button' onClick={() => setDismissed(true)} aria-label='Dismiss wallet update' className='min-h-11 min-w-11 text-sm text-gray-400'>�</button>}
+    {notice !== 'resume' && <button type='button' onClick={() => setDismissed(true)} aria-label='Dismiss wallet update' className='min-h-11 min-w-11 text-sm text-gray-400'><X className='mx-auto h-4 w-4' /></button>}
   </aside>
 }

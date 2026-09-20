@@ -1,3 +1,4 @@
+import { isAddress } from 'viem'
 import type { Request, Response } from 'express'
 import { archivePayment }          from './og-storage.js'
 import { appendAgentActivity, normalizeActivitySlug } from './agent-activity.js'
@@ -13,6 +14,7 @@ type PaymentEntry = {
   eventId:     string
   txHash:      string
   chain:       string
+  verifiedPayer?: string
   payer:       string
   memo:        string
   amount:      string
@@ -390,6 +392,14 @@ export async function listRegisteredPaymentsForEventIds(eventIds: string[]): Pro
     .sort((a, b) => b.ts - a.ts)
 }
 
+// Only new receipts with an on-chain verified sender are eligible as payer purchases.
+export async function listRegisteredPosPurchases(walletAddresses:string[]):Promise<PaymentEntry[]> {
+ const addresses=new Set(walletAddresses.filter(address=>isAddress(address)).map(a=>a.toLowerCase()))
+ if(!addresses.size)return []
+ await hydrateRegistry()
+ return [...registry.values()].flat().filter(entry=>entry.source==='ngpos'&&!!entry.verifiedPayer&&addresses.has(entry.verifiedPayer)&&/^0x[a-fA-F0-9]{64}$/.test(entry.txHash)).sort((a,b)=>b.ts-a.ts).slice(0,100)
+}
+
 function paymentError(message: string, status = 400) {
   const error = new Error(message) as Error & { status?: number }
   error.status = status
@@ -524,6 +534,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         chain: evmChain,
         txHash,
         recipient: expected.recipient,
+        ...(isAddress(payer)?{payer}:{}),
         minAmount: expected.minAmount || preferredAmount(amount, requestedAmount),
       })
     } catch (error) {
@@ -589,6 +600,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     return result
   }
   const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now() }
+  if(source==='ngpos' && isAddress(payer))entry.verifiedPayer=payer.toLowerCase()
   if (requestedAmount) entry.requestedAmount = requestedAmount
   if (source) entry.source = source
   if (merchantId) entry.merchantId = merchantId

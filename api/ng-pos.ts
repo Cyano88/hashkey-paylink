@@ -1,3 +1,4 @@
+import { resolvePocketPosCheckout } from './pocket/scan-checkout.js'
 import type { Request, Response } from 'express'
 import { randomBytes, createCipheriv, createDecipheriv, createHash } from 'crypto'
 import { mkdir, readFile, writeFile } from 'fs/promises'
@@ -1023,6 +1024,13 @@ export default async function handler(req: Request, res: Response) {
       const store = await readStore()
       const merchant = store.merchants[merchantId]
       if (!merchant) return res.status(404).json({ ok: false, error: 'Merchant not found' })
+      if(req.query.view==='pocket-scan') {
+        const raw=typeof req.query.code==='string'?req.query.code:''
+        let intentId=''
+        try { intentId=new URL(raw).searchParams.get('intent')||'' } catch { return res.status(400).json({ok:false,error:'Invalid checkout link.'}) }
+        try { res.setHeader('Cache-Control','no-store');return res.json({ok:true,...resolvePocketPosCheckout(merchant,raw,intentId?store.intents?.[intentId]:undefined)}) }
+        catch(error){return res.status(400).json({ok:false,error:error instanceof Error?error.message:'Checkout unavailable.'})}
+      }
       return res.json({ ok: true, merchant: await publicMerchant(merchant) })
     }
 

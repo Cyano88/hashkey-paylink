@@ -35,11 +35,14 @@ function responseBody(response: HttpResponse) {
 async function nativePocketFetch(request: Request) {
   if (request.signal.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
 
+  const data = await requestData(request)
+  if (request.signal.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
+
   const pending = CapacitorHttp.request({
     url: request.url,
     method: request.method,
     headers: requestHeaders(request),
-    data: await requestData(request),
+    data,
     responseType: 'json',
   })
 
@@ -67,7 +70,9 @@ export function installPocketNativeFetch() {
   installed = true
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init)
+    let request = new Request(input, init)
+    const url=new URL(request.url)
+    if(url.origin===window.location.origin && url.pathname.startsWith('/api/'))request=new Request(POCKET_ORIGIN+url.pathname+url.search,request)
     if (!isPocketApiRequest(request.url)) return ORIGINAL_FETCH(input, init)
     return nativePocketFetch(request)
   }

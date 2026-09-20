@@ -103,7 +103,7 @@ function isCircleCloseMessage(data: unknown) {
 async function circleSolanaApi<T>(payload: Record<string, unknown>, privyAccessToken?: string): Promise<T> {
   const action = typeof payload.action === 'string' ? payload.action : ''
   const paymentAction = /^(execute|signPayment|signOwnWalletBridge)/.test(action)
-  const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.pathname.includes('/pocket'))
+  const pocketClient = paymentAction && (Capacitor.isNativePlatform() || window.location.hostname === 'pocket.hashpaylink.com' || window.location.pathname.includes('/pocket'))
   const approval = pocketClient && action !== 'signOwnWalletBridge' ? takePocketPaymentApproval() : null
   const res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
     method: 'POST',

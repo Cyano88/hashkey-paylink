@@ -13,6 +13,7 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
   const navigate = useNavigate()
   const [previous,setPrevious]=useState(false)
   const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState<'checking'|'ready'|'failed'>('checking')
   const [stage, setStage] = useState<'prepare'|'verified'|'review'|'completed'>('prepare')
   const [review, setReview] = useState<PocketMigrationReview | null>(null)
   const [notice, setNotice] = useState('')
@@ -26,20 +27,30 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
     if(completed.current)window.location.replace(home)
     else navigate(home,{replace:true})
   }
+  const checkStatus = async (signal?: AbortSignal) => {
+    setStatus('checking');setError('')
+    try {
+      const token=await getAccessToken()
+      if(!active.current || signal?.aborted)return
+      if(!token)throw Error('Sign in again to check your wallet update.')
+      const response=await fetch(pocketApiUrl('/api/pocket/wallet-update/status'),{headers:{authorization:`Bearer ${token}`},cache:'no-store',signal})
+      const result=await response.json()
+      if(!response.ok || result.ok!==true)throw Error('Wallet update status is unavailable. Try again.')
+      if(!active.current || signal?.aborted)return
+      if(result.phase==='completed'){completed.current=true;setNotice('');setStage('completed')}
+      setStatus('ready')
+    } catch(reason) {
+      if(active.current && !signal?.aborted){setStatus('failed');setError(reason instanceof Error?reason.message:'Wallet update status is unavailable.')}
+    }
+  }
   useEffect(() => {
     active.current=true
-    void (async()=>{
-      const token=await getAccessToken()
-      if(!active.current||!token)return
-      const response=await fetch(pocketApiUrl('/api/pocket/wallet-update/status'),{headers:{authorization:`Bearer ${token}`},cache:'no-store'})
-      if(!response.ok)return
-      const result=await response.json()
-      if(active.current && result.ok===true && result.phase==='completed'){completed.current=true;setStage('completed')}
-    })().catch(()=>undefined)
-    return ()=>{active.current=false;operation.current=null}
+    const controller=new AbortController()
+    void checkStatus(controller.signal)
+    return ()=>{active.current=false;controller.abort();operation.current=null}
   },[getAccessToken])
   const run = async () => {
-    if(locked.current || completed.current || stage==='completed')return
+    if(status!=='ready' || locked.current || completed.current || stage==='completed')return
     locked.current=true;setBusy(true);setError('');setNotice('')
     try {
       const token=await getAccessToken()
@@ -70,6 +81,7 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
   }
   const executionReady=stage==='review' && !!review && review.rows.every(row=>row.status==='ok') && !!operation.current
   const cta='mt-5 min-h-12 w-full rounded-full bg-gray-950 px-4 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'
+  if(status!=='ready')return <section className='pt-6'><p role={status==='failed'?'alert':'status'} className='text-sm leading-6'>{status==='checking'?'Checking wallet update...':error}</p>{status==='failed'&&<button type='button' className={cta} onClick={()=>void checkStatus()}>Check again</button>}</section>
   if(previous)return <section className='pt-6'><PocketPreviousWallets key={email} email={email} getAccessToken={getAccessToken} onBack={goHome}/></section>
   return <section className='w-full space-y-4 pt-6'>
     <article className='w-full rounded-[26px] bg-white p-5 shadow-sm dark:bg-white/[0.05]'>

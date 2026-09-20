@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { requestPocketPaymentApproval } from '../pocket/lib/pocketPaymentApproval'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, Link, useOutletContext, useNavigate } from 'react-router-dom'
 import type { LayoutOutletContext } from '../Layout'
 import {
@@ -335,8 +336,9 @@ function trustedPolydeskOrigin(raw: string) {
   return ''
 }
 
-export default function PaymentPage() {
-  const [searchParams] = useSearchParams()
+export default function PaymentPage({ pocketScan }: { pocketScan?: { params: string; onBack(): void } } = {}) {
+  const [routeParams] = useSearchParams()
+  const searchParams = useMemo(() => pocketScan ? new URLSearchParams(pocketScan.params) : routeParams, [pocketScan?.params, routeParams])
   const checkoutPresentation = hostedCheckoutPresentation(resolveHostedCheckoutKind(searchParams))
   const navigate = useNavigate()
   const { onPayChainChange, onPayWalletStateChange, onPaySuccessVisibleChange } = useOutletContext<LayoutOutletContext>()
@@ -517,7 +519,7 @@ export default function PaymentPage() {
   // ── Event mode ─────────────────────────────────────────────────────────────
   // Capture event params from the INITIAL URL at mount — before the direct-send
   // V2 flow can overwrite ?id= via window.history.replaceState.
-  const [initParams] = useState(() => new URLSearchParams(window.location.search))
+  const [initParams] = useState(() => new URLSearchParams(pocketScan?.params ?? window.location.search))
   const isEventMode      = hasPaylinkFlag(initParams, 'event', 'v')
   const eventId          = initParams.get('id') ?? ''
   const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
@@ -637,8 +639,9 @@ export default function PaymentPage() {
         }
         if (isHostedService && !body.returnUrl) throw new Error('This service checkout has no verified return destination.')
         const expected = new URL(body.paymentUrl, window.location.origin)
-        const current = new URL(window.location.href)
+        const current = new URL(pocketScan ? '/pay?' + pocketScan.params : window.location.href, window.location.origin)
         if (expected.pathname !== current.pathname || expected.search !== current.search) {
+          if (pocketScan) throw new Error('This checkout changed. Return to Scan and review the current checkout before paying.')
           window.location.replace(`${expected.pathname}${expected.search}`)
           return
         }
@@ -1034,7 +1037,7 @@ export default function PaymentPage() {
   const usePrivyCircleCheckout = PRIVY_AUTH_ENABLED && showCircleEvmEmailPay && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
   const usePrivyCircleSolanaCheckout = PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay && chain === 'solana'
   const showLegacyCircleEmailPay = !PRIVY_AUTH_ENABLED && showCircleEmailPay
-  const showPrivyCircleEmailPay = usePrivyCircleCheckout && privyAuthenticated && !hasExternalPrivyEvmWallet
+  const showPrivyCircleEmailPay = usePrivyCircleCheckout && privyAuthenticated && (!!pocketScan || !hasExternalPrivyEvmWallet)
   const showPrivyCircleSolanaEmailPay = usePrivyCircleSolanaCheckout && privyAuthenticated
   const showCircleEmailBridgePay = showLegacyCircleEmailPay || showPrivyCircleEmailPay
   const showCircleSolanaEmailBridgePay = (!PRIVY_AUTH_ENABLED && showCircleSolanaEmailPay) || showPrivyCircleSolanaEmailPay
@@ -1600,7 +1603,7 @@ export default function PaymentPage() {
     const evmRecipient = isAddress(activeRecipient) ? activeRecipient as `0x${string}` : null
     if (!evmRecipient) return
 
-    const params  = new URLSearchParams(window.location.search)
+    const params  = new URLSearchParams(pocketScan?.params ?? window.location.search)
     const idParam = params.get('id')
     let linkId: `0x${string}`
     if (idParam && /^0x[0-9a-fA-F]{64}$/.test(idParam)) {
@@ -1693,7 +1696,7 @@ export default function PaymentPage() {
   // LEGACY / INACTIVE: Solana Send-via-Address vault derivation.
   useEffect(() => {
     if (chain !== 'solana' || payMode !== 'direct' || !resolvedSolana) return
-    const params    = new URLSearchParams(window.location.search)
+    const params    = new URLSearchParams(pocketScan?.params ?? window.location.search)
     const idParam   = params.get('sid')
     let linkId: string
     if (idParam) {
@@ -2301,6 +2304,10 @@ export default function PaymentPage() {
   }
 
   async function handlePay() {
+    if (pocketScan) {
+      setBasePaymasterError('Use your Pocket wallet to approve this payment.')
+      return
+    }
     if (!activeRecipient) return
     if (!await lockHostedCheckoutNetwork()) return
     setPaymentAttemptStarted(true)
@@ -2414,6 +2421,7 @@ export default function PaymentPage() {
       const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
       if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build transaction')
 
+      if(pocketScan)await requestPocketPaymentApproval()
       const signedB64 = await signCircleSolanaTransaction({
         session,
         rawTransaction: buildData.tx,
@@ -2849,6 +2857,10 @@ export default function PaymentPage() {
   }
 
   async function handleCirclePasskeyPay() {
+    if (pocketScan && (!showCircleEvmEmailPay || !privyAuthenticated)) {
+      setCirclePasskeyError('Your Pocket wallet session is unavailable. Return to Pocket and try again.')
+      return
+    }
     if (!showCircleEmailPay) return
     if (!paycrestNeedsPreparation && (!activeRecipient || !isAddress(activeRecipient))) return
     if (paymentAmountBlocked || (!paycrestNeedsPreparation && (!payableAmt || parseFloat(payableAmt) <= 0))) {
@@ -2940,6 +2952,7 @@ export default function PaymentPage() {
         if (usePrivyCircleCheckout && !privyAccessToken) {
           throw new Error('Your secure checkout session expired. Sign in again before paying.')
         }
+        if(pocketScan)await requestPocketPaymentApproval()
         const txHash = await sendCircleEvmEmailPayment({
           session,
           recipient: paymentRecipient as `0x${string}`,
@@ -3837,7 +3850,7 @@ export default function PaymentPage() {
   if (!isValidParams) {
     return (
       <>
-      <HashPayLinkCheckoutBrand />
+      {!pocketScan && <HashPayLinkCheckoutBrand />}
       <div className="mx-auto max-w-md animate-fade-in">
         <div className="overflow-hidden rounded-2xl border border-red-100 bg-white shadow-card">
           <div className="bg-red-50 p-8 text-center">
@@ -3923,9 +3936,9 @@ export default function PaymentPage() {
 
     return (
       <>
-      <HashPayLinkCheckoutBrand />
+      {!pocketScan && <HashPayLinkCheckoutBrand />}
       <div className="mx-auto max-w-md animate-scale-in">
-        {showNativePocketBack && (
+        {!pocketScan && showNativePocketBack && (
           <a
             href={`${POCKET_ORIGIN}${POCKET_ROUTES.usdc}`}
             className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-white"
@@ -4261,12 +4274,12 @@ export default function PaymentPage() {
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
-      <HashPayLinkCheckoutBrand />
+      {!pocketScan && <HashPayLinkCheckoutBrand />}
       <div
         className="overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"
         style={{ boxShadow: `0 18px 60px -32px rgba(15,23,42,0.42), ${meta.glowStyle}`, borderColor: meta.accentColor + '24' }}
       >
-        {isNgPosSource || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess || isHostedService ? (
+        {pocketScan ? null : isNgPosSource || isPolymarketFunding || isAgentOrWalletFunding || isHelperAccess || isHostedService ? (
           <button
             type="button"
             onClick={goBackFromCheckout}
@@ -4283,7 +4296,7 @@ export default function PaymentPage() {
         ) : null}
 
         {/* ── Payment network ──────────────────────────────────────────── */}
-        {!isBankSendPayment && !isNgPosPaycrestOfframp && (
+        {!pocketScan && !isBankSendPayment && !isNgPosPaycrestOfframp && (
           <div className="px-4 pb-0 pt-3">
             <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
               Payment network

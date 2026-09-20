@@ -297,4 +297,24 @@ const invalidRow = await request(invalidRowHandler)
 assert.equal(invalidRow.statusCode, 503)
 assert.equal(invalidRow.body.error.code, 'PROVIDER_UNAVAILABLE')
 
-console.log('Circle Pocket activity adapter smoke tests passed.')
+const purchaseHash='0x'+'9'.repeat(64)
+const purchaseWallet='0x'+'1'.repeat(40)
+const posPurchaseHandler=createPocketActivityHandler({
+  verifyUser:async()=>({userId:'purchase-owner'}),
+  readWalletAddresses:async ownerId=>{assert.equal(ownerId,'purchase-owner');return [purchaseWallet]},
+  readHistory:async()=>({payments:[{eventId:'ngpos-incoming',txHash:'0x'+'8'.repeat(64),chain:'base',payer:'shop-customer',memo:'POS',amount:'2',ts:1720000000000,source:'ngpos',direction:'in'}]}),
+  readWalletHistory:async()=>[{eventId:'wallet-outgoing',txHash:purchaseHash,chain:'base',payer:purchaseWallet,memo:'Transfer',amount:'2',ts:1720000000000,source:'wallet',direction:'out'}],
+  readPosPurchases:async wallets=>{assert.deepEqual(wallets,[purchaseWallet]);return [{eventId:'ngpos-merchant',txHash:purchaseHash,chain:'base',payer:purchaseWallet,verifiedPayer:purchaseWallet,memo:'POS',amount:'2',ts:1720000000000,source:'ngpos',contextLabel:'Verified Shop'}]},
+})
+const posPurchase=await request(posPurchaseHandler)
+assert.equal(posPurchase.statusCode,200)
+assert.equal(posPurchase.body.payments.filter(row=>row.txHash===purchaseHash).length,1)
+const purchase=posPurchase.body.payments.find(row=>row.txHash===purchaseHash)
+assert.equal(purchase.source,'purchase')
+assert.equal(purchase.activityLabel,'POS payment')
+assert.equal(purchase.direction,'out')
+assert.equal(purchase.recipient,'Verified Shop')
+assert.equal(purchase.verifiedPayer,undefined)
+assert.ok(purchase.receiptUrl.startsWith('/receipt/'))
+assert.equal(posPurchase.body.payments.find(row=>row.eventId==='ngpos-incoming').direction,'in')
+console.log('Circle Pocket activity adapter smoke tests passed, including owner-scoped POS purchases and transfer deduplication.')
