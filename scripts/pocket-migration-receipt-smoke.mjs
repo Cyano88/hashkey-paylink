@@ -15,6 +15,9 @@ assert.equal(inspectMigrationReceipt(row,tx,receipt,block,null),null)
 const arcLog={...log,address:'0xfffffffffffffffffffffffffffffffffffffffe',data:amount(2000000n*1000000000000n)}
 assert.ok(inspectMigrationReceipt({...row,network:'arc'},tx,{...receipt,logs:[arcLog]},block,final))
 assert.equal(inspectMigrationReceipt({...row,network:'arc'},tx,{...receipt,logs:[{...arcLog,data:amount(2000000n*1000000000000n+1n)}]},block,final),null)
+{
+const row={network:'arc',source:{walletId:'old',address:source},target:{walletId:'new',address:target},units:'2000000'}
+const receipt={status:'0x1',transactionHash:tx,blockNumber:'0xa',blockHash:bh,logs:[arcLog]}
 let calls=0
 assert.equal(await verifyMigrationReceipt(row,{challengeId:'saved'},{resolveChallenge:async()=>({walletId:'other',transactionHash:tx}),rpc:async()=>{calls++;throw Error('unexpected')}}),null)
 assert.equal(calls,0)
@@ -38,3 +41,5 @@ publicCalls=0
 assert.equal(await verifyMigrationReceipt(row,{challengeId:'saved'},{...finalityIo,rpc:async(n,m,p)=>m==='eth_getTransactionReceipt'?{...receipt,logs:[]}:stalePrimary(n,m,p)}),null)
 assert.equal(publicCalls,0,'invalid primary transfer cannot trigger alternative confirmation')
 console.log('PASS: lagging finalized tag uses independent canonical receipt and finalized height; both lagging, reorg, wrong transfer, outage and invalid primary evidence stay blocked.')
+
+}

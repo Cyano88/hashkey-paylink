@@ -1,4 +1,4 @@
-import { readEvmRpc, readPublicEvmRpc } from '../evm-read.js'
+import { readEvmRpc, readPublicEvmRpc, readPrivateEvmRpc } from '../evm-read.js'
 import type { MigrationPlan } from './wallet-migration-plan.js'
 
 type Row = MigrationPlan['rows'][number]
@@ -11,8 +11,8 @@ const quantity = (value: unknown) => typeof value === 'string' && /^0x[0-9a-f]+$
 const hash = (value: unknown) => typeof value === 'string' && /^0x[0-9a-f]{64}$/i.test(value)
 const addressTopic = (address: string) => '0x' + '0'.repeat(24) + address.slice(2).toLowerCase()
 
-// Require an exact transfer in its canonical block, at or below finalized height.
-// Unsupported finalized tags fail closed; never downgrade to a mined receipt.
+// Validate an exact canonical transfer against the caller-selected confirmation head.
+// This helper does not choose policy; verifyMigrationReceipt owns that decision.
 export function inspectMigrationReceipt(row: Row, txHash: string, receipt: Receipt | null, block: Block | null, finalized: Block | null) {
   if (!hash(txHash) || !receipt || receipt.status !== '0x1' || receipt.transactionHash?.toLowerCase() !== txHash.toLowerCase() || !hash(receipt.blockHash) || !quantity(receipt.blockNumber)) return null
   if (!block || !finalized || !hash(finalized.hash) || !quantity(finalized.number) || !quantity(block.number) || !quantity(block.timestamp) || block.hash?.toLowerCase() !== receipt.blockHash!.toLowerCase() || BigInt(block.number!) !== BigInt(receipt.blockNumber!) || BigInt(finalized.number!) < BigInt(receipt.blockNumber!)) return null
@@ -35,10 +35,32 @@ export async function verifyMigrationReceipt(row: Row, transfer: Transfer, io: {
   resolveChallenge(challengeId: string): Promise<{ walletId: string; transactionHash: string } | null>
   rpc?: typeof readEvmRpc
   publicRpc?: typeof readPublicEvmRpc
+  privateRpc?: typeof readPrivateEvmRpc
 }) {
   if (!transfer.challengeId) return null
   const transaction = await io.resolveChallenge(transfer.challengeId)
   if (!transaction || transaction.walletId !== row.source.walletId || !hash(transaction.transactionHash)) return null
+  if (row.network === 'base' || row.network === 'arbitrum') {
+    // Fast confirmation for same-owner USDC migration. The authenticated Circle
+    // resolver requires COMPLETE. Provider agreement is not L1 finality.
+    const readProof = async (read: typeof readEvmRpc) => {
+      const receipt = await read(row.network, 'eth_getTransactionReceipt', [transaction.transactionHash]) as Receipt | null
+      if (!receipt || !quantity(receipt.blockNumber)) return null
+      const [block, head] = await Promise.all([
+        read(row.network, 'eth_getBlockByNumber', [receipt.blockNumber, false]),
+        read(row.network, 'eth_getBlockByNumber', ['latest', false]),
+      ]) as [Block | null, Block | null]
+      const proof = inspectMigrationReceipt(row, transaction.transactionHash, receipt, block, head)
+      if (!proof || !quantity(head?.timestamp) || BigInt(head!.number!) < BigInt(block!.number!) + 2n || BigInt(head!.timestamp!) < BigInt(block!.timestamp!) + 15n) return null
+      return { proof, blockHash: block!.hash!.toLowerCase() }
+    }
+    const [primary, independent] = await Promise.all([
+      readProof(io.privateRpc ?? readPrivateEvmRpc),
+      readProof(io.publicRpc ?? readPublicEvmRpc),
+    ])
+    if (!primary || !independent || primary.blockHash !== independent.blockHash || primary.proof.confirmedAt !== independent.proof.confirmedAt) return null
+    return primary.proof
+  }
   const rpc = io.rpc ?? readEvmRpc
   const receipt = await rpc(row.network, 'eth_getTransactionReceipt', [transaction.transactionHash]) as Receipt | null
   if (!receipt || !quantity(receipt.blockNumber)) return null
@@ -61,4 +83,16 @@ export async function verifyMigrationReceipt(row: Row, transfer: Transfer, io: {
   ]) as [Receipt | null, Block | null, Block | null]
   if (publicBlock?.hash?.toLowerCase() !== primaryBlock?.hash?.toLowerCase()) return null
   return inspectMigrationReceipt(row, transaction.transactionHash, publicReceipt, publicBlock, publicFinalized)
+}
+
+// Revalidate saved confirmations immediately before switching active wallets.
+export async function verifyMigrationActivationReceipts(plan: MigrationPlan, verify: (row: Row, transfer: Transfer) => Promise<{ transactionHash: string; confirmedAt: number } | null>) {
+  const checks = await Promise.all(plan.rows.map(async row => {
+    if (BigInt(row.units) === 0n) return true
+    const transfer = plan.transfers[row.network]
+    if (!transfer || transfer.state !== 'confirmed' || !hash(transfer.transactionHash)) return false
+    const proof = await verify(row, transfer)
+    return !!proof && proof.transactionHash.toLowerCase() === transfer.transactionHash!.toLowerCase()
+  }))
+  return checks.every(Boolean)
 }

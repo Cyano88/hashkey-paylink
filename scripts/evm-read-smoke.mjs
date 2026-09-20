@@ -57,3 +57,22 @@ try {
  await assert.rejects(publicOnly('base','eth_sendRawTransaction',['0x']),error=>error.code===-32601)
 } finally {if(priorPrivate===undefined)delete process.env.PRIVATE_RPC_URL;else process.env.PRIVATE_RPC_URL=priorPrivate}
 console.log('PASS: independent public reader uses pinned network endpoint and retains read-only method restrictions.')
+
+const originalPrivate=process.env.PRIVATE_RPC_URL
+try {
+ let requests=0
+ const strict=createReadService(async()=>{requests++;return new Response('',{status:429})},Date.now,{privateOnly:true})
+ delete process.env.PRIVATE_RPC_URL
+ await assert.rejects(strict('base','eth_blockNumber',[]),e=>e.code===-32003)
+ process.env.PRIVATE_RPC_URL='https://mainnet.base.org/alternate-path'
+ await assert.rejects(strict('base','eth_blockNumber',[]),e=>e.code===-32003)
+ assert.equal(requests,0)
+ process.env.PRIVATE_RPC_URL='https://private.invalid/secret'
+ await assert.rejects(strict('base','eth_blockNumber',[]),e=>e.code===-32004)
+ assert.equal(requests,1,'private outage must not silently use public RPC')
+ const destinations=[]
+ const healthy=createReadService(async url=>{destinations.push(url);return Response.json({result:'0x1'})},Date.now,{privateOnly:true})
+ assert.equal(await healthy('base','eth_blockNumber',[]),'0x1')
+ assert.deepEqual(destinations,['https://private.invalid/secret'])
+} finally {if(originalPrivate===undefined)delete process.env.PRIVATE_RPC_URL;else process.env.PRIVATE_RPC_URL=originalPrivate}
+console.log('PASS: strict private reader requires a distinct configured host and never falls back to public.')
