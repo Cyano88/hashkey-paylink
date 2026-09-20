@@ -19,9 +19,9 @@ export function migrationSnapshot(plan:MigrationPlan,enabled:boolean,completed=f
 }
 const defaults:Dependencies={
  verify:verifiedPrivyUser,read:userId=>readDurableJson<MigrationPlan>('pocket:wallet-migration-plan:v1:'+userId),
- // Deliberately unavailable until the release audit covers live fee treatment,
- // outgoing-payment coordination and the old-wallet recovery UI.
- enabled:()=>false,
+ // Released flow retains approval, wallet holds and receipt verification.
+ // This operational stop switch also controls previous-wallet recovery.
+ enabled:()=> (process.env.POCKET_WALLET_MIGRATION_ENABLED ?? 'true').trim().toLowerCase()==='true',
  completed:async userId=>{
   const record=await readPocketWalletUpdate(userId)
   const links=await Promise.all((['base','arbitrum','arc'] as const).map(n=>readCircleLink(circleLinkKey(userId,n,'payment'))))

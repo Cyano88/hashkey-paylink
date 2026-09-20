@@ -38,3 +38,20 @@ assert.notEqual(migrationSnapshot(plan,true).phase,'completed')
 completed=true;result=await call({action:'status'});assert.equal(result.data.snapshot.phase,'completed')
 assert.equal((await call({...request,action:'start'})).data.snapshot.phase,'completed');assert.equal(starts,1)
 console.log('PASS: migration HTTP authentication, ownership, strict fields, stale reviews, disabled transfers, read-only refresh, reconciliation, and server completion. Synthetic only; no funds moved.')
+
+// Exercise the real release default and stop switch, without provider mutations.
+const priorGate=process.env.POCKET_WALLET_MIGRATION_ENABLED
+try {
+ const release=createMigrationFlowHandler({verify:async()=>({userId:'owner'}),read:async()=>owned,completed:async()=>false})
+ for(const [setting,expected] of [[undefined,true],['true',true],['false',false],['invalid',false],['',false]]) {
+  if(setting===undefined)delete process.env.POCKET_WALLET_MIGRATION_ENABLED
+  else process.env.POCKET_WALLET_MIGRATION_ENABLED=setting
+  const res={setHeader(){},status(){return this},json(data){this.data=data;return this}}
+  await release({method:'POST',body:{action:'status'},headers:{}},res)
+  assert.equal(res.data.snapshot.enabled,expected)
+ }
+} finally {
+ if(priorGate===undefined)delete process.env.POCKET_WALLET_MIGRATION_ENABLED
+ else process.env.POCKET_WALLET_MIGRATION_ENABLED=priorGate
+}
+console.log('PASS: released migration is enabled by default; explicit stop and invalid settings disable execution.')
