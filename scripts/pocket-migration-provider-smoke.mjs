@@ -55,8 +55,10 @@ const inspector=createMigrationProvider('synthetic',async(n,p,b)=>p.includes('/c
 assert.equal(await inspector.inspectChallenge(row,id),'approval_required')
 challenge={...challenge,errorCode:155121}
 assert.equal(await inspector.inspectChallenge(row,id),'expired')
+for(const status of ['PENDING','FAILED','EXPIRED']){challenge.status=status;assert.equal(await inspector.inspectChallenge(row,id),'expired')}
+for(const status of ['IN_PROGRESS','COMPLETE','UNKNOWN',undefined]){challenge.status=status;await assert.rejects(inspector.inspectChallenge(row,id),/status/)}
 challenge.status='IN_PROGRESS'
-await assert.rejects(inspector.inspectChallenge(row,id),/uncertain transaction status/)
+await assert.rejects(inspector.inspectChallenge(row,id),/in progress status/)
 challenge.status='PENDING'
 delete challenge.errorCode;challenge.status='IN_PROGRESS'
 assert.equal(await inspector.inspectChallenge(row,id),'pending')
@@ -116,3 +118,6 @@ const since=Date.parse('2026-02-01T00:00:00Z')
 assert.equal(await quiet.noPending(row,since),true)
 for(const change of [{createDate:'2026-02-01T00:00:00Z'},{createDate:undefined},{createDate:'invalid'},{state:'INITIATED'},{state:'STUCK'}]){const old=historyTx;historyTx={...old,...change};assert.equal(await quiet.noPending(row,since),false);historyTx=old}
 console.log('PASS: expiry retirement history blocks recent, pending and undated activity.')
+
+for(const status of ['FAILED','EXPIRED']){challenge={id,status,correlationIds:[txid],errorCode:155123};await assert.rejects(inspector.inspectChallenge(row,id),/155123/);delete challenge.errorCode;await assert.rejects(inspector.inspectChallenge(row,id),/no longer pending/)}
+console.log('PASS: documented PENDING, FAILED and EXPIRED with explicit expiry code are eligible for verification; active, complete, unknown and non-expiry failures remain blocked.')

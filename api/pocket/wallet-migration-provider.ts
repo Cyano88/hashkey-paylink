@@ -113,8 +113,10 @@ export function createMigrationProvider(userToken: string, request?: Json) {
       if(!challenge || challenge.id!==challengeId) throw new Error('Migration challenge lookup did not match.')
       if(challenge.errorCode || challenge.errorMessage) {
         if(String(challenge.errorCode)==='155121') {
-          if(challenge.status==='PENDING')return 'expired'
-          throw new Error('Circle reports an expired approval with an uncertain transaction status. Check progress before reviewing another transfer.')
+          // Circle SDK ChallengeStatusEnum includes terminal FAILED and EXPIRED;
+          // older API examples also report PENDING with the same expiry code.
+          if(['PENDING','FAILED','EXPIRED'].includes(challenge.status))return 'expired'
+          throw new Error('Circle reports an expired approval with '+(['IN_PROGRESS','COMPLETE'].includes(challenge.status)?challenge.status.toLowerCase().replace('_',' '):'an unknown')+' status. Check progress before reviewing another transfer.')
         }
         const code=String(challenge.errorCode??'')
         throw new Error('Circle could not continue the saved approval'+(/^\d{1,9}$/.test(code)?' (code '+code+')':'')+'. No replacement transfer has been created.')
