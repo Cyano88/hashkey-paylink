@@ -1,3 +1,4 @@
+import { migrationAssetsAccountedFor } from './wallet-migration-scope.js'
 import {holdMigrationWallets,withMigrationOperation,releaseUnstartedMigration} from './wallet-migration-guard.js'
 import { readLegacyPaymentWallets } from './wallet-migration-history.js'
 import { randomUUID } from 'node:crypto'
@@ -49,9 +50,10 @@ export function createPocketMigrationExecutor(input:{ userId:string; userToken:s
         readDurableJson<MigrationFeeQuote>(quoteKey(input.userId,row.network)),
         paymentExecutionRepository.listOwned(input.userId,undefined,['prepared','authorized','submitted','processing','needs_review']),
       ])
-      if(inventory.otherAssets.length)throw new Error('Your '+row.network+' wallet contains '+inventory.otherAssets.length+' additional non-USDC assets. Review these assets before continuing the wallet update.')
+      const assetsAccountedFor=await migrationAssetsAccountedFor(plan,inventory)
+      if(!assetsAccountedFor)throw new Error('Your '+row.network+' wallet contains '+inventory.otherAssets.length+' additional non-USDC assets. Review these assets before continuing the wallet update.')
       const otherPending=intents.some(intent=>intent.metadata.migrationRevision!==plan.revision && (intent.sourceNetwork===row.network || intent.settlementNetwork===row.network))
-      return {revision:plan.revision,checkedAt,ownershipVerified:true,noPendingOperations:noPending&&!otherPending,assetsAccountedFor:inventory.otherAssets.length===0,feeApproved:quote?.id===input.feeQuoteId && feeQuoteMatches(quote,plan,row,fee),sourceUnits:units.toString()}
+      return {revision:plan.revision,checkedAt,ownershipVerified:true,noPendingOperations:noPending&&!otherPending,assetsAccountedFor,feeApproved:quote?.id===input.feeQuoteId && feeQuoteMatches(quote,plan,row,fee),sourceUnits:units.toString()}
     },
     challengeFingerprint:migrationChallengeFingerprint,
     createChallenge:(row,id)=>provider.createChallenge(row,id),

@@ -1,3 +1,4 @@
+import { migrationAssetsAccountedFor } from './wallet-migration-scope.js'
 ﻿import { activateMigration } from './wallet-migration-activation.js'
 import { createMigrationProvider } from './wallet-migration-provider.js'
 import { readFreshMigrationUsdcUnits } from '../evm-balance.js'
@@ -13,7 +14,7 @@ export async function activateVerifiedMigration(plan:MigrationPlan,userToken:str
     const [checks,intents]=await Promise.all([
      Promise.all(current.rows.map(async row=>{
       const [units,inventory,pending]=await Promise.all([readFreshMigrationUsdcUnits(row.network,row.source.address as `0x${string}`),provider.inventory(row),provider.noPending(row)])
-      return {empty:units===0n,accounted:inventory.otherAssets.length===0,noPending:pending}
+      return {empty:units===0n,accounted:await migrationAssetsAccountedFor(current,inventory),noPending:pending}
      })),
      paymentExecutionRepository.listOwned(current.userId,undefined,['prepared','authorized','submitted','processing','needs_review']),
     ])
