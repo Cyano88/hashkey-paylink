@@ -22,7 +22,14 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
   setQuote(current=>current && current.revision===next.revision && next.rows.find(row=>row.network===current.network)?.state==='ready' ? current : null)
   if(next.phase==='completed')completedCallback.current()
  }
- async function refresh() { const result=await request<{snapshot:PocketMigrationSnapshot}>({action:'status'});accept(result.snapshot) }
+ async function refresh() {
+  const result=await request<{snapshot:PocketMigrationSnapshot}>({action:'status'});accept(result.snapshot)
+  const pending=result.snapshot.rows.find(row=>row.state==='pending')
+  if(!pending || !active.current)return
+  const checked=await request<{snapshot:PocketMigrationSnapshot;state:string;resume?:{action:'resume'|'recover';network:string;amount:string;source:string;target:string}}>({action:'reconcile',network:pending.network,revision:result.snapshot.revision,userToken:session.userToken})
+  accept(checked.snapshot)
+  if(active.current){setResume((checked.state==='approval_required'||checked.state==='recovery_required')?checked.resume??null:null);if(checked.state==='needs_review')setError('This saved transfer needs review before approval can continue.')}
+ }
  useEffect(()=>{
   active.current=true;locked.current=true;controller.current=new AbortController()
   void refresh().catch(reason=>{if(active.current)setError(reason instanceof Error?reason.message:'Migration status is unavailable.')}).finally(()=>{locked.current=false;if(active.current)setBusy(false)})
@@ -48,7 +55,7 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
     const result=await request<{state:string;challengeId?:string}>({action:resume.action,network:resume.network,revision:snapshot.revision,userToken:session.userToken},true)
     if(!active.current)return
     setResume(null)
-    if(result.state==='approval'&&result.challengeId)await approveCircleMigrationChallenge(session,result.challengeId)
+    if(result.state==='approval'&&result.challengeId)await approveCircleMigrationChallenge(session,result.challengeId,controller.current?.signal)
     else if(result.state==='needs_review')setError('This transfer needs review. A replacement transfer has not been created.')
     await refresh()
    } else if(quote&&!expired) {
@@ -59,7 +66,7 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
     const result=await request<{state:'approval'|'reconcile';challengeId?:string}>({action:'start',network:quote.network,revision:snapshot.revision,userToken:session.userToken,feeQuoteId:quote.id},true)
     if(!active.current)return
     setQuote(null)
-    if(result.state==='approval'&&result.challengeId)await approveCircleMigrationChallenge(session,result.challengeId)
+    if(result.state==='approval'&&result.challengeId)await approveCircleMigrationChallenge(session,result.challengeId,controller.current?.signal)
     if(active.current)await refresh()
    } else if(pending) {
     const result=await request<{snapshot:PocketMigrationSnapshot;state:string;resume?:{action:'resume'|'recover';network:string;amount:string;source:string;target:string}}>({action:'reconcile',network:pending.network,revision:snapshot.revision,userToken:session.userToken})
@@ -73,7 +80,7 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
     accept(result.snapshot)
    } else await refresh()
   } catch(reason) {
-   if(active.current){setResume(null);setError(reason instanceof Error?reason.message:'Migration could not continue.');await refresh().catch(()=>undefined)}
+   if(active.current){setQuote(null);setResume(null);setError(reason instanceof Error?reason.message:'Migration could not continue.');await refresh().catch(()=>undefined)}
   } finally {locked.current=false;if(active.current)setBusy(false)}
  }
  const unavailable=!!snapshot&&!snapshot.enabled&&(!!resume||(!!quote&&!expired)||snapshot.phase==='ready-to-activate')

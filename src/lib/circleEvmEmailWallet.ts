@@ -1,3 +1,4 @@
+import { executeRecoverableCircleApproval } from './circleRecoverableApproval'
 import { prepareEvmReplacement } from './circleEvmReplacement'
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
 import { Capacitor } from '@capacitor/core'
@@ -1561,7 +1562,7 @@ export async function restoreActivatedCircleEvmSession(session: CircleEvmEmailSe
   return applyActivatedWalletSession(session, result.wallets)
 }
 
-export async function approveCircleMigrationChallenge(session: CircleEvmEmailSession, challengeId: string) {
+export async function approveCircleMigrationChallenge(session: CircleEvmEmailSession, challengeId: string, signal?: AbortSignal) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(challengeId)) throw new Error('Invalid wallet migration challenge.')
-  return executeChallengeWithTimeout(authenticatedSdk(session), challengeId, 'Confirmation is taking longer than expected. Check migration progress before trying again.')
+  return executeRecoverableCircleApproval(authenticatedSdk(session), challengeId, sdkError, signal)
 }
