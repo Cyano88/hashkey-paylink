@@ -38,10 +38,16 @@ try {
  await page.getByRole('status',{name:'Loading base balance',exact:true}).waitFor()
  await resolve(7);await page.waitForFunction(()=>JSON.parse(document.getElementById('state').textContent).displayTotal===7)
  assert.equal((await state()).displayComplete,true)
+ // A short drag must not perform a network refresh.
+ await page.locator('[data-pocket-scroller]').evaluate(el=>{
+  el.scrollTop=0
+  for(const [type,y] of [['touchstart',100],['touchmove',180],['touchend',180]]){const event=new Event(type,{bubbles:true});Object.defineProperty(event,'touches',{value:type==='touchend'?[]:[{clientY:y}]});el.dispatchEvent(event)}
+ })
+ await page.waitForTimeout(100);assert.equal(await count(),1,'80px drag must not refresh')
  // Pull past threshold starts before touchend. Hold >3s to catch the old fake completion.
  await page.locator('[data-pocket-scroller]').evaluate(el=>{
   el.scrollTop=0
-  for(const [type,y] of [['touchstart',100],['touchmove',180],['touchmove',200]]){const event=new Event(type,{bubbles:true});Object.defineProperty(event,'touches',{value:[{clientY:y}]});el.dispatchEvent(event)}
+  for(const [type,y] of [['touchstart',100],['touchmove',210],['touchmove',230]]){const event=new Event(type,{bubbles:true});Object.defineProperty(event,'touches',{value:[{clientY:y}]});el.dispatchEvent(event)}
  })
  await page.getByRole('status',{name:'Refreshing Pocket',exact:true}).waitFor();await page.waitForFunction(()=>window.calls.length===4)
  assert.equal(await count(),2)
@@ -52,7 +58,8 @@ try {
  await resolve(0,{failure:true});await page.waitForFunction(()=>!JSON.parse(document.getElementById('state').textContent).balanceBusy)
  assert.equal((await state()).displayTotal,7);assert.equal((await state()).rows[0].balance,0)
  assert.equal((await state()).displayRows[0].stale,true)
- await page.getByRole('button',{name:'Retry balance refresh',exact:true}).waitFor()
+ assert.equal(await page.getByRole('button',{name:'Retry balance refresh',exact:true}).count(),0)
+ assert.equal(await page.getByText(/Last updated/).count(),0)
  // Automatic retry observes a synthetic confirmed deposit; no user refresh call.
  await page.evaluate(()=>window.timers.filter(timer=>timer.delay===15_000).at(-1).fn())
  await page.waitForFunction(()=>window.calls.length===6);await resolve(9)

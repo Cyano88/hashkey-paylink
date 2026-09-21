@@ -105,14 +105,14 @@ export default function PocketNotificationsPage() {
   }
   const movePull = (event: TouchEvent<HTMLDivElement>) => {
     if (pullStartY.current === null || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
-    const distance = Math.min(58, Math.max(0, (event.touches[0].clientY - pullStartY.current) * 0.62))
+    const distance = Math.min(78, Math.max(0, (event.touches[0].clientY - pullStartY.current) * 0.62))
     pullDistanceRef.current = distance
     setPullDistance(distance)
-    if (distance >= 30 && !refreshTriggered.current) { refreshTriggered.current = true; void refresh() }
+    if (distance >= 62 && !refreshTriggered.current) { refreshTriggered.current = true; void refresh() }
   }
   const finishPull = () => {
     pullStartY.current = null
-    if (pullDistanceRef.current >= 30 && !refreshTriggered.current) void refresh()
+    if (pullDistanceRef.current >= 62 && !refreshTriggered.current) void refresh()
     else { pullDistanceRef.current = 0; setPullDistance(0) }
   }
 
@@ -132,7 +132,7 @@ export default function PocketNotificationsPage() {
   }
 
   return <div ref={scrollerRef} onTouchStart={startPull} onTouchMove={movePull} onTouchEnd={finishPull} onTouchCancel={() => { pullStartY.current = null; if (!refreshing) { pullDistanceRef.current = 0; setPullDistance(0) } }} className="fixed inset-0 z-[45] overflow-y-auto overscroll-y-contain bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
-    <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-[max(.5rem,env(safe-area-inset-top))] z-[60] flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}><span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" /></span></div>
+    <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-[max(.5rem,env(safe-area-inset-top))] z-[60] flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}><span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" style={{ animationPlayState: refreshing ? 'running' : 'paused' }} /></span></div>
     <main className="mx-auto min-h-full w-full max-w-[480px] px-5 pb-8 pt-[max(1rem,env(safe-area-inset-top))]"><PocketFlowHeader title="Notifications" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       {busy ? <section className="mt-24 text-center"><Loader2 className="mx-auto h-6 w-6 text-gray-400" /></section> : error && !items.length ? <section className="mt-20 text-center"><AlertCircle className="mx-auto h-7 w-7 text-gray-300" /><p className="mt-4 text-sm font-bold">Notifications could not load</p><p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-gray-400">{error}</p><button type="button" onClick={() => void load({ showBusy: true, markRead: true })} className="mt-5 min-h-11 rounded-full bg-gray-950 px-6 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">Try again</button></section> : items.length ? <section className="mt-7 space-y-3">{items.map(item => <article key={item.id} className="rounded-[24px] bg-white p-4 shadow-sm dark:bg-white/[0.05]">
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black">{item.title}</p><p className="mt-1 text-[11px] text-gray-400">{item.direction === 'incoming' ? `From ${item.senderName}` : `To ${item.recipientName}`}</p><p className="mt-1 text-[10px] font-medium text-gray-400">Sent {new Date(item.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[9px] font-black uppercase text-gray-500 dark:bg-white/[0.08]">{item.status === 'paid' ? 'Paid' : item.status === 'accepted' ? 'Accepted' : item.status === 'declined' ? 'Declined' : 'Awaiting response'}</span></div>

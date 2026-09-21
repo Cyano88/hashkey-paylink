@@ -1,7 +1,7 @@
 import PocketWalletUpdateCard from '../components/PocketWalletUpdateCard'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Banknote, ChevronRight, Eye, EyeOff, QrCode, Send, Store, Users, Wallet } from '../components/PocketIcons'
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Landmark, ChevronRight, Eye, EyeOff, QrCode, Send, Store, RequestMoney, Deposit } from '../components/PocketIcons'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -47,10 +47,8 @@ export default function PocketHomePage() {
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
   const [balanceVisible, setBalanceVisible] = useState(() => window.localStorage.getItem(BALANCE_VISIBLE_KEY) !== 'false')
   const recent = activity.rows.slice(0, 4)
-  const balancesReady = !authenticated || wallets.resolved
   const balancesVisible = !authenticated || wallets.displayComplete
   const displayTotal = wallets.displayTotal
-  const retryBalance = balancesReady && !wallets.balanceBusy && Boolean(wallets.error)
   const activityReady = !authenticated || activity.resolved
 
   const open = (path: string) => navigate(POCKET_BASE_PATH + path)
@@ -76,8 +74,6 @@ export default function PocketHomePage() {
             {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(displayTotal) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label="Loading balances" className="block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
           </div>
           {showNgn && balancesVisible && (fx.quote ? <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(displayTotal * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p> : fx.busy ? <span aria-label="Loading Naira equivalent" className="mt-2 block h-3 w-24 animate-pulse rounded bg-white/10 dark:bg-gray-950/[0.08]" /> : null)}
-          {wallets.balanceStale && wallets.balanceObservedAt > 0 && <p className="mt-1 text-[10px] font-medium text-white/55 dark:text-gray-500">Last updated {new Date(wallets.balanceObservedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{wallets.balanceBusy ? ' ? Refreshing' : ''}</p>}
-          {retryBalance && <button type="button" onClick={() => void wallets.refreshBalances()} className="mt-2 rounded-lg px-2 py-1 text-[11px] font-semibold text-white/80 underline dark:text-gray-600">Retry balance refresh</button>}
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => open(POCKET_ROUTES.send)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><Send className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Send</span></button>
@@ -98,10 +94,10 @@ export default function PocketHomePage() {
 
     <section className="grid grid-cols-4 gap-2">
       {[
-        { label: 'Bank', icon: Banknote, path: POCKET_ROUTES.bank + '?mode=withdraw' },
+        { label: 'Bank', icon: Landmark, path: POCKET_ROUTES.bank + '?mode=withdraw' },
         { label: 'POS', icon: Store, path: POCKET_ROUTES.pos },
-        { label: 'Request', icon: Users, path: POCKET_ROUTES.usdc },
-        { label: 'Deposit', icon: Wallet, path: POCKET_ROUTES.deposit },
+        { label: 'Request', icon: RequestMoney, path: POCKET_ROUTES.usdc },
+        { label: 'Deposit', icon: Deposit, path: POCKET_ROUTES.deposit },
       ].map(item => <button key={item.label} type="button" onClick={() => open(item.path)} className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-2xl border border-gray-100 bg-white px-1 text-[10px] font-bold text-gray-700 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035] dark:text-gray-200"><item.icon className="h-5 w-5" />{item.label}</button>)}
     </section>
 

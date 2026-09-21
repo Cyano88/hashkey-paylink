@@ -1,4 +1,4 @@
-import { Activity, Banknote, TrendingUp, UserRound } from './PocketIcons'
+import { Home, Receipt, History, UserRound } from './PocketIcons'
 import { cn } from '../../lib/utils'
 
 export type PocketNavTab = 'home' | 'bills' | 'activity' | 'profile'
@@ -11,9 +11,9 @@ type PocketBottomNavProps = {
 }
 
 const items = [
-  { key: 'home', label: 'Home', icon: Activity },
-  { key: 'bills', label: 'Bills', icon: Banknote },
-  { key: 'activity', label: 'Activity', icon: TrendingUp },
+  { key: 'home', label: 'Home', icon: Home },
+  { key: 'bills', label: 'Bills', icon: Receipt },
+  { key: 'activity', label: 'Activity', icon: History },
   { key: 'profile', label: 'Profile', icon: UserRound },
 ] as const
 

@@ -100,15 +100,15 @@ export default function PocketRouteShell({
       setPullDistance(0)
       return
     }
-    const nextDistance = Math.min(58, distance * 0.62)
+    const nextDistance = Math.min(78, distance * 0.62)
     pullDistanceRef.current = nextDistance
     setPullDistance(nextDistance)
-    if (nextDistance >= 30 && !refreshTriggered.current) void runRefresh()
+    if (nextDistance >= 62 && !refreshTriggered.current) void runRefresh()
   }
 
   const finishPull = () => {
     pullStartY.current = null
-    if (pullDistanceRef.current < 30 || refreshInFlight.current || refreshTriggered.current) {
+    if (pullDistanceRef.current < 62 || refreshInFlight.current || refreshTriggered.current) {
       pullDistanceRef.current = 0
       if (!refreshInFlight.current) setPullDistance(0)
       return
@@ -170,7 +170,7 @@ export default function PocketRouteShell({
             }}
           >
             <div role="status" aria-label={refreshing ? 'Refreshing Pocket' : 'Pull to refresh'} aria-hidden={pullDistance <= 4 && !refreshing} className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}>
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900 shadow-md ring-2 ring-gray-200/80 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" style={{ animationDuration: '650ms' }} /></span>
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900 shadow-md ring-2 ring-gray-200/80 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" style={{ animationDuration: '650ms', animationPlayState: refreshing ? 'running' : 'paused' }} /></span>
             </div>
             <div
               className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))]"

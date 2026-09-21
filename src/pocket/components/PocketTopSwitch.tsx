@@ -1,4 +1,4 @@
-import { Coins, History, Landmark, Lightbulb, Phone, Store, Tv, Users, Wallet, Wifi } from './PocketIcons'
+import { Coins, History, Landmark, Lightbulb, Phone, Store, Tv, RequestMoney, CreditCard, Wifi } from './PocketIcons'
 
 export type PocketHeaderMode = 'move' | 'bills' | 'activity'
 export type PocketMoveSwitchView = 'usdc' | 'bank' | 'pos'
@@ -30,10 +30,10 @@ const billItems = [
 
 const activityItems = [
   { key: 'all', label: 'All', icon: History },
-  { key: 'purchases', label: 'Purchases', icon: Wallet },
+  { key: 'purchases', label: 'Purchases', icon: CreditCard },
   { key: 'bank', label: 'Bank receive', icon: Landmark },
   { key: 'pos', label: 'POS', icon: Store },
-  { key: 'collections', label: 'Requests', icon: Users },
+  { key: 'collections', label: 'Requests', icon: RequestMoney },
 ] as const
 
 export default function PocketTopSwitch({
