@@ -1,3 +1,4 @@
+import PocketReceiptReport from '../pocket/components/PocketReceiptReport'
 import { shareReceiptFile } from '../lib/shareReceiptFile'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -177,12 +178,12 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
   }, [])
 
   useEffect(() => {
-    const back = (event: Event) => { if (event.defaultPrevented) return; event.preventDefault(); onClose() }
+    const back = (event: Event) => { const dialogs=document.querySelectorAll('[role="dialog"]');if(dialogs[dialogs.length-1]?.getAttribute('aria-label')!==(surface==='details'?'Transaction details':'Receipt preview'))return; if (event.defaultPrevented) return; event.preventDefault(); onClose() }
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') back(event) }
     window.addEventListener(POCKET_NATIVE_BACK_EVENT, back)
     document.addEventListener('keydown', key)
     return () => { window.removeEventListener(POCKET_NATIVE_BACK_EVENT, back); document.removeEventListener('keydown', key) }
-  }, [onClose])
+  }, [onClose,surface])
 
   async function share(kind: 'image' | 'pdf') {
     if (sharing) return
@@ -218,6 +219,7 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
       {surface === 'details' ? <div className="min-h-0 flex-1 overflow-y-auto"><TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /></div> : (
         <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col px-3 pb-[max(0.5rem,var(--pocket-safe-bottom))] pt-2">
           <div data-receipt-paper={paymentReceiptBrand(receipt).kind==='pocket'||undefined} style={paymentReceiptBrand(receipt).kind==='pocket'?{WebkitMaskImage:'radial-gradient(circle at 10px 100%, transparent 5.5px, black 6px)',maskImage:'radial-gradient(circle at 10px 100%, transparent 5.5px, black 6px)',WebkitMaskSize:'20px 100%',maskSize:'20px 100%',WebkitMaskRepeat:'repeat-x',maskRepeat:'repeat-x'}:undefined} className={paymentReceiptBrand(receipt).kind==='pocket'?"min-h-0 flex-1 overflow-y-auto rounded-t-[24px] bg-white pb-2 shadow-sm dark:bg-[#111216]":"min-h-0 flex-1 overflow-y-auto rounded-[28px] border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]"}><ReceiptDocument receipt={receipt} /></div>
+          {brand.kind==='pocket'&&<PocketReceiptReport key={receipt.eventId+':'+receipt.txHash} receipt={receipt} onClose={onClose}/>}
           {extraActions}
           <div className="mt-2 grid shrink-0 grid-cols-2 gap-2">
             <button type="button" disabled={Boolean(sharing)} onClick={() => void share('image')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-950 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.08] dark:text-white">

@@ -1,3 +1,6 @@
+import { pocketActivityStore } from './activity-store.js'
+import { activityFeedKey } from './activity-feed.js'
+import { reportTransaction, transactionReportKey, transactionReportDetails, validateTransactionReport, upsertTransactionReport } from './transaction-report.js'
 import type { Request, Response } from 'express'
 import crypto from 'node:crypto'
 import { PrivyClient, type User } from '@privy-io/server-auth'
@@ -15,6 +18,9 @@ type SupportCase = {
   category: 'bank_identity' | 'bank_payment' | 'stuck_transaction' | 'account' | 'other'
   priority: 'normal' | 'high'
   summary: string
+  transactionKey?: string
+  transaction?: ReturnType<typeof transactionReportDetails>
+  reportReason?: string
   reference?: string
   assignedTo?: string
   customer?: { fullName: string; email: string; pocketId: string }
@@ -93,6 +99,7 @@ async function privateCustomerIdentity(identity: Awaited<ReturnType<typeof resol
 }
 
 export default async function pocketSupportCasesHandler(req: Request, res: Response) {
+  res.setHeader('Cache-Control', 'private, no-store')
   try {
     if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
     const action = clean(req.body?.action || req.query.action, 40) || (req.method === 'GET' ? 'list-mine' : 'create')
@@ -141,6 +148,26 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
     if (req.method === 'GET' || action === 'list-mine') {
       const rows = Object.values((await currentStore()).cases).filter(item => item.profileId === profileId).sort((a, b) => b.updatedAt - a.updatedAt)
       return res.json({ ok: true, cases: rows.map(publicCase) })
+    }
+    if (action === 'transaction-report' || action === 'transaction-report-status') {
+      if(identity.kind!=='privy') return res.status(401).json({ok:false,error:'Sign in to Pocket to report this transaction.'})
+      const feed=await pocketActivityStore.read(activityFeedKey(identity.subject))
+      const row=reportTransaction(Object.values(feed?.sources||{}).flatMap(source=>source.snapshot.payments),req.body?.transaction)
+      const transactionKey=transactionReportKey(row)
+      if(action==='transaction-report-status') {
+        const existing=Object.values((await currentStore()).cases).find(item=>item.profileId===profileId&&item.transactionKey===transactionKey&&item.status!=='resolved')
+        return res.json({ok:true,case:existing?publicCase(existing):null})
+      }
+      const report=validateTransactionReport(req.body?.reason,req.body?.description)
+      const now=Date.now(),transaction=transactionReportDetails(row,now),customer=await privateCustomerIdentity(identity)
+      const item:SupportCase={id:'pcs_'+crypto.randomUUID().replace(/-/g,'').slice(0,16),profileId,status:'open',priority:'high',
+        category:row.source?.startsWith('bank-')?'bank_payment':'stuck_transaction',summary:report.label,reference:row.bankOrderId||row.providerReference||row.billReference||row.txHash||row.eventId,
+        transactionKey,transaction,reportReason:report.reason,customer,createdAt:now,updatedAt:now,
+        messages:[{id:crypto.randomUUID(),author:'user',text:report.label+' - '+report.description,createdAt:now},
+          {id:crypto.randomUUID(),author:'agent',text:'Transaction report received for manual review. Reference: '+(transaction.providerReference||transaction.transactionHash||transaction.eventId)+'. Recorded status: '+transaction.status+'. '+transaction.amountUsdc+' USDC'+(transaction.amountNgn?' / NGN '+transaction.amountNgn:'')+'. Network: '+transaction.network+'.',createdAt:now,kind:'transaction_report'}]}
+      let saved=item,reused=false
+      await mutateDurableJson<SupportStore>(STORE_KEY,current=>{const next=current||{cases:{}};const result=upsertTransactionReport(next.cases,item);saved=result.item;reused=result.reused;return next})
+      return res.status(reused?200:201).json({ok:true,case:publicCase(saved),reused})
     }
     if (action === 'reply') {
       const caseId = clean(req.body?.caseId, 80)

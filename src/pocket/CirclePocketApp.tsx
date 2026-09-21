@@ -1,3 +1,4 @@
+import { PocketReceiptReportProvider } from './components/PocketReceiptReport'
 import PocketTransferMenuPage from './pages/PocketTransferMenuPage'
 import './pocketTheme.css'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -305,7 +306,7 @@ export default function CirclePocketApp() {
     : content
   return (
     <>
-      {securedContent}
+      <PocketReceiptReportProvider key={email} getAccessToken={authenticated?getAccessToken:undefined}>{securedContent}</PocketReceiptReportProvider>
       <PocketSessionSplash state={splashState} />
     </>
   )

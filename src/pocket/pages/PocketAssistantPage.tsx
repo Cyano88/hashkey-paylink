@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
@@ -8,6 +8,8 @@ const WELCOME_TEXT = 'Pocket Support is ready. Ask me about balances, sending or
 
 export default function PocketAssistantPage() {
   const navigate = useNavigate()
+  const [params]=useSearchParams()
+  const reportCaseId=/^pcs_[a-f0-9]{16}$/.test(params.get('case')||'')?params.get('case')||'':''
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const displayName = profile.profile?.resolvedName || 'there'
@@ -36,6 +38,7 @@ export default function PocketAssistantPage() {
             initialPayer={displayName === 'there' ? '' : displayName}
             initialHelperMode='circle-pocket'
             lockedHelperMode='circle-pocket'
+            initialSupportCaseId={reportCaseId}
             initialNotice=''
             welcomeText={WELCOME_TEXT}
             inputPlaceholder='Ask Agent Hash...'

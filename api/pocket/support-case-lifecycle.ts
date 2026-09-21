@@ -4,7 +4,7 @@ export const SUPPORT_AUTO_RESOLVE_AFTER_MS = 72 * 60 * 60 * 1000
 export type PocketSupportLifecycleMessage = {
   id: string
   author: 'user' | 'agent' | 'staff'
-  kind?: 'automatic_reminder' | 'automatic_resolution'
+  kind?: 'automatic_reminder' | 'automatic_resolution' | 'transaction_report'
   text: string
   createdAt: number
 }

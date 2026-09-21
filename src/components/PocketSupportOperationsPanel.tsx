@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { Check, Loader2, RefreshCw, Send } from 'lucide-react'
 
-type SupportMessage = { id: string; author: 'user' | 'agent' | 'staff'; kind?: 'automatic_reminder' | 'automatic_resolution'; text: string; createdAt: number }
+type SupportMessage = { id: string; author: 'user' | 'agent' | 'staff'; kind?: 'automatic_reminder' | 'automatic_resolution' | 'transaction_report'; text: string; createdAt: number }
 type SupportCase = {
   id: string
   status: 'open' | 'assigned' | 'waiting_user' | 'resolved'
   category: string
   priority: 'normal' | 'high'
+  transaction?: Record<string,string|number|undefined>
+  reportReason?:string
   summary: string
   assignedTo?: string
   customer?: { fullName: string; email: string; pocketId: string }
@@ -103,6 +105,7 @@ export default function PocketSupportOperationsPanel() {
         </button>)}</div>
         {active && <div className="rounded-3xl border border-gray-200 bg-white p-4 dark:border-white/10 dark:bg-[#111216] sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold">{active.summary}</p><p className="mt-1 text-[11px] text-gray-500">{active.category.replace('_', ' ')} · {active.priority} · {when(active.createdAt)}</p></div><div className="flex gap-2"><button disabled={busy} onClick={() => void operate('staff-assign')} className="rounded-full border border-gray-200 px-3 py-2 text-xs font-semibold dark:border-white/10">Assign to me</button><button disabled={busy || active.status === 'resolved'} onClick={() => void operate('staff-resolve')} className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-3 py-2 text-xs font-semibold dark:border-white/10"><Check className="h-3.5 w-3.5" />Resolve</button></div></div>
+          {active.transaction&&<div className="mt-4 rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]"><p className="mb-3 text-xs font-semibold">Reported transaction</p><dl className="space-y-2">{Object.entries(active.transaction).filter(([,value])=>value!==undefined&&value!=='').map(([key,value])=><div key={key} className="grid grid-cols-[8rem_1fr] gap-3 text-xs"><dt className="text-gray-500">{key.replace(/([A-Z])/g,' $1')}</dt><dd className="break-all">{key.endsWith('At')?when(Number(value)):String(value)}</dd></div>)}</dl></div>}
           {active.customer && <div className="mt-4 grid gap-2 rounded-2xl bg-gray-50 p-3 text-xs dark:bg-white/[0.04] sm:grid-cols-3"><div><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Full name</p><p className="mt-1 font-semibold">{active.customer.fullName || 'Not verified'}</p></div><div><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Email</p><p className="mt-1 truncate font-semibold">{active.customer.email || 'Unavailable'}</p></div><div><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Pocket ID</p><p className="mt-1 font-semibold tabular-nums">{active.customer.pocketId || 'Unavailable'}</p></div></div>}
           <div className="my-5 max-h-[24rem] space-y-3 overflow-y-auto">{active.messages.map(message => <div key={message.id} className={`max-w-[86%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${message.author === 'staff' ? 'ml-auto bg-gray-950 text-white dark:bg-white dark:text-gray-950' : 'bg-gray-100 dark:bg-white/[0.06]'}`}><p>{message.text}</p><p className="mt-1 text-[9px] opacity-50">{message.author} · {when(message.createdAt)}</p></div>)}</div>
           <div className="flex gap-2"><textarea value={reply} onChange={event => setReply(event.target.value)} placeholder="Reply as Pocket Support" className="min-h-12 flex-1 resize-none rounded-2xl border border-gray-200 bg-transparent px-3 py-2 text-sm outline-none focus:border-gray-500 dark:border-white/10" /><button disabled={busy || !reply.trim()} onClick={() => void operate('staff-reply')} className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gray-950 text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</button></div>
