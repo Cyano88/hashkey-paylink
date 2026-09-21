@@ -16,6 +16,7 @@ public class MainActivity extends BridgeActivity {
         launchSplash.setKeepOnScreenCondition(() -> keepLaunchSplash);
         registerPlugin(PocketInsetsPlugin.class);
         registerPlugin(PocketStatementPlugin.class);
+        registerPlugin(PocketReceiptPlugin.class);
         super.onCreate(savedInstanceState);
         getBridge().getWebView().addJavascriptInterface(new PocketLaunchBridge(), "PocketLaunch");
         getBridge().getWebView().postDelayed(() -> keepLaunchSplash = false, 15_000);

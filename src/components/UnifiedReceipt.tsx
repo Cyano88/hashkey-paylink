@@ -1,3 +1,4 @@
+import { shareReceiptFile } from '../lib/shareReceiptFile'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { POCKET_NATIVE_BACK_EVENT } from '../pocket/lib/pocketNativeBack'
@@ -155,25 +156,6 @@ function TransactionDetails({ receipt, copied, onCopy }: { receipt: PaylinkRecei
   )
 }
 
-function downloadBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
-}
-
-async function shareFile(file: File, title: string) {
-  if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-    await navigator.share({ title, files: [file] })
-    return
-  }
-  downloadBlob(file, file.name)
-}
-
 function receiptDataUrlBlob(dataUrl: string) {
   const match = /^data:([^;,]+);base64,(.+)$/s.exec(dataUrl)
   if (!match) throw new Error('Receipt image could not be prepared.')
@@ -210,10 +192,10 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
       if (kind === 'image') {
         const dataUrl = await createPaymentReceiptImage(receipt)
         const blob = receiptDataUrlBlob(dataUrl)
-        await shareFile(new File([blob], paymentReceiptImageFileName(receipt), { type: 'image/jpeg' }), `${brand.name} receipt`)
+        await shareReceiptFile(new File([blob], paymentReceiptImageFileName(receipt), { type: 'image/jpeg' }), `${brand.name} receipt`)
       } else {
         const blob = await createPaymentReceiptPdf(receipt)
-        await shareFile(new File([blob], paymentReceiptFileName(receipt), { type: 'application/pdf' }), `${brand.name} receipt`)
+        await shareReceiptFile(new File([blob], paymentReceiptFileName(receipt), { type: 'application/pdf' }), `${brand.name} receipt`)
       }
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') return
