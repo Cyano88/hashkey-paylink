@@ -82,8 +82,9 @@ export default function PocketHomePage() {
         </div>
       </div>
       <div className="mt-4 grid grid-cols-4 gap-2">
-        {NETWORKS.map(network => <button key={network.key} type="button" onClick={() => setSelected(network.key)} className={cn('relative flex h-10 items-center justify-center rounded-xl transition', selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={'Show ' + network.label + ' balance'} aria-pressed={selected === network.key}>
+        {NETWORKS.map(network => <button key={network.key} type="button" onClick={() => setSelected(network.key)} className={cn('relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl transition', selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={'Show ' + network.label + ' balance'} aria-pressed={selected === network.key}>
           <img src={network.logo} alt="" className={cn('h-6 w-6 rounded-md object-cover grayscale contrast-200', network.dark ? 'invert dark:invert-0' : 'dark:invert')} />
+          <span className="text-[9px] font-semibold">{network.label}</span>
         </button>)}
       </div>
       <div className="mt-3 border-t border-white/10 pt-3 text-center dark:border-gray-950/10">

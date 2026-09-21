@@ -81,7 +81,6 @@ export default function PocketMobileNumberInput({
   const [contactError, setContactError] = useState('')
   const manualNetworkOverride = useRef(false)
   const selectedNetwork = networkFromServiceId(selectedNetworkId)
-  const selectedOption = options.find(option => option.value === selectedNetworkId)
   const normalizedPhone = normalizeNigerianMobileNumber(phoneNumber)
   const hasCompleteNumber = normalizedPhone.startsWith('234')
     ? normalizedPhone.length >= 13
@@ -125,17 +124,14 @@ export default function PocketMobileNumberInput({
     <div>
       <div
         className={cn(
-          'flex min-h-[58px] items-center overflow-hidden rounded-2xl border bg-white shadow-sm transition',
+          'flex min-h-[52px] items-center overflow-hidden rounded-2xl border bg-white shadow-sm transition',
           'border-gray-200 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10',
           'dark:border-[#262626] dark:bg-[#17181d] dark:focus-within:border-blue-400/50',
           invalidNumber && 'border-red-300 focus-within:border-red-400 focus-within:ring-red-500/10 dark:border-red-400/40',
         )}
       >
-        <label className="relative flex h-[58px] min-w-[108px] shrink-0 cursor-pointer items-center gap-2 border-r border-gray-200 px-3 dark:border-[#262626]">
+        <label className="relative flex h-[50px] w-[72px] shrink-0 cursor-pointer items-center gap-2 border-r border-gray-200 px-2.5 dark:border-[#262626]">
           <NetworkMark network={selectedNetwork} />
-          <span className="min-w-0 flex-1 truncate text-xs font-black text-gray-900 dark:text-white">
-            {selectedOption?.label ?? 'Network'}
-          </span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
           <select
             value={selectedNetworkId}
@@ -164,7 +160,7 @@ export default function PocketMobileNumberInput({
             onBlur={event => updatePhone(event.target.value)}
             placeholder="0801 234 5678"
             aria-invalid={invalidNumber}
-            className="h-12 w-full min-w-0 bg-transparent text-[15px] font-semibold tabular-nums tracking-[0.01em] text-gray-950 outline-none placeholder:text-gray-300 disabled:opacity-60 dark:text-white dark:placeholder:text-gray-600"
+            className="h-11 w-full min-w-0 bg-transparent text-[15px] font-semibold tabular-nums tracking-[0.01em] text-gray-950 outline-none placeholder:text-gray-300 disabled:opacity-60 dark:text-white dark:placeholder:text-gray-600"
           />
         </label>
 
