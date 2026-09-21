@@ -537,7 +537,15 @@ export function paycrestActivityTimestamp(order: { created_at?: string; updated_
   return Number.isFinite(updatedAt) ? updatedAt : 0
 }
 
-export async function listNgPosHistoryForOwner(privyUserId: string) {
+export async function listNgPosResourcesForOwner(privyUserId: string) {
+  const store = await readStore()
+  return Object.values(store.merchants ?? {}).filter(merchant => merchant.owner_id === privyUserId).map(merchant => ({
+    merchant_id: merchant.merchant_id, display_name: merchant.display_name,
+    source: merchant.source, bank_name: merchant.bank_name, bank_last4: merchant.bank_last4, created_at: merchant.created_at,
+  }))
+}
+
+export async function listNgPosHistoryForOwner(privyUserId: string, options: { repair?: boolean } = {}) {
   const store = await readStore()
   const merchants = Object.values(store.merchants ?? {})
     .filter(merchant => merchant.owner_id === privyUserId)
@@ -548,7 +556,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
   const bankSendById = new Map(bankSendLinks.map(link => [link.link_id, link]))
   const merchantById = new Map(merchants.map(merchant => [merchant.merchant_id, merchant]))
   const paycrestOrders = await listPaycrestPosOrdersForMerchants([...merchantIds, ...bankSendLinkIds])
-  for (const order of paycrestOrders) {
+  for (const order of options.repair === false ? [] : paycrestOrders) {
     if (order.source !== 'bank-send' && order.tx_hash && /^0x[a-fA-F0-9]{64}$/.test(order.tx_hash)) {
       // Repair a receipt synchronously when payment was persisted but a browser,
       // worker, deploy, or provider callback stopped before event registration.
@@ -594,6 +602,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string) {
         // Provider status refreshes must not move an older payment to the top.
         // A registered receipt keeps its confirmation time in mergeRegisteredPaycrestActivity.
         ts: paycrestActivityTimestamp(order),
+        providerReference: order.intent_id,
         source: isBankSendOrder ? 'bank-send' : isBankWithdrawOrder ? 'bank-withdraw' : isBankReceiveOrder ? 'bank-receive' : 'ngpos',
         merchantId: order.merchant_id,
         contextLabel: isBankSendOrder

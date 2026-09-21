@@ -10,6 +10,8 @@ import type {
 export type UnifiedBalanceChainKey = 'base' | 'arc' | 'arbitrum' | 'solana'
 
 export interface UnifiedBalanceBreakdown {
+  walletRevision?: string
+  observedAt?: number
   key: UnifiedBalanceChainKey
   label: string
   balance: number

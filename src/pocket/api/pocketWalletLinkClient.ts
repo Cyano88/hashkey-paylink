@@ -62,13 +62,15 @@ export function parsePocketWalletsRead(value: unknown): PocketWalletsReadData {
 
 export async function readPocketWallets({
   accessToken,
+  signal,
   fetcher = fetch,
 }: {
   accessToken: string
+  signal?: AbortSignal
   fetcher?: typeof fetch
 }): Promise<PocketWalletsReadData> {
   const response = await fetcher(POCKET_API.wallets, {
-    method: 'GET',
+    method: 'GET', signal, cache: 'no-store',
     headers: { authorization: `Bearer ${accessToken}` },
   })
   const data = await response.json().catch(() => undefined)

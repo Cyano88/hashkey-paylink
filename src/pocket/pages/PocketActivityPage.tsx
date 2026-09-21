@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketLoadingState from '../components/PocketLoadingState'
@@ -43,29 +43,37 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
   const activity = usePocketActivity({ authenticated, email, enabled: true, getAccessToken })
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken })
   const bridges = usePocketBridgeActivity({ owner: email, authenticated, rows: activity.rows, getAccessToken, getEvmSession: walletController.getEvmSession })
+  const requestScope = authenticated ? email.trim().toLowerCase() : ''
+  const activeRequestScope = useRef(requestScope)
+  activeRequestScope.current = requestScope
+  const requestSequence = useRef(0)
+  const [requestsScope, setRequestsScope] = useState(requestScope)
   const [requests, setRequests] = useState<PocketRequestItem[]>([])
   const [requestsError, setRequestsError] = useState('')
-  const [requestsResolved, setRequestsResolved] = useState(!authenticated)
-  const rowsWithRequests = useMemo(() => requestActivityRows(bridges.rows, requests), [bridges.rows, requests])
+  const rowsWithRequests = useMemo(() => requestActivityRows(bridges.rows, requestsScope === requestScope ? requests : []), [bridges.rows, requests, requestsScope, requestScope])
 
   const refreshRequests = useCallback(async () => {
-    if (!authenticated) { setRequests([]); setRequestsResolved(true); return }
+    const sequence = ++requestSequence.current
+    const valid = () => activeRequestScope.current === requestScope && sequence === requestSequence.current
+    if (!authenticated) { setRequests([]); return }
     try {
       const accessToken = await getAccessToken()
       if (!accessToken) throw new Error('Sign in again to load requests.')
       const next = await readPocketRequests(accessToken)
+      if (!valid()) return
+      setRequestsScope(requestScope)
       setRequests(next)
       setRequestsError('')
     } catch (reason) {
+      if (!valid()) return
       setRequestsError(reason instanceof Error ? reason.message : 'Requests could not load.')
-    } finally {
-      setRequestsResolved(true)
     }
-  }, [authenticated, getAccessToken])
+  }, [authenticated, getAccessToken, requestScope])
 
   useEffect(() => {
-    if (authenticated) setRequestsResolved(false)
+    setRequestsError('')
     void refreshRequests()
+    return () => { requestSequence.current++ }
   }, [authenticated, refreshRequests])
 
   useEffect(() => {
@@ -112,14 +120,14 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
         rows={activity.rows}
         merchants={activity.merchants}
         collections={activity.collections}
-        requests={requests}
+        requests={requestsScope === requestScope ? requests : []}
         busy={activity.busy}
         error={view === 'collections' ? activity.error || requestsError : activity.error}
       /> : <PocketActivityPanel
         view={view}
         rows={rowsWithRequests}
         authenticated={authenticated}
-        busy={activity.busy || !requestsResolved}
+        busy={activity.busy}
         error={view === 'all' ? activity.error || requestsError || bridges.error : activity.error}
         onRefund={handleBillsRefund}
         onBridgeCheck={bridges.check}

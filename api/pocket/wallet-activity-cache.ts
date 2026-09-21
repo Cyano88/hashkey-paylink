@@ -4,7 +4,7 @@ type Scan = (network: string, wallet: string, signal: AbortSignal) => Promise<Po
 type Snapshot = { rows: PocketActivityRow[]; freshUntil: number; retainUntil: number; retryAfter: number }
 
 /** Shared, bounded activity reads only; never used as payment settlement proof. */
-export function createWalletActivityReader(scan: Scan, now = Date.now, deadlineMs = 10_000) {
+export function createWalletActivityReader(scan: Scan, now = Date.now, deadlineMs = 10_000, observe?: (owner: string, rows: PocketActivityRow[]) => Promise<void>) {
   const cache = new Map<string, Snapshot>()
   const cooldown = new Map<string, number>()
   const pending = new Map<string, Promise<PocketActivityRow[]>>()
@@ -26,8 +26,9 @@ export function createWalletActivityReader(scan: Scan, now = Date.now, deadlineM
       // Recent activity may wait only 900ms, but shares the same bounded scan
       // as the full page. The scan always aborts after this independent deadline.
       const deadline = setTimeout(() => controller.abort(), deadlineMs)
-      work = Promise.resolve().then(() => scan(network, wallet, controller.signal)).then(rows => {
+      work = Promise.resolve().then(() => scan(network, wallet, controller.signal)).then(async rows => {
         controller.signal.throwIfAborted()
+        if (observe) await observe(ownerId, rows)
         const bounded = rows.sort((a, b) => b.ts - a.ts).slice(0, 100)
         if (cache.size >= 256 && !cache.has(key)) cache.delete(cache.keys().next().value!)
         cache.set(key, { rows: copy(bounded), freshUntil: now() + 30_000, retainUntil: now() + 120_000, retryAfter: 0 })

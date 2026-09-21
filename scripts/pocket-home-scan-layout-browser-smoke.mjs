@@ -5,7 +5,7 @@ const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright')
 const mocks={
  '../components/PocketRouteShell':`import React from 'react';export default function Shell({children}){return <main className="p-4 space-y-4">{children}</main>}`,
  '../hooks/usePocketIdentity':`export default ()=>({authenticated:true,email:'fixture@example.invalid',getAccessToken:async()=>'fixture'})`,
- '../hooks/usePocketWallets':`export default ()=>({resolved:true,error:null,total:window.balance,totalComplete:true,rows:[{key:'base',balance:window.balance}],walletUpdate:'hidden'})`,
+ '../hooks/usePocketWallets':`export default ()=>({resolved:true,error:null,total:window.balance,totalComplete:true,rows:[{key:'base',balance:window.balance}],walletUpdate:'hidden',displayRows:[{key:'base',balance:window.balance,known:true}],displayTotal:window.balance,displayComplete:true})`,
  '../hooks/usePocketProfile':`export default ()=>({profile:{displayCurrency:'USD'}})`,
  '../hooks/usePocketActivity':`export default ()=>({resolved:true,rows:[]})`,
  '../hooks/usePocketFxQuote':`export default ()=>({quote:null,busy:false})`,

@@ -22,11 +22,13 @@ export default function PocketRouteShell({
   const [headerHeight, setHeaderHeight] = useState(120)
   const [pullDistance, setPullDistance] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshMessage, setRefreshMessage] = useState('')
   const scrollerRef = useRef<HTMLDivElement>(null)
   const scrollFrame = useRef<number | null>(null)
   const pullStartY = useRef<number | null>(null)
   const pullDistanceRef = useRef(0)
   const refreshTriggered = useRef(false)
+  const refreshInFlight = useRef(false)
 
   useEffect(() => {
     const header = document.querySelector<HTMLElement>('[data-hashpaylink-top-nav]')
@@ -63,23 +65,27 @@ export default function PocketRouteShell({
   }
 
   const startPull = (event: TouchEvent<HTMLDivElement>) => {
-    if (navigationDisabled || refreshing || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
+    if (navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
     pullDistanceRef.current = 0
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
   }
 
   const runRefresh = async () => {
-    if (refreshing || refreshTriggered.current) return
+    if (refreshInFlight.current || refreshTriggered.current) return
+    refreshInFlight.current = true
     refreshTriggered.current = true
     pullStartY.current = null
+    setRefreshMessage('')
     setRefreshing(true)
-    pullDistanceRef.current = 34
-    setPullDistance(34)
+    pullDistanceRef.current = 42
+    setPullDistance(42)
     try {
-      const refreshWork = refreshPocketData()
-      await Promise.race([refreshWork, new Promise(resolve => window.setTimeout(resolve, 3_000))])
+      await Promise.all([refreshPocketData(), new Promise(resolve => window.setTimeout(resolve, 350))])
+    } catch {
+      setRefreshMessage('Refresh is taking longer. Pull down to retry.')
     } finally {
+      refreshInFlight.current = false
       pullDistanceRef.current = 0
       setRefreshing(false)
       setPullDistance(0)
@@ -102,9 +108,9 @@ export default function PocketRouteShell({
 
   const finishPull = () => {
     pullStartY.current = null
-    if (pullDistanceRef.current < 30 || refreshing || refreshTriggered.current) {
+    if (pullDistanceRef.current < 30 || refreshInFlight.current || refreshTriggered.current) {
       pullDistanceRef.current = 0
-      if (!refreshing) setPullDistance(0)
+      if (!refreshInFlight.current) setPullDistance(0)
       return
     }
     void runRefresh()
@@ -163,8 +169,8 @@ export default function PocketRouteShell({
               scrollPaddingBottom: 'calc(7.5rem + var(--pocket-safe-bottom))',
             }}
           >
-            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}>
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-3.5 w-3.5 animate-spin" /></span>
+            <div role="status" aria-label={refreshing ? 'Refreshing Pocket' : 'Pull to refresh'} aria-hidden={pullDistance <= 4 && !refreshing} className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}>
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900 shadow-md ring-2 ring-gray-200/80 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" style={{ animationDuration: '650ms' }} /></span>
             </div>
             <div
               className="mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))]"
@@ -173,6 +179,7 @@ export default function PocketRouteShell({
                 paddingTop: 16,
               }}
             >
+              {refreshMessage && <p role="status" className="text-center text-xs text-gray-500 dark:text-gray-400">{refreshMessage}</p>}
               {children}
             </div>
           </div>

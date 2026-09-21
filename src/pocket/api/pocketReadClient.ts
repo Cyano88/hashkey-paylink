@@ -41,6 +41,10 @@ export type PocketLocalCurrencyProfileReadResult = {
 }
 
 export type PocketActivityReadResult = {
+  complete?: boolean
+  partial?: boolean
+  refreshing?: boolean
+  updatedAt?: number
   payments: PocketActivityRow[]
   merchants: PocketPosResource[]
   collections: PocketCollectionResource[]
@@ -125,7 +129,12 @@ export function parsePocketActivityRead(value: unknown): PocketActivityReadResul
   if (!isPocketActivityReadData(value)) {
     throw new Error('Circle Pocket activity response was invalid.')
   }
-  return { payments: value.payments, merchants: value.merchants, collections: value.collections }
+  return { payments: value.payments, merchants: value.merchants, collections: value.collections,
+    ...(typeof value.complete === 'boolean' ? { complete: value.complete } : {}),
+    ...(typeof value.partial === 'boolean' ? { partial: value.partial } : {}),
+    ...(typeof value.refreshing === 'boolean' ? { refreshing: value.refreshing } : {}),
+    ...(typeof value.updatedAt === 'number' ? { updatedAt: value.updatedAt } : {}),
+  }
 }
 
 export function parsePocketLocalCurrencyProfileSave(value: unknown): PocketProfileUpsertData {
@@ -189,15 +198,18 @@ export async function savePocketLocalCurrencyProfile({
 export async function readPocketActivity({
   accessToken,
   recent = false,
+  fresh = false,
   signal,
   fetcher = fetch,
 }: {
   accessToken: string
   recent?: boolean
+  fresh?: boolean
   signal?: AbortSignal
   fetcher?: typeof fetch
 }): Promise<PocketActivityReadResult> {
-  const response = await fetcher(recent ? `${POCKET_API.activity}?scope=recent` : POCKET_API.activity, {
+  const query = [recent ? 'scope=recent' : '', fresh ? 'refresh=1' : ''].filter(Boolean).join('&')
+  const response = await fetcher(POCKET_API.activity + (query ? '?' + query : ''), {
     method: 'GET',
     headers: { authorization: `Bearer ${accessToken}` },
     signal,
@@ -211,30 +223,36 @@ export async function readPocketActivity({
 
 export async function readPocketBalances({
   accessToken,
+  signal,
   fetcher = fetch,
+  fresh = false,
 }: {
   accessToken: string
+  signal?: AbortSignal
   fetcher?: typeof fetch
+  fresh?: boolean
 }): Promise<UnifiedBalanceResult> {
-  const response = await fetcher(POCKET_API.balances, {
-    method: 'GET',
+  const response = await fetcher(POCKET_API.balances + (fresh ? '?refresh=1' : ''), {
+    method: 'GET', signal, cache: 'no-store',
     headers: { authorization: `Bearer ${accessToken}` },
   })
   const data = await response.json().catch(() => undefined)
   if (!response.ok) throw new Error(pocketErrorMessage(data, 'Circle Pocket balance refresh failed.'))
   if (!isRecord(data) || data.ok !== true) throw new Error(pocketErrorMessage(data, 'Circle Pocket balance refresh failed.'))
   if (!isPocketBalancesReadData(data)) throw new Error('Circle Pocket balance response was invalid.')
-  return { walletUpdate: parsePocketWalletUpdateNotice(data.walletUpdate), total: data.total, rows: data.rows, totalComplete: data.totalComplete, unavailableNetworks: data.unavailableNetworks }
+  return { total: data.total, rows: data.rows, totalComplete: data.totalComplete, unavailableNetworks: data.unavailableNetworks, walletUpdate: parsePocketWalletUpdateNotice(data.walletUpdate) }
 }
 
 export async function readPocketLinkedWallets({
   accessToken,
+  signal,
   reader = readPocketWallets,
 }: {
   accessToken: string
+  signal?: AbortSignal
   reader?: typeof readPocketWallets
 }): Promise<CirclePocketWallets> {
-  const result = await reader({ accessToken })
+  const result = await reader({ accessToken, signal })
   return POCKET_BALANCE_NETWORKS.reduce<CirclePocketWallets>((wallets, network) => {
     const link = result.wallets[network]
     if (link) wallets[network] = {

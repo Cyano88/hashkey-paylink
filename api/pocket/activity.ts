@@ -1,5 +1,6 @@
+import { createDurablePocketActivityHandler } from './activity-feed.js'
 import type { Request, Response } from 'express'
-import { listNgPosHistoryForOwner } from '../ng-pos.js'
+import { listNgPosHistoryForOwner, listNgPosResourcesForOwner } from '../ng-pos.js'
 import {
   verifiedPrivyUser,
   type VerifiedLinkUser,
@@ -237,6 +238,76 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
   }
 }
 
+async function readActivitySnapshot(dependencies: PocketActivityHandlerDependencies, identity: VerifiedLinkUser, options: PocketActivityReadOptions) {
+  const [history, collections, walletHistory, durableActionRecords, walletAddresses, billsIntents, closedBankPayoutIntents] = await Promise.all([
+    dependencies.readHistory(identity.userId, options),
+    dependencies.readCollections?.(identity.userId, options) ?? Promise.resolve([]),
+    dependencies.readWalletHistory?.(identity.userId, options) ?? Promise.resolve([]),
+    dependencies.readActions?.(identity.userId, options) ?? Promise.resolve([]),
+    dependencies.readWalletAddresses?.(identity.userId, options) ?? Promise.resolve([]),
+    dependencies.readBills?.(identity.userId, options) ?? Promise.resolve([]),
+    dependencies.readClosedBankPayouts?.(identity.userId, options) ?? Promise.resolve([]),
+  ])
+  const collectionTitles = new Map(collections.map(link => [link.eventId, link.title]))
+  const [collectionPaymentRecords, externalPaymentIntents, posPurchaseRecords] = await Promise.all([
+    dependencies.readCollectionPayments?.(collections.map(link => link.eventId), options) ?? Promise.resolve([]),
+    dependencies.readExternalPayments?.(walletAddresses, options) ?? Promise.resolve([]),
+    dependencies.readPosPurchases?.(walletAddresses, options) ?? Promise.resolve([]),
+  ])
+  const collectionPayments = collectionPaymentRecords
+    .map(sanitizedActivityRow)
+    .map(row => ({
+      ...row,
+      source: 'collection',
+      merchantId: row.eventId,
+      contextLabel: collectionTitles.get(row.eventId) || row.memo || 'Collection',
+      activityLabel: collectionTitles.get(row.eventId) || 'Collection payment',
+      direction: 'in' as const,
+      paycrestStatus: row.paycrestStatus || 'confirmed',
+      receiptId: paymentReceiptId(row.eventId, row.txHash),
+      receiptUrl: `/receipt/${paymentReceiptId(row.eventId, row.txHash)}`,
+    }))
+  const durableBridges = durableActionRecords.flatMap(record => {
+    const row = bridgeActivityRow(record)
+    return row ? [row] : []
+  })
+  const externalPayments = externalPaymentIntents
+    .flatMap(intent => {
+      const row = externalPaymentActivityRow(intent)
+      return row ? [row] : []
+    })
+  const closedBankPayouts = closedBankPayoutIntents.flatMap(intent => {
+    const row = closedBankPayoutActivityRow(intent)
+    return row ? [row] : []
+  })
+  const refundPolicy = dependencies.readBillsRefundPolicy?.() ?? { enabled: false, treasuryAddress: '' }
+  const bills = billsIntents.flatMap(intent => {
+    const row = billActivityRow(intent, refundPolicy)
+    return row ? [row] : []
+  })
+  const posPurchases=posPurchaseRecords.map(sanitizedActivityRow).map(row=>({...row,source:'purchase',direction:'out' as const,settlementType:'pos_payment',activityLabel:'POS payment',recipient:row.contextLabel||'Merchant',receiptId:paymentReceiptId(row.eventId,row.txHash),receiptUrl:'/receipt/'+paymentReceiptId(row.eventId,row.txHash)}))
+  const contextualTxHashes = new Set([...externalPayments,...posPurchases].map(row => row.chain + ":" + row.txHash.toLowerCase()))
+  const allPayments = [...posPurchases, ...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
+    .filter(row => row.source === 'purchase' || row.direction === 'in' || !contextualTxHashes.has(row.chain + ":" + row.txHash.toLowerCase()))
+    .filter((row, index, rows) => rows.findIndex(candidate => candidate.chain === row.chain && candidate.txHash === row.txHash && (
+      candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
+    )) === index)
+    .sort((a, b) => b.ts - a.ts)
+  const payments = options.recent ? allPayments.slice(0, options.limit) : allPayments
+  return {
+    ok: true,
+    payments,
+    merchants: options.recent ? [] : history.merchants ?? [],
+    collections: options.recent ? [] : collections.map(link => ({
+      eventId: link.eventId,
+      title: link.title,
+      paymentUrl: link.paymentUrl,
+      createdAt: link.createdAt,
+      updatedAt: link.updatedAt,
+    })),
+  }
+}
+
 export function createPocketActivityHandler(dependencies: PocketActivityHandlerDependencies) {
   return async function pocketActivityHandler(req: Request, res: Response) {
     function fail(status: number, code: PocketErrorCode, message: string, retryable: boolean) {
@@ -251,73 +322,7 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
 
     try {
       const identity = await dependencies.verifyUser(req)
-      const [history, collections, walletHistory, durableActionRecords, walletAddresses, billsIntents, closedBankPayoutIntents] = await Promise.all([
-        dependencies.readHistory(identity.userId, options),
-        dependencies.readCollections?.(identity.userId, options) ?? Promise.resolve([]),
-        dependencies.readWalletHistory?.(identity.userId, options) ?? Promise.resolve([]),
-        dependencies.readActions?.(identity.userId, options) ?? Promise.resolve([]),
-        dependencies.readWalletAddresses?.(identity.userId, options) ?? Promise.resolve([]),
-        dependencies.readBills?.(identity.userId, options) ?? Promise.resolve([]),
-        dependencies.readClosedBankPayouts?.(identity.userId, options) ?? Promise.resolve([]),
-      ])
-      const collectionTitles = new Map(collections.map(link => [link.eventId, link.title]))
-      const [collectionPaymentRecords, externalPaymentIntents, posPurchaseRecords] = await Promise.all([
-        dependencies.readCollectionPayments?.(collections.map(link => link.eventId), options) ?? Promise.resolve([]),
-        dependencies.readExternalPayments?.(walletAddresses, options) ?? Promise.resolve([]),
-        dependencies.readPosPurchases?.(walletAddresses, options) ?? Promise.resolve([]),
-      ])
-      const collectionPayments = collectionPaymentRecords
-        .map(sanitizedActivityRow)
-        .map(row => ({
-          ...row,
-          source: 'collection',
-          merchantId: row.eventId,
-          contextLabel: collectionTitles.get(row.eventId) || row.memo || 'Collection',
-          activityLabel: collectionTitles.get(row.eventId) || 'Collection payment',
-          direction: 'in' as const,
-          paycrestStatus: row.paycrestStatus || 'confirmed',
-          receiptId: paymentReceiptId(row.eventId, row.txHash),
-          receiptUrl: `/receipt/${paymentReceiptId(row.eventId, row.txHash)}`,
-        }))
-      const durableBridges = durableActionRecords.flatMap(record => {
-        const row = bridgeActivityRow(record)
-        return row ? [row] : []
-      })
-      const externalPayments = externalPaymentIntents
-        .flatMap(intent => {
-          const row = externalPaymentActivityRow(intent)
-          return row ? [row] : []
-        })
-      const closedBankPayouts = closedBankPayoutIntents.flatMap(intent => {
-        const row = closedBankPayoutActivityRow(intent)
-        return row ? [row] : []
-      })
-      const refundPolicy = dependencies.readBillsRefundPolicy?.() ?? { enabled: false, treasuryAddress: '' }
-      const bills = billsIntents.flatMap(intent => {
-        const row = billActivityRow(intent, refundPolicy)
-        return row ? [row] : []
-      })
-      const posPurchases=posPurchaseRecords.map(sanitizedActivityRow).map(row=>({...row,source:'purchase',direction:'out' as const,settlementType:'pos_payment',activityLabel:'POS payment',recipient:row.contextLabel||'Merchant',receiptId:paymentReceiptId(row.eventId,row.txHash),receiptUrl:'/receipt/'+paymentReceiptId(row.eventId,row.txHash)}))
-      const contextualTxHashes = new Set([...externalPayments,...posPurchases].map(row => row.txHash.toLowerCase()))
-      const allPayments = [...posPurchases, ...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
-        .filter(row => row.source === 'purchase' || row.direction === 'in' || !contextualTxHashes.has(row.txHash.toLowerCase()))
-        .filter((row, index, rows) => rows.findIndex(candidate => candidate.txHash === row.txHash && (
-          candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
-        )) === index)
-        .sort((a, b) => b.ts - a.ts)
-      const payments = options.recent ? allPayments.slice(0, options.limit) : allPayments
-      return res.json({
-        ok: true,
-        payments,
-        merchants: options.recent ? [] : history.merchants ?? [],
-        collections: options.recent ? [] : collections.map(link => ({
-          eventId: link.eventId,
-          title: link.title,
-          paymentUrl: link.paymentUrl,
-          createdAt: link.createdAt,
-          updatedAt: link.updatedAt,
-        })),
-      })
+      return res.json(await readActivitySnapshot(dependencies, identity, options))
     } catch (error) {
       const normalized = error as Error & { status?: number }
       if (normalized.status === 401) return fail(401, 'AUTH_REQUIRED', normalized.message, false)
@@ -329,9 +334,9 @@ export function createPocketActivityHandler(dependencies: PocketActivityHandlerD
   }
 }
 
-export default createPocketActivityHandler({
+const activityDependencies: PocketActivityHandlerDependencies = {
   verifyUser: verifiedPrivyUser,
-  readHistory: listNgPosHistoryForOwner,
+  readHistory: owner => listNgPosHistoryForOwner(owner, { repair: false }),
   readCollections: ownerId => pocketPaylinkRepository.listOwned(ownerId),
   readCollectionPayments: listRegisteredPaymentsForEventIds,
   readWalletHistory: (ownerId, options) => readPocketWalletChainActivity(ownerId, {
@@ -371,4 +376,21 @@ export default createPocketActivityHandler({
       treasuryAddress: config.treasuryAddress,
     }
   },
+}
+
+const sourceGroups: Record<string, Partial<PocketActivityHandlerDependencies>> = {
+  pos: { readHistory: activityDependencies.readHistory },
+  resources: { readHistory: async owner => ({ payments: [], merchants: await listNgPosResourcesForOwner(owner) }) },
+  collections: { readCollections: activityDependencies.readCollections, readCollectionPayments: activityDependencies.readCollectionPayments },
+  wallets: { readWalletHistory: activityDependencies.readWalletHistory },
+  actions: { readActions: activityDependencies.readActions },
+  purchases: { readWalletAddresses: activityDependencies.readWalletAddresses, readExternalPayments: activityDependencies.readExternalPayments, readPosPurchases: activityDependencies.readPosPurchases },
+  payouts: { readClosedBankPayouts: activityDependencies.readClosedBankPayouts },
+  bills: { readBills: activityDependencies.readBills, readBillsRefundPolicy: activityDependencies.readBillsRefundPolicy },
+}
+export default createDurablePocketActivityHandler({
+  verifyUser: verifiedPrivyUser,
+  sources: Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
+    readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
+  ])),
 })

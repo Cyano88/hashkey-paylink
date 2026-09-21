@@ -46,16 +46,17 @@ export default function PocketHomePage() {
   const fx = usePocketFxQuote(1, showNgn)
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
   const [balanceVisible, setBalanceVisible] = useState(() => window.localStorage.getItem(BALANCE_VISIBLE_KEY) !== 'false')
-  // Keep the compact Home preview above the fixed native navigation. Four rows
-  // intersect the nav's compositor layer on current Android WebView builds and
-  // can leave the lower viewport unrasterized; the full list remains in Activity.
-  const recent = activity.rows.slice(0, 3)
+  const recent = activity.rows.slice(0, 4)
   const balancesReady = !authenticated || wallets.resolved
-  const balancesVisible = balancesReady && (!wallets.error || wallets.rows.length > 0)
+  const balancesVisible = !authenticated || wallets.displayComplete
+  const displayTotal = wallets.displayTotal
+  const retryBalance = balancesReady && !wallets.balanceBusy && Boolean(wallets.error)
   const activityReady = !authenticated || activity.resolved
 
   const open = (path: string) => navigate(POCKET_BASE_PATH + path)
-  const selectedBalance = wallets.rows.find(row => row.key === selected)?.balance ?? 0
+  const selectedRow = wallets.displayRows.find(row => row.key === selected)
+  const selectedVisible = !authenticated || selectedRow?.known
+  const selectedBalance = selectedRow?.balance ?? 0
   const setSelected = (network: HomeNetwork) => { window.localStorage.setItem(NETWORK_KEY, network); setSelectedState(network) }
   const toggleBalance = () => setBalanceVisible(current => { window.localStorage.setItem(BALANCE_VISIBLE_KEY, String(!current)); return !current })
   const hidden = '....'
@@ -72,10 +73,11 @@ export default function PocketHomePage() {
             </button>
           </div>
           <div className="mt-1.5">
-            {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(wallets.total) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p> : <span aria-label="Loading balances" className="block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
+            {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(displayTotal) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label="Loading balances" className="block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
           </div>
-          {showNgn && (fx.quote ? <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(wallets.total * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p> : fx.busy ? <span aria-label="Loading Naira equivalent" className="mt-2 block h-3 w-24 animate-pulse rounded bg-white/10 dark:bg-gray-950/[0.08]" /> : null)}
-          {balancesReady && (!wallets.totalComplete || wallets.error) && <p className="mt-1 text-[10px] font-medium text-white/45 dark:text-gray-500">Some network balances are updating.</p>}
+          {showNgn && balancesVisible && (fx.quote ? <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(displayTotal * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p> : fx.busy ? <span aria-label="Loading Naira equivalent" className="mt-2 block h-3 w-24 animate-pulse rounded bg-white/10 dark:bg-gray-950/[0.08]" /> : null)}
+          {wallets.balanceStale && wallets.balanceObservedAt > 0 && <p className="mt-1 text-[10px] font-medium text-white/55 dark:text-gray-500">Last updated {new Date(wallets.balanceObservedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{wallets.balanceBusy ? ' ? Refreshing' : ''}</p>}
+          {retryBalance && <button type="button" onClick={() => void wallets.refreshBalances()} className="mt-2 rounded-lg px-2 py-1 text-[11px] font-semibold text-white/80 underline dark:text-gray-600">Retry balance refresh</button>}
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => open(POCKET_ROUTES.send)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><Send className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Send</span></button>
@@ -90,7 +92,7 @@ export default function PocketHomePage() {
         </button>)}
       </div>
       <div className="mt-3 border-t border-white/10 pt-3 text-center dark:border-gray-950/10">
-        {balancesVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p> : <span className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
+        {selectedVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label={`Loading ${selected} balance`} className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
       </div>
     </section>
 

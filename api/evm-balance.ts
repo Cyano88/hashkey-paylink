@@ -91,18 +91,18 @@ async function fetchEvmUsdcBalanceUnits(chainKey: EvmBalanceChain, address: `0x$
 
 // Short-lived shared reads retain exact token units and never cache failures.
 export function createEvmBalanceReader(read = fetchEvmUsdcBalanceUnits, now = Date.now) {
-  const cache = new Map<string, { value: bigint; expires: number }>()
+  const cache = new Map<string, { value: bigint; expires: number; observedAt: number }>()
   const pending = new Map<string, Promise<bigint>>()
-  return async (chain: EvmBalanceChain, address: `0x${string}`) => {
+  return async (chain: EvmBalanceChain, address: `0x${string}`, fresh = false) => {
     const key = chain + ':' + address.toLowerCase()
     const hit = cache.get(key)
-    if (hit && hit.expires > now()) return hit.value
+    if (hit && hit.expires > now() && (!fresh || now() - hit.observedAt < 1_500)) return hit.value
     const flight = pending.get(key)
     if (flight) return flight
     if (pending.size >= 64) throw new Error('Balance reader is busy.')
     const work = Promise.resolve().then(() => read(chain, address)).then(value => {
       if (cache.size >= 512) cache.delete(cache.keys().next().value as string)
-      cache.set(key, { value, expires: now() + 5_000 })
+      cache.set(key, { value, expires: now() + 5_000, observedAt: now() })
       return value
     }).finally(() => pending.delete(key))
     pending.set(key, work)
@@ -114,6 +114,10 @@ export const readEvmUsdcBalanceUnits = createEvmBalanceReader()
 export async function readFreshMigrationUsdcUnits(chain: 'base' | 'arbitrum' | 'arc', address: `0x${string}`) {
   if (!['base', 'arbitrum', 'arc'].includes(chain) || !isAddress(address)) throw new Error('Invalid migration balance request.')
   return fetchEvmUsdcBalanceUnits(chain, address)
+}
+
+export async function readFreshEvmUsdcBalance(chain: EvmBalanceChain, address: `0x${string}`) {
+  return Number(await readEvmUsdcBalanceUnits(chain, address, true)) / 10 ** CHAIN_CONFIG[chain].decimals
 }
 
 export async function readEvmUsdcBalance(chain: EvmBalanceChain, address: `0x${string}`) {

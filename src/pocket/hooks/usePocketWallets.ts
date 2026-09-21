@@ -1,248 +1,81 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import type { UnifiedBalanceBreakdown } from '../../lib/unifiedBalance'
-import { readPocketBalances, readPocketLinkedWallets } from '../api/pocketReadClient'
 import type { CirclePocketWallets } from '../models/pocketWallet'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
+import usePocketReadScope from './usePocketReadScope'
+import { balanceOwner, loadPocketBalance, readCachedPocketBalance, replacePocketBalanceWallets, subscribePocketBalance } from '../lib/pocketBalanceCache'
 
-import { parsePocketWalletUpdateNotice, type PocketWalletUpdateNotice } from '../lib/pocketWalletUpdate'
-
-type PocketAccessTokenReader = () => Promise<string | null>
-
-type PocketWalletCacheEntry = {
-  wallets: CirclePocketWallets
-  rows: UnifiedBalanceBreakdown[]
-  total: number
-  totalComplete: boolean
+type Reader = () => Promise<string | null>
+export async function prefetchPocketWalletSnapshot({ email, getAccessToken, signal }: { email: string; getAccessToken: Reader; signal?: AbortSignal }) {
+  const owner = balanceOwner(email), saved = readCachedPocketBalance(owner)
+  if (signal?.aborted || (saved?.totalComplete && Date.now() - saved.savedAt < 10_000)) return
+  return loadPocketBalance(owner, getAccessToken, false, () => !signal?.aborted)
+}
+export async function refreshPocketWalletSnapshot({ email, getAccessToken }: { email: string; getAccessToken: Reader }) {
+  return loadPocketBalance(balanceOwner(email), getAccessToken, true)
 }
 
-const pocketWalletCache = new Map<string, PocketWalletCacheEntry>()
-const pocketWalletPrefetches = new Map<string, Promise<void>>()
-const POCKET_BALANCE_REFRESH_INTERVAL_MS = 45_000
-const POCKET_BALANCE_FOCUS_THROTTLE_MS = 10_000
-
-type PocketWalletReadState = {
-  walletUpdate: PocketWalletUpdateNotice
-  wallets: CirclePocketWallets
-  setWallets: Dispatch<SetStateAction<CirclePocketWallets>>
-  rows: UnifiedBalanceBreakdown[]
-  total: number
-  totalComplete: boolean
-  balanceBusy: boolean
-  resolved: boolean
-  error: string
-  setError: Dispatch<SetStateAction<string>>
-  refreshBalances: () => Promise<void>
-}
-
-export async function prefetchPocketWalletSnapshot({
-  email,
-  getAccessToken,
-}: {
-  email: string
-  getAccessToken: PocketAccessTokenReader
-}) {
-  if (!email || pocketWalletCache.has(email)) return
-  const active = pocketWalletPrefetches.get(email)
-  if (active) return active
-
-  const prefetch = (async () => {
-    const token = await getAccessToken()
-    if (!token) throw new Error('Pocket session is not ready.')
-    const [wallets, balanceOutcome] = await Promise.all([
-      readPocketLinkedWallets({ accessToken: token }),
-      readPocketBalances({ accessToken: token })
-        .then(result => ({ result }))
-        .catch(reason => ({ reason })),
-    ])
-    const previous = pocketWalletCache.get(email)
-    pocketWalletCache.set(email, 'result' in balanceOutcome
-      ? { wallets, rows: balanceOutcome.result.rows, total: balanceOutcome.result.total, totalComplete: balanceOutcome.result.totalComplete !== false }
-      : { wallets, rows: previous?.rows ?? [], total: previous?.total ?? 0, totalComplete: previous?.totalComplete ?? false })
-  })().finally(() => {
-    pocketWalletPrefetches.delete(email)
-  })
-
-  pocketWalletPrefetches.set(email, prefetch)
-  return prefetch
-}
-
-export async function refreshPocketWalletSnapshot({
-  email,
-  getAccessToken,
-}: {
-  email: string
-  getAccessToken: PocketAccessTokenReader
-}) {
-  await pocketWalletPrefetches.get(email)?.catch(() => undefined)
-  pocketWalletCache.delete(email)
-  return prefetchPocketWalletSnapshot({ email, getAccessToken })
-}
-
-export default function usePocketWallets({
-  authenticated,
-  email,
-  getAccessToken,
-}: {
-  authenticated: boolean
-  email: string
-  getAccessToken: PocketAccessTokenReader
-}): PocketWalletReadState {
-  const cached = authenticated && email ? pocketWalletCache.get(email) : undefined
-  const [walletUpdate, setWalletUpdate] = useState<PocketWalletUpdateNotice>('hidden')
-  const [wallets, setWallets] = useState<CirclePocketWallets>(() => cached?.wallets ?? {})
-  const [rows, setRows] = useState<UnifiedBalanceBreakdown[]>(() => cached?.rows ?? [])
-  const [total, setTotal] = useState(() => cached?.total ?? 0)
-  const [totalComplete, setTotalComplete] = useState(() => cached?.totalComplete ?? true)
-  const [balanceBusy, setBalanceBusy] = useState(false)
-  const [resolved, setResolved] = useState(() => !authenticated || Boolean(cached))
-  const [error, setError] = useState('')
-  const balanceReadInFlight = useRef(false)
-  const lastBalanceReadAt = useRef(0)
-
-  const refreshBalances = useCallback(async () => {
-    if (balanceReadInFlight.current) return
-    balanceReadInFlight.current = true
-    setBalanceBusy(true)
-    setError('')
+export default function usePocketWallets({ authenticated, email, getAccessToken }: { authenticated: boolean; email: string; getAccessToken: Reader }) {
+  const owner = authenticated ? balanceOwner(email) : ''
+  const reader = useRef(getAccessToken); reader.current = getAccessToken
+  const stableReader = useCallback(() => reader.current(), [])
+  const scope = usePocketReadScope(owner, stableReader)
+  const failureCount = useRef(0)
+  const lastAttemptAt = useRef(0)
+  const [, render] = useState(0)
+  const [state, setState] = useState({ scope, busy: false, attempted: false, error: '' })
+  const snapshot = readCachedPocketBalance(owner)
+  const refresh = useCallback(async (fresh = false) => {
+    if (!owner || !scope.active) return
+    const generation = scope.generation
+    const valid = () => scope.active && scope.generation === generation
+    lastAttemptAt.current = Date.now()
+    setState({ scope, busy: true, attempted: false, error: '' })
     try {
-      const token = await getAccessToken()
-      if (!token) throw new Error('Email session is not ready. Sign in again and retry.')
-      const result = await readPocketBalances({ accessToken: token })
-      setWalletUpdate(parsePocketWalletUpdateNotice(result.walletUpdate))
-      setRows(result.rows)
-      setTotal(result.total)
-      setTotalComplete(result.totalComplete !== false)
-      lastBalanceReadAt.current = Date.now()
-      pocketWalletCache.set(email, {
-        wallets,
-        rows: result.rows,
-        total: result.total,
-        totalComplete: result.totalComplete !== false,
-      })
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Circle Pocket balance refresh failed.')
-    } finally {
-      balanceReadInFlight.current = false
-      setBalanceBusy(false)
+      await loadPocketBalance(owner, stableReader, fresh, valid)
+      if (valid()) { failureCount.current = 0; setState({ scope, busy: false, attempted: true, error: '' }) }
+    } catch (error) {
+      if (valid()) { failureCount.current++; setState({ scope, busy: false, attempted: true, error: error instanceof Error ? error.message : 'Try refreshing balances again.' }) }
     }
-  }, [email, getAccessToken, wallets])
+  }, [owner, scope, stableReader])
+  const refreshBalances = useCallback(() => refresh(true), [refresh])
+  const setWallets: Dispatch<SetStateAction<CirclePocketWallets>> = useCallback(next => {
+    if (!owner || !scope.active) return
+    const previous = readCachedPocketBalance(owner)?.wallets ?? {}
+    void replacePocketBalanceWallets(owner, typeof next === 'function' ? next(previous) : next)
+  }, [owner, scope])
+  const setError: Dispatch<SetStateAction<string>> = useCallback(value => {
+    if (scope.active) setState(previous => ({ ...previous, scope, error: typeof value === 'function' ? value(previous.scope === scope ? previous.error : '') : value }))
+  }, [scope])
 
   useEffect(() => {
-    setWalletUpdate('hidden')
-    if (!authenticated || !email) {
-      setWallets({})
-      setRows([])
-      setTotal(0)
-      setTotalComplete(true)
-      setResolved(true)
-      return
+    if (!owner) return
+    const unsubscribe = subscribePocketBalance(owner, () => render(value => value + 1))
+    void refresh()
+    const onFocus = () => {
+      const saved = readCachedPocketBalance(owner)
+      if (document.visibilityState === 'visible' && Date.now() - lastAttemptAt.current >= 10_000 && (!saved?.totalComplete || Date.now() - saved.savedAt >= 10_000)) void refresh()
     }
-
-    const immediate = pocketWalletCache.get(email)
-    if (immediate) {
-      setWallets(immediate.wallets)
-      setRows(immediate.rows)
-      setTotal(immediate.total)
-      setTotalComplete(immediate.totalComplete)
-      setResolved(true)
-    } else {
-      setResolved(false)
-    }
-
-    let cancelled = false
-    async function hydrate() {
-      if (balanceReadInFlight.current) return
-      balanceReadInFlight.current = true
-      try {
-        const token = await getAccessToken()
-        if (!token || cancelled) return
-        const walletsRequest = readPocketLinkedWallets({ accessToken: token })
-        const balancesRequest = readPocketBalances({ accessToken: token })
-          .then(result => ({ result }))
-          .catch(reason => ({ reason }))
-        const nextWallets = await walletsRequest
-        if (cancelled) return
-        setWallets(nextWallets)
-        setBalanceBusy(true)
-        setError('')
-        const balanceOutcome = await balancesRequest
-        if (cancelled) return
-        if ('result' in balanceOutcome) {
-          setWalletUpdate(parsePocketWalletUpdateNotice(balanceOutcome.result.walletUpdate))
-          setRows(balanceOutcome.result.rows)
-          setTotal(balanceOutcome.result.total)
-          setTotalComplete(balanceOutcome.result.totalComplete !== false)
-          lastBalanceReadAt.current = Date.now()
-          pocketWalletCache.set(email, {
-            wallets: nextWallets,
-            rows: balanceOutcome.result.rows,
-            total: balanceOutcome.result.total,
-            totalComplete: balanceOutcome.result.totalComplete !== false,
-          })
-        } else if (!Object.keys(nextWallets).length) {
-          setRows([])
-          setTotal(0)
-          lastBalanceReadAt.current = Date.now()
-          pocketWalletCache.set(email, { wallets: nextWallets, rows: [], total: 0, totalComplete: true })
-        } else {
-          setError(balanceOutcome.reason instanceof Error ? balanceOutcome.reason.message : 'Circle Pocket balance refresh failed.')
-          const previous = pocketWalletCache.get(email)
-          pocketWalletCache.set(email, {
-            wallets: nextWallets,
-            rows: previous?.rows ?? [],
-            total: previous?.total ?? 0,
-            totalComplete: previous?.totalComplete ?? false,
-          })
-        }
-      } catch (reason) {
-        if (!cancelled) {
-          const previous = pocketWalletCache.get(email)
-          if (!previous) {
-            setWallets({})
-            setRows([])
-            setTotal(0)
-            setTotalComplete(false)
-          }
-          setError(reason instanceof Error ? reason.message : 'Pocket balances are updating in the background.')
-        }
-      } finally {
-        balanceReadInFlight.current = false
-        if (!cancelled) {
-          setBalanceBusy(false)
-          setResolved(true)
-        }
-      }
-    }
-
-    void hydrate()
-    return () => {
-      cancelled = true
-    }
-  }, [authenticated, email, getAccessToken])
-
+    const unregister = registerPocketRefreshHandler(refreshBalances)
+    window.addEventListener('focus', onFocus); document.addEventListener('visibilitychange', onFocus)
+    return () => { unsubscribe(); unregister(); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus) }
+  }, [owner, scope, refresh, refreshBalances])
   useEffect(() => {
-    if (!authenticated || !email) return
+    if (!owner) return
+    // No RPC while hidden. Failures back off to 60s; user refresh remains immediate.
+    const delay = snapshot?.totalComplete ? 45_000 : Math.min(60_000, 15_000 * 2 ** Math.max(0, failureCount.current - 1))
+    const timer = window.setTimeout(() => { if (document.visibilityState === 'visible') void refresh() }, delay)
+    return () => window.clearTimeout(timer)
+  }, [owner, refresh, snapshot?.totalComplete, state])
 
-    const refreshVisibleBalance = () => {
-      if (document.visibilityState !== 'visible') return
-      if (Date.now() - lastBalanceReadAt.current < POCKET_BALANCE_FOCUS_THROTTLE_MS) return
-      void refreshBalances()
-    }
-
-    const interval = window.setInterval(refreshVisibleBalance, POCKET_BALANCE_REFRESH_INTERVAL_MS)
-    window.addEventListener('focus', refreshVisibleBalance)
-    document.addEventListener('visibilitychange', refreshVisibleBalance)
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('focus', refreshVisibleBalance)
-      document.removeEventListener('visibilitychange', refreshVisibleBalance)
-    }
-  }, [authenticated, email, refreshBalances])
-
-  useEffect(() => {
-    if (!authenticated || !email) return
-    return registerPocketRefreshHandler(refreshBalances)
-  }, [authenticated, email, refreshBalances])
-
-  return { walletUpdate: walletUpdate === 'resume' ? 'resume' : error || !resolved ? 'hidden' : walletUpdate, wallets, setWallets, rows, total, totalComplete, balanceBusy, resolved, error, setError, refreshBalances }
+  const active = state.scope === scope ? state : { busy: false, attempted: false, error: '' }
+  const stale = Boolean(snapshot?.displayRows.some(row => row.stale))
+  const observed = snapshot?.displayRows.filter(row => row.known).map(row => row.observedAt || 0) ?? []
+  return { wallets: snapshot?.wallets ?? {}, setWallets,
+    rows: snapshot?.rows ?? [], total: snapshot?.total ?? 0, totalComplete: snapshot?.totalComplete ?? false,
+    displayRows: snapshot?.displayRows ?? [], displayTotal: snapshot?.displayTotal ?? 0, displayComplete: snapshot?.displayComplete ?? false,
+    balanceStale: stale, balanceObservedAt: observed.length ? Math.min(...observed) : 0,
+    balanceBusy: active.busy, resolved: !authenticated || Boolean(snapshot) || active.attempted,
+    error: active.error, setError, refreshBalances,
+    walletUpdate: snapshot?.walletUpdate === 'resume' ? 'resume' as const : active.error ? 'hidden' as const : snapshot?.walletUpdate ?? 'hidden' as const,
+  }
 }

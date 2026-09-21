@@ -1,3 +1,4 @@
+import { persistObservedWalletActivity } from './activity-feed.js'
 import { readLegacyPaymentWallets } from './wallet-migration-history.js'
 import { Connection, PublicKey } from '@solana/web3.js'
 import { readEvmRpc } from '../evm-read.js'
@@ -239,7 +240,7 @@ const readWalletActivity = createWalletActivityReader((network, wallet, signal) 
   if (network === 'solana') return solanaActivity(wallet, signal)
   if (!Object.hasOwn(EVM, network)) throw new Error('Unsupported activity network.')
   return evmActivity(network as EvmNetwork, wallet, signal)
-})
+}, Date.now, 10_000, persistObservedWalletActivity)
 
 export async function readPocketWalletChainActivity(
   ownerId: string,

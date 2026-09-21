@@ -1,3 +1,4 @@
+import { pocketBalanceRevision } from '../../src/pocket/lib/pocketBalanceRevision.js'
 import { readDurableJson } from '../render-durable-store.js'
 import type { MigrationPlan } from './wallet-migration-plan.js'
 import { pocketWalletUpdateNotice, readPocketWalletUpdate, type PocketWalletUpdateRecord } from './wallet-update-state.js'
@@ -17,7 +18,7 @@ import {
   type CircleLinkRecord,
   type VerifiedLinkUser,
 } from '../privy-circle-link.js'
-import { readEvmUsdcBalance } from '../evm-balance.js'
+import { readEvmUsdcBalance, readFreshEvmUsdcBalance } from '../evm-balance.js'
 import { readSolanaUsdcBalance } from '../solana-balance.js'
 import {
   POCKET_NETWORKS,
@@ -31,7 +32,7 @@ type PocketBalancesHandlerDependencies = {
   readWalletUpdate?(userId: string): Promise<PocketWalletUpdateRecord | undefined>
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   readLink(key: string): Promise<CircleLinkRecord | null>
-  readBalance(network: PocketNetwork, address: string): Promise<number>
+  readBalance(network: PocketNetwork, address: string, fresh?: boolean): Promise<number>
 }
 
 const LABELS: Record<PocketNetwork, string> = {
@@ -66,16 +67,20 @@ async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: num
   }
 }
 
-function circleAmount(result: GetBalancesResult, chain: UnifiedBalanceChainIdentifier) {
-  let amount = 0
+export function circleAmount(result: GetBalancesResult, chain: UnifiedBalanceChainIdentifier) {
+  let amount = 0, matched = false
   for (const account of result.breakdown) {
     for (const row of account.breakdown) {
       if (row.chain === chain) {
-        const parsed = Number.parseFloat(row.confirmedBalance ?? '0')
-        if (Number.isFinite(parsed)) amount += parsed
+        if (typeof row.confirmedBalance !== 'string' || !/^\d+(?:\.\d+)?$/.test(row.confirmedBalance)) throw new Error('Invalid Circle balance result.')
+        const parsed = Number(row.confirmedBalance)
+        if (!Number.isFinite(parsed) || parsed < 0) throw new Error('Invalid Circle balance result.')
+        matched = true
+        amount += parsed
       }
     }
   }
+  if (!matched || !Number.isFinite(amount)) throw new Error('Circle did not return this network balance.')
   return amount
 }
 
@@ -89,13 +94,13 @@ async function readCircleFallback(network: PocketNetwork, address: string) {
   return circleAmount(result, chain)
 }
 
-export async function readPocketNetworkBalance(network: PocketNetwork, address: string) {
+export async function readPocketNetworkBalance(network: PocketNetwork, address: string, fresh = false) {
   try {
     if (network === 'solana') {
       const result = await withTimeout(readSolanaUsdcBalance(address), LABELS[network], DIRECT_BALANCE_TIMEOUT_MS)
       return Number(result.balance) / 1_000_000
     }
-    return await withTimeout(readEvmUsdcBalance(network, address as `0x${string}`), LABELS[network], DIRECT_BALANCE_TIMEOUT_MS)
+    return await withTimeout((fresh ? readFreshEvmUsdcBalance : readEvmUsdcBalance)(network, address as `0x${string}`), LABELS[network], DIRECT_BALANCE_TIMEOUT_MS)
   } catch (directError) {
     try {
       const fallback = await readCircleFallback(network, address)
@@ -109,6 +114,7 @@ export async function readPocketNetworkBalance(network: PocketNetwork, address: 
 
 export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerDependencies) {
   return async function pocketBalancesHandler(req: Request, res: Response) {
+    res.setHeader?.('Cache-Control', 'private, no-store')
     function fail(status: number, code: PocketErrorCode, message: string, retryable: boolean) {
       return res.status(status).json({ ok: false, error: { code, message, retryable } })
     }
@@ -124,22 +130,24 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
       const links: Partial<Record<'base' | 'arbitrum' | 'arc', CircleLinkRecord>> = {}
       const rows = await Promise.all(POCKET_NETWORKS.map(async (network): Promise<PocketBalanceRow> => {
         const link = await dependencies.readLink(circleLinkKey(identity.userId, network, 'payment'))
+        const walletRevision = await pocketBalanceRevision(network, link ? { address: link.circleWalletAddress, walletId: link.circleWalletId, updatedAt: link.updatedAt } : undefined)
         if (!link) {
-          return { key: network, label: LABELS[network], balance: 0, status: 'ok' }
+          return { key: network, label: LABELS[network], balance: 0, status: 'ok', walletRevision, observedAt: Date.now() }
         }
         if (link.chain !== network || (link.purpose ?? 'payment') !== 'payment') {
           throw Object.assign(new Error('Stored Circle wallet link did not match its payment network.'), { status: 500 })
         }
         try {
           if (network !== 'solana') links[network] = link
-          const balance = await dependencies.readBalance(network, link.circleWalletAddress)
+          const balance = await dependencies.readBalance(network, link.circleWalletAddress, req.query?.refresh === '1')
           if (!Number.isFinite(balance) || balance < 0) throw new Error('Balance reader returned an invalid amount.')
-          return { key: network, label: LABELS[network], balance, status: 'ok' }
+          return { key: network, label: LABELS[network], balance, status: 'ok', walletRevision, observedAt: Date.now() }
         } catch {
           return {
             key: network,
             label: LABELS[network],
             balance: 0,
+            walletRevision,
             status: 'error',
             error: `${LABELS[network]} balance is temporarily unavailable.`,
           }

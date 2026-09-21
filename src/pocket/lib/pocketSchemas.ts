@@ -97,6 +97,8 @@ export type PocketWalletsReadData = {
 }
 
 export type PocketBalanceRow = {
+  walletRevision?: string
+  observedAt?: number
   key: PocketNetwork
   label: string
   balance: number
@@ -196,6 +198,10 @@ export type PocketActivityRow = {
 }
 
 export type PocketActivityReadData = {
+  complete?: boolean
+  partial?: boolean
+  refreshing?: boolean
+  updatedAt?: number
   payments: PocketActivityRow[]
   merchants: PocketPosResource[]
   collections: PocketCollectionResource[]
@@ -508,6 +514,8 @@ export function isPocketBalancesReadData(value: unknown): value is PocketBalance
     if (typeof row.balance !== 'number' || !Number.isFinite(row.balance) || row.balance < 0) return false
     if (row.status !== 'ok' && row.status !== 'error') return false
     if (row.error !== undefined && !isNonEmptyString(row.error, 500)) return false
+    if (row.walletRevision !== undefined && (typeof row.walletRevision !== 'string' || !/^[a-f0-9]{64}$/.test(row.walletRevision))) return false
+    if (row.observedAt !== undefined && (typeof row.observedAt !== 'number' || !Number.isSafeInteger(row.observedAt) || row.observedAt <= 0)) return false
     return row.status === 'error' || row.error === undefined
   })
   if (!validRows) return false
