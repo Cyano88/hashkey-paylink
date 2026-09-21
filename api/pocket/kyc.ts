@@ -4,7 +4,7 @@ import { verifiedPrivyUser } from '../local-currency-profile.js'
 import { readDurableJson, mutateDurableJson } from '../render-durable-store.js'
 import { smileConfig, smileRequest, validSmileSignature, type SmileConfig, type SmileEnvironment } from './smile-provider.js'
 
-type Job = { id: string; userId: string; environment: SmileEnvironment; status: 'pending' | 'passed' | 'failed' | 'review'; createdAt: number; checkedAt?: number; submitted?: boolean; providerMissing?: boolean; resultCode?: string; legalName?: string }
+type Job = { id: string; userId: string; environment: SmileEnvironment; status: 'pending' | 'passed' | 'failed' | 'review'; createdAt: number; checkedAt?: number; uploadReportedAt?: number; submitted?: boolean; providerMissing?: boolean; resultCode?: string; legalName?: string }
 type RecordState = { jobs: Job[] }
 const key = (userId: string, environment: SmileEnvironment) => `hashpaylink:pocket-kyc:v1:${environment}:${createHash('sha256').update(userId).digest('hex')}`
 export const smileUserId = (userId: string) => `pocket_${createHash('sha256').update(userId).digest('hex')}`
@@ -12,7 +12,7 @@ const jobKey = (id: string) => `hashpaylink:pocket-kyc-job:v1:${id}`
 const fail = (message: string, status: number) => Object.assign(new Error(message), { status })
 
 export function publicKyc(job: Job | undefined, environment: SmileEnvironment) {
-  return { environment, status: job?.status || 'not_started', verified: environment === 'production' && job?.status === 'passed', jobId: job?.id || null, canResume: job?.status === 'pending' && job.providerMissing === true && !job.submitted }
+  return { environment, status: job?.status || 'not_started', verified: environment === 'production' && job?.status === 'passed', jobId: job?.id || null, canResume: job?.status === 'pending' && job.providerMissing === true && !job.submitted && !job.uploadReportedAt, uploadReported: Boolean(job?.uploadReportedAt) }
 }
 
 export async function requireProductionKyc(userId: string) {
@@ -23,12 +23,12 @@ export async function requireProductionKyc(userId: string) {
 }
 
 async function reconcile(config: SmileConfig, owner: string, selected: Job) {
-  if (selected.status !== 'pending' || Date.now() - (selected.checkedAt || 0) < 15000) return selected
+  if (selected.status === 'passed' || (selected.status !== 'pending' && selected.resultCode) || Date.now() - (selected.checkedAt || 0) < 15000) return selected
   let claimed = false
   await mutateDurableJson<RecordState>(key(owner, config.environment), current => {
     if (!current) throw fail('Verification not found.', 404)
     const job = current.jobs.find(item => item.id === selected.id)
-    if (job?.status === 'pending' && Date.now() - (job.checkedAt || 0) >= 15000) { job.checkedAt = Date.now(); claimed = true }
+    if (job && job.status !== 'passed' && !job.resultCode && Date.now() - (job.checkedAt || 0) >= 15000) { job.checkedAt = Date.now(); claimed = true }
     return current
   })
   if (!claimed) return selected
@@ -40,7 +40,8 @@ async function reconcile(config: SmileConfig, owner: string, selected: Job) {
   const saved = await mutateDurableJson<RecordState>(key(owner, config.environment), current => {
     if (!current) throw fail('Verification not found.', 404)
     const job = current.jobs.find(item => item.id === selected.id)
-    if (!job || job.status !== 'pending') return current
+    if (!job || job.status === 'passed' || (job.status !== 'pending' && job.resultCode)) return current
+    if (data.job_found === true && data.job_complete !== true) job.status = 'pending'
     job.providerMissing = data.job_found === false
     job.submitted = data.job_found === true || data.job_complete === true || job.submitted
     if (data.job_complete === true) {
@@ -52,7 +53,7 @@ async function reconcile(config: SmileConfig, owner: string, selected: Job) {
       job.status = approved ? 'passed' : data.job_success === false ? 'failed' : 'review'
       if (approved) job.legalName = legalName
     } else if (data.job_found === false && !job.submitted && Date.now() - job.createdAt > 20 * 60_000) {
-      job.status = 'failed'
+      job.status = 'review'
     } else if (Date.now() - job.createdAt > 24 * 60 * 60_000) job.status = 'review'
     return current
   })
@@ -67,19 +68,28 @@ export default async function pocketKyc(req: Request, res: Response) {
     const action = req.body?.action
     if (action === 'eligibility') {
       try { const legalName = await requireProductionKyc(identity.userId); return res.json({ ok: true, verified: true, legalName }) }
-      catch (error) { if ((error as { status?: number }).status === 403) return res.json({ ok: true, verified: false }); throw error }
+      catch (error) { if ((error as { status?: number }).status === 403) { const config = smileConfig(); const record = await readDurableJson<RecordState>(key(identity.userId, config.environment)); return res.json({ ok: true, ...publicKyc(record?.jobs.at(-1), config.environment), verified: false }) }; throw error }
     }
     const config = smileConfig()
-    if (!['status', 'start', 'resume'].includes(action)) throw fail('Invalid verification action.', 400)
+    if (!['status', 'start', 'resume', 'uploaded'].includes(action)) throw fail('Invalid verification action.', 400)
     const storageKey = key(identity.userId, config.environment)
     const record = await readDurableJson<RecordState>(storageKey)
     const latest = record?.jobs.at(-1)
+    if (action === 'uploaded') {
+      if (!latest || req.body.jobId !== latest.id) throw fail('Verification reference did not match.', 409)
+      const saved = await mutateDurableJson<RecordState>(storageKey, current => {
+        const job = current?.jobs.find(item => item.id === latest.id)
+        if (job?.status === 'pending') { job.uploadReportedAt ||= Date.now(); job.providerMissing = false }
+        return current || { jobs: [] }
+      })
+      return res.json({ ok: true, ...publicKyc(saved.jobs.at(-1), config.environment) })
+    }
     if (action === 'status') {
       const job = latest ? await reconcile(config, identity.userId, latest) : undefined
       return res.json({ ok: true, ...publicKyc(job, config.environment) })
     }
     if (req.body.consent !== true) throw fail('Please consent to identity verification first.', 400)
-    if (action === 'resume' && (!latest || latest.status !== 'pending' || !latest.providerMissing || latest.submitted)) throw fail('Check progress before continuing verification.', 409)
+    if (action === 'resume' && (!latest || latest.status !== 'pending' || !latest.providerMissing || latest.submitted || latest.uploadReportedAt)) throw fail('Check progress before continuing verification.', 409)
     const candidate: Job = action === 'resume' ? latest! : { id: `pkyc_${randomUUID().replaceAll('-', '')}`, userId: smileUserId(identity.userId), environment: config.environment, status: 'pending', createdAt: Date.now() }
     if (action === 'start') await mutateDurableJson<RecordState>(storageKey, current => {
       const jobs = current?.jobs || []

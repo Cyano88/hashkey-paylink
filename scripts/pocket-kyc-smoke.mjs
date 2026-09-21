@@ -34,5 +34,17 @@ const second=await request('bob',{action:'start',consent:true});const secondPara
 state.result={job_found:true,job_complete:true,job_success:false,result:{PartnerParams:secondParams,ResultCode:'0811'}}
 const forged=await request('',response({PartnerParams:secondParams,ResultCode:'0810'}),true);assert.equal(forged.code,200);assert.equal((await request('bob',{action:'status'})).body.status,'failed')
 await request('carol',{action:'start',consent:true});state.result={job_found:true,job_complete:true,job_success:true,result:{ResultCode:'0810',Country:'NG',FirstName:'Test',LastName:'Person'}};assert.equal((await request('carol',{action:'status'})).body.status,'review')
+// A browser upload report suppresses duplicate capture, but cannot approve KYC.
+const uploadStart=await request('upload-user',{action:'start',consent:true});
+assert.equal((await request('bob',{action:'uploaded',jobId:uploadStart.body.jobId})).code,409);
+const uploaded=await request('upload-user',{action:'uploaded',jobId:uploadStart.body.jobId});
+assert.equal(uploaded.body.verified,false);assert.equal(uploaded.body.status,'pending');assert.equal(uploaded.body.canResume,false);
+assert.equal((await request('upload-user',{action:'resume',consent:true})).code,409);
+const uploadStore=[...state.values.values()].find(v=>v.jobs?.some(j=>j.id===uploadStart.body.jobId));
+const delayed=uploadStore.jobs[0];delayed.createdAt=Date.now()-21*60_000;delayed.checkedAt=0;state.result={missing:true};
+assert.equal((await request('upload-user',{action:'status'})).body.status,'review');
+[...state.values.values()].find(v=>v.jobs?.some(j=>j.id===delayed.id)).jobs[0].checkedAt=0;
+state.result={job_found:true,job_complete:true,job_success:true,result:{PartnerParams:{job_id:delayed.id,user_id:m.smileUserId('upload-user'),job_type:1},Country:'NG',FirstName:'Test',LastName:'Person',ResultCode:'0810'}};
+assert.equal((await request('upload-user',{action:'status'})).body.status,'passed');
 process.env.SMILE_ENVIRONMENT='production';assert.equal((await request('alice',{action:'start',consent:true})).code,503)
 console.log('PASS auth, consent, atomic duplicate prevention, owner isolation, callback authentication, authoritative reconciliation, unknown-result review, sandbox isolation production rollout guard, and unsubmitted-session recovery without replacement jobs.')

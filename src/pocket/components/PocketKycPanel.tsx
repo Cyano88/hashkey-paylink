@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import PocketBottomSheet from './PocketBottomSheet'
+import { Check, CheckCircle2, Clock3, Info } from './PocketIcons'
+import { protectSmileViewport } from '../lib/smileViewport'
 import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 
-type KycState = { environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean }
+type KycState = { environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; uploadReported?: boolean; jobId?: string }
 type Session = KycState & { token: string; partnerId: string; callbackUrl: string }
 type SmileWindow = Window & { SmileIdentity?: (config: Record<string, unknown>) => void }
 let sdk: Promise<void> | undefined
@@ -21,15 +24,16 @@ function loadSmile() {
 
 export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () => Promise<string | null> }) {
   const [state, setState] = useState<KycState | null>(null)
+  const [submittedSheet, setSubmittedSheet] = useState(false)
   const [busy, setBusy] = useState(false)
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
   const mounted = useRef(true)
   const inFlight = useRef(false)
-  const api = useCallback(async (action: 'status' | 'start' | 'resume') => {
+  const api = useCallback(async (action: 'status' | 'start' | 'resume' | 'uploaded', jobId?: string) => {
     const token = await getAccessToken()
     if (!token) throw new Error('Sign in again to continue.')
-    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) })
+    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(jobId ? { jobId } : {}), ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) })
     const data = await response.json()
     if (!response.ok || data.ok !== true) throw new Error(typeof data.error === 'string' ? data.error : 'Verification could not load. Please try again.')
     if (!['sandbox', 'production'].includes(data.environment) || !['not_started', 'pending', 'passed', 'failed', 'review'].includes(data.status)) throw new Error('Verification returned an invalid response.')
@@ -38,13 +42,14 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   const refresh = useCallback(async () => {
     if (inFlight.current) return
     inFlight.current = true
-    try { const next = await api('status'); if (mounted.current) { setState(next); setError('') } }
+    try { const next = await api('status'); if (mounted.current) { setState(current => current?.jobId === next.jobId && current?.uploadReported && next.status === 'pending' ? { ...next, canResume: false, uploadReported: true } : next); setError('') } }
     catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : 'Verification could not load.') }
     finally { inFlight.current = false }
   }, [api])
+  useEffect(() => protectSmileViewport(), [])
   useEffect(() => { mounted.current = true; void refresh(); return () => { mounted.current = false; document.getElementById('smile-identity-hosted-web-integration')?.remove() } }, [refresh])
   useEffect(() => {
-    if (state?.status !== 'pending') return
+    if (!state || !['pending', 'review'].includes(state.status)) return
     const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, 15000)
     return () => clearInterval(timer)
   }, [state?.status, refresh])
@@ -63,7 +68,16 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         id_selection: { NG: ['BVN_MFA'] }, consent_required: { NG: ['BVN_MFA'] }, previewBVNMFA: true,
         use_strict_mode: true, allow_agent_mode: false, allow_legacy_selfie_fallback: false,
         partner_details: { partner_id: session.partnerId, name: 'Pocket by Hash PayLink', logo_url: 'https://app.hashpaylink.com/pocket-circle.png', policy_url: 'https://app.hashpaylink.com/docs/privacy', theme_color: '#171717' },
-        onSuccess: done, onClose: done,
+        onSuccess: () => {
+          if (!mounted.current) return
+          setBusy(false)
+          setSubmittedSheet(true)
+          setState(current => current && { ...current, canResume: false, uploadReported: true })
+          // An upload notification is only a processing hint, never identity approval.
+          void api('uploaded', session.jobId).then(next => { if (mounted.current) setState(next) }).catch(() => {
+            if (mounted.current) setError('Your upload finished. Check progress to confirm the result.')
+          })
+        }, onClose: done,
         onError: () => { done(); if (mounted.current) setError('Verification was interrupted. Check progress before trying again.') },
       })
     } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false) } }
@@ -73,17 +87,33 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
     {!state && !error && <div role="status" aria-label="Loading verification" className="h-44 animate-pulse rounded-3xl bg-gray-200/70 dark:bg-white/10" />}
     {state && <>
       {state.environment === 'sandbox' && <p className="rounded-xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:bg-amber-400/10 dark:text-amber-200">Sandbox test. Use Smile ID test details. This does not verify your live account or unlock POS payments.</p>}
-      <div className="rounded-3xl bg-white p-5 dark:bg-[#121212]">
-        <h2 className="text-base font-semibold">{state.status === 'passed' ? state.verified ? 'Identity verified' : 'Sandbox test completed' : state.status === 'pending' ? 'Verification in progress' : state.status === 'review' ? 'Verification needs support' : state.status === 'failed' ? 'Try verification again' : 'Verify your identity'}</h2>
-        <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{state.status === 'pending' ? state.canResume ? 'Your verification has not been submitted. Continue when you are ready.' : 'Your result will update here. You can safely leave this screen and return later.' : state.status === 'review' ? 'Contact Agent Hash for help with this verification.' : state.status === 'passed' ? state.verified ? 'Your identity check is complete.' : 'The sandbox check passed. Production verification is still required for live POS access.' : 'For Nigerian individuals. Verify your BVN and take a live selfie with Smile ID.'}</p>
+      <div className="space-y-4">
+        <h2 className="text-sm font-medium">Identity verification</h2>
+        <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-5 dark:border-white/10 dark:bg-[#121212]">
+          <span className="text-sm font-medium">BVN and facial verification</span>
+          {state.status === 'passed' ? <Check aria-label={state.verified ? 'Verified' : 'Sandbox completed'} className="h-5 w-5 text-green-600" /> : ['pending', 'review'].includes(state.status) ? <Clock3 aria-label="In progress" className="h-5 w-5 text-blue-500" /> : null}
+        </div>
+        <div role="status" className={`flex items-start gap-3 rounded-xl p-4 ${state.status === 'passed' ? 'bg-green-50 text-green-800 dark:bg-green-500/10 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-300'}`}>
+          <Info className="mt-0.5 h-5 w-5 shrink-0" />
+          <div><h3 className="text-sm font-medium">{state.status === 'passed' ? state.verified ? 'Verification complete' : 'Sandbox test completed' : state.status === 'pending' ? 'Verification in progress' : state.status === 'review' ? 'Verification needs support' : state.status === 'failed' ? 'Try verification again' : 'Verify your identity'}</h3>
+          <p className="mt-1 text-sm leading-6">{state.status === 'pending' ? state.canResume ? 'Smile ID has not confirmed receipt yet. Continue your existing verification if you closed it before uploading.' : 'Your verification is being processed. We will update your status when the result is confirmed.' : state.status === 'review' ? 'Your result has not been confirmed. Check progress or contact Agent Hash for help.' : state.status === 'passed' ? state.verified ? 'Your identity check is complete. You can now set up your POS.' : 'The sandbox check passed. Production verification is still required for live POS access.' : 'For Nigerian individuals. Verify your BVN and take a live selfie with Smile ID.'}</p></div>
+        </div>
       </div>
       {retryable && <>
         <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />I agree to share my identity details and selfie with Smile ID for verification.</label>
         <button type="button" disabled={!consent || busy} onClick={() => void start()} className="w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{busy ? 'Opening verification...' : state.canResume ? 'Continue verification' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Start verification'}</button>
       </>}
       {state.status === 'review' && <a href={POCKET_BASE_PATH + POCKET_ROUTES.assistant} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
-      {state.status === 'pending' && !busy && <button type="button" onClick={() => void refresh()} className="w-full py-3 text-sm font-semibold">Check progress</button>}
+      {['pending', 'review'].includes(state.status) && !busy && <button type="button" onClick={() => void refresh()} className="w-full py-3 text-sm font-semibold">Check progress</button>}
     </>}
+    {submittedSheet && <PocketBottomSheet title="Verification submitted" onClose={() => setSubmittedSheet(false)}>
+      <div className="pb-2 pt-3 text-center">
+        <CheckCircle2 aria-hidden="true" className="mx-auto h-20 w-20 text-green-500" />
+        <h2 className="mt-6 text-2xl font-semibold">Verification submitted</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">Your upload is complete. We will update your verification status once Smile ID confirms the result.</p>
+        <button type="button" onClick={() => setSubmittedSheet(false)} className="mt-7 w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Continue</button>
+      </div>
+    </PocketBottomSheet>}
     {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400">{error}<button type="button" onClick={() => void refresh()} className="ml-2 underline">Try again</button></div>}
   </section>
 }
