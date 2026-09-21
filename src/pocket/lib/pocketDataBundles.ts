@@ -1,6 +1,6 @@
 import type { PocketDataVariation } from '../api/pocketBillsClient'
 
-export type PocketDataBundleCategory = 'daily' | 'weekly' | 'monthly' | 'mega' | 'broadband'
+export type PocketDataBundleCategory = 'daily' | 'weekly' | 'monthly'
 
 export type PocketDataBundle = PocketDataVariation & {
   dataAmount: string
@@ -87,16 +87,16 @@ export function parsePocketDataBundle(variation: PocketDataVariation, serviceId:
     || (days !== null && days > 45)
   )
   const category: PocketDataBundleCategory = isPocketBroadbandService(serviceId) || mobileBroadbandPlan
-    ? 'broadband'
+    ? 'monthly'
     : volumeGb >= 50 || (days !== null && days > 45)
-      ? 'mega'
+      ? 'monthly'
       : days !== null && days <= 2
         ? 'daily'
         : days !== null && days <= 14
           ? 'weekly'
           : days !== null && days <= 45
             ? 'monthly'
-            : 'mega'
+            : 'monthly'
 
   return {
     ...variation,
@@ -112,4 +112,10 @@ export function parsePocketDataBundles(variations: PocketDataVariation[], servic
     .filter(variation => !/\bvoice\b/i.test(variation.name))
     .map(variation => parsePocketDataBundle(variation, serviceId))
     .filter(bundle => Number.isFinite(bundle.price) && bundle.price > 0)
+}
+
+export function popularPocketDataBundles(bundles: PocketDataBundle[]) {
+  return bundles.filter(bundle => bundle.available && Number.isSafeInteger(bundle.popularityRank) && (bundle.popularityRank ?? 0) > 0)
+    .sort((a, b) => a.popularityRank! - b.popularityRank! || a.variationCode.localeCompare(b.variationCode))
+    .slice(0, 12)
 }

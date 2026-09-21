@@ -1,3 +1,4 @@
+import { rankPocketDataPlans } from './bills-popularity.js'
 import { randomUUID } from 'node:crypto'
 import { isAddress } from 'viem'
 import { createVtpassRequestId, type VtpassTransactionResult } from '../vtpass-client.js'
@@ -523,6 +524,20 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     return assertOwner(store.intents[cleanText(intentId, 100)], cleanText(ownerId, 200))
   }
 
+  let popularityCache: { expiresAt: number; rankings: Record<string, string[]> } | null = null
+  let popularityPending: Promise<Record<string, string[]>> | null = null
+  async function popularDataPlans(serviceId: string): Promise<string[]> {
+    if (!popularityCache || popularityCache.expiresAt <= now()) {
+      if (!popularityPending) popularityPending = read().then(store => {
+        const rankings = rankPocketDataPlans(Object.values(store.intents), now())
+        popularityCache = { expiresAt: now() + 60_000, rankings }
+        return rankings
+      }).finally(() => { popularityPending = null })
+      await popularityPending
+    }
+    return popularityCache?.rankings[serviceId.toLowerCase()] ?? []
+  }
+
   async function listOwnedIntents(ownerIdInput: string, limit = 50) {
     const ownerId = cleanText(ownerIdInput, 200)
     if (!ownerId) throw new PocketBillsStoreError('BILLS_AUTH_REQUIRED', 'Pocket authentication is required.', 401)
@@ -904,6 +919,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     releaseProviderRequeryClaim,
     getOwnedIntent,
     listOwnedIntents,
+    popularDataPlans,
     readLimitUsage,
     getIntentById,
     markAwaitingPayment,

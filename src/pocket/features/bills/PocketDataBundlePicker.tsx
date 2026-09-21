@@ -4,15 +4,17 @@ import { cn } from '../../../lib/utils'
 import type { PocketDataVariation } from '../../api/pocketBillsClient'
 import {
   parsePocketDataBundles,
+  popularPocketDataBundles,
   type PocketDataBundleCategory,
 } from '../../lib/pocketDataBundles'
 
-const CATEGORIES: Array<{ value: PocketDataBundleCategory; label: string }> = [
+type PlanTab = PocketDataBundleCategory | 'popular'
+
+const CATEGORIES: Array<{ value: PocketDataBundleCategory | 'popular'; label: string }> = [
+  { value: 'popular', label: 'Popular' },
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
-  { value: 'mega', label: 'Mega' },
-  { value: 'broadband', label: 'Broadband' },
 ]
 
 function formatNaira(value: number) {
@@ -37,25 +39,16 @@ export default function PocketDataBundlePicker({
   onChange: (variationCode: string) => void
 }) {
   const bundles = useMemo(() => parsePocketDataBundles(variations, serviceId), [serviceId, variations])
-  const availableCategories = useMemo(
-    () => CATEGORIES.filter(category => bundles.some(bundle => bundle.category === category.value)),
-    [bundles],
-  )
-  const selectedBundle = bundles.find(bundle => bundle.variationCode === value)
-  const [category, setCategory] = useState<PocketDataBundleCategory>('daily')
-
-  useEffect(() => {
-    const next = selectedBundle?.category ?? availableCategories[0]?.value
-    if (next) setCategory(next)
-  }, [availableCategories, selectedBundle?.category, serviceId])
-
-  const visible = bundles.filter(bundle => bundle.category === category)
+  const popular = useMemo(() => popularPocketDataBundles(bundles), [bundles])
+  const [category, setCategory] = useState<PlanTab>('popular')
+  useEffect(() => { setCategory('popular') }, [serviceId])
+  const visible = category === 'popular' ? popular : bundles.filter(bundle => bundle.category === category)
 
   return (
     <div className="space-y-2.5">
       <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Data plan categories">
         {CATEGORIES.map(item => {
-          const hasPlans = availableCategories.some(categoryOption => categoryOption.value === item.value)
+          const hasPlans = item.value === 'popular' || bundles.some(bundle => bundle.category === item.value)
           const active = category === item.value
           return (
             <button
@@ -63,6 +56,7 @@ export default function PocketDataBundlePicker({
               type="button"
               disabled={!hasPlans || disabled}
               onClick={() => setCategory(item.value)}
+              aria-pressed={active}
               className={cn(
                 'min-h-8 shrink-0 rounded-full px-3 text-[10px] font-black transition-all duration-200',
                 active
@@ -77,6 +71,7 @@ export default function PocketDataBundlePicker({
         })}
       </div>
 
+      {category === 'popular' && <p className="text-[11px] leading-5 text-gray-500 dark:text-gray-400">{popular.length ? 'Most purchased on this network in the last 30 days.' : 'Popular plans will appear after completed purchases on this network. Browse Daily, Weekly or Monthly.'}</p>}
       <div className="grid grid-cols-3 gap-2" role="listbox" aria-label="Data plans">
         {visible.map(bundle => {
           const selected = bundle.variationCode === value

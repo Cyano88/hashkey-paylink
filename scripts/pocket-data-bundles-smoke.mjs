@@ -18,8 +18,8 @@ assert.deepEqual(
 
 assert.equal(parsePocketDataBundle(variation('N100 100MB - 24 hrs', '100'), 'mtn-data').validity, '1 Day')
 assert.equal(parsePocketDataBundle(variation('9mobile 11GB (7GB+ 4GB Night) - 2,500 Naira - 30 days', '2500'), 'etisalat-data').category, 'monthly')
-assert.equal(parsePocketDataBundle(variation('MTN N50,000 165GB SME Mobile Data (2-Months)', '50000'), 'mtn-data').category, 'broadband')
-assert.equal(parsePocketDataBundle(variation('Smile 10GB 30 Days Bumpa', '5000'), 'smile-direct').category, 'broadband')
+assert.equal(parsePocketDataBundle(variation('MTN N50,000 165GB SME Mobile Data (2-Months)', '50000'), 'mtn-data').category, 'monthly')
+assert.equal(parsePocketDataBundle(variation('Smile 10GB 30 Days Bumpa', '5000'), 'smile-direct').category, 'monthly')
 assert.equal(parsePocketDataBundle(variation('Spectranet N5000', '5000'), 'spectranet').dataAmount, 'Data')
 assert.equal(parsePocketDataBundle(variation('UnlimitedPlatinum for 30days - 24,000 Naira', '24000'), 'smile-direct').dataAmount, 'Unlimited')
 assert.equal(parsePocketDataBundle(variation('MTN N450,000 4.5TB Mobile Data (1 Year)', '450000'), 'mtn-data').dataAmount, '4.5 TB')
@@ -31,13 +31,13 @@ const parsed = parsePocketDataBundles([
   variation('100GB - 90 days', '20000'),
   variation('MTN N500 Xtratalk Weekly Bundle', '500'),
 ], 'mtn-data')
-assert.deepEqual(parsed.map(item => item.category), ['daily', 'weekly', 'monthly', 'broadband', 'weekly'])
+assert.deepEqual(parsed.map(item => item.category), ['daily', 'weekly', 'monthly', 'monthly', 'weekly'])
 const xtraTalk = parsePocketDataBundle(variation('MTN N500 Xtratalk Weekly Bundle', '500'), 'mtn-data')
 assert.equal(xtraTalk.dataAmount, 'XtraTalk')
 assert.equal(xtraTalk.validity, '7 Days')
 assert.equal(xtraTalk.category, 'weekly')
-assert.equal(parsePocketDataBundle(variation('Airtel 110GB - 30 Days', '20000'), 'airtel-data').category, 'broadband')
-assert.equal(parsePocketDataBundle(variation('Glo 120GB - 30 Days', '18000'), 'glo-data').category, 'broadband')
-assert.equal(parsePocketDataBundle(variation('9mobile 125GB - 30 Days', '20000'), 'etisalat-data').category, 'broadband')
+assert.equal(parsePocketDataBundle(variation('Airtel 110GB - 30 Days', '20000'), 'airtel-data').category, 'monthly')
+assert.equal(parsePocketDataBundle(variation('Glo 120GB - 30 Days', '18000'), 'glo-data').category, 'monthly')
+assert.equal(parsePocketDataBundle(variation('9mobile 125GB - 30 Days', '20000'), 'etisalat-data').category, 'monthly')
 
 console.log('Pocket Data bundle parsing and categorization smoke tests passed.')

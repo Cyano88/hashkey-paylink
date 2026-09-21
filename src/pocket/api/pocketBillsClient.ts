@@ -251,7 +251,7 @@ export async function quotePocketAirtime(input: {
 }
 
 export type PocketDataService = { serviceId: string; name: string }
-export type PocketDataVariation = { variationCode: string; name: string; amountNgn: string; available: boolean }
+export type PocketDataVariation = { variationCode: string; name: string; amountNgn: string; available: boolean; popularityRank?: number }
 export type PocketBillService = PocketDataService
 export type PocketBillVariation = PocketDataVariation
 
@@ -278,7 +278,7 @@ export async function readPocketDataCatalog(input: {
   const variations = Array.isArray(data.variations) ? data.variations.flatMap(value => {
     const item = record(value)
     return text(item.variationCode) && text(item.name) && text(item.amountNgn)
-      ? [{ variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false }]
+      ? [{ variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false, ...(Number.isSafeInteger(item.popularityRank) && Number(item.popularityRank) > 0 ? { popularityRank: Number(item.popularityRank) } : {}) }]
       : []
   }) : []
   if (input.serviceId ? input.category !== 'electricity' && !variations.length : !services.length) {
