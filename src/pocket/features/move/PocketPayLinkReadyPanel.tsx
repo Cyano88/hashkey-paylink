@@ -44,7 +44,7 @@ export function PocketPayLinkReadyPanel({
   onShare,
 }: PocketPayLinkReadyPanelProps) {
   return (
-    <div className="animate-slide-up space-y-4 border-t border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-white/[0.03] sm:p-4">
+    <div className="animate-slide-up space-y-4 border-t border-gray-100 bg-gray-50/70 p-3 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none sm:p-4">
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
@@ -58,12 +58,12 @@ export function PocketPayLinkReadyPanel({
           </button>
         </div>
 
-        <div className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-[#262626] dark:bg-[#171717]">
           <div className="min-w-0 flex-1 space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Preview</p>
             <div className="flex items-baseline gap-1.5">
               {flexible
-                ? <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm font-semibold text-gray-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100"><Sliders className="h-3.5 w-3.5" />{localCurrency ? 'Flexible NGN' : 'Flexible'}</span>
+                ? <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm font-semibold text-gray-800 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-100"><Sliders className="h-3.5 w-3.5" />{localCurrency ? 'Flexible NGN' : 'Flexible'}</span>
                 : <><span className="text-2xl font-bold text-gray-900 dark:text-white">{amountLabel}</span><span className="text-sm font-medium text-gray-500 dark:text-gray-400">{localCurrency ? 'NGN' : 'USDC'}</span></>
               }
             </div>
@@ -121,7 +121,7 @@ export function PocketPayLinkReadyPanel({
           >
             {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Share2 className="h-4 w-4" /> Share</>}
           </button>
-          <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]">
+          <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]">
             <ExternalLink className="h-4 w-4" />
             Preview
           </a>
@@ -132,7 +132,7 @@ export function PocketPayLinkReadyPanel({
             href={dashboardUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
           >
             <LayoutDashboard className="h-4 w-4" />
             View payments
@@ -145,7 +145,7 @@ export function PocketPayLinkReadyPanel({
               href={dashboardUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
             >
               <LayoutDashboard className="h-4 w-4" />
               View payments

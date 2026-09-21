@@ -93,7 +93,7 @@ export default function PocketDataBundlePicker({
                 'relative min-h-[82px] rounded-xl border p-2 text-left transition-all duration-200',
                 selected
                   ? 'border-blue-500 bg-blue-50/80 shadow-[0_8px_22px_rgba(59,130,246,0.12)] dark:border-blue-400/50 dark:bg-blue-400/10'
-                  : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-sm dark:border-white/10 dark:bg-white/[0.035] dark:hover:border-blue-400/40',
+                  : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:hover:border-blue-400/40',
                 (disabled || !bundle.available) && 'cursor-not-allowed opacity-40 hover:translate-y-0 hover:border-gray-200 hover:shadow-none dark:hover:border-white/10',
               )}
             >

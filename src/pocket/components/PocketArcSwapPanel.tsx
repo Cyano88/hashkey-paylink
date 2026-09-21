@@ -151,7 +151,7 @@ export default function PocketArcSwapPanel(props: Props) {
     } finally { locked.current = false }
   }
   const selected = tokens.find(token => token.address.toLowerCase() === tokenIn.toLowerCase())
-  return <section className="space-y-5 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.035]">
+  return <section className="space-y-5 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none">
     <p className="text-xs text-gray-500">Exchange tokens in your Arc wallet.</p>
     {pending ? <div className="space-y-3 rounded-2xl bg-blue-50 p-4 dark:bg-blue-500/10">
       <p className="text-sm">Your swap is awaiting confirmation. Check its status before creating another.</p>
@@ -164,10 +164,10 @@ export default function PocketArcSwapPanel(props: Props) {
       </div>
       {loadingTokens && <p role="status" className="text-xs text-gray-400">Loading Arc tokens...</p>}
       {catalogError && <p role="alert" className="text-xs text-gray-500">{catalogError} <button type="button" onClick={() => void load()} className="font-bold text-blue-600">Try again</button></p>}
-      <label className="block text-xs text-gray-500">Amount<input aria-label="Swap amount" inputMode="decimal" disabled={busy || approvalBusy || !!catalogError} value={amount} onChange={event => { invalidate(); setAmount(event.target.value) }} className="mt-2 w-full rounded-2xl border border-gray-200 bg-transparent p-4 text-base text-gray-950 dark:border-white/10 dark:text-white" placeholder="0.00" /></label>
+      <label className="block text-xs text-gray-500">Amount<input aria-label="Swap amount" inputMode="decimal" disabled={busy || approvalBusy || !!catalogError} value={amount} onChange={event => { invalidate(); setAmount(event.target.value) }} className="mt-2 w-full rounded-2xl border border-gray-200 bg-transparent p-4 text-base text-gray-950 dark:border-[#262626] dark:text-white" placeholder="0.00" /></label>
       <p className="text-xs text-gray-500">Available: {selected?.balance ?? '—'} {selected?.symbol}</p>
       {selected?.balanceStatus === 'wallet_required' && <button type="button" onClick={() => void props.ensureWallet().then(() => load()).catch(reason => setError(reason.message))} className="text-xs font-bold text-blue-600">Open Arc wallet</button>}
-      {quoted && <div className="space-y-2 rounded-2xl bg-gray-50 p-4 text-xs dark:bg-white/[0.04]">
+      {quoted && <div className="space-y-2 rounded-2xl bg-gray-50 p-4 text-xs dark:bg-[#171717]">
         <p>Estimated receive: <b>{quoted.quote.expectedOut} {quoted.quote.tokenOut.symbol}</b></p>
         <p>Minimum receive: <b>{quoted.quote.minimumOut} {quoted.quote.tokenOut.symbol}</b></p>
         <p>Slippage limit: 0.5%</p>

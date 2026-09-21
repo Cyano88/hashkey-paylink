@@ -14,7 +14,7 @@ export default function PocketThemeToggle({ className = '' }: { className?: stri
       title={dark ? 'Light mode' : 'Dark mode'}
       data-pocket-theme-toggle
       className={cn(
-        'pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:bg-gray-50 hover:text-gray-950 active:scale-[0.96] dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-300 dark:hover:bg-white/[0.1] dark:hover:text-white',
+        'pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition hover:bg-gray-50 hover:text-gray-950 active:scale-[0.96] dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300 dark:hover:bg-white/[0.1] dark:hover:text-white',
         className,
       )}
     >

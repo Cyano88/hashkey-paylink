@@ -11,8 +11,8 @@ export default function PocketActivityLoadingState() {
         <div className="flex items-center justify-between px-1"><Bar className="h-3 w-16" /><Bar className="h-8 w-8 rounded-full" /></div>
         <section>
           <Bar className="h-3 w-24" />
-          <div className="mt-2 overflow-hidden rounded-2xl border border-gray-100 bg-white px-4 dark:border-white/10 dark:bg-[#111216]">
-            {Array.from({ length: 4 }).map((_, index) => <div key={index} className="flex min-h-[72px] items-center gap-3 border-b border-gray-100 last:border-b-0 dark:border-white/[0.07]">
+          <div className="mt-2 overflow-hidden rounded-2xl border border-gray-100 bg-white px-4 dark:border-[#262626] dark:bg-[#111216]">
+            {Array.from({ length: 4 }).map((_, index) => <div key={index} className="flex min-h-[72px] items-center gap-3 border-b border-gray-100 last:border-b-0 dark:border-[#262626]">
               <Bar className="h-10 w-10 shrink-0 rounded-full" />
               <span className="min-w-0 flex-1 space-y-2"><Bar className="h-3 w-32" /><Bar className="h-2.5 w-20" /></span>
               <span className="space-y-2"><Bar className="ml-auto h-3 w-16" /><Bar className="ml-auto h-2.5 w-12" /></span>

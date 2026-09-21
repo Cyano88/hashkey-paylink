@@ -38,8 +38,8 @@ export function PocketPayerNetworkPanel({
       {showSelector && <div className={cn(
         'space-y-2.5',
         embedded
-          ? 'border-y border-gray-100 py-3 dark:border-white/[0.07]'
-          : 'rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]',
+          ? 'border-y border-gray-100 py-3 dark:border-[#262626]'
+          : 'rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm dark:border-[#262626] dark:bg-[#171717]',
       )}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -63,7 +63,7 @@ export function PocketPayerNetworkPanel({
           type="button"
           onClick={onMultiChainToggle}
           disabled={emailReceive}
-          className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-all hover:border-gray-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70 dark:border-white/10 dark:bg-white/[0.035] dark:hover:border-white/20"
+          className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-all hover:border-gray-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:hover:border-white/20"
         >
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer choose network</span>
@@ -88,7 +88,7 @@ export function PocketPayerNetworkPanel({
       </div>}
 
       {multiChain && !managedNetworkRouting && (
-        <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-[#262626] dark:bg-[#171717]">
           <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Add receiving addresses</p>
           <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">Enter one address for each network payers can choose.</p>
         </div>

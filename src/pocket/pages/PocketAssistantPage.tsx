@@ -14,9 +14,9 @@ export default function PocketAssistantPage() {
   const ownerKey = email || profile.profile?.pocketId || 'circle-pocket-web'
 
   return (
-    <div className='fixed inset-0 z-[55] h-[100dvh] overflow-hidden bg-white text-gray-950 dark:bg-[#0A0A0A] dark:text-white'>
+    <div className='fixed inset-0 z-[55] h-[100dvh] overflow-hidden bg-white text-gray-950 dark:bg-black dark:text-white'>
       <main className='mx-auto flex h-[100dvh] w-full max-w-[480px] flex-col overflow-hidden' style={{ paddingTop: 'max(env(safe-area-inset-top), var(--pocket-status-bar-inset, 0px), 0.5rem)' }}>
-        <header className='sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between border-b border-gray-100 bg-white px-5 dark:border-white/[0.06] dark:bg-[#0A0A0A]'>
+        <header className='sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between border-b border-gray-100 bg-white px-5 dark:border-[#262626] dark:bg-black'>
           <button type='button' onClick={() => navigate(-1)} className='flex h-10 w-10 items-center justify-center rounded-full bg-[#F5F5F7] dark:bg-white/[0.07]' aria-label='Back'>
             <ArrowLeft className='h-4 w-4' />
           </button>

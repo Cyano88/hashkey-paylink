@@ -127,11 +127,11 @@ export default function PocketMobileNumberInput({
         className={cn(
           'flex min-h-[58px] items-center overflow-hidden rounded-2xl border bg-white shadow-sm transition',
           'border-gray-200 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10',
-          'dark:border-white/10 dark:bg-[#17181d] dark:focus-within:border-blue-400/50',
+          'dark:border-[#262626] dark:bg-[#17181d] dark:focus-within:border-blue-400/50',
           invalidNumber && 'border-red-300 focus-within:border-red-400 focus-within:ring-red-500/10 dark:border-red-400/40',
         )}
       >
-        <label className="relative flex h-[58px] min-w-[108px] shrink-0 cursor-pointer items-center gap-2 border-r border-gray-200 px-3 dark:border-white/10">
+        <label className="relative flex h-[58px] min-w-[108px] shrink-0 cursor-pointer items-center gap-2 border-r border-gray-200 px-3 dark:border-[#262626]">
           <NetworkMark network={selectedNetwork} />
           <span className="min-w-0 flex-1 truncate text-xs font-black text-gray-900 dark:text-white">
             {selectedOption?.label ?? 'Network'}

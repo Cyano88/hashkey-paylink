@@ -84,7 +84,7 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
   if(status!=='ready')return <section className='pt-6'><p role={status==='failed'?'alert':'status'} className='text-sm leading-6'>{status==='checking'?'Checking wallet update...':error}</p>{status==='failed'&&<button type='button' className={cta} onClick={()=>void checkStatus()}>Check again</button>}</section>
   if(previous)return <section className='pt-6'><PocketPreviousWallets key={email} email={email} getAccessToken={getAccessToken} onBack={goHome}/></section>
   return <section className='w-full space-y-4 pt-6'>
-    <article className='w-full rounded-[26px] bg-white p-5 shadow-sm dark:bg-white/[0.05]'>
+    <article className='w-full rounded-[26px] bg-white p-5 shadow-sm dark:bg-[#121212] dark:shadow-none'>
       <h2 className='text-lg font-black'>{stage==='completed'?'Migration complete':stage==='review'?'Review your balance':stage==='verified'?'Wallets verified':'Update your Pocket wallet'}</h2>
       {stage==='completed' ? <><p className='mt-3 text-sm leading-6 text-gray-500'>Your balance migration and updated wallets are confirmed.</p><button type='button' onClick={goHome} className={cta}>Proceed to Pocket</button><button type='button' onClick={()=>setPrevious(true)} className='mt-3 min-h-12 w-full text-sm font-bold'>Previous wallets</button></> : <>
         <p className='mt-3 text-sm leading-6 text-gray-500'>{stage==='verified'?'Your Base, Arbitrum and Arc replacement addresses match. Review your balance next.':'Your current wallets remain active until transfers and activation are confirmed.'}</p>

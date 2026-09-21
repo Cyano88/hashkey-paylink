@@ -65,7 +65,7 @@ export function PocketReceiveMethodPanel({
             'min-h-[54px] rounded-full border px-4 py-2.5 text-left transition-all active:scale-[0.98]',
             receiveMode === 'paste'
               ? 'border-gray-950 bg-gray-950 text-white shadow-sm dark:border-white dark:bg-white dark:text-gray-950'
-              : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
+              : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-300 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
           )}
         >
           <span className="flex items-center justify-between gap-2 text-sm font-semibold">
@@ -87,7 +87,7 @@ export function PocketReceiveMethodPanel({
               'min-h-[54px] rounded-full border px-4 py-2.5 text-left transition-all active:scale-[0.98]',
               receiveMode === 'email'
                 ? 'border-gray-950 bg-gray-950 text-white shadow-sm dark:border-white dark:bg-white dark:text-gray-950'
-                : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
+                : 'border-gray-200 bg-white text-gray-700 shadow-sm hover:border-gray-300 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]',
               recipientPending && 'cursor-not-allowed opacity-70',
             )}
           >
@@ -153,8 +153,8 @@ export function PocketEmailWalletDetails({
     <div className={cn(
       'px-3.5 py-3',
       embedded
-        ? 'rounded-2xl bg-gray-50/80 dark:bg-white/[0.04]'
-        : 'rounded-xl border border-gray-100 bg-gray-50/70 dark:border-white/10 dark:bg-white/[0.04]',
+        ? 'rounded-2xl bg-gray-50/80 dark:bg-[#171717]'
+        : 'rounded-xl border border-gray-100 bg-gray-50/70 dark:border-[#262626] dark:bg-[#171717]',
     )}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">

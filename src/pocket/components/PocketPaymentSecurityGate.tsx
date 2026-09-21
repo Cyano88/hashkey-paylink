@@ -39,7 +39,7 @@ function pendingResetToken() {
 }
 
 function PinFields({ pin, confirm, onPin, onConfirm, disabled }: { pin: string; confirm: string; onPin(value: string): void; onConfirm(value: string): void; disabled: boolean }) {
-  const field = 'min-h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-white/10 dark:bg-white/[0.06]'
+  const field = 'min-h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-[#262626] dark:bg-[#171717]'
   return <div className='mt-6 space-y-3'>
     <input value={pin} onChange={event => onPin(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode='numeric' type='password' autoComplete='new-password' placeholder='Six-digit PIN' aria-label='New Pocket PIN' disabled={disabled} className={field} />
     <input value={confirm} onChange={event => onConfirm(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode='numeric' type='password' autoComplete='new-password' placeholder='Confirm PIN' aria-label='Confirm Pocket PIN' disabled={disabled} className={field} />
@@ -51,7 +51,7 @@ function PaymentPinSlots({ value, focused }: { value: string; focused: boolean }
     {Array.from({ length: 6 }, (_, index) => {
       const filled = index < value.length
       const active = focused && index === value.length
-      return <span key={index} className={`flex aspect-square items-center justify-center rounded-2xl border-2 transition-[background-color,border-color,box-shadow] ${filled ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : active ? 'border-blue-600 bg-gray-50 ring-4 ring-blue-500/15 dark:bg-white/[0.06]' : 'border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]'}`}>
+      return <span key={index} className={`flex aspect-square items-center justify-center rounded-2xl border-2 transition-[background-color,border-color,box-shadow] ${filled ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : active ? 'border-blue-600 bg-gray-50 ring-4 ring-blue-500/15 dark:bg-[#171717]' : 'border-gray-200 bg-gray-50 dark:border-[#262626] dark:bg-[#171717]'}`}>
         {filled && <span className='h-2.5 w-2.5 rounded-full bg-current' />}
       </span>
     })}
@@ -193,14 +193,14 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
 
   if (state === 'loading') return <PocketSecuritySurface><Loader2 className='h-6 w-6 animate-spin text-blue-600' /></PocketSecuritySurface>
   if (state === 'error') return <PocketSecuritySurface>
-    <section className='w-full max-w-[390px] rounded-[30px] bg-white p-7 text-center shadow-xl dark:bg-[#17181c]'>
+    <section className='w-full max-w-[390px] rounded-[30px] bg-white p-7 text-center shadow-xl dark:bg-[#171717]'>
       <h1 className='text-xl font-black'>Payment security needs attention</h1>
       <p className='mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400'>{error}</p>
       <button type='button' onClick={() => { setError(''); setState('loading'); setLoadAttempt(value => value + 1) }} className='mt-5 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white dark:bg-white dark:text-gray-950'>Try again</button>
     </section>
   </PocketSecuritySurface>
   if (state === 'setup') return <PocketSecuritySurface scroll>
-    <section className='w-full max-w-[390px] rounded-[30px] bg-white p-7 text-center shadow-xl dark:bg-[#17181c]'>
+    <section className='w-full max-w-[390px] rounded-[30px] bg-white p-7 text-center shadow-xl dark:bg-[#171717]'>
       <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10'><Lock className='h-6 w-6' /></span>
       <h1 className='mt-5 text-xl font-black'>{resetting ? 'Reset Pocket PIN' : 'Create your Pocket PIN'}</h1>
       <p className='mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400'>{resetting ? 'Your sign-in was verified. Choose a new PIN for payments.' : 'Use this six-digit PIN whenever fingerprint or face approval is unavailable.'}</p>
@@ -210,10 +210,10 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     </section>
   </PocketSecuritySurface>
   if (state === 'offer') return <PocketSecuritySurface scroll>
-    <section className='w-full max-w-[390px] rounded-[30px] bg-white p-7 text-center shadow-xl dark:bg-[#17181c]'>
+    <section className='w-full max-w-[390px] rounded-[30px] bg-white p-7 text-center shadow-xl dark:bg-[#171717]'>
       <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10'><Lock className='h-6 w-6' /></span>
       <h1 className='mt-5 text-xl font-black'>Faster payment approval</h1><p className='mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400'>{setupPin ? 'Use fingerprint or face first. Your Pocket PIN remains available as fallback.' : 'Confirm your Pocket PIN once, then use fingerprint or face for payments on this phone.'}</p>
-      {!setupPin && <input autoFocus value={existingPin} onChange={event => setExistingPin(event.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={event => { if (event.key === 'Enter') void turnOnBiometrics() }} inputMode='numeric' type='password' autoComplete='current-password' placeholder='Six-digit Pocket PIN' aria-label='Pocket PIN' disabled={busy} className='mt-6 min-h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-white/10 dark:bg-white/[0.06]' />}
+      {!setupPin && <input autoFocus value={existingPin} onChange={event => setExistingPin(event.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={event => { if (event.key === 'Enter') void turnOnBiometrics() }} inputMode='numeric' type='password' autoComplete='current-password' placeholder='Six-digit Pocket PIN' aria-label='Pocket PIN' disabled={busy} className='mt-6 min-h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-[#262626] dark:bg-[#171717]' />}
       {error && <p className='mt-3 text-xs font-semibold text-red-500'>{error}</p>}
       <button type='button' disabled={busy || (!setupPin && existingPin.length !== 6)} onClick={() => void turnOnBiometrics()} className='mt-6 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Turning on…' : setupPin ? 'Use fingerprint or face' : 'Verify PIN and enable'}</button>
       <button type='button' disabled={busy} onClick={() => { setBusy(true); setError(''); void disablePocketPaymentBiometrics(email).then(() => setState('ready')).catch(() => setError('Pocket could not save this choice. Try again.')).finally(() => setBusy(false)) }} className='mt-2 min-h-12 w-full text-sm font-bold text-gray-500'>Use PIN only</button>
@@ -221,7 +221,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
   </PocketSecuritySurface>
 
   return <>{children}{pending.current && approvalOpen && <div className='fixed inset-0 z-[90] flex items-end justify-center bg-black/45 px-4 pb-[calc(1rem+var(--pocket-safe-bottom))] pt-[var(--pocket-safe-top)] sm:items-center'>
-    <section className='w-full max-w-[390px] rounded-[28px] bg-white p-6 text-center text-gray-950 shadow-2xl dark:bg-[#17181c] dark:text-white'>
+    <section className='w-full max-w-[390px] rounded-[28px] bg-white p-6 text-center text-gray-950 shadow-2xl dark:bg-[#171717] dark:text-white'>
       <h2 className='text-lg font-black'>Enter Pocket PIN</h2><p className='mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400'>Enter your six-digit PIN to approve this payment.</p>
       <div className='relative mt-5' onClick={() => document.getElementById('pocket-payment-pin')?.focus()}>
         <PaymentPinSlots value={approvalPin} focused={approvalFocused} />

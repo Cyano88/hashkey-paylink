@@ -135,8 +135,8 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
   if (!connected) return null
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
-      <div className="border-b border-gray-100 px-3.5 py-3.5 dark:border-white/10">
+    <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-[#262626] dark:bg-[#171717]">
+      <div className="border-b border-gray-100 px-3.5 py-3.5 dark:border-[#262626]">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-2.5">
             <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gray-950 text-white dark:bg-white dark:text-gray-950"><Store className="h-4 w-4" /></span>
@@ -145,7 +145,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
               <p className="mt-0.5 text-[11px] leading-4 text-gray-500 dark:text-gray-400">Buy compatible data and AI services with App Pay.</p>
             </div>
           </div>
-          <span className="shrink-0 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">Circle Gateway</span>
+          <span className="shrink-0 rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-gray-500 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:text-gray-300">Circle Gateway</span>
         </div>
       </div>
 
@@ -157,7 +157,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
         </div>
       ) : (
         <div className="space-y-3 p-3.5">
-          <form onSubmit={event => { event.preventDefault(); void load(query) }} className="flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 dark:border-white/10 dark:bg-white/[0.05]">
+          <form onSubmit={event => { event.preventDefault(); void load(query) }} className="flex h-10 items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none">
             <Search className="h-4 w-4 text-gray-400" />
             <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search services" className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400 dark:text-white" />
             <button type="submit" disabled={loading} className="text-xs font-bold text-gray-600 disabled:opacity-50 dark:text-gray-300">{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}</button>
@@ -167,7 +167,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
             <p className={cn(
               'rounded-xl border px-3 py-2 text-xs font-medium',
               hasCachedServices
-                ? 'border-gray-200 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300'
+                ? 'border-gray-200 bg-gray-50 text-gray-500 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:text-gray-300'
                 : 'border-red-100 bg-red-50 text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200',
             )}>
               {hasCachedServices ? 'Couldn\'t refresh Marketplace. Showing the latest available services.' : loadError}
@@ -206,7 +206,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
                   'flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition active:scale-[0.99]',
                   selected?.resource === item.resource
                     ? 'border-gray-900 bg-white ring-1 ring-gray-900/10 dark:border-white dark:bg-white/[0.09]'
-                    : 'border-gray-100 bg-gray-50/70 hover:border-gray-200 hover:bg-white dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:border-white/15 dark:hover:bg-white/[0.06]',
+                    : 'border-gray-100 bg-gray-50/70 hover:border-gray-200 hover:bg-white dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:hover:border-white/15 dark:hover:bg-white/[0.06]',
                 )}
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-black text-gray-800 shadow-sm dark:bg-white/[0.08] dark:text-white">{item.provider.slice(0, 1).toUpperCase()}</span>
@@ -229,7 +229,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
       {selected && (
         <>
           <button type="button" aria-label="Close purchase confirmation" onClick={() => { if (!buying) setSelected(null) }} className="fixed inset-0 z-40 bg-gray-950/30 backdrop-blur-[2px] dark:bg-black/60" />
-          <div role="dialog" aria-modal="true" aria-label="Confirm Marketplace purchase" className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[430px] -translate-x-1/2 overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.32)] dark:border-white/10 dark:bg-[#17181c]">
+          <div role="dialog" aria-modal="true" aria-label="Confirm Marketplace purchase" className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[430px] -translate-x-1/2 overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.32)] dark:border-[#262626] dark:bg-[#171717]">
             <div className="flex justify-center pt-2.5"><span className="h-1 w-9 rounded-full bg-gray-200 dark:bg-white/15" /></div>
             <div className="p-5 pt-3.5">
               <div className="flex items-center gap-3">
@@ -243,12 +243,12 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
               </div>
 
               <p className="mt-4 line-clamp-2 text-sm font-semibold leading-5 text-gray-900 dark:text-white">{selected.description}</p>
-              <div className="mt-3 overflow-hidden rounded-2xl border border-gray-100 bg-gray-50/80 dark:border-white/[0.07] dark:bg-white/[0.04]">
+              <div className="mt-3 overflow-hidden rounded-2xl border border-gray-100 bg-gray-50/80 dark:border-[#262626] dark:bg-[#171717]">
                 <div className="flex items-center justify-between gap-4 px-3.5 py-3">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Service</span>
                   <span className="max-w-[65%] truncate text-xs font-semibold text-gray-900 dark:text-gray-100">{selected.provider}</span>
                 </div>
-                <div className="flex items-center justify-between gap-4 border-t border-gray-100 px-3.5 py-3 dark:border-white/[0.07]">
+                <div className="flex items-center justify-between gap-4 border-t border-gray-100 px-3.5 py-3 dark:border-[#262626]">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Pay from App Pay</span>
                   <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(selected.amount)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></span>
                 </div>
@@ -257,7 +257,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
               {!enoughBalance(gatewayBalance, selected.amount) && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">Add at least {selected.amount} USDC to App Pay before paying.</p>}
               {purchaseError && <p className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{purchaseError}</p>}
               <div className="mt-4 grid grid-cols-2 gap-2.5">
-                <button type="button" onClick={() => setSelected(null)} disabled={buying} className="rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition active:scale-[0.98] disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-200">Cancel</button>
+                <button type="button" onClick={() => setSelected(null)} disabled={buying} className="rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition active:scale-[0.98] disabled:opacity-50 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:text-gray-200">Cancel</button>
                 <button type="button" onClick={() => void buy()} disabled={buying || !canPay} className="inline-flex items-center justify-center gap-2 rounded-full bg-gray-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-40 dark:bg-white dark:text-gray-950">{buying ? <><Clock3 className="h-4 w-4" /> Paying</> : <>Pay {selected.amount}<ArrowRight className="h-4 w-4" /></>}</button>
               </div>
             </div>

@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
-import PocketLoadingState from '../components/PocketLoadingState'
+import { PocketBillsSkeleton } from '../components/PocketContentSkeletons'
 import usePocketBillsController from '../controllers/usePocketBillsController'
 import usePocketPaymentLiquidityController from '../controllers/usePocketPaymentLiquidityController'
 import usePocketWalletController from '../controllers/usePocketWalletController'
@@ -83,7 +83,7 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
-  if (authenticated && !wallets.resolved) return <PocketLoadingState active="bills" />
+  if (authenticated && !wallets.resolved) return <PocketRouteShell active="bills" onSelect={selectNav}><PocketBillsSkeleton /></PocketRouteShell>
 
   const baseBalance = wallets.rows.find(row => row.key === 'base')?.balance ?? 0
   return (

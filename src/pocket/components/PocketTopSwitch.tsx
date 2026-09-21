@@ -55,7 +55,7 @@ export default function PocketTopSwitch({
         : activityItems
 
   return (
-    <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full bg-white/95 p-1 shadow-sm backdrop-blur-2xl dark:bg-white/[0.05] ${mode === 'move' ? 'grid-cols-3' : mode === 'activity' ? 'grid-cols-5' : compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
+    <div className={`pointer-events-auto grid w-full max-w-[430px] gap-1 rounded-full bg-white/95 p-1 shadow-sm backdrop-blur-2xl dark:bg-[#121212] dark:shadow-none ${mode === 'move' ? 'grid-cols-3' : mode === 'activity' ? 'grid-cols-5' : compact ? 'grid-cols-4' : 'grid-cols-2'}`}>
       {items.map(({ key, label, icon: Icon }) => {
         const active = mode === 'move'
           ? moveView === key

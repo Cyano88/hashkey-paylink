@@ -58,7 +58,7 @@ const tabs = [
 
 export function PocketHomeTabBar({ tab, onTabChange }: { tab: PocketHomeTab; onTabChange: (tab: PocketHomeTab) => void }) {
   return (
-    <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
+    <div className="grid grid-cols-4 gap-1 rounded-xl border border-gray-200 bg-white p-1 shadow-sm dark:border-[#262626] dark:bg-[#17181d]">
       {tabs.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
@@ -81,7 +81,7 @@ export function PocketHomeTabBar({ tab, onTabChange }: { tab: PocketHomeTab; onT
 
 export function PocketHomeSignInCard() {
   return (
-    <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
+    <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-[#262626] dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
       <PrivyConnectButton className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]">
         <Mail className="absolute left-5 h-4 w-4" />
         <span>Sign in to Smart Wallet</span>
@@ -165,7 +165,7 @@ export default function PocketHomeControls({
               tab === 'move' && moveMode === 'bridge' && network.key === 'arc' && 'cursor-not-allowed opacity-35',
                 selectedNetwork === network.key
                   ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950'
-                  : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
+                  : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-900 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200',
               )}
             >
               <span className={cn('flex h-6 w-6 items-center justify-center overflow-hidden rounded-lg', network.logoCanvas === 'dark' ? 'bg-gray-950' : 'bg-white')}>
@@ -179,17 +179,17 @@ export default function PocketHomeControls({
       )}
 
       {tab === 'fund' && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#111216]">
           <div className="flex items-center justify-between gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300">
               <Download className="h-[18px] w-[18px]" />
             </span>
-            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400">
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:text-gray-400">
               {selectedNetworkLabel} only
             </span>
           </div>
           {selectedAddress ? (
-            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-[#262626] dark:bg-[#171717]">
               <p className="mb-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400">Your funding address</p>
               <div className="flex items-center gap-2">
                 <p className="min-w-0 flex-1 break-all text-xs font-semibold leading-5 text-gray-700 dark:text-gray-200">{selectedAddress}</p>
@@ -198,7 +198,7 @@ export default function PocketHomeControls({
                   onClick={onCopyAddress}
                   aria-label={copied ? 'Funding address copied' : 'Copy funding address'}
                   title={copied ? 'Copied' : 'Copy address'}
-                  className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 shadow-sm transition-all active:scale-95 dark:border-white/10 dark:bg-white/[0.07] dark:text-gray-200"
+                  className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600 shadow-sm transition-all active:scale-95 dark:border-[#262626] dark:bg-white/[0.07] dark:text-gray-200"
                 >
                   {copied ? <CheckCheck className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                   {copied && <span className="absolute -top-6 right-0 rounded-md bg-gray-950 px-1.5 py-0.5 text-[8px] font-bold text-white shadow-sm dark:bg-white dark:text-gray-950">Copied</span>}
@@ -220,7 +220,7 @@ export default function PocketHomeControls({
       )}
 
       {tab === 'move' && (
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-white p-1.5 shadow-sm dark:border-white/10 dark:bg-[#17181d]">
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-white p-1.5 shadow-sm dark:border-[#262626] dark:bg-[#17181d]">
           {([
             { key: 'send', label: 'Send USDC', icon: Send },
             { key: 'bridge', label: 'Bridge USDC', icon: ArrowLeftRight },
@@ -241,8 +241,8 @@ export default function PocketHomeControls({
       )}
 
       {tab === 'move' && moveMode === 'send' && (
-        <div className="space-y-3 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
-          <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+        <div className="space-y-3 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-[#262626] dark:from-[#15161a] dark:to-[#101115]">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-[#171717]">
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {selectedNetworkLabel}</span>
             <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(selectedBalance)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></span>
           </div>
@@ -256,7 +256,7 @@ export default function PocketHomeControls({
                   onFocus={() => { if (withdrawStatus === 'successful') onWithdrawAddressChange('') }}
                   onChange={event => onWithdrawAddressChange(event.target.value.trim())}
                   placeholder={selectedNetwork === 'solana' ? 'Destination Solana address' : '0x destination address'}
-                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-[#262626] dark:bg-[#171717] dark:text-white"
                 />
               </label>
               <label className="block">
@@ -269,9 +269,9 @@ export default function PocketHomeControls({
                     onFocus={() => { if (withdrawStatus === 'successful') onWithdrawAmountChange('') }}
                     onChange={event => onWithdrawAmountChange(event.target.value)}
                     placeholder="0.00"
-                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                    className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 dark:border-[#262626] dark:bg-[#171717] dark:text-white"
                   />
-                  <button type="button" onClick={onWithdrawMax} className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-white/10 dark:text-gray-200">Max</button>
+                  <button type="button" onClick={onWithdrawMax} className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-[#262626] dark:text-gray-200">Max</button>
                 </span>
               </label>
               <PocketSlideAction
@@ -301,11 +301,11 @@ export default function PocketHomeControls({
       )}
 
       {tab === 'move' && moveMode === 'bridge' && (
-        <div className="space-y-3 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-white/10 dark:from-[#15161a] dark:to-[#101115]">
+        <div className="space-y-3 rounded-[24px] border border-gray-100 bg-gradient-to-b from-white to-gray-50/80 p-4 shadow-[0_14px_38px_rgba(15,23,42,0.08)] dark:border-[#262626] dark:from-[#15161a] dark:to-[#101115]">
           <div className="grid grid-cols-2 gap-2">
             <div>
               <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">From</p>
-              <div className="flex min-h-12 items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 text-sm font-black text-gray-900 shadow-sm dark:border-white/10 dark:bg-white/[0.04] dark:text-white">
+              <div className="flex min-h-12 items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-3 text-sm font-black text-gray-900 shadow-sm dark:border-[#262626] dark:bg-[#171717] dark:text-white">
                 {bridgeSourceMeta && <span className={cn('h-6 w-6 shrink-0 overflow-hidden rounded-lg', bridgeSourceMeta.logoCanvas === 'dark' ? 'bg-gray-950' : 'bg-white')}><img src={bridgeSourceMeta.logo} alt="" className="h-full w-full object-contain grayscale" /></span>}
                 <span className="min-w-0 truncate">{selectedNetworkLabel}</span>
               </div>
@@ -324,24 +324,24 @@ export default function PocketHomeControls({
               />
             </div>
           </div>
-          <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-[#171717]">
             <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available on {selectedNetworkLabel}</span>
             <span className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(selectedBalance)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></span>
           </div>
           <label className="block">
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Amount</span>
             <span className="mt-1 flex gap-2">
-              <input type="text" inputMode="decimal" value={bridgeAmount} onFocus={() => { if (bridgeStatus === 'successful') onBridgeAmountChange('') }} onChange={event => onBridgeAmountChange(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white" />
-              <button type="button" onClick={onBridgeMax} className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-white/10 dark:text-gray-200">Max</button>
+              <input type="text" inputMode="decimal" value={bridgeAmount} onFocus={() => { if (bridgeStatus === 'successful') onBridgeAmountChange('') }} onChange={event => onBridgeAmountChange(event.target.value)} placeholder="0.00" className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 dark:border-[#262626] dark:bg-[#171717] dark:text-white" />
+              <button type="button" onClick={onBridgeMax} className="rounded-xl border border-gray-200 px-3 text-xs font-black text-gray-700 dark:border-[#262626] dark:text-gray-200">Max</button>
             </span>
           </label>
           {bridgeStatus === 'quoting' ? (
-            <div className="flex items-center justify-center gap-2 rounded-xl bg-gray-50 px-3 py-3 text-xs font-semibold text-gray-500 dark:bg-white/[0.04]"><Loader2 className="h-3.5 w-3.5 animate-spin" />Getting a live Circle quote</div>
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-gray-50 px-3 py-3 text-xs font-semibold text-gray-500 dark:bg-[#171717]"><Loader2 className="h-3.5 w-3.5 animate-spin" />Getting a live Circle quote</div>
           ) : bridgeQuote ? (
-            <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-[#262626] dark:bg-[#171717]">
               <div className="flex justify-between gap-3"><span className="text-gray-500">You receive</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(bridgeQuote.receive)} USDC</span></div>
               <div className="flex justify-between gap-3"><span className="text-gray-500">Circle + destination fee</span><span className="font-medium tabular-nums tracking-[-0.02em] text-gray-700 dark:text-gray-200">{formatPocketDisplayAmount(bridgeQuote.fee)} USDC</span></div>
-              <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-white/10"><span className="text-gray-500">Total from {selectedNetworkLabel}</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(bridgeQuote.total)} USDC</span></div>
+              <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total from {selectedNetworkLabel}</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(bridgeQuote.total)} USDC</span></div>
             </div>
           ) : null}
           <PocketSlideAction
@@ -357,7 +357,7 @@ export default function PocketHomeControls({
       )}
 
       {tab === 'activity' && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#111216]">
           {activityError ? (
             <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{activityError}</p>
           ) : activityRows.length ? (
@@ -366,7 +366,7 @@ export default function PocketHomeControls({
                 const deposit = String(item.source).toLowerCase() === 'wallet-deposit'
                 const bridge = String(item.source).toLowerCase() === 'wallet-bridge'
                 return (
-                <div key={`${item.txHash || item.eventId}-${item.ts}-${index}`} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-white/[0.04]">
+                <div key={`${item.txHash || item.eventId}-${item.ts}-${index}`} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-[#171717]">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-gray-500 shadow-sm dark:bg-white/[0.07] dark:text-gray-300">{deposit ? <ArrowDownToLine className="h-3.5 w-3.5" /> : bridge ? <ArrowLeftRight className="h-3.5 w-3.5" /> : <ArrowUpFromLine className="h-3.5 w-3.5" />}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-xs font-bold text-gray-700 dark:text-gray-200">{deposit ? 'USDC deposit' : bridge ? 'USDC bridge' : 'USDC sent'}</span>
@@ -380,7 +380,7 @@ export default function PocketHomeControls({
               )})}
             </div>
           ) : !activityBusy ? (
-            <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-4 text-center dark:border-white/10 dark:bg-white/[0.025]">
+            <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-4 text-center dark:border-[#262626] dark:bg-white/[0.025]">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-gray-400 shadow-sm dark:bg-white/[0.07]"><Activity className="h-[18px] w-[18px]" /></span>
               <p className="mt-3 text-sm font-bold text-gray-700 dark:text-gray-200">No wallet activity yet</p>
               <p className="mt-1 text-xs leading-relaxed text-gray-400">Confirmed USDC deposits and sends will appear here and remain after refresh.</p>

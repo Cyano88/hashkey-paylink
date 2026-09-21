@@ -56,12 +56,12 @@ export function PocketRecipientAddressFields({
               autoComplete="off"
               className={cn(
                 'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
-                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
+                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                 evm.dirty && !evm.valid
                   ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
                   : evm.valid
                     ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100 dark:border-emerald-400/40 dark:text-gray-100 dark:focus:ring-emerald-400/10'
-                    : 'border-gray-200 text-gray-900 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
+                    : 'border-gray-200 text-gray-900 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-[#262626] dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
               )}
             />
             {evm.dirty && !evm.valid && <XCircle className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-red-400" />}
@@ -100,12 +100,12 @@ export function PocketRecipientAddressFields({
               autoComplete="off"
               className={cn(
                 'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
-                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
+                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                 solana.dirty && !solana.valid
                   ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
                   : solana.valid
                     ? 'border-emerald-300 text-gray-900 focus:ring-emerald-100 dark:border-emerald-400/40 dark:text-gray-100 dark:focus:ring-emerald-400/10'
-                    : 'border-gray-200 text-gray-900 focus:border-[#14F195]/40 focus:ring-[#14F195]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-emerald-400/40 dark:focus:ring-emerald-400/10',
+                    : 'border-gray-200 text-gray-900 focus:border-[#14F195]/40 focus:ring-[#14F195]/15 dark:border-[#262626] dark:text-gray-100 dark:focus:border-emerald-400/40 dark:focus:ring-emerald-400/10',
               )}
             />
             {solana.dirty && !solana.valid && <XCircle className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-red-400" />}

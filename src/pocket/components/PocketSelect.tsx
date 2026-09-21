@@ -78,7 +78,7 @@ export default function PocketSelect({
           setOpen(current => !current)
         }}
         className={cn(
-          'flex min-h-10 w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-900 shadow-sm outline-none transition-all hover:border-blue-300 hover:bg-blue-50/70 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#17181d] dark:text-white dark:hover:border-blue-400/40 dark:hover:bg-blue-400/10 dark:focus:border-blue-400/50',
+          'flex min-h-10 w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-sm font-semibold text-gray-900 shadow-sm outline-none transition-all hover:border-blue-300 hover:bg-blue-50/70 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-[#262626] dark:bg-[#17181d] dark:text-white dark:hover:border-blue-400/40 dark:hover:bg-blue-400/10 dark:focus:border-blue-400/50',
           buttonClassName,
         )}
       >
@@ -87,9 +87,9 @@ export default function PocketSelect({
       </button>
 
       {open && options.length > 0 && (
-        <div role="listbox" aria-label={ariaLabel} className="absolute left-0 right-0 top-full z-[80] mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-[#1b1b20] dark:shadow-[0_22px_60px_rgba(0,0,0,0.5)]">
+        <div role="listbox" aria-label={ariaLabel} className="absolute left-0 right-0 top-full z-[80] mt-1.5 max-h-64 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.18)] dark:border-[#262626] dark:bg-[#1b1b20] dark:shadow-[0_22px_60px_rgba(0,0,0,0.5)]">
           {searchable && (
-            <label className="sticky top-0 z-10 mb-1.5 flex min-h-11 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 shadow-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10 dark:border-white/10 dark:bg-[#1b1b20]">
+            <label className="sticky top-0 z-10 mb-1.5 flex min-h-11 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 shadow-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10 dark:border-[#262626] dark:bg-[#1b1b20]">
               <Search className="h-4 w-4 shrink-0 text-gray-400" />
               <input autoFocus value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => event.stopPropagation()} placeholder={searchPlaceholder} aria-label={searchPlaceholder} className="min-w-0 flex-1 bg-transparent py-2 text-sm font-semibold text-gray-900 outline-none placeholder:text-gray-400 dark:text-white" />
             </label>

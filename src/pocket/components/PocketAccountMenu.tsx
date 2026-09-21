@@ -38,9 +38,9 @@ export default function PocketAccountMenu() {
   return (
     <div ref={rootRef} className="pointer-events-auto relative">
       <button type="button" onClick={() => setOpen(value => !value)} aria-label="Open Pocket profile" aria-expanded={open}>
-        <PocketAvatar avatarId={current?.avatarId} className="h-9 w-9 border border-gray-200 shadow-sm dark:border-white/10" />
+        <PocketAvatar avatarId={current?.avatarId} className="h-9 w-9 border border-gray-200 shadow-sm dark:border-[#262626]" />
       </button>
-      {open && <div className="absolute right-0 top-12 z-[70] w-[min(330px,calc(100vw-2rem))] rounded-[24px] border border-gray-200 bg-white p-2 shadow-[0_24px_70px_rgba(15,23,42,0.22)] dark:border-white/10 dark:bg-[#18181c]">
+      {open && <div className="absolute right-0 top-12 z-[70] w-[min(330px,calc(100vw-2rem))] rounded-[24px] border border-gray-200 bg-white p-2 shadow-[0_24px_70px_rgba(15,23,42,0.22)] dark:border-[#262626] dark:bg-[#18181c]">
         <div className="flex items-center gap-3 px-3 pb-3 pt-2">
           <PocketAvatar avatarId={current?.avatarId} className="h-12 w-12" />
           <span className="min-w-0 flex-1">
@@ -51,7 +51,7 @@ export default function PocketAccountMenu() {
             </button>
           </span>
         </div>
-        <div className="space-y-1 rounded-[18px] bg-gray-50 p-1 dark:bg-white/[0.04]">
+        <div className="space-y-1 rounded-[18px] bg-gray-50 p-1 dark:bg-[#171717]">
           <button type="button" onClick={() => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.profile}`)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-xs font-bold text-gray-700 hover:bg-white dark:text-gray-300 dark:hover:bg-white/[0.07]">
             <UserRound className="h-4 w-4" /><span className="flex-1">View profile</span><ChevronRight className="h-3.5 w-3.5 text-gray-400" />
           </button>
@@ -59,7 +59,7 @@ export default function PocketAccountMenu() {
             <Pencil className="h-4 w-4" /><span className="flex-1">Edit Pocket ID</span><ChevronRight className="h-3.5 w-3.5 text-gray-400" />
           </button>
         </div>
-        <div className="mt-2 flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-2.5 dark:bg-white/[0.04]">
+        <div className="mt-2 flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-2.5 dark:bg-[#171717]">
           <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Appearance</span><PocketThemeToggle className="border-0 bg-transparent shadow-none dark:bg-transparent" />
         </div>
       </div>}

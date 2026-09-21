@@ -95,7 +95,7 @@ export default function PocketHomeOverview({
 
   return (
     <>
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-blue-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-blue-500/[0.08]">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-blue-50/70 p-4 shadow-sm dark:border-[#262626] dark:from-[#111216] dark:via-[#111216] dark:to-blue-500/[0.08]">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
@@ -113,7 +113,7 @@ export default function PocketHomeOverview({
                   : `≈ ${formatPocketDisplayAmount(globalBalance)} USDC`}
               </p>
             ) : null}
-            <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-white/75 p-0.5 text-[10px] font-black text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-300">
+            <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-white/75 p-0.5 text-[10px] font-black text-gray-600 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:text-gray-300">
               <button
                 type="button"
                 onClick={() => moveBalanceCurrency(-1)}
@@ -138,8 +138,8 @@ export default function PocketHomeOverview({
 
       {controls}
 
-      {showNetworks && <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
-        <div className="border-b border-gray-100 px-4 py-3 dark:border-white/[0.07]">
+      {showNetworks && <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#262626] dark:bg-[#111216]">
+        <div className="border-b border-gray-100 px-4 py-3 dark:border-[#262626]">
           <div>
             <p className="text-sm font-black text-gray-950 dark:text-white">Wallet networks</p>
             <p className="mt-0.5 text-[11px] text-gray-400">Your USDC across supported networks</p>
@@ -166,7 +166,7 @@ export default function PocketHomeOverview({
                 )}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-white/[0.06]">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-[#171717]">
                     <img
                       src={network.logo}
                       alt=""
@@ -181,7 +181,7 @@ export default function PocketHomeOverview({
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-bold text-gray-950 dark:text-white">{network.label}</p>
                       {network.comingSoon ? (
-                        <span className="rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-400">
+                        <span className="rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-gray-500 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-400">
                           Soon
                         </span>
                       ) : null}

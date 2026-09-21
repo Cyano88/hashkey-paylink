@@ -116,7 +116,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
             {!!visibleRows.length && <button type="button" onClick={() => setFilterOpen(current => !current)} className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-white/[0.06]" aria-label="Filter activity by month" aria-expanded={filterOpen}><Filter className="h-4 w-4" /></button>}
           </div>
 
-          {filterOpen && <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-[#111216]"><label className="text-[10px] font-bold uppercase tracking-wider text-gray-400" htmlFor="pocket-activity-month">Month and year</label><select id="pocket-activity-month" value={monthFilter} onChange={event => { setMonthFilter(event.target.value); setFilterOpen(false) }} className="mt-2 min-h-11 w-full rounded-xl bg-gray-50 px-3 text-xs font-semibold outline-none dark:bg-white/[0.06]"><option value="">All history</option>{months.map(month => <option key={month} value={month}>{monthLabel(month)}</option>)}</select></div>}
+          {filterOpen && <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm dark:border-[#262626] dark:bg-[#111216]"><label className="text-[10px] font-bold uppercase tracking-wider text-gray-400" htmlFor="pocket-activity-month">Month and year</label><select id="pocket-activity-month" value={monthFilter} onChange={event => { setMonthFilter(event.target.value); setFilterOpen(false) }} className="mt-2 min-h-11 w-full rounded-xl bg-gray-50 px-3 text-xs font-semibold outline-none dark:bg-[#171717]"><option value="">All history</option>{months.map(month => <option key={month} value={month}>{monthLabel(month)}</option>)}</select></div>}
 
           {error && !visibleRows.length ? (
             <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">
@@ -126,7 +126,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
             <div className="space-y-5">
               {monthGroups.map(group => <section key={group.month}>
                 <p className="px-1 text-[11px] font-bold text-gray-500 dark:text-gray-400">{monthLabel(group.month)}</p>
-                <div className="mt-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                <div className="mt-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#262626] dark:bg-[#111216]">
               {group.rows.map((row, index) => {
                 const kind = activityKind(row)
                 const amountNgn = formatNgnAmount(row.amountNgn ?? '')
@@ -140,7 +140,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                 const expanded = collapsible && expandedActivityId === recordId
                 const supportReference = row.supportReference || row.providerReference || row.billReference || row.receiptId || row.txHash || row.eventId
                 return (
-                  <div key={recordId} className="border-b border-gray-100 p-3.5 last:border-0 dark:border-white/10">
+                  <div key={recordId} className="border-b border-gray-100 p-3.5 last:border-0 dark:border-[#262626]">
                     <div
                       className={cn('flex items-start justify-between gap-3', collapsible && 'cursor-pointer')}
                       role={collapsible ? 'button' : undefined}
@@ -154,7 +154,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                       }}
                     >
                       <span className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-[#171717] dark:text-gray-300">
                           {kind === 'wallet'
                             ? String(row.source).toLowerCase() === 'wallet-deposit' ? <ArrowDownToLine className="h-4 w-4" /> : String(row.source).toLowerCase() === 'wallet-bridge' ? <ArrowLeftRight className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />
                             : String(row.source).toLowerCase() === 'request' ? row.direction === 'in' ? <ArrowDownToLine className="h-4 w-4" /> : <ArrowUpFromLine className="h-4 w-4" />
@@ -179,7 +179,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                       </span>
                     </div>
                     {timestamp && expanded && (
-                      <p className="mt-3 border-t border-gray-100 pt-2 text-[10px] font-medium text-gray-400 dark:border-white/10">
+                      <p className="mt-3 border-t border-gray-100 pt-2 text-[10px] font-medium text-gray-400 dark:border-[#262626]">
                         {timestamp.toLocaleDateString()} at {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     )}
@@ -188,7 +188,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                       <div className="mt-2 space-y-3">
                         <UnifiedReceipt receipt={receipt} />
                             {row.supportReference && row.source !== 'bills' && (
-                              <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 text-[10px] dark:border-white/10">
+                              <div className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 text-[10px] dark:border-[#262626]">
                                 <span className="font-semibold text-gray-400">Support reference</span>
                                 <span className="max-w-[60%] break-all text-right font-mono text-gray-500 dark:text-gray-300">{row.supportReference}</span>
                               </div>
@@ -203,7 +203,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
                               </div>
                             )}
                             {row.refundAction && refundIntentId && (
-                              <div className="flex items-center justify-between gap-3 border-t border-gray-100 pt-2 dark:border-white/10">
+                              <div className="flex items-center justify-between gap-3 border-t border-gray-100 pt-2 dark:border-[#262626]">
                                 <span className="font-semibold text-gray-400">USDC refund</span>
                                 <button
                                   type="button"
@@ -237,8 +237,8 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
               })}</div></section>)}
             </div>
           ) : !busy ? (
-            <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white px-5 text-center shadow-sm dark:border-white/10 dark:bg-[#111216]">
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">
+            <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white px-5 text-center shadow-sm dark:border-[#262626] dark:bg-[#111216]">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500 dark:bg-[#171717] dark:text-gray-300">
                 <Activity className="h-[18px] w-[18px]" />
               </span>
               <h3 className="mt-3 text-sm font-black text-gray-900 dark:text-gray-100">No activity to show yet</h3>
@@ -251,7 +251,7 @@ export default function PocketActivityPanel({ view, rows, authenticated, busy, e
       )}
 
       {!authenticated && (
-        <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
+        <div className="overflow-hidden rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-[#262626] dark:bg-[#151518]/95 dark:shadow-[0_16px_44px_rgba(0,0,0,0.3)]">
           <PrivyConnectButton className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]">
             <Mail className="absolute left-5 h-4 w-4" />
             <span>Sign in to Activity</span>

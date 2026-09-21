@@ -93,9 +93,9 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
     const payments = resourceRows(selected.id).sort((a, b) => b.ts - a.ts)
     return (
       <div className="space-y-4">
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#111216]">
           <div className="flex items-start justify-between gap-3">
-            <button type="button" aria-label={`Back to ${view}`} onClick={() => setSearchParams({})} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition hover:bg-gray-200 dark:bg-white/[0.06] dark:text-gray-200 dark:hover:bg-white/[0.1]">
+            <button type="button" aria-label={`Back to ${view}`} onClick={() => setSearchParams({})} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition hover:bg-gray-200 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/[0.1]">
               <ArrowLeft className="h-4 w-4" />
             </button>
             <div className="min-w-0 flex-1">
@@ -104,18 +104,18 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
               <p className="mt-0.5 text-xs font-semibold text-gray-400">{selected.request ? `${selected.request.amount} USDC · ${selected.request.direction === 'outgoing' ? `To ${selected.request.recipientName}` : `From ${selected.request.senderName}`}` : `${payments.length} payment${payments.length === 1 ? '' : 's'} · ${totalLabel(payments)}`}</p>
             </div>
             {selected.paymentUrl && <div className="flex shrink-0 items-center gap-1.5">
-              <a href={selected.paymentUrl} target="_blank" rel="noreferrer" aria-label="Open payment link" className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
+              <a href={selected.paymentUrl} target="_blank" rel="noreferrer" aria-label="Open payment link" className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">
                 <ExternalLink className="h-4 w-4" />
               </a>
-              <button type="button" aria-label="Copy payment link" onClick={() => void copyLink(selected.id, selected.paymentUrl)} className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-300">
+              <button type="button" aria-label="Copy payment link" onClick={() => void copyLink(selected.id, selected.paymentUrl)} className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">
                 {copiedId === selected.id ? <CheckCheck className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
               </button>
             </div>}
           </div>
-          {selected.request && <div className="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-4 text-xs dark:border-white/10"><div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</p><p className="mt-1 font-bold capitalize">{selected.request.status === 'pending' ? 'Awaiting response' : selected.request.status}</p></div><div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Network</p><p className="mt-1 font-bold capitalize">{selected.request.network}</p></div></div>}
+          {selected.request && <div className="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-4 text-xs dark:border-[#262626]"><div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</p><p className="mt-1 font-bold capitalize">{selected.request.status === 'pending' ? 'Awaiting response' : selected.request.status}</p></div><div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Network</p><p className="mt-1 font-bold capitalize">{selected.request.network}</p></div></div>}
         </div>
 
-        {error && !payments.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">{error}</p> : null}
+        {error && !payments.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-[#171717] dark:text-gray-300">{error}</p> : null}
         {payments.length ? (
           <div className="space-y-2">
             {payments.map((row, index) => {
@@ -123,7 +123,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
               const expanded = expandedPaymentId === paymentId
               const receipt = pocketActivityReceipt(row)
               return (
-                <div key={paymentId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-white/10 dark:bg-[#111216]">
+                <div key={paymentId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-[#262626] dark:bg-[#111216]">
                   <button type="button" aria-expanded={receipt ? expanded : undefined} onClick={() => { if (receipt) setExpandedPaymentId(current => current === paymentId ? '' : paymentId) }} className="flex w-full items-center justify-between gap-3 text-left">
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">{view === 'collections' ? row.memo || row.payer || 'Payer' : row.payer || row.memo || 'Payer'}</span>
@@ -135,13 +135,13 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
                       {receipt ? <ChevronDown className={`ml-auto mt-1 h-3.5 w-3.5 text-gray-300 transition-transform ${expanded ? 'rotate-180' : ''}`} /> : null}
                     </span>
                   </button>
-                  {expanded && receipt ? <UnifiedReceipt receipt={receipt} compact className="mt-3 border-t border-gray-100 pt-3 dark:border-white/10" /> : null}
+                  {expanded && receipt ? <UnifiedReceipt receipt={receipt} compact className="mt-3 border-t border-gray-100 pt-3 dark:border-[#262626]" /> : null}
                 </div>
               )
             })}
           </div>
         ) : !busy ? (
-          <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center dark:border-white/10 dark:bg-[#111216]">
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center dark:border-[#262626] dark:bg-[#111216]">
             <p className="text-sm font-black text-gray-900 dark:text-gray-100">{selected.request ? selected.request.status === 'paid' ? 'Payment is syncing' : 'No payment yet' : 'No payments yet'}</p>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{selected.request ? selected.request.status === 'paid' ? 'The confirmed transfer will appear here when Activity finishes syncing.' : selected.request.direction === 'incoming' && selected.request.status === 'accepted' ? 'Open Notifications when you are ready to pay.' : 'Pocket will update this request when its status changes.' : 'Share the collection link when you are ready to receive.'}</p>
           </div>
@@ -152,24 +152,24 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
 
   return (
     <div className="space-y-4">
-      {error && !resources.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-white/[0.06] dark:text-gray-300">{error}</p> : null}
+      {error && !resources.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-[#171717] dark:text-gray-300">{error}</p> : null}
       {resources.length ? (
         <div className="space-y-2">
           {resources.map(resource => {
             const payments = resourceRows(resource.id)
             return (
-              <div key={resource.id} className="flex w-full items-center gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm transition hover:border-gray-200 dark:border-white/10 dark:bg-[#111216] dark:hover:border-white/20">
+              <div key={resource.id} className="flex w-full items-center gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm transition hover:border-gray-200 dark:border-[#262626] dark:bg-[#111216] dark:hover:border-white/20">
                 <button type="button" onClick={() => setSearchParams({ [key]: resource.id })} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1.5 text-left">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">{view === 'pos' ? <Store className="h-4 w-4" /> : <Users className="h-4 w-4" />}</span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-[#171717] dark:text-gray-300">{view === 'pos' ? <Store className="h-4 w-4" /> : <Users className="h-4 w-4" />}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">{resourceTitle(resource)}</span>
                   <span className="mt-0.5 block text-[11px] font-medium text-gray-400">{resource.request ? `${resource.request.direction === 'outgoing' ? `To ${resource.request.recipientName}` : `From ${resource.request.senderName}`} · ${resource.request.amount} USDC · ${resource.request.status === 'pending' ? 'Awaiting response' : resource.request.status.charAt(0).toUpperCase() + resource.request.status.slice(1)}` : `${payments.length} payment${payments.length === 1 ? '' : 's'} · ${totalLabel(payments)}`}</span>
                 </span>
                 </button>
-                {resource.paymentUrl && <><a href={resource.paymentUrl} target="_blank" rel="noreferrer" aria-label="Open payment link" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 dark:border-white/10 dark:text-gray-300">
+                {resource.paymentUrl && <><a href={resource.paymentUrl} target="_blank" rel="noreferrer" aria-label="Open payment link" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 dark:border-[#262626] dark:text-gray-300">
                   <ExternalLink className="h-4 w-4" />
                 </a>
-                <button type="button" aria-label="Copy payment link" onClick={() => void copyLink(resource.id, resource.paymentUrl)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 dark:border-white/10 dark:text-gray-300">
+                <button type="button" aria-label="Copy payment link" onClick={() => void copyLink(resource.id, resource.paymentUrl)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 dark:border-[#262626] dark:text-gray-300">
                   {copiedId === resource.id ? <CheckCheck className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                 </button></>}
               </div>
@@ -177,7 +177,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
           })}
         </div>
       ) : !busy ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center dark:border-white/10 dark:bg-[#111216]">
+        <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center dark:border-[#262626] dark:bg-[#111216]">
           <p className="text-sm font-black text-gray-900 dark:text-gray-100">No {view === 'pos' ? 'terminals' : 'requests or collections'} yet</p>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{view === 'pos' ? 'Create a POS terminal and it will appear here.' : 'Create one from Receive and it will appear here.'}</p>
         </div>

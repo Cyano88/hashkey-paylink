@@ -59,7 +59,7 @@ export default function PocketArcTokenPicker({ label, value, tokens, excluded, d
   }, [open, normalized, filtered.length, excluded])
   function select(token: ArcPickerToken) { onChange(token); setOpen(false) }
   return <>
-    <button ref={trigger} type="button" aria-label={label} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => { setQuery(''); setSearching(false); setOpen(true) }} className="flex min-h-12 w-full items-center justify-between gap-2 rounded-2xl border border-gray-200 px-3 py-3 text-sm font-bold disabled:opacity-40 dark:border-white/10">
+    <button ref={trigger} type="button" aria-label={label} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => { setQuery(''); setSearching(false); setOpen(true) }} className="flex min-h-12 w-full items-center justify-between gap-2 rounded-2xl border border-gray-200 px-3 py-3 text-sm font-bold disabled:opacity-40 dark:border-[#262626]">
       {selected && <TokenImage token={selected} small />}<span className="min-w-0 flex-1 truncate text-left">{selected?.symbol || 'Select token'}</span><ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
     </button>
     {open && createPortal(<div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/40 sm:items-center" onClick={event => { if (event.target === event.currentTarget) setOpen(false) }}>

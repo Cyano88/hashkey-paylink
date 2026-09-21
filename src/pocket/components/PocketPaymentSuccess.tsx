@@ -31,8 +31,8 @@ export default function PocketPaymentSuccess({ receipt, onDone, title = 'Bank pa
     return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
   }, [onDone])
   return createPortal(
-    <div className="fixed inset-x-0 bottom-0 z-[130] flex flex-col overflow-hidden bg-[#F5F5F7] font-sans text-gray-950 dark:bg-[#0A0A0A] dark:text-white" style={{ top: 'var(--pocket-safe-top)' }} role="dialog" aria-modal="true" aria-label={heading}>
-      <header className="z-10 shrink-0 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:bg-[#0A0A0A]/95">
+    <div className="fixed inset-x-0 bottom-0 z-[130] flex flex-col overflow-hidden bg-[#F5F5F7] font-sans text-gray-950 dark:bg-black dark:text-white" style={{ top: 'var(--pocket-safe-top)' }} role="dialog" aria-modal="true" aria-label={heading}>
+      <header className="z-10 shrink-0 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:bg-black/95">
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between">
           <span className="h-10 w-12" />
           <span className="text-sm font-bold tracking-[-0.02em]">{title}</span>

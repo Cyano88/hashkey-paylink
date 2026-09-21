@@ -214,14 +214,14 @@ export default function PocketMoveBankPage() {
             <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc)} className="min-h-10 rounded-full px-3 text-xs font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Request</button>
             <button type="button" className="min-h-10 rounded-full bg-gray-950 px-3 text-xs font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">Collection</button>
           </div>
-          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.05]">
+          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-100 p-1 dark:bg-[#121212] dark:shadow-none">
             <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc + '?flow=collection')} className="min-h-10 rounded-xl text-xs font-bold text-gray-500 dark:text-gray-400">USDC</button>
             <button type="button" className="min-h-10 rounded-xl bg-white text-xs font-bold text-gray-950 shadow-sm dark:bg-white/[0.1] dark:text-white">Local currency</button>
           </div>
-          <section className="space-y-2 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/[0.035]">
+          <section className="space-y-2 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none">
             <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Collection country</p>
             <div className="flex min-h-14 items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 dark:border-blue-400/20 dark:bg-blue-400/10"><span><span className="block text-sm font-bold">Nigeria</span><span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">Collect in NGN</span></span><span className="rounded-full bg-blue-600 px-2.5 py-1 text-[9px] font-black uppercase text-white">Selected</span></div>
-            {([['Ghana', 'GHS'], ['Kenya', 'KES']] as const).map(([country, currency]) => <div key={country} className="flex min-h-14 items-center justify-between rounded-2xl border border-gray-200 px-4 opacity-55 dark:border-white/10"><span><span className="block text-sm font-bold">{country}</span><span className="mt-0.5 block text-[11px] text-gray-400">Collect in {currency}</span></span><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[9px] font-black uppercase text-gray-500 dark:bg-white/[0.08]">Soon</span></div>)}
+            {([['Ghana', 'GHS'], ['Kenya', 'KES']] as const).map(([country, currency]) => <div key={country} className="flex min-h-14 items-center justify-between rounded-2xl border border-gray-200 px-4 opacity-55 dark:border-[#262626]"><span><span className="block text-sm font-bold">{country}</span><span className="mt-0.5 block text-[11px] text-gray-400">Collect in {currency}</span></span><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[9px] font-black uppercase text-gray-500 dark:bg-white/[0.08]">Soon</span></div>)}
             <p className="px-2 pt-1 text-center text-[11px] leading-5 text-gray-400 dark:text-gray-500">Nigeria is available now. Ghana and Kenya will unlock when their local payment rails are ready.</p>
           </section>
         </>}
@@ -236,7 +236,7 @@ export default function PocketMoveBankPage() {
                 key={option.key}
                 type="button"
                 onClick={() => setMode(active ? 'idle' : option.key)}
-                className={`min-h-[62px] rounded-full border px-4 py-2.5 text-left shadow-sm transition-all active:scale-[0.98] ${active ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50/70 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-200 dark:hover:border-blue-400/40 dark:hover:bg-blue-400/10'}`}
+                className={`min-h-[62px] rounded-full border px-4 py-2.5 text-left shadow-sm transition-all active:scale-[0.98] ${active ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50/70 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200 dark:hover:border-blue-400/40 dark:hover:bg-blue-400/10'}`}
               >
                 <span className="flex items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-3">
@@ -250,7 +250,7 @@ export default function PocketMoveBankPage() {
           })}
         </div>}
 
-        {mode !== 'idle' && <div className="space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] dark:border-white/10 dark:bg-white/[0.035] dark:shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+        {mode !== 'idle' && <div className="space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
           <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">{mode === 'request' ? 'Local-currency collection' : 'Direct bank payout'}</p>
 
           {!authenticated && (
@@ -306,7 +306,7 @@ export default function PocketMoveBankPage() {
                 onAmountChange={bank.setAmount}
               />
 
-              <div className="border-y border-gray-100 py-3 dark:border-white/[0.07]">
+              <div className="border-y border-gray-100 py-3 dark:border-[#262626]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Payer network</p>
@@ -348,7 +348,7 @@ export default function PocketMoveBankPage() {
                 onAmountChange={direct.setAmount}
               />
 
-              <div className="border-y border-gray-100 py-3 dark:border-white/[0.07]">
+              <div className="border-y border-gray-100 py-3 dark:border-[#262626]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Withdrawal network</p>
@@ -364,7 +364,7 @@ export default function PocketMoveBankPage() {
 
               <div className="space-y-2 pt-1">
                 {recoveredPayout ? (
-                  <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
+                  <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#171717] dark:text-gray-300">
                     Your previous payout is updating in Activity.
                   </p>
                 ) : <PocketSlideAction

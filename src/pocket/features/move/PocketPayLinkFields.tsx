@@ -23,7 +23,7 @@ export function PocketPaymentAmountField({ lane, flexible, amount, dirty, valid,
   return (
     <>
       {flexible && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]">
+        <div className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-[#262626] dark:bg-[#171717]">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950">
             <Sliders className="h-3.5 w-3.5" />
           </span>
@@ -49,10 +49,10 @@ export function PocketPaymentAmountField({ lane, flexible, amount, dirty, valid,
               onChange={event => onAmountChange(event.target.value)}
               className={cn(
                 'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 pr-28 text-sm',
-                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
+                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                 dirty && !valid
                   ? 'border-red-300 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
-                  : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-white/10 dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
+                  : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-[#262626] dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
               )}
             />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-[11px] font-semibold text-gray-400">{naira ? 'NGN' : 'USDC'}</span>
@@ -87,7 +87,7 @@ export function PocketPaymentNoteField({ value, onChange, label = 'Payment note'
         value={value}
         maxLength={100}
         onChange={event => onChange(event.target.value)}
-        className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-2.5 text-sm placeholder:text-gray-400 transition-all focus:border-[#0071E3]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-blue-400/40 dark:focus:bg-white/[0.06] dark:focus:ring-blue-400/10"
+        className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-2.5 text-sm placeholder:text-gray-400 transition-all focus:border-[#0071E3]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/15 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:border-blue-400/40 dark:focus:bg-white/[0.06] dark:focus:ring-blue-400/10"
       />
     </fieldset>
   )
@@ -107,8 +107,8 @@ export function PocketFlexibleAmountToggle({ lane, enabled, onToggle }: PocketFl
       className={cn(
         'w-full rounded-xl border p-3 text-left transition-all',
         enabled
-          ? 'border-gray-300 bg-white shadow-sm dark:border-white/15 dark:bg-white/[0.05]'
-          : 'border-gray-200 bg-white hover:border-gray-300 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/20',
+          ? 'border-gray-300 bg-white shadow-sm dark:border-white/15 dark:bg-[#121212] dark:shadow-none'
+          : 'border-gray-200 bg-white hover:border-gray-300 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:hover:border-white/20',
       )}
     >
       <div className="flex items-center justify-between gap-3">
@@ -117,7 +117,7 @@ export function PocketFlexibleAmountToggle({ lane, enabled, onToggle }: PocketFl
             'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all',
             enabled
               ? 'border-gray-900 bg-gray-950 text-white dark:border-white/20 dark:bg-gray-900 dark:text-white'
-              : 'border-gray-200 bg-white text-gray-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-gray-500',
+              : 'border-gray-200 bg-white text-gray-400 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-500',
           )}><Sliders className="h-3.5 w-3.5" /></span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold leading-tight text-gray-800 dark:text-gray-100">Let payer enter amount</span>
@@ -160,7 +160,7 @@ export function PocketPayLinkSubmitPanel({ lane, shellActive, idle, canSubmit, s
               ? shellActive
                 ? 'bg-gray-950 text-white shadow-sm hover:bg-black dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]'
                 : 'bg-black text-white shadow-button hover:bg-gray-800 hover:shadow-md active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200'
-              : 'cursor-not-allowed bg-gray-100 text-gray-400 dark:bg-white/[0.06] dark:text-gray-500',
+              : 'cursor-not-allowed bg-gray-100 text-gray-400 dark:bg-[#171717] dark:text-gray-500',
           )}
         >
           {bankLane && submitting

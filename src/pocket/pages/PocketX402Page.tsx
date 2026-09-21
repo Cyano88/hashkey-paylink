@@ -59,7 +59,7 @@ export default function PocketX402Page() {
   return (
     <PocketRouteShell active="home" onSelect={selectNav}>
       <div className="space-y-3">
-        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-violet-50/70 p-4 shadow-sm dark:border-white/10 dark:from-[#111216] dark:via-[#111216] dark:to-violet-500/[0.08]">
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-violet-50/70 p-4 shadow-sm dark:border-[#262626] dark:from-[#111216] dark:via-[#111216] dark:to-violet-500/[0.08]">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Available for app payments</p>
@@ -73,7 +73,7 @@ export default function PocketX402Page() {
                   'rounded-full border px-2 py-1',
                   connected
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300'
-                    : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-white/10 dark:bg-white/[0.05] dark:text-gray-400',
+                    : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:text-gray-400',
                 )}>
                   {sessionChecking
                     ? 'Restoring session'
@@ -88,11 +88,11 @@ export default function PocketX402Page() {
           </div>
         </div>
 
-        <details className="group rounded-xl border border-gray-100 bg-white/70 px-3 py-2 dark:border-white/[0.07] dark:bg-white/[0.025]">
+        <details className="group rounded-xl border border-gray-100 bg-white/70 px-3 py-2 dark:border-[#262626] dark:bg-white/[0.025]">
           <summary className="cursor-pointer list-none text-[11px] font-semibold text-gray-400 transition hover:text-gray-700 dark:hover:text-gray-200">
             Payment network
           </summary>
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-white/[0.07]">
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-gray-100 pt-3 dark:border-[#262626]">
             <div>
               <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Circle Gateway</p>
               <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Choose where apps are paid</p>
@@ -110,11 +110,11 @@ export default function PocketX402Page() {
         </details>
 
         {sessionChecking ? (
-          <div className="flex min-h-28 items-center justify-center gap-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 text-xs font-semibold text-gray-400 dark:border-white/10 dark:bg-[#151518]/95">
+          <div className="flex min-h-28 items-center justify-center gap-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 text-xs font-semibold text-gray-400 dark:border-[#262626] dark:bg-[#151518]/95">
             <Loader2 className="h-4 w-4 animate-spin" /> Restoring App Pay
           </div>
         ) : !authenticated ? (
-          <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95">
+          <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-[#262626] dark:bg-[#151518]/95">
             <PrivyConnectButton
               debugLabel="x402-wallet-email"
               loginOptions={{ loginMethods: ['email'] }}
@@ -130,7 +130,7 @@ export default function PocketX402Page() {
             <p className="px-3 pb-1 text-center text-[11px] font-medium text-gray-400">Secure email access. Wallets powered by Circle.</p>
           </div>
         ) : !connected ? (
-          <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-white/10 dark:bg-[#151518]/95">
+          <div className="w-full space-y-2 rounded-[26px] border border-gray-200 bg-[#F5F5F7]/95 p-2 shadow-[0_12px_36px_rgba(15,23,42,0.1)] dark:border-[#262626] dark:bg-[#151518]/95">
             <div className="px-1 pb-1">
               <p className="text-sm font-semibold text-gray-900 dark:text-white">
                 {verificationRequired ? 'Verify your App Pay wallet' : 'Set up App Pay'}
@@ -144,10 +144,10 @@ export default function PocketX402Page() {
 
             {x402.walletStep === 'otp' ? (
               <div className="space-y-2">
-                <p className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:bg-white/[0.04] dark:text-gray-400">
+                <p className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] font-medium text-gray-500 dark:bg-[#171717] dark:text-gray-400">
                   Circle sent a code to {email || 'your email'} for your Base wallet.
                 </p>
-                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
+                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-[#262626] dark:bg-[#171717]">
                   <input value={x402.otp} onChange={event => x402.setOtp(event.target.value.trim())} placeholder="Enter Circle OTP" disabled={x402.walletBusy} className="min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none dark:text-white" />
                 </div>
                 <button type="button" onClick={() => void x402.completeConnection()} disabled={x402.walletBusy || !x402.otp.trim()} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 text-sm font-semibold text-white shadow-sm transition-all active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950">
@@ -159,7 +159,7 @@ export default function PocketX402Page() {
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.06]">
+                <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-[#262626] dark:bg-[#171717]">
                   <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-700 dark:bg-white/[0.08] dark:text-gray-200"><Wallet className="h-4 w-4" /></span>
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">{x402.walletMode === 'create' ? 'Pocket wallet setup' : 'Existing wallet verification'}</p>
@@ -189,7 +189,7 @@ export default function PocketX402Page() {
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="overflow-hidden rounded-lg border border-gray-100 bg-white dark:border-white/10 dark:bg-white/[0.04]">
+            <div className="overflow-hidden rounded-lg border border-gray-100 bg-white dark:border-[#262626] dark:bg-[#171717]">
               <div className="flex items-center justify-between gap-3 px-3 py-3">
                 <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Pocket wallet</p>
@@ -197,7 +197,7 @@ export default function PocketX402Page() {
                 </div>
                 <a href={fundUrl} className="inline-flex h-9 w-[104px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-3 text-xs font-semibold text-white dark:bg-white dark:text-gray-950"><ArrowRight className="h-3.5 w-3.5" /> Fund</a>
               </div>
-              <div className="border-t border-gray-100 px-3 py-3 dark:border-white/10">
+              <div className="border-t border-gray-100 px-3 py-3 dark:border-[#262626]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Available for app payments</p>
@@ -210,7 +210,7 @@ export default function PocketX402Page() {
                 <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">{x402.activationPending ? 'Updating App Pay balance...' : treasuryEmpty ? 'Add USDC to your Pocket wallet first.' : 'Set aside USDC for apps, AI tools, and pay-per-use services.'}</p>
               </div>
               {(x402.activationOpen || x402.activationSuccess) && (
-                <div className="border-t border-gray-100 bg-gray-50/70 p-3 dark:border-white/10 dark:bg-black/10">
+                <div className="border-t border-gray-100 bg-gray-50/70 p-3 dark:border-[#262626] dark:bg-black/10">
                   {x402.activationSuccess ? (
                     <div className="py-2 text-center">
                       <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-200"><CheckCircle2 className="h-5 w-5" /></div>
@@ -222,13 +222,13 @@ export default function PocketX402Page() {
                       <p className="text-xs font-semibold text-gray-900 dark:text-white">Add App Pay funds</p>
                       <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Set aside USDC from your Pocket wallet for pay-per-use services.</p>
                       <label className="mb-1.5 mt-3 block text-xs font-semibold text-gray-600 dark:text-gray-300">Amount</label>
-                      <div className="flex h-10 max-w-[150px] overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/[0.06]">
+                      <div className="flex h-10 max-w-[150px] overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-[#262626] dark:bg-[#171717]">
                         <input value={x402.amount} onChange={event => x402.setAmount(event.target.value)} inputMode="decimal" className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-semibold text-gray-900 outline-none dark:text-white" />
-                        <span className="border-l border-gray-200 px-2.5 py-3 text-[11px] font-semibold text-gray-400 dark:border-white/10">USDC</span>
+                        <span className="border-l border-gray-200 px-2.5 py-3 text-[11px] font-semibold text-gray-400 dark:border-[#262626]">USDC</span>
                       </div>
                       {(x402.activationError || x402.error) && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">{x402.activationError || x402.error}</p>}
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => x402.setActivationOpen(false)} disabled={x402.activationBusy} className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-white/10 dark:bg-white/[0.06] dark:text-gray-200">Cancel</button>
+                        <button type="button" onClick={() => x402.setActivationOpen(false)} disabled={x402.activationBusy} className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200">Cancel</button>
                         <button type="button" onClick={() => void x402.activate()} disabled={x402.activationBusy || Boolean(x402.activationError)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{x402.activationBusy ? <><span>Adding funds</span><Loader2 className="h-4 w-4 animate-spin" /></> : <><ArrowRight className="h-4 w-4" /> Add funds</>}</button>
                       </div>
                     </>

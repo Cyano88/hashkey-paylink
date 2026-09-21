@@ -1,0 +1,34 @@
+/* Match the standalone Hash PayStream dark canvas while keeping Pocket's light balance card. */
+html.dark [data-pocket-app-frame='true'],
+html.dark [data-pocket-app-frame='true'] [data-hashpaylink-top-nav] {
+  background-color: #000;
+  border-color: #262626;
+  box-shadow: none;
+}
+html[data-pocket-runtime='native'].dark:not([data-pocket-light-surface='true']) body::before {
+  background-color: #000;
+}
+html.dark section[data-pocket-balance-card] {
+  background-color: #fff;
+  color: #09090b;
+}
+
+/* Keep legacy Hash PayLink utility overrides from changing Pocket surfaces. */
+html.dark [data-pocket-app-frame='true'] [class~='dark:bg-[#121212]'] { background-color: #121212; }
+html.dark [data-pocket-app-frame='true'] [class~='dark:bg-[#171717]'] { background-color: #171717; }
+html.dark [data-pocket-app-frame='true'] [class~='dark:bg-[#0b0b0b]'] { background-color: #0b0b0b; }
+html.dark [data-pocket-app-frame='true'] [class~='dark:bg-black'] { background-color: #000; }
+html.dark [data-pocket-app-frame='true'] [class~='dark:border-[#262626]'] { border-color: #262626; }
+html.dark [data-pocket-app-frame='true'] [class~='dark:text-white'] { color: #fff; }
+html.dark [data-pocket-app-frame='true'] [class~='dark:text-gray-200'] { color: #e5e7eb; }
+html.dark [data-pocket-app-frame='true'] [class~='dark:text-gray-300'] { color: #d1d5db; }
+html.dark [data-pocket-app-frame='true'] [class~='dark:text-gray-400'] { color: #9ca3af; }
+
+html.dark [data-pocket-app-frame='true'] [data-pocket-balance-card] button { color: #52525b; }
+html.dark [data-pocket-app-frame='true'] [data-pocket-balance-card] button:hover { color: #09090b; }
+/* Match Hash PayStream's icon-and-label navigation, without a filled selected tile. */
+html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] button { background-color: transparent; box-shadow: none; }
+html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] button[aria-current='page'],
+html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] button[aria-current='page'] svg { color: #fff; }
+html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] button:not([aria-current='page']),
+html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] button:not([aria-current='page']) svg { color: #71717a; }
