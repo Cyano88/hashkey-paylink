@@ -119,7 +119,6 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
 
   return (
     <PocketRouteShell active="activity" onSelect={selectNav}>
-      <h1 className="py-3 text-center text-base font-black">Activity</h1>
       <PocketActivityPanel
         view={view}
         rows={rowsWithRequests}
