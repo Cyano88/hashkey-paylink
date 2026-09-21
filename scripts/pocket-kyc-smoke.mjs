@@ -52,3 +52,7 @@ const recoverable=await request('abandoned',{action:'status'});assert.equal(reco
 const recovered=await request('abandoned',{action:'resume',consent:true});assert.equal(recovered.code,200);assert.equal(recovered.body.jobId,abandoned.body.jobId);
 process.env.SMILE_ENVIRONMENT='production';assert.equal((await request('alice',{action:'start',consent:true})).code,503)
 console.log('PASS auth, consent, atomic duplicate prevention, owner isolation, callback authentication, authoritative reconciliation, unknown-result review, sandbox isolation production rollout guard, and unsubmitted-session recovery without replacement jobs.')
+
+assert.equal(m.publicKyc({status:'failed',resultCode:'0811'},'sandbox').failureReason,'face_mismatch')
+assert.equal(m.publicKyc({status:'pending'},'sandbox').failureReason,null)
+assert.equal(m.publicKyc({status:'failed'},'sandbox').failureReason,'session_failed')

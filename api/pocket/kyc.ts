@@ -12,7 +12,7 @@ const jobKey = (id: string) => `hashpaylink:pocket-kyc-job:v1:${id}`
 const fail = (message: string, status: number) => Object.assign(new Error(message), { status })
 
 export function publicKyc(job: Job | undefined, environment: SmileEnvironment) {
-  return { environment, status: job?.status || 'not_started', verified: environment === 'production' && job?.status === 'passed', jobId: job?.id || null, canResume: Boolean(job && ['pending', 'review'].includes(job.status) && !job.resultCode) && job?.providerMissing === true && !job.submitted && !job.uploadReportedAt, uploadReported: Boolean(job?.uploadReportedAt) }
+  return { environment, status: job?.status || 'not_started', verified: environment === 'production' && job?.status === 'passed', jobId: job?.id || null, canResume: Boolean(job && ['pending', 'review'].includes(job.status) && !job.resultCode) && job?.providerMissing === true && !job.submitted && !job.uploadReportedAt, uploadReported: Boolean(job?.uploadReportedAt), failureReason: job?.status === 'failed' ? job.resultCode === '0811' ? 'face_mismatch' : job.resultCode ? 'provider_rejected' : 'session_failed' : null }
 }
 
 export async function requireProductionKyc(userId: string) {
