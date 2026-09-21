@@ -20,6 +20,7 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
     && new URLSearchParams(location.search).get('preview') === '1'
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const [walletBusy, setWalletBusy] = useState(false)
+  const [walletOpenError, setWalletOpenError] = useState('')
   const onWalletReady = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana', wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
     wallets.setWallets(current => ({ ...current, [network]: wallet }))
   }, [wallets.setWallets])
@@ -60,13 +61,13 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
   }
 
   const openBaseWallet = useCallback(async () => {
-    setWalletBusy(true)
-    wallets.setError('')
+    setWalletBusy(true); setWalletOpenError('')
+    setWalletOpenError('')
     try {
       await ensureBaseWallet()
       await wallets.refreshBalances()
     } catch (reason) {
-      wallets.setError(reason instanceof Error ? reason.message : 'Base wallet setup failed.')
+      setWalletOpenError(reason instanceof Error ? reason.message : 'Base wallet setup failed.')
     } finally {
       setWalletBusy(false)
     }
@@ -83,7 +84,7 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
-  if (authenticated && !wallets.resolved) return <PocketRouteShell active="bills" onSelect={selectNav}><PocketBillsSkeleton /></PocketRouteShell>
+  if (authenticated && (!wallets.resolved || (wallets.error && !wallets.wallets.base?.address))) return <PocketRouteShell active="bills" onSelect={selectNav}><PocketBillsSkeleton /></PocketRouteShell>
 
   const baseBalance = wallets.rows.find(row => row.key === 'base')?.balance ?? 0
   return (
@@ -107,7 +108,7 @@ export default function PocketBillsPage({ view }: { view: PocketBillView }) {
           insufficient: paymentLiquidity.insufficient,
         }}
       />
-      {wallets.error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{wallets.error}</p>}
+      {walletOpenError && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{walletOpenError}</p>}
     </PocketRouteShell>
   )
 }

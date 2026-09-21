@@ -1,3 +1,4 @@
+import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
@@ -12,6 +13,7 @@ import {
   quotePocketElectricity,
   readPocketDataCatalog,
   readPocketBillsAvailability,
+  cachedPocketBillsAvailability,
   verifyPocketBillCustomer,
   refreshPocketAirtime,
   type PocketDataService,
@@ -96,12 +98,13 @@ export default function usePocketBillsController({
 }) {
   const category = view
   const activeBillKey = `pocket:bills:active:${category}`
-  const [availability, setAvailability] = useState<'loading' | 'enabled' | 'disabled'>('loading')
-  const [environment, setEnvironment] = useState<'sandbox' | 'live'>('sandbox')
-  const [airtimeEnabled, setAirtimeEnabled] = useState(false)
-  const [dataEnabled, setDataEnabled] = useState(false)
-  const [tvEnabled, setTvEnabled] = useState(false)
-  const [electricityEnabled, setElectricityEnabled] = useState(false)
+  const savedAvailability = cachedPocketBillsAvailability()
+  const [availability, setAvailability] = useState<'loading' | 'enabled' | 'disabled'>(savedAvailability ? savedAvailability.enabled ? 'enabled' : 'disabled' : 'loading')
+  const [environment, setEnvironment] = useState<'sandbox' | 'live'>(savedAvailability?.environment ?? 'sandbox')
+  const [airtimeEnabled, setAirtimeEnabled] = useState(savedAvailability?.airtimeEnabled ?? false)
+  const [dataEnabled, setDataEnabled] = useState(savedAvailability?.dataEnabled ?? false)
+  const [tvEnabled, setTvEnabled] = useState(savedAvailability?.tvEnabled ?? false)
+  const [electricityEnabled, setElectricityEnabled] = useState(savedAvailability?.electricityEnabled ?? false)
   const [serviceId, setServiceIdState] = useState('mtn')
   const [phone, setPhoneState] = useState('')
   const [amountNgn, setAmountNgnState] = useState('')
@@ -146,24 +149,33 @@ export default function usePocketBillsController({
   }, [serviceId, view])
 
   useEffect(() => {
-    let cancelled = false
-    void readPocketBillsAvailability()
-      .then(result => {
+    let initializedSandbox = false
+    let cancelled = false, pending: Promise<void> | undefined, timer: ReturnType<typeof setTimeout>, failures = 0
+    const refreshAvailability = () => {
+      if (cancelled || document.visibilityState !== 'visible') return Promise.resolve()
+      if (pending) return pending
+      pending = readPocketBillsAvailability().then(result => {
         if (cancelled) return
-        setEnvironment(result.environment)
-        setAirtimeEnabled(result.airtimeEnabled)
-        setDataEnabled(result.dataEnabled)
-        setTvEnabled(result.tvEnabled)
-        setElectricityEnabled(result.electricityEnabled)
-        if (result.environment === 'sandbox') {
+        failures = 0
+        setEnvironment(result.environment); setAirtimeEnabled(result.airtimeEnabled); setDataEnabled(result.dataEnabled)
+        setTvEnabled(result.tvEnabled); setElectricityEnabled(result.electricityEnabled)
+        if (result.environment === 'sandbox' && !initializedSandbox) {
+          initializedSandbox = true
           setPhoneState(view === 'tv' ? sandboxBillAccount('tv') : view === 'electricity' ? sandboxBillAccount('electricity') : VTPASS_SANDBOX_SUCCESS_PHONE)
           setContactPhoneState(VTPASS_SANDBOX_SUCCESS_PHONE)
           if (view === 'electricity') setVariationCodeState('prepaid')
         }
         setAvailability(result.enabled ? 'enabled' : 'disabled')
-      })
-      .catch(() => { if (!cancelled) setAvailability('disabled') })
-    return () => { cancelled = true }
+      }).catch(() => { failures++ /* Retain verified configuration; unknown remains a shimmer. */ }).finally(() => { pending = undefined })
+      return pending
+    }
+    const poll = async () => { await refreshAvailability(); if (!cancelled) timer = setTimeout(poll, failures ? Math.min(60_000, 15_000 * 2 ** (failures - 1)) : 60_000) }
+    const visible = () => { if (document.visibilityState === 'visible') void refreshAvailability() }
+    void poll()
+    const unregister = registerPocketRefreshHandler(refreshAvailability)
+    document.addEventListener('visibilitychange', visible)
+    window.addEventListener('online', visible)
+    return () => { cancelled = true; clearTimeout(timer); unregister(); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', visible) }
   }, [view])
 
   const resetResult = useCallback(() => {

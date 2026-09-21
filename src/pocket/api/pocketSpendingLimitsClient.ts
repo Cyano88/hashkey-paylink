@@ -12,6 +12,8 @@ export async function readPocketBankPayoutLimit(input: {
 }): Promise<PocketBankPayoutLimit> {
   const response = await (input.fetcher ?? fetch)(POCKET_API.spendingLimits, {
     method: "GET",
+    signal: AbortSignal.timeout(10_000),
+    cache: "no-store",
     headers: { authorization: `Bearer ${input.accessToken}` },
   });
   const body = (await response.json().catch(() => undefined)) as

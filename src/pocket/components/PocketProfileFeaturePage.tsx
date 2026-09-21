@@ -1,5 +1,6 @@
+import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 import PocketWalletPreparation from './PocketWalletPreparation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Bell, Loader2 } from './PocketIcons'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
 import { cn } from '../../lib/utils'
@@ -56,7 +57,7 @@ function LimitProgress({ title, used, limit, detail }: { title: string; used: nu
     <div className='mt-5 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10'><div className='h-full rounded-full bg-blue-600 transition-[width]' style={{ width: `${percent}%` }} /></div>
     <div className='mt-3 flex justify-between text-[11px]'>
       {used === null
-        ? <span className='font-bold text-gray-400'>Today's usage is unavailable</span>
+        ? <span role='status' aria-label="Loading today's usage" className='block h-3 w-full animate-pulse rounded bg-gray-200 motion-reduce:animate-none dark:bg-white/10' />
         : <><span className='font-bold'>{ngn(used)} used</span><span className='text-gray-400'>{ngn(Math.max(0, limit - used))} remaining</span></>}
     </div>
   </article>
@@ -68,7 +69,6 @@ function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBil
   return <section className='pt-10'>
     <p className='text-xs leading-5 text-gray-500 dark:text-gray-400'>Your Pocket limits</p>
     <div className='mt-5 space-y-3'>
-      {busy && !usage && <div className='flex items-center gap-2 rounded-[24px] bg-white p-5 text-sm font-bold text-gray-500 dark:bg-[#121212] dark:shadow-none'><Loader2 className='h-4 w-4 animate-spin' />Loading today's usage</div>}
       {bank && <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#121212] dark:shadow-none'>
         <p className='text-[10px] font-black uppercase tracking-[0.18em] text-gray-400'>Bank payout</p>
         <p className='mt-2 text-2xl font-black'>{new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(bank.maxUsdc)} USDC</p>
@@ -78,7 +78,7 @@ function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBil
       <LimitProgress title='Airtime' used={airtime.usedTodayNgn} limit={airtime.dailyLimitNgn} detail={`Up to ${ngn(airtime.perPaymentNgn)} per payment`} />
       <LimitProgress title='Other Bills' used={otherBills.usedTodayNgn} limit={otherBills.dailyLimitNgn} detail='Data, TV, and electricity combined' />
       <p className='px-1 text-[11px] leading-5 text-gray-400'>Resets daily at midnight, Lagos time. Product-specific limits may be lower.</p>
-      {!usage && !busy && <div className='rounded-[20px] bg-amber-50 p-4 dark:bg-amber-400/10'>
+      {!usage && !busy && error && <div className='rounded-[20px] bg-amber-50 p-4 dark:bg-amber-400/10'>
         <p className='text-xs font-bold text-amber-800 dark:text-amber-200'>{error || `Today's usage could not be refreshed.`}</p>
         <button type='button' onClick={onRefresh} className='mt-3 min-h-9 rounded-full border border-amber-200 px-4 text-[11px] font-black dark:border-amber-400/20'>Try again</button>
       </div>}
@@ -181,26 +181,47 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
   const [bankLimit, setBankLimit] = useState<PocketBankPayoutLimit | null>(null)
   const [limitsBusy, setLimitsBusy] = useState(false)
   const [limitsError, setLimitsError] = useState('')
-  const refreshLimits = async () => {
+  const limitsToken = useRef(getAccessToken); limitsToken.current = getAccessToken
+  const limitsEpoch = useRef(0), limitsPending = useRef<Promise<void> | null>(null), limitsAttemptAt = useRef(0)
+  const refreshLimits = useCallback(() => {
+    if (limitsPending.current) return limitsPending.current
+    const epoch = limitsEpoch.current
+    const valid = () => epoch === limitsEpoch.current
+    limitsAttemptAt.current = Date.now()
     setLimitsBusy(true)
-    try {
-      const accessToken = await getAccessToken()
-      if (!accessToken) throw new Error('Sign in again to view today\'s limits.')
-      const [billsResult, bankResult] = await Promise.allSettled([
-        readPocketBillsLimitUsage({ accessToken }),
-        readPocketBankPayoutLimit({ accessToken }),
-      ])
-      if (billsResult.status === 'rejected') throw billsResult.reason
-      setLimits(billsResult.value)
-      setBankLimit(bankResult.status === 'fulfilled' ? bankResult.value : null)
-      setLimitsError('')
-    } catch {
-      setLimitsError('Today\'s usage could not be refreshed.')
-    } finally {
-      setLimitsBusy(false)
-    }
-  }
-  useEffect(() => { if (feature === 'limits') void refreshLimits() }, [feature]) // eslint-disable-line react-hooks/exhaustive-deps
+    const work = (async () => {
+      try {
+        const accessToken = await limitsToken.current()
+        if (!accessToken) throw new Error('Sign in again to view limits.')
+        if (!valid()) return
+        const [billsResult, bankResult] = await Promise.allSettled([
+          readPocketBillsLimitUsage({ accessToken }), readPocketBankPayoutLimit({ accessToken }),
+        ])
+        if (!valid()) return
+        if (bankResult.status === 'fulfilled') setBankLimit(bankResult.value)
+        if (billsResult.status === 'fulfilled') { setLimits(billsResult.value); setLimitsError('') }
+        else setLimitsError('Reconnecting to update your usage.')
+      } catch {
+        if (valid()) setLimitsError('Reconnecting to update your usage.')
+      } finally {
+        if (valid()) { limitsPending.current = null; setLimitsBusy(false) }
+      }
+    })()
+    limitsPending.current = work
+    return work
+  }, [email])
+  useEffect(() => {
+    limitsEpoch.current++; limitsPending.current = null; setLimits(null); setBankLimit(null); setLimitsError('')
+    if (feature !== 'limits') return
+    let cancelled = false, timer: ReturnType<typeof setTimeout>
+    const poll = async () => { if (document.visibilityState === 'visible') await refreshLimits(); if (!cancelled) timer = setTimeout(poll, 30_000) }
+    const visible = () => { if (document.visibilityState === 'visible' && Date.now() - limitsAttemptAt.current >= 10_000) void refreshLimits() }
+    void poll()
+    const unregister = registerPocketRefreshHandler(refreshLimits)
+    document.addEventListener('visibilitychange', visible); window.addEventListener('online', visible)
+    return () => { cancelled = true; limitsEpoch.current++; limitsPending.current = null; clearTimeout(timer); unregister(); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', visible) }
+  }, [feature, email, refreshLimits])
+
   const title = feature === 'wallet-setup' ? 'Wallet preparation' : feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
   return <div className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white'>
     <main className='mx-auto min-h-full w-full max-w-[480px] px-5 pb-[max(2.5rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]'>

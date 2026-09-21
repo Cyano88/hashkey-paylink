@@ -1,3 +1,4 @@
+import { pocketApiUrl } from '../lib/pocketRoutes'
 import { POCKET_API, createPocketIdempotencyKey } from '../lib/pocketSchemas'
 
 export type PocketBillIntentState =
@@ -129,6 +130,7 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
 
 export function parsePocketBillsAvailability(value: unknown) {
   const bills = record(record(value).bills)
+  if (typeof bills.enabled !== 'boolean' || !['live', 'sandbox'].includes(String(bills.environment)) || !Array.isArray(bills.categories)) throw new PocketBillsApiError('Bills availability could not be verified.', { retryable: true })
   const categories = Array.isArray(bills.categories) ? bills.categories.map(String) : []
   return {
     enabled: bills.enabled === true,
@@ -178,11 +180,24 @@ async function postBills({
   return record(root.data)
 }
 
-export async function readPocketBillsAvailability(fetcher: typeof fetch = fetch) {
-  const response = await fetcher('/api/public-config', { cache: 'no-store' })
-  const data = await response.json().catch(() => undefined)
-  if (!response.ok) throw new PocketBillsApiError('Bills availability is temporarily unavailable.', { status: response.status, retryable: true })
-  return parsePocketBillsAvailability(data)
+let availabilitySaved: ReturnType<typeof parsePocketBillsAvailability> | undefined
+let availabilityReadAt = 0
+let availabilityPending: Promise<ReturnType<typeof parsePocketBillsAvailability>> | undefined
+export function cachedPocketBillsAvailability() { return availabilitySaved }
+export async function readPocketBillsAvailability(fetcher?: typeof fetch) {
+  if (!fetcher && availabilityPending) return availabilityPending
+  if (!fetcher && availabilitySaved && Date.now() - availabilityReadAt < 30_000) return availabilitySaved
+  const work = async () => {
+    const response = await (fetcher ?? fetch)(pocketApiUrl('/api/public-config'), { cache: 'no-store', signal: AbortSignal.timeout(10_000) })
+    const data = await response.json().catch(() => undefined)
+    if (!response.ok) throw new PocketBillsApiError('Bills availability is temporarily unavailable.', { status: response.status, retryable: true })
+    const result = parsePocketBillsAvailability(data)
+    if (!fetcher) { availabilitySaved = result; availabilityReadAt = Date.now() }
+    return result
+  }
+  if (fetcher) return work()
+  availabilityPending = work().finally(() => { availabilityPending = undefined })
+  return availabilityPending
 }
 
 export async function readPocketBillsLimitUsage(input: { accessToken: string; fetcher?: typeof fetch }): Promise<PocketBillsLimitUsage> {
@@ -190,7 +205,7 @@ export async function readPocketBillsLimitUsage(input: { accessToken: string; fe
     endpoint: POCKET_API.billsPay,
     accessToken: input.accessToken,
     idempotencyKey: createPocketIdempotencyKey('bill-limits'),
-    fetcher: input.fetcher,
+    fetcher: (url, options) => (input.fetcher ?? fetch)(url, { ...options, signal: AbortSignal.timeout(10_000) }),
     body: { action: 'limits' },
   })
   const limits = record(data.limits)
