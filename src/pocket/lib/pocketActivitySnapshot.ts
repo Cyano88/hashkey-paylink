@@ -18,7 +18,12 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
       if (alias) { old = alias[1]; rows.delete(alias[0]) }
     }
     // The current source owns mutable fields, including removal of refund actions.
-    rows.set(rowKey(row), { ...row, ts: old?.ts || row.ts })
+    const bank = String(row.source || '').replace(/_/g, '-').startsWith('bank-')
+      || row.settlementType?.toLowerCase() === 'instant_fiat'
+    // A partial bank response is not evidence that a previously observed status vanished.
+    const savedStatus = bank && !row.paycrestStatus?.trim() && old?.paycrestStatus
+      ? { paycrestStatus: old.paycrestStatus } : {}
+    rows.set(rowKey(row), { ...row, ...savedStatus, ts: old?.ts || row.ts })
   }
   const values = [...rows.values()]
   const contextual = new Set(values.filter(row => row.source && !['wallet-deposit', 'wallet-withdrawal'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))

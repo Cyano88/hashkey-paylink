@@ -1,3 +1,4 @@
+import { pocketBankStatus } from './pocketBankStatus'
 import { isOutgoingPosPurchase } from './pocketPurchaseKind'
 import type { PaylinkReceipt } from '../../lib/paymentReceiptPdf'
 import type { PocketActivityRow } from '../models/pocketActivity'
@@ -46,12 +47,8 @@ function normalizedSettlement(row: PocketActivityRow) {
 
 export function pocketActivityStatus(row: PocketActivityRow) {
   const status = String(row.paycrestStatus || '').trim().toLowerCase()
-  if (normalizedSource(row) === 'bank-withdraw') {
-    if (status === 'refunded' || status === 'reversed') return 'reversed'
-    if (status === 'refunding' || status === 'reversing') return 'reversing'
-    if (['deposited', 'fulfilled', 'fulfilling', 'settled', 'settling', 'successful', 'validated'].includes(status)) return 'successful'
-    if (status === 'pending' && /^0x[a-f0-9]{64}$/i.test(row.txHash)) return 'successful'
-  }
+  const source = normalizedSource(row)
+  if (source.startsWith('bank-') || normalizedSettlement(row) === 'instant_fiat') return pocketBankStatus(status, source)
   return status || 'status unavailable'
 }
 
@@ -83,7 +80,7 @@ export function pocketReceiptAvailability(row: PocketActivityRow): PocketReceipt
   if (kind === 'money_in' && source === 'wallet-deposit' && row.chain === 'solana' && (!row.payer || row.payer === 'Solana wallet')) return 'none'
   const status = pocketActivityStatus(row)
   if (FINAL_STATUSES.has(status)) return 'ready'
-  if (PENDING_STATUSES.has(status)) return 'pending'
+  if (PENDING_STATUSES.has(status) || status === 'reversing' || status === 'failed') return 'pending'
   return 'none'
 }
 

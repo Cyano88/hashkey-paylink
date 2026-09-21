@@ -3,8 +3,8 @@ import { createPocketActivityHandler } from '../api/pocket/activity.ts'
 import { bankWithdrawActivityStatus, mergeRegisteredPaycrestActivity, paycrestActivityTimestamp } from '../api/ng-pos.ts'
 import { isPocketActivityReadData } from '../src/pocket/lib/pocketSchemas.ts'
 
-assert.equal(bankWithdrawActivityStatus({ status: 'deposited', tx_hash: '0x' + 'a'.repeat(64) }), 'successful')
-assert.equal(bankWithdrawActivityStatus({ status: 'pending', tx_hash: '0x' + 'b'.repeat(64) }), 'successful')
+assert.equal(bankWithdrawActivityStatus({ status: 'deposited', tx_hash: '0x' + 'a'.repeat(64) }), 'pending')
+assert.equal(bankWithdrawActivityStatus({ status: 'pending', tx_hash: '0x' + 'b'.repeat(64) }), 'pending')
 assert.equal(bankWithdrawActivityStatus({ status: 'refunding', tx_hash: '0x' + 'c'.repeat(64) }), 'reversing')
 assert.equal(bankWithdrawActivityStatus({ status: 'refunded', tx_hash: '0x' + 'd'.repeat(64) }), 'reversed')
 
@@ -318,3 +318,6 @@ assert.equal(purchase.verifiedPayer,undefined)
 assert.ok(purchase.receiptUrl.startsWith('/receipt/'))
 assert.equal(posPurchase.body.payments.find(row=>row.eventId==='ngpos-incoming').direction,'in')
 console.log('Circle Pocket activity adapter smoke tests passed, including owner-scoped POS purchases and transfer deduplication.')
+
+assert.equal(bankWithdrawActivityStatus({status:'failed',tx_hash:'0x'+'a'.repeat(64)}),'failed')
+assert.equal(bankWithdrawActivityStatus({status:'settled',tx_hash:'0x'+'a'.repeat(64)}),'successful')

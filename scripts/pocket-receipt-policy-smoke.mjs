@@ -75,13 +75,13 @@ assert.equal(pocketActivityReceipt(bridge), null)
 const bankPending = { ...base, eventId: 'evt_4', source: 'bank-withdraw', settlementType: 'INSTANT_FIAT', paycrestStatus: 'processing', direction: 'out' }
 assert.equal(pocketReceiptAvailability(bankPending), 'pending')
 assert.equal(pocketActivityReceipt(bankPending), null)
-assert.equal(pocketActivityReceipt(bankPending, { allowPending: true })?.status, 'processing')
+assert.equal(pocketActivityReceipt(bankPending, { allowPending: true })?.status, 'pending')
 
 const bankDeposited = { ...bankPending, paycrestStatus: 'deposited' }
-assert.equal(pocketActivityStatus(bankDeposited), 'successful')
-assert.equal(pocketReceiptAvailability(bankDeposited), 'ready')
-assert.equal(pocketActivityReceipt(bankDeposited)?.status, 'successful')
-assert.equal(pocketActivityStatus({ ...bankPending, paycrestStatus: 'pending' }), 'successful')
+assert.equal(pocketActivityStatus(bankDeposited), 'pending')
+assert.equal(pocketReceiptAvailability(bankDeposited), 'pending')
+assert.equal(pocketActivityReceipt(bankDeposited, { allowPending: true })?.status, 'pending')
+assert.equal(pocketActivityStatus({ ...bankPending, paycrestStatus: 'pending' }), 'pending')
 
 const bankReversed = { ...bankPending, paycrestStatus: 'refunded' }
 assert.equal(pocketActivityStatus(bankReversed), 'reversed')
@@ -131,3 +131,11 @@ for (const status of ['pending', 'processing', 'refund available', 'refund pendi
 assert.equal(paymentReceiptOutcome({status:'refunded'}).label,'Payment reversed')
 assert.equal(paymentReceiptOutcome({status:'failed'}).label,'Payment failed')
 assert.equal(paymentReceiptOutcome({status:'confirmed'}).label,'Payment successful')
+
+for (const status of ['failed','rejected','cancelled','expired']) {
+ const row={...bankPending,paycrestStatus:status}
+ assert.equal(pocketActivityStatus(row),'failed')
+ assert.equal(pocketActivityReceipt(row,{allowPending:true})?.status,'failed')
+}
+for (const status of ['', 'pending','deposited','fulfilling','fulfilled','validated','settling']) assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:status}),'pending')
+assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:'settled'}),'successful')

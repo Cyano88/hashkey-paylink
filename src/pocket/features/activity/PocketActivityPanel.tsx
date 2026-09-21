@@ -55,6 +55,16 @@ export default function PocketActivityPanel({view,rows,authenticated,busy,error,
     catch(reason){if(!(reason instanceof Error&&reason.name==='AbortError'))setExportError('Your statement could not be saved. Please try again.')}
     finally{setExporting(false)}
   }
+  const groups: Array<{key:string;label:string;rows:PocketActivityRow[]}> = []
+  const today=new Date();today.setHours(0,0,0,0)
+  const yesterday=new Date(today);yesterday.setDate(yesterday.getDate()-1)
+  for(const row of visible){
+    const date=new Date(row.ts);date.setHours(0,0,0,0)
+    const key=Number.isFinite(date.getTime())?String(date.getTime()):'earlier'
+    const label=key==='earlier'?'Earlier':date.getTime()===today.getTime()?'Today':date.getTime()===yesterday.getTime()?'Yesterday':date.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+    const last=groups[groups.length-1]
+    if(last?.key===key)last.rows.push(row);else groups.push({key,label,rows:[row]})
+  }
   const selectedRow=selected ? rows.find(row=>row.eventId===selected.eventId&&row.txHash===selected.txHash) ?? selected : null
   if(!authenticated)return <p className="py-12 text-center text-sm text-gray-500">Sign in to view your transactions.</p>
   return <div className="space-y-4">
@@ -84,7 +94,8 @@ export default function PocketActivityPanel({view,rows,authenticated,busy,error,
       <button type="button" disabled={!visible.length||exporting} onClick={()=>void exportStatement()} className="mt-6 h-12 w-full rounded-full bg-gray-950 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{exporting?'Preparing statement...':'Download CSV'}</button>
     </PocketBottomSheet>}
     {busy&&!transactions.length?<PocketRecentActivitySkeleton/>:!visible.length?<p className="py-12 text-center text-xs text-gray-500">{error&&!transactions.length?error:'No transactions to show.'}</p>:<div aria-label="Transactions">
-      {visible.map(row=>{
+      {groups.map(group=><section key={group.key} data-pocket-activity-day className="mb-5"><h2 className="mb-2 px-1 text-xs font-semibold text-gray-500">{group.label}</h2><div className="rounded-2xl bg-gray-50 px-3 dark:bg-[#141414]">{group.rows.map(row=>{
+        const status=pocketActivityStatus(row),outcome=paymentReceiptOutcome({status})
         const kind=pocketTransactionCategory(row),incoming=row.direction==='in'||['refunded','reversed'].includes(pocketActivityStatus(row))
         const Icon=kind==='bank'?Landmark:kind==='bills'?Receipt:kind==='pos'?Store:kind==='requests'?RequestMoney:kind==='purchases'?CreditCard:row.source==='wallet-swap'||row.source==='wallet-bridge'?ArrowLeftRight:incoming?ArrowDownToLine:ArrowUpFromLine
         const title=pocketBankRecipientLabel(row)||row.activityLabel||row.memo||(incoming?'USDC received':'Payment')
@@ -92,9 +103,9 @@ export default function PocketActivityPanel({view,rows,authenticated,busy,error,
         return <button key={row.eventId+':'+row.txHash} type="button" onClick={()=>setSelected(row)} className="flex w-full items-center gap-3 py-4 text-left" data-pocket-transaction-row>
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-[#171717] dark:text-gray-200"><Icon className="h-5 w-5"/></span>
           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{title}</span><span className="mt-1 block truncate text-[11px] text-gray-500">{detail}</span></span>
-          <span className="shrink-0 text-right"><span className={`block text-xs font-semibold tabular-nums ${incoming?'text-emerald-600 dark:text-emerald-400':''}`}>{row.source==='wallet-swap'?'Swap':(incoming?'+':'-')+(row.amountNgn?'NGN '+Number(row.amountNgn).toLocaleString('en-NG'):formatPocketDisplayAmount(Number(row.amount))+' USDC')}</span><span className="mt-1 block text-[10px] capitalize text-gray-500">{pocketActivityStatus(row)}</span></span>
+          <span className="shrink-0 text-right"><span className={`block text-xs font-semibold tabular-nums ${incoming?'text-emerald-600 dark:text-emerald-400':''}`}>{row.source==='wallet-swap'?'Swap':(incoming?'+':'-')+(row.amountNgn?'NGN '+Number(row.amountNgn).toLocaleString('en-NG'):formatPocketDisplayAmount(Number(row.amount))+' USDC')}</span><span className={`mt-1 block text-[10px] capitalize ${outcome.state==='failed'?'text-red-600 dark:text-red-400':outcome.state==='successful'?'text-emerald-600 dark:text-emerald-400':'text-amber-600 dark:text-amber-400'}`}>{status}</span></span>
         </button>
-      })}
+      })}</div></section>)}
     </div>}
     {selectedRow&&<PocketActivityReceipt row={selectedRow} onClose={()=>setSelected(null)} onRefund={onRefund}>{selectedRow.bridge&&<PocketBridgeActivityDetails bridge={selectedRow.bridge} checking={bridgeChecking?.(selectedRow.bridge.id)||false} message={bridgeMessages?.[selectedRow.bridge.id]||''} onCheck={()=>{if(selectedRow.bridge)void onBridgeCheck?.(selectedRow.bridge)}} onNewBridge={onNewBridge}/>}</PocketActivityReceipt>}
   </div>

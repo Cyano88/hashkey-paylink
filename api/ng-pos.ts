@@ -1,3 +1,4 @@
+import { pocketBankStatus } from '../src/pocket/lib/pocketBankStatus.js'
 import { resolvePocketPosCheckout } from './pocket/scan-checkout.js'
 import type { Request, Response } from 'express'
 import { randomBytes, createCipheriv, createDecipheriv, createHash } from 'crypto'
@@ -487,7 +488,7 @@ function parseSettlementType(value: unknown): SettlementType {
 
 function isVisiblePaycrestHistoryStatus(status: string) {
   const normalized = status.trim().toLowerCase()
-  return ['deposited', 'pending', 'fulfilling', 'fulfilled', 'validated', 'settling', 'settled', 'refunding', 'refunded'].includes(normalized)
+  return ['deposited', 'pending', 'fulfilling', 'fulfilled', 'validated', 'settling', 'settled', 'refunding', 'refunded', 'failed', 'rejected', 'expired', 'cancelled', 'canceled', 'reverted'].includes(normalized)
 }
 
 function isReconcileablePaycrestStatus(status: string) {
@@ -524,10 +525,7 @@ export function mergeRegisteredPaycrestActivity<
 }
 
 export function bankWithdrawActivityStatus(order: { status: string; tx_hash?: string }) {
-  const status = order.status.trim().toLowerCase()
-  if (status === 'refunded') return 'reversed'
-  if (status === 'refunding') return 'reversing'
-  return order.tx_hash ? 'successful' : status
+  return pocketBankStatus(order.status, 'bank-withdraw')
 }
 
 export function paycrestActivityTimestamp(order: { created_at?: string; updated_at?: string }) {
@@ -576,7 +574,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
     .filter(order => isVisiblePaycrestHistoryStatus(order.status))
     .filter(order => {
       const bankWithdraw = order.source === 'bank-withdraw' || merchantById.get(order.merchant_id)?.source === 'bank-withdraw'
-      return !bankWithdraw || Boolean(order.tx_hash)
+      return !bankWithdraw || Boolean(order.tx_hash) || pocketBankStatus(order.status) === 'failed'
     })
     .map(order => {
       const isBankSendOrder = order.source === 'bank-send'
