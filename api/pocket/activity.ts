@@ -131,6 +131,7 @@ function closedBankPayoutActivityRow(intent: PaymentExecutionIntent): PocketActi
     bankName: intent.metadata.bankName,
     bankLast4: intent.metadata.bankLast4,
     accountName: intent.metadata.accountName,
+    bankOrderId: intent.providerReference,
     providerReference: intent.providerReference || intent.resourceId || intent.id,
     supportReference: intent.providerReference || intent.resourceId || intent.id,
   }
@@ -225,6 +226,7 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     ...(value.bankName !== undefined ? { bankName: value.bankName } : {}),
     ...(value.bankLast4 !== undefined ? { bankLast4: value.bankLast4 } : {}),
     ...(value.accountName !== undefined ? { accountName: value.accountName } : {}),
+    ...(value.bankOrderId !== undefined ? { bankOrderId: value.bankOrderId } : {}),
     ...(value.providerReference !== undefined ? { providerReference: value.providerReference } : {}),
     ...(value.supportReference !== undefined ? { supportReference: value.supportReference } : {}),
     ...(value.billToken !== undefined ? { billToken: value.billToken } : {}),

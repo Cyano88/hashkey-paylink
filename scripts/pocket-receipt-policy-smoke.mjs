@@ -127,15 +127,19 @@ assert.equal(pocketReceiptAvailability(unknown), 'none')
 
 console.log('Pocket receipt policy smoke checks passed')
 
-for (const status of ['pending', 'processing', 'refund available', 'refund pending', 'refunding', 'verification pending', 'unknown']) assert.equal(paymentReceiptOutcome({status}).label, 'Payment pending')
+for (const status of ['pending', 'processing', 'refund available', 'refund pending', 'refunding', 'unknown']) assert.equal(paymentReceiptOutcome({status}).label, 'Payment pending')
 assert.equal(paymentReceiptOutcome({status:'refunded'}).label,'Payment reversed')
 assert.equal(paymentReceiptOutcome({status:'failed'}).label,'Payment failed')
 assert.equal(paymentReceiptOutcome({status:'confirmed'}).label,'Payment successful')
 
-for (const status of ['failed','rejected','cancelled','expired']) {
+for (const status of ['failed','rejected','cancelled']) {
  const row={...bankPending,paycrestStatus:status}
  assert.equal(pocketActivityStatus(row),'failed')
  assert.equal(pocketActivityReceipt(row,{allowPending:true})?.status,'failed')
 }
-for (const status of ['', 'pending','deposited','fulfilling','fulfilled','validated','settling']) assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:status}),'pending')
+for (const status of ['pending','deposited','fulfilling','fulfilled','validated','settling']) assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:status}),'pending')
 assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:'settled'}),'successful')
+
+assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:''}),'payout incomplete')
+assert.equal(pocketActivityStatus({...bankPending,paycrestStatus:'expired'}),'payout incomplete')
+assert.equal(paymentReceiptOutcome({status:'needs review'}).label,'Payment needs review')

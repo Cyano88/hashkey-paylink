@@ -13,7 +13,7 @@ import {
   type PaylinkReceipt,
   type X402ReceiptLike,
 } from '../lib/paymentReceiptPdf'
-import { Check, Clock3, Copy, Eye, Loader2, Share2, Undo2 } from '../pocket/components/PocketIcons'
+import { Check, Clock3, Copy, Eye, Loader2, Share2, Undo2, X } from '../pocket/components/PocketIcons'
 import { CPurseIcon } from '../pocket/components/CPurseIcon'
 
 type UnifiedReceiptProps = {
@@ -33,7 +33,17 @@ type ReceiptResponse = {
 
 type ReceiptSurface = 'details' | 'receipt' | null
 
-function receiptState(receipt: PaylinkReceipt) { return paymentReceiptOutcome(receipt).state }
+function ReceiptStatus({receipt,timestamp}:{receipt:PaylinkReceipt;timestamp:string}) {
+  const outcome=paymentReceiptOutcome(receipt)
+  const Icon=outcome.state==='successful'?Check:outcome.state==='reversed'?Undo2:outcome.state==='failed'?X:Clock3
+  return <div className="text-center" data-receipt-status>
+    <h2 className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-[13px] font-semibold text-gray-950 dark:bg-white/[0.06] dark:text-white" data-receipt-status-pill>
+      <Icon aria-hidden="true" className="h-[18px] w-[18px] shrink-0" style={{color:outcome.color}} strokeWidth={2}/>
+      <span>{outcome.label}</span>
+    </h2>
+    <p className="mt-2 text-[11px] font-medium text-gray-400">{timestamp}</p>
+  </div>
+}
 
 function isCanonicalReceipt(receipt: ReceiptResponse['receipt']): receipt is PaylinkReceipt {
   return Boolean(receipt?.receiptId && receipt.receiptHash && receipt.eventId && receipt.status)
@@ -68,14 +78,21 @@ function BrandMark({ receipt, className = '' }: { receipt: PaylinkReceipt; class
   )
 }
 
+function ReceiptWatermark({receipt}:{receipt:PaylinkReceipt}) {
+  if(paymentReceiptBrand(receipt).kind!=='pocket')return null
+  return <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" data-pocket-receipt-watermark>
+    <div className="absolute inset-x-0 top-12 grid -rotate-12 grid-cols-3 justify-items-center gap-x-8 gap-y-20 opacity-[0.035] dark:opacity-[0.045]">
+      {Array.from({length:24},(_,index)=>index%2===0?<CPurseIcon key={index} size={30} title=""/>:<img key={index} src="/brand/usdc-circle-logo.png" alt="" className="h-[30px] w-[30px] rounded-full grayscale dark:invert"/>)}
+    </div>
+  </div>
+}
+
 function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
   const view = useMemo(() => paymentReceiptView(receipt), [receipt])
   const brand = paymentReceiptBrand(receipt)
-  const state = receiptState(receipt)
-  const pending = state === 'pending' || state === 'failed'
-  const reversed = state === 'reversed'
   return (
-    <article className="mx-auto flex h-full min-h-0 w-full max-w-md flex-col bg-white px-7 pb-4 pt-4 font-sans text-gray-950 dark:bg-[#111216] dark:text-white sm:px-9">
+    <article className="relative isolate mx-auto flex h-full min-h-0 w-full max-w-md flex-col bg-white px-7 pb-4 pt-4 font-sans text-gray-950 dark:bg-[#111216] dark:text-white sm:px-9">
+      <ReceiptWatermark receipt={receipt}/>
       <header className="flex items-center justify-between gap-4">
         <span className="flex min-w-0 items-center gap-3">
           <BrandMark receipt={receipt} className="h-9 w-9 shrink-0" />
@@ -84,12 +101,8 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
         <span className="rounded-full bg-gray-100 px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.08em] text-gray-500 dark:bg-white/10 dark:text-gray-300">{view.badge}</span>
       </header>
 
-      <section className="mt-3">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : reversed ? 'bg-amber-500' : 'bg-emerald-500'}`}>
-          {pending ? <Clock3 className="h-5 w-5" /> : reversed ? <Undo2 className="h-5 w-5" /> : <Check className="h-5 w-5" strokeWidth={2.5} />}
-        </span>
-        <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.02em]">{paymentReceiptOutcome(receipt).label}</h2>
-        <p className="mt-1 text-[11px] font-medium text-gray-400">{view.timestamp}</p>
+      <section className="mt-5">
+        <ReceiptStatus receipt={receipt} timestamp={view.timestamp}/>
         <p className="mt-3 break-words text-[30px] font-bold tracking-[-0.045em]">{view.amount}</p>
       </section>
 
@@ -114,19 +127,11 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
 
 function TransactionDetails({ receipt, copied, onCopy }: { receipt: PaylinkReceipt; copied: boolean; onCopy: () => void }) {
   const view = paymentReceiptView(receipt)
-  const state = receiptState(receipt)
-  const pending = state === 'pending' || state === 'failed'
-  const reversed = state === 'reversed'
   return (
     <div className="mx-auto w-full max-w-lg px-4 pb-12 pt-8">
-      <div className="rounded-[28px] bg-white p-5 shadow-sm dark:bg-[#111216]">
-        <div className="flex items-center gap-3">
-          <span className={`flex h-11 w-11 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : reversed ? 'bg-amber-500' : 'bg-emerald-500'}`}>{pending ? <Clock3 className="h-5 w-5" /> : reversed ? <Undo2 className="h-5 w-5" /> : <Check className="h-5 w-5" />}</span>
-          <span>
-            <span className="block text-sm font-bold text-gray-950 dark:text-white">{paymentReceiptOutcome(receipt).label}</span>
-            <span className="mt-0.5 block text-[11px] font-medium text-gray-400">{view.timestamp}</span>
-          </span>
-        </div>
+      <div className="relative isolate overflow-hidden rounded-[28px] bg-white p-5 shadow-sm dark:bg-[#111216]">
+        <ReceiptWatermark receipt={receipt}/>
+        <ReceiptStatus receipt={receipt} timestamp={view.timestamp}/>
         <p className="mt-8 text-[32px] font-bold tracking-[-0.045em] text-gray-950 dark:text-white">{view.amount}</p>
         <dl className="mt-7 divide-y divide-gray-100 border-t border-gray-100 dark:divide-white/10 dark:border-white/10">
           {[...view.rows, { label: 'Status', value: receipt.status || 'confirmed' }].map(row => (

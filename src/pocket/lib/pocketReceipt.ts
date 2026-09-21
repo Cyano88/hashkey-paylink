@@ -25,6 +25,7 @@ const PENDING_STATUSES = new Set([
   'fulfilled',
   'fulfilling',
   'needs review',
+  'payout incomplete',
   'paid pending',
   'pending',
   'processing',
@@ -48,7 +49,7 @@ function normalizedSettlement(row: PocketActivityRow) {
 export function pocketActivityStatus(row: PocketActivityRow) {
   const status = String(row.paycrestStatus || '').trim().toLowerCase()
   const source = normalizedSource(row)
-  if (source.startsWith('bank-') || normalizedSettlement(row) === 'instant_fiat') return pocketBankStatus(status, source)
+  if (source.startsWith('bank-') || normalizedSettlement(row) === 'instant_fiat') return pocketBankStatus(status, source, /^0x[a-f0-9]{64}$/i.test(row.txHash))
   return status || 'status unavailable'
 }
 

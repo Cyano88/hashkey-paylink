@@ -501,31 +501,52 @@ function isSettledPaycrestStatus(status: string) {
   return normalized === 'settled' || normalized === 'validated'
 }
 
+export function paycrestActivityHashes(order: { tx_hash?: string; intent_id: string; paycrest_order_id: string; raw?: unknown }) {
+  const raw = order.raw as { transactionLogs?: Array<{ tx_hash?: string; txHash?: string }> } | undefined
+  return [...new Set([order.tx_hash, `paycrest_${order.intent_id}`, `paycrest_${order.paycrest_order_id}`,
+    ...(raw?.transactionLogs || []).map(log => log.tx_hash || log.txHash)].filter((hash): hash is string => Boolean(hash)))]
+}
+export function paycrestActivityFundingHash(order: { tx_hash?: string; source?: string; intent_id: string; raw?: unknown }) {
+  const raw = order.raw as { transactionLogs?: Array<{ status?: string; tx_hash?: string; txHash?: string }> } | undefined
+  const deposit = raw?.transactionLogs?.find(log => log.status === 'crypto_deposited')
+  return (order.source !== 'bank-send' && (deposit?.tx_hash || deposit?.txHash)) || order.tx_hash || `paycrest_${order.intent_id}`
+}
 export function mergeRegisteredPaycrestActivity<
-  T extends { eventId: string; txHash: string; ts: number },
-  P extends { eventId: string; txHash: string; ts: number },
+  T extends { eventId: string; txHash: string; ts: number; chain?: string },
+  P extends { eventId: string; txHash: string; ts: number; chain?: string; relatedTxHashes?: string[]; providerReference?: string },
 >(payments: T[], paycrestRows: P[]) {
-  const paycrestByTxHash = new Map(
-    paycrestRows
-      .filter(row => row.txHash)
-      .map(row => [row.txHash.toLowerCase(), row]),
-  )
-  return payments.map(payment => {
-    const paycrest = paycrestByTxHash.get(payment.txHash.toLowerCase())
-    if (!paycrest) return payment
-    return {
-      ...payment,
-      ...paycrest,
-      // Keep the signed receipt identity and original confirmation timestamp.
-      eventId: payment.eventId,
-      txHash: payment.txHash,
-      ts: payment.ts,
-    }
+  const key = (row: { eventId:string; chain?:string }, hash:string) => `${row.eventId}:${row.chain || ''}:${hash.toLowerCase()}`
+  const byHash = new Map<string,P>()
+  for (const row of paycrestRows) for (const hash of [row.txHash,...(row.relatedTxHashes || [])]) if(hash) byHash.set(key(row,hash),row)
+  const merged = payments.map(payment => {
+    const provider = byHash.get(key(payment,payment.txHash))
+    return provider ? { ...payment, ...provider, eventId:payment.eventId, txHash:payment.txHash, ts:payment.ts } : payment
+  })
+  // Funding and settlement receipts remain in the registry; Activity shows one order.
+  return merged.filter((row,index) => {
+    const provider = byHash.get(key(row,row.txHash))
+    if(!provider?.providerReference)return true
+    const siblings=merged.map((item,i)=>({item,i})).filter(({item})=>byHash.get(key(item,item.txHash))===provider)
+    const canonical=siblings.find(({item})=>item.txHash.toLowerCase()===provider.txHash.toLowerCase()) || siblings[0]
+    return canonical.i===index
   })
 }
 
+const historyRefreshAfter = new Map<string,number>()
+async function refreshPendingHistoryOrders<T extends { intent_id:string; source?:string; status:string; updated_at:string }>(orders:T[]) {
+  const now=Date.now()
+  const candidates=orders.filter(order=>order.source?.startsWith('bank-')
+    && ['pending','deposited','fulfilling','fulfilled','validated','settling','refunding'].includes(order.status.toLowerCase())
+    && now-Date.parse(order.updated_at)>60_000 && (historyRefreshAfter.get(order.intent_id)||0)<=now).slice(0,3)
+  for(const order of candidates){if(historyRefreshAfter.size>=512)historyRefreshAfter.delete(historyRefreshAfter.keys().next().value!);historyRefreshAfter.set(order.intent_id,now+60_000)}
+  let timer:ReturnType<typeof setTimeout>|undefined
+  const work=Promise.all(candidates.map(order=>refreshPaycrestOrderStatus(order.intent_id).catch(()=>null)))
+  const refreshed=await Promise.race([work,new Promise<[]>(resolve=>{timer=setTimeout(()=>resolve([]),2000)})]).finally(()=>clearTimeout(timer))
+  return orders.map(order=>refreshed.find(next=>next?.intent_id===order.intent_id) || order)
+}
+
 export function bankWithdrawActivityStatus(order: { status: string; tx_hash?: string }) {
-  return pocketBankStatus(order.status, 'bank-withdraw')
+  return pocketBankStatus(order.status, 'bank-withdraw', /^0x[a-f0-9]{64}$/i.test(order.tx_hash || ''))
 }
 
 export function paycrestActivityTimestamp(order: { created_at?: string; updated_at?: string }) {
@@ -553,7 +574,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
   const bankSendLinkIds = bankSendLinks.map(link => link.link_id)
   const bankSendById = new Map(bankSendLinks.map(link => [link.link_id, link]))
   const merchantById = new Map(merchants.map(merchant => [merchant.merchant_id, merchant]))
-  const paycrestOrders = await listPaycrestPosOrdersForMerchants([...merchantIds, ...bankSendLinkIds])
+  const paycrestOrders = await refreshPendingHistoryOrders(await listPaycrestPosOrdersForMerchants([...merchantIds, ...bankSendLinkIds]))
   for (const order of options.repair === false ? [] : paycrestOrders) {
     if (order.source !== 'bank-send' && order.tx_hash && /^0x[a-fA-F0-9]{64}$/.test(order.tx_hash)) {
       // Repair a receipt synchronously when payment was persisted but a browser,
@@ -584,7 +605,8 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
       const isBankReceiveOrder = !isBankSendOrder && (order.source === 'bank-receive' || merchant?.source === 'bank-receive')
       return {
         eventId: isBankSendOrder ? `bank-send-${order.merchant_id}` : `ngpos-${order.merchant_id}`,
-        txHash: order.tx_hash || `paycrest_${order.intent_id}`,
+        txHash: paycrestActivityFundingHash(order),
+        relatedTxHashes: paycrestActivityHashes(order),
         chain: isBankSendOrder ? (order.destination_network || link?.destination_network || 'base') : 'base',
         payer: isBankSendOrder
           ? (order.payer_name || order.payer_email || 'Bank transfer payer')
@@ -601,6 +623,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
         // A registered receipt keeps its confirmation time in mergeRegisteredPaycrestActivity.
         ts: paycrestActivityTimestamp(order),
         providerReference: order.intent_id,
+        bankOrderId: order.paycrest_order_id,
         source: isBankSendOrder ? 'bank-send' : isBankWithdrawOrder ? 'bank-withdraw' : isBankReceiveOrder ? 'bank-receive' : 'ngpos',
         merchantId: order.merchant_id,
         contextLabel: isBankSendOrder
@@ -626,8 +649,9 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
       }
     })
   const enrichedPayments = mergeRegisteredPaycrestActivity(payments, allPaycrestRows)
+  const matchedOrders = new Set(enrichedPayments.map(row => 'providerReference' in row ? row.providerReference : undefined).filter(Boolean))
   const paycrestRows = allPaycrestRows
-    .filter(row => !row.txHash || !existingTxHashes.has(row.txHash.toLowerCase()))
+    .filter(row => !matchedOrders.has(row.providerReference) && (!row.txHash || !existingTxHashes.has(row.txHash.toLowerCase())))
   return {
     merchants: merchants.map(merchant => ({
       merchant_id: merchant.merchant_id,

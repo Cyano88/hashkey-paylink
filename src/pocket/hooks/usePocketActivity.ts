@@ -1,3 +1,4 @@
+import { pocketActivityArchiveKey } from '../lib/pocketActivityArchive'
 import { isIncomingPosPayment } from '../lib/pocketPurchaseKind'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { activityScope, cachedPocketActivity, refreshPocketActivity, subscribePocketActivity } from '../lib/pocketActivityCache'
@@ -60,7 +61,8 @@ export default function usePocketActivity({ authenticated, email, enabled, recen
   const scoped = state.scope === scope ? state : { busy: false, error: '', attempted: false }
   const hasContent = Boolean(snapshot && (snapshot.payments.length || snapshot.merchants.length || snapshot.collections.length))
   return {
-    rows: recent ? snapshot?.payments.filter(row => !isIncomingPosPayment(row)).slice(0, 4) ?? [] : snapshot?.payments ?? [],
+    rows: recent ? snapshot?.payments.filter(row => !isIncomingPosPayment(row) && !snapshot.archivedKeys?.includes(pocketActivityArchiveKey(row))).slice(0, 4) ?? [] : snapshot?.payments ?? [],
+    archivedKeys: snapshot?.archivedKeys ?? [],
     merchants: snapshot?.merchants ?? [], collections: snapshot?.collections ?? [],
     busy: scoped.busy && !hasContent,
     resolved: !authenticated || hasContent || Boolean(snapshot?.complete) || scoped.attempted,

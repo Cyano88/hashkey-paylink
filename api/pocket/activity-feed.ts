@@ -1,3 +1,4 @@
+import { pocketActivityArchiveKey } from '../../src/pocket/lib/pocketActivityArchive.js'
 import { isIncomingPosPayment } from '../../src/pocket/lib/pocketPurchaseKind.js'
 import type { Request, Response } from 'express'
 import { createHash } from 'node:crypto'
@@ -6,7 +7,7 @@ import type { PocketActivityReadData } from '../../src/pocket/lib/pocketSchemas.
 import { mergePocketActivitySnapshot } from '../../src/pocket/lib/pocketActivitySnapshot.js'
 
 type Source = { snapshot: PocketActivityReadData; startedAt: number; updatedAt: number }
-export type ActivityFeed = { version: 1; sources: Record<string, Source> }
+export type ActivityFeed = { version: 1; archivedKeys?: string[]; sources: Record<string, Source> }
 type Store = {
   read(key: string): Promise<ActivityFeed | undefined>
   mutate(key: string, update: (previous: ActivityFeed | undefined) => ActivityFeed): Promise<ActivityFeed>
@@ -43,7 +44,7 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
           const feed: ActivityFeed = previous ?? { version: 1, sources: {} }
           const old = feed.sources[name]
           if (old && old.startedAt > startedAt) return feed
-          return { version: 1, sources: { ...feed.sources, [name]: {
+          return { ...feed, version: 1, sources: { ...feed.sources, [name]: {
             snapshot: mergePocketActivitySnapshot(old?.snapshot, snapshot),
             startedAt, updatedAt: now(),
           } } }
@@ -58,13 +59,27 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
   }
   return async function pocketActivity(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'private, no-store')
-    if (req.method !== 'GET') return res.status(405).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Method not allowed.', retryable: false } })
+    if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Method not allowed.', retryable: false } })
     const scope = req.query?.scope
     if (scope !== undefined && scope !== '' && scope !== 'recent') return res.status(400).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Activity scope is invalid.', retryable: false } })
     try {
       const { userId } = await dependencies.verifyUser(req)
       const key = activityFeedKey(userId)
       let saved = await store.read(key)
+      if(req.method==='POST'){
+        const action=req.body?.action,recordKey=req.body?.recordKey
+        if(!['archive','restore'].includes(action)||typeof recordKey!=='string'||!recordKey||recordKey.length>600)return res.status(400).json({ok:false,error:{message:'Invalid archive request.'}})
+        const owned=Object.values(saved?.sources||{}).some(source=>source.snapshot.payments.some(row=>pocketActivityArchiveKey(row)===recordKey))
+        if(!owned)return res.status(404).json({ok:false,error:{message:'Transaction was not found in this account.'}})
+        const updated=await store.mutate(key,current=>{
+          if(!current)throw Error('Activity is unavailable.')
+          const keys=new Set(current.archivedKeys||[])
+          if(action==='archive'){if(keys.size>=1000&&!keys.has(recordKey))throw Error('Archive limit reached.');keys.add(recordKey)}else keys.delete(recordKey)
+          return {...current,archivedKeys:[...keys]}
+        })
+        return res.json({ok:true,archivedKeys:updated.archivedKeys||[]})
+      }
+
       const force = req.query?.refresh === '1'
       const stale = force || sourceNames.some(name => now() - (saved?.sources[name]?.updatedAt ?? 0) >= 15_000)
       if (stale && !pending.has(key) && (retryAfter.get(key) ?? 0) <= now() && pending.size < 16) {
@@ -90,8 +105,8 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
       const complete = sourceNames.every(name => Boolean(saved?.sources[name]))
       const partial = !complete || sourceNames.some(name => now() - (saved?.sources[name]?.updatedAt ?? 0) > 60_000)
       return res.json({
-        ok: true, ...snapshot,
-        payments: scope === 'recent' ? snapshot.payments.filter(row => !isIncomingPosPayment(row)).slice(0, 4) : snapshot.payments,
+        ok: true, ...snapshot, archivedKeys:saved?.archivedKeys||[],
+        payments: scope === 'recent' ? snapshot.payments.filter(row => !isIncomingPosPayment(row) && !saved?.archivedKeys?.includes(pocketActivityArchiveKey(row))).slice(0, 4) : snapshot.payments,
         complete, partial, refreshing: pending.has(key),
         updatedAt: Math.max(0, ...Object.values(saved?.sources ?? {}).map(source => source.updatedAt)),
       })

@@ -1,3 +1,4 @@
+import { pocketActivityArchiveKey } from '../../lib/pocketActivityArchive'
 import { useEffect, useState } from 'react'
 import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Receipt, Landmark, Store, Filter, Deposit, RequestMoney, CreditCard } from '../../components/PocketIcons'
 import type { PocketActivityRow } from '../../models/pocketActivity'
@@ -15,7 +16,7 @@ import PocketRecentActivitySkeleton from '../../components/PocketRecentActivityS
 export type { PocketActivityRow } from '../../models/pocketActivity'
 export type PocketActivityView = 'all' | 'purchases' | 'bank' | 'pos' | 'collections'
 type Category = 'all' | 'bank' | 'bills' | 'pos' | 'requests' | 'purchases' | 'wallet'
-type Props = {view:PocketActivityView;rows:PocketActivityRow[];authenticated:boolean;busy:boolean;error:string;onRefund:(id:string)=>Promise<string>;onBridgeCheck?:(bridge:PocketPendingBridge)=>Promise<void>;bridgeChecking?:(id:string)=>boolean;bridgeMessages?:Record<string,string>;onNewBridge?:()=>void}
+type Props = {archivedKeys?:string[];onArchive?:(row:PocketActivityRow,archived:boolean)=>Promise<void>;view:PocketActivityView;rows:PocketActivityRow[];authenticated:boolean;busy:boolean;error:string;onRefund:(id:string)=>Promise<string>;onBridgeCheck?:(bridge:PocketPendingBridge)=>Promise<void>;bridgeChecking?:(id:string)=>boolean;bridgeMessages?:Record<string,string>;onNewBridge?:()=>void}
 const categories: Array<[Category,string]> = [['all','All transactions'],['bank','Bank transfers'],['bills','Bills'],['pos','POS purchases'],['requests','Requests and collections'],['purchases','Other purchases'],['wallet','USDC and swaps']]
 export function pocketTransactionCategory(row: PocketActivityRow): Category {
   const source = String(row.source || '').toLowerCase().replace(/_/g,'-')
@@ -27,11 +28,14 @@ export function pocketTransactionCategory(row: PocketActivityRow): Category {
   return 'purchases'
 }
 function initialCategory(view:PocketActivityView):Category {return view === 'bank' ? 'bank' : view === 'collections' ? 'requests' : view === 'purchases' ? 'bills' : 'all'}
-export default function PocketActivityPanel({view,rows,authenticated,busy,error,onRefund,onBridgeCheck,bridgeChecking,bridgeMessages,onNewBridge}:Props) {
+export default function PocketActivityPanel({archivedKeys=[],onArchive,view,rows,authenticated,busy,error,onRefund,onBridgeCheck,bridgeChecking,bridgeMessages,onNewBridge}:Props) {
+  const [archiveView,setArchiveView]=useState(false)
+  const [archiveBusy,setArchiveBusy]=useState(false)
+  const [archiveError,setArchiveError]=useState('')
   const [category,setCategory] = useState<Category>(()=>initialCategory(view))
   const [period,setPeriod] = useState({from:'',to:''})
   const [status,setStatus] = useState('all')
-  const [draft,setDraft] = useState({category:initialCategory(view),status:'all',from:'',to:''})
+  const [draft,setDraft] = useState({category:initialCategory(view),status:'all',from:'',to:'',archived:false})
   const [statementOpen,setStatementOpen] = useState(false)
   const [exporting,setExporting] = useState(false)
   const [exportError,setExportError] = useState('')
@@ -42,12 +46,12 @@ export default function PocketActivityPanel({view,rows,authenticated,busy,error,
   const visible=transactions.filter(row=>{
     const date=new Date(row.ts)
     const day=Number.isFinite(date.getTime())?date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0'):''
-    return (category==='all'||pocketTransactionCategory(row)===category)
+    return archivedKeys.includes(pocketActivityArchiveKey(row))===archiveView && (category==='all'||pocketTransactionCategory(row)===category)
       &&(status==='all'||paymentReceiptOutcome({status:pocketActivityStatus(row)}).state===status)
       &&(!period.from||!!day&&day>=period.from)&&(!period.to||!!day&&day<=period.to)
   })
-  const activeFilters=category!=='all'||status!=='all'||!!period.from||!!period.to
-  const openFilters=()=>{setDraft({category,status,...period});setFilterOpen(true)}
+  const activeFilters=archiveView||category!=='all'||status!=='all'||!!period.from||!!period.to
+  const openFilters=()=>{setDraft({category,status,...period,archived:archiveView});setFilterOpen(true)}
   const exportStatement=async()=>{
     if(exporting)return
     setExporting(true);setExportError('')
@@ -75,15 +79,16 @@ export default function PocketActivityPanel({view,rows,authenticated,busy,error,
         <button type="button" aria-label="Download statement" onClick={()=>{setExportError('');setStatementOpen(true)}} className="flex h-11 w-11 items-center justify-center rounded-full"><Deposit className="h-5 w-5"/></button>
       </div>
     </header>
-    {activeFilters&&<div className="flex items-center justify-between text-xs text-gray-500"><span>{visible.length} transactions</span><button type="button" onClick={()=>{setCategory('all');setStatus('all');setPeriod({from:'',to:''})}} className="min-h-10 px-2 font-semibold">Clear filters</button></div>}
+    {activeFilters&&<div className="flex items-center justify-between text-xs text-gray-500"><span>{visible.length} transactions</span><button type="button" onClick={()=>{setCategory('all');setStatus('all');setPeriod({from:'',to:''});setArchiveView(false)}} className="min-h-10 px-2 font-semibold">Clear filters</button></div>}
     {filterOpen&&<PocketBottomSheet title="Filter transactions" onClose={()=>setFilterOpen(false)}>
       <h2 className="mb-6 text-center text-base font-bold">Filter transactions</h2>
       <div className="space-y-5">
         <fieldset><legend className="mb-3 text-xs font-semibold text-gray-500">Category</legend><div className="flex flex-wrap gap-2">{categories.map(([key,label])=><button key={key} type="button" aria-pressed={draft.category===key} onClick={()=>setDraft(value=>({...value,category:key}))} className={`min-h-10 rounded-full px-4 text-xs font-medium ${draft.category===key?'bg-gray-950 text-white dark:bg-white dark:text-gray-950':'bg-gray-100 dark:bg-[#222]'}`}>{label}</button>)}</div></fieldset>
+        <fieldset><legend className="mb-3 text-xs font-semibold text-gray-500">History</legend><div className="flex gap-2">{[[false,'Activity'],[true,'Archived']].map(([value,label])=><button type="button" key={String(label)} aria-pressed={draft.archived===value} onClick={()=>setDraft(current=>({...current,archived:Boolean(value)}))} className={`min-h-10 rounded-full px-4 text-xs font-medium ${draft.archived===value?'bg-gray-950 text-white dark:bg-white dark:text-gray-950':'bg-gray-100 dark:bg-[#222]'}`}>{label}</button>)}</div></fieldset>
         <fieldset><legend className="mb-3 text-xs font-semibold text-gray-500">Status</legend><div className="flex flex-wrap gap-2">{[['all','All statuses'],['successful','Successful'],['pending','Pending'],['failed','Failed'],['reversed','Reversed']].map(([key,label])=><button key={key} type="button" aria-pressed={draft.status===key} onClick={()=>setDraft(value=>({...value,status:key}))} className={`min-h-10 rounded-full px-4 text-xs font-medium ${draft.status===key?'bg-gray-950 text-white dark:bg-white dark:text-gray-950':'bg-gray-100 dark:bg-[#222]'}`}>{label}</button>)}</div></fieldset>
         <div className="grid grid-cols-2 gap-3">{(['from','to'] as const).map(key=><label key={key} className="min-w-0 text-xs text-gray-500">{key==='from'?'From':'To'}<input type="date" aria-label={key==='from'?'From date':'To date'} value={draft[key]} onChange={event=>setDraft(value=>({...value,[key]:event.target.value}))} className="mt-2 h-12 w-full min-w-0 rounded-xl bg-gray-100 px-3 text-sm text-gray-950 dark:bg-[#222] dark:text-white"/></label>)}</div>
         {draft.from&&draft.to&&draft.from>draft.to&&<p role="alert" className="text-xs text-red-500">Choose an end date on or after the start date.</p>}
-        <div className="flex gap-3"><button type="button" onClick={()=>setDraft({category:'all',status:'all',from:'',to:''})} className="h-12 flex-1 rounded-full bg-gray-100 text-sm font-semibold dark:bg-[#222]">Reset</button><button type="button" disabled={!!draft.from&&!!draft.to&&draft.from>draft.to} onClick={()=>{setCategory(draft.category);setStatus(draft.status);setPeriod({from:draft.from,to:draft.to});setFilterOpen(false)}} className="h-12 flex-1 rounded-full bg-gray-950 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">Apply filters</button></div>
+        <div className="flex gap-3"><button type="button" onClick={()=>setDraft({category:'all',status:'all',from:'',to:'',archived:false})} className="h-12 flex-1 rounded-full bg-gray-100 text-sm font-semibold dark:bg-[#222]">Reset</button><button type="button" disabled={!!draft.from&&!!draft.to&&draft.from>draft.to} onClick={()=>{setCategory(draft.category);setStatus(draft.status);setArchiveView(draft.archived);setPeriod({from:draft.from,to:draft.to});setFilterOpen(false)}} className="h-12 flex-1 rounded-full bg-gray-950 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">Apply filters</button></div>
       </div>
     </PocketBottomSheet>}
     {statementOpen&&<PocketBottomSheet title="Download statement" onClose={()=>setStatementOpen(false)} dismissible={!exporting}>
@@ -100,13 +105,13 @@ export default function PocketActivityPanel({view,rows,authenticated,busy,error,
         const Icon=kind==='bank'?Landmark:kind==='bills'?Receipt:kind==='pos'?Store:kind==='requests'?RequestMoney:kind==='purchases'?CreditCard:row.source==='wallet-swap'||row.source==='wallet-bridge'?ArrowLeftRight:incoming?ArrowDownToLine:ArrowUpFromLine
         const title=pocketBankRecipientLabel(row)||row.activityLabel||row.memo||(incoming?'USDC received':'Payment')
         const detail=pocketBankRecipientLabel(row)?[row.bankName,'Bank transfer'].filter(Boolean).join(' / '):new Date(row.ts).toLocaleDateString(undefined,{day:'numeric',month:'short'})
-        return <button key={row.eventId+':'+row.txHash} type="button" onClick={()=>setSelected(row)} className="flex w-full items-center gap-3 py-4 text-left" data-pocket-transaction-row>
+        return <button key={row.eventId+':'+row.txHash} type="button" onClick={()=>{setArchiveError('');setSelected(row)}} className="flex w-full items-center gap-3 py-4 text-left" data-pocket-transaction-row>
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-[#171717] dark:text-gray-200"><Icon className="h-5 w-5"/></span>
           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{title}</span><span className="mt-1 block truncate text-[11px] text-gray-500">{detail}</span></span>
           <span className="shrink-0 text-right"><span className={`block text-xs font-semibold tabular-nums ${incoming?'text-emerald-600 dark:text-emerald-400':''}`}>{row.source==='wallet-swap'?'Swap':(incoming?'+':'-')+(row.amountNgn?'NGN '+Number(row.amountNgn).toLocaleString('en-NG'):formatPocketDisplayAmount(Number(row.amount))+' USDC')}</span><span className={`mt-1 block text-[10px] capitalize ${outcome.state==='failed'?'text-red-600 dark:text-red-400':outcome.state==='successful'?'text-emerald-600 dark:text-emerald-400':'text-amber-600 dark:text-amber-400'}`}>{status}</span></span>
         </button>
       })}</div></section>)}
     </div>}
-    {selectedRow&&<PocketActivityReceipt row={selectedRow} onClose={()=>setSelected(null)} onRefund={onRefund}>{selectedRow.bridge&&<PocketBridgeActivityDetails bridge={selectedRow.bridge} checking={bridgeChecking?.(selectedRow.bridge.id)||false} message={bridgeMessages?.[selectedRow.bridge.id]||''} onCheck={()=>{if(selectedRow.bridge)void onBridgeCheck?.(selectedRow.bridge)}} onNewBridge={onNewBridge}/>}</PocketActivityReceipt>}
+    {selectedRow&&<PocketActivityReceipt row={selectedRow} onClose={()=>setSelected(null)} onRefund={onRefund}>{onArchive&&selectedRow.source?.replace(/_/g,'-').startsWith('bank-')&&<div className="py-2 text-center"><button type="button" disabled={archiveBusy} onClick={async()=>{setArchiveBusy(true);setArchiveError('');try{await onArchive(selectedRow,!archiveView);setSelected(null)}catch{setArchiveError('Archive could not be updated. Try again.')}finally{setArchiveBusy(false)}}} className="min-h-11 px-4 text-xs font-semibold text-gray-500">{archiveBusy?'Saving...':archiveView?'Restore to activity':'Archive transaction'}</button>{archiveError&&<p role="alert" className="text-xs text-red-500">{archiveError}</p>}</div>}{selectedRow.bridge&&<PocketBridgeActivityDetails bridge={selectedRow.bridge} checking={bridgeChecking?.(selectedRow.bridge.id)||false} message={bridgeMessages?.[selectedRow.bridge.id]||''} onCheck={()=>{if(selectedRow.bridge)void onBridgeCheck?.(selectedRow.bridge)}} onNewBridge={onNewBridge}/>}</PocketActivityReceipt>}
   </div>
 }

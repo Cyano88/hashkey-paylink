@@ -315,7 +315,8 @@ export async function createPaymentReceiptImage(receipt: PaylinkReceipt) {
   await document.fonts?.load('700 16px "Plus Jakarta Sans"').catch(() => undefined)
   const brand = paymentReceiptBrand(receipt)
   const logo = brand.imageUrl ? await loadImage(brand.imageUrl) : null
-  drawReceiptCanvas(ctx, receipt, width, height, logo)
+  const watermarkLogo = brand.kind === 'pocket' ? await loadImage('/brand/usdc-circle-logo.png') : null
+  drawReceiptCanvas(ctx, receipt, width, height, logo, watermarkLogo)
   return new Promise<string>((resolve) => canvas.toBlob(blob => {
     if (!blob) return resolve('')
     const reader = new FileReader()
@@ -347,12 +348,25 @@ function drawReceiptCanvas(
   width: number,
   height: number,
   logo: HTMLImageElement | null,
+  watermarkLogo: HTMLImageElement | null,
 ) {
   const view = paymentReceiptView(receipt)
   const brand = paymentReceiptBrand(receipt)
   const sans = '"Plus Jakarta Sans", Arial, sans-serif'
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
+  if (brand.kind === 'pocket') {
+    ctx.save()
+    ctx.globalAlpha = 0.035
+    for(let row=0;row<7;row++)for(let col=0;col<5;col++){
+      ctx.save();ctx.translate(66+col*120,100+row*106);ctx.rotate(-Math.PI/15)
+      if((row+col)%2 && watermarkLogo){ctx.filter='grayscale(1)';drawContainedImage(ctx,watermarkLogo,-16,-16,32,32)}
+      else drawPocketMark(ctx,-16,-16,32)
+      ctx.restore()
+    }
+    ctx.restore()
+  }
+
 
   if (logo) {
     drawContainedImage(ctx, logo, 52, 48, 38, 38)
@@ -371,28 +385,30 @@ function drawReceiptCanvas(
   drawBadge(ctx, view.badge.toUpperCase(), '#f3f4f6', '#374151', 438, 54, sans)
 
   const outcome = paymentReceiptOutcome(receipt)
-  ctx.fillStyle = outcome.color
+  ctx.font = `600 15px ${sans}`
+  const labelWidth=ctx.measureText(outcome.label).width
+  const pillWidth=labelWidth+62, pillX=306-pillWidth/2, iconX=pillX+23, iconY=145
+  roundRect(ctx,pillX,125,pillWidth,40,20,'#f3f4f6')
+  ctx.strokeStyle=outcome.color
+  ctx.lineWidth=2
+  ctx.lineCap='round'
+  ctx.lineJoin='round'
   ctx.beginPath()
-  ctx.arc(72, 151, 20, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.strokeStyle = '#ffffff'
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  if (outcome.state === 'successful') {
-    ctx.moveTo(63, 151); ctx.lineTo(69, 157); ctx.lineTo(81, 144)
-  } else if (outcome.state === 'pending') {
-    ctx.moveTo(72, 139); ctx.lineTo(72, 151); ctx.lineTo(81, 155)
-  } else {
-    ctx.moveTo(63, 151); ctx.lineTo(81, 151)
+  if(outcome.state==='successful'){
+    ctx.moveTo(iconX-6,iconY);ctx.lineTo(iconX-1,iconY+5);ctx.lineTo(iconX+7,iconY-5)
+  }else if(outcome.state==='failed'){
+    ctx.moveTo(iconX-5,iconY-5);ctx.lineTo(iconX+5,iconY+5);ctx.moveTo(iconX+5,iconY-5);ctx.lineTo(iconX-5,iconY+5)
+  }else if(outcome.state==='reversed'){
+    ctx.moveTo(iconX+6,iconY+5);ctx.lineTo(iconX+6,iconY-1);ctx.quadraticCurveTo(iconX+6,iconY-6,iconX,iconY-6);ctx.lineTo(iconX-6,iconY-6);ctx.moveTo(iconX-2,iconY-10);ctx.lineTo(iconX-6,iconY-6);ctx.lineTo(iconX-2,iconY-2)
+  }else{
+    ctx.arc(iconX,iconY,7,0,Math.PI*2);ctx.moveTo(iconX,iconY-4);ctx.lineTo(iconX,iconY);ctx.lineTo(iconX+4,iconY+2)
   }
   ctx.stroke()
-
-  ctx.fillStyle = '#111827'
-  ctx.font = `700 15px ${sans}`
-  ctx.fillText(outcome.label, 104, 148)
-  ctx.fillStyle = '#6b7280'
-  ctx.font = `500 11px ${sans}`
-  ctx.fillText(view.timestamp, 104, 168)
+  ctx.fillStyle='#111827'
+  ctx.fillText(outcome.label,pillX+42,150)
+  ctx.fillStyle='#6b7280'
+  ctx.font=`500 11px ${sans}`
+  ctx.fillText(view.timestamp,306-ctx.measureText(view.timestamp).width/2,185)
 
   ctx.fillStyle = '#111827'
   ctx.font = `700 36px ${sans}`
@@ -551,5 +567,5 @@ export function paymentReceiptOutcome(receipt: Pick<PaylinkReceipt, 'status'>) {
   if (['refunded', 'reversed'].includes(status)) return { state: 'reversed' as const, label: 'Payment reversed', color: '#d97706' }
   if (['failed', 'cancelled', 'canceled', 'rejected'].includes(status)) return { state: 'failed' as const, label: 'Payment failed', color: '#dc2626' }
   if (['completed', 'confirmed', 'delivered', 'paid', 'settled', 'successful', 'test complete', 'validated'].includes(status)) return { state: 'successful' as const, label: status === 'test complete' ? 'Test complete' : 'Payment successful', color: '#16a34a' }
-  return { state: 'pending' as const, label: 'Payment pending', color: '#2563eb' }
+  return { state: 'pending' as const, label: status === 'payout incomplete' ? 'Payout incomplete' : ['needs review','verification pending','status unavailable'].includes(status) ? 'Payment needs review' : 'Payment pending', color: '#d97706' }
 }

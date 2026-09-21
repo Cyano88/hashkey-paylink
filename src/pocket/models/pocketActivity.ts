@@ -23,6 +23,7 @@ export type PocketActivityRow = {
   bankName?: string
   bankLast4?: string
   accountName?: string
+  bankOrderId?: string
   providerReference?: string
   supportReference?: string
   billToken?: string

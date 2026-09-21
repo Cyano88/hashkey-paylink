@@ -184,6 +184,7 @@ export type PocketActivityRow = {
   bankName?: string
   bankLast4?: string
   accountName?: string
+  bankOrderId?: string
   providerReference?: string
   supportReference?: string
   billToken?: string
@@ -198,6 +199,7 @@ export type PocketActivityRow = {
 }
 
 export type PocketActivityReadData = {
+  archivedKeys?: string[]
   complete?: boolean
   partial?: boolean
   refreshing?: boolean
@@ -595,6 +597,7 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.bankName, 160)
     && isOptionalBoundedString(value.bankLast4, 16)
     && isOptionalBoundedString(value.accountName, 200)
+    && isOptionalBoundedString(value.bankOrderId, 160)
     && isOptionalBoundedString(value.providerReference, 160)
     && isOptionalBoundedString(value.supportReference, 160)
     && isOptionalBoundedString(value.billToken, 4000)
@@ -610,6 +613,7 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
 
 export function isPocketActivityReadData(value: unknown): value is PocketActivityReadData {
   return isRecord(value)
+    && (value.archivedKeys === undefined || Array.isArray(value.archivedKeys) && value.archivedKeys.length<=1000 && value.archivedKeys.every(key=>typeof key==='string' && key.length<=600))
     && Array.isArray(value.payments)
     && value.payments.every(isPocketActivityRow)
     && Array.isArray(value.merchants)

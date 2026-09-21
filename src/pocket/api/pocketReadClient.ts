@@ -41,6 +41,7 @@ export type PocketLocalCurrencyProfileReadResult = {
 }
 
 export type PocketActivityReadResult = {
+  archivedKeys?: string[]
   complete?: boolean
   partial?: boolean
   refreshing?: boolean
@@ -129,7 +130,7 @@ export function parsePocketActivityRead(value: unknown): PocketActivityReadResul
   if (!isPocketActivityReadData(value)) {
     throw new Error('Circle Pocket activity response was invalid.')
   }
-  return { payments: value.payments, merchants: value.merchants, collections: value.collections,
+  return { payments: value.payments, merchants: value.merchants, collections: value.collections, archivedKeys:value.archivedKeys || [],
     ...(typeof value.complete === 'boolean' ? { complete: value.complete } : {}),
     ...(typeof value.partial === 'boolean' ? { partial: value.partial } : {}),
     ...(typeof value.refreshing === 'boolean' ? { refreshing: value.refreshing } : {}),
@@ -291,4 +292,10 @@ export async function readPocketRecipientBalance({
 
   const raw = await evmReader({ network, address })
   return Number(raw) / 10 ** CHAIN_META[network].decimals
+}
+
+export async function archivePocketActivity(accessToken:string,recordKey:string,archived:boolean) {
+  const response=await fetch(POCKET_API.activity,{method:'POST',headers:{authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({action:archived?'archive':'restore',recordKey})})
+  const data=await response.json().catch(()=>undefined)
+  if(!response.ok || !data?.ok)throw Error('Your archive could not be updated. Try again.')
 }
