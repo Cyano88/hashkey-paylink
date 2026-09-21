@@ -12,8 +12,7 @@ import { PrivyDisconnectButton } from './lib/PrivyDisconnectButton'
 import PocketNotificationButton from './pocket/components/PocketNotificationButton'
 import PocketHeaderIdentity from './pocket/components/PocketHeaderIdentity'
 import { CPurseIcon } from './pocket/components/CPurseIcon'
-import PocketTopSwitch from './pocket/components/PocketTopSwitch'
-import { isPocketHostname, POCKET_BASE_PATH, pocketPathFor, resolvePocketRoute, type PocketRouteState } from './pocket/lib/pocketRoutes'
+import { isPocketHostname, POCKET_BASE_PATH, pocketPathFor, resolvePocketRoute } from './pocket/lib/pocketRoutes'
 
 // ─── Input detection ─────────────────────────────────────────────────────────
 const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/
@@ -201,20 +200,13 @@ export default function Layout() {
   const pocketRoute = isPocketAppPage
     ? resolvePocketRoute(isPocketHost ? pathname : pathname.slice('/pocket'.length) || '/')
     : null
-  const circlePocketHeaderMode = pocketRoute?.section === 'bills'
-      ? 'bills'
-      : 'activity'
-  const circlePocketMoveView = pocketRoute?.section === 'move' ? pocketRoute.view : ''
-  const circlePocketBillView = pocketRoute?.section === 'bills' && pocketRoute.view !== 'overview' ? pocketRoute.view : 'airtime'
-  const circlePocketActivityView = pocketRoute?.section === 'activity' ? pocketRoute.view : 'all'
-  const isPocketImmersivePage = pocketRoute?.section === 'bills'
+  const isPocketImmersivePage = pocketRoute?.section === 'activity'
+    || pocketRoute?.section === 'bills'
     || pocketRoute?.section === 'profile'
     || pocketRoute?.section === 'notifications'
     || (pocketRoute?.section === 'home' && pocketRoute.view !== 'overview')
 
-  const navigatePocketHeader = (state: PocketRouteState) => {
-    navigate(`${POCKET_BASE_PATH}${pocketPathFor(state)}`)
-  }
+
 
   useEffect(() => {
     const handleHistoryVisibilityChange = (event: Event) => {
@@ -411,17 +403,7 @@ export default function Layout() {
                   <PocketNotificationButton />
                 </div>
               )}
-              {pocketRoute?.section === 'activity' && (
-                <PocketTopSwitch
-                  mode={circlePocketHeaderMode}
-                  moveView={circlePocketMoveView}
-                  billView={circlePocketBillView}
-                  activityView={circlePocketActivityView}
-                  onMoveChange={(view) => navigatePocketHeader({ section: 'move', view })}
-                  onBillChange={(view) => navigatePocketHeader({ section: 'bills', view })}
-                  onActivityChange={(view) => navigatePocketHeader({ section: 'activity', view })}
-                />
-              )}
+
             </>
           ) : (
           <Link to={isPolyDeskSurface ? '/polydesk' : '/'} className="group flex items-center gap-2.5 focus:outline-none">

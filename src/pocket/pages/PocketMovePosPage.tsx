@@ -66,7 +66,7 @@ export default function PocketMovePosPage() {
 
   return (
     <PocketRouteShell active="home" onSelect={selectNav}>
-      <PocketFlowHeader title="POS" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
+      <PocketFlowHeader centered rightAction={<button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.posManage)} className="min-h-10 px-1 text-xs font-bold">Manage</button>} title="POS" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <PocketPosShell standalone>
         {authenticated && !pos.profileVerified && <PocketVerifiedNameGate />}
         {authenticated && pos.profileVerified && <PocketVerifiedNameBadge name={profile.profile?.resolvedName ?? ''} />}

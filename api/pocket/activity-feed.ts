@@ -1,3 +1,4 @@
+import { isIncomingPosPayment } from '../../src/pocket/lib/pocketPurchaseKind.js'
 import type { Request, Response } from 'express'
 import { createHash } from 'node:crypto'
 import { pocketActivityStore } from './activity-store.js'
@@ -90,7 +91,7 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
       const partial = !complete || sourceNames.some(name => now() - (saved?.sources[name]?.updatedAt ?? 0) > 60_000)
       return res.json({
         ok: true, ...snapshot,
-        payments: scope === 'recent' ? snapshot.payments.slice(0, 4) : snapshot.payments,
+        payments: scope === 'recent' ? snapshot.payments.filter(row => !isIncomingPosPayment(row)).slice(0, 4) : snapshot.payments,
         complete, partial, refreshing: pending.has(key),
         updatedAt: Math.max(0, ...Object.values(saved?.sources ?? {}).map(source => source.updatedAt)),
       })

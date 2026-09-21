@@ -1,3 +1,4 @@
+import { isOutgoingPosPurchase } from './pocketPurchaseKind'
 import type { PaylinkReceipt } from '../../lib/paymentReceiptPdf'
 import type { PocketActivityRow } from '../models/pocketActivity'
 
@@ -60,9 +61,11 @@ export function pocketReceiptKind(row: PocketActivityRow): PocketReceiptKind | n
 
   if ((source === 'wallet-bridge' || source === 'wallet-swap') || settlement === 'wallet_bridge') return null
   if (source === 'bills' || settlement === 'bill_payment' || settlement.startsWith('bill_payment:')) return 'bill_purchase'
+  if (isOutgoingPosPurchase(row)) return 'app_purchase'
   if (source === 'purchase' || source === 'app-pay' || settlement === 'app_pay' || settlement === 'hosted_checkout' || settlement === 'service_funding') return 'app_purchase'
   if (source === 'wallet-deposit') return 'money_in'
   if (source === 'collection') return 'money_in'
+  if (source === 'request' && row.paycrestStatus === 'paid' && row.txHash) return row.direction === 'in' ? 'money_in' : 'money_out'
   if (source === 'wallet-withdrawal') return 'money_out'
   if (source === 'bank-withdraw') return 'money_out'
   if (source === 'bank-send' || source === 'bank-receive' || source === 'ngpos' || source === 'pos') return 'money_in'

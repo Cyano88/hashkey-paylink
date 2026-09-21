@@ -1,3 +1,4 @@
+import { isIncomingPosPayment } from '../../src/pocket/lib/pocketPurchaseKind.js'
 import { createDurablePocketActivityHandler } from './activity-feed.js'
 import type { Request, Response } from 'express'
 import { listNgPosHistoryForOwner, listNgPosResourcesForOwner } from '../ng-pos.js'
@@ -293,7 +294,7 @@ async function readActivitySnapshot(dependencies: PocketActivityHandlerDependenc
       candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
     )) === index)
     .sort((a, b) => b.ts - a.ts)
-  const payments = options.recent ? allPayments.slice(0, options.limit) : allPayments
+  const payments = options.recent ? allPayments.filter(row => !isIncomingPosPayment(row)).slice(0, options.limit) : allPayments
   return {
     ok: true,
     payments,

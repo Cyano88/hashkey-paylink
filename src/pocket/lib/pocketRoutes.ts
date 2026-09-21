@@ -46,7 +46,7 @@ export function pocketApiUrl(path: string) {
 export const POCKET_BASE_PATH = pocketBasePathForHostname(typeof window === 'undefined' ? '' : window.location.hostname)
 
 export type PocketRouteState =
-  | { section: 'home'; view: 'overview' | 'deposit' | 'send' | 'swap' | 'scan' | 'transfer' | 'receive' }
+  | { section: 'home'; view: 'overview' | 'deposit' | 'send' | 'swap' | 'scan' | 'transfer' | 'receive' | 'pos-manage' }
   | { section: 'profile'; view: 'details' | 'verify-name' }
   | { section: 'notifications'; view: 'inbox' }
   | { section: 'move'; view: PocketMoveView }
@@ -69,6 +69,7 @@ export const POCKET_ROUTES = {
   usdc: '/move/usdc',
   bank: '/move/bank',
   pos: '/move/pos',
+  posManage: '/move/pos/manage',
   bills: '/bills',
   airtime: '/bills/airtime',
   data: '/bills/data',
@@ -103,6 +104,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   if (path === POCKET_ROUTES.notifications) return { section: 'notifications', view: 'inbox' }
   if (path === POCKET_ROUTES.usdc) return { section: 'move', view: 'usdc' }
   if (path === POCKET_ROUTES.bank) return { section: 'move', view: 'bank' }
+  if (path === POCKET_ROUTES.posManage) return { section: 'home', view: 'pos-manage' }
   if (path === POCKET_ROUTES.pos) return { section: 'move', view: 'pos' }
   if (path === POCKET_ROUTES.bills) return { section: 'bills', view: 'overview' }
   if (path === POCKET_ROUTES.airtime) return { section: 'bills', view: 'airtime' }
@@ -119,7 +121,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
 }
 
 export function pocketPathFor(state: PocketRouteState) {
-  if (state.section === 'home') return state.view === 'transfer' ? POCKET_ROUTES.transfer : state.view === 'receive' ? POCKET_ROUTES.receive : state.view === 'scan' ? POCKET_ROUTES.scan : state.view === 'deposit' ? POCKET_ROUTES.deposit : state.view === 'send' ? POCKET_ROUTES.send : state.view === 'swap' ? POCKET_ROUTES.swap : POCKET_ROUTES.home
+  if (state.section === 'home') return state.view === 'pos-manage' ? POCKET_ROUTES.posManage : state.view === 'transfer' ? POCKET_ROUTES.transfer : state.view === 'receive' ? POCKET_ROUTES.receive : state.view === 'scan' ? POCKET_ROUTES.scan : state.view === 'deposit' ? POCKET_ROUTES.deposit : state.view === 'send' ? POCKET_ROUTES.send : state.view === 'swap' ? POCKET_ROUTES.swap : POCKET_ROUTES.home
   if (state.section === 'profile') return state.view === 'verify-name' ? POCKET_ROUTES.verifyName : POCKET_ROUTES.profile
   if (state.section === 'notifications') return POCKET_ROUTES.notifications
   if (state.section === 'move') return POCKET_ROUTES[state.view]

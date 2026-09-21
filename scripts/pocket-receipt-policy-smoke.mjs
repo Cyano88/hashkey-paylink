@@ -5,7 +5,7 @@ import {
   pocketReceiptAvailability,
   pocketReceiptKind,
 } from '../src/pocket/lib/pocketReceipt.ts'
-import { paymentReceiptBrand, paymentReceiptFileName, paymentReceiptView } from '../src/lib/paymentReceiptPdf.ts'
+import { paymentReceiptBrand, paymentReceiptFileName, paymentReceiptView, paymentReceiptOutcome } from '../src/lib/paymentReceiptPdf.ts'
 import { evmLogBlockRanges, evmTransferTouchesTopic, solanaUsdcTransferParties } from '../api/pocket/wallet-chain-activity.ts'
 
 const base = {
@@ -126,3 +126,8 @@ assert.equal(pocketActivityStatus(unknown), 'status unavailable')
 assert.equal(pocketReceiptAvailability(unknown), 'none')
 
 console.log('Pocket receipt policy smoke checks passed')
+
+for (const status of ['pending', 'processing', 'refund available', 'refund pending', 'refunding', 'verification pending', 'unknown']) assert.equal(paymentReceiptOutcome({status}).label, 'Payment pending')
+assert.equal(paymentReceiptOutcome({status:'refunded'}).label,'Payment reversed')
+assert.equal(paymentReceiptOutcome({status:'failed'}).label,'Payment failed')
+assert.equal(paymentReceiptOutcome({status:'confirmed'}).label,'Payment successful')

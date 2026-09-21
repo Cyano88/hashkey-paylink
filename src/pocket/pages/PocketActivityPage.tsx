@@ -1,15 +1,14 @@
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketLoadingState from '../components/PocketLoadingState'
 import PocketActivityPanel from '../features/activity/PocketActivityPanel'
-import PocketResourceActivityPanel from '../features/activity/PocketResourceActivityPanel'
 import usePocketActivity from '../hooks/usePocketActivity'
 import usePocketBridgeActivity from '../hooks/usePocketBridgeActivity'
 import usePocketWalletController from '../controllers/usePocketWalletController'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import { POCKET_BASE_PATH, pocketPathFor, type PocketActivityView } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor, type PocketActivityView } from '../lib/pocketRoutes'
 import { processPocketBillRefund } from '../api/pocketBillsClient'
 import { POCKET_REQUESTS_UPDATED_EVENT, readPocketRequests, type PocketRequestItem } from '../api/pocketRequestsClient'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
@@ -38,6 +37,11 @@ function requestActivityRows(rows: PocketActivityRow[], requests: PocketRequestI
   return [...activityRows, ...requestRows]
 }
 export default function PocketActivityPage({ view }: { view: PocketActivityView }) {
+  const location = useLocation()
+  if (view === 'pos') return <Navigate replace to={POCKET_BASE_PATH + POCKET_ROUTES.posManage + location.search} />
+  return <PocketTransactionsPage view={view} />
+}
+function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const activity = usePocketActivity({ authenticated, email, enabled: true, getAccessToken })
@@ -115,15 +119,8 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
 
   return (
     <PocketRouteShell active="activity" onSelect={selectNav}>
-      {view === 'pos' || view === 'collections' ? <PocketResourceActivityPanel
-        view={view}
-        rows={activity.rows}
-        merchants={activity.merchants}
-        collections={activity.collections}
-        requests={requestsScope === requestScope ? requests : []}
-        busy={activity.busy}
-        error={view === 'collections' ? activity.error || requestsError : activity.error}
-      /> : <PocketActivityPanel
+      <h1 className="py-3 text-center text-base font-black">Activity</h1>
+      <PocketActivityPanel
         view={view}
         rows={rowsWithRequests}
         authenticated={authenticated}
@@ -134,7 +131,7 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
         bridgeChecking={bridges.isChecking}
         bridgeMessages={bridges.messages}
         onNewBridge={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'home', view: 'swap' }))}
-      />}
+      />
     </PocketRouteShell>
   )
 }

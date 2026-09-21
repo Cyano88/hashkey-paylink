@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
-import { ArrowLeft, CheckCheck, ChevronDown, Copy, Store, Users } from '../../components/PocketIcons'
+import { isIncomingPosPayment } from '../../lib/pocketPurchaseKind'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, CheckCheck, Copy, Store, Users } from '../../components/PocketIcons'
 import { ArrowTopRightOnSquareIcon as ExternalLink } from '@heroicons/react/24/outline'
 import { useSearchParams } from 'react-router-dom'
 import { copyToClipboard, formatNgnAmount } from '../../../lib/utils'
@@ -7,8 +8,7 @@ import type { PocketActivityRow } from '../../models/pocketActivity'
 import type { PocketCollectionResource, PocketPosResource } from '../../lib/pocketSchemas'
 import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
 import { hashPayLinkAppOriginForOrigin } from '../../lib/pocketRoutes'
-import UnifiedReceipt from '../../../components/UnifiedReceipt'
-import { pocketActivityReceipt } from '../../lib/pocketReceipt'
+import PocketActivityReceipt from '../../components/PocketActivityReceipt'
 import type { PocketRequestItem } from '../../api/pocketRequestsClient'
 
 type Props = {
@@ -61,9 +61,10 @@ function totalLabel(rows: PocketActivityRow[]) {
 export default function PocketResourceActivityPanel({ view, rows, merchants, collections, requests, busy, error }: Props) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [copiedId, setCopiedId] = useState('')
-  const [expandedPaymentId, setExpandedPaymentId] = useState('')
+  const [selectedPayment, setSelectedPayment] = useState<PocketActivityRow | null>(null)
   const key = view === 'pos' ? 'terminal' : 'collection'
   const selectedId = searchParams.get(key) ?? ''
+  useEffect(() => { setSelectedPayment(null) }, [selectedId])
   const resources = useMemo<ActivityResource[]>(() => view === 'pos'
     ? merchants.filter(merchant => !merchant.source || merchant.source === 'pos').map(merchant => ({
         id: merchant.merchant_id,
@@ -78,7 +79,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
       ].sort((a, b) => b.createdAt - a.createdAt), [collections, merchants, requests, view])
   const selected = resources.find(resource => resource.id === selectedId)
   const resourceRows = (resourceId: string) => rows.filter(row => view === 'pos'
-    ? ['ngpos', 'pos'].includes(rowSource(row)) && row.merchantId === resourceId
+    ? isIncomingPosPayment(row) && row.merchantId === resourceId
     : resourceId.startsWith('preq_')
       ? Boolean(resources.find(resource => resource.id === resourceId)?.request?.transactionHash) && row.txHash.toLowerCase() === resources.find(resource => resource.id === resourceId)?.request?.transactionHash.toLowerCase()
       : rowSource(row) === 'collection' && row.eventId === resourceId)
@@ -95,9 +96,9 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
       <div className="space-y-4">
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#111216]">
           <div className="flex items-start justify-between gap-3">
-            <button type="button" aria-label={`Back to ${view}`} onClick={() => setSearchParams({})} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition hover:bg-gray-200 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/[0.1]">
+            {view !== 'pos' && <button type="button" aria-label={`Back to ${view}`} onClick={() => setSearchParams({})} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition hover:bg-gray-200 dark:bg-[#171717] dark:text-gray-200 dark:hover:bg-white/[0.1]">
               <ArrowLeft className="h-4 w-4" />
-            </button>
+            </button>}
             <div className="min-w-0 flex-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-400">{selected.kind === 'pos' ? 'POS terminal' : selected.kind === 'request' ? 'Personal request' : 'Collection'}</p>
               <h2 className="mt-1 truncate text-lg font-black text-gray-950 dark:text-white">{resourceTitle(selected)}</h2>
@@ -115,16 +116,15 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
           {selected.request && <div className="mt-4 grid grid-cols-2 gap-2 border-t border-gray-100 pt-4 text-xs dark:border-[#262626]"><div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Status</p><p className="mt-1 font-bold capitalize">{selected.request.status === 'pending' ? 'Awaiting response' : selected.request.status}</p></div><div><p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Network</p><p className="mt-1 font-bold capitalize">{selected.request.network}</p></div></div>}
         </div>
 
+        {selectedPayment && <PocketActivityReceipt row={selectedPayment} onClose={() => setSelectedPayment(null)} />}
         {error && !payments.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-[#171717] dark:text-gray-300">{error}</p> : null}
         {payments.length ? (
           <div className="space-y-2">
             {payments.map((row, index) => {
               const paymentId = `${row.txHash}-${row.ts}-${index}`
-              const expanded = expandedPaymentId === paymentId
-              const receipt = pocketActivityReceipt(row)
               return (
-                <div key={paymentId} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-sm dark:border-[#262626] dark:bg-[#111216]">
-                  <button type="button" aria-expanded={receipt ? expanded : undefined} onClick={() => { if (receipt) setExpandedPaymentId(current => current === paymentId ? '' : paymentId) }} className="flex w-full items-center justify-between gap-3 text-left">
+                <div key={paymentId} className="py-3.5">
+                  <button type="button" onClick={() => setSelectedPayment(row)} className="flex w-full items-center justify-between gap-3 text-left">
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-black text-gray-900 dark:text-gray-100">{view === 'collections' ? row.memo || row.payer || 'Payer' : row.payer || row.memo || 'Payer'}</span>
                       <span className="mt-0.5 block text-[11px] font-medium text-gray-400">{new Date(row.ts).toLocaleDateString()} at {new Date(row.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -132,10 +132,8 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
                     <span className="shrink-0 text-right">
                       <span className="block text-xs font-bold tabular-nums text-gray-900 dark:text-gray-100">{displayAmount(row)}</span>
                       <span className="mt-0.5 block text-[10px] font-semibold capitalize text-gray-400">{row.paycrestStatus || 'confirmed'}</span>
-                      {receipt ? <ChevronDown className={`ml-auto mt-1 h-3.5 w-3.5 text-gray-300 transition-transform ${expanded ? 'rotate-180' : ''}`} /> : null}
                     </span>
                   </button>
-                  {expanded && receipt ? <UnifiedReceipt receipt={receipt} compact className="mt-3 border-t border-gray-100 pt-3 dark:border-[#262626]" /> : null}
                 </div>
               )
             })}
@@ -158,7 +156,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
           {resources.map(resource => {
             const payments = resourceRows(resource.id)
             return (
-              <div key={resource.id} className="flex w-full items-center gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-sm transition hover:border-gray-200 dark:border-[#262626] dark:bg-[#111216] dark:hover:border-white/20">
+              <div key={resource.id} className="flex w-full items-center gap-2 py-2">
                 <button type="button" onClick={() => setSearchParams({ [key]: resource.id })} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1.5 text-left">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-[#171717] dark:text-gray-300">{view === 'pos' ? <Store className="h-4 w-4" /> : <Users className="h-4 w-4" />}</span>
                 <span className="min-w-0 flex-1">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { POCKET_NATIVE_BACK_EVENT } from '../pocket/lib/pocketNativeBack'
 import {
@@ -9,6 +9,7 @@ import {
   paymentReceiptFileName,
   paymentReceiptImageFileName,
   paymentReceiptView,
+  paymentReceiptOutcome,
   type PaylinkReceipt,
   type X402ReceiptLike,
 } from '../lib/paymentReceiptPdf'
@@ -32,15 +33,7 @@ type ReceiptResponse = {
 
 type ReceiptSurface = 'details' | 'receipt' | null
 
-const PENDING_RECEIPT_STATUSES = new Set(['deposited', 'fulfilling', 'fulfilled', 'needs review', 'pending', 'processing', 'reconciling', 'settling', 'submitted', 'verification pending'])
-const REVERSED_RECEIPT_STATUSES = new Set(['refunded', 'reversed'])
-
-function receiptState(receipt: PaylinkReceipt) {
-  const status = String(receipt.status || '').trim().toLowerCase()
-  if (REVERSED_RECEIPT_STATUSES.has(status)) return 'reversed'
-  if (PENDING_RECEIPT_STATUSES.has(status)) return 'pending'
-  return 'successful'
-}
+function receiptState(receipt: PaylinkReceipt) { return paymentReceiptOutcome(receipt).state }
 
 function isCanonicalReceipt(receipt: ReceiptResponse['receipt']): receipt is PaylinkReceipt {
   return Boolean(receipt?.receiptId && receipt.receiptHash && receipt.eventId && receipt.status)
@@ -79,7 +72,7 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
   const view = useMemo(() => paymentReceiptView(receipt), [receipt])
   const brand = paymentReceiptBrand(receipt)
   const state = receiptState(receipt)
-  const pending = state === 'pending'
+  const pending = state === 'pending' || state === 'failed'
   const reversed = state === 'reversed'
   return (
     <article className="mx-auto flex h-full min-h-0 w-full max-w-md flex-col bg-white px-7 pb-4 pt-4 font-sans text-gray-950 dark:bg-[#111216] dark:text-white sm:px-9">
@@ -95,7 +88,7 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
         <span className={`flex h-9 w-9 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : reversed ? 'bg-amber-500' : 'bg-emerald-500'}`}>
           {pending ? <Clock3 className="h-5 w-5" /> : reversed ? <Undo2 className="h-5 w-5" /> : <Check className="h-5 w-5" strokeWidth={2.5} />}
         </span>
-        <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.02em]">{pending ? 'Payment pending' : reversed ? 'Payment reversed' : 'Payment successful'}</h2>
+        <h2 className="mt-2 text-[15px] font-semibold tracking-[-0.02em]">{paymentReceiptOutcome(receipt).label}</h2>
         <p className="mt-1 text-[11px] font-medium text-gray-400">{view.timestamp}</p>
         <p className="mt-3 break-words text-[30px] font-bold tracking-[-0.045em]">{view.amount}</p>
       </section>
@@ -122,7 +115,7 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
 function TransactionDetails({ receipt, copied, onCopy }: { receipt: PaylinkReceipt; copied: boolean; onCopy: () => void }) {
   const view = paymentReceiptView(receipt)
   const state = receiptState(receipt)
-  const pending = state === 'pending'
+  const pending = state === 'pending' || state === 'failed'
   const reversed = state === 'reversed'
   return (
     <div className="mx-auto w-full max-w-lg px-4 pb-12 pt-8">
@@ -130,7 +123,7 @@ function TransactionDetails({ receipt, copied, onCopy }: { receipt: PaylinkRecei
         <div className="flex items-center gap-3">
           <span className={`flex h-11 w-11 items-center justify-center rounded-full text-white ${pending ? 'bg-blue-600' : reversed ? 'bg-amber-500' : 'bg-emerald-500'}`}>{pending ? <Clock3 className="h-5 w-5" /> : reversed ? <Undo2 className="h-5 w-5" /> : <Check className="h-5 w-5" />}</span>
           <span>
-            <span className="block text-sm font-bold text-gray-950 dark:text-white">{pending ? 'Payment pending' : reversed ? 'Payment reversed' : 'Payment successful'}</span>
+            <span className="block text-sm font-bold text-gray-950 dark:text-white">{paymentReceiptOutcome(receipt).label}</span>
             <span className="mt-0.5 block text-[11px] font-medium text-gray-400">{view.timestamp}</span>
           </span>
         </div>
@@ -183,7 +176,7 @@ function receiptDataUrlBlob(dataUrl: string) {
   return new Blob([bytes], { type: match[1] })
 }
 
-export function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: PaylinkReceipt; surface: Exclude<ReceiptSurface, null>; onClose: () => void }) {
+export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActions }: { receipt: PaylinkReceipt; surface: Exclude<ReceiptSurface, null>; onClose: () => void; extraActions?: ReactNode }) {
   const [sharing, setSharing] = useState<'image' | 'pdf' | ''>('')
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
@@ -238,6 +231,7 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose }: { receip
       {surface === 'details' ? <div className="min-h-0 flex-1 overflow-y-auto"><TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /></div> : (
         <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col px-3 pb-[max(0.5rem,var(--pocket-safe-bottom))] pt-2">
           <div className="min-h-0 flex-1 overflow-y-auto rounded-[28px] border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]"><ReceiptDocument receipt={receipt} /></div>
+          {extraActions}
           <div className="mt-2 grid shrink-0 grid-cols-2 gap-2">
             <button type="button" disabled={Boolean(sharing)} onClick={() => void share('image')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-950 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.08] dark:text-white">
               {sharing === 'image' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}Share as image

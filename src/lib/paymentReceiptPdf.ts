@@ -370,21 +370,26 @@ function drawReceiptCanvas(
   ctx.fillText(clipCanvasText(ctx, brand.name, 320), 104, 72)
   drawBadge(ctx, view.badge.toUpperCase(), '#f3f4f6', '#374151', 438, 54, sans)
 
-  ctx.fillStyle = '#16a34a'
+  const outcome = paymentReceiptOutcome(receipt)
+  ctx.fillStyle = outcome.color
   ctx.beginPath()
   ctx.arc(72, 151, 20, 0, Math.PI * 2)
   ctx.fill()
   ctx.strokeStyle = '#ffffff'
   ctx.lineWidth = 3
   ctx.beginPath()
-  ctx.moveTo(63, 151)
-  ctx.lineTo(69, 157)
-  ctx.lineTo(81, 144)
+  if (outcome.state === 'successful') {
+    ctx.moveTo(63, 151); ctx.lineTo(69, 157); ctx.lineTo(81, 144)
+  } else if (outcome.state === 'pending') {
+    ctx.moveTo(72, 139); ctx.lineTo(72, 151); ctx.lineTo(81, 155)
+  } else {
+    ctx.moveTo(63, 151); ctx.lineTo(81, 151)
+  }
   ctx.stroke()
 
   ctx.fillStyle = '#111827'
   ctx.font = `700 15px ${sans}`
-  ctx.fillText('Payment successful', 104, 148)
+  ctx.fillText(outcome.label, 104, 148)
   ctx.fillStyle = '#6b7280'
   ctx.font = `500 11px ${sans}`
   ctx.fillText(view.timestamp, 104, 168)
@@ -539,4 +544,12 @@ function createPdfWithJpeg(dataUrl: string, width: number, height: number) {
   for (let i = 1; i <= 5; i += 1) add(`${String(offsets[i]).padStart(10, '0')} 00000 n \n`)
   add(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`)
   return new Blob(parts, { type: 'application/pdf' })
+}
+
+export function paymentReceiptOutcome(receipt: Pick<PaylinkReceipt, 'status'>) {
+  const status = String(receipt.status || '').trim().toLowerCase()
+  if (['refunded', 'reversed'].includes(status)) return { state: 'reversed' as const, label: 'Payment reversed', color: '#d97706' }
+  if (['failed', 'cancelled', 'canceled', 'rejected'].includes(status)) return { state: 'failed' as const, label: 'Payment failed', color: '#dc2626' }
+  if (['completed', 'confirmed', 'delivered', 'paid', 'settled', 'successful', 'test complete', 'validated'].includes(status)) return { state: 'successful' as const, label: status === 'test complete' ? 'Test complete' : 'Payment successful', color: '#16a34a' }
+  return { state: 'pending' as const, label: 'Payment pending', color: '#2563eb' }
 }
