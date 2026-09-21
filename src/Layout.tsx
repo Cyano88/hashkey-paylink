@@ -207,7 +207,7 @@ export default function Layout() {
   const circlePocketMoveView = pocketRoute?.section === 'move' ? pocketRoute.view : ''
   const circlePocketBillView = pocketRoute?.section === 'bills' && pocketRoute.view !== 'overview' ? pocketRoute.view : 'airtime'
   const circlePocketActivityView = pocketRoute?.section === 'activity' ? pocketRoute.view : 'all'
-  const isPocketImmersivePage = (pocketRoute?.section === 'bills' && pocketRoute.view !== 'overview')
+  const isPocketImmersivePage = pocketRoute?.section === 'bills'
     || pocketRoute?.section === 'profile'
     || pocketRoute?.section === 'notifications'
     || (pocketRoute?.section === 'home' && pocketRoute.view !== 'overview')
