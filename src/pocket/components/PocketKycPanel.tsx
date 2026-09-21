@@ -8,6 +8,7 @@ import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRout
 type KycState = { environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; uploadReported?: boolean; jobId?: string }
 type Session = KycState & { token: string; partnerId: string; callbackUrl: string }
 type SmileWindow = Window & { SmileIdentity?: (config: Record<string, unknown>) => void }
+const TEMPORARY_ERROR = 'Verification is temporarily unavailable. We will retry automatically.'
 let sdk: Promise<void> | undefined
 function loadSmile() {
   if ((window as SmileWindow).SmileIdentity) return Promise.resolve()
@@ -36,10 +37,10 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   const api = useCallback(async (action: 'status' | 'start' | 'resume' | 'uploaded', jobId?: string) => {
     const token = await getAccessToken()
     if (!token) throw new Error('Sign in again to continue.')
-    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(jobId ? { jobId } : {}), ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) })
-    const data = await response.json()
-    if (!response.ok || data.ok !== true) throw new Error(typeof data.error === 'string' ? data.error : 'Verification could not load. Please try again.')
-    if (!['sandbox', 'production'].includes(data.environment) || !['not_started', 'pending', 'passed', 'failed', 'review'].includes(data.status)) throw new Error('Verification returned an invalid response.')
+    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(jobId ? { jobId } : {}), ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) }).catch(() => { throw new Error(TEMPORARY_ERROR) })
+    const data = await response.json().catch(() => null)
+    if (!response.ok || data?.ok !== true) throw new Error(response.status < 500 && typeof data?.error === 'string' ? data.error : TEMPORARY_ERROR)
+    if (!['sandbox', 'production'].includes(data.environment) || !['not_started', 'pending', 'passed', 'failed', 'review'].includes(data.status)) throw new Error(TEMPORARY_ERROR)
     return data as Session
   }, [getAccessToken])
   const refresh = useCallback(async () => {
@@ -52,13 +53,13 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   useEffect(() => protectSmileViewport(setProviderVisible), [])
   useEffect(() => { mounted.current = true; void refresh(); return () => { mounted.current = false; document.getElementById('smile-identity-hosted-web-integration')?.remove() } }, [refresh])
   useEffect(() => {
-    if (!state || !['pending', 'review'].includes(state.status)) return
+    if ((!state || !['pending', 'review'].includes(state.status)) && !error) return
     const onVisible = () => { if (!document.hidden) void refresh() }
     window.addEventListener('focus', onVisible)
     document.addEventListener('visibilitychange', onVisible)
     const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, 15000)
     return () => { clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible) }
-  }, [state?.status, refresh])
+  }, [state?.status, error, refresh])
   const start = async () => {
     if (!consent || busy) return
     setBusy(true); setError('')
