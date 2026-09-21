@@ -34,7 +34,7 @@ main{position:relative!important;inset:auto!important;transform:none!important;w
 #camera-container{min-width:0;max-width:100%}
 smart-camera-web{max-width:100%}
 input,select,textarea{background:#fff;border:1px solid #e5e7eb;border-radius:8px}
-input:focus,select:focus,textarea:focus{border-color:#9ca3af;outline:none}
+smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{border-color:#9ca3af;outline:2px solid #d1d5db;outline-offset:2px;box-shadow:none}
 </style>
 </head>
 
@@ -680,5 +680,50 @@ input:focus,select:focus,textarea:focus{border-color:#9ca3af;outline:none}
     </main>
 
     <script src="https://cdn.smileidentity.com/inline/v1/js/biometric-kyc.min.js"></script>
+
+    <script id="pocket-verification-inputs">
+      // Smile renders BVN/OTP fields in open shadow roots. Style presentation only;
+      // keep its input validation, events, consent and submission behavior intact.
+      (() => {
+        const css = `
+          input:not([type="radio"]):not([type="checkbox"]),select,textarea {
+            box-sizing:border-box!important; min-width:0!important; max-width:100%!important;
+            background:#fff!important; color:#171717!important;
+            border:1px solid #e5e7eb!important; border-radius:8px!important;
+            box-shadow:none!important;
+          }
+          input:focus,select:focus,textarea:focus {
+            border-color:#9ca3af!important; outline:2px solid #d1d5db!important;
+            outline-offset:2px!important; box-shadow:none!important;
+          }
+          input[aria-invalid="true"] { border-color:#dc2626!important; }
+          #totp-token {
+            width:100%!important; inline-size:100%!important; max-inline-size:100%!important;
+            min-inline-size:0!important; height:56px!important; block-size:56px!important;
+            margin-inline:0!important; padding:12px!important;
+            font-size:24px!important; line-height:30px!important;
+            letter-spacing:.35em!important; text-indent:.35em!important;
+            text-align:center!important; font-variant-numeric:tabular-nums;
+          }
+          #otp-entry,form,.input-group { min-width:0; max-width:100%; }
+        `;
+        const watched = new WeakSet();
+        const apply = root => {
+          if (root instanceof ShadowRoot && !root.querySelector('#pocket-input-style')) {
+            const style = document.createElement('style');
+            style.id = 'pocket-input-style'; style.textContent = css; root.append(style);
+          }
+          if (!watched.has(root)) {
+            watched.add(root);
+            new MutationObserver(() => apply(root)).observe(root,{childList:true,subtree:true});
+          }
+          root.querySelectorAll('end-user-consent,totp-consent').forEach(el => {
+            if (el.shadowRoot) apply(el.shadowRoot);
+          });
+        };
+        Promise.all(['end-user-consent','totp-consent'].map(name => customElements.whenDefined(name)))
+          .then(() => apply(document.querySelector('main')));
+      })();
+    </script>
   </body>
 </html>
