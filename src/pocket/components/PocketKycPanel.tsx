@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { openSmileFrame } from '../lib/smileFrame'
 import usePocketLightSurface from '../hooks/usePocketLightSurface'
 import PocketBottomSheet from './PocketBottomSheet'
 import { Check, CheckCircle2, Clock3, Info } from './PocketIcons'
@@ -9,19 +10,9 @@ type KycState = { environment: 'sandbox' | 'production'; status: 'not_started' |
 type Session = KycState & { token: string; partnerId: string; callbackUrl: string }
 type SmileWindow = Window & { SmileIdentity?: (config: Record<string, unknown>) => void }
 const TEMPORARY_ERROR = 'Verification is temporarily unavailable. We will retry automatically.'
-let sdk: Promise<void> | undefined
 function loadSmile() {
-  if ((window as SmileWindow).SmileIdentity) return Promise.resolve()
-  sdk ??= new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = 'https://cdn.smileidentity.com/inline/v1/js/script.min.js'
-    script.async = true
-    const timer = window.setTimeout(() => { script.remove(); sdk = undefined; reject(new Error('Verification could not open. Please try again.')) }, 15000)
-    script.onload = () => { clearTimeout(timer); if ((window as SmileWindow).SmileIdentity) resolve(); else { sdk = undefined; reject(new Error('Verification could not open.')) } }
-    script.onerror = () => { clearTimeout(timer); script.remove(); sdk = undefined; reject(new Error('Verification could not open. Please try again.')) }
-    document.head.appendChild(script)
-  })
-  return sdk
+  ;(window as SmileWindow).SmileIdentity ??= openSmileFrame
+  return Promise.resolve()
 }
 
 export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () => Promise<string | null> }) {
