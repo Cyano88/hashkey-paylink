@@ -182,7 +182,7 @@ export function LocalCurrencyProfileCard({
       </label>
 
       {bankMismatch && (
-        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium leading-relaxed text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">
+        <p className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium leading-relaxed text-gray-600 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">
           Bank account name is {bankAccountName}. Make sure this payout account belongs to you or your business.
         </p>
       )}

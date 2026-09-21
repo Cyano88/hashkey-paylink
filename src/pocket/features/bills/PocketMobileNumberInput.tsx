@@ -134,8 +134,8 @@ export default function PocketMobileNumberInput({
       <div
         className={cn(
           'flex min-h-[52px] items-center overflow-hidden rounded-2xl border bg-white shadow-sm transition',
-          'border-gray-200 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-500/10',
-          'dark:border-[#262626] dark:bg-[#17181d] dark:focus-within:border-blue-400/50',
+          'border-gray-200 focus-within:border-gray-400 focus-within:ring-4 focus-within:ring-blue-500/10',
+          'dark:border-[#262626] dark:bg-[#17181d] dark:focus-within:border-gray-400/50',
           invalidNumber && 'border-red-300 focus-within:border-red-400 focus-within:ring-red-500/10 dark:border-red-400/40',
         )}
       >

@@ -215,7 +215,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
                 <label className="block">
                   <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard number') : 'Meter number'}</span>
-                  <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked || bills.environment === 'sandbox'} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-[#262626] dark:bg-[#171717] dark:text-white" />
+                  <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked || bills.environment === 'sandbox'} value={bills.phone} onChange={event => bills.setPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 disabled:opacity-60 dark:border-[#262626] dark:bg-[#171717] dark:text-white" />
                 </label>
               </>
             )}
@@ -248,7 +248,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             ) : view !== 'electricity' ? (
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Airtime amount</span>
-                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-blue-400 dark:border-[#262626] dark:bg-[#171717]">
+                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#171717]">
                   <span className="text-sm font-black text-gray-400">₦</span>
                   <input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" />
                 </span>
@@ -264,7 +264,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                 )}
                 <label className="block">
                   <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Contact phone</span>
-                  <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked} value={bills.contactPhone} onChange={event => bills.setContactPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-blue-400 disabled:opacity-60 dark:border-[#262626] dark:bg-[#171717] dark:text-white" />
+                  <input type="tel" inputMode="tel" autoComplete="tel" disabled={locked} value={bills.contactPhone} onChange={event => bills.setContactPhone(event.target.value)} placeholder="08012345678" className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-400 disabled:opacity-60 dark:border-[#262626] dark:bg-[#171717] dark:text-white" />
                 </label>
               </>
             )}
@@ -272,7 +272,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {view === 'electricity' && (
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Electricity amount</span>
-                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-blue-400 dark:border-[#262626] dark:bg-[#171717]"><span className="text-sm font-black text-gray-400">₦</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
+                <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#171717]"><span className="text-sm font-black text-gray-400">₦</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
                 {bills.verification?.minimumAmount !== null && bills.verification?.minimumAmount !== undefined && <span className="mt-1.5 block text-[10px] font-semibold text-gray-400">Minimum for this meter: {money(String(bills.verification.minimumAmount))}</span>}
               </label>
             )}

@@ -78,9 +78,9 @@ function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBil
       <LimitProgress title='Airtime' used={airtime.usedTodayNgn} limit={airtime.dailyLimitNgn} detail={`Up to ${ngn(airtime.perPaymentNgn)} per payment`} />
       <LimitProgress title='Other Bills' used={otherBills.usedTodayNgn} limit={otherBills.dailyLimitNgn} detail='Data, TV, and electricity combined' />
       <p className='px-1 text-[11px] leading-5 text-gray-400'>Resets daily at midnight, Lagos time. Product-specific limits may be lower.</p>
-      {!usage && !busy && error && <div className='rounded-[20px] bg-amber-50 p-4 dark:bg-amber-400/10'>
-        <p className='text-xs font-bold text-amber-800 dark:text-amber-200'>{error || `Today's usage could not be refreshed.`}</p>
-        <button type='button' onClick={onRefresh} className='mt-3 min-h-9 rounded-full border border-amber-200 px-4 text-[11px] font-black dark:border-amber-400/20'>Try again</button>
+      {!usage && !busy && error && <div className='rounded-[20px] bg-gray-50 p-4 dark:bg-[#171717]'>
+        <p className='text-xs font-bold text-gray-600 dark:text-gray-300'>{error || `Today's usage could not be refreshed.`}</p>
+        <button type='button' onClick={onRefresh} className='mt-3 min-h-9 rounded-full border border-gray-200 px-4 text-[11px] font-black dark:border-[#262626]'>Try again</button>
       </div>}
     </div>
   </section>

@@ -121,7 +121,7 @@ export default function PocketProfilePage() {
         <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-300"><Trash className="h-6 w-6" /></span>
         <h1 className="mt-6 text-3xl font-black tracking-[-0.04em]">Delete your Pocket account?</h1>
         <p className="mt-3 text-sm font-medium leading-6 text-gray-500 dark:text-gray-400">This permanently removes your profile, Pocket ID association, saved wallet links, push registrations, Pocket PIN, and Agent Hash account memory.</p>
-        <div className="mt-6 rounded-[22px] border border-amber-200 bg-amber-50 p-4 text-xs font-medium leading-5 text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-100">
+        <div className="mt-6 rounded-[22px] border border-gray-200 bg-gray-50 p-4 text-xs font-medium leading-5 text-gray-600 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">
           Completed payments are not reversed. Transaction, payout, bill, receipt, reconciliation, dispute, fraud-prevention, security, and accounting records may be retained where required. Public blockchain records cannot be erased.
         </div>
         <label className="mt-8 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400" htmlFor="delete-pocket-confirmation">Type DELETE to confirm</label>

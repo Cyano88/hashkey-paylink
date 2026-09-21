@@ -179,9 +179,9 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
               'rounded-xl border p-3',
               purchaseResolved
                 ? 'border-emerald-100 bg-emerald-50/70 dark:border-emerald-400/20 dark:bg-emerald-400/10'
-                : 'border-amber-100 bg-amber-50/70 dark:border-amber-400/20 dark:bg-amber-400/10',
+                : 'border-gray-200 bg-gray-50 dark:border-[#262626] dark:bg-[#171717]',
             )}>
-              <div className={cn('flex items-center gap-2', purchaseResolved ? 'text-emerald-700 dark:text-emerald-200' : 'text-amber-700 dark:text-amber-200')}>
+              <div className={cn('flex items-center gap-2', purchaseResolved ? 'text-emerald-700 dark:text-emerald-200' : 'text-gray-600 dark:text-gray-300')}>
                 {purchaseResolved ? <CheckCircle2 className="h-4 w-4" /> : <Clock3 className="h-4 w-4" />}
                 <p className="text-xs font-bold">{purchase.status === 'completed' ? 'Service completed' : purchase.status === 'paid' ? 'Payment confirmed' : purchaseNeedsReview ? 'Payment needs review' : 'Payment submitted — reconciliation pending'}</p>
               </div>
@@ -189,7 +189,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
               {purchase.status === 'completed' && resultPreview(purchase.result) && <pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-white/70 p-2 text-[10px] leading-4 text-gray-600 dark:bg-black/20 dark:text-gray-300">{resultPreview(purchase.result)}</pre>}
               {purchase.status === 'completed' && purchase.receiptActivityId
                 ? <UnifiedReceipt receiptId={purchase.receiptActivityId} className="mt-2" />
-                : <Link to={`${POCKET_BASE_PATH}/activity`} className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 dark:text-amber-200">View service payment <ArrowRight className="h-3 w-3" /></Link>}
+                : <Link to={`${POCKET_BASE_PATH}/activity`} className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-gray-600 dark:text-gray-300">View service payment <ArrowRight className="h-3 w-3" /></Link>}
             </div>
           )}
 
@@ -254,7 +254,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
                 </div>
               </div>
               <p className="mt-2.5 text-[11px] leading-4 text-gray-400">You are approving this request only. The service cannot make another charge.</p>
-              {!enoughBalance(gatewayBalance, selected.amount) && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:bg-amber-400/10 dark:text-amber-200">Add at least {selected.amount} USDC to App Pay before paying.</p>}
+              {!enoughBalance(gatewayBalance, selected.amount) && <p className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 dark:bg-[#171717] dark:text-gray-300">Add at least {selected.amount} USDC to App Pay before paying.</p>}
               {purchaseError && <p className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">{purchaseError}</p>}
               <div className="mt-4 grid grid-cols-2 gap-2.5">
                 <button type="button" onClick={() => setSelected(null)} disabled={buying} className="rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition active:scale-[0.98] disabled:opacity-50 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:text-gray-200">Cancel</button>

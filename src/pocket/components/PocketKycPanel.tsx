@@ -92,7 +92,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   return <section className="mt-6 space-y-5">
     {!state && !error && <div role="status" aria-label="Loading verification" className="h-44 animate-pulse rounded-3xl bg-gray-200/70 dark:bg-white/10" />}
     {state && <>
-      {state.environment === 'sandbox' && <p className="rounded-xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:bg-amber-400/10 dark:text-amber-200">Sandbox test. Use Smile ID test details. This does not verify your live account or unlock POS payments.</p>}
+      {state.environment === 'sandbox' && <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600 dark:bg-[#171717] dark:text-gray-300">Sandbox test. Use Smile ID test details. This does not verify your live account or unlock POS payments.</p>}
       <div className="space-y-4">
 
         <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-5 dark:border-white/10 dark:bg-[#121212]">

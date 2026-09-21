@@ -206,7 +206,7 @@ export default function PocketMoveBankPage() {
   return (
     <PocketRouteShell active="home" onSelect={selectNav}>
       {payoutToast && (
-        <div role="status" aria-live="polite" className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-[100] w-[min(calc(100%-2rem),26rem)] -translate-x-1/2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-950 shadow-xl dark:border-amber-400/30 dark:bg-amber-950 dark:text-amber-100">
+        <div role="status" aria-live="polite" className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-[100] w-[min(calc(100%-2rem),26rem)] -translate-x-1/2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm font-semibold text-gray-600 shadow-xl dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">
           {payoutToast}
         </div>
       )}

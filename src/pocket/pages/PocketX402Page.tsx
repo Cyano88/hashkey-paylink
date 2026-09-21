@@ -167,15 +167,15 @@ export default function PocketX402Page() {
                   </div>
                 </div>
                 {x402.walletChoices.length > 0 && (
-                  <div className="space-y-2 rounded-lg border border-amber-100 bg-amber-50/70 p-2 dark:border-amber-400/20 dark:bg-amber-400/10">
-                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-200">Choose wallet</p>
+                  <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-[#262626] dark:bg-[#171717]">
+                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300">Choose wallet</p>
                     {x402.walletChoices.map(choice => (
-                      <button key={choice.address} type="button" onClick={() => x402.setExpectedWallet(choice.address)} className={cn('w-full rounded-lg border px-2.5 py-2 text-left', x402.expectedWallet.toLowerCase() === choice.address.toLowerCase() ? 'border-gray-900 bg-white dark:border-white dark:bg-white/[0.12]' : 'border-amber-100 bg-white/80 dark:border-amber-400/20 dark:bg-black/10')}>
+                      <button key={choice.address} type="button" onClick={() => x402.setExpectedWallet(choice.address)} className={cn('w-full rounded-lg border px-2.5 py-2 text-left', x402.expectedWallet.toLowerCase() === choice.address.toLowerCase() ? 'border-gray-900 bg-white dark:border-white dark:bg-white/[0.12]' : 'border-gray-200 bg-white/80 dark:border-[#262626] dark:bg-black/10')}>
                         <span className="block truncate font-mono text-xs">{choice.address}</span>
                         <span className="mt-0.5 block text-[11px] font-medium tabular-nums tracking-[-0.02em] text-gray-500">{choice.balance !== undefined ? `${formatPocketDisplayAmount(choice.balance)} USDC` : choice.balanceError || 'Balance unavailable'}</span>
                       </button>
                     ))}
-                    <p className="px-1 text-[11px] text-amber-700/80 dark:text-amber-200/80">After choosing, resend OTP and verify again so Circle confirms this exact wallet.</p>
+                    <p className="px-1 text-[11px] text-gray-600 dark:text-gray-300">After choosing, resend OTP and verify again so Circle confirms this exact wallet.</p>
                   </div>
                 )}
                 <button type="button" onClick={() => void x402.beginConnection()} disabled={x402.walletBusy} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950">
@@ -226,7 +226,7 @@ export default function PocketX402Page() {
                         <input value={x402.amount} onChange={event => x402.setAmount(event.target.value)} inputMode="decimal" className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-semibold text-gray-900 outline-none dark:text-white" />
                         <span className="border-l border-gray-200 px-2.5 py-3 text-[11px] font-semibold text-gray-400 dark:border-[#262626]">USDC</span>
                       </div>
-                      {(x402.activationError || x402.error) && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200">{x402.activationError || x402.error}</p>}
+                      {(x402.activationError || x402.error) && <p className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-600 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">{x402.activationError || x402.error}</p>}
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <button type="button" onClick={() => x402.setActivationOpen(false)} disabled={x402.activationBusy} className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200">Cancel</button>
                         <button type="button" onClick={() => void x402.activate()} disabled={x402.activationBusy || Boolean(x402.activationError)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{x402.activationBusy ? <><span>Adding funds</span><Loader2 className="h-4 w-4 animate-spin" /></> : <><ArrowRight className="h-4 w-4" /> Add funds</>}</button>
