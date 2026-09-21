@@ -31,7 +31,7 @@ function initialNetwork(): HomeNetwork {
 
 function navPath(tab: PocketNavTab) {
   if (tab === 'profile') return POCKET_ROUTES.profile
-  if (tab === 'bills') return pocketPathFor({ section: 'bills', view: 'airtime' })
+  if (tab === 'bills') return pocketPathFor({ section: 'bills', view: 'overview' })
   if (tab === 'activity') return pocketPathFor({ section: 'activity', view: 'all' })
   return POCKET_ROUTES.home
 }

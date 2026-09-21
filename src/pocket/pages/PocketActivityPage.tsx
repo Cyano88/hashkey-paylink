@@ -106,7 +106,7 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
         : tab === 'profile'
         ? pocketPathFor({ section: 'profile', view: 'details' })
         : tab === 'bills'
-          ? pocketPathFor({ section: 'bills', view: 'airtime' })
+          ? pocketPathFor({ section: 'bills', view: 'overview' })
           : pocketPathFor({ section: 'activity', view })
     navigate(`${POCKET_BASE_PATH}${path}`)
   }

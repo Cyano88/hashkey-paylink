@@ -21,7 +21,7 @@ const NETWORKS = [
 
 function navPath(tab: PocketNavTab) {
   if (tab === 'profile') return POCKET_ROUTES.profile
-  if (tab === 'bills') return pocketPathFor({ section: 'bills', view: 'airtime' })
+  if (tab === 'bills') return pocketPathFor({ section: 'bills', view: 'overview' })
   if (tab === 'activity') return POCKET_ROUTES.activity
   return POCKET_ROUTES.home
 }

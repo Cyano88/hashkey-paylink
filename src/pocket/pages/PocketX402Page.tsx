@@ -49,7 +49,7 @@ export default function PocketX402Page() {
     const path = tab === 'profile'
       ? pocketPathFor({ section: 'profile', view: 'details' })
       : tab === 'bills'
-        ? pocketPathFor({ section: 'bills', view: 'airtime' })
+        ? pocketPathFor({ section: 'bills', view: 'overview' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
           : pocketPathFor({ section: 'home', view: 'overview' })

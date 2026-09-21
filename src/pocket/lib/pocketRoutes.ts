@@ -50,7 +50,7 @@ export type PocketRouteState =
   | { section: 'profile'; view: 'details' | 'verify-name' }
   | { section: 'notifications'; view: 'inbox' }
   | { section: 'move'; view: PocketMoveView }
-  | { section: 'bills'; view: PocketBillView }
+  | { section: 'bills'; view: PocketBillView | 'overview' }
   | { section: 'activity'; view: PocketActivityView }
   | { section: 'assistant'; view: 'circle-pocket' }
 
@@ -67,6 +67,7 @@ export const POCKET_ROUTES = {
   usdc: '/move/usdc',
   bank: '/move/bank',
   pos: '/move/pos',
+  bills: '/bills',
   airtime: '/bills/airtime',
   data: '/bills/data',
   tv: '/bills/tv',
@@ -99,6 +100,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   if (path === POCKET_ROUTES.usdc) return { section: 'move', view: 'usdc' }
   if (path === POCKET_ROUTES.bank) return { section: 'move', view: 'bank' }
   if (path === POCKET_ROUTES.pos) return { section: 'move', view: 'pos' }
+  if (path === POCKET_ROUTES.bills) return { section: 'bills', view: 'overview' }
   if (path === POCKET_ROUTES.airtime) return { section: 'bills', view: 'airtime' }
   if (path === POCKET_ROUTES.data) return { section: 'bills', view: 'data' }
   if (path === POCKET_ROUTES.tv) return { section: 'bills', view: 'tv' }
@@ -117,7 +119,7 @@ export function pocketPathFor(state: PocketRouteState) {
   if (state.section === 'profile') return state.view === 'verify-name' ? POCKET_ROUTES.verifyName : POCKET_ROUTES.profile
   if (state.section === 'notifications') return POCKET_ROUTES.notifications
   if (state.section === 'move') return POCKET_ROUTES[state.view]
-  if (state.section === 'bills') return POCKET_ROUTES[state.view]
+  if (state.section === 'bills') return state.view === 'overview' ? POCKET_ROUTES.bills : POCKET_ROUTES[state.view]
   if (state.section === 'assistant') return POCKET_ROUTES.assistant
   if (state.view === 'all') return POCKET_ROUTES.activity
   return state.view === 'bank'

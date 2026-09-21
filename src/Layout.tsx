@@ -205,9 +205,10 @@ export default function Layout() {
       ? 'bills'
       : 'activity'
   const circlePocketMoveView = pocketRoute?.section === 'move' ? pocketRoute.view : ''
-  const circlePocketBillView = pocketRoute?.section === 'bills' ? pocketRoute.view : 'airtime'
+  const circlePocketBillView = pocketRoute?.section === 'bills' && pocketRoute.view !== 'overview' ? pocketRoute.view : 'airtime'
   const circlePocketActivityView = pocketRoute?.section === 'activity' ? pocketRoute.view : 'all'
-  const isPocketImmersivePage = pocketRoute?.section === 'profile'
+  const isPocketImmersivePage = (pocketRoute?.section === 'bills' && pocketRoute.view !== 'overview')
+    || pocketRoute?.section === 'profile'
     || pocketRoute?.section === 'notifications'
     || (pocketRoute?.section === 'home' && pocketRoute.view !== 'overview')
 
@@ -401,7 +402,7 @@ export default function Layout() {
         >
           {isPocketAppPage ? (
             <>
-              {pocketRoute?.section !== 'bills' && pocketRoute?.section !== 'activity' && (
+              {pocketRoute?.section !== 'activity' && (
                 <div className="pointer-events-auto flex h-10 w-full items-center justify-between">
                   <Link to={`${POCKET_BASE_PATH}/home`} className="flex items-center gap-2 text-gray-950 transition-opacity hover:opacity-75 dark:text-white">
                     <CPurseIcon size={32} title="" className="shrink-0" />
@@ -410,7 +411,7 @@ export default function Layout() {
                   <PocketNotificationButton />
                 </div>
               )}
-              {(pocketRoute?.section === 'bills' || pocketRoute?.section === 'activity') && (
+              {pocketRoute?.section === 'activity' && (
                 <PocketTopSwitch
                   mode={circlePocketHeaderMode}
                   moveView={circlePocketMoveView}

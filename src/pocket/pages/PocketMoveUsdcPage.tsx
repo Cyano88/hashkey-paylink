@@ -141,7 +141,7 @@ export default function PocketMoveUsdcPage() {
 
   const selectNav = (tab: PocketNavTab) => {
     const path = tab === 'home' ? pocketPathFor({ section: 'home', view: 'overview' })
-      : tab === 'bills' ? pocketPathFor({ section: 'bills', view: 'airtime' })
+      : tab === 'bills' ? pocketPathFor({ section: 'bills', view: 'overview' })
       : tab === 'activity' ? pocketPathFor({ section: 'activity', view: 'all' })
       : pocketPathFor({ section: 'profile', view: 'details' })
     navigate(`${POCKET_BASE_PATH}${path}`)

@@ -21,7 +21,7 @@ import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRou
 type SendNetwork = 'base' | 'arbitrum' | 'solana'
 type RecipientMode = 'pocket' | 'address'
 const networkLabel = (network: SendNetwork) => network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : 'Base'
-function navPath(tab: PocketNavTab) { if (tab === 'profile') return POCKET_ROUTES.profile; if (tab === 'bills') return pocketPathFor({ section: 'bills', view: 'airtime' }); if (tab === 'activity') return POCKET_ROUTES.activity; return POCKET_ROUTES.home }
+function navPath(tab: PocketNavTab) { if (tab === 'profile') return POCKET_ROUTES.profile; if (tab === 'bills') return pocketPathFor({ section: 'bills', view: 'overview' }); if (tab === 'activity') return POCKET_ROUTES.activity; return POCKET_ROUTES.home }
 
 export default function PocketSendPage() {
   const navigate = useNavigate()

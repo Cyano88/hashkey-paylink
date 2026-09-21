@@ -90,7 +90,7 @@ export default function PocketProfilePage() {
     await logout()
     navigate(POCKET_BASE_PATH || POCKET_ROUTES.root)
   }
-  const selectNav = (tab: PocketNavTab) => navigate(POCKET_BASE_PATH + (tab === 'profile' ? POCKET_ROUTES.profile : tab === 'bills' ? pocketPathFor({ section: 'bills', view: 'airtime' }) : tab === 'activity' ? POCKET_ROUTES.activity : POCKET_ROUTES.home))
+  const selectNav = (tab: PocketNavTab) => navigate(POCKET_BASE_PATH + (tab === 'profile' ? POCKET_ROUTES.profile : tab === 'bills' ? pocketPathFor({ section: 'bills', view: 'overview' }) : tab === 'activity' ? POCKET_ROUTES.activity : POCKET_ROUTES.home))
   const confirmAccountDeletion = async () => {
     if (deleteConfirmation !== 'DELETE' || deleteBusy) return
     setDeleteBusy(true)

@@ -189,7 +189,7 @@ export default function PocketMoveBankPage() {
     const path = tab === 'home'
         ? pocketPathFor({ section: 'home', view: 'overview' })
         : tab === 'bills'
-        ? pocketPathFor({ section: 'bills', view: 'airtime' })
+        ? pocketPathFor({ section: 'bills', view: 'overview' })
         : tab === 'activity'
           ? pocketPathFor({ section: 'activity', view: 'all' })
           : pocketPathFor({ section: 'profile', view: 'details' })
