@@ -6,7 +6,8 @@ import { Check, Clock3, Info } from './PocketIcons'
 import { protectSmileViewport } from '../lib/smileViewport'
 import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 
-type KycState = { environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; uploadReported?: boolean; failureReason?: string | null; jobId?: string }
+type VerificationPolicy = { country: string; countryName: string; provider: string; idSelection: Record<string, string[]>; consentRequired: Record<string, string[]>; previewBVNMFA: boolean }
+type KycState = { environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; uploadReported?: boolean; failureReason?: string | null; verification?: VerificationPolicy; jobId?: string }
 type Session = KycState & { token: string; partnerId: string; callbackUrl: string }
 type SmileWindow = Window & { SmileIdentity?: (config: Record<string, unknown>) => void }
 const TEMPORARY_ERROR = 'Verification is temporarily unavailable. We will retry automatically.'
@@ -59,11 +60,12 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
       if (!mounted.current) return
       const session = await api(state?.canResume ? 'resume' : 'start')
       if (!mounted.current) return
+      if (!session.verification || session.verification.provider !== 'smile') throw new Error(TEMPORARY_ERROR)
       setState(session)
       const done = () => { if (mounted.current) { setBusy(false); void refresh() } }
       ;(window as SmileWindow).SmileIdentity!({
         token: session.token, product: 'biometric_kyc', environment: session.environment, callback_url: session.callbackUrl,
-        id_selection: { NG: ['BVN_MFA'] }, consent_required: { NG: ['BVN_MFA'] }, previewBVNMFA: true,
+        id_selection: session.verification.idSelection, consent_required: session.verification.consentRequired, previewBVNMFA: session.verification.previewBVNMFA,
         use_strict_mode: true, allow_agent_mode: false, allow_legacy_selfie_fallback: false,
         partner_details: { partner_id: session.partnerId, name: 'Pocket by Hash PayLink', logo_url: 'https://app.hashpaylink.com/pocket-mark.svg', policy_url: 'https://app.hashpaylink.com/docs/privacy', theme_color: '#171717' },
         onSuccess: () => {

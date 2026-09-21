@@ -1,10 +1,11 @@
+import { startKycPolicy, storedKycPolicy, matchesKycPolicy, type PocketKycContext } from './kyc-policy.js'
 import type { Request, Response } from 'express'
 import { createHash, randomUUID } from 'node:crypto'
 import { verifiedPrivyUser } from '../local-currency-profile.js'
 import { readDurableJson, mutateDurableJson } from '../render-durable-store.js'
 import { smileConfig, smileRequest, validSmileSignature, type SmileConfig, type SmileEnvironment } from './smile-provider.js'
 
-type Job = { id: string; userId: string; environment: SmileEnvironment; status: 'pending' | 'passed' | 'failed' | 'review'; createdAt: number; checkedAt?: number; uploadReportedAt?: number; submitted?: boolean; providerMissing?: boolean; resultCode?: string; legalName?: string }
+type Job = PocketKycContext & { id: string; userId: string; environment: SmileEnvironment; status: 'pending' | 'passed' | 'failed' | 'review'; createdAt: number; checkedAt?: number; uploadReportedAt?: number; submitted?: boolean; providerMissing?: boolean; resultCode?: string; legalName?: string }
 type RecordState = { jobs: Job[] }
 const key = (userId: string, environment: SmileEnvironment) => `hashpaylink:pocket-kyc:v1:${environment}:${createHash('sha256').update(userId).digest('hex')}`
 export const smileUserId = (userId: string) => `pocket_${createHash('sha256').update(userId).digest('hex')}`
@@ -12,12 +13,12 @@ const jobKey = (id: string) => `hashpaylink:pocket-kyc-job:v1:${id}`
 const fail = (message: string, status: number) => Object.assign(new Error(message), { status })
 
 export function publicKyc(job: Job | undefined, environment: SmileEnvironment) {
-  return { environment, status: job?.status || 'not_started', verified: environment === 'production' && job?.status === 'passed', jobId: job?.id || null, canResume: Boolean(job && ['pending', 'review'].includes(job.status) && !job.resultCode) && job?.providerMissing === true && !job.submitted && !job.uploadReportedAt, uploadReported: Boolean(job?.uploadReportedAt), failureReason: job?.status === 'failed' ? job.resultCode === '0811' ? 'face_mismatch' : job.resultCode ? 'provider_rejected' : 'session_failed' : null }
+  return { environment, verification: storedKycPolicy(job), status: job?.status || 'not_started', verified: environment === 'production' && job?.status === 'passed', jobId: job?.id || null, canResume: Boolean(job && ['pending', 'review'].includes(job.status) && !job.resultCode) && job?.providerMissing === true && !job.submitted && !job.uploadReportedAt, uploadReported: Boolean(job?.uploadReportedAt), failureReason: job?.status === 'failed' ? job.resultCode === '0811' ? 'face_mismatch' : job.resultCode ? 'provider_rejected' : 'session_failed' : null }
 }
 
 export async function requireProductionKyc(userId: string) {
   const record = await readDurableJson<RecordState>(key(userId, 'production'))
-  const job = record?.jobs.find(item => item.status === 'passed' && item.environment === 'production')
+  const job = record?.jobs.find(item => item.status === 'passed' && item.environment === 'production' && matchesKycPolicy(item, 'NG'))
   if (!job?.legalName) throw fail('Complete identity verification before setting up your POS.', 403)
   return job.legalName
 }
@@ -49,7 +50,7 @@ async function reconcile(config: SmileConfig, owner: string, selected: Job) {
       // Unknown/incomplete successes stay in review; never infer approval from HTTP 200.
       const country = String(result.Country || result.IDInfo?.country || '').toUpperCase()
       const legalName = [result.FirstName, result.MiddleName, result.LastName].filter(value => typeof value === 'string').join(' ').replace(/\s+/g, ' ').trim().slice(0, 160)
-      const approved = data.job_success === true && job.resultCode === '0810' && params && country === 'NG' && legalName
+      const approved = data.job_success === true && job.resultCode === '0810' && params && matchesKycPolicy(job, country) && legalName
       job.status = approved ? 'passed' : data.job_success === false ? 'failed' : 'review'
       if (approved) job.legalName = legalName
     } else if (data.job_found === false && !job.submitted && Date.now() - job.createdAt > 20 * 60_000) {
@@ -88,10 +89,12 @@ export default async function pocketKyc(req: Request, res: Response) {
       const job = latest ? await reconcile(config, identity.userId, latest) : undefined
       return res.json({ ok: true, ...publicKyc(job, config.environment) })
     }
+    const policy = action === 'resume' ? storedKycPolicy(latest) : startKycPolicy(req.body.country)
+    if (action === 'resume' && req.body.country !== undefined && req.body.country !== policy.country) throw fail('Continue verification with its original country.', 409)
     if (action === 'resume' && latest && publicKyc(latest, config.environment).canResume) latest = await reconcile(config, identity.userId, latest)
     if (req.body.consent !== true) throw fail('Please consent to identity verification first.', 400)
     if (action === 'resume' && (!latest || !publicKyc(latest, config.environment).canResume)) throw fail('Check progress before continuing verification.', 409)
-    const candidate: Job = action === 'resume' ? latest! : { id: `pkyc_${randomUUID().replaceAll('-', '')}`, userId: smileUserId(identity.userId), environment: config.environment, status: 'pending', createdAt: Date.now() }
+    const candidate: Job = action === 'resume' ? latest! : { id: `pkyc_${randomUUID().replaceAll('-', '')}`, userId: smileUserId(identity.userId), environment: config.environment, country: policy.country, provider: policy.provider, policyVersion: policy.policyVersion, status: 'pending', createdAt: Date.now() }
     if (action === 'resume') await mutateDurableJson<RecordState>(storageKey, current => {
       const job = current?.jobs.find(item => item.id === candidate.id)
       if (!job || !publicKyc(job, config.environment).canResume) throw fail('Your verification status changed. Please try again.', 409)

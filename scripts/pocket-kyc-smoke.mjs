@@ -50,6 +50,23 @@ const abandoned=await request('abandoned',{action:'start',consent:true});
 const abandonedJob=[...state.values.values()].find(v=>v.jobs?.some(j=>j.id===abandoned.body.jobId)).jobs[0];abandonedJob.createdAt=Date.now()-30*60_000;state.result={missing:true};
 const recoverable=await request('abandoned',{action:'status'});assert.equal(recoverable.body.status,'review');assert.equal(recoverable.body.canResume,true);
 const recovered=await request('abandoned',{action:'resume',consent:true});assert.equal(recovered.code,200);assert.equal(recovered.body.jobId,abandoned.body.jobId);
+
+// Unlaunched countries cannot create a durable job or call the provider.
+const countBefore = state.calls.length
+for (const country of ['KE', 'RW', 'US', null]) {
+ const blocked = await request('country-'+country,{action:'start',consent:true,country})
+ assert.equal(blocked.code,['KE','RW'].includes(country)?409:400)
+}
+assert.equal(state.calls.length,countBefore)
+assert.equal((await request('abandoned',{action:'resume',consent:true,country:'KE'})).code,409)
+const regional = await request('regional',{action:'start',consent:true,country:'NG',provider:'sumsub'})
+assert.equal(regional.body.verification.country,'NG');assert.equal(regional.body.verification.provider,'smile')
+const regionalJob=[...state.values.values()].find(v=>v.jobs?.some(j=>j.id===regional.body.jobId)).jobs[0]
+assert.equal(regionalJob.country,'NG');assert.equal(regionalJob.provider,'smile');assert.equal(regionalJob.policyVersion,'ng-smile-bvn-v1')
+state.result={job_found:true,job_complete:true,job_success:true,result:{PartnerParams:{job_id:regionalJob.id,user_id:regionalJob.userId,job_type:1},Country:'KE',FirstName:'Test',LastName:'Person',ResultCode:'0810'}}
+assert.equal((await request('regional',{action:'status'})).body.status,'review')
+console.log('PASS country launch gates, persisted provider/country/policy, original-country resume, and mismatched-country approval rejection.')
+
 process.env.SMILE_ENVIRONMENT='production';assert.equal((await request('alice',{action:'start',consent:true})).code,503)
 console.log('PASS auth, consent, atomic duplicate prevention, owner isolation, callback authentication, authoritative reconciliation, unknown-result review, sandbox isolation production rollout guard, and unsubmitted-session recovery without replacement jobs.')
 
