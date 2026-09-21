@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import { AlertCircle, Bell, Check, Loader2, XCircle } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import { decidePocketRequest, markPocketRequestsRead, POCKET_REQUESTS_UPDATED_EVENT, readPocketRequests, reconcilePocketRequest, type PocketRequestItem } from '../api/pocketRequestsClient'
+import { decidePocketRequest, markPocketRequestsRead, POCKET_REQUESTS_UPDATED_EVENT, readPocketRequestInbox, reconcilePocketRequest, type PocketRequestItem } from '../api/pocketRequestsClient'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
 export default function PocketNotificationsPage() {
   const navigate = useNavigate()
-  const { authenticated, getAccessToken } = usePocketIdentity()
+  const { authenticated, email, getAccessToken } = usePocketIdentity()
   const [items, setItems] = useState<PocketRequestItem[]>([])
   const [busy, setBusy] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -21,31 +21,50 @@ export default function PocketNotificationsPage() {
   const pullDistanceRef = useRef(0)
   const refreshTriggered = useRef(false)
   const lastReconcileAt = useRef(0)
+  const tokenRef = useRef(getAccessToken)
+  tokenRef.current = getAccessToken
+  const scope = useRef(0)
+  const pendingLoad = useRef<Promise<void> | null>(null)
+  useEffect(() => {
+    scope.current += 1; pendingLoad.current = null; lastReconcileAt.current = 0
+    setItems([]); setError('')
+    return () => { scope.current += 1; pendingLoad.current = null }
+  }, [authenticated, email])
 
-  const load = useCallback(async ({ showBusy = false, markRead = false } = {}) => {
-    if (!authenticated) { setBusy(false); return }
+  const load = useCallback(({ showBusy = false, markRead = false } = {}) => {
+    if (!authenticated) { setBusy(false); return Promise.resolve() }
+    if (pendingLoad.current) return pendingLoad.current
+    const generation = scope.current
+    const current = () => generation === scope.current
     if (showBusy) setBusy(true)
-    try {
-      const token = await getAccessToken()
-      if (!token) throw new Error('Sign in again to read requests.')
-      const next = await readPocketRequests(token)
-      let resolved = next
-      const accepted = next.filter(item => item.status === 'accepted').slice(0, 4)
-      if (accepted.length && Date.now() - lastReconcileAt.current >= 30_000) {
-        lastReconcileAt.current = Date.now()
-        const updates = await Promise.all(accepted.map(item => reconcilePocketRequest(token, item.id).catch(() => item)))
-        const byId = new Map(updates.map(item => [item.id, item]))
-        resolved = next.map(item => byId.get(item.id) ?? item)
+    const work = (async () => {
+      try {
+        const token = await tokenRef.current()
+        if (!current()) return
+        if (!token) throw new Error('Sign in again to read requests.')
+        const inbox = await readPocketRequestInbox(token)
+        if (!current()) return
+        setItems(inbox.requests); setError('')
+        // A read-receipt failure must not turn a successfully loaded inbox into an error.
+        if (markRead && inbox.unreadCount > 0) await markPocketRequestsRead(token).catch(() => undefined)
+        if (!current()) return
+        const accepted = inbox.requests.filter(item => item.status === 'accepted').slice(0, 4)
+        if (accepted.length && Date.now() - lastReconcileAt.current >= 30_000) {
+          lastReconcileAt.current = Date.now()
+          const updates = await Promise.all(accepted.map(item => reconcilePocketRequest(token, item.id).catch(() => item)))
+          if (!current()) return
+          const byId = new Map(updates.map(item => [item.id, item]))
+          setItems(inbox.requests.map(item => byId.get(item.id) ?? item))
+        }
+      } catch (reason) {
+        if (current()) setError(reason instanceof Error ? reason.message : 'Could not load requests.')
+      } finally {
+        if (current()) { pendingLoad.current = null; setBusy(false) }
       }
-      setItems(resolved)
-      setError('')
-      if (markRead) await markPocketRequestsRead(token)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load requests.')
-    } finally {
-      if (showBusy) setBusy(false)
-    }
-  }, [authenticated, getAccessToken])
+    })()
+    pendingLoad.current = work
+    return work
+  }, [authenticated, email])
 
   const refresh = useCallback(async () => {
     if (refreshing) return
@@ -53,8 +72,7 @@ export default function PocketNotificationsPage() {
     pullDistanceRef.current = 32
     setPullDistance(32)
     try {
-      const refreshWork = load({ markRead: true })
-      await Promise.race([refreshWork, new Promise(resolve => window.setTimeout(resolve, 3_000))])
+      await load({ markRead: true })
     }
     finally { pullDistanceRef.current = 0; setRefreshing(false); setPullDistance(0) }
   }, [load, refreshing])
@@ -62,7 +80,7 @@ export default function PocketNotificationsPage() {
   useEffect(() => { void load({ showBusy: true, markRead: true }) }, [load])
   useEffect(() => {
     if (!authenticated) return
-    const update = () => { void load() }
+    const update = () => document.visibilityState === 'visible' ? load() : Promise.resolve()
     const visibility = () => { if (document.visibilityState === 'visible') update() }
     const interval = window.setInterval(update, 15_000)
     const unregister = registerPocketRefreshHandler(update)
@@ -114,7 +132,7 @@ export default function PocketNotificationsPage() {
   }
 
   return <div ref={scrollerRef} onTouchStart={startPull} onTouchMove={movePull} onTouchEnd={finishPull} onTouchCancel={() => { pullStartY.current = null; if (!refreshing) { pullDistanceRef.current = 0; setPullDistance(0) } }} className="fixed inset-0 z-[45] overflow-y-auto overscroll-y-contain bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
-    <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-[max(.5rem,env(safe-area-inset-top))] z-[60] flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}><span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-3.5 w-3.5" /></span></div>
+    <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-[max(.5rem,env(safe-area-inset-top))] z-[60] flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}><span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#17181c] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" /></span></div>
     <main className="mx-auto min-h-full w-full max-w-[480px] px-5 pb-8 pt-[max(1rem,env(safe-area-inset-top))]"><PocketFlowHeader title="Notifications" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       {busy ? <section className="mt-24 text-center"><Loader2 className="mx-auto h-6 w-6 text-gray-400" /></section> : error && !items.length ? <section className="mt-20 text-center"><AlertCircle className="mx-auto h-7 w-7 text-gray-300" /><p className="mt-4 text-sm font-bold">Notifications could not load</p><p className="mx-auto mt-2 max-w-xs text-xs leading-5 text-gray-400">{error}</p><button type="button" onClick={() => void load({ showBusy: true, markRead: true })} className="mt-5 min-h-11 rounded-full bg-gray-950 px-6 text-xs font-semibold text-white dark:bg-white dark:text-gray-950">Try again</button></section> : items.length ? <section className="mt-7 space-y-3">{items.map(item => <article key={item.id} className="rounded-[24px] bg-white p-4 shadow-sm dark:bg-white/[0.05]">
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-black">{item.title}</p><p className="mt-1 text-[11px] text-gray-400">{item.direction === 'incoming' ? `From ${item.senderName}` : `To ${item.recipientName}`}</p><p className="mt-1 text-[10px] font-medium text-gray-400">Sent {new Date(item.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })} at {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[9px] font-black uppercase text-gray-500 dark:bg-white/[0.08]">{item.status === 'paid' ? 'Paid' : item.status === 'accepted' ? 'Accepted' : item.status === 'declined' ? 'Declined' : 'Awaiting response'}</span></div>

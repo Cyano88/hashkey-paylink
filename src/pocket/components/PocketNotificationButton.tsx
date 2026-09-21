@@ -1,26 +1,38 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "./PocketIcons";
 import { POCKET_BASE_PATH, POCKET_ROUTES } from "../lib/pocketRoutes";
 import usePocketIdentity from "../hooks/usePocketIdentity";
 import { POCKET_REQUESTS_UPDATED_EVENT, readPocketRequestInbox } from "../api/pocketRequestsClient";
+import usePocketPageVisible from "../hooks/usePocketPageVisible";
 import { registerPocketRefreshHandler } from "../lib/pocketRefresh";
 
 export default function PocketNotificationButton() {
   const navigate = useNavigate();
-  const { authenticated, getAccessToken } = usePocketIdentity();
+  const { authenticated, email, getAccessToken } = usePocketIdentity();
   const [unread, setUnread] = useState(0);
+  const visible = usePocketPageVisible();
+  const tokenRef = useRef(getAccessToken);
+  tokenRef.current = getAccessToken;
   useEffect(() => {
     if (!authenticated) {
       setUnread(0);
       return;
     }
+    if (!visible) return;
+    setUnread(0);
     let cancelled = false;
+    let inFlight = false;
     const refresh = async () => {
-      const token = await getAccessToken();
-      if (!token) return;
-      const inbox = await readPocketRequestInbox(token).catch(() => null);
-      if (!cancelled && inbox) setUnread(inbox.unreadCount);
+      if (cancelled || inFlight || document.visibilityState !== 'visible') return;
+      inFlight = true;
+      try {
+        const token = await tokenRef.current();
+        if (!token || cancelled || document.visibilityState !== 'visible') return;
+        const inbox = await readPocketRequestInbox(token);
+        if (!cancelled) setUnread(inbox.unreadCount);
+      } catch { /* Keep the last count when the session or inbox is unavailable. */ }
+      finally { inFlight = false; }
     };
     void refresh();
     const interval = window.setInterval(refresh, 30_000);
@@ -32,7 +44,7 @@ export default function PocketNotificationButton() {
       unregister();
       window.removeEventListener(POCKET_REQUESTS_UPDATED_EVENT, refresh);
     };
-  }, [authenticated, getAccessToken]);
+  }, [authenticated, email, visible]);
   return (
     <button
       type="button"
