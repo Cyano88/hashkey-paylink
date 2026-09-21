@@ -50,8 +50,11 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   useEffect(() => { mounted.current = true; void refresh(); return () => { mounted.current = false; document.getElementById('smile-identity-hosted-web-integration')?.remove() } }, [refresh])
   useEffect(() => {
     if (!state || !['pending', 'review'].includes(state.status)) return
+    const onVisible = () => { if (!document.hidden) void refresh() }
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
     const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, 15000)
-    return () => clearInterval(timer)
+    return () => { clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible) }
   }, [state?.status, refresh])
   const start = async () => {
     if (!consent || busy) return
@@ -67,7 +70,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         token: session.token, product: 'biometric_kyc', environment: session.environment, callback_url: session.callbackUrl,
         id_selection: { NG: ['BVN_MFA'] }, consent_required: { NG: ['BVN_MFA'] }, previewBVNMFA: true,
         use_strict_mode: true, allow_agent_mode: false, allow_legacy_selfie_fallback: false,
-        partner_details: { partner_id: session.partnerId, name: 'Pocket by Hash PayLink', logo_url: 'https://app.hashpaylink.com/pocket-circle.png', policy_url: 'https://app.hashpaylink.com/docs/privacy', theme_color: '#171717' },
+        partner_details: { partner_id: session.partnerId, name: 'Pocket by Hash PayLink', logo_url: 'https://app.hashpaylink.com/pocket-mark.svg', policy_url: 'https://app.hashpaylink.com/docs/privacy', theme_color: '#171717' },
         onSuccess: () => {
           if (!mounted.current) return
           setBusy(false)
@@ -75,10 +78,10 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
           setState(current => current && { ...current, canResume: false, uploadReported: true })
           // An upload notification is only a processing hint, never identity approval.
           void api('uploaded', session.jobId).then(next => { if (mounted.current) setState(next) }).catch(() => {
-            if (mounted.current) setError('Your upload finished. Check progress to confirm the result.')
+            if (mounted.current) setError('Your upload finished. We will keep checking for your result.')
           })
         }, onClose: done,
-        onError: () => { done(); if (mounted.current) setError('Verification was interrupted. Check progress before trying again.') },
+        onError: () => { done(); if (mounted.current) setError('Verification was interrupted. We are checking its status.') },
       })
     } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false) } }
   }
@@ -88,23 +91,22 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
     {state && <>
       {state.environment === 'sandbox' && <p className="rounded-xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:bg-amber-400/10 dark:text-amber-200">Sandbox test. Use Smile ID test details. This does not verify your live account or unlock POS payments.</p>}
       <div className="space-y-4">
-        <h2 className="text-sm font-medium">Identity verification</h2>
+
         <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-5 dark:border-white/10 dark:bg-[#121212]">
           <span className="text-sm font-medium">BVN and facial verification</span>
           {state.status === 'passed' ? <Check aria-label={state.verified ? 'Verified' : 'Sandbox completed'} className="h-5 w-5 text-green-600" /> : ['pending', 'review'].includes(state.status) ? <Clock3 aria-label="In progress" className="h-5 w-5 text-blue-500" /> : null}
         </div>
         <div role="status" className={`flex items-start gap-3 rounded-xl p-4 ${state.status === 'passed' ? 'bg-green-50 text-green-800 dark:bg-green-500/10 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-300'}`}>
           <Info className="mt-0.5 h-5 w-5 shrink-0" />
-          <div><h3 className="text-sm font-medium">{state.status === 'passed' ? state.verified ? 'Verification complete' : 'Sandbox test completed' : state.status === 'pending' ? 'Verification in progress' : state.status === 'review' ? 'Verification needs support' : state.status === 'failed' ? 'Try verification again' : 'Verify your identity'}</h3>
-          <p className="mt-1 text-sm leading-6">{state.status === 'pending' ? state.canResume ? 'Smile ID has not confirmed receipt yet. Continue your existing verification if you closed it before uploading.' : 'Your verification is being processed. We will update your status when the result is confirmed.' : state.status === 'review' ? 'Your result has not been confirmed. Check progress or contact Agent Hash for help.' : state.status === 'passed' ? state.verified ? 'Your identity check is complete. You can now set up your POS.' : 'The sandbox check passed. Production verification is still required for live POS access.' : 'For Nigerian individuals. Verify your BVN and take a live selfie with Smile ID.'}</p></div>
+          <div><h3 className="text-sm font-medium">{state.canResume ? 'Complete verification' : state.status === 'passed' ? state.verified ? 'Verification complete' : 'Sandbox test completed' : state.status === 'pending' ? 'Verification in progress' : state.status === 'review' ? 'Verification processing' : state.status === 'failed' ? 'Try verification again' : 'Verify your identity'}</h3>
+          <p className="mt-1 text-sm leading-6">{state.canResume ? 'Your last session was not submitted. Continue to finish your verification.' : state.status === 'pending' ? 'Your verification is being processed. We will update your status when the result is confirmed.' : state.status === 'review' ? 'Your result is taking longer than expected. We will update it automatically once confirmed.' : state.status === 'passed' ? state.verified ? 'Your identity check is complete. You can now set up your POS.' : 'The sandbox check passed. Production verification is still required for live POS access.' : 'For Nigerian individuals. Verify your BVN and take a live selfie with Smile ID.'}</p></div>
         </div>
       </div>
       {retryable && <>
         <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />I agree to share my identity details and selfie with Smile ID for verification.</label>
         <button type="button" disabled={!consent || busy} onClick={() => void start()} className="w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{busy ? 'Opening verification...' : state.canResume ? 'Continue verification' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Start verification'}</button>
       </>}
-      {state.status === 'review' && <a href={POCKET_BASE_PATH + POCKET_ROUTES.assistant} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
-      {['pending', 'review'].includes(state.status) && !busy && <button type="button" onClick={() => void refresh()} className="w-full py-3 text-sm font-semibold">Check progress</button>}
+      {state.status === 'review' && !state.canResume && <a href={POCKET_BASE_PATH + POCKET_ROUTES.assistant} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
     </>}
     {submittedSheet && <PocketBottomSheet title="Verification submitted" onClose={() => setSubmittedSheet(false)}>
       <div className="pb-2 pt-3 text-center">

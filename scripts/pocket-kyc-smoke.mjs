@@ -46,5 +46,9 @@ assert.equal((await request('upload-user',{action:'status'})).body.status,'revie
 [...state.values.values()].find(v=>v.jobs?.some(j=>j.id===delayed.id)).jobs[0].checkedAt=0;
 state.result={job_found:true,job_complete:true,job_success:true,result:{PartnerParams:{job_id:delayed.id,user_id:m.smileUserId('upload-user'),job_type:1},Country:'NG',FirstName:'Test',LastName:'Person',ResultCode:'0810'}};
 assert.equal((await request('upload-user',{action:'status'})).body.status,'passed');
+const abandoned=await request('abandoned',{action:'start',consent:true});
+const abandonedJob=[...state.values.values()].find(v=>v.jobs?.some(j=>j.id===abandoned.body.jobId)).jobs[0];abandonedJob.createdAt=Date.now()-30*60_000;state.result={missing:true};
+const recoverable=await request('abandoned',{action:'status'});assert.equal(recoverable.body.status,'review');assert.equal(recoverable.body.canResume,true);
+const recovered=await request('abandoned',{action:'resume',consent:true});assert.equal(recovered.code,200);assert.equal(recovered.body.jobId,abandoned.body.jobId);
 process.env.SMILE_ENVIRONMENT='production';assert.equal((await request('alice',{action:'start',consent:true})).code,503)
 console.log('PASS auth, consent, atomic duplicate prevention, owner isolation, callback authentication, authoritative reconciliation, unknown-result review, sandbox isolation production rollout guard, and unsubmitted-session recovery without replacement jobs.')

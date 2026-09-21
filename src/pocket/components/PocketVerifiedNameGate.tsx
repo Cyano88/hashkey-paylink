@@ -17,7 +17,7 @@ export default function PocketVerifiedNameGate() {
         if (!token) return
         const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'eligibility' }), signal: AbortSignal.timeout(15000) })
         const data = await response.json()
-        if (current && response.ok && data.ok) setPending(['pending', 'review'].includes(data.status))
+        if (current && response.ok && data.ok) setPending(['pending', 'review'].includes(data.status) && !data.canResume)
       } catch { /* Keep the verification entry point available on lookup failure. */ }
     })()
     return () => { current = false }

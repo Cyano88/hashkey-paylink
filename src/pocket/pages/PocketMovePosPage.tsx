@@ -45,7 +45,7 @@ export default function PocketMovePosPage() {
         const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', headers: { authorization: `Bearer ${token || ''}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'eligibility' }), signal: AbortSignal.timeout(15000) })
         const data = await response.json()
         if (!response.ok || data.ok !== true) throw new Error('Verification could not load. Please try again.')
-        if (current) { setVerificationPending(['pending', 'review'].includes(data.status)); setIdentityVerified(data.verified === true); setVerifiedIdentityName(data.verified === true && typeof data.legalName === 'string' ? data.legalName : '') }
+        if (current) { setVerificationPending(['pending', 'review'].includes(data.status) && !data.canResume); setIdentityVerified(data.verified === true); setVerifiedIdentityName(data.verified === true && typeof data.legalName === 'string' ? data.legalName : '') }
       } catch { if (current) { setIdentityVerified(false); setVerificationError('Verification could not load. Please try again from Profile.') } }
     })()
     return () => { current = false }
@@ -92,7 +92,7 @@ export default function PocketMovePosPage() {
       <PocketFlowHeader centered rightAction={<button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.posManage)} className="min-h-10 px-1 text-xs font-bold">Manage</button>} title="POS" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <PocketPosShell standalone>
         {authenticated && !identityVerified && (
-          <PocketKycGate pending={verificationPending} error={verificationError} onClose={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} onManage={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.posManage)} />
+          <PocketKycGate pending={verificationPending} error={verificationError} onClose={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
         )}
 
         {authenticated && identityVerified && (!pos.country ? (
