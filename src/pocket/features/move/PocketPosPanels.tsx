@@ -1,7 +1,7 @@
 import { Store as PaymentStore } from 'lucide-react'
 import { ArrowRight, Copy, LayoutDashboard, Loader2, Mail } from '../../components/PocketIcons'
 import { QRCodeCanvas } from 'qrcode.react'
-import { cn, truncateAddress } from '../../../lib/utils'
+import { cn } from '../../../lib/utils'
 import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import type { ReactNode } from 'react'
 import type {
@@ -70,10 +70,9 @@ export function PocketPosCountryPanel({ controller, countries, profileReady }: P
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">In-person checkout</p>
         <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">One QR for every sale</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-          Customers enter the amount, pay with Base USDC, and you receive Naira in your verified bank account.
+          Accept USDC payments and receive Naira in your bank account.
         </p>
       </div>
 
@@ -100,7 +99,7 @@ export function PocketPosCountryPanel({ controller, countries, profileReady }: P
                   </span>
                   <div>
                     <p className="text-sm font-black text-gray-900 dark:text-white">{country.name}</p>
-                    <p className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">{country.copy}</p>
+                    {country.copy && <p className="mt-0.5 text-xs leading-snug text-gray-500 dark:text-gray-400">{country.copy}</p>}
                   </div>
                 </div>
               </div>
@@ -150,10 +149,9 @@ export function PocketPosSetupPanel({
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Nigeria Naira POS</p>
-        <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Create Naira POS QR</h2>
+        <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Set up your POS</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-          Payers enter Naira, pay with Base USDC, and you receive a bank payout.
+          Choose where to receive your payments.
         </p>
       </div>
 
@@ -203,7 +201,7 @@ export function PocketPosSetupPanel({
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Nigerian bank account</p>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Account ownership resolves automatically after the tenth digit.
+                  Use a bank account in your name.
                 </p>
               </div>
             </div>
@@ -215,7 +213,7 @@ export function PocketPosSetupPanel({
                     value={bankCode}
                     options={bankInstitutions.map(institution => ({
                       value: institution.code,
-                      label: `${institution.name} (${institution.code})`,
+                      label: institution.name,
                     }))}
                     onChange={value => {
                       const selected = bankInstitutions.find(institution => institution.code === value)
@@ -268,7 +266,7 @@ export function PocketPosSetupPanel({
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
       >
         {controller.submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <PaymentStore className="h-4 w-4" />}
-        Generate Naira POS QR
+        Create POS
       </button>
     </div>
   )
@@ -287,14 +285,12 @@ export function PocketPosReadyPanel({
   customerUrl,
   dashboardUrl,
   displayName,
-  walletAddress,
   copied,
   onCopy,
 }: PocketPosReadyPanelProps) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Nigerian Retail Mode</p>
         <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">POS QR ready</h2>
         <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">Payers scan once and enter their amount.</p>
       </div>
@@ -305,9 +301,7 @@ export function PocketPosReadyPanel({
             <QRCodeCanvas value={customerUrl} size={112} level="H" includeMargin />
           </div>
           <div className="min-w-0">
-            <span className="inline-flex rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:border-[#262626] dark:bg-[#171717]">Static POS QR</span>
             <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{displayName}</p>
-            <p className="mt-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">{truncateAddress(walletAddress, 8)}</p>
             <button
               type="button"
               onClick={onCopy}
@@ -318,7 +312,6 @@ export function PocketPosReadyPanel({
             </button>
           </div>
         </div>
-        <p className="mt-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">Payer link ready</p>
       </div>
 
       <div className="grid gap-2">
@@ -331,9 +324,6 @@ export function PocketPosReadyPanel({
           <LayoutDashboard className="h-4 w-4" />
           View payments
         </a>
-        <p className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-          Payers open payment by scanning the QR or using the copied link.
-        </p>
       </div>
     </div>
   )
@@ -350,7 +340,7 @@ export function PocketPosSignInCard() {
         </span>
       </PrivyConnectButton>
       <p className="px-3 pb-1 pt-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">
-        Secure access keeps POS receipts, payouts, reversals, and support records connected.
+        Sign in to manage your POS and payments.
       </p>
     </div>
   )

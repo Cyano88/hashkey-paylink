@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express'
-import { createNgPosMerchant } from '../ng-pos.js'
-import { assertBankAccountMatchesPocketName } from './verified-bank-name.js'
+import { createNgPosMerchant, verifyNgPosBankAccount } from '../ng-pos.js'
+import { normalizeBankLegalName } from './verified-bank-name.js'
+import { requireProductionKyc } from './kyc.js'
+import { verifiedPrivyUser } from '../local-currency-profile.js'
 import {
   isPocketIdempotencyKey,
   isPocketPosCreateRequest,
@@ -76,5 +78,12 @@ export function createPocketPosHandler(dependencies: PocketPosHandlerDependencie
 
 export default createPocketPosHandler({
   createMerchant: createNgPosMerchant,
-  authorizeBankAccount: assertBankAccountMatchesPocketName,
+  authorizeBankAccount: async (req, body) => {
+    const identity = await verifiedPrivyUser(req)
+    const legalName = await requireProductionKyc(identity.userId)
+    const bank = await verifyNgPosBankAccount(body) as { account_name?: string }
+    if (!bank.account_name || normalizeBankLegalName(bank.account_name) !== normalizeBankLegalName(legalName)) {
+      throw Object.assign(new Error('Use a payout account in your verified name.'), { status: 403 })
+    }
+  },
 })

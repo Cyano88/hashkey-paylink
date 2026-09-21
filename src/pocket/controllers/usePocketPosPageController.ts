@@ -17,6 +17,7 @@ export default function usePocketPosPageController({
   getAccessToken,
   profile,
   profileReady,
+  verifiedIdentityName = '',
   routeStep,
   onStepChange,
 }: {
@@ -25,6 +26,7 @@ export default function usePocketPosPageController({
   getAccessToken: PocketAccessTokenReader
   profile: LocalCurrencyProfile | null
   profileReady: boolean
+  verifiedIdentityName?: string
   routeStep: PocketPosRouteStep
   onStepChange: (step: PocketPosRouteStep) => void
 }) {
@@ -45,8 +47,8 @@ export default function usePocketPosPageController({
   const creationIdempotencyKey = useRef('')
   const lastVerificationKey = useRef('')
   const normalizeName = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '')
-  const profileVerified = profile?.nameStatus === 'bank_resolved' && Boolean(profile.resolvedName)
-  const identityMatches = profileVerified && bankVerified && normalizeName(bankAccountName) === normalizeName(profile?.resolvedName ?? '')
+  const profileVerified = Boolean(verifiedIdentityName)
+  const identityMatches = profileVerified && bankVerified && normalizeName(bankAccountName) === normalizeName(verifiedIdentityName)
 
   const resetBank = useCallback(() => {
     creationIdempotencyKey.current = ''
@@ -76,7 +78,7 @@ export default function usePocketPosPageController({
   }, [resetBank, routeStep])
 
   useEffect(() => {
-    if (!country) return
+    if (!country || !authenticated || !profileVerified) return
     let current = true
     setInstitutionsBusy(true)
     readPocketBankInstitutions()
@@ -92,7 +94,7 @@ export default function usePocketPosPageController({
         if (current) setInstitutionsBusy(false)
       })
     return () => { current = false }
-  }, [country])
+  }, [authenticated, country, profileVerified])
 
   const verifyBankAccount = useCallback(async () => {
     setBankVerifyBusy(true)
@@ -113,7 +115,7 @@ export default function usePocketPosPageController({
       if (data.bank_code) setBankCode(String(data.bank_code).trim())
       const resolved = String(data.account_name ?? '').trim()
       setBankAccountName(resolved)
-      if (profileVerified && normalizeName(resolved) !== normalizeName(profile?.resolvedName ?? '')) {
+      if (profileVerified && normalizeName(resolved) !== normalizeName(verifiedIdentityName)) {
         setError('This account belongs to a different verified name. Use an account in your verified name.')
         return
       }
@@ -123,7 +125,7 @@ export default function usePocketPosPageController({
     } finally {
       setBankVerifyBusy(false)
     }
-  }, [bankAccount, bankCode, bankName, getAccessToken, profile?.resolvedName, profileVerified])
+  }, [bankAccount, bankCode, bankName, getAccessToken, verifiedIdentityName, profileVerified])
 
   useEffect(() => {
     if (!authenticated || !bankCode || bankAccount.length !== 10 || bankVerifyBusy || bankVerified) return
@@ -162,8 +164,8 @@ export default function usePocketPosPageController({
         idempotencyKey,
         request: {
           owner_email: email,
-          owner_first_name: profile?.firstName,
-          owner_last_name: profile?.lastName,
+          owner_first_name: verifiedIdentityName.split(' ')[0],
+          owner_last_name: verifiedIdentityName.split(' ').slice(1).join(' '),
           payout_preference: 'INSTANT_FIAT',
           display_name: merchantName.trim(),
           supported_networks: ['base'],
@@ -183,7 +185,7 @@ export default function usePocketPosPageController({
     } finally {
       setBusy(false)
     }
-  }, [authenticated, bankAccount, bankAccountName, bankCode, bankName, canSubmit, email, getAccessToken, merchantName, onStepChange, profile])
+  }, [authenticated, bankAccount, bankAccountName, bankCode, bankName, canSubmit, email, getAccessToken, merchantName, onStepChange, verifiedIdentityName])
 
   const controller = usePocketPosController({
     draft: {

@@ -74,6 +74,7 @@ import pocketProfileHandler from './api/pocket/profile.js'
 import pocketAccountHandler from './api/pocket/account.js'
 import pocketPaymentSecurityHandler from './api/pocket/payment-security.js'
 import pocketPosHandler from './api/pocket/pos.js'
+import pocketKycHandler, { pocketKycCallback } from './api/pocket/kyc.js'
 import pocketBankReceiveHandler from './api/pocket/bank-receive.js'
 import pocketBankInstitutionsHandler from './api/pocket/bank-receive-institutions.js'
 import pocketBankVerifyHandler from './api/pocket/bank-receive-verify.js'
@@ -185,7 +186,7 @@ app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY')
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  res.setHeader('Permissions-Policy', 'camera=(self "https://cdn.smileidentity.com"), microphone=(), geolocation=()')
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   }
@@ -193,13 +194,13 @@ app.use((_req, res, next) => {
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com https://cdn.smileidentity.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' https: wss:",
-      "frame-src 'self' https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
-      "child-src 'self' https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+      "frame-src 'self' https://cdn.smileidentity.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+      "child-src 'self' https://cdn.smileidentity.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -211,6 +212,7 @@ app.use((_req, res, next) => {
 const vtpassWebhookLimiter = rateLimit({ name: 'vtpass-webhook', windowMs: 60_000, max: 60 })
 const hashPayStreamArcWebhookLimiter = rateLimit({ name: 'hashpaystream-arc-webhook', windowMs: 60_000, max: 120 })
 
+app.post('/api/pocket/kyc/callback', rateLimit({ name: 'smile-callback', windowMs: 60_000, max: 120 }), express.json({ limit: '1536kb' }), pocketKycCallback)
 app.post('/api/paycrest-webhook', express.raw({ type: 'application/json', limit: '128kb' }), paycrestWebhookHandler)
 app.post('/api/vtpass-webhook', vtpassWebhookLimiter, express.json({ type: 'application/json', limit: '32kb' }), vtpassBillsWebhookHandler)
 app.post(
@@ -326,6 +328,7 @@ app.all('/api/local-currency-profile',  strictLimiter, localCurrencyProfileHandl
 app.all('/api/pocket/profile',           strictLimiter, pocketProfileHandler)
 app.delete('/api/pocket/account',         strictLimiter, pocketAccountHandler)
 app.all('/api/pocket/payment-security',  strictLimiter, pocketPaymentSecurityHandler)
+app.all('/api/pocket/kyc', strictLimiter, pocketKycHandler)
 app.all('/api/pocket/pos',               strictLimiter, pocketPosHandler)
 app.all('/api/pocket/bank-receive',      strictLimiter, pocketBankReceiveHandler)
 app.all('/api/pocket/bank-receive/institutions', readLimiter, pocketBankInstitutionsHandler)
