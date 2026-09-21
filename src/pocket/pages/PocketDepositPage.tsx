@@ -44,7 +44,7 @@ export default function PocketDepositPage() {
   const copy = async () => { if (!wallet?.address) return; await navigator.clipboard.writeText(wallet.address); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }
   if (authenticated && !wallets.resolved) return <PocketLoadingState active="home" />
   return <PocketRouteShell active="home" onSelect={tab => navigate(POCKET_BASE_PATH + navPath(tab))}>
-    <PocketFlowHeader title="Deposit USDC" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
+    <PocketFlowHeader centered title="Deposit USDC" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.receive)} />
     <section className="rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none">
       <div className="grid grid-cols-3 gap-3">{NETWORKS.map(item => <button key={item.key} type="button" onClick={() => setNetwork(item.key)} className={cn('flex min-h-14 items-center justify-center rounded-2xl border transition', network === item.key ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : 'border-gray-100 dark:border-[#262626]')} aria-label={'Deposit on ' + item.label}><img src={item.logo} alt="" className={cn('h-7 w-7 rounded-md object-cover grayscale contrast-200', item.dark && 'invert', network !== item.key && 'dark:invert')} /></button>)}</div>
       {wallet?.address ? <div className="mt-7 text-center">

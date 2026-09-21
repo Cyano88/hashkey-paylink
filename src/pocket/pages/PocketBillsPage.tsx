@@ -25,9 +25,9 @@ export default function PocketBillsPage({ view }: { view: PocketBillView | 'over
   if (view !== 'overview') return <PocketBillFlow key={view} view={view} />
   const selectNav = (tab: PocketNavTab) => navigate(POCKET_BASE_PATH + pocketPathFor(tab === 'bills' ? { section: 'bills', view: 'overview' } : tab === 'profile' ? { section: 'profile', view: 'details' } : tab === 'activity' ? { section: 'activity', view: 'all' } : { section: 'home', view: 'overview' }))
   return <PocketRouteShell active="bills" onSelect={selectNav}>
-    <h1 className="text-xl font-black tracking-tight text-gray-950 dark:text-white">Bills</h1>
-    <section aria-label="Bill services" className="space-y-3">
-      {BILL_ACTIONS.map(({ view, label, Icon }) => <button key={view} type="button" onClick={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'bills', view }))} className="flex min-h-20 w-full items-center gap-4 rounded-[22px] border border-gray-100 bg-white p-4 text-left shadow-sm transition active:scale-[0.99] dark:border-[#262626] dark:bg-[#121212] dark:shadow-none">
+    <h1 className="py-3 text-center text-base font-black tracking-tight text-gray-950 dark:text-white">Bills</h1>
+    <section aria-label="Bill services" className="divide-y divide-gray-100 dark:divide-[#262626]">
+      {BILL_ACTIONS.map(({ view, label, Icon }) => <button key={view} type="button" onClick={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'bills', view }))} className="flex min-h-20 w-full items-center gap-4 px-1 py-4 text-left transition active:scale-[0.99]">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-700 dark:bg-[#171717] dark:text-gray-200"><Icon className="h-5 w-5" /></span>
         <span className="flex-1 text-sm font-bold text-gray-950 dark:text-white">{label}</span>
         <ChevronRight className="h-4 w-4 text-gray-400" />
@@ -109,7 +109,7 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
-  const flowHeader = <PocketFlowHeader title={BILL_ACTIONS.find(action => action.view === view)!.label} onBack={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'bills', view: 'overview' }))} />
+  const flowHeader = <PocketFlowHeader centered title={BILL_ACTIONS.find(action => action.view === view)!.label} onBack={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'bills', view: 'overview' }))} />
 
   if (authenticated && (!wallets.resolved || (wallets.error && !wallets.wallets.base?.address))) return <PocketRouteShell active="bills" onSelect={selectNav}>{flowHeader}<PocketBillsSkeleton /></PocketRouteShell>
 

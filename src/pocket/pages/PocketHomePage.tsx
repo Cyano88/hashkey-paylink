@@ -1,7 +1,7 @@
 import PocketWalletUpdateCard from '../components/PocketWalletUpdateCard'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Landmark, ChevronRight, Eye, EyeOff, QrCode, Send, Store, RequestMoney, Deposit } from '../components/PocketIcons'
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, ArrowRight, ChevronRight, Eye, EyeOff, QrCode, Send, Store, Deposit } from '../components/PocketIcons'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -14,7 +14,7 @@ import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRou
 import { cn } from '../../lib/utils'
 import PocketRecentActivitySkeleton from '../components/PocketRecentActivitySkeleton'
 
-type HomeNetwork = 'base' | 'arbitrum' | 'solana' | 'arc'
+type HomeNetwork = 'base' | 'arbitrum' | 'solana' | 'arc' | 'polygon' | 'ethereum'
 const NETWORK_KEY = 'pocket.home.network'
 const BALANCE_VISIBLE_KEY = 'pocket.balanceVisible'
 const NETWORKS = [
@@ -22,6 +22,8 @@ const NETWORKS = [
   { key: 'arbitrum', label: 'Arbitrum', logo: '/brand/arbitrum-logo.jpeg', dark: false },
   { key: 'solana', label: 'Solana', logo: '/brand/solana-logo.jpeg', dark: true },
   { key: 'arc', label: 'Arc', logo: '/brand/arc-logo.jpeg', dark: true },
+  { key: 'polygon', label: 'Polygon', logo: '/brand/polygon-logo.png', dark: false },
+  { key: 'ethereum', label: 'Ethereum', logo: '/brand/ethereum-logo.png', dark: false },
 ] as const
 
 function initialNetwork(): HomeNetwork {
@@ -45,6 +47,7 @@ export default function PocketHomePage() {
   const showNgn = profile.profile?.displayCurrency === 'NGN'
   const fx = usePocketFxQuote(1, showNgn)
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
+  const [networkPage, setNetworkPage] = useState(0)
   const [balanceVisible, setBalanceVisible] = useState(() => window.localStorage.getItem(BALANCE_VISIBLE_KEY) !== 'false')
   const recent = activity.rows.slice(0, 4)
   const balancesVisible = !authenticated || wallets.displayComplete
@@ -54,8 +57,9 @@ export default function PocketHomePage() {
   const open = (path: string) => navigate(POCKET_BASE_PATH + path)
   const selectedRow = wallets.displayRows.find(row => row.key === selected)
   const selectedVisible = !authenticated || selectedRow?.known
+  const comingSoon = selected === 'polygon' || selected === 'ethereum'
   const selectedBalance = selectedRow?.balance ?? 0
-  const setSelected = (network: HomeNetwork) => { window.localStorage.setItem(NETWORK_KEY, network); setSelectedState(network) }
+  const setSelected = (network: HomeNetwork) => { if (network !== 'polygon' && network !== 'ethereum') window.localStorage.setItem(NETWORK_KEY, network); setSelectedState(network) }
   const toggleBalance = () => setBalanceVisible(current => { window.localStorage.setItem(BALANCE_VISIBLE_KEY, String(!current)); return !current })
   const hidden = '....'
 
@@ -76,28 +80,26 @@ export default function PocketHomePage() {
           {showNgn && balancesVisible && (fx.quote ? <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(displayTotal * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p> : fx.busy ? <span aria-label="Loading Naira equivalent" className="mt-2 block h-3 w-24 animate-pulse rounded bg-white/10 dark:bg-gray-950/[0.08]" /> : null)}
         </div>
         <div className="flex items-center gap-1">
-          <button type="button" onClick={() => open(POCKET_ROUTES.send)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><Send className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Send</span></button>
           <button type="button" onClick={() => open(POCKET_ROUTES.scan)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><QrCode className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Scan</span></button>
-          <button type="button" onClick={() => open(POCKET_ROUTES.swap)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><ArrowLeftRight className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Swap</span></button>
         </div>
       </div>
-      <div className="mt-4 grid grid-cols-4 gap-2">
-        {NETWORKS.map(network => <button key={network.key} type="button" onClick={() => setSelected(network.key)} className={cn('relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl transition', selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={'Show ' + network.label + ' balance'} aria-pressed={selected === network.key}>
+      <div className="mt-4 flex items-center gap-2"><div className="pocket-network-page grid min-w-0 flex-1 grid-cols-4 gap-2" aria-label="Balance networks" key={networkPage}>
+        {NETWORKS.slice(networkPage * 4, networkPage * 4 + 4).map(network => <button key={network.key} type="button" onClick={() => setSelected(network.key)} className={cn('relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl transition', selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={network.key === 'polygon' || network.key === 'ethereum' ? network.label + ' - Coming soon' : 'Show ' + network.label + ' balance'} aria-pressed={selected === network.key}>
           <img src={network.logo} alt="" className={cn('h-6 w-6 rounded-md object-cover grayscale contrast-200', network.dark ? 'invert dark:invert-0' : 'dark:invert')} />
           <span className="text-[9px] font-semibold">{network.label}</span>
         </button>)}
-      </div>
+      </div><button type="button" aria-label={networkPage === 0 ? 'More networks' : 'Previous networks'} onClick={() => { const next = networkPage === 0 ? 1 : 0; setNetworkPage(next); setSelected(next === 1 ? 'polygon' : 'base') }} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-full"><ArrowRight className={cn('h-5 w-5 transition-transform', networkPage === 1 && 'rotate-180')} /></button></div>
       <div className="mt-3 border-t border-white/10 pt-3 text-center dark:border-gray-950/10">
-        {selectedVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label={`Loading ${selected} balance`} className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
+        {comingSoon ? <p className="text-sm font-semibold">Coming soon</p> : selectedVisible ? <p className="text-lg font-semibold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(selectedBalance) : hidden} <span className="text-[10px] font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label={`Loading ${selected} balance`} className="mx-auto block h-6 w-28 animate-pulse rounded-lg bg-white/10 dark:bg-gray-950/[0.08]" />}
       </div>
     </section>
 
     <section className="grid grid-cols-4 gap-2">
       {[
-        { label: 'Bank', icon: Landmark, path: POCKET_ROUTES.bank + '?mode=withdraw' },
+        { label: 'Send', icon: Send, path: POCKET_ROUTES.transfer },
         { label: 'POS', icon: Store, path: POCKET_ROUTES.pos },
-        { label: 'Request', icon: RequestMoney, path: POCKET_ROUTES.usdc },
-        { label: 'Deposit', icon: Deposit, path: POCKET_ROUTES.deposit },
+        { label: 'Swap', icon: ArrowLeftRight, path: POCKET_ROUTES.swap },
+        { label: 'Receive', icon: Deposit, path: POCKET_ROUTES.receive },
       ].map(item => <button key={item.label} type="button" onClick={() => open(item.path)} className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-2xl border border-gray-100 bg-white px-1 text-[10px] font-bold text-gray-700 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:text-gray-200"><item.icon className="h-5 w-5" />{item.label}</button>)}
     </section>
 

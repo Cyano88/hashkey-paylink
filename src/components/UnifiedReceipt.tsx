@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { POCKET_NATIVE_BACK_EVENT } from '../pocket/lib/pocketNativeBack'
 import {
   createPaymentReceiptImage,
   createPaymentReceiptPdf,
@@ -182,7 +183,7 @@ function receiptDataUrlBlob(dataUrl: string) {
   return new Blob([bytes], { type: match[1] })
 }
 
-function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: PaylinkReceipt; surface: Exclude<ReceiptSurface, null>; onClose: () => void }) {
+export function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: PaylinkReceipt; surface: Exclude<ReceiptSurface, null>; onClose: () => void }) {
   const [sharing, setSharing] = useState<'image' | 'pdf' | ''>('')
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
@@ -194,6 +195,14 @@ function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: Payl
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = previous }
   }, [])
+
+  useEffect(() => {
+    const back = (event: Event) => { if (event.defaultPrevented) return; event.preventDefault(); onClose() }
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') back(event) }
+    window.addEventListener(POCKET_NATIVE_BACK_EVENT, back)
+    document.addEventListener('keydown', key)
+    return () => { window.removeEventListener(POCKET_NATIVE_BACK_EVENT, back); document.removeEventListener('keydown', key) }
+  }, [onClose])
 
   async function share(kind: 'image' | 'pdf') {
     if (sharing) return
@@ -221,14 +230,14 @@ function FullScreenReceiptSurface({ receipt, surface, onClose }: { receipt: Payl
       <div className="z-10 shrink-0 border-b border-gray-200/80 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:border-white/10 dark:bg-[#0A0A0A]/95">
         <div className="mx-auto grid h-14 max-w-lg grid-cols-[48px_1fr_48px] items-center">
           <span className="h-10 w-12" />
-          <h1 className="text-sm font-bold tracking-[-0.02em]">{surface === 'details' ? 'Transaction details' : 'Receipt'}</h1>
+          <h1 className="text-center text-sm font-bold tracking-[-0.02em]">{surface === 'details' ? 'Transaction details' : 'Receipt'}</h1>
           <button type="button" onClick={onClose} className="inline-flex h-10 items-center justify-end rounded-full text-xs font-bold">Done</button>
         </div>
       </div>
 
       {surface === 'details' ? <div className="min-h-0 flex-1 overflow-y-auto"><TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /></div> : (
         <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col px-3 pb-[max(0.5rem,var(--pocket-safe-bottom))] pt-2">
-          <div className="min-h-0 flex-1 overflow-hidden rounded-[28px] border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]"><ReceiptDocument receipt={receipt} /></div>
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-[28px] border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]"><ReceiptDocument receipt={receipt} /></div>
           <div className="mt-2 grid shrink-0 grid-cols-2 gap-2">
             <button type="button" disabled={Boolean(sharing)} onClick={() => void share('image')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-950 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.08] dark:text-white">
               {sharing === 'image' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}Share as image

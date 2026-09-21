@@ -1,3 +1,4 @@
+import PocketTransferMenuPage from './pages/PocketTransferMenuPage'
 import './pocketTheme.css'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { App as CapacitorApp } from '@capacitor/app'
@@ -281,6 +282,7 @@ export default function CirclePocketApp() {
   else if (!ready) content = <PocketLoadingState active={active} />
   else if (!authenticated) content = <PocketPageBoundary active='home'><PocketLandingPage /></PocketPageBoundary>
   else if (landing) content = <PocketPageBoundary active="home"><PocketLandingPage /></PocketPageBoundary>
+  else if (route?.section === 'home' && (route.view === 'transfer' || route.view === 'receive')) content = <PocketPageBoundary active="home"><PocketTransferMenuPage kind={route.view === 'transfer' ? 'send' : 'receive'} /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'deposit') content = <PocketPageBoundary active="home"><PocketDepositPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'scan') content = <PocketPageBoundary active='home'><PocketScanPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'send') content = <PocketPageBoundary active="home"><PocketSendPage /></PocketPageBoundary>

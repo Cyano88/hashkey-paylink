@@ -1,3 +1,4 @@
+import PocketBottomSheet from '../../components/PocketBottomSheet'
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from '../../components/PocketIcons'
 import { IdentificationIcon as ContactRound } from '@heroicons/react/24/outline'
@@ -77,6 +78,7 @@ export default function PocketMobileNumberInput({
   loading?: boolean
   onChange: (value: MobileNumberChange) => void
 }) {
+  const [networkOpen, setNetworkOpen] = useState(false)
   const [contactPickerAvailable, setContactPickerAvailable] = useState(false)
   const [contactError, setContactError] = useState('')
   const manualNetworkOverride = useRef(false)
@@ -122,6 +124,13 @@ export default function PocketMobileNumberInput({
 
   return (
     <div>
+      {networkOpen && <PocketBottomSheet title="Select network" onClose={() => setNetworkOpen(false)}>
+        <h2 className="mb-3 text-sm font-bold">Select network</h2>
+        <div role="listbox" aria-label="Mobile networks">{options.map(option => <button key={option.value} type="button" role="option" aria-selected={option.value === selectedNetworkId} onClick={() => { manualNetworkOverride.current = true; setContactError(''); onChange({ phoneNumber: normalizedPhone, networkId: option.value }); setNetworkOpen(false) }} className="flex min-h-14 w-full items-center gap-3 text-left text-sm font-semibold">
+          <NetworkMark network={networkFromServiceId(option.value)} /><span className="flex-1">{option.label}</span><span aria-hidden="true" className={cn('h-4 w-4 rounded-full border', option.value === selectedNetworkId ? 'border-4 border-gray-950 dark:border-white' : 'border-gray-300 dark:border-gray-600')} />
+        </button>)}</div>
+      </PocketBottomSheet>}
+
       <div
         className={cn(
           'flex min-h-[52px] items-center overflow-hidden rounded-2xl border bg-white shadow-sm transition',
@@ -130,23 +139,10 @@ export default function PocketMobileNumberInput({
           invalidNumber && 'border-red-300 focus-within:border-red-400 focus-within:ring-red-500/10 dark:border-red-400/40',
         )}
       >
-        <label className="relative flex h-[50px] w-[72px] shrink-0 cursor-pointer items-center gap-2 border-r border-gray-200 px-2.5 dark:border-[#262626]">
+        <button type="button" aria-label={`Select ${category} network`} aria-haspopup="dialog" disabled={disabled || loading || options.length === 0} onClick={() => setNetworkOpen(true)} className="relative flex h-[50px] w-[72px] shrink-0 items-center gap-2 border-r border-gray-200 px-2.5 disabled:opacity-50 dark:border-[#262626]">
           <NetworkMark network={selectedNetwork} />
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-          <select
-            value={selectedNetworkId}
-            disabled={disabled || loading || options.length === 0}
-            onChange={event => {
-              manualNetworkOverride.current = true
-              setContactError('')
-              onChange({ phoneNumber: normalizedPhone, networkId: event.target.value })
-            }}
-            aria-label={`Select ${category} network`}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-          >
-            {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
+        </button>
 
         <label className="min-w-0 flex-1 px-3">
           <span className="sr-only">Phone number</span>

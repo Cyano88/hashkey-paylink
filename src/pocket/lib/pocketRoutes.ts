@@ -46,7 +46,7 @@ export function pocketApiUrl(path: string) {
 export const POCKET_BASE_PATH = pocketBasePathForHostname(typeof window === 'undefined' ? '' : window.location.hostname)
 
 export type PocketRouteState =
-  | { section: 'home'; view: 'overview' | 'deposit' | 'send' | 'swap' | 'scan' }
+  | { section: 'home'; view: 'overview' | 'deposit' | 'send' | 'swap' | 'scan' | 'transfer' | 'receive' }
   | { section: 'profile'; view: 'details' | 'verify-name' }
   | { section: 'notifications'; view: 'inbox' }
   | { section: 'move'; view: PocketMoveView }
@@ -57,6 +57,8 @@ export type PocketRouteState =
 export const POCKET_ROUTES = {
   root: '/',
   home: '/home',
+  transfer: '/home/transfer',
+  receive: '/home/receive',
   deposit: '/home/deposit',
   send: '/home/send',
   scan: '/home/scan',
@@ -90,6 +92,8 @@ function cleanPathname(pathname: string) {
 export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   const path = cleanPathname(pathname)
   if (path === POCKET_ROUTES.home) return { section: 'home', view: 'overview' }
+  if (path === POCKET_ROUTES.transfer) return { section: 'home', view: 'transfer' }
+  if (path === POCKET_ROUTES.receive) return { section: 'home', view: 'receive' }
   if (path === POCKET_ROUTES.deposit) return { section: 'home', view: 'deposit' }
   if (path === POCKET_ROUTES.scan) return { section: 'home', view: 'scan' }
   if (path === POCKET_ROUTES.send) return { section: 'home', view: 'send' }
@@ -115,7 +119,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
 }
 
 export function pocketPathFor(state: PocketRouteState) {
-  if (state.section === 'home') return state.view === 'scan' ? POCKET_ROUTES.scan : state.view === 'deposit' ? POCKET_ROUTES.deposit : state.view === 'send' ? POCKET_ROUTES.send : state.view === 'swap' ? POCKET_ROUTES.swap : POCKET_ROUTES.home
+  if (state.section === 'home') return state.view === 'transfer' ? POCKET_ROUTES.transfer : state.view === 'receive' ? POCKET_ROUTES.receive : state.view === 'scan' ? POCKET_ROUTES.scan : state.view === 'deposit' ? POCKET_ROUTES.deposit : state.view === 'send' ? POCKET_ROUTES.send : state.view === 'swap' ? POCKET_ROUTES.swap : POCKET_ROUTES.home
   if (state.section === 'profile') return state.view === 'verify-name' ? POCKET_ROUTES.verifyName : POCKET_ROUTES.profile
   if (state.section === 'notifications') return POCKET_ROUTES.notifications
   if (state.section === 'move') return POCKET_ROUTES[state.view]

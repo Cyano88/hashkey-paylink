@@ -32,3 +32,9 @@ html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] but
 html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] button[aria-current='page'] svg { color: #fff; }
 html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] button:not([aria-current='page']),
 html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] button:not([aria-current='page']) svg { color: #71717a; }
+
+@keyframes pocket-network-enter { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: translateX(0); } }
+.pocket-network-page { animation: pocket-network-enter 180ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .pocket-network-page { animation: none; } }
+
+html.dark [data-pocket-sheet] { background-color: #121212; color: #fff; }

@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import PocketBottomSheet from '../../components/PocketBottomSheet'
 import { PocketBillsSkeleton, PocketLoadingField } from '../../components/PocketContentSkeletons'
 import { AlertCircle, ArrowRight, Check, Clock3, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from '../../components/PocketIcons'
 import { cn } from '../../../lib/utils'
@@ -75,6 +77,7 @@ function SignInCard() {
 }
 
 export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet, onPreparePayment, paymentRouting }: PocketBillsPanelProps) {
+  const [approvalBusy, setApprovalBusy] = useState(false)
   const meta = billMeta[view]
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
@@ -179,7 +182,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             )}
           </div>
 
-          <div className="space-y-4 rounded-[22px] bg-white p-4 shadow-sm dark:bg-[#121212] dark:shadow-none">
+          <div className="space-y-5 py-2">
             {bills.environment === 'sandbox' && <p className="text-center text-[10px] font-medium text-gray-400 dark:text-gray-500">Test mode · USDC payment is real · no live service is delivered</p>}
             {isMobileBill ? (
               <div>
@@ -216,6 +219,10 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                 </label>
               </>
             )}
+            {(view === 'airtime' || view === 'electricity') && <div className="grid grid-cols-3 gap-2" aria-label="Suggested amounts">
+              {(view === 'airtime' ? [100, 200, 500, 1000, 2000, 5000] : [2000, 3000, 5000, 10000, 20000, 50000]).map(amount => <button key={amount} type="button" disabled={locked} onClick={() => bills.setAmountNgn(String(amount))} className={cn('min-h-12 rounded-xl border text-xs font-semibold disabled:opacity-40', Number(bills.amountNgn) === amount ? 'border-blue-400 bg-blue-50 dark:bg-blue-400/10' : 'border-gray-200 dark:border-[#262626]')}>{money(String(amount))}</button>)}
+            </div>}
+
             {isData ? (
               <div>
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Data plan</span>
@@ -278,23 +285,19 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
             {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200">View Bills activity</Link>}
 
-            {showPayment && bills.intent && (
-              <>
-                {bills.status === 'successful' && billReceipt ? (
-                  null
-                ) : (
-                  <>
-                    {bills.status === 'ready' && (
-                      <div className="flex justify-end">
-                        <button type="button" onClick={bills.edit} className="rounded-full px-2 py-1 text-[11px] font-bold text-blue-600 transition hover:bg-blue-50 hover:text-blue-700 dark:text-blue-300 dark:hover:bg-blue-400/10">Edit details</button>
-                      </div>
-                    )}
-                    <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 text-[11px] dark:border-[#262626] dark:bg-[#171717]">
+            {showPayment && bills.status !== 'successful' && bills.intent && (
+              <PocketBottomSheet title="Review payment" dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
+                <>
+                    <h2 className="mb-1 text-center text-2xl font-bold">{money(bills.intent.amountNgn)}</h2>
+                    <p className="mb-6 text-center text-xs text-gray-500">{bills.intent.variationName || billName}</p>
+                    <div className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-4 text-xs dark:border-[#262626] dark:bg-[#171717]">
+                      <div className="flex justify-between gap-3"><span className="text-gray-500">Biller</span><span className="text-right font-semibold">{bills.intent.serviceName || billName}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500">{bills.intent.variationName || 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard') : view === 'electricity' ? 'Meter' : isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
-                      <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Pay from Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.amountUsdc))} USDC</span></div>
+                      <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc))} USDC</span></div>
                     </div>
-                    <PocketSlideAction
+                    {bills.error && <p role="alert" className="mb-3 text-center text-xs text-red-500">{bills.error}</p>}
+                    <PocketSlideAction onApprovalBusyChange={setApprovalBusy}
                       status={slideStatus}
                       disabled={bills.status !== 'ready' || paymentRouteBusy || paymentRouteInsufficient}
                       onPrepare={onPreparePayment}
@@ -316,9 +319,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                     {paymentRouting?.notice && bills.status === 'ready' && (
                       <p className="px-2 text-center text-[11px] font-medium text-gray-400 dark:text-gray-500">{paymentRouting.notice}</p>
                     )}
-                  </>
-                )}
-              </>
+                </>
+              </PocketBottomSheet>
             )}
 
             {bills.notice && <p className={cn('text-center text-xs font-semibold', bills.status === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bills.notice}</p>}
@@ -341,7 +343,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
         </>
       )}
       {bills.status === 'successful' && billReceipt && (
-        <PocketPaymentSuccess receipt={billReceipt} title={billName} onDone={bills.resetResult} />
+        <PocketPaymentSuccess receipt={billReceipt} title={billName} onDone={bills.edit} />
       )}
     </div>
   )
