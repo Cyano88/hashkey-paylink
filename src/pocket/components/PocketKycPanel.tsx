@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import usePocketLightSurface from '../hooks/usePocketLightSurface'
 import PocketBottomSheet from './PocketBottomSheet'
 import { Check, CheckCircle2, Clock3, Info } from './PocketIcons'
 import { protectSmileViewport } from '../lib/smileViewport'
@@ -23,6 +24,8 @@ function loadSmile() {
 }
 
 export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () => Promise<string | null> }) {
+  const [providerVisible, setProviderVisible] = useState(false)
+  usePocketLightSurface(providerVisible)
   const [state, setState] = useState<KycState | null>(null)
   const [submittedSheet, setSubmittedSheet] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -46,7 +49,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
     catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : 'Verification could not load.') }
     finally { inFlight.current = false }
   }, [api])
-  useEffect(() => protectSmileViewport(), [])
+  useEffect(() => protectSmileViewport(setProviderVisible), [])
   useEffect(() => { mounted.current = true; void refresh(); return () => { mounted.current = false; document.getElementById('smile-identity-hosted-web-integration')?.remove() } }, [refresh])
   useEffect(() => {
     if (!state || !['pending', 'review'].includes(state.status)) return
