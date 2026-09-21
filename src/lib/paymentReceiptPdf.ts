@@ -357,11 +357,11 @@ function drawReceiptCanvas(
   ctx.fillRect(0, 0, width, height)
   if (brand.kind === 'pocket') {
     ctx.save()
-    ctx.globalAlpha = 0.035
+    ctx.globalAlpha = 0.08
     for(let row=0;row<7;row++)for(let col=0;col<5;col++){
       ctx.save();ctx.translate(66+col*120,100+row*106);ctx.rotate(-Math.PI/15)
       if((row+col)%2 && watermarkLogo){ctx.filter='grayscale(1)';drawContainedImage(ctx,watermarkLogo,-16,-16,32,32)}
-      else drawPocketMark(ctx,-16,-16,32)
+      else {drawPocketMark(ctx,-36,-13,26);ctx.fillStyle='#111827';ctx.font=`700 19px ${sans}`;ctx.fillText('Pocket',-8,7)}
       ctx.restore()
     }
     ctx.restore()
@@ -449,6 +449,10 @@ function drawReceiptCanvas(
   ctx.font = `600 10px ${sans}`
   const footer = 'Powered by Hash PayLink'
   ctx.fillText(footer, (width - ctx.measureText(footer).width) / 2, 746)
+  if(brand.kind==='pocket'){
+    ctx.fillStyle='#f5f5f7';ctx.fillRect(0,height-12,width,12)
+    for(let x=10;x<width;x+=20){ctx.beginPath();ctx.arc(x,height-12,6,0,Math.PI*2);ctx.fill()}
+  }
 }
 
 function drawContainedImage(ctx: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, width: number, height: number) {

@@ -293,9 +293,3 @@ export async function readPocketRecipientBalance({
   const raw = await evmReader({ network, address })
   return Number(raw) / 10 ** CHAIN_META[network].decimals
 }
-
-export async function archivePocketActivity(accessToken:string,recordKey:string,archived:boolean) {
-  const response=await fetch(POCKET_API.activity,{method:'POST',headers:{authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'},body:JSON.stringify({action:archived?'archive':'restore',recordKey})})
-  const data=await response.json().catch(()=>undefined)
-  if(!response.ok || !data?.ok)throw Error('Your archive could not be updated. Try again.')
-}

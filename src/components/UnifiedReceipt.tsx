@@ -81,8 +81,8 @@ function BrandMark({ receipt, className = '' }: { receipt: PaylinkReceipt; class
 function ReceiptWatermark({receipt}:{receipt:PaylinkReceipt}) {
   if(paymentReceiptBrand(receipt).kind!=='pocket')return null
   return <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" data-pocket-receipt-watermark>
-    <div className="absolute inset-x-0 top-12 grid -rotate-12 grid-cols-3 justify-items-center gap-x-8 gap-y-20 opacity-[0.035] dark:opacity-[0.045]">
-      {Array.from({length:24},(_,index)=>index%2===0?<CPurseIcon key={index} size={30} title=""/>:<img key={index} src="/brand/usdc-circle-logo.png" alt="" className="h-[30px] w-[30px] rounded-full grayscale dark:invert"/>)}
+    <div className="absolute inset-x-0 top-12 grid -rotate-12 grid-cols-3 justify-items-center gap-x-6 gap-y-16 text-gray-950 opacity-[0.08] dark:text-white dark:opacity-[0.12]">
+      {Array.from({length:24},(_,index)=>index%2===0?<span key={index} className="flex items-center gap-1 text-[19px] font-bold tracking-tight"><CPurseIcon size={25} title=""/>Pocket</span>:<img key={index} src="/brand/usdc-circle-logo.png" alt="" className="h-[30px] w-[30px] rounded-full grayscale dark:invert"/>)}
     </div>
   </div>
 }
@@ -235,7 +235,7 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
 
       {surface === 'details' ? <div className="min-h-0 flex-1 overflow-y-auto"><TransactionDetails receipt={receipt} copied={copied} onCopy={() => void navigator.clipboard.writeText(reference).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200) })} /></div> : (
         <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col px-3 pb-[max(0.5rem,var(--pocket-safe-bottom))] pt-2">
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-[28px] border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]"><ReceiptDocument receipt={receipt} /></div>
+          <div data-receipt-paper={paymentReceiptBrand(receipt).kind==='pocket'||undefined} style={paymentReceiptBrand(receipt).kind==='pocket'?{WebkitMaskImage:'radial-gradient(circle at 10px 100%, transparent 5.5px, black 6px)',maskImage:'radial-gradient(circle at 10px 100%, transparent 5.5px, black 6px)',WebkitMaskSize:'20px 100%',maskSize:'20px 100%',WebkitMaskRepeat:'repeat-x',maskRepeat:'repeat-x'}:undefined} className={paymentReceiptBrand(receipt).kind==='pocket'?"min-h-0 flex-1 overflow-y-auto rounded-t-[24px] bg-white pb-2 shadow-sm dark:bg-[#111216]":"min-h-0 flex-1 overflow-y-auto rounded-[28px] border border-gray-100 bg-white shadow-sm dark:border-white/10 dark:bg-[#111216]"}><ReceiptDocument receipt={receipt} /></div>
           {extraActions}
           <div className="mt-2 grid shrink-0 grid-cols-2 gap-2">
             <button type="button" disabled={Boolean(sharing)} onClick={() => void share('image')} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-gray-200 bg-white px-4 text-xs font-bold text-gray-950 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.08] dark:text-white">

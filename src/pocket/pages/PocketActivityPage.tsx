@@ -1,5 +1,3 @@
-import { archivePocketActivity } from '../api/pocketReadClient'
-import { pocketActivityArchiveKey } from '../lib/pocketActivityArchive'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PocketNavTab } from '../components/PocketBottomNav'
@@ -125,7 +123,6 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
         view={view}
         rows={rowsWithRequests}
         archivedKeys={activity.archivedKeys}
-        onArchive={async(row,archived)=>{const token=await getAccessToken();if(!token)throw Error('Sign in again.');await archivePocketActivity(token,pocketActivityArchiveKey(row),archived);await activity.refresh(true)}}
         authenticated={authenticated}
         busy={activity.busy}
         error={view === 'all' ? activity.error || requestsError || bridges.error : activity.error}
