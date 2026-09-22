@@ -8,7 +8,7 @@ export function openSmileFrame(config: Record<string, unknown>) {
   const frame = document.createElement('iframe')
   frame.id = frame.name = FRAME_ID
   frame.title = 'Smile ID identity verification'
-  frame.src = SMILE_FRAME_URL
+  frame.src = SMILE_FRAME_URL + (config.product === 'doc_verification' ? '?method=government_id' : '')
   frame.allow = 'camera; fullscreen'
   frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups')
   frame.referrerPolicy = 'no-referrer'

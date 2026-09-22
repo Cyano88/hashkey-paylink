@@ -230,7 +230,7 @@ app.get('/pocket/identity-frame', (req, res) => {
     "form-action 'none'",
     "sandbox allow-scripts allow-same-origin allow-forms allow-popups",
   ].join('; '))
-  return res.sendFile(join(__dirname, 'vendor', 'smile-id', 'biometric-kyc.html'))
+  return res.sendFile(join(__dirname, 'vendor', 'smile-id', req.query.method === 'government_id' ? 'doc-verification.html' : 'biometric-kyc.html'))
 })
 
 const vtpassWebhookLimiter = rateLimit({ name: 'vtpass-webhook', windowMs: 60_000, max: 60 })
