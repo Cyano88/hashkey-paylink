@@ -53,7 +53,7 @@ function usdcUnits(value: unknown) {
 
 export function payoutState(status: unknown) {
   const normalized = text(status, 40).toLowerCase()
-  if (normalized === 'settled' || normalized === 'validated') return 'sent'
+  if (normalized === 'settled') return 'sent'
   if (normalized === 'refunded') return 'refunded'
   if (['failed', 'expired', 'cancelled', 'canceled'].includes(normalized)) return 'failed'
   return 'processing'

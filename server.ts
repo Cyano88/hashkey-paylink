@@ -95,6 +95,7 @@ import pocketPaylinksHandler from './api/pocket/paylinks.js'
 import pocketRequestsHandler from './api/pocket/requests.js'
 import pocketPushDevicesHandler from './api/pocket/push-devices.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
+import pocketXPayHandler, { drainXPayPayments } from './api/pocket/xpay.js'
 import pocketStockNotificationsHandler from './api/pocket/xstocks-notifications.js'
 import { drainStockNotifications } from './api/pocket/xstocks-notifications-store.js'
 import pocketStockBalancesHandler from './api/pocket/xstocks-balances.js'
@@ -385,6 +386,7 @@ app.get('/api/pocket/requests',          readLimiter, pocketRequestsHandler)
 app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
+app.all('/api/pocket/xstocks/xpay', strictLimiter, pocketXPayHandler)
 app.all('/api/pocket/xstocks/notifications', strictLimiter, pocketStockNotificationsHandler)
 app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)
 app.post('/api/pocket/xstocks/prices', readLimiter, pocketStockPricesHandler)
@@ -558,7 +560,7 @@ void drainPocketReconciliation().catch(error => {
   console.error('[pocket-reconciliation] startup run failed:', error instanceof Error ? error.message : String(error))
 })
 
-const stockNotificationTimer = setInterval(() => { void drainStockNotifications().catch(() => console.warn('[xstocks-notifications] scan deferred')) }, 30_000)
+const stockNotificationTimer = setInterval(() => { void drainStockNotifications().catch(() => console.warn('[xstocks-notifications] scan deferred')); void drainXPayPayments().catch(() => console.warn('[xpay] confirmation deferred')) }, 30_000)
 stockNotificationTimer.unref()
 void drainStockNotifications().catch(() => console.warn('[xstocks-notifications] startup deferred'))
 const pocketMoneyPushTimer = setInterval(() => {
