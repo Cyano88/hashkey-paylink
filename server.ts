@@ -97,6 +97,7 @@ import pocketPushDevicesHandler from './api/pocket/push-devices.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
 import pocketStockNotificationsHandler from './api/pocket/xstocks-notifications.js'
 import { drainStockNotifications } from './api/pocket/xstocks-notifications-store.js'
+import pocketStockBalancesHandler from './api/pocket/xstocks-balances.js'
 import pocketStockPricesHandler from './api/pocket/xstocks-prices.js'
 import pocketStockSwapHandler from './api/pocket/xstocks-swap.js'
 import pocketArcSwapHandler from './api/pocket/arc-swap.js'
@@ -385,6 +386,7 @@ app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
 app.all('/api/pocket/xstocks/notifications', strictLimiter, pocketStockNotificationsHandler)
+app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)
 app.post('/api/pocket/xstocks/prices', readLimiter, pocketStockPricesHandler)
 app.all('/api/pocket/xstocks/swap', strictLimiter, pocketStockSwapHandler)
 app.all('/api/pocket/arc-swap',          strictLimiter, pocketArcSwapHandler)

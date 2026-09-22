@@ -8,7 +8,7 @@ export const stockTokenAbi = parseAbi(['function balanceOf(address) view returns
 export type StockAsset = { symbol: string; name: string; address: string; icon: string }
 export const stockAssets: StockAsset[] = catalogue.assets
 export const stockUsdc: StockAsset = { symbol: 'USDC', name: 'USD Coin', address: '0xB6CEceAB302E2E4948951eE7843FC24E92933061', icon: '' }
-export const stockGasAsset: StockAsset = { symbol: 'OKB', name: 'OKB', address: 'native', icon: '' }
+export const stockGasAsset: StockAsset = { symbol: 'OKB', name: 'OKB', address: 'native', icon: '/brand/okb.png' }
 export type StockHolding = { asset: StockAsset; units: bigint; decimals: number }
 export type StockTransfer = { owner: Address; recipient: Address; asset: StockAsset; amount: string; units: bigint; decimals: number; to: Address; data?: Hex; value: bigint; gas: bigint; fee: bigint; expiresAt: number }
 
@@ -24,12 +24,13 @@ export async function assertStockChain() {
 export type StockBalanceSnapshot = { holdings: StockHolding[]; cash: bigint | null; gas: bigint; complete: boolean; blockNumber: bigint; blockHash: Hex; fullScanAt: number; observedAt: number }
 const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
 const tokenDecimals = new Map<string, number>()
-export async function readStockHoldings(owner: Address, previous?: StockBalanceSnapshot): Promise<StockBalanceSnapshot> {
-  await assertStockChain()
-  const block = await stockClient.getBlock({ blockTag: 'latest' })
+export async function readStockHoldings(owner: Address, previous?: StockBalanceSnapshot, signal?: AbortSignal, options?: { rpcUrl?: string; force?: boolean }): Promise<StockBalanceSnapshot> {
+  const client = signal || options?.rpcUrl ? createPublicClient({ chain: pocketXLayer, transport: http(options?.rpcUrl || pocketXLayer.rpcUrls.default.http[0], { timeout: 15_000, retryCount: 0, fetchOptions: { signal } }) }) : stockClient
+  if (await client.getChainId() !== 196) throw Error('X Layer connection could not be verified.')
+  const block = await client.getBlock({ blockTag: 'latest' })
   const blockNumber = block.number
   if (!block.hash || Date.now() - Number(block.timestamp) * 1000 > 60_000) throw Error('X Layer node is not current.')
-  const reorganized = previous ? (blockNumber === previous.blockNumber ? block.hash !== previous.blockHash : (await stockClient.getBlock({ blockNumber: previous.blockNumber })).hash !== previous.blockHash) : false
+  const reorganized = previous ? (blockNumber === previous.blockNumber ? block.hash !== previous.blockHash : (await client.getBlock({ blockNumber: previous.blockNumber })).hash !== previous.blockHash) : false
   if (previous && blockNumber < previous.blockNumber) throw Error('X Layer node is behind the previous balance snapshot.')
   if (previous && blockNumber === previous.blockNumber && previous.complete && !reorganized) return previous
   const full = reorganized || !previous?.complete || Date.now() - previous.fullScanAt >= 300_000 || blockNumber - previous.blockNumber > 2000n
@@ -38,26 +39,26 @@ export async function readStockHoldings(owner: Address, previous?: StockBalanceS
     // Re-read transfers across a short overlap to cover ordinary shallow reorganizations.
     const fromBlock = previous.blockNumber > 12n ? previous.blockNumber - 12n : 0n
     const logs = (await Promise.all([
-      stockClient.getLogs({ event: transferEvent, args: { from: owner }, fromBlock, toBlock: blockNumber }),
-      stockClient.getLogs({ event: transferEvent, args: { to: owner }, fromBlock, toBlock: blockNumber }),
+      client.getLogs({ event: transferEvent, args: { from: owner }, fromBlock, toBlock: blockNumber }),
+      client.getLogs({ event: transferEvent, args: { to: owner }, fromBlock, toBlock: blockNumber }),
     ])).flat()
     const changed = new Set(logs.map(log => log.address.toLowerCase()))
     assets = stockAssets.filter(asset => changed.has(asset.address.toLowerCase()))
   }
-  const balances = assets.length ? await stockClient.multicall({ blockNumber, batchSize: 16_384, contracts: assets.map(a => ({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'balanceOf' as const, args: [owner] as const })) }) : []
+  const balances = assets.length ? await client.multicall({ blockNumber, batchSize: 16_384, contracts: assets.map(a => ({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'balanceOf' as const, args: [owner] as const })) }) : []
   if (balances.some(r => r.status !== 'success')) throw Error('Some stock balances could not be verified.')
   const held = balances.flatMap((r, i) => r.status === 'success' && r.result > 0n ? [{ asset: assets[i], units: r.result }] : [])
   const missing = held.filter(h => !tokenDecimals.has(h.asset.address))
   if (missing.length) {
-    const decimals = await stockClient.multicall({ blockNumber, batchSize: 16_384, contracts: missing.map(h => ({ address: getAddress(h.asset.address), abi: stockTokenAbi, functionName: 'decimals' as const })) })
+    const decimals = await client.multicall({ blockNumber, batchSize: 16_384, contracts: missing.map(h => ({ address: getAddress(h.asset.address), abi: stockTokenAbi, functionName: 'decimals' as const })) })
     decimals.forEach((r, i) => { if (r.status === 'success' && Number(r.result) <= 36) tokenDecimals.set(missing[i].asset.address, Number(r.result)) })
     if (missing.some(h => !tokenDecimals.has(h.asset.address))) throw Error('Stock precision could not be verified.')
   }
   const touched = new Set(assets.map(a => a.address))
   const holdings = [...(!full && previous ? previous.holdings.filter(h => !touched.has(h.asset.address)) : []), ...held.map(h => ({ ...h, decimals: tokenDecimals.get(h.asset.address)! }))]
   const [cash, gas] = await Promise.all([
-    stockClient.readContract({ address: getAddress(stockUsdc.address), abi: stockTokenAbi, functionName: 'balanceOf', args: [owner], blockNumber }),
-    stockClient.getBalance({ address: owner, blockNumber }),
+    client.readContract({ address: getAddress(stockUsdc.address), abi: stockTokenAbi, functionName: 'balanceOf', args: [owner], blockNumber }),
+    client.getBalance({ address: owner, blockNumber }),
   ])
   return { holdings, cash, gas, complete: true, blockNumber, blockHash: block.hash, fullScanAt: full ? Date.now() : previous!.fullScanAt, observedAt: Date.now() }
 }
