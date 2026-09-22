@@ -95,6 +95,7 @@ import pocketPaylinksHandler from './api/pocket/paylinks.js'
 import pocketRequestsHandler from './api/pocket/requests.js'
 import pocketPushDevicesHandler from './api/pocket/push-devices.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
+import pocketStockPricesHandler from './api/pocket/xstocks-prices.js'
 import pocketStockSwapHandler from './api/pocket/xstocks-swap.js'
 import pocketArcSwapHandler from './api/pocket/arc-swap.js'
 import pocketSolanaRpcHandler from './api/pocket/solana-rpc.js'
@@ -381,6 +382,7 @@ app.get('/api/pocket/requests',          readLimiter, pocketRequestsHandler)
 app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
+app.post('/api/pocket/xstocks/prices', readLimiter, pocketStockPricesHandler)
 app.all('/api/pocket/xstocks/swap', strictLimiter, pocketStockSwapHandler)
 app.all('/api/pocket/arc-swap',          strictLimiter, pocketArcSwapHandler)
 app.post('/api/pocket/solana-rpc',       readLimiter, pocketSolanaRpcHandler)

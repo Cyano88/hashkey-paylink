@@ -5,7 +5,7 @@ import { swapAssets, readStockSwapFee, okxTokenAddress, validateStockSwap, sameS
 
 const allowanceAbi = parseAbi(['function allowance(address,address) view returns(uint256)'])
 function fail(message: string, status = 400): never { throw Object.assign(new Error(message), { status }) }
-function okxCredentials() {
+export function okxCredentials() {
   const dedicated = ['OKX_DEX_API_KEY', 'OKX_DEX_SECRET_KEY', 'OKX_DEX_PASSPHRASE'].some(k => !!process.env[k])
   return dedicated ? { key: process.env.OKX_DEX_API_KEY, secret: process.env.OKX_DEX_SECRET_KEY, passphrase: process.env.OKX_DEX_PASSPHRASE } : { key: process.env.OKX_API_KEY, secret: process.env.OKX_SECRET_KEY, passphrase: process.env.OKX_PASSPHRASE }
 }
