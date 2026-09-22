@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { encodeFunctionData, getAddress, parseUnits } from 'viem'
 import { stockAmountUnits, stockAssets, stockClient, stockUsdc, readStockHoldings } from '../src/pocket/lib/pocketXStocksWallet.ts'
-import { validateStockSwap, OKX_XLAYER_ROUTER, OKX_XLAYER_SPENDER } from '../src/pocket/lib/pocketXStocksSwap.ts'
+import { validateStockSwap, readStockSwapFee, OKX_XLAYER_ROUTER, OKX_XLAYER_SPENDER } from '../src/pocket/lib/pocketXStocksSwap.ts'
 import { sealStockQuote, openStockQuote, okxGet } from '../api/pocket/xstocks-swap-provider.ts'
 
 const abi=JSON.parse(readFileSync('src/pocket/lib/pocketOkxRouterAbi.json','utf8'))
@@ -19,6 +19,14 @@ for(const bad of [
  {...q,tx:{...q.tx,data:encode(base,'0x2222222222222222222222222222222222222222')}},
  {...q,tx:{...q.tx,data:encode()+'00'}}, {...q,spender:owner},
 ]) assert.throws(()=>validateStockSwap(bad,owner))
+const dagData=encodeFunctionData({abi,functionName:'dagSwapTo',args:[1n,owner,base,[{mixAdapters:[],assetTo:[],rawData:[],extraData:[],fromToken:BigInt(stockUsdc.address)}]]})
+const expected=parseUnits(q.expectedOut,q.decimalsOut)
+const trim=(threshold=expected,cap=100n)=>((0x777777771111800000000000n<<160n)|threshold).toString(16).padStart(64,'0')+((0x777777771111n<<208n)|(cap<<160n)|BigInt(owner)).toString(16).padStart(64,'0')
+const dag={...q,tx:{...q.tx,data:dagData+trim()}}
+dag.positiveSlippageFee=readStockSwapFee(dag);validateStockSwap(dag,owner)
+assert.equal(dag.positiveSlippageFee.capPercent,10)
+for(const tail of [trim(expected-1n),trim(expected,101n),trim()+'00'])assert.throws(()=>readStockSwapFee({...q,tx:{...q.tx,data:dagData+tail}}))
+assert.throws(()=>validateStockSwap({...dag,positiveSlippageFee:undefined},owner))
 const secret='fixture-key-not-a-production-secret-123456789'
 const token=sealStockQuote(q,'fixture-user',secret)
 assert.deepEqual(openStockQuote(token,'fixture-user',secret),q)

@@ -1,4 +1,4 @@
-import { createPublicClient, encodeFunctionData, formatUnits, getAddress, http, isAddress, parseAbi, parseUnits, type Address, type Hex } from 'viem'
+import { createPublicClient, encodeFunctionData, formatUnits, getAddress, http, isAddress, parseAbi, parseAbiItem, parseUnits, type Address, type Hex } from 'viem'
 import { xLayer } from 'viem/chains'
 import catalogue from './pocketXStocksCatalog.json'
 
@@ -21,14 +21,45 @@ export function stockAmountUnits(amount: string, decimals: number) {
 export async function assertStockChain() {
   if (await stockClient.getChainId() !== 196) throw Error('X Layer connection could not be verified.')
 }
-export async function readStockHoldings(owner: Address) {
+export type StockBalanceSnapshot = { holdings: StockHolding[]; cash: bigint | null; gas: bigint; complete: boolean; blockNumber: bigint; blockHash: Hex; fullScanAt: number; observedAt: number }
+const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
+const tokenDecimals = new Map<string, number>()
+export async function readStockHoldings(owner: Address, previous?: StockBalanceSnapshot): Promise<StockBalanceSnapshot> {
   await assertStockChain()
-  const blockNumber = await stockClient.getBlockNumber()
-  const balances = await stockClient.multicall({ blockNumber, batchSize: 16_384, contracts: stockAssets.map(a => ({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'balanceOf' as const, args: [owner] as const })) })
-  const held = balances.flatMap((r, i) => r.status === 'success' && r.result > 0n ? [{ asset: stockAssets[i], units: r.result }] : [])
-  const decimals = held.length ? await stockClient.multicall({ blockNumber, batchSize: 16_384, contracts: held.map(h => ({ address: getAddress(h.asset.address), abi: stockTokenAbi, functionName: 'decimals' as const })) }) : []
-  const holdings: StockHolding[] = held.flatMap((h, i) => decimals[i]?.status === 'success' ? [{ ...h, decimals: Number(decimals[i].result) }] : [])
-  return { holdings, complete: balances.every(r => r.status === 'success') && holdings.length === held.length, gas: await stockClient.getBalance({ address: owner, blockNumber }) }
+  const block = await stockClient.getBlock({ blockTag: 'latest' })
+  const blockNumber = block.number
+  if (!block.hash || Date.now() - Number(block.timestamp) * 1000 > 60_000) throw Error('X Layer node is not current.')
+  const reorganized = previous ? (blockNumber === previous.blockNumber ? block.hash !== previous.blockHash : (await stockClient.getBlock({ blockNumber: previous.blockNumber })).hash !== previous.blockHash) : false
+  if (previous && blockNumber < previous.blockNumber) throw Error('X Layer node is behind the previous balance snapshot.')
+  if (previous && blockNumber === previous.blockNumber && previous.complete && !reorganized) return previous
+  const full = reorganized || !previous?.complete || Date.now() - previous.fullScanAt >= 300_000 || blockNumber - previous.blockNumber > 2000n
+  let assets = stockAssets
+  if (!full && previous) {
+    // Re-read transfers across a short overlap to cover ordinary shallow reorganizations.
+    const fromBlock = previous.blockNumber > 12n ? previous.blockNumber - 12n : 0n
+    const logs = (await Promise.all([
+      stockClient.getLogs({ event: transferEvent, args: { from: owner }, fromBlock, toBlock: blockNumber }),
+      stockClient.getLogs({ event: transferEvent, args: { to: owner }, fromBlock, toBlock: blockNumber }),
+    ])).flat()
+    const changed = new Set(logs.map(log => log.address.toLowerCase()))
+    assets = stockAssets.filter(asset => changed.has(asset.address.toLowerCase()))
+  }
+  const balances = assets.length ? await stockClient.multicall({ blockNumber, batchSize: 16_384, contracts: assets.map(a => ({ address: getAddress(a.address), abi: stockTokenAbi, functionName: 'balanceOf' as const, args: [owner] as const })) }) : []
+  if (balances.some(r => r.status !== 'success')) throw Error('Some stock balances could not be verified.')
+  const held = balances.flatMap((r, i) => r.status === 'success' && r.result > 0n ? [{ asset: assets[i], units: r.result }] : [])
+  const missing = held.filter(h => !tokenDecimals.has(h.asset.address))
+  if (missing.length) {
+    const decimals = await stockClient.multicall({ blockNumber, batchSize: 16_384, contracts: missing.map(h => ({ address: getAddress(h.asset.address), abi: stockTokenAbi, functionName: 'decimals' as const })) })
+    decimals.forEach((r, i) => { if (r.status === 'success' && Number(r.result) <= 36) tokenDecimals.set(missing[i].asset.address, Number(r.result)) })
+    if (missing.some(h => !tokenDecimals.has(h.asset.address))) throw Error('Stock precision could not be verified.')
+  }
+  const touched = new Set(assets.map(a => a.address))
+  const holdings = [...(!full && previous ? previous.holdings.filter(h => !touched.has(h.asset.address)) : []), ...held.map(h => ({ ...h, decimals: tokenDecimals.get(h.asset.address)! }))]
+  const [cash, gas] = await Promise.all([
+    stockClient.readContract({ address: getAddress(stockUsdc.address), abi: stockTokenAbi, functionName: 'balanceOf', args: [owner], blockNumber }),
+    stockClient.getBalance({ address: owner, blockNumber }),
+  ])
+  return { holdings, cash, gas, complete: true, blockNumber, blockHash: block.hash, fullScanAt: full ? Date.now() : previous!.fullScanAt, observedAt: Date.now() }
 }
 export async function prepareStockTransfer(owner: Address, asset: StockAsset, recipientInput: string, amount: string): Promise<StockTransfer> {
   await assertStockChain()

@@ -415,5 +415,171 @@
       }
     ],
     "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "dagSwapTo",
+    "stateMutability": "payable",
+    "inputs": [
+      {
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "name": "receiver",
+        "type": "address"
+      },
+      {
+        "name": "baseRequest",
+        "type": "tuple",
+        "internalType": "struct DexRouter.BaseRequest",
+        "components": [
+          {
+            "name": "fromToken",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "toToken",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "fromTokenAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "minReturnAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "deadLine",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      },
+      {
+        "name": "paths",
+        "type": "tuple[]",
+        "internalType": "struct IDexRouter.RouterPath[]",
+        "components": [
+          {
+            "name": "mixAdapters",
+            "type": "address[]",
+            "internalType": "address[]"
+          },
+          {
+            "name": "assetTo",
+            "type": "address[]",
+            "internalType": "address[]"
+          },
+          {
+            "name": "rawData",
+            "type": "uint256[]",
+            "internalType": "uint256[]"
+          },
+          {
+            "name": "extraData",
+            "type": "bytes[]",
+            "internalType": "bytes[]"
+          },
+          {
+            "name": "fromToken",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "returnAmount",
+        "type": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "dagSwapByOrderId",
+    "stateMutability": "payable",
+    "inputs": [
+      {
+        "name": "orderId",
+        "type": "uint256"
+      },
+      {
+        "name": "baseRequest",
+        "type": "tuple",
+        "internalType": "struct DexRouter.BaseRequest",
+        "components": [
+          {
+            "name": "fromToken",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "toToken",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "fromTokenAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "minReturnAmount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "deadLine",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      },
+      {
+        "name": "paths",
+        "type": "tuple[]",
+        "internalType": "struct IDexRouter.RouterPath[]",
+        "components": [
+          {
+            "name": "mixAdapters",
+            "type": "address[]",
+            "internalType": "address[]"
+          },
+          {
+            "name": "assetTo",
+            "type": "address[]",
+            "internalType": "address[]"
+          },
+          {
+            "name": "rawData",
+            "type": "uint256[]",
+            "internalType": "uint256[]"
+          },
+          {
+            "name": "extraData",
+            "type": "bytes[]",
+            "internalType": "bytes[]"
+          },
+          {
+            "name": "fromToken",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "returnAmount",
+        "type": "uint256"
+      }
+    ]
   }
 ]

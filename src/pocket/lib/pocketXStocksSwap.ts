@@ -11,7 +11,7 @@ export const OKX_XLAYER_SPENDER = '0x8b773d83bc66be128c60e07e17c8901f7a64f000'
 export type StockSwapQuote = {
   id: string; chainId: 196; owner: Address; tokenIn: StockAsset; tokenOut: StockAsset; amount: string; amountUnits: string;
   decimalsIn: number; decimalsOut: number; expectedOut: string; minimumOut: string; minimumOutUnits: string; expiresAt: number;
-  gasFee: string; priceImpact: string; approvalRequired: boolean; spender: Address;
+  positiveSlippageFee?: { capPercent: number; recipient: Address }; gasFee: string; priceImpact: string; approvalRequired: boolean; spender: Address;
   tx: { from: Address; to: Address; data: Hex; value: string };
 }
 export const sameStockAddress = (a: unknown, b: string) => typeof a === 'string' && a.toLowerCase() === b.toLowerCase()
@@ -40,7 +40,25 @@ export function validateStockSwap(quote: StockSwapQuote, owner: Address, now = D
   if (!isAddress(receiver) || !sameStockAddress(receiver, owner) || !sameStockAddress(inputAddress, okxTokenAddress(quote.tokenIn))
     || !sameStockAddress(base.toToken, okxTokenAddress(quote.tokenOut)) || BigInt(base.fromTokenAmount) !== input
     || BigInt(base.minReturnAmount) < minimum || BigInt(base.deadLine) <= BigInt(Math.floor(now / 1000))) fail()
-  // Unknown appended commissions or arbitrary call trailers are not signed.
-  const canonical = encodeFunctionData({ abi: routerAbi as Abi, functionName: decoded.functionName, args: decoded.args })
-  if (canonical.toLowerCase() !== quote.tx.data.toLowerCase()) fail()
+  const fee = readStockSwapFee(quote)
+  if (JSON.stringify(fee) !== JSON.stringify(quote.positiveSlippageFee)) fail()
+}
+
+// OKX v1.0.7 CommissionLib: recognize only the two-word, positive-slippage-only
+// trailer. No partner commission or dual-charge trailer is supported.
+export function readStockSwapFee(quote: StockSwapQuote) {
+  const fail = () => { throw Error('Unsupported provider fee encoding.') }
+  const decoded = decodeFunctionData({ abi: routerAbi as Abi, data: quote.tx.data })
+  const canonical = encodeFunctionData({ abi: routerAbi as Abi, functionName: decoded.functionName, args: decoded.args }).toLowerCase()
+  const raw = quote.tx.data.toLowerCase()
+  if (!raw.startsWith(canonical)) return fail()
+  const tail = raw.slice(canonical.length)
+  if (!tail) return undefined
+  if (tail.length !== 128) return fail()
+  const expectation = BigInt('0x' + tail.slice(0, 64)), fee = BigInt('0x' + tail.slice(64))
+  const mask160 = (1n << 160n) - 1n
+  if ((expectation >> 160n) !== 0x777777771111800000000000n || (fee >> 208n) !== 0x777777771111n) return fail()
+  const cap = (fee >> 160n) & ((1n << 48n) - 1n)
+  if (cap <= 0n || cap > 100n || (expectation & mask160) !== stockAmountUnits(quote.expectedOut, quote.decimalsOut) || (fee & mask160) === 0n) return fail()
+  return { capPercent: Number(cap) / 10, recipient: getAddress('0x' + (fee & mask160).toString(16).padStart(40, '0')) }
 }

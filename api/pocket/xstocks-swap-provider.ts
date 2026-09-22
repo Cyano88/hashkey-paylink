@@ -1,19 +1,24 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 import { formatUnits, getAddress, parseAbi, type Address } from 'viem'
 import { stockClient, stockTokenAbi, stockAmountUnits, assertStockChain } from '../../src/pocket/lib/pocketXStocksWallet.js'
-import { swapAssets, okxTokenAddress, validateStockSwap, sameStockAddress, OKX_XLAYER_ROUTER, OKX_XLAYER_SPENDER, type StockSwapQuote } from '../../src/pocket/lib/pocketXStocksSwap.js'
+import { swapAssets, readStockSwapFee, okxTokenAddress, validateStockSwap, sameStockAddress, OKX_XLAYER_ROUTER, OKX_XLAYER_SPENDER, type StockSwapQuote } from '../../src/pocket/lib/pocketXStocksSwap.js'
 
 const allowanceAbi = parseAbi(['function allowance(address,address) view returns(uint256)'])
 function fail(message: string, status = 400): never { throw Object.assign(new Error(message), { status }) }
-export const okxConfigured = () => !!(process.env.OKX_DEX_API_KEY && process.env.OKX_DEX_SECRET_KEY && process.env.OKX_DEX_PASSPHRASE)
+function okxCredentials() {
+  const dedicated = ['OKX_DEX_API_KEY', 'OKX_DEX_SECRET_KEY', 'OKX_DEX_PASSPHRASE'].some(k => !!process.env[k])
+  return dedicated ? { key: process.env.OKX_DEX_API_KEY, secret: process.env.OKX_DEX_SECRET_KEY, passphrase: process.env.OKX_DEX_PASSPHRASE } : { key: process.env.OKX_API_KEY, secret: process.env.OKX_SECRET_KEY, passphrase: process.env.OKX_PASSPHRASE }
+}
+export const okxConfigured = () => { const c = okxCredentials(); return !!(c.key && c.secret && c.passphrase) }
 export async function okxGet(path: string, query: Record<string, string>, fetcher = fetch) {
   if (!okxConfigured()) fail('Stock trading is awaiting provider activation.', 503)
+  const credentials = okxCredentials()
   const requestPath = '/api/v6/dex/aggregator/' + path + '?' + new URLSearchParams(query)
   const timestamp = new Date().toISOString()
-  const signature = createHmac('sha256', process.env.OKX_DEX_SECRET_KEY!).update(timestamp + 'GET' + requestPath).digest('base64')
+  const signature = createHmac('sha256', credentials.secret!).update(timestamp + 'GET' + requestPath).digest('base64')
   const response = await fetcher('https://web3.okx.com' + requestPath, { headers: {
-    'OK-ACCESS-KEY': process.env.OKX_DEX_API_KEY!, 'OK-ACCESS-SIGN': signature,
-    'OK-ACCESS-PASSPHRASE': process.env.OKX_DEX_PASSPHRASE!, 'OK-ACCESS-TIMESTAMP': timestamp,
+    'OK-ACCESS-KEY': credentials.key!, 'OK-ACCESS-SIGN': signature,
+    'OK-ACCESS-PASSPHRASE': credentials.passphrase!, 'OK-ACCESS-TIMESTAMP': timestamp,
   }, signal: AbortSignal.timeout(20_000), redirect: 'error' })
   const body = await response.json() as any
   if (!response.ok || body.code !== '0' || !Array.isArray(body.data) || !body.data.length) fail('No executable quote is available for this pair and amount. Please try again.', 503)
@@ -50,6 +55,8 @@ export async function quoteStockSwap(input: { owner: Address; tokenIn: string; t
     expectedOut: formatUnits(out, decimalsOut), minimumOut: formatUnits(minimum, decimalsOut), minimumOutUnits: String(minimum), expiresAt: Date.now() + 45_000,
     gasFee: formatUnits((gas + (approvalRequired ? 120_000n : 0n)) * gasPrice * 120n / 100n, 18), priceImpact: String(impact), approvalRequired, spender: getAddress(OKX_XLAYER_SPENDER),
     tx: { from: input.owner, to: getAddress(tx.to), data: tx.data, value: String(tx.value || '0') } }
+  const providerFee = readStockSwapFee(quote)
+  if (providerFee) quote.positiveSlippageFee = providerFee
   validateStockSwap(quote, input.owner)
   return quote
 }
