@@ -195,12 +195,12 @@ async function sendApplePushWithEnvironmentFallback(
 export async function sendPocketPush(ownerId: string, eventId: string, input: { title: string; body: string; path: string; tag?: string }) {
   const serviceAccount = firebaseServiceAccount()
   const appleCredentials = applePushCredentials()
-  if (!serviceAccount && !appleCredentials) return
+  if (!serviceAccount && !appleCredentials) return false
   const snapshot = normalized(await readDurableJson<PocketPushStore>(STORE_KEY))
   const deliveryKey = ownerId + ':' + eventId
-  if (snapshot.delivered[deliveryKey]) return
+  if (snapshot.delivered[deliveryKey]) return true
   const devices = Object.values(snapshot.devices).filter(device => device.ownerId === ownerId).slice(0, 500)
-  if (!devices.length) return
+  if (!devices.length) return false
   const accessToken = serviceAccount ? await firebaseAccessToken(serviceAccount) : ''
   const responses = await Promise.all(devices.map(async device => {
     if (device.platform === 'ios') {
@@ -234,6 +234,7 @@ export async function sendPocketPush(ownerId: string, eventId: string, input: { 
     })
     return store
   })
+  return responses.some(result => result.ok)
 }
 
 export default async function handler(req: Request, res: Response) {

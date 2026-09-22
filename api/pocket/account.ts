@@ -4,6 +4,7 @@ import { verifiedPrivyUser, localCurrencyProfileRepository, type VerifiedProfile
 import { deleteCircleLinksForPrivyUser } from '../privy-circle-link.js'
 import { deleteHelperProfile } from '../helper-profile.js'
 import { circlePocketIdentityId, type CirclePocketIdentity } from '../circle-pocket-identity.js'
+import { mutateStockNotices } from './xstocks-notifications-store.js'
 import { unregisterAllPocketPushDevices } from './push-devices.js'
 import { deletePocketPaymentSecurity } from './payment-security.js'
 import { redactPocketSupportCases } from './support-cases.js'
@@ -36,7 +37,7 @@ export function createPocketAccountHandler(overrides: Partial<Dependencies> = {}
     verifyUser: verifiedPrivyUser,
     deleteProfile: userId => localCurrencyProfileRepository.deleteProfile(userId),
     deleteCircleLinks: deleteCircleLinksForPrivyUser,
-    deletePushDevices: unregisterAllPocketPushDevices,
+    deletePushDevices: async owner => { await unregisterAllPocketPushDevices(owner); await mutateStockNotices(s => { delete s.wallets[owner]; delete s.reads[owner]; Object.entries(s.notices).forEach(([id, n]) => { if (n.owner === owner) delete s.notices[id] }) }) },
     deletePaymentSecurity: deletePocketPaymentSecurity,
     deleteHelper: deleteHelperProfile,
     redactSupport: redactPocketSupportCases,

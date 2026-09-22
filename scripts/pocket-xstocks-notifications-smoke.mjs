@@ -1,0 +1,11 @@
+﻿import assert from 'node:assert/strict';
+import {normalizeStockNotices,addStockRequest,decideStockRequest,recordStockTransfer} from '../api/pocket/xstocks-notifications-store.ts';
+import {formatStockQuantity} from '../src/pocket/lib/pocketStockDisplay.ts';
+const s=normalizeStockNotices(),a='0x1111111111111111111111111111111111111111',b='0x2222222222222222222222222222222222222222';s.wallets.sender={address:a,since:100};s.wallets.payer={address:b,since:100};
+const input={eventId:'fixture-request-123',sender:'sender',payer:'payer',senderPocketId:'111111',payerPocketId:'222222',address:a,payerAddress:b,token:'native',symbol:'OKB',amount:'0.01',units:'10000000000000000',decimals:18};
+const r=addStockRequest(s,input,200);assert.equal(addStockRequest(s,input,201).id,r.id);assert.equal(Object.keys(s.requests).length,1);assert.throws(()=>decideStockRequest(s,'stranger',r.id,'accept',210));decideStockRequest(s,'payer',r.id,'accept',210);
+const transfer={id:'hash:native',hash:'0x'+'a'.repeat(64),from:b,to:a,token:'native',symbol:'OKB',units:input.units,decimals:18,at:220};recordStockTransfer(s,{...transfer,units:'1'});assert.equal(r.status,'accepted');recordStockTransfer(s,transfer);assert.equal(r.status,'paid');const count=Object.keys(s.notices).length;recordStockTransfer(s,transfer);assert.equal(Object.keys(s.notices).length,count);
+const second=addStockRequest(s,{...input,eventId:'fixture-request-456'},200);decideStockRequest(s,'payer',second.id,'accept',210);recordStockTransfer(s,transfer);assert.equal(second.status,'accepted');assert.throws(()=>addStockRequest(s,{...input,units:'2'},201));
+assert.equal(formatStockQuantity('0.0099999999'),'0.01');assert.equal(formatStockQuantity('0'),'0');assert.equal(formatStockQuantity('0.00000001'),'0.00000001');
+const old=normalizeStockNotices();old.wallets.sender={address:a,since:300};recordStockTransfer(old,transfer);assert.equal(Object.keys(old.notices).length,0);
+console.log('PASS XStocks-only request ownership, idempotency, exact confirmed payment matching, replay protection, transfer deduplication, historical exclusion and display rounding.');
