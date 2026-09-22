@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 fs.mkdirSync('.codex-temp',{recursive:true})
 const mocks={
+'./payment-security.js':`export const consumePocketPaymentApproval=async(token,owner)=>{if(token!=='single-use-fixture-'+owner||globalThis.fixture.usedApproval)return false;globalThis.fixture.usedApproval=true;return true}`,
 '../local-currency-profile.js':`export const verifiedPrivyUser=async()=>({userId:globalThis.fixture.owner});export const localCurrencyProfileRepository={ensure:async()=>({profile:{pocketId:'12345678'}})}`,
 '../render-durable-store.js':`let state;export const readDurableJson=async()=>structuredClone(state);export const mutateDurableJson=async(k,fn)=>{state=await fn(structuredClone(state));return structuredClone(state)}`,
 './xstocks-wallet-owner.js':`export const verifyStockWalletOwner=async(owner,wallet)=>{if(globalThis.fixture.wallets[owner]!==wallet)throw Object.assign(Error('Wrong wallet'),{status:403})}`,
@@ -15,7 +16,7 @@ const {encodeEventTopics,encodeAbiParameters,parseAbiItem}=await import('viem')
 const assert=(await import('node:assert/strict')).default
 const from='0x'+'1'.repeat(40),to='0x'+'2'.repeat(40),token=stockAssets[0].address.toLowerCase(),hash='0x'+'a'.repeat(64)
 globalThis.fixture={owner:'merchant',wallets:{merchant:to,payer:from},receipts:{}}
-const call=async(body,expected=200)=>{let status=200,result;await handler({method:'POST',body},{setHeader(){},status(s){status=s;return this},json(data){result=data;return this},sendStatus(s){status=s}});assert.equal(status,expected,JSON.stringify(result));return result}
+const call=async(body,expected=200,headers={})=>{let status=200,result;await handler({method:'POST',body,headers},{setHeader(){},status(s){status=s;return this},json(data){result=data;return this},sendStatus(s){status=s}});assert.equal(status,expected,JSON.stringify(result));return result}
 await call({action:'merchant-save',wallet:from,name:'Fixture',tokens:[token]},403)
 const merchant=(await call({action:'merchant-save',wallet:to,name:'Fixture',tokens:[token]})).merchant
 fixture.owner='payer'
@@ -35,3 +36,11 @@ const second=(await call({...body,key:'fixture-unique-key-0002'})).payment
 await call({action:'authorize',id:second.id});await call({action:'confirm',id:second.id,hash},409)
 fixture.head=140n;const recoveredHash='0x'+'b'.repeat(64);fixture.logs=[{args:{value:5000000000000000n},transactionHash:recoveredHash}];fixture.receipts[recoveredHash]={...fixture.receipts[hash],blockNumber:130n};assert.equal((await call({action:'status',id:second.id})).payment.status,'paid');
 console.log('PASS lost-hash chain recovery; server merchant ownership, idempotency, changed details rejection, authorize once, active-payment guard, ownership isolation, verified settlement, hash replay guard')
+
+fixture.owner='payer';const readyAfterDelete=(await call({...body,key:'fixture-unique-key-0003'})).payment;const pendingAfterDelete=(await call({...body,key:'fixture-unique-key-0004'})).payment;await call({action:'authorize',id:pendingAfterDelete.id});await call({action:'merchant-delete',id:merchant.id},404);fixture.owner='merchant';await call({action:'merchant-delete',id:merchant.id},403);
+const third=(await call({action:'merchant-save',create:true,wallet:to,name:'Second link',tokens:[token]})).merchant;assert.notEqual(third.id,merchant.id);assert.equal((await call({action:'mine'})).merchants.length,2);
+await call({action:'merchant-delete',id:merchant.id},200,{'x-pocket-payment-approval':'single-use-fixture-merchant'});await call({action:'merchant',id:merchant.id},404);assert.equal((await call({action:'mine'})).merchants.length,1);assert.equal((await call({action:'mine'})).payments.length,4);await call({action:'merchant-delete',id:third.id},403,{'x-pocket-payment-approval':'single-use-fixture-merchant'});
+fixture.owner='payer';await call({...body,key:'fixture-unique-key-after-delete'},400);
+console.log('PASS independent reusable links; owner-only, one-time PIN approval deletion; deleted QR rejected; payment history retained')
+
+await call({action:'authorize',id:readyAfterDelete.id},409);const finalHash='0x'+'c'.repeat(64);fixture.head=160n;fixture.receipts[finalHash]={...fixture.receipts[hash],blockNumber:150n};assert.equal((await call({action:'confirm',id:pendingAfterDelete.id,hash:finalHash})).payment.status,'paid');console.log('PASS deleted links reject unsigned quotes and still settle pre-authorized payments');
