@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Banknote, Bell, Check, ChevronRight, Coins, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil, Trash, TrendingUp } from '../components/PocketIcons'
+import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketAvatar from '../components/PocketAvatar'
 import PocketBottomNav, { type PocketNavTab } from '../components/PocketBottomNav'
 import PocketLoadingState from '../components/PocketLoadingState'
@@ -26,7 +27,9 @@ import { deletePocketAccount } from '../api/pocketAccountClient'
 
 export default function PocketProfilePage() {
   const navigate = useNavigate()
-  const stocks = isXStocksPath(useLocation().pathname)
+  const location = useLocation()
+  const stocks = isXStocksPath(location.pathname)
+  const returnHome = () => navigate(stocks ? xStockPath('portfolio') : POCKET_BASE_PATH + POCKET_ROUTES.home, { replace: true })
   const { authenticated, email, getAccessToken, logout: identityLogout } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const stockCurrency = usePocketStockCurrency(email)
@@ -71,11 +74,14 @@ export default function PocketProfilePage() {
       } else if (editing) {
         rawEvent.preventDefault()
         setEditing(false)
+      } else {
+        rawEvent.preventDefault()
+        returnHome()
       }
     }
     window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
     return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
-  }, [currencyOpen, deleteBusy, deleteOpen, editing, feature])
+  }, [currencyOpen, deleteBusy, deleteOpen, editing, feature, stocks, navigate])
   if (!profile.loaded || profile.busy && !profile.profile) return <PocketLoadingState active="home" />
   const current = profile.profile
   const copyId = async () => { if (!current?.pocketId) return; await navigator.clipboard.writeText(current.pocketId); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }
@@ -118,11 +124,8 @@ export default function PocketProfilePage() {
     }
   }
   if (deleteOpen) return <div className="fixed inset-0 z-[70] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white">
-    <main className="mx-auto flex min-h-full w-full max-w-[480px] flex-col px-5 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]">
-      <header className="flex h-12 items-center justify-between">
-        <button type="button" onClick={() => !deleteBusy && setDeleteOpen(false)} disabled={deleteBusy} className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm disabled:opacity-50 dark:bg-white/[0.07]" aria-label="Back"><ArrowLeft className="h-4 w-4" /></button>
-        <p className="text-sm font-black">Delete account</p><span className="h-10 w-10" />
-      </header>
+    <main className="mx-auto flex min-h-full w-full max-w-[462px] flex-col px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]">
+      <PocketFlowHeader centered title="Delete account" onBack={() => { if (!deleteBusy) setDeleteOpen(false) }} />
       <section className="flex flex-1 flex-col pt-8">
         <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-300"><Trash className="h-6 w-6" /></span>
         <h1 className="mt-6 text-3xl font-black tracking-[-0.04em]">Delete your Pocket account?</h1>
@@ -133,7 +136,7 @@ export default function PocketProfilePage() {
         <label className="mt-8 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400" htmlFor="delete-pocket-confirmation">Type DELETE to confirm</label>
         <input id="delete-pocket-confirmation" value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value.toUpperCase().slice(0, 6))} autoCapitalize="characters" autoCorrect="off" disabled={deleteBusy} className="mt-2 min-h-14 rounded-2xl border border-gray-200 bg-white px-4 text-base font-black tracking-[0.16em] outline-none focus:border-red-500 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none" />
         {deleteError && <p className="mt-3 text-xs font-semibold leading-5 text-red-600 dark:text-red-300" role="alert">{deleteError}</p>}
-        <button type="button" onClick={() => void confirmAccountDeletion()} disabled={deleteConfirmation !== 'DELETE' || deleteBusy} className="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-red-600 px-5 text-sm font-bold text-white disabled:opacity-40">
+        <button type="button" onClick={() => void confirmAccountDeletion()} disabled={deleteConfirmation !== 'DELETE' || deleteBusy} className="mt-6 flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-40">
           {deleteBusy && <Loader2 className="h-4 w-4" />}{deleteBusy ? 'Deleting account' : 'Delete account permanently'}
         </button>
         <a href="/docs/account-deletion" target="_blank" rel="noreferrer" className="mt-5 text-center text-xs font-bold text-gray-500 underline underline-offset-4">Account deletion and retention details</a>
@@ -143,8 +146,8 @@ export default function PocketProfilePage() {
   if (feature) return <PocketProfileFeaturePage stocks={stocks} feature={feature} onBack={() => setFeature(null)} getAccessToken={getAccessToken} email={email} onResetPin={() => signOut(true)} />
   if (currencyOpen) return <PocketDisplayCurrencyPicker stocks={stocks} current={displayCurrency ?? 'USDC'} busy={stocks ? false : profile.busy} error={stocks ? '' : profile.error} onBack={() => setCurrencyOpen(false)} onSelect={async currency => stocks ? stockCurrency.save(currency) : Boolean(await profile.saveDisplayCurrency(currency))} />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white">
-    <main className="mx-auto flex min-h-full w-full max-w-[480px] flex-col px-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]">
-      <header className="flex h-12 items-center justify-between"><button type="button" onClick={() => editing ? setEditing(false) : navigate(-1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]" aria-label="Back"><ArrowLeft className="h-4 w-4" /></button><p className="text-sm font-black">Profile</p><span className="h-10 w-10" /></header>
+    <main className="mx-auto flex min-h-full w-full max-w-[462px] flex-col px-4 pb-[calc(7.5rem+var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]">
+      <PocketFlowHeader centered title="Profile" onBack={() => editing ? setEditing(false) : returnHome()} />
       <section className="flex flex-1 flex-col pt-8">
         <div className="text-center"><PocketAvatar avatarId={editing ? profile.draft.avatarId : current?.avatarId} className="mx-auto h-24 w-24" /><p className="mt-4 text-xl font-black tracking-[-0.03em]">{current?.resolvedName || 'Pocket profile'}</p><p className="mt-1 text-xs font-medium text-gray-400">{email}</p></div>
         {editing ? <div className="mt-8 space-y-5">
@@ -153,7 +156,7 @@ export default function PocketProfilePage() {
           <button type="button" onClick={() => void save()} disabled={profile.busy || !/^\d{6,12}$/.test(profile.draft.pocketId)} className="flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{profile.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}Save profile</button>
         </div> : <div className="mt-8 space-y-3">
           <button type="button" onClick={() => void copyId()} className="flex w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#121212] dark:shadow-none"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Pocket ID</span><span className="mt-1 block text-base font-black tabular-nums">{current?.pocketId}</span></span><Copy className="h-4 w-4 text-gray-400" />{copied && <span className="text-xs font-bold text-emerald-500">Copied</span>}</button>
-          <button type="button" onClick={() => navigate(stocks ? xStockPath('verify-name') : POCKET_BASE_PATH + POCKET_ROUTES.verifyName)} className="flex w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#121212] dark:shadow-none"><span className="min-w-0 flex-1"><span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Bank account name</span><span className="mt-1 block text-sm font-bold">{current?.resolvedName || 'Verify bank name'}</span></span><ChevronRight className="h-4 w-4 text-gray-400" /></button>
+          <button type="button" onClick={() => navigate(stocks ? xStockPath('verify-name') : POCKET_BASE_PATH + POCKET_ROUTES.verifyName, { state: { bankVerificationFrom: location.pathname + location.search } })} className="flex w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#121212] dark:shadow-none"><span className="min-w-0 flex-1"><span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Bank account name</span><span className="mt-1 block text-sm font-bold">{current?.resolvedName || 'Verify bank name'}</span></span><ChevronRight className="h-4 w-4 text-gray-400" /></button>
           <div className="flex w-full items-center gap-3 rounded-[22px] bg-white p-4 dark:bg-[#121212]"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Identity verification</span><span className="mt-1 block text-sm font-bold">Bank cash-out KYC</span></span><span className="text-xs font-medium text-gray-400">Coming soon</span></div>
           {!stocks && <button type="button" onClick={() => setFeature('wallet-setup')} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#121212] dark:shadow-none"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Wallets</span><span className="mt-1 block text-sm font-bold">Wallet update</span></span><ChevronRight className="h-4 w-4 text-gray-400" /></button>}
           <div className="rounded-[22px] bg-white p-4 shadow-sm dark:bg-[#121212] dark:shadow-none"><p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Email<Lock className="h-3 w-3" /></p><p className="mt-1 truncate text-sm font-bold">{email}</p></div>

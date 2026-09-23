@@ -1,4 +1,5 @@
-import { ArrowLeft, Check, Loader2 } from './PocketIcons'
+import PocketFlowHeader from './PocketFlowHeader'
+import { Check, Loader2 } from './PocketIcons'
 import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 
 type Currency = LocalCurrencyProfile['displayCurrency']
@@ -19,5 +20,5 @@ function CurrencyOption({ option, current, busy, choose, stocks }: { stocks?: bo
 
 export default function PocketDisplayCurrencyPicker({ current, busy, error, onBack, onSelect, stocks = false }: { stocks?: boolean; current: Currency; busy: boolean; error: string; onBack(): void; onSelect(currency: Currency): Promise<boolean> }) {
   const choose = async (currency: Currency) => { if (await onSelect(currency)) onBack() }
-  return <div className="fixed inset-0 z-[55] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white"><main className="mx-auto max-w-[480px] px-5 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]"><header className="flex h-12 items-center justify-between"><button type="button" onClick={onBack} className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]" aria-label="Back"><ArrowLeft className="h-4 w-4" /></button><b className="text-sm">Display currency</b><span className="h-10 w-10" /></header><h1 className="mt-8 text-2xl font-black">Choose how balances appear</h1><p className="mt-2 text-xs text-gray-500">{stocks ? 'Applies only to XStocks on this device.' : "USDC remains Pocket's settlement currency."}</p><div className="mt-6 overflow-hidden rounded-3xl bg-white dark:bg-white/5">{OPTIONS.map(option => <CurrencyOption stocks={stocks} key={option[0]} option={option} current={current} busy={busy} choose={currency => void choose(currency)} />)}</div>{error && <p className="mt-3 text-xs text-red-600">{error}</p>}</main></div>
+  return <div className="fixed inset-0 z-[55] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white"><main className="mx-auto max-w-[462px] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]"><PocketFlowHeader centered title="Display currency" onBack={onBack} /><h1 className="mt-8 text-2xl font-black">Choose how balances appear</h1><p className="mt-2 text-xs text-gray-500">{stocks ? 'Applies only to XStocks on this device.' : "USDC remains Pocket's settlement currency."}</p><div className="mt-6 overflow-hidden rounded-3xl bg-white dark:bg-white/5">{OPTIONS.map(option => <CurrencyOption stocks={stocks} key={option[0]} option={option} current={current} busy={busy} choose={currency => void choose(currency)} />)}</div>{error && <p className="mt-3 text-xs text-red-600">{error}</p>}</main></div>
 }

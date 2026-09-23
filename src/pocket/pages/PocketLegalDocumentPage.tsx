@@ -13,7 +13,7 @@ export default function PocketLegalDocumentPage({ document }: { document: 'terms
 
   return (
     <div className="fixed inset-0 flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-white text-gray-950">
-      <header className="z-20 shrink-0 border-b border-gray-200 bg-white/95 px-4 pb-3 pt-[max(0.75rem,var(--pocket-safe-top))] backdrop-blur">
+      <header className="z-20 shrink-0 border-b border-gray-200 bg-white/95 px-4 pb-3 pt-[calc(var(--pocket-safe-top)+1rem)] backdrop-blur">
         <div className="mx-auto flex w-full max-w-3xl items-center gap-3">
           <button
             type="button"

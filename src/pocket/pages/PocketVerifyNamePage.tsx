@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { isXStocksPath, xStockPath } from '../lib/pocketRail'
+import { isXStocksPath } from '../lib/pocketRail'
 import { Check, Loader2, Lock } from '../components/PocketIcons'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketLoadingState from '../components/PocketLoadingState'
@@ -8,12 +8,18 @@ import PocketSelect from '../components/PocketSelect'
 import { readPocketBankInstitutions, verifyPocketBankAccount } from '../api/pocketBankClient'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
-import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
+import { pocketVerificationReturn } from '../lib/pocketVerificationReturn'
+import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 
 export default function PocketVerifyNamePage() {
   const navigate = useNavigate()
-  const stocks = isXStocksPath(useLocation().pathname)
-  const profilePath = stocks ? xStockPath('account') : POCKET_BASE_PATH + POCKET_ROUTES.profile
+  const location = useLocation()
+  const stocks = isXStocksPath(location.pathname)
+  const returnPath = pocketVerificationReturn(location.state, stocks)
+  const returnToCaller = () => {
+    if (location.state?.bankVerificationFrom === returnPath && window.history.state?.idx > 0) navigate(-1)
+    else navigate(returnPath, { replace: true })
+  }
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const [institutions, setInstitutions] = useState<Array<{ code: string; name: string }>>([])
@@ -24,6 +30,11 @@ export default function PocketVerifyNamePage() {
   const [error, setError] = useState('')
   const lastResolutionKey = useRef('')
   const bankName = institutions.find(item => item.code === bankCode)?.name ?? ''
+  useEffect(() => {
+    const back = (event: Event) => { event.preventDefault(); if (!busy) returnToCaller() }
+    window.addEventListener(POCKET_NATIVE_BACK_EVENT, back)
+    return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, back)
+  }, [busy, location.key, returnPath])
   const locked = profile.profile?.nameStatus === 'bank_resolved'
   const canResolve = Boolean(bankCode && /^\d{10}$/.test(accountNumber))
   const options = useMemo(() => institutions.map(item => ({ value: item.code, label: item.name })), [institutions])
@@ -74,7 +85,7 @@ export default function PocketVerifyNamePage() {
       const result = await verifyPocketBankAccount({ accessToken, request: { bank_code: bankCode, bank_name: bankName, account_number: accountNumber, confirm_profile_name: true } })
       if (result.account_name.trim().toLocaleUpperCase() !== resolvedName.toLocaleUpperCase()) throw new Error('The bank returned a different name. Resolve the account again.')
       await profile.reload()
-      navigate(profilePath, { replace: true })
+      returnToCaller()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not confirm your verified name.')
     } finally {
@@ -84,8 +95,8 @@ export default function PocketVerifyNamePage() {
 
   if (!profile.loaded) return <PocketLoadingState active="profile" />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
-    <main className="mx-auto min-h-full w-full max-w-[480px] px-5 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]">
-      <PocketFlowHeader title="Bank account name" onBack={() => navigate(profilePath)} />
+    <main className="mx-auto min-h-full w-full max-w-[462px] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]">
+      <PocketFlowHeader centered title="Bank account name" onBack={() => { if (!busy) returnToCaller() }} />
       {locked ? <section className="mt-7 rounded-[26px] bg-white p-6 text-center shadow-sm dark:bg-white/[0.05]">
         <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10"><Lock className="h-5 w-5" /></span>
         <p className="mt-4 text-lg font-black">{profile.profile?.resolvedName}</p>
