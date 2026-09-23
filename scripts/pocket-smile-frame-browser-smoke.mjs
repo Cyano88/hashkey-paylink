@@ -6,14 +6,15 @@ const browser=await chromium.launch({headless:true,channel:'chrome'})
 try {
  const page=await browser.newPage()
  await page.route('https://app.hashpaylink.com/',r=>r.fulfill({contentType:'text/html',body:'<body></body>'}))
- await page.route('https://hashkey-paylink.onrender.com/pocket/identity-frame',r=>r.fulfill({contentType:'text/html',body:`<script>window.addEventListener('message',e=>window.received=e.data);parent.postMessage('SmileIdentity::ChildPageReady','https://app.hashpaylink.com')</script>`}))
+ await page.route('https://hashkey-paylink.onrender.com/pocket/identity-frame**',r=>r.fulfill({contentType:'text/html',body:`<script>window.addEventListener('message',e=>window.received=e.data);parent.postMessage('SmileIdentity::ChildPageReady','https://app.hashpaylink.com')</script>`}))
  await page.goto('https://app.hashpaylink.com/')
  await page.addScriptTag({content:bundle.outputFiles[0].text})
  await page.evaluate(()=>{window.success=0;window.closeCalls=0;window.errors=0;window.openSmileFrame({token:'fixture-secret',onSuccess:()=>window.success++,onClose:()=>window.closeCalls++,onError:()=>window.errors++})})
  const frame=page.frames().find(f=>f.url().includes('/identity-frame'))??await new Promise(resolve=>page.once('framenavigated',resolve))
  await frame.waitForFunction(()=>!!window.received)
  assert.equal(await frame.evaluate(()=>JSON.parse(window.received).token),'fixture-secret')
- assert.equal(new URL(frame.url()).search,'')
+ assert.equal(new URL(frame.url()).searchParams.get('capture'),'v11-smile-20260923')
+ assert.equal(new URL(frame.url()).searchParams.has('token'),false)
  await page.evaluate(()=>{
   const source=document.querySelector('iframe').contentWindow
   window.dispatchEvent(new MessageEvent('message',{origin:'https://evil.invalid',source,data:'SmileIdentity::Success'}))

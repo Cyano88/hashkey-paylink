@@ -8,7 +8,11 @@ export function openSmileFrame(config: Record<string, unknown>) {
   const frame = document.createElement('iframe')
   frame.id = frame.name = FRAME_ID
   frame.title = 'Smile ID identity verification'
-  frame.src = SMILE_FRAME_URL + (config.product === 'doc_verification' ? '?method=government_id' : '')
+  // Version the cached shell whenever the capture engine changes.
+  const frameUrl = new URL(SMILE_FRAME_URL)
+  frameUrl.searchParams.set('capture', 'v11-smile-20260923')
+  if (config.product === 'doc_verification') frameUrl.searchParams.set('method', 'government_id')
+  frame.src = frameUrl.toString()
   frame.allow = 'camera; fullscreen'
   frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups')
   frame.referrerPolicy = 'no-referrer'
