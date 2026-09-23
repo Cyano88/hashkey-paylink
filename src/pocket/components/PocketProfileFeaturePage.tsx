@@ -1,3 +1,4 @@
+import PocketFlowHeader from './PocketFlowHeader'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 import PocketWalletPreparation from './PocketWalletPreparation'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -226,7 +227,7 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
   const title = feature === 'wallet-setup' ? 'Wallet preparation' : feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
   return <div className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white'>
     <main className='mx-auto min-h-full w-full max-w-[480px] px-5 pb-[max(2.5rem,var(--pocket-safe-bottom))] pt-[max(1rem,var(--pocket-safe-top))]'>
-      <header className='flex h-12 items-center justify-between'><button type='button' onClick={onBack} className='flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]' aria-label='Back'><ArrowLeft className='h-4 w-4' /></button><p className='text-sm font-black'>{title}</p><span className='h-10 w-10' /></header>
+      {feature==='wallet-setup' ? <PocketFlowHeader title={title} onBack={onBack} centered /> : <header className='flex h-12 items-center justify-between'><button type='button' onClick={onBack} className='flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm dark:bg-white/[0.07]' aria-label='Back'><ArrowLeft className='h-4 w-4' /></button><p className='text-sm font-black'>{title}</p><span className='h-10 w-10' /></header>}
       {feature === 'wallet-setup' && <PocketWalletPreparation key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={setCurrency} />}
       {feature === 'limits' && <LimitsPanel usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}

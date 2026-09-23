@@ -23,13 +23,25 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
   setQuote(current=>current && current.revision===next.revision && next.rows.find(row=>row.network===current.network)?.state==='ready' ? current : null)
   if(next.phase==='completed'){setResume(null);setError('');completedCallback.current()}
  }
+ async function finishIfReady(next:PocketMigrationSnapshot) {
+  if(next.phase!=='ready-to-activate'||!next.enabled||recovery||!active.current)return
+  const completed=await request<{snapshot:PocketMigrationSnapshot}>({action:'activate',revision:next.revision,userToken:session.userToken})
+  accept(completed.snapshot)
+ }
+ async function approveSaved(challengeId:string,network:string,revision:string) {
+  await approveCircleMigrationChallenge(session,challengeId,controller.current?.signal,async()=>{
+   const checked=await request<{state:string}>({action:'reconcile',network,revision,userToken:session.userToken})
+   return checked.state==='confirmed'
+  })
+ }
  async function refresh(preserveError=false) {
   const result=await request<{snapshot:PocketMigrationSnapshot}>({action:'status'});accept(result.snapshot)
   const pending=result.snapshot.rows.find(row=>row.state==='pending')
   if(!active.current)return
-  if(!pending){setResume(null);if(!preserveError)setError('');return}
+  if(!pending){setResume(null);if(!preserveError)setError('');await finishIfReady(result.snapshot);return}
   const checked=await request<{snapshot:PocketMigrationSnapshot;state:string;resume?:{action:'resume'|'recover';network:string;amount:string;source:string;target:string}}>({action:'reconcile',network:pending.network,revision:result.snapshot.revision,userToken:session.userToken})
   accept(checked.snapshot)
+  await finishIfReady(checked.snapshot)
   if(active.current){setResume((checked.state==='approval_required'||checked.state==='recovery_required')?checked.resume??null:null);if(checked.state==='needs_review')setError('This saved transfer needs review before approval can continue.');else if(!preserveError || checked.state==='confirmed')setError('')}
  }
  useEffect(()=>{
@@ -46,14 +58,15 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
  const pending=snapshot?.rows.find(row=>row.state==='pending')
  const next=snapshot?.rows.find(row=>row.state==='ready')
  // Reconcile only the saved request while it awaits network confirmation.
- // Polling never starts, resumes, recovers, signs or activates a transfer.
+ // Polling never starts, resumes, recovers or signs a transfer.
+ // Activation follows only after all exact transfer receipts are confirmed.
  useEffect(()=>{
   if(!pending || resume || quote)return
   const timer=window.setInterval(()=>{
    if(!active.current || locked.current || document.visibilityState!=='visible')return
    locked.current=true;setBusy(true)
    void refresh().catch(reason=>{if(active.current)setError(reason instanceof Error?reason.message:'Migration status is unavailable.')}).finally(()=>{locked.current=false;if(active.current)setBusy(false)})
-  },10_000)
+  },3_000)
   return()=>window.clearInterval(timer)
  },[pending?.network,snapshot?.revision,!!resume,!!quote,session.userToken,getAccessToken])
 
@@ -69,7 +82,7 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
     const result=await request<{state:string;challengeId?:string}>({action:resume.action,network:resume.network,revision:snapshot.revision,userToken:session.userToken},true)
     if(!active.current)return
     setResume(null)
-    if(result.state==='approval'&&result.challengeId)await approveCircleMigrationChallenge(session,result.challengeId,controller.current?.signal)
+    if(result.state==='approval'&&result.challengeId)await approveSaved(result.challengeId,resume.network,snapshot.revision)
     else if(result.state==='needs_review')setError('This transfer needs review. A replacement transfer has not been created.')
     await refresh()
    } else if(quote&&!expired) {
@@ -80,11 +93,12 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
     const result=await request<{state:'approval'|'reconcile';challengeId?:string}>({action:'start',network:quote.network,revision:snapshot.revision,userToken:session.userToken,feeQuoteId:quote.id},true)
     if(!active.current)return
     setQuote(null)
-    if(result.state==='approval'&&result.challengeId)await approveCircleMigrationChallenge(session,result.challengeId,controller.current?.signal)
+    if(result.state==='approval'&&result.challengeId)await approveSaved(result.challengeId,quote.network,snapshot.revision)
     if(active.current)await refresh()
    } else if(pending) {
     const result=await request<{snapshot:PocketMigrationSnapshot;state:string;resume?:{action:'resume'|'recover';network:string;amount:string;source:string;target:string}}>({action:'reconcile',network:pending.network,revision:snapshot.revision,userToken:session.userToken})
     accept(result.snapshot)
+    await finishIfReady(result.snapshot)
     if(active.current){setResume((result.state==='approval_required'||result.state==='recovery_required') ? result.resume??null : null);if(result.state==='needs_review')setError('This transfer needs review. A replacement transfer has not been created.')}
    } else if(next) {
     const result=await request<{quote:PocketMigrationFee}>({action:'quote',network:next.network,revision:snapshot.revision,userToken:session.userToken})
