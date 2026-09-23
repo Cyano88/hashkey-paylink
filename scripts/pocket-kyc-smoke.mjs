@@ -123,3 +123,17 @@ console.log('PASS provisional review remains refreshable until final provider ve
 const missingDob=await request('missing-dob',{action:'start',consent:true});
 assert.equal((await passJob('missing-dob',missingDob,'bvn','Test Person','')).body.status,'review');
 console.log('PASS new BVN policy requires government ID type and matching attributes; legacy policy remains readable.')
+
+// Pausing enrollment must not mint tokens, change records, or mark anyone verified.
+const rolloutSnapshot = JSON.stringify([...state.values]);
+const rolloutCalls = state.calls.length;
+for (const action of ['start', 'resume']) {
+  const res = { code: 200, setHeader() {}, status(code) { this.code=code; return this }, json(body) { this.body=body; return this } };
+  await m.default({method:'POST',headers:{authorization:'alice'},body:{action,consent:true}},res);
+  assert.equal(res.code,503); assert.equal(res.body.code,'KYC_COMING_SOON'); assert.equal(res.body.retryable,false);
+}
+const unauthorizedRollout = { code:200,setHeader(){},status(code){this.code=code;return this},json(body){this.body=body;return this} };
+await m.default({method:'POST',headers:{},body:{action:'start'}},unauthorizedRollout);
+assert.equal(unauthorizedRollout.code,401);
+assert.equal(state.calls.length,rolloutCalls); assert.equal(JSON.stringify([...state.values]),rolloutSnapshot);
+console.log('PASS paused public enrollment preserves authentication and records, makes no provider calls, and never grants verification.');

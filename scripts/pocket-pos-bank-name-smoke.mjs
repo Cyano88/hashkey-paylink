@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { assertBankAccountMatchesPocketName } from '../api/pocket/verified-bank-name.ts';
+let resolved=0;
+const deps={verifyUser:async()=>({userId:'fixture-owner',email:'fixture@example.invalid'}),profiles:{get:async()=>({nameStatus:'bank_resolved',resolvedName:'Ada Lovelace'})},verifyAccount:async()=>{resolved++;return {account_name:'ADA LOVELACE',bank_code:'001'}}};
+const result=await assertBankAccountMatchesPocketName({}, {bank_code:'001',account_number:'0123456789',account_name:'Forged Name'},deps);
+assert.equal(result.verification.account_name,'ADA LOVELACE');assert.equal(resolved,1);
+await assert.rejects(()=>assertBankAccountMatchesPocketName({}, {}, {...deps,verifyAccount:async()=>({account_name:'Different Person',bank_code:'001'})}),e=>e.status===403);
+await assert.rejects(()=>assertBankAccountMatchesPocketName({}, {}, {...deps,profiles:{get:async()=>({nameStatus:'unverified',resolvedName:'Ada Lovelace'})}}),e=>e.status===403);
+await assert.rejects(()=>assertBankAccountMatchesPocketName({}, {}, {...deps,verifyUser:async()=>{throw Object.assign(Error('Sign in'),{status:401})}}),e=>e.status===401);
+await assert.rejects(()=>assertBankAccountMatchesPocketName({}, {}, {...deps,verifyAccount:async()=>({})}),e=>e.status===502);
+console.log('PASS bank-resolved POS owner accepted without Smile; mismatched name, unenrolled profile, missing auth and invalid provider result rejected.');
