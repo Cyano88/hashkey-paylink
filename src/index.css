@@ -10,6 +10,20 @@
   --pocket-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--pocket-navigation-bar-inset, 0px));
 }
 
+/* Keep scrolling pages, portals and provider overlays below the Android status icons. */
+html[data-pocket-runtime='native'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto;
+  height: var(--pocket-safe-top);
+  z-index: 2147483647;
+  pointer-events: none;
+  background: #F5F5F7;
+}
+html[data-pocket-runtime='native'].dark:not([data-pocket-light-surface='true']) body::before {
+  background: #0A0A0A;
+}
+
 html[data-pocket-runtime='native'],
 html[data-pocket-runtime='native'] body,
 html[data-pocket-runtime='native'] #root {

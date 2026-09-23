@@ -1,4 +1,4 @@
-﻿import { useEffect,useRef,useState } from 'react'
+import { useEffect,useRef,useState } from 'react'
 import { approveCircleMigrationChallenge,type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { pocketMigrationRequest } from '../lib/pocketMigrationClient'
 import { requestPocketPaymentApproval } from '../lib/pocketPaymentApproval'

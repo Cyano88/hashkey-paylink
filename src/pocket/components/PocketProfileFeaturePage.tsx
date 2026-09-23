@@ -102,7 +102,7 @@ function NotificationsPanel({ enabled, onChange }: { enabled: boolean; onChange(
   </section>
 }
 
-function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; getAccessToken(): Promise<string | null>; onResetPin(): Promise<void> }) {
+function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: boolean; email: string; getAccessToken(): Promise<string | null>; onResetPin(): Promise<void> }) {
   const [currentPin, setCurrentPin] = useState('')
   const [biometricPin, setBiometricPin] = useState('')
   const [newPin, setNewPin] = useState('')
@@ -155,6 +155,7 @@ function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; g
   }
   const inputClass = 'mt-2 min-h-12 w-full rounded-2xl bg-gray-50 px-4 text-center text-base font-black tracking-[0.25em] outline-none focus:ring-2 focus:ring-blue-500 dark:bg-[#171717]'
   return <section className='pt-8 space-y-4'>
+    <p className='px-1 text-xs leading-5 text-gray-400'>One Pocket PIN and fingerprint or face setup for Stablecoins and XStocks.</p>
     <article className='rounded-[26px] bg-white p-5 shadow-sm dark:bg-[#121212] dark:shadow-none'>
       <div className='flex items-center gap-3'><span className='min-w-0 flex-1'><strong className='block text-sm'>Fingerprint or face</strong><span className='mt-1 block text-xs text-gray-500'>{biometrics ? 'Used first for payment approval' : 'Payments use your Pocket PIN'}</span></span>{biometricsAvailable && <label className={cn('relative h-7 w-12 cursor-pointer rounded-full transition-colors', busy && 'pointer-events-none opacity-50', biometrics ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}><input type='checkbox' role='switch' aria-label='Fingerprint or face' checked={biometrics} onChange={() => void toggleBiometrics()} disabled={busy} className='peer sr-only' /><span className={cn('pointer-events-none absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform', biometrics ? 'translate-x-6' : 'translate-x-1')} /></label>}</div>
       {!biometrics && biometricsAvailable && <><label className='mt-4 block text-[10px] font-black uppercase tracking-[0.16em] text-gray-400'>Current PIN</label><input value={biometricPin} onChange={event => setBiometricPin(clean(event.target.value))} inputMode='numeric' type='password' className={inputClass} /></>}
@@ -166,14 +167,14 @@ function SecurityPanel({ email, getAccessToken, onResetPin }: { email: string; g
       <input value={confirmPin} onChange={event => setConfirmPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='Confirm new PIN' aria-label='Confirm new Pocket PIN' className={inputClass} />
       <button type='button' onClick={() => void changePin()} disabled={busy || currentPin.length !== 6 || newPin.length !== 6 || confirmPin.length !== 6} className='mt-4 min-h-12 w-full rounded-full bg-gray-950 text-xs font-black text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>Change PIN</button>
     </article>
-    <button type='button' onClick={() => void reconnectWallet()} disabled={busy} className='min-h-12 w-full rounded-full border border-gray-200 text-xs font-black text-gray-700 disabled:opacity-50 dark:border-[#262626] dark:text-gray-200'>{busy ? 'Please wait...' : 'Reconnect Circle wallet'}</button>
+    {!stocks && <button type='button' onClick={() => void reconnectWallet()} disabled={busy} className='min-h-12 w-full rounded-full border border-gray-200 text-xs font-black text-gray-700 disabled:opacity-50 dark:border-[#262626] dark:text-gray-200'>{busy ? 'Please wait...' : 'Reconnect Circle wallet'}</button>}
     {error && <p className='px-2 text-xs font-semibold text-red-500'>{error}</p>}{notice && <p className='px-2 text-xs font-semibold text-emerald-600'>{notice}</p>}
     <button type='button' onClick={() => void resetPin()} disabled={busy} className='min-h-12 w-full rounded-full border border-red-200 text-xs font-black text-red-600 disabled:opacity-50 dark:border-red-400/20 dark:text-red-300'>Forgot or reset PIN</button>
     <p className='px-1 text-[11px] leading-5 text-gray-400'>Reset signs you out first so your email identity can be verified again.</p>
   </section>
 }
 
-export default function PocketProfileFeaturePage({ feature, onBack, getAccessToken, email = '', onResetPin = async () => undefined }: { feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null>; email?: string; onResetPin?(): Promise<void> }) {
+export default function PocketProfileFeaturePage({ feature, onBack, getAccessToken, email = '', onResetPin = async () => undefined, stocks = false }: { stocks?: boolean; feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null>; email?: string; onResetPin?(): Promise<void> }) {
   const fx = usePocketFxQuote(10, feature === 'rates')
   const [currency, setCurrency] = useState('NGN')
   const [pushEnabled, setPushEnabled] = useState(pocketPushEnabled)
@@ -230,7 +231,7 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={setCurrency} />}
       {feature === 'limits' && <LimitsPanel usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
       {feature === 'notifications' && <NotificationsPanel enabled={pushEnabled} onChange={enabled => { setPocketPushEnabled(enabled); setPushEnabled(enabled) }} />}
-      {feature === 'security' && <SecurityPanel email={email} getAccessToken={getAccessToken} onResetPin={onResetPin} />}
+      {feature === 'security' && <SecurityPanel stocks={stocks} email={email} getAccessToken={getAccessToken} onResetPin={onResetPin} />}
     </main>
   </div>
 }

@@ -98,6 +98,7 @@ export default function PocketHomePage() {
       </div>
     </section>
 
+
     <section className="grid grid-cols-4 gap-2">
       {[
         { label: 'Send', icon: Send, path: POCKET_ROUTES.transfer },

@@ -12,10 +12,11 @@ import usePocketWalletController from '../controllers/usePocketWalletController'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 import { cn } from '../../lib/utils'
 
-type DepositNetwork = 'base' | 'arbitrum' | 'solana'
+type DepositNetwork = 'base' | 'arbitrum' | 'solana' | 'arc'
 const NETWORKS = [
   { key: 'base', label: 'Base', logo: '/brand/base-logo.jpeg', dark: false },
   { key: 'arbitrum', label: 'Arbitrum', logo: '/brand/arbitrum-logo.jpeg', dark: false },
+  { key: 'arc', label: 'Arc', logo: '/brand/arc-logo.jpeg', dark: true },
   { key: 'solana', label: 'Solana', logo: '/brand/solana-logo.jpeg', dark: true },
 ] as const
 
@@ -32,7 +33,7 @@ export default function PocketDepositPage() {
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const [network, setNetwork] = useState<DepositNetwork>(() => {
     const saved = window.localStorage.getItem('pocket.home.network')
-    return saved === 'arbitrum' || saved === 'solana' ? saved : 'base'
+    return saved === 'arbitrum' || saved === 'solana' || saved === 'arc' ? saved : 'base'
   })
   const [opening, setOpening] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -46,7 +47,7 @@ export default function PocketDepositPage() {
   return <PocketRouteShell active="home" onSelect={tab => navigate(POCKET_BASE_PATH + navPath(tab))}>
     <PocketFlowHeader centered title="Deposit USDC" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.receive)} />
     <section className="rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none">
-      <div className="grid grid-cols-3 gap-3">{NETWORKS.map(item => <button key={item.key} type="button" onClick={() => setNetwork(item.key)} className={cn('flex min-h-14 items-center justify-center rounded-2xl border transition', network === item.key ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : 'border-gray-100 dark:border-[#262626]')} aria-label={'Deposit on ' + item.label}><img src={item.logo} alt="" className={cn('h-7 w-7 rounded-md object-cover grayscale contrast-200', item.dark && 'invert', network !== item.key && 'dark:invert')} /></button>)}</div>
+      <div className="grid grid-cols-4 gap-3">{NETWORKS.map(item => <button key={item.key} type="button" onClick={() => setNetwork(item.key)} className={cn('flex min-h-14 items-center justify-center rounded-2xl border transition', network === item.key ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : 'border-gray-100 dark:border-[#262626]')} aria-label={'Deposit on ' + item.label}><img src={item.logo} alt="" className={cn('h-7 w-7 rounded-md object-cover grayscale contrast-200', item.dark && 'invert', network !== item.key && 'dark:invert')} /></button>)}</div>
       {wallet?.address ? <div className="mt-7 text-center">
         <div className="mx-auto w-fit rounded-[24px] bg-white p-4"><QRCodeSVG value={wallet.address} size={164} /></div>
         <p className="mt-5 break-all text-xs font-semibold leading-5 text-gray-600 dark:text-gray-300">{wallet.address}</p>
