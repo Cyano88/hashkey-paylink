@@ -3,11 +3,12 @@ import { build } from 'esbuild'
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const stubs = {
+  pocketBalanceCache: 'export const balanceOwner=x=>x; export const readCachedPocketBalance=()=>null; export const replacePocketBalanceWallets=async()=>{}',
   authMode: 'export const PRIVY_AUTH_ENABLED = true',
-  circleEvmEmailWallet: 'export const canUseCircleEvmEmailWallet=()=>true; export const connectCircleEvmEmailWallet=()=>{}; export const resumeCircleArcMainnetWallet=()=>{}',
+  circleEvmEmailWallet: 'export const canUseCircleEvmEmailWallet=()=>true; export const connectCircleEvmEmailWallet=()=>{}; export const resumeCircleArcMainnetWallet=()=>{}; export const resumeCircleProductionEvmWallet=()=>{}; export const restoreActivatedCircleEvmSession=()=>{}',
   circleSolanaEmailWallet: 'export const canUseCircleSolanaEmailWallet=()=>true; export const connectCircleSolanaEmailWallet=()=>{}; export const resumeCircleSolanaEmailWallet=()=>{}',
   chains: 'export const CHAIN_META={base:{label:"Base"},arbitrum:{label:"Arbitrum"},arc:{label:"Arc"}}',
-  pocketWalletLinkClient: 'export const linkPocketWallet=()=>{}; export const readPocketWallet=()=>{}',
+  pocketWalletLinkClient: 'export const linkPocketWallet=()=>{}; export const readPocketWallet=()=>{}; export const readPocketWallets=()=>{}',
   pocketSecureWalletSession: 'export const readPocketSecureWalletSession=async()=>null; export const savePocketSecureWalletSession=async()=>{}; export const deletePocketSecureWalletSession=async()=>{}; export const secureSessionForNetwork=()=>null; export class PocketWalletSessionRecoveryRequiredError extends Error {}',
   pocketQuickApproval: 'export const pocketQuickApprovalCredentialSaved=async()=>false; export const readPocketEvmQuickSession=async()=>null',
 }

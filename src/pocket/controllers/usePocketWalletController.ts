@@ -1,9 +1,12 @@
+import { preparePocketWalletNetworks } from '../lib/pocketWalletBootstrap'
+import { balanceOwner, readCachedPocketBalance, replacePocketBalanceWallets } from '../lib/pocketBalanceCache'
 import { useCallback, useRef, useState } from 'react'
 import { PRIVY_AUTH_ENABLED } from '../../lib/authMode'
 import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
   resumeCircleArcMainnetWallet,
+  resumeCircleProductionEvmWallet,
   restoreActivatedCircleEvmSession,
   type CircleEvmEmailSession,
 } from '../../lib/circleEvmEmailWallet'
@@ -13,7 +16,7 @@ import {
   resumeCircleSolanaEmailWallet,
 } from '../../lib/circleSolanaEmailWallet'
 import { CHAIN_META } from '../../lib/chains'
-import { linkPocketWallet, readPocketWallet } from '../api/pocketWalletLinkClient'
+import { linkPocketWallet, readPocketWallet, readPocketWallets } from '../api/pocketWalletLinkClient'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import { deletePocketSecureWalletSession, PocketWalletSessionRecoveryRequiredError, readPocketSecureWalletSession, savePocketSecureWalletSession, secureSessionForNetwork } from '../lib/pocketSecureWalletSession'
 import { pocketQuickApprovalCredentialSaved, readPocketEvmQuickSession } from '../lib/pocketQuickApproval'
@@ -56,7 +59,8 @@ export async function restorePocketWalletSession(email: string) {
   const pending = sharedSessionRestores.get(key)
   if (pending) return pending
   const request = readPocketSecureWalletSession(email)
-    .then(session => {
+    .then(saved => {
+      const session = saved ?? activePocketEvmSession(email, 'base')
       if (session) cacheEvmSession(email, session)
       return session
     })
@@ -164,7 +168,7 @@ export async function ensurePocketWallet({
   }
 
   if (network === 'solana') {
-    const storedSession = await readPocketSecureWalletSession(email)
+    const storedSession = await restorePocketWalletSession(email)
     const session = storedSession
       ? await resumeCircleSolanaEmailWallet(storedSession)
       : await dependencies.connectSolana(email)
@@ -184,7 +188,7 @@ export async function ensurePocketWallet({
     }
   }
 
-  const storedSession = await readPocketSecureWalletSession(email)
+  const storedSession = await restorePocketWalletSession(email)
   const storedWallet = storedSession?.chain === network
     ? storedSession.wallet
     : network === 'base' || network === 'arbitrum'
@@ -193,7 +197,7 @@ export async function ensurePocketWallet({
   const resumedSession = storedSession && storedWallet
     ? secureSessionForNetwork(storedSession, network as Exclude<PocketNetwork, 'solana'>, storedWallet.address)
     : null
-  const mainnetSession = network === 'arc' ? await readPocketSecureWalletSession(email) : null
+  const mainnetSession = network === 'arc' ? await restorePocketWalletSession(email) : null
   const session = resumedSession ?? (mainnetSession && mainnetSession.wallet.blockchain !== 'ARC-TESTNET' ? await resumeCircleArcMainnetWallet(mainnetSession) : await dependencies.connectEvm(email, network))
   if (!shouldContinue()) return null
   await onEvmSession?.(session)
@@ -221,11 +225,13 @@ async function unlockPocketBaseWalletOnce({
   email,
   getAccessToken,
   forceReconnect = false,
+  shouldContinue = () => true,
 }: {
   authenticated: boolean
   email: string
   getAccessToken: PocketAccessTokenReader
   forceReconnect?: boolean
+  shouldContinue?: () => boolean
 }) {
   let approvedSession: CircleEvmEmailSession | null = null
   const wallet = await ensurePocketWallet({
@@ -233,13 +239,19 @@ async function unlockPocketBaseWalletOnce({
     authenticated,
     email,
     getAccessToken,
-    onEvmSession: session => { approvedSession = session },
+    shouldContinue,
+    onEvmSession: async session => {
+      approvedSession = session
+      await savePocketSecureWalletSession(email, session)
+      cacheEvmSession(email, session)
+    },
   })
-  if (!wallet) throw new Error('Circle wallet unlock did not complete.')
+  if (!wallet || !shouldContinue()) throw new Error('Circle wallet unlock did not complete.')
   if (forceReconnect) await deletePocketSecureWalletSession(email)
-  const storedSession = approvedSession || forceReconnect ? null : await readPocketSecureWalletSession(email)
+  const storedSession = approvedSession || forceReconnect ? null : await restorePocketWalletSession(email)
   const secured = storedSession ? secureSessionForNetwork(storedSession, 'base', wallet.address) : null
   let session = approvedSession ?? secured ?? storedSession ?? await connectCircleEvmEmailWallet(email, 'base')
+  if (!shouldContinue()) throw new Error('Wallet setup cancelled.')
   if (session.wallet.address.toLowerCase() !== wallet.address.toLowerCase() || (wallet.walletId && session.wallet.id !== wallet.walletId)) {
     const token = await getAccessToken()
     if (!token) throw new PocketWalletSessionRecoveryRequiredError('Sign in again to restore your updated wallets.')
@@ -270,12 +282,53 @@ export async function unlockPocketBaseWallet(params: {
   return request
 }
 
+const sharedWalletPreparation = new Map<string, { work: Promise<CircleEvmEmailSession>; active: () => boolean }>()
+export async function preparePocketWalletsAfterSignIn(params: {
+  email: string; getAccessToken: PocketAccessTokenReader; session: CircleEvmEmailSession; shouldContinue?: () => boolean
+}): Promise<CircleEvmEmailSession> {
+  const owner = balanceOwner(params.email)
+  const active = params.shouldContinue ?? (() => true)
+  const pending = sharedWalletPreparation.get(owner)
+  if (pending) {
+    try { return await pending.work } catch (error) {
+      if (pending.active() || !active()) throw error
+      return preparePocketWalletsAfterSignIn(params)
+    }
+  }
+  const work = (async () => {
+    const token = await params.getAccessToken()
+    if (!token || !active()) throw new Error('Sign in again to finish wallet setup.')
+    const result = await preparePocketWalletNetworks(params.session, {
+      read: () => readPocketWallets({ accessToken: token }),
+      evm: resumeCircleProductionEvmWallet,
+      arc: resumeCircleArcMainnetWallet,
+      solana: resumeCircleSolanaEmailWallet,
+      link: (network, candidate) => linkPocketWallet({ accessToken: token, network, circleUserToken: candidate.userToken, wallet: candidate.wallet }),
+      save: complete => savePocketSecureWalletSession(params.email, complete),
+    }, active)
+    if (!active()) throw new Error('Wallet setup cancelled.')
+    cacheEvmSession(params.email, result.session)
+    if (result.session.arcMainnetWallet) cacheEvmSession(params.email, { ...result.session, chain: 'arc', wallet: result.session.arcMainnetWallet })
+    sharedSolanaSessions.set(solanaSessionKey(params.email, result.solana.wallet.address), result.solana as PocketSolanaEmailSession)
+    const previous = readCachedPocketBalance(owner)?.wallets
+    if (JSON.stringify(previous) !== JSON.stringify(result.wallets)) await replacePocketBalanceWallets(owner, result.wallets)
+    return result.session
+  })().finally(() => sharedWalletPreparation.delete(owner))
+  sharedWalletPreparation.set(owner, { work, active })
+  return work
+}
+
 export async function reconnectPocketBaseWallet(params: {
   authenticated: boolean
   email: string
   getAccessToken: PocketAccessTokenReader
+  shouldContinue?: () => boolean
 }) {
-  return unlockPocketBaseWalletOnce({ ...params, forceReconnect: true })
+  // Retry an interrupted setup with the retained session, without another OTP.
+  const retained = await restorePocketWalletSession(params.email).catch(() => null)
+  const unlocked = await unlockPocketBaseWalletOnce({ ...params, forceReconnect: !retained })
+  const session = await preparePocketWalletsAfterSignIn({ ...params, session: unlocked.session })
+  return { ...unlocked, session }
 }
 
 export default function usePocketWalletController({
@@ -349,7 +402,7 @@ export default function usePocketWalletController({
     const shared = sharedSolanaSessions.get(solanaSessionKey(email, walletAddress))
     if (shared) return shared
     const activeAuthentication = activePocketEvmSession(email, 'base')
-    const authentication = activeAuthentication ?? await readPocketSecureWalletSession(email)
+    const authentication = activeAuthentication ?? await restorePocketWalletSession(email)
     const session = authentication
       ? await resumeCircleSolanaEmailWallet(authentication, walletAddress)
       : await connectCircleSolanaEmailWallet(email)

@@ -757,6 +757,26 @@ async function ensureProductionEvmWallet(
   return { wallet, productionEvmTopology: topology }
 }
 
+export async function resumeCircleProductionEvmWallet(session: CircleEvmEmailSession, chain: 'base' | 'arbitrum'): Promise<CircleEvmEmailSession> {
+  const sdk = authenticatedSdk(session)
+  const snapshot = await getWalletSnapshot(session.userToken, chain)
+  const topology = auditPocketProductionEvmWallets(snapshot.wallets)
+  if (!topology.wallets[chain] && topology.status === 'single-network') {
+    // Repair a partial first-time setup by adding only the absent network.
+    // Never replace the existing wallet or move its balance.
+    const peer = topology.wallets[chain === 'base' ? 'arbitrum' : 'base']!
+    const created = await circleWalletApi<{ challengeId?: string; walletReady?: boolean }>({
+      action: 'createWallet', userToken: session.userToken,
+      blockchain: CHAIN_CONFIG[chain].blockchain, accountType: 'SCA',
+      name: 'Pocket ' + CHAIN_CONFIG[chain].label, pocketSetupFor: peer.id,
+    })
+    if (created.challengeId) await executeChallenge(sdk, created.challengeId)
+    else if (!created.walletReady) throw new Error('Circle did not finish wallet setup. Try again.')
+  }
+  const ensured = await ensureProductionEvmWallet(sdk, session.userToken, session.encryptionKey, chain)
+  return { ...session, ...ensured, chain }
+}
+
 export async function resumeCircleArcMainnetWallet(session: CircleEvmEmailSession): Promise<CircleEvmEmailSession> {
   if (session.chain === 'arc' && session.wallet.blockchain !== 'ARC') throw new Error('Reconnect your wallet on Arc mainnet.')
   const sdk = authenticatedSdk(session)

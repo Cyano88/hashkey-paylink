@@ -18,7 +18,7 @@ import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
 import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutAcceptance, readActivePocketBankPayoutTransfer } from './lib/pocketBankPayoutState'
 import { registerPocketRefreshHandler } from './lib/pocketRefresh'
 import { POCKET_NATIVE_BACK_EVENT } from './lib/pocketNativeBack'
-import { reconnectPocketBaseWallet, restorePocketWalletSession } from './controllers/usePocketWalletController'
+import { preparePocketWalletsAfterSignIn, reconnectPocketBaseWallet, restorePocketWalletSession } from './controllers/usePocketWalletController'
 import { Lock } from './components/PocketIcons'
 import PocketPaymentSecurityGate from './components/PocketPaymentSecurityGate'
 import PocketProgressDots from './components/PocketProgressDots'
@@ -90,6 +90,8 @@ export default function CirclePocketApp() {
   const route = useMemo(() => landing ? null : resolvePocketRoute(relativePath), [landing, relativePath])
   const stocks = route?.section === 'xstocks'
   const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
+  const activeIdentity = useRef('')
+  activeIdentity.current = authenticated ? email : ''
   usePocketPushNotifications({ ready, authenticated, getAccessToken, navigate })
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const unlockedEmail = useRef('')
@@ -130,23 +132,26 @@ export default function CirclePocketApp() {
     setWalletUnlockState('checking')
     setWalletUnlockError('')
     void restorePocketWalletSession(email)
-      .then(session => {
+      .then(async session => {
         if (!active) return
         if (!session) {
           setWalletUnlockError('Connect your Circle wallet once on this phone. Pocket will keep the secure session for future visits.')
           setWalletUnlockState('reconnect')
           return
         }
+        automaticWalletSignInEmail.current = email
+        await preparePocketWalletsAfterSignIn({ email, getAccessToken, session, shouldContinue: () => active })
+        if (!active) return
         unlockedEmail.current = email
         setWalletUnlockState('ready')
       })
       .catch(() => {
         if (!active) return
-        setWalletUnlockError('Reconnect your Circle wallet once to restore secure payments on this phone.')
+        setWalletUnlockError('Wallet setup did not finish. Try again to continue.')
         setWalletUnlockState('reconnect')
       })
     return () => { active = false }
-  }, [authenticated, email, ready, stocks])
+  }, [authenticated, email, ready, stocks, getAccessToken])
 
   useEffect(() => {
     setPaymentSecurityReady(false)
@@ -157,14 +162,16 @@ export default function CirclePocketApp() {
     setWalletUnlockBusy(true)
     setWalletUnlockError('')
     try {
-      await reconnectPocketBaseWallet({ authenticated, email, getAccessToken })
+      await reconnectPocketBaseWallet({ authenticated, email, getAccessToken, shouldContinue: () => activeIdentity.current === email })
+      if (activeIdentity.current !== email) return
       unlockedEmail.current = email
       setWalletUnlockState('ready')
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : ''
+      if (activeIdentity.current !== email) return
       setWalletUnlockError(/cancel/i.test(message)
         ? 'Circle wallet sign-in was cancelled.'
-        : 'Circle wallet sign-in did not finish. Check your connection and try again.')
+        : 'Wallet setup did not finish. Try again to continue.')
       setWalletUnlockState('reconnect')
     } finally {
       setWalletUnlockBusy(false)

@@ -1,3 +1,4 @@
+import { missingPocketEvmWalletPlan } from './pocket/wallet-setup.js'
 import { withOrdinaryWalletMutation } from './pocket/wallet-migration-guard.js'
 import type { Request, Response } from 'express'
 import { consumePocketPaymentApproval, requiresPocketPaymentApproval } from './pocket/payment-security.js'
@@ -439,14 +440,21 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'createWallet') {
-      const { userToken, blockchain, accountType, name } = params
+      const { userToken, blockchain, accountType, name, pocketSetupFor } = params
       if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
+      let setupKey: string | undefined
+      if (pocketSetupFor) {
+        if (!['BASE', 'ARB'].includes(blockchain) || accountType !== 'SCA' || typeof pocketSetupFor !== 'string' || pocketSetupFor.length > 256) return res.status(400).json({ ok: false, error: 'Invalid wallet setup.' })
+        const plan = missingPocketEvmWalletPlan(blockchain, pocketSetupFor, await listCircleUserWallets(userToken, 'base'))
+        if (plan.walletReady) return res.json({ ok: true, walletReady: true })
+        setupKey = plan.idempotencyKey
+      }
       const data = await circleJson('/v1/w3s/user/wallets', {
         method: 'POST',
         userToken,
         apiKey: circleApiKey({ blockchain }),
         body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: setupKey || crypto.randomUUID(),
           accountType: accountType || 'EOA',
           blockchains: [blockchain || solanaBlockchain()],
           metadata: [{ name: name || 'Hash PayLink Solana' }],
