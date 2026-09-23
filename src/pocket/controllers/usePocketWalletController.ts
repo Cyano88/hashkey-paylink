@@ -288,6 +288,15 @@ export async function preparePocketWalletsAfterSignIn(params: {
 }): Promise<CircleEvmEmailSession> {
   const owner = balanceOwner(params.email)
   const active = params.shouldContinue ?? (() => true)
+  if (!active()) throw new Error('Wallet setup cancelled.')
+  // A retained session that already covers the verified local wallet set can
+  // open immediately. Normal balance/link refresh still runs quietly.
+  const cachedWallets = readCachedPocketBalance(owner)?.wallets
+  if (cachedWallets?.solana?.address && cachedWallets.solana.walletId &&
+      (['base', 'arbitrum', 'arc'] as const).every(network => {
+        const wallet = cachedWallets[network]
+        return wallet?.walletId && secureSessionForNetwork(params.session, network, wallet.address)?.wallet.id === wallet.walletId
+      })) return params.session
   const pending = sharedWalletPreparation.get(owner)
   if (pending) {
     try { return await pending.work } catch (error) {
