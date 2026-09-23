@@ -725,5 +725,35 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           .then(() => apply(document.querySelector('main')));
       })();
     </script>
+  
+    <script id="pocket-selfie-layout">
+      // Presentation only. Smile owns image capture and liveness verification.
+      (() => {
+        const css = `
+          #selfie-capture-screen { block-size:auto!important; min-block-size:0!important; padding-block:16px!important; max-inline-size:100%!important; }
+          #selfie-capture-screen .video-container { width:min(100%,320px)!important; aspect-ratio:215/245; margin-inline:auto; }
+          #selfie-capture-screen .video-container .video { width:100%!important; height:100%!important; left:0!important; top:0!important; clip-path:ellipse(46.8% 48% at 50% 50%)!important; }
+          #selfie-capture-screen .video-container video { width:100%!important; height:100%!important; min-height:0!important; object-fit:cover; top:50%!important; }
+          #selfie-capture-screen #image-outline { position:relative; width:100%!important; height:100%!important; display:block; filter:drop-shadow(0 0 2px white); pointer-events:none; }
+          #selfie-capture-screen #image-outline path { stroke:#171717; stroke-width:5; }
+          #selfie-capture-screen #smile-cta { text-shadow:0 1px 6px #000; }
+          #selfie-capture-screen .tips { display:block; max-width:100%; line-height:1.5; }
+          #selfie-capture-screen #start-image-capture { min-height:48px; margin-block:20px; }
+        `;
+        const watched = new WeakSet();
+        const apply = root => {
+          if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture' && !root.querySelector('#pocket-selfie-style')) {
+            const style = document.createElement('style');
+            style.id = 'pocket-selfie-style'; style.textContent = css; root.append(style);
+          }
+          if (!watched.has(root)) {
+            watched.add(root);
+            new MutationObserver(() => apply(root)).observe(root,{childList:true,subtree:true});
+          }
+          root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) apply(el.shadowRoot); });
+        };
+        customElements.whenDefined('selfie-capture').then(() => apply(document.querySelector('main')));
+      })();
+    </script>
   </body>
 </html>

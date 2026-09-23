@@ -85,10 +85,11 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
     } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false) } }
   }
   const needsAdditional = Boolean(state?.workflow?.needsAdditional)
+  useEffect(() => { setConsent(false) }, [needsAdditional])
   const complete = state?.workflow ? state.workflow.complete : state?.status === 'passed'
   const stepLabel = state?.verification?.method === 'government_id' ? 'Government ID and selfie' : state?.verification?.method === 'nin' ? 'NIN and facial verification' : 'BVN and facial verification'
   const failed = state?.status === 'failed'
-  const failureText = state?.failureReason === 'identity_mismatch' ? 'The identity details could not be matched to your verified BVN. Contact support to review your verification.' : state?.failureReason === 'face_mismatch' ? (state.environment === 'sandbox' ? 'Smile ID received your submission, but the selfie did not match the sandbox identity image. This sandbox attempt did not pass.' : 'Smile ID received your submission, but could not match your selfie to the identity image. Please check your details before trying again.') : state?.failureReason === 'session_failed' ? 'The verification session could not start. Please try again.' : 'Smile ID received your submission, but the identity check did not pass. Please review your details before trying again.'
+  const failureText = state?.failureReason === 'identity_mismatch' ? 'The identity details could not be matched to your verified BVN. Contact support to review your verification.' : state?.failureReason === 'face_mismatch' ? (state.environment === 'sandbox' ? 'The selfie did not match the sandbox test identity. Sandbox does not look up your real BVN. Use a Smile ID test identity configured with a matching test photo.' : 'Smile ID received your submission, but could not match your selfie to the identity image. Please check your details before trying again.') : state?.failureReason === 'session_failed' ? 'The verification session could not start. Please try again.' : 'Smile ID received your submission, but the identity check did not pass. Please review your details before trying again.'
   const passed = state?.status === 'passed'
   const resultTitle = needsAdditional && !failed ? 'BVN verification complete' : failed ? 'Verification did not pass' : passed ? state.verified ? 'Verification complete' : 'Sandbox test completed' : 'Verification submitted'
   const resultText = needsAdditional && !failed ? 'Next, verify your NIN or a government-issued ID to finish your identity verification.' : failed ? failureText : passed ? state.verified ? 'Your identity check passed. You can continue to Pocket.' : 'Your sandbox identity check passed. Production verification is still required for live POS access.' : 'Your submission has been received. We are checking the result with Smile ID. You can stay here for the update or continue while it processes.'
@@ -96,7 +97,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   return <section className="mt-6 space-y-5">
     {!state && !error && <div role="status" aria-label="Loading verification" className="h-44 animate-pulse rounded-3xl bg-gray-200/70 dark:bg-white/10" />}
     {state && <>
-      {state.environment === 'sandbox' && <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600 dark:bg-[#171717] dark:text-gray-300">Sandbox test. Use Smile ID test details. This does not verify your live account or unlock POS payments.</p>}
+      {state.environment === 'sandbox' && <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600 dark:bg-[#171717] dark:text-gray-300">Sandbox test. Real BVN/NIN records are not checked here. Use Smile ID test details and a matching test photo. This does not unlock live POS payments.</p>}
       <div className="space-y-4">
 
         {!state.workflow && <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-5 dark:border-white/10 dark:bg-[#121212]">
@@ -106,12 +107,12 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         <div role="status" className={`flex items-start gap-3 rounded-xl p-4 ${state.status === 'passed' ? 'bg-green-50 text-green-800 dark:bg-green-500/10 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-gray-300'}`}>
           <Info className="mt-0.5 h-5 w-5 shrink-0" />
           <div><h3 className="text-sm font-medium">{needsAdditional && !failed ? 'Choose your next verification step' : state.canResume ? 'Complete verification' : state.status === 'passed' ? state.verified ? 'Verification complete' : 'Sandbox test completed' : state.status === 'pending' ? 'Verification in progress' : state.status === 'review' ? 'Verification processing' : state.status === 'failed' ? state.environment === 'sandbox' ? 'Sandbox verification did not pass' : 'Verification did not pass' : 'Verify your identity'}</h3>
-          <p className="mt-1 text-sm leading-6">{needsAdditional && !failed ? 'Your BVN check passed. Verify your NIN or a government-issued ID to finish.' : state.failureReason === 'identity_mismatch' ? failureText : state.canResume ? 'Your last session was not submitted. Continue to finish your verification.' : state.status === 'pending' ? 'Your verification is being processed. We will update your status when the result is confirmed.' : state.status === 'review' ? 'Your result is taking longer than expected. We will update it automatically once confirmed.' : state.status === 'passed' ? state.verified ? 'Your identity check is complete. You can now set up your POS.' : 'The sandbox check passed. Production verification is still required for live POS access.' : failed ? failureText : 'For Nigerian individuals. Verify your BVN and take a live selfie with Smile ID.'}</p></div>
+          <p className="mt-1 text-sm leading-6">{needsAdditional && !failed ? 'Your BVN check passed. Verify your NIN or a government-issued ID to finish.' : state.failureReason === 'identity_mismatch' ? failureText : state.canResume ? 'Your last session was not submitted. Continue to finish your verification.' : state.status === 'pending' ? 'Your verification is being processed. We will update your status when the result is confirmed.' : state.status === 'review' ? 'Your result is taking longer than expected. We will update it automatically once confirmed.' : state.status === 'passed' ? state.verified ? 'Your identity check is complete. You can now set up your POS.' : 'The sandbox check passed. Production verification is still required for live POS access.' : failed ? failureText : 'First, verify your BVN and take a selfie. After it passes, choose NIN or a government-issued ID to finish.'}</p></div>
         </div>
       </div>
       {state.workflow && <ol aria-label="Verification steps" className="space-y-2 text-sm">
         <li className="flex items-center justify-between py-2"><span>1. BVN verification</span><span className="text-gray-500">{state.workflow.bvnPassed ? 'Complete' : 'Required'}</span></li>
-        <li className="flex items-center justify-between py-2"><span>2. NIN or government ID</span><span className="text-gray-500">{complete ? 'Complete' : state.workflow.bvnPassed && !needsAdditional ? 'In progress' : 'Required'}</span></li>
+        <li className="flex items-center justify-between py-2"><span>2. NIN or government ID</span><span className="text-gray-500">{complete ? 'Complete' : !state.workflow.bvnPassed ? 'After BVN passes' : !needsAdditional ? 'In progress' : 'Required'}</span></li>
       </ol>}
       {needsAdditional && <fieldset disabled={busy} className="space-y-2">
         <legend className="mb-2 text-sm font-medium">Choose how to verify</legend>
@@ -131,7 +132,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         {passed ? <Check aria-hidden="true" className="mx-auto h-14 w-14 text-green-600" /> : failed ? <Info aria-hidden="true" className="mx-auto h-14 w-14 text-red-500" /> : <Clock3 aria-hidden="true" className="mx-auto h-14 w-14 text-gray-500" />}
         <h2 className="mt-6 text-2xl font-semibold">{resultTitle}</h2>
         <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{resultText}</p>
-        <button type="button" onClick={() => setSubmittedSheet(false)} className="mt-7 w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">Continue</button>
+        <button type="button" onClick={() => setSubmittedSheet(false)} className="mt-7 w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">{needsAdditional ? 'Choose NIN or government ID' : 'Continue'}</button>
       </div>
     </PocketBottomSheet>}
     {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400">{error}<button type="button" onClick={() => void refresh()} className="ml-2 underline">Try again</button></div>}
