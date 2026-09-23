@@ -15,7 +15,7 @@ const wallet = {
   scaCore: 'circle_6900_singleowner_v3',
 }
 
-assert.deepEqual(Object.keys(CIRCLE_GAS_STATION_EVM_NETWORKS), ['base', 'arbitrum', 'arc'])
+assert.deepEqual(Object.keys(CIRCLE_GAS_STATION_EVM_NETWORKS), ['base', 'arbitrum', 'arc', 'ethereum', 'polygon'])
 assert.equal(CIRCLE_GAS_STATION_EVM_NETWORKS.base.blockchain, 'BASE')
 assert.equal(CIRCLE_GAS_STATION_EVM_NETWORKS.arbitrum.blockchain, 'ARB')
 assert.equal(CIRCLE_GAS_STATION_EVM_NETWORKS.arc.blockchain, 'ARC')
@@ -69,3 +69,14 @@ assert.match(checkoutSource, /circleEvmPaymentBreakdown\(totalUnits\)\.requiredU
 console.log('Circle EVM Gas Station policy smoke tests passed.')
 
 assert.throws(() => requireCircleGasStationEvmWallet({chain:'arc',walletId:wallet.id,walletAddress:wallet.address,wallets:[{...wallet,blockchain:'ARC-TESTNET'}]}), /ownership/)
+
+// New rail groundwork: exact mainnet SCA ownership only; no UI/transaction enablement.
+for (const [chain, blockchain, testnet, other] of [['ethereum','ETH','ETH-SEPOLIA','MATIC'],['polygon','MATIC','MATIC-AMOY','ETH']]) {
+  const check = candidate => requireCircleGasStationEvmWallet({ chain, walletId: wallet.id, walletAddress: wallet.address, wallets: [candidate] });
+  assert.equal(check({...wallet,blockchain}).accountType,'SCA');
+  for (const candidate of [{...wallet,blockchain:testnet},{...wallet,blockchain:other},{...wallet,blockchain,address:'0x2222222222222222222222222222222222222222'},{...wallet,blockchain,id:'another-owner-wallet'}]) assert.throws(()=>check(candidate),error=>error.status===403);
+  assert.throws(()=>check({...wallet,blockchain,accountType:'EOA'}),error=>error.status===409);
+  assert.throws(()=>check({...wallet,blockchain,state:'FROZEN'}),error=>error.status===409);
+}
+assert.throws(()=>requireCircleGasStationEvmWallet({chain:'unsupported',walletId:wallet.id,walletAddress:wallet.address,wallets:[{...wallet,blockchain:'ARC'}]}),error=>error.status===403);
+console.log('PASS Ethereum/Polygon exact mainnet SCA ownership and fail-closed network checks.');
