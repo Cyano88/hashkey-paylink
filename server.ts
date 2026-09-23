@@ -229,7 +229,7 @@ app.get('/pocket/identity-frame', (req, res) => {
     "style-src 'unsafe-inline' https://cdn.smileidentity.com https://cdn.usesmileid.com https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com data:",
     "img-src https: data: blob:",
-    "connect-src https: wss:",
+    "connect-src https: wss: data:",
     "worker-src blob: https://cdn.smileidentity.com https://cdn.usesmileid.com",
     "media-src blob:",
     "frame-ancestors https://app.hashpaylink.com http://localhost:5173",

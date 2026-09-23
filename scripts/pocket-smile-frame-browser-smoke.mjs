@@ -13,7 +13,7 @@ try {
  const frame=page.frames().find(f=>f.url().includes('/identity-frame'))??await new Promise(resolve=>page.once('framenavigated',resolve))
  await frame.waitForFunction(()=>!!window.received)
  assert.equal(await frame.evaluate(()=>JSON.parse(window.received).token),'fixture-secret')
- assert.equal(new URL(frame.url()).searchParams.get('capture'),'v12-v3-20260923')
+ assert.equal(new URL(frame.url()).searchParams.get('capture'),'v12-recovery-20260923')
  assert.equal(new URL(frame.url()).searchParams.has('token'),false)
  await page.evaluate(()=>{
   const source=document.querySelector('iframe').contentWindow
@@ -22,10 +22,14 @@ try {
   window.dispatchEvent(new MessageEvent('message',{origin:'https://hashkey-paylink.onrender.com',source,data:{message:42}}))
  })
  assert.equal(await page.evaluate(()=>window.success),0)
+ await frame.evaluate(()=>parent.postMessage({message:'SmileIdentity::Error',status:400,error_code:'SUBMISSION_FAILED',retryable:false,error:'id_number is invalid'},'https://app.hashpaylink.com'))
+ await page.waitForFunction(()=>window.errors===1)
+ assert.equal(await page.locator('iframe').count(),1,'Submission rejection must keep provider screen open')
+ assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('pocket:kyc-error:v1')).status),400)
  await frame.evaluate(()=>{parent.postMessage({message:'SmileIdentity::Result',payload:{status:'Accepted'}},'https://app.hashpaylink.com');parent.postMessage('SmileIdentity::Success','https://app.hashpaylink.com')})
  await page.waitForFunction(()=>window.success===1)
  await frame.evaluate(()=>parent.postMessage('SmileIdentity::Close::System','https://app.hashpaylink.com'))
  await page.waitForFunction(()=>!document.querySelector('iframe'))
- assert.deepEqual(await page.evaluate(()=>[window.success,window.closeCalls,window.errors]),[1,0,0])
+ assert.deepEqual(await page.evaluate(()=>[window.success,window.closeCalls,window.errors]),[1,0,1])
  console.log('PASS trusted frame handshake, token excluded from URL, spoofed messages rejected, malformed messages ignored, one upload callback, and cleanup.')
 } finally {await browser.close()}

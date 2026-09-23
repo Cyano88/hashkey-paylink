@@ -70,6 +70,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         id_selection: session.verification.idSelection, partner_params: session.partnerParams,
         // V12 collects explicit provider consent; default capture uses smile detection.
         use_strict_mode: false, allow_agent_mode: false, allow_legacy_selfie_fallback: false,
+        translation: { language: 'en-GB', locales: { 'en-GB': { selfie: { ess: { alert: { smile: 'Smile with your mouth slightly open', holdStill: 'Hold still and look at the camera', capturing: 'Keep smiling' } }, smart: { alert: { smileRequired: 'Smile with your mouth slightly open', openMouthSmile: 'Keep smiling and open your mouth slightly' } } } } } },
         partner_details: { partner_id: session.partnerId, name: 'Pocket by Hash PayLink', logo_url: 'https://app.hashpaylink.com/pocket-mark.svg', policy_url: 'https://app.hashpaylink.com/docs/privacy', theme_color: '#171717' },
         onSuccess: () => {
           if (!mounted.current) return
@@ -81,7 +82,12 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
             if (mounted.current) setError('Your upload finished. We will keep checking for your result.')
           })
         }, onClose: done,
-        onError: () => { done(); if (mounted.current) setError('Verification was interrupted. We are checking its status.') },
+        onError: (failure?: { frameOpen?: boolean; errorCode?: string; status?: number }) => {
+          if (!mounted.current) return
+          if (failure?.frameOpen) return // The provider retains its error and retry screen.
+          setBusy(false)
+          setError(failure?.errorCode === 'CONSENT_DENIED' ? 'Verification was cancelled.' : 'Verification could not open. Please try again.')
+        },
       })
     } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false) } }
   }

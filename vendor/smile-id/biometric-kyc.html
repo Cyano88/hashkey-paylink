@@ -638,8 +638,7 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture-wrapper') {
             // Keep an exit available while the model is loading or cannot initialize.
             const existing = root.querySelector('#pocket-capture-close');
-            if (root.querySelector('smileid-navigation')) existing?.remove();
-            else if (!existing && root.childElementCount) {
+            if (!existing && root.childElementCount) {
               const close = document.createElement('button');
               close.id = 'pocket-capture-close'; close.type = 'button';
               close.setAttribute('aria-label','Close verification'); close.textContent = '\u00d7';
@@ -663,5 +662,66 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
       })();
     </script>
 
+<script id="pocket-v12-recovery">
+(() => {
+  const videos = new WeakSet();
+  const tracks = new WeakSet();
+  const roots = new WeakSet();
+  const css = `
+    .enhanced-instructions,.smartselfie-capture,.enhanced-submission { background:#fff!important; }
+    .smartselfie-capture { padding-top:72px!important; }
+    .smartselfie-capture .camera-preview-container { width:min(100%,320px)!important; height:auto!important; aspect-ratio:311/418; flex-shrink:0!important; }
+    .smartselfie-capture .video-wrapper { width:100%!important; max-width:none!important; height:100%!important; border:0!important; }
+    .camera-preview-container > div > svg path { stroke-width:6!important; }
+    .camera-preview-container > div > svg path[stroke="#C4C4C4"] { stroke:#64748b; }
+    .camera-canvas { visibility:hidden; } /* Hide the debug-like mesh, not inference or capture. */
+    .alert-title { font-size:18px!important; line-height:1.45!important; font-weight:600!important; }
+    .enhanced-instructions .hero-oval { margin-block:18px!important; }
+    #pocket-capture-help { margin:0 auto 12px; max-width:300px; text-align:center; font:14px/1.5 system-ui,sans-serif; color:#475569; }
+  `;
+  const improvePreview = async video => {
+    const track=video.srcObject?.getVideoTracks?.()[0];
+    if(!track || tracks.has(track) || typeof track.applyConstraints!=='function')return;
+    tracks.add(track);
+    const before=track.getSettings();
+    // Ask the active track for a sharper preview. Do not change facing mode,
+    // provider image encoding, biometric thresholds or navigator APIs.
+    if(!before.width || !before.height || Math.max(before.width,before.height)>=1280)return;
+    const scale=1280/Math.max(before.width,before.height);
+    try {
+      await track.applyConstraints({width:{ideal:Math.round(before.width*scale)},height:{ideal:Math.round(before.height*scale)},aspectRatio:{ideal:before.width/before.height}});
+      const after=track.getSettings();
+      window.__pocketCameraQuality={applied:true,width:after.width,height:after.height};
+    } catch(error) {window.__pocketCameraQuality={applied:false,reason:error?.name||'Unsupported'};}
+  };
+  const inspect=root=>{
+    if(root instanceof ShadowRoot && root.host.localName==='selfie-capture-wrapper'){
+      if(!root.querySelector('#pocket-v12-style')){const style=document.createElement('style');style.id='pocket-v12-style';style.textContent=css;root.append(style);}
+      const hero=root.querySelector('.hero-oval');
+      if(hero&&!root.querySelector('#pocket-capture-help')){const help=document.createElement('p');help.id='pocket-capture-help';help.textContent='Look at the camera. When prompted, smile with your mouth slightly open.';hero.after(help);}
+    }
+    if(!roots.has(root)){roots.add(root);new MutationObserver(()=>inspect(root)).observe(root,{childList:true,subtree:true});}
+    if(root instanceof ShadowRoot && root.host.localName==='selfie-capture-wrapper') root.querySelectorAll('video').forEach(video=>{
+      if(videos.has(video))return;videos.add(video);
+      video.addEventListener('loadedmetadata',()=>void improvePreview(video));
+      // Keep the SDK's drawing surface aligned if the negotiated track size changes.
+      video.addEventListener('resize',()=>{const canvas=video.parentElement?.querySelector('.camera-canvas');if(canvas&&video.videoWidth&&video.videoHeight){canvas.width=video.videoWidth;canvas.height=video.videoHeight;}});
+      if(video.readyState>=1)void improvePreview(video);
+    });
+    root.querySelectorAll('*').forEach(el=>{if(el.shadowRoot)inspect(el.shadowRoot);});
+  };
+  customElements.whenDefined('selfie-capture-wrapper').then(()=>inspect(document.querySelector('main')));
+  addEventListener('message',event=>{
+    if(event.source!==window.parent||!['https://app.hashpaylink.com','http://localhost:5173'].includes(event.origin)||event.data?.source!=='Pocket::SubmissionError')return;
+    const screen=document.getElementById('upload-failure-screen');if(!screen)return;
+    const {status,retryable,message}=event.data;
+    const title=screen.querySelector('h1');if(title)title.textContent='Verification not submitted';
+    const text=screen.querySelector('[data-i18n="pages.error.uploadFailed"]');
+    if(text)text.textContent=status===401?'Your session expired. Close this screen and continue verification.':status===402?'Smile could not confirm the service wallet balance. Please contact Pocket support.':status===403?'Smile could not authorize this verification. Please contact Pocket support.':status===429?'Too many attempts. Please wait before continuing.':status===400||status===422?String(message||'Please review your verification details.').slice(0,300):'We could not confirm your submission. Check your connection before trying again.';
+    const hint=screen.querySelector('[data-i18n="pages.error.checkInternet"]');if(hint)hint.textContent=retryable?'You can retry here without taking another selfie.':'Close this screen to return to Pocket.';
+    const retry=document.getElementById('retry-upload');if(retry)retry.hidden=retryable!==true;
+  });
+})();
+</script>
 </body>
 </html>
