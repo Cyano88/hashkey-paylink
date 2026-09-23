@@ -912,5 +912,46 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         customElements.whenDefined('selfie-capture').then(() => apply(document.querySelector('main')));
       })();
     </script>
+
+    <script id="pocket-selfie-review">
+      // Keep provider capture/upload decisions intact; guard repeated review taps.
+      (() => {
+        const watched = new WeakSet();
+        const locked = new WeakSet();
+        const apply = root => {
+          root.querySelectorAll('main > p.validation-message').forEach(message => {
+            if (message.textContent === 'Something went wrong') {
+              message.textContent = "We couldn't submit your verification. Close this screen and try again.";
+              message.setAttribute('role','alert');
+            }
+          });
+          if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture-review') {
+            const image = root.querySelector('#document-capture-review-image');
+            if (image) image.alt = 'Your selfie';
+          }
+          if (!watched.has(root)) {
+            watched.add(root);
+            if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture-review') {
+              root.addEventListener('click', event => {
+                const button = event.target.closest?.('button');
+                if (button?.id === 're-capture-image') {
+                  locked.delete(root.host);
+                  return;
+                }
+                if (button?.id !== 'select-id-image') return;
+                if (locked.has(root.host)) {
+                  event.preventDefault(); event.stopImmediatePropagation(); return;
+                }
+                locked.add(root.host);
+                button.disabled = true;
+              }, true);
+            }
+            new MutationObserver(() => apply(root)).observe(root, {childList:true,subtree:true});
+          }
+          root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) apply(el.shadowRoot); });
+        };
+        customElements.whenDefined('selfie-capture-review').then(() => apply(document.querySelector('main')));
+      })();
+    </script>
 </body>
 </html>

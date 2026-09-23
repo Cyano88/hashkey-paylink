@@ -221,7 +221,7 @@ app.get('/pocket/identity-frame', (req, res) => {
   if (req.hostname !== 'hashkey-paylink.onrender.com' && process.env.NODE_ENV === 'production') return res.sendStatus(404)
   res.removeHeader('X-Frame-Options')
   res.setHeader('Referrer-Policy', 'no-referrer')
-  res.setHeader('Cache-Control', 'public, max-age=300')
+  res.setHeader('Cache-Control', 'no-store')
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
   res.setHeader('Content-Security-Policy', [
     "default-src 'none'",
