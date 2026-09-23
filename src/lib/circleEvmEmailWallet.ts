@@ -1565,6 +1565,10 @@ export async function prepareCircleEvmReplacement(session: CircleEvmEmailSession
       action: 'prepareEvmReplacement', userToken: session.userToken, attemptId: request.idempotencyKey,
       walletId: session.wallet.id, walletAddress: session.wallet.address,
     }, { privyAccessToken }) },
+    align: () => { checkActive(); return circleWalletApi<{ challengeId?: string; walletReady?: boolean }>({
+      action: 'alignEvmReplacement', userToken: session.userToken, attemptId,
+      walletId: session.wallet.id, walletAddress: session.wallet.address,
+    }, { privyAccessToken }) },
     approve: challengeId => { checkActive(); return executeChallengeWithTimeout(sdk, challengeId, 'Wallet preparation timed out. Recheck this attempt before trying again.') },
   })
 }

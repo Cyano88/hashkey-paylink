@@ -37,7 +37,7 @@ await assert.rejects(prepareEvmReplacement(id,{list:async()=>[],create:async()=>
 await assert.rejects(prepareEvmReplacement(id,{list:async()=>[],create:async()=>({challengeId:'test'}),approve:async()=>{throw Error('cancelled')}}),/cancelled/)
 console.log('Replacement checks passed: 3 chains, isolation, mismatches, invalid records, link rejection, retry and cancellation. No live calls.')
 import circleHandler from '../api/circle-solana-email.ts'
-for (const action of ['prepareEvmReplacement', 'listEvmReplacement', 'reviewEvmReplacement', 'restoreActivatedEvmWallets']) {
+for (const action of ['prepareEvmReplacement', 'alignEvmReplacement', 'listEvmReplacement', 'reviewEvmReplacement', 'restoreActivatedEvmWallets']) {
   const response = {code:200, setHeader(){return this}, status(code){this.code=code;return this}, json(body){this.body=body;return this}}
   const realFetch=globalThis.fetch
   let providerCalls=0
