@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Exact CPurseIcon geometry, centered at the 96dp web-launch size inside
+<!-- Exact CPurseIcon geometry, at the original 192dp launch size inside
      Android's 288dp splash canvas. Padding keeps the mark out of the OS mask. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="288dp"
     android:height="288dp"
-    android:viewportWidth="1536"
-    android:viewportHeight="1536">
-    <group android:translateX="512" android:translateY="512">
+    android:viewportWidth="624"
+    android:viewportHeight="624">
+    <group android:translateX="56" android:translateY="56">
         <clip-path android:pathData="M256,48 A208,208 0,1 1,256,464 A208,208 0,1 1,256,48 Z" />
         <path android:fillColor="#030712"
             android:pathData="M48,48 H300 V464 H48 Z M320,48 H344 V464 H320 Z M364,48 H464 V464 H364 Z" />

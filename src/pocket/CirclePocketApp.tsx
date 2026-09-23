@@ -1,3 +1,4 @@
+import usePocketEmbeddedWallet from './hooks/usePocketEmbeddedWallet'
 ﻿import { PocketReceiptReportProvider } from './components/PocketReceiptReport'
 import PocketTransferMenuPage from './pages/PocketTransferMenuPage'
 import './pocketTheme.css'
@@ -83,6 +84,8 @@ function pocketRelativePath(pathname: string) {
 }
 
 export default function CirclePocketApp() {
+  usePocketEmbeddedWallet()
+
   const location = useLocation()
   const navigate = useNavigate()
   const relativePath = pocketRelativePath(location.pathname)

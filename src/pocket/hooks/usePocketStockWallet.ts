@@ -1,5 +1,6 @@
+import usePocketEmbeddedWallet from './usePocketEmbeddedWallet'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useCreateWallet, useSendTransaction, useWallets } from '@privy-io/react-auth'
+import { useSendTransaction, useWallets } from '@privy-io/react-auth'
 import { getAddress, encodeFunctionData, parseAbi, parseUnits, type Address, type Hex } from 'viem'
 import { stockSwapRequest } from '../api/pocketStockSwapClient'
 import { validateStockSwap, type StockSwapQuote } from '../lib/pocketXStocksSwap'
@@ -17,13 +18,14 @@ export default function usePocketStockWallet() {
   const { authenticated, user, getAccessToken } = usePocketIdentity()
   const { ready, wallets } = useWallets()
   const [walletWaitExpired, setWalletWaitExpired] = useState(false)
-  useEffect(() => { setWalletWaitExpired(false); if (ready || wallets.some(w => w.walletClientType === 'privy')) return; const timer = window.setTimeout(() => setWalletWaitExpired(true), 15_000); return () => window.clearTimeout(timer) }, [ready, wallets])
-  const { createWallet } = useCreateWallet()
+  const hasEmbedded=wallets.some(w=>w.walletClientType==='privy')
+  useEffect(() => { setWalletWaitExpired(false); if (ready || hasEmbedded) return; const timer = window.setTimeout(() => setWalletWaitExpired(true), 15_000); return () => window.clearTimeout(timer) }, [ready, hasEmbedded])
+  const setup=usePocketEmbeddedWallet()
   const { sendTransaction } = useSendTransaction()
   const embedded = wallets.filter(w => w.walletClientType === 'privy')
-  const wallet = authenticated && embedded.length === 1 ? embedded[0] : undefined
+  const wallet = authenticated && embedded.length === 1 && setup.address?.toLowerCase()===embedded[0].address.toLowerCase() ? embedded[0] : undefined
   const walletRef = useRef(wallet); walletRef.current = wallet
-  const address = wallet ? getAddress(wallet.address) : undefined
+  const address = authenticated && setup.address ? getAddress(setup.address) : undefined
   useEffect(() => { if (!address || !user?.id) return; const register = () => { void registerStockNotifications(user.id, address, getAccessToken).catch(() => undefined) }; register(); const timer = window.setInterval(register, 60_000); return () => clearInterval(timer) }, [address, user?.id, getAccessToken])
   const ownerKey = user?.id + ':' + (address || '')
   const scope = useRef(ownerKey); scope.current = ownerKey
@@ -57,14 +59,13 @@ export default function usePocketStockWallet() {
     return () => { cancelled = true; window.clearInterval(timer) }
   }, [pending?.hash, pending?.status, ownerKey, refresh])
   const connect = async () => {
-    if (!authenticated || !ready || busy) return
-    if (embedded.length > 1) { setError('Multiple embedded wallets found. Wallet selection needs review.'); return }
-    if (wallet) return
-    setBusy(true); setError('')
-    try { await createWallet() } catch { setError('Could not open your embedded wallet. Please try again.') } finally { setBusy(false) }
+    if(!authenticated||busy||setup.busy)return
+    if(embedded.length>1){setError('Multiple embedded wallets found. Wallet selection needs review.');return}
+    setError('');setup.retry()
   }
   const send = async (review: StockTransfer, hooks?: {beforeSubmit?:()=>Promise<void>;onSubmitted?:(hash:Hex)=>void}) => {
-    if (!wallet || !address || inFlight.current || hasStockSubmission(ownerKey) || pending?.status === 'pending') throw Error('Wait for your current transaction to finish.')
+    if(!wallet)throw Error('Your XStocks wallet is reconnecting. Try again in a moment.')
+    if (!address || inFlight.current || hasStockSubmission(ownerKey) || pending?.status === 'pending') throw Error('Wait for your current transaction to finish.')
     const key = ownerKey
     if (review.owner !== address || review.expiresAt <= Date.now()) throw Error('This review expired. Review the transfer again.')
     inFlight.current = true; setBusy(true); setError('')
@@ -87,7 +88,8 @@ export default function usePocketStockWallet() {
   }
 
   const trade = async (review: StockSwapQuote, quoteToken: string, onProgress: (stage: StockTradeStage) => void = () => {}) => {
-    if (!wallet || !address || inFlight.current || hasStockSubmission(ownerKey) || pending?.status === 'pending') throw Error('Wait for the current transaction to finish.')
+    if(!wallet)throw Error('Your XStocks wallet is reconnecting. Try again in a moment.')
+    if (!address || inFlight.current || hasStockSubmission(ownerKey) || pending?.status === 'pending') throw Error('Wait for the current transaction to finish.')
     validateStockSwap(review, address)
     const key = ownerKey
     const stillCurrent = () => { if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed. Review the trade again.') }
@@ -146,5 +148,5 @@ export default function usePocketStockWallet() {
       throw reason
     } finally { inFlight.current = false; setBusy(false) }
   }
-  return { address, ready: ready || !!wallet, busy, uncertain, error: error || balanceError || (!ready && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
+  return { address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, error: error || setup.error || balanceError || (!ready && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
 }
