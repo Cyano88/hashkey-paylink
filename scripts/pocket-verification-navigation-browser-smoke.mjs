@@ -3,7 +3,7 @@ const{chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright');
 const mocks={
  '../hooks/usePocketIdentity':`export default ()=>({authenticated:true,email:'fixture@example.invalid',getAccessToken:async()=> 'fixture'})`,
  '../hooks/usePocketProfile':`export default ()=>({loaded:true,profile:{nameStatus:window.locked?'bank_resolved':'pending',resolvedName:'Test User'},reload:async()=>{window.locked=true}})`,
- '../api/pocketBankClient':`export const readPocketBankInstitutions=async()=>({institutions:[{code:'test',name:'Test bank'}]});export const verifyPocketBankAccount=async()=>({account_name:'Test User'});`,
+ '../api/pocketBankClient':`export const readPocketBankInstitutions=async()=>{if(window.holdBanks)await new Promise(()=>{});return {institutions:[{code:'test',name:'Test bank'}]}};export const verifyPocketBankAccount=async()=>({account_name:'Test User'});`,
  '../components/PocketSelect':`import React from 'react';export default ({onChange,ariaLabel})=><select aria-label={ariaLabel} onChange={e=>onChange(e.target.value)}><option/><option value='test'>Test bank</option></select>`,
  '../components/PocketLoadingState':`export default ()=>null`,
 };
@@ -16,8 +16,6 @@ for(const path of ['/pocket/move/bank?mode=withdraw','/pocket/move/pos','/pocket
  await p.evaluate(path=>window.mount(path),path);await p.getByRole('button',{name:/Link your bank name first/}).click();await at('/pocket/profile/verify-name');await p.getByRole('combobox').selectOption('test');await p.getByPlaceholder('10-digit account number').fill('0000000000');await p.getByRole('button',{name:'Confirm and lock'}).click();await at(path);
  await p.evaluate(path=>window.mount(path),path);await p.getByRole('button',{name:/Link your bank name first/}).click();await at('/pocket/profile/verify-name');await p.getByRole('combobox').waitFor();await p.waitForTimeout(100);await p.evaluate(()=>window.dispatchEvent(new Event('pocket:native-back',{cancelable:true})));await at(path);
 }
+await p.evaluate(()=>{window.holdBanks=true;window.mount('/pocket/move/bank?mode=withdraw')});await p.getByRole('button',{name:/Link your bank name first/}).click();await at('/pocket/profile/verify-name');await p.getByRole('button',{name:'Back',exact:true}).click();await at('/pocket/move/bank?mode=withdraw');
 assert.equal(await p.evaluate(()=>window.returnPath({bankVerificationFrom:'https://evil.invalid'},false)),'/pocket/profile');assert.equal(await p.evaluate(()=>window.returnPath({bankVerificationFrom:'/pocket/profile/verify-name'},false)),'/pocket/profile');assert.equal(await p.evaluate(()=>window.returnPath(null,true)),'/pocket/xstocks/account');
 console.log('PASS bank/POS/profile verification: header Back, native Back, successful confirmation return to caller with query retained; second Back exits; unsafe/self return rejected. No live API calls.');}finally{await browser.close()}
-
-
-

@@ -27,14 +27,15 @@ export default function PocketVerifyNamePage() {
   const [accountNumber, setAccountNumber] = useState('')
   const [resolvedName, setResolvedName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const lastResolutionKey = useRef('')
   const bankName = institutions.find(item => item.code === bankCode)?.name ?? ''
   useEffect(() => {
-    const back = (event: Event) => { event.preventDefault(); if (!busy) returnToCaller() }
+    const back = (event: Event) => { event.preventDefault(); if (!confirming) returnToCaller() }
     window.addEventListener(POCKET_NATIVE_BACK_EVENT, back)
     return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, back)
-  }, [busy, location.key, returnPath])
+  }, [confirming, location.key, returnPath])
   const locked = profile.profile?.nameStatus === 'bank_resolved'
   const canResolve = Boolean(bankCode && /^\d{10}$/.test(accountNumber))
   const options = useMemo(() => institutions.map(item => ({ value: item.code, label: item.name })), [institutions])
@@ -77,6 +78,7 @@ export default function PocketVerifyNamePage() {
 
   const confirm = async () => {
     if (!resolvedName) return
+    setConfirming(true)
     setBusy(true)
     setError('')
     try {
@@ -89,14 +91,14 @@ export default function PocketVerifyNamePage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not confirm your verified name.')
     } finally {
-      setBusy(false)
+      setBusy(false); setConfirming(false)
     }
   }
 
   if (!profile.loaded) return <PocketLoadingState active="profile" />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
     <main className="mx-auto min-h-full w-full max-w-[462px] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]">
-      <PocketFlowHeader centered title="Bank account name" onBack={() => { if (!busy) returnToCaller() }} />
+      <PocketFlowHeader centered title="Bank account name" onBack={() => { if (!confirming) returnToCaller() }} />
       {locked ? <section className="mt-7 rounded-[26px] bg-white p-6 text-center shadow-sm dark:bg-white/[0.05]">
         <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-400/10"><Lock className="h-5 w-5" /></span>
         <p className="mt-4 text-lg font-black">{profile.profile?.resolvedName}</p>
