@@ -533,8 +533,6 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
 
 <script id="pocket-v12-recovery">
 (() => {
-  const videos = new WeakSet();
-  const tracks = new WeakSet();
   const roots = new WeakSet();
   const css = `
     .enhanced-instructions,.smartselfie-capture,.enhanced-submission { background:#fff!important; }
@@ -549,21 +547,7 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
     .enhanced-instructions .hero-oval { margin-block:18px!important; }
     #pocket-capture-help { margin:0 auto 12px; max-width:300px; text-align:center; font:14px/1.5 system-ui,sans-serif; color:#475569; }
   `;
-  const improvePreview = async video => {
-    const track=video.srcObject?.getVideoTracks?.()[0];
-    if(!track || tracks.has(track) || typeof track.applyConstraints!=='function')return;
-    tracks.add(track);
-    const before=track.getSettings();
-    // Ask the active track for a sharper preview. Do not change facing mode,
-    // provider image encoding, biometric thresholds or navigator APIs.
-    if(!before.width || !before.height || Math.max(before.width,before.height)>=1280)return;
-    const scale=1280/Math.max(before.width,before.height);
-    try {
-      await track.applyConstraints({width:{ideal:Math.round(before.width*scale)},height:{ideal:Math.round(before.height*scale)},aspectRatio:{ideal:before.width/before.height}});
-      const after=track.getSettings();
-      window.__pocketCameraQuality={applied:true,width:after.width,height:after.height};
-    } catch(error) {window.__pocketCameraQuality={applied:false,reason:error?.name||'Unsupported'};}
-  };
+  // Smile owns camera constraints and drawing-surface dimensions throughout capture.
   const inspect=root=>{
     if(root instanceof ShadowRoot && root.host.localName==='selfie-capture-wrapper'){
       if(!root.querySelector('#pocket-v12-style')){const style=document.createElement('style');style.id='pocket-v12-style';style.textContent=css;root.append(style);}
@@ -571,13 +555,6 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
       if(hero&&!root.querySelector('#pocket-capture-help')){const help=document.createElement('p');help.id='pocket-capture-help';help.textContent='Look at the camera. When prompted, smile with your mouth slightly open.';hero.after(help);}
     }
     if(!roots.has(root)){roots.add(root);new MutationObserver(()=>inspect(root)).observe(root,{childList:true,subtree:true});}
-    if(root instanceof ShadowRoot && root.host.localName==='selfie-capture-wrapper') root.querySelectorAll('video').forEach(video=>{
-      if(videos.has(video))return;videos.add(video);
-      video.addEventListener('loadedmetadata',()=>void improvePreview(video));
-      // Keep the SDK's drawing surface aligned if the negotiated track size changes.
-      video.addEventListener('resize',()=>{const canvas=video.parentElement?.querySelector('.camera-canvas');if(canvas&&video.videoWidth&&video.videoHeight){canvas.width=video.videoWidth;canvas.height=video.videoHeight;}});
-      if(video.readyState>=1)void improvePreview(video);
-    });
     root.querySelectorAll('*').forEach(el=>{if(el.shadowRoot)inspect(el.shadowRoot);});
   };
   customElements.whenDefined('selfie-capture-wrapper').then(()=>inspect(document.querySelector('main')));
