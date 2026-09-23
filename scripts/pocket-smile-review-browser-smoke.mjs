@@ -24,22 +24,21 @@ try {
   const paused=await page.evaluate(()=>window.__captures);await page.waitForTimeout(1000);assert.equal(await page.evaluate(()=>window.__captures),paused,'Neutral face must pause at smile stage');assert.equal(await page.evaluate(()=>window.__published),0)
   await page.evaluate(()=>window.__smile=true);await page.waitForFunction(n=>window.__captures>n,paused);await page.evaluate(()=>window.__smile=false);await page.waitForTimeout(700)
   const stopped=await page.evaluate(()=>window.__captures);assert.ok(stopped<8,'Must pause before completion');await page.waitForTimeout(800);assert.equal(await page.evaluate(()=>window.__captures),stopped,'Stopping the smile pauses capture')
-  await page.evaluate(()=>{window.__face=false;window.__smile=true});await page.waitForTimeout(650);assert.equal(await page.evaluate(()=>window.__captures),stopped,'No face cannot progress');await page.evaluate(()=>window.__face=true);await page.waitForFunction(()=>window.__published===1)
-  assert.equal(await page.evaluate(()=>window.__imageCount),8);assert.equal(submissions,0)
-  await page.locator('#capture-test selfie-capture-review:not([hidden])').waitFor();
-  const preview=page.locator('#capture-test selfie-capture-review img');
+  await page.evaluate(()=>{window.__face=false;window.__smile=true});await page.waitForTimeout(650);assert.equal(await page.evaluate(()=>window.__captures),stopped,'No face cannot progress');await page.evaluate(()=>window.__face=true);await page.locator('#capture-test .confirm').waitFor()
+  assert.equal(await page.evaluate(()=>window.__published),0);assert.equal(submissions,0)
+  await page.locator('#capture-test .confirm').waitFor();
+  const preview=page.locator('#capture-test .submission-oval img');
   await preview.evaluate(i=>i.decode());
-  assert.equal(await preview.getAttribute('alt'),'Your selfie');
-  await page.locator('#capture-test #re-capture-image').click();
+  assert.match(await preview.getAttribute('alt'),/selfie/i);
+  await page.locator('#capture-test .retake').click();
   await page.locator('#capture-test selfie-capture-wrapper #start-image-capture').click();
-  await page.locator('#capture-test selfie-capture-review:not([hidden])').waitFor();
+  await page.locator('#capture-test .confirm').waitFor();
   await preview.evaluate(i=>i.decode());
   await page.evaluate(()=>document.getElementById('capture-test').addEventListener('selfie-capture-screens.publish',e=>{window.__accepted=(window.__accepted||0)+1;window.__acceptedCount=e.detail.images.length}));
-  await page.locator('#capture-test #select-id-image').evaluate(b=>{b.click();b.click()});
+  await page.locator('#capture-test .confirm').evaluate(b=>{b.click();b.click()});
   assert.equal(await page.evaluate(()=>window.__accepted),1);assert.equal(await page.evaluate(()=>window.__acceptedCount),8);
-  await page.evaluate(()=>{const e=document.createElement('p');e.className='validation-message';e.textContent='Something went wrong';document.querySelector('main').prepend(e)});
-  await page.getByRole('alert').filter({hasText:"We couldn't submit your verification"}).waitFor();
-  assert.equal(submissions,0);
+
+  assert.equal(submissions,0);assert.equal(await page.evaluate(()=>window.__published),1);assert.equal(await page.evaluate(()=>window.__imageCount),8);
   console.log('PASS valid selfie preview and duplicate acceptance guard: '+method);await page.close();
  }
 }finally{await browser.close()}

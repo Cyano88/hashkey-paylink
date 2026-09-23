@@ -5,25 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SmileIdentity - Biometric KYC</title>
 
-    <link rel="stylesheet" href="https://cdn.smileidentity.com/inline/v11/css/styles.css" />
+    <link rel="stylesheet" href="https://cdn.usesmileid.com/inline/v12/css/styles.css" />
 
     <!-- Start Font Loading -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="preload"
       as="style"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
     />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
       media="print"
       onload="this.media='all'"
     />
     <noscript>
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
       />
     </noscript>
     <!-- End Font Loading -->
@@ -308,9 +308,6 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
             >
           </button>
         </div>
-        <h1 class="center" data-i18n="pages.idInfo.title">
-          Enter ID Information
-        </h1>
         <p class="demo-tip" data-variant="yellow" hidden>
           <svg
             aria-hidden="true"
@@ -343,147 +340,11 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           </span>
         </p>
 
-        <form name="user-details" class="flow">
-          <div hidden id="id-number" class="input-group flow">
-            <label class="required" for="id_number"> ID Number </label>
-
-            <input
-              aria-required="true"
-              id="id_number"
-              name="id_number"
-              placeholder=""
-            />
-          </div>
-
-          <fieldset hidden id="names" class="split-pair" data-variant="start">
-            <div class="input-group flow">
-              <label
-                class="required"
-                for="first_name"
-                data-i18n="pages.idInfo.firstName"
-              >
-                First Name
-              </label>
-
-              <input
-                aria-required="true"
-                id="first_name"
-                name="first_name"
-                placeholder="Jane"
-                required=""
-                type="text"
-              />
-            </div>
-
-            <div class="input-group flow">
-              <label
-                class="required"
-                for="last_name"
-                data-i18n="pages.idInfo.lastName"
-              >
-                Last Name
-              </label>
-
-              <input
-                aria-required="true"
-                id="last_name"
-                name="last_name"
-                placeholder="Momodu"
-                required=""
-                type="text"
-              />
-            </div>
-          </fieldset>
-          <fieldset hidden id="dob" class="flow">
-            <legend data-i18n="pages.idInfo.dateOfBirth">Date of Birth</legend>
-
-            <div class="dob">
-              <div class="input-group flow">
-                <label class="required" for="day" data-i18n="pages.idInfo.day">
-                  Day
-                </label>
-
-                <input
-                  aria-required="true"
-                  id="day"
-                  name="day"
-                  placeholder="31"
-                  required=""
-                  type="text"
-                />
-              </div>
-
-              <div class="input-group flow">
-                <label
-                  class="required"
-                  for="month"
-                  data-i18n="pages.idInfo.month"
-                >
-                  Month
-                </label>
-
-                <input
-                  aria-required="true"
-                  id="month"
-                  name="month"
-                  placeholder="10"
-                  required=""
-                  type="text"
-                />
-              </div>
-
-              <div class="input-group flow">
-                <label
-                  class="required"
-                  for="year"
-                  data-i18n="pages.idInfo.year"
-                >
-                  Year
-                </label>
-
-                <input
-                  aria-required="true"
-                  id="year"
-                  name="year"
-                  placeholder="2000"
-                  required=""
-                  type="text"
-                />
-              </div>
-            </div>
-          </fieldset>
-
-          <button data-variant="solid" type="button" id="submitForm">
-            <span data-i18n="common.continue">Continue</span>
-            <svg
-              aria-hidden="true"
-              width="25"
-              height="24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M7 12h11m0 0-4.588-4M18 12l-4.588 4"
-                stroke="#fff"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-        </form>
-
-        <p class="center credits">
-          <span class="visually-hidden">Powered by SmileID</span>
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 90 9"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <use href="#attribution" />
-          </svg>
-        </p>
+        <!-- The id-info form (title, id_number + names + contact fields, and the
+             Continue button) is rendered by the `<smileid-user-details>` web
+             component, driven by the v3 `fields_to_collect` contract. The
+             component mounts here and owns its own attribution. -->
+        <div id="user-details-mount"></div>
       </section>
 
       <section hidden id="upload-progress-screen" class="flow center">
@@ -664,117 +525,6 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         </p>
       </section>
 
-      <section hidden id="oidc-redirect" class="flow center">
-        <div class="nav">
-          <div class="back-wrapper">
-            <button
-              type="button"
-              data-type="icon"
-              id="oidc-back-button"
-              class="back-button"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                fill="none"
-              >
-                <path
-                  fill="#DBDBC4"
-                  d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z"
-                  opacity=".4"
-                />
-                <path
-                  fill="var(--color-default, #001096)"
-                  d="M15.5 11.25h-5.19l1.72-1.72c.29-.29.29-.77 0-1.06a.754.754 0 0 0-1.06 0l-3 3c-.29.29-.29.77 0 1.06l3 3c.15.15.34.22.53.22s.38-.07.53-.22c.29-.29.29-.77 0-1.06l-1.72-1.72h5.19c.41 0 .75-.34.75-.75s-.34-.75-.75-.75Z"
-                />
-              </svg>
-            </button>
-            <div class="back-button-text" data-i18n="common.back">Back</div>
-          </div>
-          <button data-type="icon" type="button" class="close-iframe">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              fill="none"
-            >
-              <path
-                fill="#DBDBC4"
-                d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z"
-                opacity=".4"
-              />
-              <path
-                fill="#91190F"
-                d="m13.06 12 2.3-2.3c.29-.29.29-.77 0-1.06a.754.754 0 0 0-1.06 0l-2.3 2.3-2.3-2.3a.754.754 0 0 0-1.06 0c-.29.29-.29.77 0 1.06l2.3 2.3-2.3 2.3c-.29.29-.29.77 0 1.06.15.15.34.22.53.22s.38-.07.53-.22l2.3-2.3 2.3 2.3c.15.15.34.22.53.22s.38-.07.53-.22c.29-.29.29-.77 0-1.06l-2.3-2.3Z"
-              />
-            </svg>
-            <span class="visually-hidden"
-              >Close SmileIdentity Verification frame</span
-            >
-          </button>
-        </div>
-
-        <h1 id="oidc-title" data-i18n="pages.oidc.title">
-          Sign in with your national ID
-        </h1>
-
-        <div id="oidc-launch" class="flow" hidden>
-          <p id="oidc-launch-prompt" data-i18n="pages.oidc.launchPrompt">
-            You'll be sent to your national identity provider to sign in. A
-            secure window will open when you continue.
-          </p>
-          <button
-            data-variant="solid"
-            type="button"
-            id="oidc-continue-button"
-            data-i18n="pages.oidc.continue"
-          >
-            Continue to sign-in
-          </button>
-        </div>
-
-        <div id="oidc-loading" aria-live="polite">
-          <p id="oidc-preparing" data-i18n="pages.oidc.preparing">
-            Preparing your secure sign-in…
-          </p>
-          <p id="oidc-waiting" data-i18n="pages.oidc.waiting" hidden>
-            Complete the sign-in in the window that opened. This screen will
-            continue automatically.
-          </p>
-          <p class="spinner"></p>
-        </div>
-
-        <div id="oidc-popup-blocked" class="flow" hidden>
-          <p data-i18n="pages.oidc.popupBlocked">
-            Your browser held back the sign-in window. Select the button below
-            to open it.
-          </p>
-          <button
-            data-variant="solid"
-            type="button"
-            id="oidc-retry-button"
-            data-i18n="pages.oidc.openSignIn"
-          >
-            Open sign-in window
-          </button>
-        </div>
-
-        <div id="oidc-error" hidden aria-live="assertive"></div>
-
-        <p class="center credits">
-          <span class="visually-hidden">Powered by SmileID</span>
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 90 9"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <use href="#attribution" />
-          </svg>
-        </p>
-      </section>
-
       <section hidden id="complete-screen" class="flow center">
         <br />
 
@@ -822,7 +572,7 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
       </section>
     </main>
 
-    <script src="https://cdn.smileidentity.com/inline/v11/js/biometric-kyc.min.js"></script>
+    <script src="https://cdn.usesmileid.com/inline/v12/js/biometric-kyc.min.js"></script>
   <script id="pocket-verification-inputs">
       // Smile renders BVN/OTP fields in open shadow roots. Style presentation only;
       // keep its input validation, events, consent and submission behavior intact.
@@ -909,49 +659,9 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           }
           root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) apply(el.shadowRoot); });
         };
-        customElements.whenDefined('selfie-capture').then(() => apply(document.querySelector('main')));
+        customElements.whenDefined('selfie-capture-wrapper').then(() => apply(document.querySelector('main')));
       })();
     </script>
 
-    <script id="pocket-selfie-review">
-      // Keep provider capture/upload decisions intact; guard repeated review taps.
-      (() => {
-        const watched = new WeakSet();
-        const locked = new WeakSet();
-        const apply = root => {
-          root.querySelectorAll('main > p.validation-message').forEach(message => {
-            if (message.textContent === 'Something went wrong') {
-              message.textContent = "We couldn't submit your verification. Close this screen and try again.";
-              message.setAttribute('role','alert');
-            }
-          });
-          if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture-review') {
-            const image = root.querySelector('#document-capture-review-image');
-            if (image) image.alt = 'Your selfie';
-          }
-          if (!watched.has(root)) {
-            watched.add(root);
-            if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture-review') {
-              root.addEventListener('click', event => {
-                const button = event.target.closest?.('button');
-                if (button?.id === 're-capture-image') {
-                  locked.delete(root.host);
-                  return;
-                }
-                if (button?.id !== 'select-id-image') return;
-                if (locked.has(root.host)) {
-                  event.preventDefault(); event.stopImmediatePropagation(); return;
-                }
-                locked.add(root.host);
-                button.disabled = true;
-              }, true);
-            }
-            new MutationObserver(() => apply(root)).observe(root, {childList:true,subtree:true});
-          }
-          root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) apply(el.shadowRoot); });
-        };
-        customElements.whenDefined('selfie-capture-review').then(() => apply(document.querySelector('main')));
-      })();
-    </script>
 </body>
 </html>

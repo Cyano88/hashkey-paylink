@@ -193,7 +193,7 @@ app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY')
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
-  res.setHeader('Permissions-Policy', 'camera=(self "https://cdn.smileidentity.com" "https://hashkey-paylink.onrender.com"), microphone=(), geolocation=()')
+  res.setHeader('Permissions-Policy', 'camera=(self "https://cdn.smileidentity.com" "https://cdn.usesmileid.com" "https://hashkey-paylink.onrender.com"), microphone=(), geolocation=()')
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   }
@@ -201,13 +201,13 @@ app.use((_req, res, next) => {
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com https://cdn.smileidentity.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com https://cdn.smileidentity.com https://cdn.usesmileid.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' https: wss:",
-      "frame-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
-      "child-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+      "frame-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://cdn.usesmileid.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+      "child-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://cdn.usesmileid.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -225,12 +225,12 @@ app.get('/pocket/identity-frame', (req, res) => {
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
   res.setHeader('Content-Security-Policy', [
     "default-src 'none'",
-    "script-src 'unsafe-inline' 'unsafe-eval' https://cdn.smileidentity.com https://web-models.smileidentity.com https://secure.smileidentity.com https://js.sentry-cdn.com https://browser.sentry-cdn.com",
-    "style-src 'unsafe-inline' https://cdn.smileidentity.com https://fonts.googleapis.com",
+    "script-src 'unsafe-inline' 'unsafe-eval' https://cdn.smileidentity.com https://cdn.usesmileid.com https://web-models.smileidentity.com https://secure.smileidentity.com https://js.sentry-cdn.com https://browser.sentry-cdn.com",
+    "style-src 'unsafe-inline' https://cdn.smileidentity.com https://cdn.usesmileid.com https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com data:",
     "img-src https: data: blob:",
     "connect-src https: wss:",
-    "worker-src blob: https://cdn.smileidentity.com",
+    "worker-src blob: https://cdn.smileidentity.com https://cdn.usesmileid.com",
     "media-src blob:",
     "frame-ancestors https://app.hashpaylink.com http://localhost:5173",
     "base-uri 'none'",

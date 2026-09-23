@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Document Verification — Smile Identity</title>
 
-    <link rel="stylesheet" href="https://cdn.smileidentity.com/inline/v11/css/styles.css" />
+    <link rel="stylesheet" href="https://cdn.usesmileid.com/inline/v12/css/styles.css" />
 
     <!-- Start Font Loading -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -441,7 +441,7 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
       </section>
     </main>
 
-    <script src="https://cdn.smileidentity.com/inline/v11/js/doc-verification.min.js"></script>
+    <script src="https://cdn.usesmileid.com/inline/v12/js/doc-verification.min.js"></script>
   <script id="pocket-verification-inputs">
       // Smile renders BVN/OTP fields in open shadow roots. Style presentation only;
       // keep its input validation, events, consent and submission behavior intact.
@@ -528,49 +528,9 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           }
           root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) apply(el.shadowRoot); });
         };
-        customElements.whenDefined('selfie-capture').then(() => apply(document.querySelector('main')));
+        customElements.whenDefined('selfie-capture-wrapper').then(() => apply(document.querySelector('main')));
       })();
     </script>
 
-    <script id="pocket-selfie-review">
-      // Keep provider capture/upload decisions intact; guard repeated review taps.
-      (() => {
-        const watched = new WeakSet();
-        const locked = new WeakSet();
-        const apply = root => {
-          root.querySelectorAll('main > p.validation-message').forEach(message => {
-            if (message.textContent === 'Something went wrong') {
-              message.textContent = "We couldn't submit your verification. Close this screen and try again.";
-              message.setAttribute('role','alert');
-            }
-          });
-          if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture-review') {
-            const image = root.querySelector('#document-capture-review-image');
-            if (image) image.alt = 'Your selfie';
-          }
-          if (!watched.has(root)) {
-            watched.add(root);
-            if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture-review') {
-              root.addEventListener('click', event => {
-                const button = event.target.closest?.('button');
-                if (button?.id === 're-capture-image') {
-                  locked.delete(root.host);
-                  return;
-                }
-                if (button?.id !== 'select-id-image') return;
-                if (locked.has(root.host)) {
-                  event.preventDefault(); event.stopImmediatePropagation(); return;
-                }
-                locked.add(root.host);
-                button.disabled = true;
-              }, true);
-            }
-            new MutationObserver(() => apply(root)).observe(root, {childList:true,subtree:true});
-          }
-          root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) apply(el.shadowRoot); });
-        };
-        customElements.whenDefined('selfie-capture-review').then(() => apply(document.querySelector('main')));
-      })();
-    </script>
 </body>
 </html>

@@ -10,7 +10,7 @@ export function openSmileFrame(config: Record<string, unknown>) {
   frame.title = 'Smile ID identity verification'
   // Version the cached shell whenever the capture engine changes.
   const frameUrl = new URL(SMILE_FRAME_URL)
-  frameUrl.searchParams.set('capture', 'v11-smile-20260923')
+  frameUrl.searchParams.set('capture', 'v12-v3-20260923')
   if (config.product === 'doc_verification') frameUrl.searchParams.set('method', 'government_id')
   frame.src = frameUrl.toString()
   frame.allow = 'camera; fullscreen'
@@ -34,7 +34,7 @@ export function openSmileFrame(config: Record<string, unknown>) {
     if (message === 'SmileIdentity::ChildPageReady') {
       clearTimeout(timer)
       frame.contentWindow?.postMessage(JSON.stringify({ ...config, source: 'SmileIdentity::Configuration' }), origin)
-    } else if (message === 'SmileIdentity::Success') {
+    } else if (message === 'SmileIdentity::Success' || message === 'SmileIdentity::Result') {
       if (!succeeded) { succeeded = true; notify('onSuccess') }
     } else if (message === 'SmileIdentity::Close' || message === 'SmileIdentity::Close::System') {
       dispose()

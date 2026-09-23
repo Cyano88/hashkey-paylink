@@ -9,7 +9,7 @@ import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRout
 type VerificationMethod = 'bvn' | 'nin' | 'government_id'
 type VerificationPolicy = { method?: VerificationMethod; product?: string; country: string; countryName: string; provider: string; idSelection: Record<string, string[]>; consentRequired: Record<string, string[]>; previewBVNMFA: boolean }
 type KycState = { workflow?: { bvnPassed: boolean; complete: boolean; needsAdditional: boolean; methods: string[] }; environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; uploadReported?: boolean; failureReason?: string | null; verification?: VerificationPolicy; jobId?: string }
-type Session = KycState & { token: string; partnerId: string; callbackUrl: string }
+type Session = KycState & { token: string; partnerId: string; callbackUrl: string; partnerParams?: Record<string,string> }
 type SmileWindow = Window & { SmileIdentity?: (config: Record<string, unknown>) => void }
 const TEMPORARY_ERROR = 'Verification is temporarily unavailable. We will retry automatically.'
 function loadSmile() {
@@ -67,8 +67,8 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
       const done = () => { if (mounted.current) { setBusy(false); void refresh() } }
       ;(window as SmileWindow).SmileIdentity!({
         token: session.token, product: session.verification.product || 'biometric_kyc', environment: session.environment, callback_url: session.callbackUrl,
-        id_selection: session.verification.idSelection, consent_required: session.verification.consentRequired, previewBVNMFA: session.verification.previewBVNMFA,
-        // v11 default uses smile detection; strict mode requests head-turn challenges.
+        id_selection: session.verification.idSelection, partner_params: session.partnerParams,
+        // V12 collects explicit provider consent; default capture uses smile detection.
         use_strict_mode: false, allow_agent_mode: false, allow_legacy_selfie_fallback: false,
         partner_details: { partner_id: session.partnerId, name: 'Pocket by Hash PayLink', logo_url: 'https://app.hashpaylink.com/pocket-mark.svg', policy_url: 'https://app.hashpaylink.com/docs/privacy', theme_color: '#171717' },
         onSuccess: () => {

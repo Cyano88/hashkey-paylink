@@ -13,7 +13,7 @@ try {
  const frame=page.frames().find(f=>f.url().includes('/identity-frame'))??await new Promise(resolve=>page.once('framenavigated',resolve))
  await frame.waitForFunction(()=>!!window.received)
  assert.equal(await frame.evaluate(()=>JSON.parse(window.received).token),'fixture-secret')
- assert.equal(new URL(frame.url()).searchParams.get('capture'),'v11-smile-20260923')
+ assert.equal(new URL(frame.url()).searchParams.get('capture'),'v12-v3-20260923')
  assert.equal(new URL(frame.url()).searchParams.has('token'),false)
  await page.evaluate(()=>{
   const source=document.querySelector('iframe').contentWindow
@@ -22,7 +22,7 @@ try {
   window.dispatchEvent(new MessageEvent('message',{origin:'https://hashkey-paylink.onrender.com',source,data:{message:42}}))
  })
  assert.equal(await page.evaluate(()=>window.success),0)
- await frame.evaluate(()=>{parent.postMessage('SmileIdentity::Success','https://app.hashpaylink.com');parent.postMessage('SmileIdentity::Success','https://app.hashpaylink.com')})
+ await frame.evaluate(()=>{parent.postMessage({message:'SmileIdentity::Result',payload:{status:'Accepted'}},'https://app.hashpaylink.com');parent.postMessage('SmileIdentity::Success','https://app.hashpaylink.com')})
  await page.waitForFunction(()=>window.success===1)
  await frame.evaluate(()=>parent.postMessage('SmileIdentity::Close::System','https://app.hashpaylink.com'))
  await page.waitForFunction(()=>!document.querySelector('iframe'))
