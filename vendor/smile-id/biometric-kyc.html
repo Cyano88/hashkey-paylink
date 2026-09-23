@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>SmileIdentity - Biometric KYC</title>
 
-    <link rel="stylesheet" href="https://cdn.smileidentity.com/inline/v1/css/styles.css" />
+    <link rel="stylesheet" href="https://cdn.smileidentity.com/inline/v11/css/styles.css" />
 
     <!-- Start Font Loading -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -49,37 +49,8 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         SmileIdentity
       </p>
     </noscript>
-    <script>
-      // Configure sentryOnLoad before adding the Loader Script
-      window.sentryOnLoad = function () {
-        Sentry.init({
-          beforeSend(event) {
-            // Check if the error originates from the library's source files
-            /// https://sentry.zendesk.com/hc/en-us/articles/24076831568027--JS-Filter-events-based-on-their-entire-stack-trace
-            const traces = event.exception.values[0].stacktrace?.frames || [];
-            for (let i in traces) {
-              if (
-                !event.exception.values[0].stacktrace.frames[i].filename.match(
-                  /inline\/src/g,
-                )
-              )
-                return null;
-            }
-            if (!event.request.url.match(/biometric-kyc/g)) {
-              return null;
-            }
-            return event;
-          },
-          tracesSampleRate: 0.01,
-        });
-      };
-    </script>
-    <script
-      src="https://js.sentry-cdn.com/82cc89f6d5a076c26d3a3cdc03a8d954.min.js"
-      crossorigin="anonymous"
-    ></script>
 
-    <main>
+    <main hidden>
       <section id="loading-screen" class="flow center">
         <div class="nav justify-right">
           <button data-type="icon" type="button" class="close-iframe">
@@ -107,12 +78,18 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         <br />
         <p class="spinner"></p>
 
-        <h1 style="--flow-space: 4rem">Setting up</h1>
+        <h1 style="--flow-space: 4rem" data-i18n="pages.loading.title">
+          Setting up
+        </h1>
 
         <p>
-          Just a few more seconds
+          <span data-i18n="pages.loading.subtitle"
+            >Just a few more seconds</span
+          >
           <br />
-          We are setting up your verification flow
+          <span data-i18n="pages.loading.description"
+            >We are setting up your verification flow</span
+          >
         </p>
 
         <p class="center credits" hidden>
@@ -206,27 +183,44 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
             >
           </button>
         </div>
-        <h1 class="center font-size-500 max-width:100ch">Select ID Type</h1>
+        <h1
+          class="center font-size-500 max-width:100ch"
+          data-i18n="pages.idSelection.title"
+        >
+          Select ID Type
+        </h1>
 
         <form name="hosted-web-config" class="flow flow-space:800">
           <div class="split-pair flow-space:400">
             <div class="flow input-group">
-              <label for="country"> Select Country </label>
+              <label for="country" data-i18n="pages.idSelection.selectCountry">
+                Select Country
+              </label>
               <select disabled required id="country" name="country">
-                <option value="">--Please Select--</option>
+                <option value="" data-i18n="pages.idSelection.placeholder">
+                  --Please Select--
+                </option>
               </select>
             </div>
 
             <div class="flow input-group">
-              <label for="id_type"> Select ID Type </label>
+              <label for="id_type" data-i18n="pages.idSelection.selectIdType">
+                Select ID Type
+              </label>
               <select required id="id_type" name="id_type" disabled>
-                <option value="" disabled>Select Country First</option>
+                <option
+                  value=""
+                  disabled
+                  data-i18n="pages.idSelection.selectCountryFirst"
+                >
+                  Select Country First
+                </option>
               </select>
             </div>
           </div>
 
           <button data-variant="solid" type="submit" id="submitConfig">
-            Continue
+            <span data-i18n="common.continue">Continue</span>
             <svg
               aria-hidden="true"
               width="25"
@@ -258,9 +252,11 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         </p>
       </section>
 
-      <div id="camera-container">
-        <smart-camera-web hidden show-navigation></smart-camera-web>
-      </div>
+      <smart-camera-web
+        hidden
+        show-navigation
+        show-back-on-guidelines
+      ></smart-camera-web>
 
       <section hidden id="id-info" class="flow">
         <div class="nav">
@@ -288,7 +284,7 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
                 />
               </svg>
             </button>
-            <div class="back-button-text">Back</div>
+            <div class="back-button-text" data-i18n="common.back">Back</div>
           </div>
           <button data-type="icon" type="button" class="close-iframe">
             <svg
@@ -312,7 +308,9 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
             >
           </button>
         </div>
-        <h1 class="center">Enter ID Information</h1>
+        <h1 class="center" data-i18n="pages.idInfo.title">
+          Enter ID Information
+        </h1>
         <p class="demo-tip" data-variant="yellow" hidden>
           <svg
             aria-hidden="true"
@@ -359,7 +357,13 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
 
           <fieldset hidden id="names" class="split-pair" data-variant="start">
             <div class="input-group flow">
-              <label class="required" for="first_name"> First Name </label>
+              <label
+                class="required"
+                for="first_name"
+                data-i18n="pages.idInfo.firstName"
+              >
+                First Name
+              </label>
 
               <input
                 aria-required="true"
@@ -372,7 +376,13 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
             </div>
 
             <div class="input-group flow">
-              <label class="required" for="last_name"> Last Name </label>
+              <label
+                class="required"
+                for="last_name"
+                data-i18n="pages.idInfo.lastName"
+              >
+                Last Name
+              </label>
 
               <input
                 aria-required="true"
@@ -385,11 +395,13 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
             </div>
           </fieldset>
           <fieldset hidden id="dob" class="flow">
-            <legend>Date of Birth</legend>
+            <legend data-i18n="pages.idInfo.dateOfBirth">Date of Birth</legend>
 
             <div class="dob">
               <div class="input-group flow">
-                <label class="required" for="day"> Day </label>
+                <label class="required" for="day" data-i18n="pages.idInfo.day">
+                  Day
+                </label>
 
                 <input
                   aria-required="true"
@@ -402,7 +414,13 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
               </div>
 
               <div class="input-group flow">
-                <label class="required" for="last_name"> Month </label>
+                <label
+                  class="required"
+                  for="month"
+                  data-i18n="pages.idInfo.month"
+                >
+                  Month
+                </label>
 
                 <input
                   aria-required="true"
@@ -415,7 +433,13 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
               </div>
 
               <div class="input-group flow">
-                <label class="required" for="year"> Year </label>
+                <label
+                  class="required"
+                  for="year"
+                  data-i18n="pages.idInfo.year"
+                >
+                  Year
+                </label>
 
                 <input
                   aria-required="true"
@@ -430,7 +454,7 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           </fieldset>
 
           <button data-variant="solid" type="button" id="submitForm">
-            Continue
+            <span data-i18n="common.continue">Continue</span>
             <svg
               aria-hidden="true"
               width="25"
@@ -489,12 +513,16 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         <br />
         <p class="spinner"></p>
 
-        <h1 style="--flow-space: 4rem">Uploading</h1>
+        <h1 style="--flow-space: 4rem" data-i18n="pages.upload.title">
+          Uploading
+        </h1>
 
         <p>
-          Just a few more seconds
+          <span data-i18n="pages.upload.subtitle">Just a few more seconds</span>
           <br />
-          We are processing your request
+          <span data-i18n="pages.upload.description"
+            >We are processing your request</span
+          >
         </p>
 
         <p class="center credits">
@@ -591,17 +619,21 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           </defs>
         </svg>
 
-        <h1>Something went wrong</h1>
+        <h1 data-i18n="pages.error.generic">Something went wrong</h1>
 
-        <p>We could not upload your information</p>
+        <p data-i18n="pages.error.uploadFailed">
+          We could not upload your information
+        </p>
 
         <p>
-          Please check that you have a stable internet connection. Then try
-          again!
+          <span data-i18n="pages.error.checkInternet"
+            >Please check that you have a stable internet connection. Then try
+            again!</span
+          >
         </p>
 
         <button data-variant="solid" type="button" id="retry-upload">
-          Try again
+          <span data-i18n="pages.error.tryAgain">Try again</span>
           <svg
             aria-hidden="true"
             width="25"
@@ -618,6 +650,117 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
             />
           </svg>
         </button>
+
+        <p class="center credits">
+          <span class="visually-hidden">Powered by SmileID</span>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 90 9"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <use href="#attribution" />
+          </svg>
+        </p>
+      </section>
+
+      <section hidden id="oidc-redirect" class="flow center">
+        <div class="nav">
+          <div class="back-wrapper">
+            <button
+              type="button"
+              data-type="icon"
+              id="oidc-back-button"
+              class="back-button"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                fill="none"
+              >
+                <path
+                  fill="#DBDBC4"
+                  d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z"
+                  opacity=".4"
+                />
+                <path
+                  fill="var(--color-default, #001096)"
+                  d="M15.5 11.25h-5.19l1.72-1.72c.29-.29.29-.77 0-1.06a.754.754 0 0 0-1.06 0l-3 3c-.29.29-.29.77 0 1.06l3 3c.15.15.34.22.53.22s.38-.07.53-.22c.29-.29.29-.77 0-1.06l-1.72-1.72h5.19c.41 0 .75-.34.75-.75s-.34-.75-.75-.75Z"
+                />
+              </svg>
+            </button>
+            <div class="back-button-text" data-i18n="common.back">Back</div>
+          </div>
+          <button data-type="icon" type="button" class="close-iframe">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              fill="none"
+            >
+              <path
+                fill="#DBDBC4"
+                d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z"
+                opacity=".4"
+              />
+              <path
+                fill="#91190F"
+                d="m13.06 12 2.3-2.3c.29-.29.29-.77 0-1.06a.754.754 0 0 0-1.06 0l-2.3 2.3-2.3-2.3a.754.754 0 0 0-1.06 0c-.29.29-.29.77 0 1.06l2.3 2.3-2.3 2.3c-.29.29-.29.77 0 1.06.15.15.34.22.53.22s.38-.07.53-.22l2.3-2.3 2.3 2.3c.15.15.34.22.53.22s.38-.07.53-.22c.29-.29.29-.77 0-1.06l-2.3-2.3Z"
+              />
+            </svg>
+            <span class="visually-hidden"
+              >Close SmileIdentity Verification frame</span
+            >
+          </button>
+        </div>
+
+        <h1 id="oidc-title" data-i18n="pages.oidc.title">
+          Sign in with your national ID
+        </h1>
+
+        <div id="oidc-launch" class="flow" hidden>
+          <p id="oidc-launch-prompt" data-i18n="pages.oidc.launchPrompt">
+            You'll be sent to your national identity provider to sign in. A
+            secure window will open when you continue.
+          </p>
+          <button
+            data-variant="solid"
+            type="button"
+            id="oidc-continue-button"
+            data-i18n="pages.oidc.continue"
+          >
+            Continue to sign-in
+          </button>
+        </div>
+
+        <div id="oidc-loading" aria-live="polite">
+          <p id="oidc-preparing" data-i18n="pages.oidc.preparing">
+            Preparing your secure sign-in…
+          </p>
+          <p id="oidc-waiting" data-i18n="pages.oidc.waiting" hidden>
+            Complete the sign-in in the window that opened. This screen will
+            continue automatically.
+          </p>
+          <p class="spinner"></p>
+        </div>
+
+        <div id="oidc-popup-blocked" class="flow" hidden>
+          <p data-i18n="pages.oidc.popupBlocked">
+            Your browser held back the sign-in window. Select the button below
+            to open it.
+          </p>
+          <button
+            data-variant="solid"
+            type="button"
+            id="oidc-retry-button"
+            data-i18n="pages.oidc.openSignIn"
+          >
+            Open sign-in window
+          </button>
+        </div>
+
+        <div id="oidc-error" hidden aria-live="assertive"></div>
 
         <p class="center credits">
           <span class="visually-hidden">Powered by SmileID</span>
@@ -659,10 +802,10 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           />
         </svg>
 
-        <h1>Submission Complete</h1>
+        <h1 data-i18n="pages.complete.title">Submission Complete</h1>
 
-        <p id="thank-you-message">
-          Your submission is complete. Pocket will show the verification result after Smile ID processes it.
+        <p id="thank-you-message" data-i18n="pages.complete.subtitle">
+          That's all you need to verify your identity
         </p>
 
         <p class="center credits">
@@ -679,9 +822,8 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
       </section>
     </main>
 
-    <script src="https://cdn.smileidentity.com/inline/v1/js/biometric-kyc.min.js"></script>
-
-    <script id="pocket-verification-inputs">
+    <script src="https://cdn.smileidentity.com/inline/v11/js/biometric-kyc.min.js"></script>
+  <script id="pocket-verification-inputs">
       // Smile renders BVN/OTP fields in open shadow roots. Style presentation only;
       // keep its input validation, events, consent and submission behavior intact.
       (() => {
@@ -725,11 +867,12 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           .then(() => apply(document.querySelector('main')));
       })();
     </script>
-  
-    <script id="pocket-selfie-layout">
+<script id="pocket-selfie-layout">
       // Presentation only. Smile owns image capture and liveness verification.
       (() => {
         const css = `
+          .smartselfie-capture .camera-preview-container, .smartselfie-capture .video-wrapper { width:100%!important; max-width:320px!important; }
+          .smartselfie-capture { max-width:100%; }
           #selfie-capture-screen { block-size:auto!important; min-block-size:0!important; padding-block:16px!important; max-inline-size:100%!important; }
           #selfie-capture-screen .video-container { width:min(100%,320px)!important; aspect-ratio:215/245; margin-inline:auto; }
           #selfie-capture-screen .video-container .video { width:100%!important; height:100%!important; left:0!important; top:0!important; clip-path:ellipse(46.8% 48% at 50% 50%)!important; }
@@ -742,7 +885,21 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         `;
         const watched = new WeakSet();
         const apply = root => {
-          if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture' && !root.querySelector('#pocket-selfie-style')) {
+          if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture-wrapper') {
+            // Keep an exit available while the model is loading or cannot initialize.
+            const existing = root.querySelector('#pocket-capture-close');
+            if (root.querySelector('smileid-navigation')) existing?.remove();
+            else if (!existing && root.childElementCount) {
+              const close = document.createElement('button');
+              close.id = 'pocket-capture-close'; close.type = 'button';
+              close.setAttribute('aria-label','Close verification'); close.textContent = '\u00d7';
+              close.style.cssText = 'position:fixed;top:12px;right:16px;width:44px;height:44px;border:0;border-radius:50%;background:#f3f4f6;color:#171717;font:28px/1 sans-serif;z-index:1000';
+              close.addEventListener('click',() => window.parent.postMessage('SmileIdentity::Close','*'));
+              root.append(close);
+            }
+          }
+
+          if (root instanceof ShadowRoot && ['selfie-capture','selfie-capture-wrapper'].includes(root.host.localName) && !root.querySelector('#pocket-selfie-style')) {
             const style = document.createElement('style');
             style.id = 'pocket-selfie-style'; style.textContent = css; root.append(style);
           }
@@ -755,5 +912,5 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         customElements.whenDefined('selfie-capture').then(() => apply(document.querySelector('main')));
       })();
     </script>
-  </body>
+</body>
 </html>

@@ -68,7 +68,8 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
       ;(window as SmileWindow).SmileIdentity!({
         token: session.token, product: session.verification.product || 'biometric_kyc', environment: session.environment, callback_url: session.callbackUrl,
         id_selection: session.verification.idSelection, consent_required: session.verification.consentRequired, previewBVNMFA: session.verification.previewBVNMFA,
-        use_strict_mode: true, allow_agent_mode: false, allow_legacy_selfie_fallback: false,
+        // v11 default uses smile detection; strict mode requests head-turn challenges.
+        use_strict_mode: false, allow_agent_mode: false, allow_legacy_selfie_fallback: false,
         partner_details: { partner_id: session.partnerId, name: 'Pocket by Hash PayLink', logo_url: 'https://app.hashpaylink.com/pocket-mark.svg', policy_url: 'https://app.hashpaylink.com/docs/privacy', theme_color: '#171717' },
         onSuccess: () => {
           if (!mounted.current) return

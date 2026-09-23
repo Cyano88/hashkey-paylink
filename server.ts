@@ -225,7 +225,7 @@ app.get('/pocket/identity-frame', (req, res) => {
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
   res.setHeader('Content-Security-Policy', [
     "default-src 'none'",
-    "script-src 'unsafe-inline' 'unsafe-eval' https://cdn.smileidentity.com https://js.sentry-cdn.com https://browser.sentry-cdn.com",
+    "script-src 'unsafe-inline' 'unsafe-eval' https://cdn.smileidentity.com https://web-models.smileidentity.com https://secure.smileidentity.com https://js.sentry-cdn.com https://browser.sentry-cdn.com",
     "style-src 'unsafe-inline' https://cdn.smileidentity.com https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com data:",
     "img-src https: data: blob:",
