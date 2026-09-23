@@ -2,6 +2,7 @@ import PocketActivityReceipt from '../components/PocketActivityReceipt'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { isIncomingPosPayment, pocketBankRecipientLabel } from '../lib/pocketPurchaseKind'
 import PocketWalletUpdateCard from '../components/PocketWalletUpdateCard'
+import { pocketWalletPreparationNotice } from '../lib/pocketWalletPreparationNotice'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, ArrowRight, ChevronRight, Eye, EyeOff, QrCode, Send, Store, Deposit } from '../components/PocketIcons'
@@ -68,7 +69,7 @@ export default function PocketHomePage() {
   const hidden = '....'
 
   return <PocketRouteShell active="home" onSelect={tab => open(navPath(tab))}>
-    <PocketWalletUpdateCard key={email} notice={wallets.walletUpdate} onReview={() => open(POCKET_ROUTES.profile + "?feature=wallet-setup")} />
+    <PocketWalletUpdateCard key={email} notice={pocketWalletPreparationNotice(wallets.walletUpdate, wallets.wallets)} onReview={() => open(POCKET_ROUTES.profile + "?feature=wallet-setup")} />
     <section data-pocket-balance-card className="overflow-hidden rounded-[26px] bg-gray-950 px-5 py-4 text-white shadow-[0_18px_48px_rgba(15,23,42,0.14)] dark:bg-white dark:text-gray-950">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
