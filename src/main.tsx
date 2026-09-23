@@ -1,3 +1,4 @@
+import { pocketXLayer } from './pocket/lib/pocketXStocksWallet'
 import React, { lazy, Suspense, useMemo, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -85,7 +86,7 @@ function AppProviders() {
     loginMethods: ['email'],
     allowOAuthInEmbeddedBrowsers: true,
     defaultChain: baseMainnet,
-    supportedChains: [baseMainnet, arcChain, arbitrum, polygon],
+    supportedChains: [baseMainnet, arcChain, arbitrum, polygon, pocketXLayer],
     embeddedWallets: {
       ethereum: {
         createOnLogin: 'off',

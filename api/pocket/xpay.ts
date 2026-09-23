@@ -64,6 +64,11 @@ async function observe(p:Payment){
 export default async function handler(req:Request,res:Response){
  res.setHeader('Cache-Control','no-store')
  try{
+  if(req.method==='GET'){
+   const id=String(req.query?.id||'');if(!/^[0-9a-f-]{36}$/.test(id))fail('Invalid XPay link.',400)
+   const merchant=(await read()).merchants[id];if(!merchant||merchant.deletedAt)fail('This XPay link is unavailable.',404)
+   return res.json({ok:true,merchant:{id:merchant.id,name:merchant.name,pocketId:merchant.pocketId,tokens:merchant.tokens}})
+  }
   if(req.method!=='POST')return res.sendStatus(405)
   const identity=await verifiedPrivyUser(req),owner=identity.userId,b=req.body||{},action=b.action
   if(action==='merchant-save'){

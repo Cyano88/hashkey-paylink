@@ -38,3 +38,36 @@ html.dark [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] but
 @media (prefers-reduced-motion: reduce) { .pocket-network-page { animation: none; } }
 
 html.dark [data-pocket-sheet] { background-color: #121212; color: #fff; }
+
+
+/* One header row, equal side tracks keep the selector at the screen centre. */
+.pocket-main-header { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; width:100%; max-width:430px; min-height:44px; gap:6px; }
+.pocket-header-id { min-width:0; color:#09090b; }
+.dark .pocket-header-id { color:#fafafa; }
+.pocket-header-bell { justify-self:end; }
+.pocket-mode-pill { position:relative; display:grid; grid-template-columns:1fr 1fr; width:176px; padding:4px; border:1px solid #e4e4e7; border-radius:999px; background:#eaeaec; }
+.pocket-mode-pill button { position:relative; z-index:1; min-height:34px; border-radius:999px; font-size:10px; font-weight:750; color:#71717a; transition:color 220ms; }
+.pocket-mode-pill button[aria-pressed="true"] { color:#fff; }
+.pocket-mode-thumb { position:absolute; left:4px; top:4px; bottom:4px; width:calc((100% - 8px)/2); border-radius:999px; background:#18181b; transition:transform 380ms cubic-bezier(.22,1,.36,1); }
+.pocket-mode-thumb[data-stock="true"] { transform:translateX(100%); }
+.dark .pocket-mode-pill { background:#171717; border-color:#262626; }
+.dark .pocket-mode-thumb { background:#fafafa; }
+.dark .pocket-mode-pill button[aria-pressed="true"] { color:#09090b; }
+.pocket-mode-pill button:focus-visible { outline:2px solid #3b82f6; outline-offset:3px; }
+@media(max-width:360px) { .pocket-mode-pill { width:160px; } .pocket-header-id button { font-size:9px; } }
+
+.pocket-mode-curtain { position:fixed; inset:0; z-index:120; display:grid; place-items:center; overflow:hidden; background:#fafafa; color:#09090b; animation:pocket-curtain-out 2200ms linear both; }
+.dark .pocket-mode-curtain { background:#050505; color:#fafafa; }
+.pocket-mode-brand { text-align:center; }
+.pocket-mode-wordmark { display:flex; align-items:center; justify-content:center; gap:10px; height:64px; }
+.pocket-mode-mark { display:block; animation:pocket-mark-resolve 800ms cubic-bezier(.22,1,.36,1) both; }
+.pocket-mode-name { overflow:hidden; font-size:38px; font-weight:750; letter-spacing:-1.5px; animation:pocket-name-reveal 950ms cubic-bezier(.22,1,.36,1) both; }
+.pocket-mode-brand p { margin:16px 0 0; color:#71717a; font-size:13px; font-weight:500; animation:pocket-caption-reveal 1100ms ease both; }
+.dark .pocket-mode-brand p { color:#a1a1aa; }
+@keyframes pocket-mark-resolve { 0% { opacity:0; transform:rotate(-135deg) scale(.45); } 30% { opacity:1; } 100% { transform:rotate(0) scale(1); } }
+@keyframes pocket-name-reveal { 0%,45% { opacity:0; max-width:0; transform:translateX(-8px); } 100% { opacity:1; max-width:150px; transform:translateX(0); } }
+@keyframes pocket-caption-reveal { 0%,65% { opacity:0; transform:translateY(6px); } 100% { opacity:1; transform:translateY(0); } }
+@keyframes pocket-curtain-out { 0%,86% { opacity:1; } 100% { opacity:0; visibility:hidden; } }
+.pocket-mode-content { animation:none; }
+[data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] { z-index:50; }
+@media(prefers-reduced-motion:reduce) { .pocket-mode-curtain { display:none; } .pocket-mode-content { animation:none; } .pocket-mode-thumb,.pocket-mode-pill button { transition:none; } }

@@ -44,3 +44,6 @@ fixture.owner='payer';await call({...body,key:'fixture-unique-key-after-delete'}
 console.log('PASS independent reusable links; owner-only, one-time PIN approval deletion; deleted QR rejected; payment history retained')
 
 await call({action:'authorize',id:readyAfterDelete.id},409);const finalHash='0x'+'c'.repeat(64);fixture.head=160n;fixture.receipts[finalHash]={...fixture.receipts[hash],blockNumber:150n};assert.equal((await call({action:'confirm',id:pendingAfterDelete.id,hash:finalHash})).payment.status,'paid');console.log('PASS deleted links reject unsigned quotes and still settle pre-authorized payments');
+
+const readPublic=async(id,expected)=>{let status=200,result;await handler({method:'GET',query:{id}},{setHeader(){},status(s){status=s;return this},json(data){result=data;return this},sendStatus(s){status=s}});assert.equal(status,expected);return result};
+const publicLink=await readPublic(third.id,200);assert.deepEqual(Object.keys(publicLink.merchant).sort(),['id','name','pocketId','tokens']);await readPublic(merchant.id,404);await readPublic('../mine',400);console.log('PASS public merchant read exposes no wallet, owner, or payment records; deleted links rejected');

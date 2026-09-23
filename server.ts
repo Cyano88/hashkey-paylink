@@ -1,3 +1,4 @@
+import pocketCheckoutConfig from './api/pocket/checkout-config.js'
 import pocketMigrationLegacyFlowHandler from './api/pocket/wallet-migration-legacy-flow.js'
 /**
  * Express server for Render deployment.
@@ -386,6 +387,7 @@ app.get('/api/pocket/requests',          readLimiter, pocketRequestsHandler)
 app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
+app.get('/api/pocket/checkout-config', readLimiter, pocketCheckoutConfig)
 app.all('/api/pocket/xstocks/xpay', strictLimiter, pocketXPayHandler)
 app.all('/api/pocket/xstocks/notifications', strictLimiter, pocketStockNotificationsHandler)
 app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)

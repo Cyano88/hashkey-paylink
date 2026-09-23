@@ -1,3 +1,4 @@
+import PocketGetApp from '../pocket/components/PocketGetApp'
 import { assertPocketScanPayoutPayable, pocketScanPayoutNeedsReview } from '../pocket/lib/pocketScanPayout'
 import { requestPocketPaymentApproval } from '../pocket/lib/pocketPaymentApproval'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -4124,6 +4125,8 @@ export default function PaymentPage({ pocketScan }: { pocketScan?: { params: str
                 Preparing receipt...
               </p>
             )}
+
+            {!pocketScan && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || paycrestOrder?.status === 'settled') && <PocketGetApp />}
 
             {/* Only surface registration errors — success/pending/idle are silent */}
             {isEventMode && !agentUrl && eventRegStatus === 'error' && (
