@@ -288,3 +288,9 @@ services:
         value: "64"
       - key: POLYMARKET_MATCH_URLS
         sync: false                   # JSON map from fixture/team keys to eligible World Cup Polymarket URLs
+
+      # Dedicated Pocket cryptographic secrets; never substitute provider credentials.
+      - key: POCKET_PIN_PEPPER
+        sync: false                   # preserve existing value to keep PIN hashes valid
+      - key: POCKET_SWAP_QUOTE_SECRET
+        sync: false                   # at least 32 characters; signs Arc/XStocks quotes

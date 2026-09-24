@@ -5,6 +5,8 @@ const handler=createPocketPaymentSecurityHandler({verifyUser:async()=>({userId:'
 async function call(body){let status=200,result;await handler({method:'POST',headers:{},body},{setHeader(){},status(s){status=s;return this},json(v){result=v;return this}});return {status,result}}
 try{
  process.env.NODE_ENV='production';delete process.env.POCKET_PIN_PEPPER;process.env.PRIVY_APP_SECRET='synthetic-old-provider-secret-not-real-123456'
+ assert.equal((await call({action:'setup',pin:'123456'})).status,503,'Privy must not substitute for missing production pepper')
+ process.env.POCKET_PIN_PEPPER=process.env.PRIVY_APP_SECRET
  assert.equal((await call({action:'setup',pin:'123456'})).status,200)
  process.env.POCKET_PIN_PEPPER=process.env.PRIVY_APP_SECRET
  process.env.PRIVY_APP_SECRET='synthetic-new-provider-secret-not-real-654321'

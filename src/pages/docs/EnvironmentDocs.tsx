@@ -32,7 +32,8 @@ export default function EnvironmentDocs() {
             ['CIRCLE_API_KEY_ARC_MAINNET', 'Arc Agreement operator', 'Production Circle LIVE_API_KEY for the separately configured mainnet operator.'],
             ['CIRCLE_BASE_URL', 'Optional', 'Circle API base URL. Defaults to https://api.circle.com.'],
             ['VITE_CIRCLE_USER_WALLET_APP_ID', 'Optional', 'Public Circle wallet app ID for browser wallet sessions.'],
-            ['POCKET_SWAP_QUOTE_SECRET', 'Arc swaps', 'Server-only random secret of at least 32 characters. Defaults to PRIVY_APP_SECRET.'],
+            ['POCKET_SWAP_QUOTE_SECRET', 'Arc and XStocks swaps', 'Required server-only signing secret of at least 32 characters; independent of Privy credentials.'],
+            ['POCKET_PIN_PEPPER', 'Pocket payments', 'Required stable PIN hashing secret. Preserve its existing value when rotating provider credentials.'],
           ]}
         />
       </Section>
