@@ -61,7 +61,7 @@ export function createMigrationFlowHandler(overrides:Partial<Dependencies>={}) {
     const executor=io.executor({userId:identity.userId,userToken,approvalToken:String(req.headers['x-pocket-payment-approval']??''),feeQuoteId:typeof feeQuoteId==='string'?feeQuoteId:''})
     const context={userId:identity.userId,revision:plan.revision,network:row!.network}
     if(action==='start'||action==='resume'||action==='recover') {
-     const result=await executor[action](context,plan)
+     const result=await executor[action as 'start'|'resume'|'recover'](context,plan)
      return res.json({ok:true,...result})
     }
     const result=await executor.reconcile(context,plan)

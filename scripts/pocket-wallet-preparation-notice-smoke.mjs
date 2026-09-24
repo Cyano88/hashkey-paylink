@@ -9,3 +9,4 @@ assert.equal(notice('hidden',{base:split.base}),'hidden')
 assert.equal(notice('resume',split),'resume')
 assert.equal(notice('available',split),'available')
 console.log('PASS split addresses expose preparation; matching and incomplete wallets do not; saved migration notices retain priority.')
+assert.equal(notice('hidden',{...same,ethereum:wallet('0xdef')}),'prepare');assert.equal(notice('hidden',{...same,ethereum:wallet('0xabc'),polygon:wallet('0xdef')}),'prepare');assert.equal(notice('hidden',{...same,ethereum:wallet('0xabc'),polygon:wallet('0xabc')}),'hidden');

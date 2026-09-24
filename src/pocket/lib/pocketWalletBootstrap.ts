@@ -27,7 +27,13 @@ export async function preparePocketWalletNetworks(session: CircleEvmEmailSession
   const sessions: Partial<Record<PocketNetwork, { userToken: string; wallet: ProviderWallet }>> = {}
   const accept = async (network: PocketNetwork, candidate: { userToken: string; wallet: ProviderWallet }) => {
     check()
-    const existing = before[network]?.wallet
+    // A repair may activate a matching wallet; accept only the fresh server link.
+    let existing = before[network]?.wallet
+    if(existing && !matches(network,existing,candidate.wallet) && (network==='ethereum'||network==='polygon')) {
+      const fresh=(await deps.read()).wallets[network]?.wallet
+      if(!fresh)throw new Error('Pocket could not confirm the updated '+network+' wallet.')
+      existing=fresh
+    }
     if (existing && !matches(network, existing, candidate.wallet)) throw new Error('The restored ' + network + ' wallet does not match your Pocket account.')
     if (!existing) await deps.link(network, candidate)
     check()

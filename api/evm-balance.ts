@@ -113,8 +113,8 @@ export function createEvmBalanceReader(read = fetchEvmUsdcBalanceUnits, now = Da
 }
 export const readEvmUsdcBalanceUnits = createEvmBalanceReader()
 // Execution planning requires an exact fresh read, without the display cache/fallback.
-export async function readFreshMigrationUsdcUnits(chain: 'base' | 'arbitrum' | 'arc', address: `0x${string}`) {
-  if (!['base', 'arbitrum', 'arc'].includes(chain) || !isAddress(address)) throw new Error('Invalid migration balance request.')
+export async function readFreshMigrationUsdcUnits(chain: EvmBalanceChain, address: `0x${string}`) {
+  if (!isEvmBalanceChain(chain) || !isAddress(address)) throw new Error('Invalid migration balance request.')
   return fetchEvmUsdcBalanceUnits(chain, address)
 }
 

@@ -7,13 +7,16 @@ import type { CircleEvmWalletRecord } from '../../src/lib/circleEvmWalletTopolog
 
 export const migrationNetworks = ['base', 'arbitrum', 'arc'] as const
 type Network = typeof migrationNetworks[number]
+export type MigrationNetwork = Network | "ethereum" | "polygon"
 type Wallet = { walletId: string; address: string }
 export type MigrationPlan = {
+  scope?: "additional" | "additional-recovery"
+  anchor?: {walletId:string;address:string}
   version: 1; userId: string; attemptId: string; revision: string; reviewedAt: number
   phase: 'review' | 'transferring' | 'confirmed'
-  expiredTransfers?: Array<{ network: Network; idempotencyKey: string; executionId: string; challengeId: string; requestFingerprint: string; units: string; expiredAt: number }>
-  rows: Array<{ network: Network; source: Wallet; target: Wallet; units: string }>
-  transfers: Partial<Record<Network, { idempotencyKey: string; units: string; state: 'reserved' | 'submitted' | 'confirmed'; requestFingerprint?: string; recoveryAfter?: number; executionId?: string; challengeId?: string; transactionHash?: string; submittedAt?: number; confirmedAt?: number }>>
+  expiredTransfers?: Array<{ network: MigrationNetwork; idempotencyKey: string; executionId: string; challengeId: string; requestFingerprint: string; units: string; expiredAt: number }>
+  rows: Array<{ network: MigrationNetwork; source: Wallet; target: Wallet; units: string }>
+  transfers: Partial<Record<MigrationNetwork, { idempotencyKey: string; units: string; state: 'reserved' | 'submitted' | 'confirmed'; requestFingerprint?: string; recoveryAfter?: number; executionId?: string; challengeId?: string; transactionHash?: string; submittedAt?: number; confirmedAt?: number }>>
 }
 
 // Only server-read links, Circle-owned candidates and exact USDC units belong here.
@@ -54,7 +57,7 @@ export const saveMigrationPlan = (plan: MigrationPlan) => mutateDurableJson<Migr
 
 // Internal primitive for the executor. Persist the reservation BEFORE contacting Circle.
 // The caller must separately verify fresh balances, fees, approval and pending activity.
-export function reserveMigrationTransfer(plan: MigrationPlan, userId: string, revision: string, network: Network, newId = randomUUID): MigrationPlan {
+export function reserveMigrationTransfer(plan: MigrationPlan, userId: string, revision: string, network: MigrationNetwork, newId = randomUUID): MigrationPlan {
   if (plan.userId !== userId || plan.revision !== revision) throw new Error('Migration review changed.')
   const row = plan.rows.find(row => row.network === network)
   if (!row || BigInt(row.units) <= 0n) throw new Error('No balance to migrate on this network.')
@@ -65,6 +68,6 @@ export function reserveMigrationTransfer(plan: MigrationPlan, userId: string, re
 export function existingMigrationReview(plan:MigrationPlan|undefined,userId:string,attemptId:string,wallets:CircleEvmWalletRecord[]) {
  if(!plan || !Object.keys(plan.transfers).length)return null
  const candidates=inspectEvmReplacement(wallets,attemptId)
- if(plan.userId!==userId || plan.attemptId!==attemptId.toLowerCase() || candidates.status!=='matching' || !plan.rows.every(row=>candidates.wallets[row.network].id===row.target.walletId && candidates.wallets[row.network].address.toLowerCase()===row.target.address.toLowerCase()))throw Error('Existing migration wallet review does not match.')
+ if(plan.userId!==userId || plan.attemptId!==attemptId.toLowerCase() || candidates.status!=='matching' || !plan.rows.every(row=>(row.network==='base'||row.network==='arbitrum'||row.network==='arc') && candidates.wallets[row.network].id===row.target.walletId && candidates.wallets[row.network].address.toLowerCase()===row.target.address.toLowerCase()))throw Error('Existing migration wallet review does not match.')
  return {phase:'review' as const,transferAvailable:false,rows:plan.rows.map(row=>({network:row.network,balance:Number(BigInt(row.units))/1_000_000,amountUnits:row.units,status:'ok' as const}))}
 }

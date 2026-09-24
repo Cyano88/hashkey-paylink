@@ -13,7 +13,7 @@ import { createMigrationProvider, migrationChallengeFingerprint } from './wallet
 import { verifyMigrationReceipt } from './wallet-migration-receipt.js'
 import type { MigrationPlan } from './wallet-migration-plan.js'
 type Row = MigrationPlan['rows'][number]
-export type MigrationFeeQuote = { id:string; userId:string; revision:string; network:Row['network']; units:string; sourceId:string; targetId:string; amount:string; asset:'USDC'|'ETH'; expiresAt:number }
+export type MigrationFeeQuote = { id:string; userId:string; revision:string; network:Row['network']; units:string; sourceId:string; targetId:string; amount:string; asset:'USDC'|'ETH'|'POL'; expiresAt:number }
 const quoteKey=(owner:string,network:Row['network'])=>'pocket:migration-fee:v1:'+owner+':'+network
 export function feeQuoteMatches(quote: MigrationFeeQuote | undefined, plan: MigrationPlan, row: Row, fee: {amount:string;asset:string}, now=Date.now()) {
   if (!quote || quote.userId!==plan.userId || quote.revision!==plan.revision || quote.network!==row.network || quote.units!==row.units || quote.sourceId!==row.source.walletId || quote.targetId!==row.target.walletId || !Number.isFinite(quote.expiresAt) || quote.expiresAt<=now || quote.asset!==fee.asset) return false
@@ -29,15 +29,16 @@ export async function prepareMigrationFeeQuote(plan: MigrationPlan, row: Row, us
 }
 // Called only after the HTTP layer verifies Privy. The supplied approval is a
 // one-use Pocket security token, not a client boolean or a Circle session token.
-export function createPocketMigrationExecutor(input:{ userId:string; userToken:string; approvalToken:string; feeQuoteId:string; legacyRecovery?:boolean }) {
+export function createPocketMigrationExecutor(input:{ userId:string; userToken:string; approvalToken:string; feeQuoteId:string; legacyRecovery?:boolean; additionalNetwork?: "ethereum"|"polygon" }) {
+  const planKey = (userId:string) => input.additionalNetwork ? (input.legacyRecovery?'pocket:additional-recovery:v1:':'pocket:additional-migration:v1:')+userId+':'+input.additionalNetwork : (input.legacyRecovery?'pocket:wallet-recovery-plan:v1:':'pocket:wallet-migration-plan:v1:')+userId
   const provider=createMigrationProvider(input.userToken)
   const executor=createMigrationExecutor({
     ...migrationExecutionStorage,
-    ...(input.legacyRecovery ? {mutate:(userId:string,fn:(current:MigrationPlan|undefined)=>MigrationPlan)=>mutateDurableJson<MigrationPlan>('pocket:wallet-recovery-plan:v1:'+userId,fn)} : {}),
+    ...((input.legacyRecovery || input.additionalNetwork) ? {mutate:(userId:string,fn:(current:MigrationPlan|undefined)=>MigrationPlan)=>mutateDurableJson<MigrationPlan>(planKey(userId),fn)} : {}),
     approve: context=>context.userId===input.userId ? consumePocketPaymentApproval(input.approvalToken,input.userId) : Promise.resolve(false),
     preflight: async(plan,row)=>{
       const checkedAt=Date.now()
-      if(plan.userId!==input.userId) throw new Error('Migration owner mismatch.')
+      if(plan.userId!==input.userId || (input.additionalNetwork && (plan.rows.length!==1 || row.network!==input.additionalNetwork || plan.scope!==(input.legacyRecovery?'additional-recovery':'additional')))) throw new Error('Migration owner or scope mismatch.')
       const link=await readCircleLink(circleLinkKey(input.userId,row.network,'payment'))
       const expectedLink=input.legacyRecovery?row.target:row.source
       if(!link || link.privyUserId!==input.userId || link.chain!==row.network || (link.purpose??'payment')!=='payment' || link.circleWalletId!==expectedLink.walletId || link.circleWalletAddress.toLowerCase()!==expectedLink.address.toLowerCase()) throw new Error('Current migration wallet changed.')
@@ -71,7 +72,7 @@ export function createPocketMigrationExecutor(input:{ userId:string; userToken:s
     verifyReceipt:(row,transfer)=>verifyMigrationReceipt(row,transfer,{resolveChallenge:id=>provider.resolveChallenge(row,id)}),
   })
   return {...executor,reconcile:async(context:Parameters<typeof executor.reconcile>[0],_snapshot:MigrationPlan)=>withMigrationOperation(input.userId,async()=>{
-    const current=await readDurableJson<MigrationPlan>((input.legacyRecovery?'pocket:wallet-recovery-plan:v1:':'pocket:wallet-migration-plan:v1:')+input.userId)
+    const current=await readDurableJson<MigrationPlan>(planKey(input.userId))
     if(!current || current.userId!==input.userId || context.userId!==input.userId || current.revision!==context.revision)throw new Error('Migration review changed.')
     if(!current.transfers[context.network])return {state:'review_required' as const}
     return executor.reconcile(context,current)
@@ -80,7 +81,7 @@ export function createPocketMigrationExecutor(input:{ userId:string; userToken:s
     return withMigrationOperation(input.userId,async()=>{
       await holdMigrationWallets(plan)
       try{return await executor.start(context,plan)}
-      finally{await releaseUnstartedMigration(plan)}
+      finally{await releaseUnstartedMigration(plan,planKey(input.userId))}
     })
   }}
 }

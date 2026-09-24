@@ -113,7 +113,7 @@ type CircleInit = {
   headers?: Record<string, string>
 }
 
-async function circleJson<T extends Record<string, unknown> = Record<string, unknown>>(path: string, init: CircleInit = {}) {
+async function circleJson<T extends Record<string, unknown> = Record<string, unknown>>(path: string, init: CircleInit = {}): Promise<T> {
   const { apiKey, migrationInternal, ...requestInit } = init
   if(!migrationInternal && init.method==='POST' && /^\/v1\/w3s\/user\/(transactions|sign)/.test(path) && init.body) {
     const request=JSON.parse(init.body)
@@ -141,7 +141,7 @@ async function circleJson<T extends Record<string, unknown> = Record<string, unk
     throw err
   }
   if (migrationInternal && (!init.method || init.method === 'GET')) {
-    return { ...body.data, migrationPageLink: res.headers.get('link') } as T
+    return { ...body.data, migrationPageLink: res.headers.get('link') } as unknown as T
   }
   return body.data as T
 }
@@ -204,6 +204,7 @@ function evmWallet(wallets: CircleUserWallet[], chain: keyof typeof EVM_CHAINS) 
 }
 
 export type CircleUserWallet = {
+  createDate?: string
   refId?: string
   id: string
   address: string
@@ -419,11 +420,9 @@ export default async function handler(req: Request, res: Response) {
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
           accountType: 'SCA',
-          blockchains: ['BASE', 'ARB'],
-          metadata: [
-            { name: 'Pocket Base', refId: 'pocket:canonical-evm:v1' },
-            { name: 'Pocket Arbitrum', refId: 'pocket:canonical-evm:v1' },
-          ],
+          scaConfiguration: { scaCore: 'circle_6900_singleowner_v4' },
+          blockchains: ['BASE', 'ARB', 'ARC', 'ETH', 'MATIC'],
+          metadata: ['Base','Arbitrum','Arc','Ethereum','Polygon'].map(name=>({name:'Pocket '+name,refId:'pocket:canonical-evm:v1'})),
         }),
       })
       return res.json({ ok: true, ...data })
@@ -494,30 +493,44 @@ export default async function handler(req: Request, res: Response) {
       res.setHeader('Cache-Control', 'no-store')
       const identity = await verifiedPrivyUser(req)
       const { userToken, chain } = params
-      if (!userToken || userToken.length > 8000 || (chain !== 'ethereum' && chain !== 'polygon')) return res.status(400).json({ ok: false, error: 'Invalid additional wallet setup.' })
-      const baseLink = await readCircleLink(circleLinkKey(identity.userId, 'base', 'payment'))
-      if (!baseLink) return res.status(409).json({ ok: false, error: 'Finish your Pocket wallet setup first.' })
-      const anchor = await readCircleUserWallet(userToken, 'base', baseLink.circleWalletId)
+      if (!userToken || userToken.length > 8000 || (chain !== 'ethereum' && chain !== 'polygon')) return res.status(400).json({ ok:false,error:'Invalid additional wallet setup.' })
+      const {additionalAlignmentPlan}=await import('./pocket/wallet-additional-alignment.js')
+      const {readAdditionalMigration,buildAdditionalMigration,saveAdditionalMigration,activateAdditionalMigration}=await import('./pocket/wallet-additional-migration.js')
+      const {compareAndSetCircleLink}=await import('./privy-circle-link.js')
+      const baseLink=await readCircleLink(circleLinkKey(identity.userId,'base','payment'))
+      if(!baseLink)throw Error('Finish your Pocket wallet setup first.')
+      const anchor=await readCircleUserWallet(userToken,'base',baseLink.circleWalletId)
       requireCircleGasStationEvmWallet({chain:'base',walletId:baseLink.circleWalletId,walletAddress:baseLink.circleWalletAddress,wallets:anchor?[anchor]:[]})
-      const existingLink = await readCircleLink(circleLinkKey(identity.userId, chain, 'payment'))
-      if (existingLink) {
-        const existing = await readCircleUserWallet(userToken, chain, existingLink.circleWalletId)
-        const wallet = requireCircleGasStationEvmWallet({chain,walletId:existingLink.circleWalletId,walletAddress:existingLink.circleWalletAddress,wallets:existing?[existing]:[]})
-        return res.json({ok:true,wallet})
+      const existingLink=await readCircleLink(circleLinkKey(identity.userId,chain,'payment'))
+      const source=existingLink?await readCircleUserWallet(userToken,chain,existingLink.circleWalletId):null
+      if(existingLink) {
+        requireCircleGasStationEvmWallet({chain,walletId:existingLink.circleWalletId,walletAddress:existingLink.circleWalletAddress,wallets:source?[source]:[]})
+        if(source!.address.toLowerCase()===anchor!.address.toLowerCase())return res.json({ok:true,wallet:source})
       }
-      const inventory = await listCircleUserWallets(userToken, chain)
-      if (inventory.length >= 50) return res.status(409).json({ok:false,error:'Wallet inventory needs review before adding this network.'})
-      const candidates = inventory.filter(wallet=>wallet.blockchain===EVM_CHAINS[chain].blockchain && !isEvmReplacementCandidate(wallet))
-      if (candidates.length > 1) return res.status(409).json({ok:false,error:'Multiple wallets exist on this network. Contact Pocket support before linking.'})
-      if (candidates.length === 1) {
-        const candidate=candidates[0]
-        const wallet=requireCircleGasStationEvmWallet({chain,walletId:candidate.id,walletAddress:candidate.address,wallets:candidates})
-        return res.json({ok:true,wallet})
+      const inventory=await listCircleUserWallets(userToken,chain)
+      const alignment=additionalAlignmentPlan(anchor as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord,inventory as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[],chain)
+      if(alignment.request) {
+        const data=await circleJson('/v1/w3s/user/wallets',{method:'POST',userToken,apiKey:circleApiKey({chain}),body:JSON.stringify(alignment.request)})
+        return res.json({ok:true,...data})
       }
-      const hash=crypto.createHash('sha256').update('pocket-additional-sca-v1|'+identity.userId+'|'+chain).digest('hex')
-      const idempotencyKey=hash.slice(0,8)+'-'+hash.slice(8,12)+'-4'+hash.slice(13,16)+'-a'+hash.slice(17,20)+'-'+hash.slice(20,32)
-      const data=await circleJson('/v1/w3s/user/wallets',{method:'POST',userToken,apiKey:circleApiKey({chain}),body:JSON.stringify({idempotencyKey,accountType:'SCA',blockchains:[EVM_CHAINS[chain].blockchain],metadata:[{name:'Pocket '+chain}]})})
-      return res.json({ok:true,...data})
+      const target=alignment.wallet!
+      if(!existingLink) {
+        if(inventory.some(w=>w.blockchain===target.blockchain && w.id!==target.id && !isEvmReplacementCandidate(w)))throw Error('Restore your existing wallet before changing this network.')
+        await compareAndSetCircleLink(circleLinkKey(identity.userId,chain),{privyUserId:identity.userId,email:identity.email,chain,purpose:'payment',circleWalletId:target.id,circleWalletAddress:target.address,circleBlockchain:target.blockchain,updatedAt:Date.now()})
+        return res.json({ok:true,wallet:target})
+      }
+      let plan=await readAdditionalMigration(identity.userId,chain)
+      if(plan && (plan.rows[0]?.source.walletId!==existingLink.circleWalletId || plan.rows[0]?.target.walletId!==target.id || plan.anchor?.walletId!==anchor!.id))throw Error('Your existing wallet update needs review.')
+      if(!plan || (plan.phase==='review' && !Object.keys(plan.transfers).length)) {
+        const {readFreshMigrationUsdcUnits}=await import('./evm-balance.js')
+        const units=await readFreshMigrationUsdcUnits(chain,existingLink.circleWalletAddress as Parameters<typeof readFreshMigrationUsdcUnits>[1])
+        plan=await saveAdditionalMigration(buildAdditionalMigration(identity.userId,chain,existingLink,target,anchor as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord,units))
+      }
+      if(plan.rows[0].units==='0') {
+        await activateAdditionalMigration(plan,userToken)
+        return res.json({ok:true,wallet:target})
+      }
+      return res.json({ok:true,wallet:source,alignmentRequired:true})
     }
 
     if (action === 'restoreActivatedEvmWallets') {
@@ -604,11 +617,9 @@ export default async function handler(req: Request, res: Response) {
         body: JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
           accountType: 'SCA',
-          blockchains: ['BASE', 'ARB'],
-          metadata: [
-            { name: 'Pocket Base', refId: 'pocket:canonical-evm:v1' },
-            { name: 'Pocket Arbitrum', refId: 'pocket:canonical-evm:v1' },
-          ],
+          scaConfiguration: { scaCore: 'circle_6900_singleowner_v4' },
+          blockchains: ['BASE', 'ARB', 'ARC', 'ETH', 'MATIC'],
+          metadata: ['Base','Arbitrum','Arc','Ethereum','Polygon'].map(name=>({name:'Pocket '+name,refId:'pocket:canonical-evm:v1'})),
         }),
       })
       return res.json({ ok: true, ...data })

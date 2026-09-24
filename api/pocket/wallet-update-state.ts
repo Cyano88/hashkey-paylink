@@ -48,7 +48,7 @@ export function pocketWalletUpdateNotice(input: {
   // after USDC reaches zero, or while a balance provider is unavailable.
   if(plan?.version===1 && plan.userId===input.userId && ['review','transferring'].includes(plan.phase) && Number.isFinite(plan.reviewedAt) && plan.reviewedAt>0 && plan.rows.length===3 && new Set(plan.rows.map(row=>row.network)).size===3) {
     const currentSources=plan.rows.every(row=>{
-      if(!['base','arbitrum','arc'].includes(row.network))return false
+      if(row.network!=='base'&&row.network!=='arbitrum'&&row.network!=='arc')return false
       const link=links[row.network]
       return !!link && link.privyUserId===input.userId && link.chain===row.network && (link.purpose??'payment')==='payment' && link.circleWalletId===row.source.walletId && link.circleWalletAddress.toLowerCase()===row.source.address.toLowerCase()
     })

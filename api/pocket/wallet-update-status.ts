@@ -19,7 +19,13 @@ export default async function handler(req: Request, res: Response) {
     const identity=await verifiedPrivyUser(req)
     const record=await readPocketWalletUpdate(identity.userId)
     const links=record?.phase === 'completed' ? await Promise.all((['base','arbitrum','arc'] as const).map(network=>readCircleLink(circleLinkKey(identity.userId,network,'payment')))) : []
-    return res.json({ok:true,phase:migrationActivationComplete(identity.userId,record,links)?'completed':'not-completed'})
+    const {additionalNetworks}=await import('./wallet-additional-alignment.js')
+    const base=await readCircleLink(circleLinkKey(identity.userId,'base'))
+    const additional=await Promise.all(additionalNetworks.map(async network=>({network,link:await readCircleLink(circleLinkKey(identity.userId,network))})))
+    const peers=await Promise.all((['arbitrum','arc'] as const).map(n=>readCircleLink(circleLinkKey(identity.userId,n))))
+    const coreReady=base&&peers.every(link=>link&&link.circleWalletAddress.toLowerCase()===base.circleWalletAddress.toLowerCase())
+    const additionalUpdates=coreReady?additional.filter(({link})=>link&&link.circleWalletAddress.toLowerCase()!==base.circleWalletAddress.toLowerCase()).map(({network})=>network):[]
+    return res.json({ok:true,phase:migrationActivationComplete(identity.userId,record,links)?'completed':'not-completed',additionalUpdates})
   } catch(error) {
     const status=(error as {status?:number}).status
     return res.status(status===401||status===403?status:503).json({ok:false,error:'Wallet migration status is temporarily unavailable.'})

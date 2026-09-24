@@ -16,5 +16,13 @@ export function verifiedLegacyPaymentWallets(userId: string, record: PocketWalle
 }
 export async function readLegacyPaymentWallets(userId: string) {
   const [record, archive] = await Promise.all([readPocketWalletUpdate(userId), readDurableJson<Archive>('pocket:wallet-migration-legacy:v1:' + userId)])
-  return verifiedLegacyPaymentWallets(userId, record, archive)
+  const original=verifiedLegacyPaymentWallets(userId, record, archive)
+  const {additionalNetworks,additionalArchiveKey,additionalPlanKey}=await import('./wallet-additional-alignment.js')
+  const additional=await Promise.all(additionalNetworks.map(async network=>{
+    const [saved,plan]=await Promise.all([readDurableJson<{version:number;userId:string;network:string;revision:string;source:{walletId:string;address:string};target:{walletId:string;address:string}}>(additionalArchiveKey(userId,network)),readDurableJson<import('./wallet-migration-plan.js').MigrationPlan>(additionalPlanKey(userId,network))])
+    const row=plan?.rows[0]
+    if(!saved||saved.version!==1||saved.userId!==userId||saved.network!==network||!plan||plan.userId!==userId||plan.scope!=='additional'||plan.phase!=='confirmed'||plan.revision!==saved.revision||plan.rows.length!==1||row?.network!==network||saved.source.walletId!==row.source.walletId||!isAddress(saved.source.address)||saved.source.address.toLowerCase()!==row.source.address.toLowerCase()||saved.target.walletId!==row.target.walletId||saved.target.address.toLowerCase()!==row.target.address.toLowerCase())return null
+    return {network,walletId:saved.source.walletId,walletAddress:saved.source.address}
+  }))
+  return [...original,...additional.filter((w):w is NonNullable<typeof w>=>w!==null)]
 }

@@ -11,3 +11,8 @@ const missing=fixture();let reads=0;const original=missing.deps.read;missing.dep
 let active=true;const switched=fixture();const link=switched.deps.link;switched.deps.link=async(n,s)=>{await link(n,s);active=false};await assert.rejects(()=>preparePocketWalletNetworks(base,switched.deps,()=>active),/cancelled/);assert.deepEqual(switched.events,['link:base']);assert.equal(switched.saved,0);
 const partial=fixture({base:{wallet:wallet('base')}});await preparePocketWalletNetworks({...base,productionEvmTopology:undefined},partial.deps);assert.ok(partial.events.includes('evm:arbitrum'));
 console.log('PASS all six wallets share one session; linked wallets preserved; partial setup retries; owner mismatch, account switch and incomplete final links cannot mark setup ready.');
+
+const oldEth={...wallet('ethereum'),id:'old-eth',address:'0x'+'2'.repeat(40)};
+const repaired=fixture({...f.links,ethereum:{wallet:oldEth}});const repair=repaired.deps.additional;repaired.deps.additional=async(s,n)=>{const value=await repair(s,n);if(n==='ethereum')repaired.links.ethereum={wallet:value.wallet};return value};await preparePocketWalletNetworks(base,repaired.deps);assert.equal(repaired.saved,1);
+const unverified=fixture({...f.links,ethereum:{wallet:oldEth}});await assert.rejects(()=>preparePocketWalletNetworks(base,unverified.deps),/does not match/);assert.equal(unverified.saved,0);
+console.log('PASS activated additional wallet accepted only when the server link matches; unverified switches rejected.');

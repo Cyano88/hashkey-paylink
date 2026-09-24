@@ -322,7 +322,7 @@ async function getCircleDeviceId(sdk: W3SSdk, appId: string) {
   if (cached) return cached
 
   let deviceId = ''
-  let restoreDeviceFrame = () => undefined
+  let restoreDeviceFrame: () => void = () => undefined
   try {
     const pendingDeviceId = sdk.getDeviceId()
     restoreDeviceFrame = keepCircleDeviceFrameRunnable()
@@ -784,7 +784,7 @@ export async function resumeCircleProductionEvmWallet(session: CircleEvmEmailSes
 export async function resumeCircleAdditionalEvmWallet(session: CircleEvmEmailSession, chain: 'ethereum' | 'polygon', privyAccessToken: string): Promise<CircleEvmEmailSession> {
   const read = () => circleWalletApi<{wallet?:CircleEvmWallet;challengeId?:string}>({action:'prepareAdditionalPocketWallet',userToken:session.userToken,chain},{privyAccessToken})
   let result=await read()
-  if (!result.wallet) {
+  for (let step=0; !result.wallet && step<3; step++) {
     if (!result.challengeId) throw new Error('Circle did not finish '+CHAIN_CONFIG[chain].label+' wallet setup. Try again.')
     await executeChallenge(authenticatedSdk(session),result.challengeId)
     result=await read()

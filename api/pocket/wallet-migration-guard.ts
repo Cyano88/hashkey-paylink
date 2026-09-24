@@ -32,9 +32,9 @@ export async function withMigrationOperation<T>(userId:string,run:()=>Promise<T>
  })
 }
 // Only called while the owner operation lock is held and no reservation exists.
-export async function releaseUnstartedMigration(plan:MigrationPlan) {
+export async function releaseUnstartedMigration(plan:MigrationPlan, planKey = 'pocket:wallet-migration-plan:v1:'+plan.userId) {
  return withDurablePostgresTransaction(async client=>{
-  const current=await client.query('select value from render_durable_kv where store_key=$1',['pocket:wallet-migration-plan:v1:'+plan.userId])
+  const current=await client.query('select value from render_durable_kv where store_key=$1',[planKey])
   if(!current.rows[0]?.value || current.rows[0].value.revision!==plan.revision || Object.keys(current.rows[0].value.transfers??{}).length)return
   for(const row of [...plan.rows].sort((a,b)=>a.source.walletId.localeCompare(b.source.walletId))) {
    await client.query('select pg_advisory_xact_lock(hashtext($1))',[key(row.source.walletId)])

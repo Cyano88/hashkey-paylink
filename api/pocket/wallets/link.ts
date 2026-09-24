@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import {
   CircleLinkVersionConflictError,
   circleLinkKey,
+  readCircleLink,
   compareAndDeleteCircleLink,
   compareAndSetCircleLink,
   verifiedPrivyUser,
@@ -24,7 +25,9 @@ type PocketWalletLinkHandlerDependencies = {
     userToken: string
     chain: CircleLinkRecord['chain']
     wallet: CircleLinkWallet
+    activeWallet?: CircleLinkWallet
   }): Promise<void>
+  readLink?: typeof readCircleLink
   setLink(key: string, candidate: CircleLinkRecord, expectedUpdatedAt?: number): Promise<CircleLinkMutationResult>
   deleteLink(key: string, expectedUpdatedAt?: number): Promise<CircleLinkMutationResult>
   requestId?: () => string
@@ -102,10 +105,12 @@ export function createPocketWalletLinkHandler(dependencies: PocketWalletLinkHand
           address: req.body.wallet.address.trim(),
           blockchain: req.body.wallet.blockchain.trim().toUpperCase(),
         }
+        const active=await dependencies.readLink?.(key)
         await verifyOwnedWallet(dependencies, {
           userToken: req.body.circleUserToken,
           chain: req.body.network,
           wallet,
+          ...(active&&active.privyUserId===identity.userId&&active.chain===req.body.network&&(active.purpose??'payment')==='payment'?{activeWallet:{id:active.circleWalletId,address:active.circleWalletAddress,blockchain:active.circleBlockchain}}:{}),
         })
         result = await dependencies.setLink(key, {
           privyUserId: identity.userId,
@@ -142,6 +147,7 @@ export function createPocketWalletLinkHandler(dependencies: PocketWalletLinkHand
 
 export default createPocketWalletLinkHandler({
   verifyUser: verifiedPrivyUser,
+  readLink: readCircleLink,
   verifyWallet: verifyCircleLinkWallet,
   setLink: compareAndSetCircleLink,
   deleteLink: compareAndDeleteCircleLink,

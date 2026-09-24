@@ -7,7 +7,7 @@ import { migrationNetworks, type MigrationPlan } from './wallet-migration-plan.j
 import { readLegacyPaymentWallets } from './wallet-migration-history.js'
 type Network = MigrationPlan['rows'][number]['network']
 export function buildLegacyRecoveryPlan(input:{userId:string;network:Network;units:bigint;legacy:Awaited<ReturnType<typeof readLegacyPaymentWallets>>;links:Record<Network,CircleLinkRecord|null>;attemptId?:string;now?:number}):MigrationPlan {
-  if(!migrationNetworks.includes(input.network)||input.units<=0n||input.units>=2n**256n) throw new Error('No valid USDC balance to recover.')
+  if(!migrationNetworks.some(network=>network===input.network)||input.units<=0n||input.units>=2n**256n) throw new Error('No valid USDC balance to recover.')
   const rows=migrationNetworks.map(network=>{
     const sources=input.legacy.filter(row=>row.network===network)
     const source=sources[0], target=input.links[network]

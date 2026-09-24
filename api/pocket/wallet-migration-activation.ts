@@ -9,7 +9,7 @@ export async function activateMigration(plan: MigrationPlan, io: {
   transaction?: typeof withDurablePostgresTransaction
   now?: () => number
 }) {
-  if (!migrationTransfersConfirmed(plan)) throw new Error('Migration transfers are not confirmed.')
+  if (plan.scope || !migrationTransfersConfirmed(plan)) throw new Error('Migration transfers are not confirmed.')
   const now = io.now ?? Date.now
   const proof = await io.verify(plan)
   const age = now() - proof.checkedAt
@@ -38,6 +38,7 @@ export async function activateMigration(plan: MigrationPlan, io: {
     // Preserve legacy identifiers in the same transaction, before replacing links.
     await client.query('insert into render_durable_kv (store_key,value) values ($1,$2::jsonb)', ['pocket:wallet-migration-legacy:v1:' + plan.userId, JSON.stringify({ version: 1, userId: plan.userId, revision: current.revision, links: links.rows, archivedAt: now() })])
     for (const row of current.rows) {
+      if(row.network!=='base'&&row.network!=='arbitrum'&&row.network!=='arc')throw Error('Original migration network mismatch.')
       const saved = await client.query('update privy_circle_links set circle_wallet_id=$2, circle_wallet_address=$3, circle_blockchain=$4, updated_at=now() where link_key=$1 and circle_wallet_id=$5', [circleLinkKey(plan.userId,row.network,'payment'), row.target.walletId, row.target.address, { base:'BASE', arbitrum:'ARB', arc:'ARC' }[row.network], row.source.walletId])
       if (saved.rowCount !== 1) throw new Error('Wallet activation conflict.')
     }

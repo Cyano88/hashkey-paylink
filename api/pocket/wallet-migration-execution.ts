@@ -174,7 +174,9 @@ export function createMigrationExecutor(io: MigrationExecutionDependencies) {
 // Activation additionally requires fresh zero balances/asset checks and one database
 // transaction for all links plus completion. This predicate alone never activates.
 export function migrationTransfersConfirmed(plan: MigrationPlan) {
-  return plan.rows.length === 3 && new Set(plan.rows.map(row => row.network)).size === 3 && plan.rows.every(row => {
+  const additional = plan.scope === 'additional' || plan.scope === 'additional-recovery'
+  const shape = additional ? plan.rows.length === 1 && ['ethereum','polygon'].includes(plan.rows[0].network) : plan.rows.length === 3 && ['base','arbitrum','arc'].every(n=>plan.rows.some(r=>r.network===n))
+  return shape && new Set(plan.rows.map(row => row.network)).size === plan.rows.length && plan.rows.every(row => {
     if (row.units === '0') return true
     const transfer = plan.transfers[row.network]
     return Boolean(transfer && transfer.units === row.units && transfer.state === 'confirmed' && transfer.executionId && transfer.challengeId && /^0x[0-9a-f]{64}$/i.test(transfer.transactionHash ?? '') && Number.isFinite(transfer.confirmedAt) && transfer.confirmedAt! > 0)

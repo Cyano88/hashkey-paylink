@@ -69,7 +69,7 @@ type LinkHandlerDependencies = {
   read(key: string): Promise<CircleLinkRecord | null>
   write(key: string, record: CircleLinkRecord): Promise<void>
   remove(key: string): Promise<void>
-  verifyWallet(input: { userToken: string; chain: CircleLinkChain; wallet: CircleLinkWallet }): Promise<void>
+  verifyWallet(input: { userToken: string; chain: CircleLinkChain; wallet: CircleLinkWallet; activeWallet?: CircleLinkWallet }): Promise<void>
 }
 
 export type CircleLinkMutationResult = {
@@ -178,6 +178,7 @@ export async function verifyCircleLinkWallet(input: {
   userToken: string
   chain: CircleLinkChain
   wallet: CircleLinkWallet
+  activeWallet?: CircleLinkWallet
   listWallets?: (userToken: string, chain: string) => Promise<CircleUserWallet[]>
   attempts?: number
   wait?: (milliseconds: number) => Promise<void>
@@ -188,7 +189,7 @@ export async function verifyCircleLinkWallet(input: {
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const wallets = await listWallets(input.userToken, input.chain)
-    if (wallets.some(wallet => wallet.id === input.wallet.id && isEvmReplacementCandidate(wallet))) {
+    if (wallets.some(wallet => wallet.id === input.wallet.id && isEvmReplacementCandidate(wallet)) && !(input.activeWallet?.id===input.wallet.id && input.activeWallet.blockchain===input.wallet.blockchain && input.activeWallet.address.toLowerCase()===input.wallet.address.toLowerCase())) {
       throw Object.assign(new Error('Replacement wallets cannot be linked before balance migration is verified.'), { status: 409 })
     }
     if (input.chain !== 'solana' && blockchainMatchesChain(input.chain, input.wallet.blockchain)) {
@@ -554,7 +555,8 @@ export function createPrivyCircleLinkHandler(dependencies: LinkHandlerDependenci
           if (!userToken || userToken.length > 8_000) {
             return res.status(400).json({ ok: false, error: 'A valid Circle wallet session is required to link this wallet.' })
           }
-          await dependencies.verifyWallet({ userToken, chain, wallet })
+          const active = await dependencies.read(key)
+          await dependencies.verifyWallet({ userToken, chain, wallet, ...(active && active.privyUserId===userId && active.chain===chain && (active.purpose??'payment')==='payment' ? {activeWallet:{id:active.circleWalletId,address:active.circleWalletAddress,blockchain:active.circleBlockchain}} : {}) })
         }
 
         const record: CircleLinkRecord = {

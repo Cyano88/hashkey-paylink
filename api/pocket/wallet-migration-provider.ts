@@ -5,8 +5,8 @@ import type { MigrationPlan } from './wallet-migration-plan.js'
 type Row = MigrationPlan['rows'][number]
 type Network = Row['network']
 type Json = (network: Network, path: string, body?: Record<string, unknown>) => Promise<Record<string, any>>
-const tokens = { base:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', arbitrum:'0xaf88d065e77c8cC2239327C5EDb3A432268e5831', arc:'0x3600000000000000000000000000000000000000' } as const
-const chains = { base:'BASE', arbitrum:'ARB', arc:'ARC' }
+const tokens = { base:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', arbitrum:'0xaf88d065e77c8cC2239327C5EDb3A432268e5831', arc:'0x3600000000000000000000000000000000000000', ethereum:'0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', polygon:'0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' } as const
+const chains = { base:'BASE', arbitrum:'ARB', arc:'ARC', ethereum:'ETH', polygon:'MATIC' }
 const transferAbi = parseAbi(['function transfer(address to, uint256 amount) returns (bool)'])
 const batchAbi = parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)'])
 // Follow provider collection cursors, never token IDs, preserving wallet scope.
@@ -99,7 +99,7 @@ export function createMigrationProvider(userToken: string, request?: Json) {
       const amount=data.high?.networkFee
       if(typeof amount!=='string'||!/^\d+(?:\.\d{1,18})?$/.test(amount)) throw new Error('Migration network fee is unavailable.')
       parseUnits(amount,18)
-      return {amount,asset:row.network==='arc'?'USDC' as const:'ETH' as const,feeLevel:'HIGH' as const}
+      return {amount,asset:row.network==='arc'?'USDC' as const:row.network==='polygon'?'POL' as const:'ETH' as const,feeLevel:'HIGH' as const}
     },
     async createChallenge(row: Row,idempotencyKey: string) {
       if(!uuid(idempotencyKey)) throw new Error('Invalid migration idempotency key.')

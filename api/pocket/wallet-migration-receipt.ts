@@ -4,7 +4,7 @@ import type { MigrationPlan } from './wallet-migration-plan.js'
 type Row = MigrationPlan['rows'][number]
 type Transfer = NonNullable<MigrationPlan['transfers'][Row['network']]>
 const topic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
-const emitters = { base: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', arbitrum: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', arc: '0xfffffffffffffffffffffffffffffffffffffffe' }
+const emitters = { base: '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913', arbitrum: '0xaf88d065e77c8cc2239327c5edb3a432268e5831', arc: '0xfffffffffffffffffffffffffffffffffffffffe', ethereum:'0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', polygon:'0x3c499c542cef5e3811e1192ce70d8cc03d5c3359' }
 type Receipt = { status?: string; transactionHash?: string; blockNumber?: string; blockHash?: string; logs?: Array<{ address?: string; topics?: string[]; data?: string; removed?: boolean }> }
 type Block = { number?: string; hash?: string; timestamp?: string }
 const quantity = (value: unknown) => typeof value === 'string' && /^0x[0-9a-f]+$/i.test(value)

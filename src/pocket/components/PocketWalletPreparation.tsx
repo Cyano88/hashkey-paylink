@@ -1,3 +1,4 @@
+import PocketAdditionalWalletUpdate from './PocketAdditionalWalletUpdate'
 import PocketPreviousWallets from './PocketPreviousWallets'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -12,6 +13,7 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
 }) {
   const navigate = useNavigate()
   const [previous,setPrevious]=useState(false)
+  const [additional,setAdditional]=useState<Array<'ethereum'|'polygon'>>([])
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<'checking'|'ready'|'failed'>('checking')
   const [stage, setStage] = useState<'prepare'|'verified'|'review'|'completed'>('prepare')
@@ -37,6 +39,7 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
       const result=await response.json()
       if(!response.ok || result.ok!==true)throw Error('Wallet update status is unavailable. Try again.')
       if(!active.current || signal?.aborted)return
+      if(Array.isArray(result.additionalUpdates))setAdditional(result.additionalUpdates.filter((n:unknown)=>n==='ethereum'||n==='polygon'))
       if(result.phase==='completed'){completed.current=true;setNotice('');setStage('completed')}
       setStatus('ready')
     } catch(reason) {
@@ -82,6 +85,7 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
   const executionReady=stage==='review' && !!review && review.rows.every(row=>row.status==='ok') && !!operation.current
   const cta='mt-5 min-h-12 w-full rounded-full bg-gray-950 px-4 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'
   if(status!=='ready')return <section className='pt-6'><p role={status==='failed'?'alert':'status'} className='text-sm leading-6'>{status==='checking'?'Checking wallet update...':error}</p>{status==='failed'&&<button type='button' className={cta} onClick={()=>void checkStatus()}>Check again</button>}</section>
+  if(additional.length && !previous)return <PocketAdditionalWalletUpdate email={email} getAccessToken={getAccessToken} networks={additional} onComplete={()=>{setAdditional([]);completed.current=true;goHome()}}/>
   if(previous)return <section className='pt-6'><PocketPreviousWallets key={email} email={email} getAccessToken={getAccessToken} onBack={goHome}/></section>
   return <section className='w-full space-y-4 pt-6'>
     <article className='w-full rounded-[26px] bg-white p-5 shadow-sm dark:bg-[#121212] dark:shadow-none'>

@@ -3,7 +3,7 @@ import { approveCircleMigrationChallenge,type CircleEvmEmailSession } from '../.
 import { pocketMigrationRequest } from '../lib/pocketMigrationClient'
 import { requestPocketPaymentApproval } from '../lib/pocketPaymentApproval'
 import type { PocketMigrationFee,PocketMigrationSnapshot } from '../lib/pocketMigrationFlow'
-export default function PocketMigrationExecution({session,getAccessToken,onComplete,recovery=false}:{session:CircleEvmEmailSession;recovery?:boolean;getAccessToken():Promise<string|null>;onComplete():void}) {
+export default function PocketMigrationExecution({session,getAccessToken,onComplete,recovery=false,additionalNetwork}:{session:CircleEvmEmailSession;recovery?:boolean;additionalNetwork?:"ethereum"|"polygon";getAccessToken():Promise<string|null>;onComplete():void}) {
  const [snapshot,setSnapshot]=useState<PocketMigrationSnapshot|null>(null)
  const [resume,setResume]=useState<{action:'resume'|'recover';network:string;amount:string;source:string;target:string}|null>(null)
  const [quote,setQuote]=useState<PocketMigrationFee|null>(null)
@@ -15,7 +15,7 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
   const token=await getAccessToken()
   if(signal?.aborted || !active.current)throw new Error('Migration screen was closed.')
   if(!token)throw new Error('Sign in again to continue your wallet update.')
-  return pocketMigrationRequest<T>(token,body,{payment,signal,recovery})
+  return pocketMigrationRequest<T>(token,body,{payment,signal,recovery,additionalNetwork})
  }
  function accept(next:PocketMigrationSnapshot) {
   if(!active.current)return
@@ -117,7 +117,7 @@ export default function PocketMigrationExecution({session,getAccessToken,onCompl
  return <div className='mt-5'>
   <p className='mb-4 text-xs leading-5 text-gray-500'>Only USDC moves. Other assets stay in your previous wallets.</p>
   {resume?<><p className='text-base font-bold'>Continue your {resume.amount} USDC transfer on {resume.network}</p><dl className='mt-4 space-y-3 text-sm'><div><dt>From your previous wallet</dt><dd className='mt-1 break-all text-xs'>{resume.source}</dd></div><div><dt>To your updated wallet</dt><dd className='mt-1 break-all text-xs'>{resume.target}</dd></div></dl><p className='mt-3 text-xs text-gray-500'>{resume.action==='recover'?'Recover the saved request before continuing approval.':'Continue the saved transfer approval.'}</p></>:quote?<>
-   <p className='text-base font-bold'>Move {quote.transferAmount} USDC on {quote.network==='arbitrum'?'Arbitrum':quote.network==='base'?'Base':'Arc'}</p>
+   <p className='text-base font-bold'>Move {quote.transferAmount} USDC on {{base:'Base',arbitrum:'Arbitrum',arc:'Arc',ethereum:'Ethereum',polygon:'Polygon'}[quote.network]}</p>
    <dl className='mt-4 space-y-3 text-sm'><div><dt className='text-gray-500'>From your previous wallet</dt><dd className='mt-1 break-all text-xs'>{quote.source.address}</dd></div><div><dt className='text-gray-500'>To your updated wallet</dt><dd className='mt-1 break-all text-xs'>{quote.target.address}</dd></div><div className='flex justify-between gap-3'><dt>Estimated network fee</dt><dd>{quote.amount} {quote.asset}</dd></div></dl>
    <p className='mt-3 text-xs leading-5 text-gray-500'>{expired?'This fee estimate expired. Refresh before continuing.':'Gas sponsorship applies only if available for this transaction.'}</p>
   </>:snapshot?<dl className='space-y-3'>{snapshot.rows.map(row=><div key={row.network} className='flex justify-between gap-3 text-sm'><dt className='capitalize'>{row.network}</dt><dd className='text-right'>{row.amount} USDC{row.state==='pending'&&<span className='block text-xs text-gray-500'>Waiting for confirmation</span>}{row.state==='confirmed'&&<span className='block text-xs text-gray-500'>Transfer confirmed</span>}</dd></div>)}</dl>:<p className='text-sm text-gray-500'>Checking migration status...</p>}
