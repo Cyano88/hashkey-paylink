@@ -1,3 +1,4 @@
+import { isAgentCheckoutNetwork } from '../src/lib/developerNetworkPolicy.js'
 import { mutateWithDeveloperActivity } from './developer-activity-store.js'
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto'
 import type { Request, Response } from 'express'
@@ -1020,6 +1021,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
 
     if (!KINDS.has(kind)) return res.status(400).json({ ok: false, error: 'Private beta supports usdc_request and service checkouts.' })
     if (checkoutMode !== 'human' && checkoutMode !== 'agentic') return res.status(400).json({ ok: false, error: 'checkoutMode must be human or agentic.' })
+    if (checkoutMode === 'agentic' && !isAgentCheckoutNetwork(network)) return res.status(400).json({ ok: false, error: 'Agent checkout supports Base and Arc only.' })
     if (checkoutMode === 'agentic' && agenticType !== 'creator_earnings' && agenticType !== 'agent_treasury') return res.status(400).json({ ok: false, error: 'Agentic checkout requires agenticType creator_earnings or agent_treasury.' })
     if (checkoutMode === 'human' && requestedAgenticType) return res.status(400).json({ ok: false, error: 'agenticType is only valid for agentic checkout.' })
     if (checkoutMode === 'agentic' && (kind !== 'service' || flexible || isNairaProject)) return res.status(400).json({ ok: false, error: 'Agentic checkout requires a fixed USDC service payment.' })

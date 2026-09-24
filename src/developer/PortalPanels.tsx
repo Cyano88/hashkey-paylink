@@ -29,7 +29,7 @@ export function OverviewPanel({project,onNavigate}:{project:ProjectSummary;onNav
 }
 export function ProductsPanel({project,onConfigure}:{project:ProjectSummary;onConfigure:()=>void}) {
   const products=[
-    {id:'hosted_checkout',name:'Checkout',copy:project.checkoutMode==='agentic'?'Accept service payments from compatible agent wallets.':'Give customers a hosted payment page.',rule:project.checkoutMode==='agentic'?'Base and Arc network update pending. Review your saved project routes before sending payments.':'Live routes follow your saved project configuration.'},
+    {id:'hosted_checkout',name:'Checkout',copy:project.checkoutMode==='agentic'?'Accept service payments from compatible agent wallets.':'Give customers a hosted payment page.',rule:project.checkoutMode==='agentic'?'Base and Arc only. Existing payment history remains available.':'Live routes follow your saved project configuration.'},
     {id:'arc_agreements',name:'Agreements',copy:'Create fixed, progressive or milestone payment agreements.',rule:'Arc only. Draft creation and project approval do not enable funding; reviewed deployment is still required.'},
     {id:'polymarket_funding',name:'Polymarket Funding',copy:'Fund a Polymarket wallet through the supported bridge.',rule:'Live only. Existing Base and Arbitrum routes; no sandbox or Arc bridge. Minimum amount and eligibility are checked by the funding API.'},
   ].filter(p=>project.checkoutMode==='human'||p.id!=='polymarket_funding')

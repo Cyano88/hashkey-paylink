@@ -1,3 +1,4 @@
+import { isAgentCheckoutNetwork, developerCheckoutNetworks } from '../src/lib/developerNetworkPolicy.js'
 import { listDeveloperActivity } from './developer-activity-store.js'
 import { cliRequestScope, resolveCliGrant } from './developer-cli-grants.js'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
@@ -789,6 +790,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (currentCheckoutMode === 'agentic' && settlementMode !== 'usdc') return res.status(400).json({ ok: false, error: 'Agentic x402 projects support USDC settlement only.' })
         if (currentCheckoutMode === 'agentic' && capabilities.includes('polymarket_funding')) return res.status(400).json({ ok: false, error: 'Agentic x402 projects cannot enable human funding products.' })
         if (settlementMode !== 'usdc' && settlementMode !== 'ngn') return res.status(400).json({ ok: false, error: 'Choose USDC or Naira settlement.' })
+        if (currentCheckoutMode === 'agentic' && networks.some(network => !isAgentCheckoutNetwork(network))) return res.status(400).json({ ok: false, error: 'Agent checkout supports Base and Arc only. Remove unsupported networks in Settings.' })
         if (!networks.length || !networks.includes(defaultNetwork)) return res.status(400).json({ ok: false, error: 'Choose a valid default payment network.' })
         if (settlementMode === 'usdc' && networks.some(network => !recipients[network])) return res.status(400).json({ ok: false, error: 'Add a valid receiving address for every selected network.' })
         if (!allowedOrigins.length) return res.status(400).json({ ok: false, error: 'Add at least one allowed return origin.' })
@@ -843,7 +845,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.status(409).json({ ok: false, error: 'Complete checkout routing before creating a key.' })
         }
         const environment: DeveloperEnvironment = clean(req.body?.environment, 10).toLowerCase() === 'test' ? 'test' : 'live'
-        const environmentNetworks: DeveloperNetwork[] = environment === 'test' ? [] : ['base', 'arbitrum', 'arc']
+        if (projectCheckoutMode(currentProject) === 'agentic' && currentProject.networks.some(network => !isAgentCheckoutNetwork(network))) return res.status(409).json({ ok: false, error: 'Agent checkout supports Base and Arc only. Update project networks before creating a key.' })
+        const environmentNetworks = environment === 'test' ? [] : developerCheckoutNetworks(projectCheckoutMode(currentProject))
         if (currentProject.settlementMode === 'ngn' && environment === 'test') {
           return res.status(409).json({ ok: false, error: 'Naira settlement requires a live key.' })
         }
@@ -915,7 +918,7 @@ function policyForDeveloperProject(
   if (secret.length < 32 || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
   const allowedNetworks = environment === 'test'
     ? new Set<DeveloperNetwork>()
-    : new Set<DeveloperNetwork>(['base', 'arbitrum', 'arc'])
+    : new Set<DeveloperNetwork>(developerCheckoutNetworks(projectCheckoutMode(project)))
   if (project.settlementMode === 'ngn' && environment !== 'live') return null
   const paymentOptions = project.settlementMode === 'ngn'
     ? (project.refundAddress ? [{ network: 'base' as const, recipient: project.refundAddress }] : [])

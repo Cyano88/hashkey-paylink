@@ -1,3 +1,4 @@
+import { isAgentCheckoutNetwork } from '../lib/developerNetworkPolicy'
 import PaymentActivityPanel from '../developer/PaymentActivityPanel'
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -395,6 +396,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork) ? draft.defaultNetwork : networks[0] })
   }
   return <div>
+    {draft.checkoutMode === 'agentic' && draft.networks.some(network => !isAgentCheckoutNetwork(network)) && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Agent checkout now supports Base and Arc only. Remove unsupported routes, then save your settings. <button type="button" className="ml-2 underline" onClick={() => { const networks = draft.networks.filter(isAgentCheckoutNetwork); if (!networks.length) networks.push('base'); setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork as 'base' | 'arc') ? draft.defaultNetwork : networks[0] }) }}>Remove unsupported networks</button></div>}
     <PanelHeader eyebrow="Project" title="Settings" copy="Configure the products, receiving accounts and return URLs for this project." status={draft.operationalStatus === 'suspended' ? 'Suspended' : draft.settlementStatus === 'ready' ? 'Configured' : 'Setup required'} />
     <div className="mt-7 grid gap-4 sm:grid-cols-2">
       <Field label="Platform name"><input className={fieldClass()} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Field>
@@ -442,7 +444,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     <div className="mt-7">
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Payment networks</p>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {NETWORKS.map(network => {
+        {NETWORKS.filter(network => draft.checkoutMode !== 'agentic' || isAgentCheckoutNetwork(network.key)).map(network => {
           const active = network.key !== 'solana' && draft.networks.includes(network.key)
           const disabled = network.disabled || (draft.settlementMode === 'ngn' && network.key !== 'base')
           return <button key={network.key} type="button" disabled={disabled} onClick={() => network.key !== 'solana' && toggleNetwork(network.key)} className={cn('flex min-h-12 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition', active ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/10 dark:bg-blue-400/15 dark:text-blue-200' : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:bg-blue-50/60 dark:border-white/10 dark:text-gray-400 dark:hover:bg-blue-400/10', disabled && 'cursor-not-allowed opacity-45')}>{network.label}{network.note && <span className="text-xs font-black uppercase opacity-70">{network.note}</span>}</button>
