@@ -133,6 +133,12 @@ assert.equal(ready.body.project.settlementStatus, 'ready')
 assert.deepEqual(ready.body.project.allowedOrigins, ['https://polydesk.trade'])
 assert.equal(ready.body.project.brandImageUrl, 'https://polydesk.trade/brand/polydesk-mark-bw-transparent.png')
 
+const beforeInvalidEnvironment = JSON.stringify(store)
+for (const environment of ['sandbox', 'production', '', null, ['test'], { value: 'test' }]) {
+  const result = await request(handler, 'POST', { action: 'create-key', projectId: created.body.project.id, name: 'Must not create', environment })
+  assert.equal(result.statusCode, 400)
+  assert.equal(JSON.stringify(store), beforeInvalidEnvironment, 'Invalid environment must not write a live key')
+}
 const generated = await request(handler, 'POST', { action: 'create-key', projectId: created.body.project.id, name: 'Production backend' })
 assert.equal(generated.statusCode, 201)
 assert.match(generated.body.apiKey, /^hpl_live_/)

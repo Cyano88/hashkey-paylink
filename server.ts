@@ -147,6 +147,8 @@ import publicConfigHandler from './api/public-config.js'
 import { runtimePublicConfigScript } from './api/runtime-public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
+import developerCapabilitiesHandler from './api/developer-capabilities.js'
+import { developerEnvironmentBoundary } from './api/developer-environment.js'
 import arcAgreementsHandler from './api/arc-agreements.js'
 import verifiedArcRecipientsHandler from './api/arc-agreement-verified-recipients.js'
 import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
@@ -255,6 +257,9 @@ app.use(express.json({ limit: '256kb' }))
 
 // A CLI credential must not activate a different API surface, including public
 // mutations that do not otherwise resolve a developer policy.
+app.all('/api/v2/capabilities', developerCapabilitiesHandler)
+app.use(['/api/v2/checkouts', '/api/v2/agreements', '/api/v2/funding'], developerEnvironmentBoundary)
+
 app.use('/api', (req, res, next) => {
   const usesScoped = [req.headers.authorization, req.headers['x-api-key']].some(value => /hpl_(?:cli|app)_/.test(String(value ?? '')))
   if (usesScoped && req.path !== '/v2/cli/auth' && !cliRequestScope(req)) {

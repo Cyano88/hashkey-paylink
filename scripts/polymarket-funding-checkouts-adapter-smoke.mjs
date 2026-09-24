@@ -25,6 +25,7 @@ let executionFailure = false
 let bridgeComplete = false
 let capturedRouting
 const basePolicy = {
+  environment: 'live',
   partnerId: 'dev_testproject1234', merchantName: 'PolyDesk', allowedOrigins: ['https://polydesk.trade'],
   defaultNetwork: 'base', paymentOptions: [
     { network: 'base', recipient: '0x1111111111111111111111111111111111111111' },
@@ -134,3 +135,4 @@ const forbiddenHandler = createPolymarketFundingCheckoutsHandler({
 assert.equal((await request(forbiddenHandler, 'POST', { body: {} })).statusCode, 403)
 
 console.log('Polymarket funding checkout adapter smoke tests passed')
+

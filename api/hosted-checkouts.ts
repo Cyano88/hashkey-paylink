@@ -1,3 +1,4 @@
+import { assertLiveDeveloperRequest } from './developer-environment.js'
 import { isAgentCheckoutNetwork } from '../src/lib/developerNetworkPolicy.js'
 import { mutateWithDeveloperActivity } from './developer-activity-store.js'
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto'
@@ -894,6 +895,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
   return async function hostedCheckoutsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
     try {
+      assertLiveDeveloperRequest(req)
     if (!dependencies.hasStore()) return res.status(503).json({ ok: false, error: 'Hosted checkout storage is unavailable.' })
     const secret = dependencies.signingSecret()
     if (secret.length < 32) return res.status(503).json({ ok: false, error: 'Hosted checkout signing is not configured.' })
@@ -911,6 +913,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       }
       if (req.query?.purpose === 'status') {
         const policy = await dependencies.policy(req)
+    if (policy && 'environment' in policy && policy.environment !== 'live') return res.status(403).json({ ok: false, error: 'This checkout route requires live credentials.' })
         if (!policy || policy.partnerId !== record.partnerId) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
         const expired = dependencies.now().getTime() >= Date.parse(record.expiresAt)
         if (expired && !record.payment) await expireHostedCheckoutExecution(record, dependencies.executions)
@@ -975,6 +978,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       }
     }
     const policy = await dependencies.policy(req)
+    if (policy && 'environment' in policy && policy.environment !== 'live') return res.status(403).json({ ok: false, error: 'This checkout route requires live credentials.' })
     if (!policy) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
     const providerRouting = verifiedProviderRouting.get(req)
     if (providerRouting && (!('projectManaged' in policy) || !policy.capabilities.includes(providerRouting.capability))) {
