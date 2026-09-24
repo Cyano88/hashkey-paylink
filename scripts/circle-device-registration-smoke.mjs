@@ -1,0 +1,10 @@
+﻿import assert from 'node:assert/strict';import fs from 'node:fs';import ts from 'typescript';import vm from 'node:vm';
+const source=fs.readFileSync('src/lib/circleEvmEmailWallet.ts','utf8'),tree=ts.createSourceFile('wallet.ts',source,ts.ScriptTarget.Latest,true);
+const fn=tree.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='getCircleDeviceId');assert.ok(fn);
+let restored=0,closed=0,cached=[];const context={keepCircleDeviceFrameRunnable:()=>()=>{restored++},withTimeout:async p=>p,cacheCircleDeviceId:(app,id)=>cached.push([app,id]),closeCircleSdkModal:()=>{closed++},readCachedCircleDeviceId:()=>{throw Error('Must not trust legacy IDs')}};
+vm.createContext(context);vm.runInContext(ts.transpileModule(fn.getText(tree),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,context);
+let calls=0;const sdk={getDeviceId:async()=>{calls++;return 'registered-circle-device'}};
+assert.equal(await context.getCircleDeviceId(sdk,'app'),'registered-circle-device');await context.getCircleDeviceId(sdk,'app');assert.equal(calls,2);assert.equal(restored,2);assert.equal(cached.length,2);
+await assert.rejects(context.getCircleDeviceId({getDeviceId:async()=>{throw Error('timeout')}},'app'),/register/);
+await assert.rejects(context.getCircleDeviceId({getDeviceId:async()=>''},'app'),/register/);assert.equal(cached.length,2);assert.equal(closed,2);assert.equal(restored,4);
+console.log('Hosted Circle device registration passed: fresh SDK registration, legacy cache ignored, no synthetic IDs, and frame cleanup on failure.');

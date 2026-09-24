@@ -314,30 +314,20 @@ function keepCircleDeviceFrameRunnable() {
 }
 
 async function getCircleDeviceId(sdk: W3SSdk, appId: string) {
-  const cached = readCachedCircleDeviceId(appId)
-  if (cached) return cached
-
-  let deviceId = ''
-  let restoreDeviceFrame = () => undefined
+  // Always register through Circle. Cached or locally generated IDs are not proof of registration.
+  let restoreDeviceFrame: () => void = () => {}
   try {
     const pendingDeviceId = sdk.getDeviceId()
     restoreDeviceFrame = keepCircleDeviceFrameRunnable()
-    deviceId = (await withTimeout(
-      pendingDeviceId,
-      15_000,
-      'Smart wallet security frame was blocked. Allow third-party site data for Circle and try again.',
-    )).trim()
+    const deviceId = (await withTimeout(pendingDeviceId, 15000,
+      'Circle device registration timed out. Check your connection and try again.')).trim()
+    if (!deviceId) throw Error('Circle returned an empty device ID.')
+    cacheCircleDeviceId(appId, deviceId)
+    return deviceId
   } catch {
     closeCircleSdkModal()
-    // Circle uses this value only to bind its OTP credentials to this browser.
-    // Keep a stable local UUID when its third-party device frame is unavailable.
-    deviceId = window.crypto.randomUUID()
-  } finally {
-    restoreDeviceFrame()
-  }
-  if (!deviceId) throw new Error('Circle returned an empty device ID.')
-  cacheCircleDeviceId(appId, deviceId)
-  return deviceId
+    throw Error('Circle could not register this device. Check your connection and try again.')
+  } finally { restoreDeviceFrame() }
 }
 
 function isHexHash(value: unknown): value is Hex {
