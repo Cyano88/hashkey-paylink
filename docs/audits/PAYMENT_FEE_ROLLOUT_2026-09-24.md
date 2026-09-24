@@ -15,12 +15,13 @@
 ## Verification
 
 - Read-only checks from Render: Ethereum and Polygon public RPC chain IDs match. No private ETH/POL RPC was configured at check time; public fallback worked.
+- Render Solana readiness check: treasury parses, relay key is configured, relay balance exceeds one token-account setup plus base fee, and SOL/USDC price data is fresh. Values and keys were not printed.
 - Read-only Circle CCTP forwarding quotes into Base returned HTTP 200 for Arbitrum, Arc, Solana, Ethereum and Polygon.
 - Render public ETH, POL and USDC price requests returned fresh data. No authenticated Circle transaction estimate or real payment was executed.
 - Mocked tests cover five EVM fee conversions/execution, recipient/treasury amounts, insufficient funds before challenge, tampering, expiry, wrong-chain ownership and retry keys.
 - Mocked Solana tests cover RPC fees/rent, exact recipient amount, treasury amount, insufficient funds and broadcast-timeout recovery without duplicate payments.
 - Wallet bootstrap, bank payout recovery, bridge proofs, bridge recovery, request persistence and existing EVM/Solana transfer adapter tests pass.
-- Web and native web bundles compiled during integration. Rebuild after the final merge before packaging.
+- Web and final native web bundles compiled. Java 21 offline Android assembly passed; APK v2 signature verified, package com.hashpaylink.pocket, versionCode 4, versionName 1.0.3, 35,579,587 bytes.
 - Full repository typecheck is not passing: it reports existing errors and a repeated run stalled. Do not report a clean typecheck.
 
 ## Release status
@@ -28,7 +29,7 @@
 - Work is local until a deployment and APK install are explicitly recorded below.
 - Pixel 5A160DLCH006VM is connected. Update com.hashpaylink.pocket in place with adb install -r; do not uninstall or clear data.
 - The earlier APK at HEAD 9483161b1 is outdated for these changes.
-- Live changed from aaab0a11a to c0175e7d7 during this work. Merge the verified Arc deployment metadata before publishing; do not enable Agreement execution as part of this release.
+- Live changed from aaab0a11a to c0175e7d7 during this work. Merged in 385d244bd; Arc boundary regression passes and Agreement execution remains gated.
 - API quote requirements need matching web/mobile clients. Older APKs cannot use these new mandatory quoted-payment paths.
 
 ## Remaining platform-wide coverage

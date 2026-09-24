@@ -30,8 +30,8 @@ const createdAt = '2026-07-19T12:00:00.000Z'
 let blockTimestamp = `0x${BigInt(Math.floor(Date.parse('2026-07-19T12:30:00.000Z') / 1_000)).toString(16)}`
 globalThis.fetch = async (_url, init) => {
   const request = JSON.parse(String(init?.body ?? '{}'))
-  const result = request.method === 'eth_getBlockByNumber'
-    ? { timestamp: blockTimestamp }
+  const result = request.method === 'eth_chainId' ? '0x2105' : request.method === 'eth_getBlockByNumber'
+    ? { timestamp: blockTimestamp, number: '0x100' }
     : nextReceipt
   return {
     ok: true,
@@ -95,7 +95,8 @@ globalThis.fetch = async (url, init) => {
       data: `0x${parseUnits('0.5', 6).toString(16)}`,
     }],
   }
-  else if (request.method === 'eth_getBlockByNumber') result = { timestamp: blockTimestamp }
+  else if (request.method === 'eth_chainId') result = '0x2105'
+  else if (request.method === 'eth_getBlockByNumber') result = { timestamp: blockTimestamp, number: '0x100' }
   else throw new Error(`Unexpected RPC method ${request.method}`)
   return { ok: true, status: 200, statusText: 'OK', text: async () => JSON.stringify({ result }) }
 }
@@ -120,11 +121,13 @@ globalThis.fetch = async (url, init) => {
   const request = JSON.parse(String(init?.body ?? '{}'))
   fallbackCalls.push({ target, method: request.method })
   if (request.method === 'eth_getLogs' && target === 'https://rpc.invalid') return { ok: false, status: 400, statusText: 'Bad Request', text: async () => '' }
-  const result = request.method === 'eth_blockNumber'
+  const result = request.method === 'eth_chainId' ? '0x2105'
+    : request.method === 'eth_getTransactionReceipt' ? { ...receipt('0x1'), logs: receipt('0x1').logs.map(log => ({ ...log, data: '0x'+parseUnits('0.5',6).toString(16) })) }
+    : request.method === 'eth_blockNumber'
     ? '0x100'
     : request.method === 'eth_getLogs'
       ? [{ transactionHash: txHash, blockNumber: '0xff', logIndex: '0x0', data: `0x${parseUnits('0.5', 6).toString(16)}` }]
-      : { timestamp: `0x${BigInt(Math.floor(Date.parse('2026-07-19T12:03:00.000Z') / 1_000)).toString(16)}` }
+      : { number: '0x100', timestamp: `0x${BigInt(Math.floor(Date.parse('2026-07-19T12:03:00.000Z') / 1_000)).toString(16)}` }
   return { ok: true, status: 200, statusText: 'OK', text: async () => JSON.stringify({ result }) }
 }
 const rpcFallback = await findEvmUsdcTransfer({
@@ -151,3 +154,19 @@ if (previousRpc === undefined) delete process.env.PRIVATE_RPC_URL
 else process.env.PRIVATE_RPC_URL = previousRpc
 
 console.log('USDC transfer verification smoke tests passed.')
+
+// Both new networks require their own native USDC and finalized receipts.
+try {
+ for (const [chain,id,token] of [['ethereum','0x1','0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],['polygon','0x89','0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359']]) {
+  let reported=id, finalized='0x100';
+  globalThis.fetch=async (_url,init)=>{
+   const request=JSON.parse(init.body);
+   const result=request.method==='eth_chainId'?reported:request.method==='eth_getTransactionReceipt'?{...receipt('0x1'),logs:receipt('0x1').logs.map(log=>({...log,address:token}))}:{number:request.params[0]==='finalized'?finalized:'0x10',timestamp:blockTimestamp};
+   return {ok:true,status:200,text:async()=>JSON.stringify({result})};
+  };
+  await verifyEvmUsdcTransfer({chain,txHash,payer,recipient,minAmount:amount});
+  reported='0x2105';await assert.rejects(()=>verifyEvmUsdcTransfer({chain,txHash,payer,recipient,minAmount:amount}),/chain does not match/);
+  reported=id;finalized='0xf';await assert.rejects(()=>verifyEvmUsdcTransfer({chain,txHash,payer,recipient,minAmount:amount}),/final/i);
+ }
+ console.log('PASS: Ethereum and Polygon native-USDC proof rejects the wrong network and unfinalized receipts.');
+}finally{globalThis.fetch=previousFetch}
