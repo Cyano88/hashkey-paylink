@@ -2972,10 +2972,6 @@ export function TelegramHelperPanel({
         proof?: { ogTxHash: string; ogExplorer: string }
         zeroscoutSponsorship?: ZeroScoutSponsorship
         error?: string
-        upgradeRequired?: boolean
-        upgradeLink?: string
-        upgradeAmount?: string
-        upgradeCurrency?: string
         suggestedAction?: { label: string; url: string }
       }
       try {
@@ -2988,12 +2984,6 @@ export function TelegramHelperPanel({
         }
       }
       if (!data.answer) {
-        if (data.upgradeRequired && data.upgradeLink) {
-          finishHelperMessage(nextQuestion, {
-            answer: `Deep research is paused after today's free uses. Agent Hash Pro is ${data.upgradeAmount ?? '10'} ${data.upgradeCurrency ?? 'USDC'} monthly: ${data.upgradeLink}`,
-          })
-          return
-        }
         throw new Error(data.error ?? 'No helper response returned.')
       }
       setThinkingState('proof')

@@ -145,7 +145,7 @@ export default function ApiReference() {
           <CodeBlock lang="bash">{`GET /api/agent-verify?eventId=YOUR_EVENT_ID&payer=Alice`}</CodeBlock>
         </SubSection>
         <SubSection title="POST /api/agent-ask">
-          <p>Assistant compatibility endpoint for the existing helper session flow. Legacy paid access based on an event ID and payer label returns HTTP 410. Historical archive lookup remains available; Pocket uses its dedicated assistant route.</p>
+          <p>Compatibility endpoint for Pocket Agent Hash only. Experimental assistant modes and paid access return HTTP 410. Historical archive lookup remains available separately.</p>
         </SubSection>
       </Section>
 

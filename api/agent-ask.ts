@@ -8,7 +8,6 @@
 
 
 import type { Request, Response } from 'express'
-import { lookupLegacyArchive } from './legacy-archive-lookup.js'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
@@ -40,7 +39,6 @@ const HELPER_USAGE_WINDOW_MS = 24 * 60 * 60 * 1000
 const HELPER_USAGE_STORE = process.env.HELPER_USAGE_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/helper-usage.json` : './data/helper-usage.json')
 const HELPER_VERIFY_TIMEOUT_MS = Math.max(5_000, parseInt(process.env.HELPER_VERIFY_TIMEOUT_MS ?? '15000', 10) || 15_000)
-const AGENT_HASH_PRO_TREASURY = (process.env.AGENT_HASH_PRO_TREASURY ?? process.env.TREASURY_ADDRESS ?? '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753').trim()
 const HELPER_USAGE_STORE_KEY = (process.env.HELPER_USAGE_STORE_KEY ?? 'hashpaylink:helper-usage').trim()
 const GENERIC_STRATEGY_PHRASE = 'Build around agentic USDC commerce'
 const GENERIC_STRATEGY_PATTERNS = [
@@ -117,17 +115,6 @@ function helperLimitForTier(tier: HelperUsageTier) {
 
 function usageKey(eventId: string, payer: string, tier: HelperUsageTier) {
   return crypto.createHash('sha256').update(`${tier}:${eventId.toLowerCase()}:${payer.toLowerCase()}`).digest('hex')
-}
-
-function agentHashProPaymentLink(payer: string) {
-  const params = new URLSearchParams({
-    e: AGENT_HASH_PRO_TREASURY,
-    a: '10',
-    m: 'Agent Hash Pro monthly subscription',
-    v: '1',
-    id: `agent-hash-pro-${crypto.createHash('sha256').update(payer.toLowerCase()).digest('hex').slice(0, 16)}`,
-  })
-  return `https://hashpaylink.com/pay?${params.toString()}`
 }
 
 function compactContentCard(card: Record<string, unknown>) {
@@ -698,7 +685,6 @@ async function getHelperPromptUsageStatus(eventId: string, payer: string, tier: 
   return { allowed: true, remaining: Math.max(0, limit - current.count - 1), resetAt: current.resetAt, limit, tier }
 }
 
-const verifyPayment = lookupLegacyArchive
 
 // ─── AI response ──────────────────────────────────────────────────────────────
 
@@ -1167,7 +1153,7 @@ function userFacingZeroScoutMediaFollowUp(error: unknown) {
   return 'You do not need to unlock again. Try again shortly; if this repeats, the ZeroScout media worker or API configuration needs attention on the server.'
 }
 
-function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'paid', helperMode = '', hashpayStreamContext?: unknown, circlePocketRoute?: CirclePocketRoute): string {
+function getHelperResponse(question: string, payerName: string, chain: string, amount: string, memorySummary = '', zeroScoutGuidance?: ZeroScoutHelperGuidance, accessMode = 'helper-free', helperMode = '', hashpayStreamContext?: unknown, circlePocketRoute?: CirclePocketRoute): string {
   const zeroScoutAnswer = answerFromZeroScoutGuidance(question, zeroScoutGuidance)
   const isHashpayStreamMediaInspection = helperMode === 'streampay'
     && (
@@ -1236,10 +1222,6 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
     return 'I could not complete the PolyDesk answer just now. Open Portfolio, World Cup, or LP Scout and I will use that exact Polymarket path.'
   }
 
-  if (accessMode !== HELPER_FREE_ACCESS_MODE) {
-    return `Your paid helper access is verified: ${amount} on ${chain}. What would you like to do next?`
-  }
-
   const cleanQuestion = cleanQuestionForFallback(question)
   return cleanQuestion
     ? `I did not get the full refined answer just now, but I can still respond. For "${cleanQuestion}", tell me a little more about what you mean and I will help from there.`
@@ -1261,45 +1243,35 @@ export default async function handler(req: Request, res: Response) {
     })
   }
 
-  const { eventId: rawEventId, payer: rawPayer, question: rawQuestion, memorySummary: rawMemorySummary, accessMode: rawAccessMode, helperMode: rawHelperMode, hashpayStreamContext: rawHashpayStreamContext } = (req.body ?? {}) as Record<string, unknown>
+  if (req.body?.helperMode !== 'circle-pocket') {
+    return res.status(410).json({ error: 'This experimental assistant has been retired.', code: 'EXPERIMENTAL_ASSISTANT_RETIRED' })
+  }
+  const { question: rawQuestion, helperMode: rawHelperMode, hashpayStreamContext: rawHashpayStreamContext } = (req.body ?? {}) as Record<string, unknown>
   let eventId: string
   let payer: string
   let question: string
   let memorySummary = ''
-  const accessMode = rawAccessMode === HELPER_FREE_ACCESS_MODE ? HELPER_FREE_ACCESS_MODE : 'paid'
+  const accessMode = HELPER_FREE_ACCESS_MODE
   const helperMode = normalizeHelperMode(rawHelperMode)
-  let freeIdentity: Awaited<ReturnType<typeof resolveCirclePocketIdentity>> | null = null
-
-  if (accessMode === HELPER_FREE_ACCESS_MODE) {
-    try {
-      freeIdentity = await resolveCirclePocketIdentity(req)
-    } catch (error) {
-      return res.status(circlePocketIdentityErrorStatus(error)).json({
-        error: error instanceof Error ? error.message : 'Unauthorized Circle Pocket session.',
-      })
-    }
+  let freeIdentity: Awaited<ReturnType<typeof resolveCirclePocketIdentity>>
+  try {
+    freeIdentity = await resolveCirclePocketIdentity(req)
+  } catch (error) {
+    return res.status(circlePocketIdentityErrorStatus(error)).json({ error: error instanceof Error ? error.message : 'Unauthorized Pocket session.' })
   }
-
   try {
     question = normalizeBoundedString(rawQuestion, 'question', MAX_QUESTION_LENGTH)
-    if (freeIdentity) {
-      const identityHash = crypto.createHash('sha256').update(freeIdentity.storageKey).digest('hex')
-      payer = `circle-pocket-${identityHash.slice(0, 24)}`
-      eventId = `helper-free-${identityHash.slice(0, 24)}`
-      memorySummary = await readHelperProfileMemory(freeIdentity)
-    } else {
-      payer = normalizeBoundedString(rawPayer, 'payer', MAX_PAYER_LENGTH)
-      eventId = normalizeBoundedString(rawEventId, 'eventId', MAX_EVENT_ID_LENGTH)
-      if (typeof rawMemorySummary === 'string') memorySummary = rawMemorySummary.trim().slice(0, MAX_MEMORY_LENGTH)
-    }
+    const identityHash = crypto.createHash('sha256').update(freeIdentity.storageKey).digest('hex')
+    payer = `circle-pocket-${identityHash.slice(0, 24)}`
+    eventId = `helper-free-${identityHash.slice(0, 24)}`
+    memorySummary = await readHelperProfileMemory(freeIdentity)
   } catch (err) {
     return res.status(400).json({ error: err instanceof Error ? err.message : 'Invalid request' })
   }
 
   try {
-    // 1. Verify payment on 0G Mainnet unless this is the free Ask Hash helper.
-    const result = accessMode === HELPER_FREE_ACCESS_MODE ? null : await verifyPayment(eventId, payer)
-    const access = result ?? {
+    // Pocket assistance is session-bound and does not require a paid entitlement.
+    const access = {
       payment: {
         eventId,
         payer,
@@ -1315,17 +1287,6 @@ export default async function handler(req: Request, res: Response) {
       },
     }
 
-    if (!result && accessMode !== HELPER_FREE_ACCESS_MODE) {
-      return res.status(402).json({
-        error:           'Payment required',
-        paymentRequired: true,
-        message:         `No verified payment found for "${payer}" on event ${eventId}.`,
-        hint:            'Payment may still be archiving to 0G (~30–60s after confirmation)',
-        paymentLink:     `https://hashpaylink.com/pay?v=1&id=${encodeURIComponent(eventId)}`,
-      })
-    }
-
-    // 2. Payment verified — get AI response
     const baseHelperRouting = classifyHelperRequest(question, helperMode)
     const circlePocketRoute = isNameQuestion(question) || isGreetingQuestion(question)
       ? undefined
@@ -1346,13 +1307,9 @@ export default async function handler(req: Request, res: Response) {
       res.setHeader('Retry-After', Math.ceil((usagePreview.resetAt - Date.now()) / 1000).toString())
       return res.status(429).json({
         error: usageTier === 'deep'
-          ? 'Deep research limit reached for today. Upgrade to Agent Hash Pro to continue deeper Ask Hash research.'
-          : 'Daily Ask Hash chat limit reached. Payment Links, HashpayStream, and other manual tools remain available.',
+          ? 'Daily research limit reached. Please try again tomorrow.'
+          : 'Daily Pocket support limit reached. Please try again tomorrow.',
         cooldown: true,
-        upgradeRequired: usageTier === 'deep',
-        upgradeAmount: usageTier === 'deep' ? '10' : undefined,
-        upgradeCurrency: usageTier === 'deep' ? 'USDC' : undefined,
-        upgradeLink: usageTier === 'deep' ? agentHashProPaymentLink(access.payment.payer) : undefined,
         usageTier,
         limit: usagePreview.limit,
         resetAt: usagePreview.resetAt,
@@ -1404,7 +1361,7 @@ export default async function handler(req: Request, res: Response) {
           hashpayStreamContext,
         },
         sourceProof: {
-          type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
+          type: 'helper-free-access',
           contract: access.proof.contract,
           network: access.proof.network,
           rootHash: access.proof.rootHash,
@@ -1501,7 +1458,7 @@ export default async function handler(req: Request, res: Response) {
             : undefined,
         },
         sourceProof: {
-          type: accessMode === HELPER_FREE_ACCESS_MODE ? 'helper-free-access' : 'helper_access_receipt',
+          type: 'helper-free-access',
           ...access.proof,
         },
         result: {
@@ -1515,7 +1472,7 @@ export default async function handler(req: Request, res: Response) {
         },
       })
     } catch (err) {
-      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep' || accessMode !== HELPER_FREE_ACCESS_MODE
+      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep'
       console.warn('[agent-ask] ZeroScout response sponsorship failed:', safeZeroScoutGuidanceError(err))
       if (strictSponsorshipRequired) {
         return res.status(503).json({
@@ -1525,7 +1482,7 @@ export default async function handler(req: Request, res: Response) {
       }
     }
     if (!zeroscoutSponsorship) {
-      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep' || accessMode !== HELPER_FREE_ACCESS_MODE
+      const strictSponsorshipRequired = helperRouting.qualityMode === 'deep'
       if (strictSponsorshipRequired) {
         return res.status(503).json({
           error: 'ZeroScout sponsorship is required before helper responses are returned. Try again shortly.',
@@ -1539,13 +1496,9 @@ export default async function handler(req: Request, res: Response) {
       res.setHeader('Retry-After', Math.ceil((usage.resetAt - Date.now()) / 1000).toString())
       return res.status(429).json({
         error: usageTier === 'deep'
-          ? 'Deep research limit reached for today. Upgrade to Agent Hash Pro to continue deeper Ask Hash research.'
-          : 'Daily Ask Hash chat limit reached. Payment Links, HashpayStream, and other manual tools remain available.',
+          ? 'Daily research limit reached. Please try again tomorrow.'
+          : 'Daily Pocket support limit reached. Please try again tomorrow.',
         cooldown: true,
-        upgradeRequired: usageTier === 'deep',
-        upgradeAmount: usageTier === 'deep' ? '10' : undefined,
-        upgradeCurrency: usageTier === 'deep' ? 'USDC' : undefined,
-        upgradeLink: usageTier === 'deep' ? agentHashProPaymentLink(access.payment.payer) : undefined,
         usageTier,
         limit: usage.limit,
         resetAt: usage.resetAt,
@@ -1555,7 +1508,7 @@ export default async function handler(req: Request, res: Response) {
     return res.json({
       answer,
       accessMode,
-      paymentVerified: accessMode !== HELPER_FREE_ACCESS_MODE,
+      paymentVerified: false,
       usage: {
         remaining: usage.remaining,
         limit: usage.limit,
@@ -1573,7 +1526,6 @@ export default async function handler(req: Request, res: Response) {
         : undefined,
       suggestedAction: circlePocketRoute?.action,
       payment:         access.payment,
-      proof:           accessMode === HELPER_FREE_ACCESS_MODE ? undefined : result?.proof,
       zeroscoutSponsorship,
       zeroscoutPending: !zeroscoutSponsorship,
       zeroscoutMediaDiagnostic: hashpayStreamVideoInspectionRequested

@@ -35,3 +35,17 @@ Fresh independent npm ci could not complete because C: ran out of disk space. Re
 - Approved 25-bps monetization remains a separate unfinished implementation; no new fee activated here.
 
 References: https://github.com/advisories/GHSA-4mjr-xmp4-gh2g ; https://github.com/advisories/GHSA-g6gw-c38x-mqfc ; https://www.alchemy.com/docs/how-to-rotate-api-keys
+
+## Follow-up: Pocket is the only preserved assistant
+
+User explicitly retired every experimental paid assistant and designated Pocket Agent Hash as the only assistant product to preserve.
+
+Removed archive-backed paid authorization code, Agent Hash Pro treasury/payment-link generation, upgrade pricing and frontend subscription prompts. `/api/agent-ask` now accepts only `helper-free` with exact `helperMode: circle-pocket`; all other assistant modes return 410 before compute. Removed the experimental StreamAgentHash component and its layout launcher. Pocket's existing shared panel, task preparation, support case access, helper-session checks and dedicated assistant endpoint remain. Historical receipts and developer payment APIs remain separate.
+
+Mocked end-to-end handler test confirms authenticated Pocket responds, missing identity rejects, all retired modes reject, and no paid upsell or archive authorization remains. Generic assistant helper functions that Pocket shares are retained; they are not independently exposed assistant products.
+
+## Operational progress
+
+First security release c6639be9819523426196207f92d0897454b8a00c deployed successfully as dep-daqavilg1s2s73fqn0jg. Render now uses the repository's `npm ci --include=dev` source-build command; removed the unpinned global Circle CLI install. The successful production build closes the fresh lockfile-install/build check for that commit.
+
+Created dedicated Alchemy app ccyw9vctixzexwon for Hash PayLink Polygon mainnet (137), node-api only, restricted to the verified Render egress ranges. Direct probes from Render passed chain ID, block number and native-USDC contract code. Updated only Hash PayLink's POLYMARKET_RPC_URL and verified readback. The old shared key remains for PolyDesk; it cannot yet be revoked because that consumer and provider account have not migrated. New runtime activation is checked after the follow-up deployment.
