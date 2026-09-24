@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {build} from 'esbuild'
 import {mkdir} from 'node:fs/promises'
 import {createHmac} from 'node:crypto'
-process.env.SMILE_PARTNER_ID='fixture';process.env.SMILE_API_KEY='fixture-secret';process.env.SMILE_ENVIRONMENT='sandbox'
+process.env.SMILE_PARTNER_ID='fixture';process.env.SMILE_API_KEY='fixture-secret';process.env.SMILE_ENVIRONMENT='sandbox';process.env.POCKET_KYC_IDENTITY_MATCH_KEY='fixture-secret'
 const state={values:new Map(),tail:Promise.resolve(),calls:[],result:null};globalThis.__kycFixture=state
 const mocks={
  'render-durable-store':`export const readDurableJson=async k=>structuredClone(globalThis.__kycFixture.values.get(k));export const mutateDurableJson=async(k,f)=>{const s=globalThis.__kycFixture;const p=s.tail.then(async()=>{const v=await f(structuredClone(s.values.get(k)));s.values.set(k,v);return structuredClone(v)});s.tail=p.catch(()=>{});return p}`,

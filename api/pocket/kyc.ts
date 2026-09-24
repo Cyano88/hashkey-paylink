@@ -1,3 +1,4 @@
+import { smileIdentityMatchKey } from './smile-v3.js'
 import pocketKycV3, { pocketKycV3Callback, requireV3ProductionKyc } from './kyc-v3.js'
 import { startKycPolicy, storedKycPolicy, matchesKycPolicy, type PocketKycContext } from './kyc-policy.js'
 import type { Request, Response } from 'express'
@@ -34,7 +35,7 @@ function identityEvidence(config: SmileConfig, result: Record<string, any>) {
   // Do not persist raw DOB or ID numbers. Missing/ambiguous evidence never matches.
   const validDob = /^\d{4}-\d{2}-\d{2}$/.test(dob) && !Number.isNaN(Date.parse(dob)) && new Date(dob).toISOString().slice(0,10) === dob
   const name = legalName.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N} ]/gu,'').split(/\s+/).filter(Boolean).sort().join(' ')
-  const identityMatch = name && validDob ? createHmac('sha256', config.apiKey).update('pocket-identity-v1|'+name+'|'+dob).digest('hex') : undefined
+  const identityMatch = name && validDob ? createHmac('sha256', smileIdentityMatchKey(config)).update('pocket-identity-v1|'+name+'|'+dob).digest('hex') : undefined
   return { legalName, identityMatch }
 }
 export async function requireProductionKyc(userId: string) {
@@ -106,8 +107,9 @@ export async function pocketLegacyKyc(req: Request, res: Response) {
     let latest = record?.jobs.at(-1)
     if (action === 'uploaded') {
       if (!latest || req.body.jobId !== latest.id) throw fail('Verification reference did not match.', 409)
+      const uploadedJobId = latest.id
       const saved = await mutateDurableJson<RecordState>(storageKey, current => {
-        const job = current?.jobs.find(item => item.id === latest.id)
+        const job = current?.jobs.find(item => item.id === uploadedJobId)
         if (job?.status === 'pending') { job.uploadReportedAt ||= Date.now(); job.providerMissing = false }
         return current || { jobs: [] }
       })

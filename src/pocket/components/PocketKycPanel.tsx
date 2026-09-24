@@ -26,37 +26,41 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   const [additionalMethod, setAdditionalMethod] = useState<'nin' | 'government_id'>('nin')
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
+  const [autoRetry, setAutoRetry] = useState(true)
   const mounted = useRef(true)
   const inFlight = useRef(false)
-  const api = useCallback(async (action: 'status' | 'start' | 'resume' | 'uploaded', jobId?: string, method?: VerificationMethod) => {
+  const api = useCallback(async (action: 'status' | 'start' | 'resume' | 'uploaded', jobId?: string, method?: VerificationMethod, submission?: {jobId:string;userId:string}) => {
     const token = await getAccessToken()
-    if (!token) throw new Error('Sign in again to continue.')
-    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(method ? { method } : {}), ...(jobId ? { jobId } : {}), ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) }).catch(() => { throw new Error(TEMPORARY_ERROR) })
+    if (!token) throw Object.assign(new Error('Sign in again to continue.'), {retryable:false})
+    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(method ? { method } : {}), ...(jobId ? { jobId } : {}), ...(submission ? {submission} : {}), ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) }).catch(() => { throw new Error(TEMPORARY_ERROR) })
     const data = await response.json().catch(() => null)
-    if (!response.ok || data?.ok !== true) throw new Error(response.status < 500 && typeof data?.error === 'string' ? data.error : TEMPORARY_ERROR)
+    if (!response.ok || data?.ok !== true) {
+      const retryable = data?.retryable !== false && (response.status >= 500 || response.status === 429)
+      throw Object.assign(new Error(typeof data?.error === 'string' && (response.status < 500 || !retryable) ? data.error : TEMPORARY_ERROR), {retryable})
+    }
     if (!['sandbox', 'production'].includes(data.environment) || !['not_started', 'pending', 'passed', 'failed', 'review'].includes(data.status)) throw new Error(TEMPORARY_ERROR)
     return data as Session
   }, [getAccessToken])
   const refresh = useCallback(async () => {
     if (inFlight.current) return
     inFlight.current = true
-    try { const next = await api('status'); if (mounted.current) { setState(current => current?.jobId === next.jobId && current?.uploadReported && next.status === 'pending' ? { ...next, canResume: false, uploadReported: true } : next); setError('') } }
-    catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : 'Verification could not load.') }
+    try { const next = await api('status'); if (mounted.current) { setState(current => current?.jobId === next.jobId && current?.uploadReported && next.status === 'pending' ? { ...next, canResume: false, uploadReported: true } : next); setError(''); setAutoRetry(true) } }
+    catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not load.'); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false) } }
     finally { inFlight.current = false }
   }, [api])
   useEffect(() => protectSmileViewport(setProviderVisible), [])
   useEffect(() => { mounted.current = true; void refresh(); return () => { mounted.current = false; document.getElementById('smile-identity-hosted-web-integration')?.remove() } }, [refresh])
   useEffect(() => {
-    if ((!state || !['pending', 'review'].includes(state.status)) && !error) return
+    if (error && !autoRetry || ((!state || !['pending', 'review'].includes(state.status)) && !error)) return
     const onVisible = () => { if (!document.hidden) void refresh() }
     window.addEventListener('focus', onVisible)
     document.addEventListener('visibilitychange', onVisible)
     const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, 15000)
     return () => { clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible) }
-  }, [state?.status, error, refresh])
+  }, [state?.status, error, autoRetry, refresh])
   const start = async () => {
     if (!consent || busy) return
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setAutoRetry(true)
     try {
       await loadSmile()
       if (!mounted.current) return
@@ -72,13 +76,13 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         use_strict_mode: false, allow_agent_mode: false, allow_legacy_selfie_fallback: false,
         translation: { language: 'en-GB', locales: { 'en-GB': { selfie: { ess: { alert: { smile: 'Smile with your mouth slightly open', holdStill: 'Hold still and look at the camera', capturing: 'Keep smiling' } }, smart: { alert: { smileRequired: 'Smile with your mouth slightly open', openMouthSmile: 'Keep smiling and open your mouth slightly' } } } } } },
         partner_details: { partner_id: session.partnerId, name: 'Pocket by Hash PayLink', logo_url: 'https://app.hashpaylink.com/pocket-mark.svg', policy_url: 'https://app.hashpaylink.com/docs/privacy', theme_color: '#171717' },
-        onSuccess: () => {
+        onSuccess: (submission?: {jobId:string;userId:string}) => {
           if (!mounted.current) return
           setBusy(false)
           setSubmittedSheet(true)
           setState(current => current && { ...current, canResume: false, uploadReported: true })
           // An upload notification is only a processing hint, never identity approval.
-          void api('uploaded', session.jobId).then(next => { if (mounted.current) { setState(next); void refresh() } }).catch(() => {
+          void api('uploaded', session.jobId, undefined, submission).then(next => { if (mounted.current) { setState(next); void refresh() } }).catch(() => {
             if (mounted.current) setError('Your upload finished. We will keep checking for your result.')
           })
         }, onClose: done,
@@ -89,7 +93,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
           setError(failure?.errorCode === 'CONSENT_DENIED' ? 'Verification was cancelled.' : 'Verification could not open. Please try again.')
         },
       })
-    } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false) } }
+    } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false) } }
   }
   const needsAdditional = Boolean(state?.workflow?.needsAdditional)
   useEffect(() => { setConsent(false) }, [needsAdditional])
@@ -123,7 +127,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
       </ol>}
       {needsAdditional && <fieldset disabled={busy} className="space-y-2">
         <legend className="mb-2 text-sm font-medium">Choose how to verify</legend>
-        {([{ value: 'nin', title: 'NIN', description: 'Verify your National Identification Number and take a selfie.' }, { value: 'government_id', title: 'Government ID', description: 'Use your passport, driving licence or national ID card and take a selfie.' }] as const).map(option => <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4 dark:border-white/10">
+        {([{ value: 'nin', title: 'NIN', description: 'Verify your National Identification Number and take a selfie.' }, { value: 'government_id', title: 'Government ID', description: 'Use an available government-issued ID and take a selfie.' }] as const).map(option => <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4 dark:border-white/10">
           <input type="radio" name="identity-method" value={option.value} checked={additionalMethod === option.value} onChange={() => { setAdditionalMethod(option.value); setConsent(false) }} className="mt-1 h-4 w-4" />
           <span><span className="block text-sm font-medium">{option.title}</span><span className="mt-1 block text-xs leading-5 text-gray-500">{option.description}</span></span>
         </label>)}
@@ -142,6 +146,6 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         <button type="button" onClick={() => setSubmittedSheet(false)} className="mt-7 w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">{needsAdditional ? 'Choose NIN or government ID' : 'Continue'}</button>
       </div>
     </PocketBottomSheet>}
-    {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400">{error}<button type="button" onClick={() => void refresh()} className="ml-2 underline">Try again</button></div>}
+    {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400">{error}{autoRetry && <button type="button" onClick={() => void refresh()} className="ml-2 underline">Try again</button>}</div>}
   </section>
 }
