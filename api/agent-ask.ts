@@ -1,20 +1,11 @@
 /**
  * POST /api/agent-ask
  *
- * Payment-gated AI service endpoint — demonstrates the Hash PayLink agentic
- * economy primitive. Any AI service can use this pattern to require verified
- * payment before rendering a response.
- *
- * Body: { eventId?: string, payer: string, question: string, accessMode?: 'helper-free', helperMode?: string }
- *
- * Flow:
- *   1. Verify payment on 0G Mainnet via PayLinkArchive contract (trustless)
- *   2. If verified → return AI response + on-chain proof
- *   3. If not verified → 402 Payment Required + payment link
- *
- * Ask Hash gets model intelligence through ZeroScout guidance and only returns
- * after final ZeroScout sponsorship succeeds.
+ * Existing helper-session compatibility endpoint. Legacy paid requests based
+ * on public archive labels are retired; archive evidence is not authorization.
+ * Pocket uses its dedicated read-only assistant route.
  */
+
 
 import type { Request, Response } from 'express'
 import { lookupLegacyArchive } from './legacy-archive-lookup.js'
@@ -1260,6 +1251,15 @@ function getHelperResponse(question: string, payerName: string, chain: string, a
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
+
+  // Public archive labels are replayable evidence, never paid-access credentials.
+  // Current clients explicitly select helper-free and still pass its identity checks.
+  if (req.body?.accessMode !== HELPER_FREE_ACCESS_MODE) {
+    return res.status(410).json({
+      error: 'Legacy paid assistant access has been retired.',
+      code: 'LEGACY_PAID_ASSISTANT_RETIRED',
+    })
+  }
 
   const { eventId: rawEventId, payer: rawPayer, question: rawQuestion, memorySummary: rawMemorySummary, accessMode: rawAccessMode, helperMode: rawHelperMode, hashpayStreamContext: rawHashpayStreamContext } = (req.body ?? {}) as Record<string, unknown>
   let eventId: string
