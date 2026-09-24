@@ -55,3 +55,13 @@ Created dedicated Alchemy app ccyw9vctixzexwon for Hash PayLink Polygon mainnet 
 Old `agent-hash-pro-*` subscription IDs and `src=telegram-helper` links are rejected by a checkout wrapper before the active payment component mounts. Existing merchant/service/POS/bank/wallet-funding links remain unaffected. Dedicated policy regression and TSX transform passed. Historical receipt storage and generic developer payments are not removed.
 
 Dependency audit after the qs/Hono patches reports 55 findings (18 low, 29 moderate, 8 high), down from 59; no claim of a vulnerability-free dependency tree.
+
+## Final live verification (05:25 UTC)
+
+- Final deployed application commit: 830f09ed434c6de1b027ce41e8d4e015ef04bdd5; Render deployment dep-daqb5gt03fqc73dbvkf0 is live.
+- Confirmed runtime commit, dedicated Polygon endpoint matching current Render configuration, and configured preserved PIN pepper through Render SSH. Installed qs is 6.16.0 and Hono is 4.13.9.
+- Scanned 392 deployed public text assets for exact matches to the selected runtime private credential values: no matches. This is a bounded current-value scan, not proof of no historic/unrecognized secrets or APK exposure.
+- Public checks passed: health 200; paid and non-Pocket experimental assistants 410; Pocket compatibility and dedicated assistant routes reject missing identity with 401; malformed historical archive lookup returns 400. Render loopback and public-origin health/retirement checks also passed. Earlier probes during rolling deployment returned 502 and then recovered; no clean zero-downtime claim.
+- Browser verification of a syntactically valid old subscription link shows only the retirement notice and Open Pocket link, no payment action. Screenshot: output/playwright/retired-assistant-checkout-20260924.png.
+- Full provider-key rotation is NOT complete. Polygon replacement is active for Hash PayLink, but the old shared credential remains in PolyDesk. Privy/Circle/OKX issuance/revocation, fund-key migration where needed, remaining dependency findings and prior release-readiness gates remain open.
+- Future releases must include this security branch's commits; deploying an older branch would regress these fixes. Original working-tree changes were preserved.
