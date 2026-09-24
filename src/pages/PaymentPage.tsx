@@ -1,3 +1,4 @@
+import { isRetiredAssistantCheckout } from '../lib/retiredAssistantCheckout'
 import PocketGetApp from '../pocket/components/PocketGetApp'
 import { assertPocketScanPayoutPayable, pocketScanPayoutNeedsReview } from '../pocket/lib/pocketScanPayout'
 import { requestPocketPaymentApproval } from '../pocket/lib/pocketPaymentApproval'
@@ -339,6 +340,19 @@ function trustedPolydeskOrigin(raw: string) {
 }
 
 export default function PaymentPage({ pocketScan }: { pocketScan?: { params: string; onBack(): void } } = {}) {
+  const [routeParams] = useSearchParams()
+  const params = pocketScan ? new URLSearchParams(pocketScan.params) : routeParams
+  if (isRetiredAssistantCheckout(params)) {
+    return <main className="mx-auto max-w-md px-6 py-16 text-center">
+      <h1 className="text-lg font-semibold">This offer is no longer available</h1>
+      <p className="mt-3 text-sm text-gray-500">The experimental paid assistant has been retired. No payment is needed.</p>
+      <a className="mt-6 inline-block text-sm font-semibold underline" href="https://pocket.hashpaylink.com">Open Pocket</a>
+    </main>
+  }
+  return <ActivePaymentPage pocketScan={pocketScan} />
+}
+
+function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBack(): void } } = {}) {
   const [routeParams] = useSearchParams()
   const searchParams = useMemo(() => pocketScan ? new URLSearchParams(pocketScan.params) : routeParams, [pocketScan?.params, routeParams])
   const checkoutPresentation = hostedCheckoutPresentation(resolveHostedCheckoutKind(searchParams))

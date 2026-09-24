@@ -49,3 +49,9 @@ Mocked end-to-end handler test confirms authenticated Pocket responds, missing i
 First security release c6639be9819523426196207f92d0897454b8a00c deployed successfully as dep-daqavilg1s2s73fqn0jg. Render now uses the repository's `npm ci --include=dev` source-build command; removed the unpinned global Circle CLI install. The successful production build closes the fresh lockfile-install/build check for that commit.
 
 Created dedicated Alchemy app ccyw9vctixzexwon for Hash PayLink Polygon mainnet (137), node-api only, restricted to the verified Render egress ranges. Direct probes from Render passed chain ID, block number and native-USDC contract code. Updated only Hash PayLink's POLYMARKET_RPC_URL and verified readback. The old shared key remains for PolyDesk; it cannot yet be revoked because that consumer and provider account have not migrated. New runtime activation is checked after the follow-up deployment.
+
+## Retired offer collection guard
+
+Old `agent-hash-pro-*` subscription IDs and `src=telegram-helper` links are rejected by a checkout wrapper before the active payment component mounts. Existing merchant/service/POS/bank/wallet-funding links remain unaffected. Dedicated policy regression and TSX transform passed. Historical receipt storage and generic developer payments are not removed.
+
+Dependency audit after the qs/Hono patches reports 55 findings (18 low, 29 moderate, 8 high), down from 59; no claim of a vulnerability-free dependency tree.
