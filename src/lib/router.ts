@@ -37,15 +37,8 @@ export const ERC20_BALANCE_OF_ABI = [{
   outputs: [{ name: '',        type: 'uint256' }],
 }] as const
 
-/**
- * Per-chain PayLinkFactoryV2 addresses.
- * All chains fall back to VITE_FACTORY_V2 if their dedicated var is not set.
- */
-export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'arbitrum', `0x${string}`>> = {
-  base:     (import.meta.env.VITE_FACTORY_V2         ?? '') as `0x${string}`,
-  arc:      (import.meta.env.VITE_FACTORY_V2_ARC_MAINNET ?? '') as `0x${string}`,
-  arbitrum: (import.meta.env.VITE_FACTORY_V2_ARB     ?? import.meta.env.VITE_FACTORY_V2 ?? '') as `0x${string}`,
-}
+/** Retired manual-deposit rail: no executable factory addresses. */
+export const FACTORY_V2_ADDRESSES: Partial<Record<'base' | 'arc' | 'arbitrum', `0x${string}`>> = {}
 
 /** Convenience alias: Base factory address. */
 export const FACTORY_V2_ADDRESS = FACTORY_V2_ADDRESSES.base ?? ('' as `0x${string}`)

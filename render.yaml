@@ -18,8 +18,6 @@ services:
         value: "hybrid"               # enables Privy-backed public PolyDesk sessions
       - key: VITE_PRIVY_APP_ID
         sync: false                   # browser-visible Privy app id
-      - key: VITE_FACTORY_V2
-        value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
       - key: VITE_BASE_PAYMASTER_URL
         value: "/api/base-paymaster"   # optional Coinbase/CDP Base paymaster proxy
       - key: VITE_CIRCLE_PAYMASTER_ENABLED
@@ -204,10 +202,6 @@ services:
         sync: false                   # scoped server token for PolyDesk funding checkout creation
       - key: RESEND_API_KEY
         sync: false                   # Resend API key for Hash PayLink transactional emails
-      - key: STREAM_INVITE_FROM_EMAIL
-        value: "no-reply@mail.hashpaylink.com"
-      - key: STREAM_INVITE_FROM_NAME
-        value: "StreamPay"
       - key: ALERT_FROM_EMAIL
         value: "no-reply@mail.hashpaylink.com"
       - key: ZEROSCOUT_API_URL
@@ -249,8 +243,6 @@ services:
       - key: PRIVATE_RPC_URL_ARB
         value: "https://arb1.arbitrum.io/rpc"   # swap for Alchemy/QuickNode in prod
       - key: PAYLINK_FACTORY_V2_ARB
-        value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
-      - key: VITE_FACTORY_V2_ARB
         value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
 
       # Operational endpoint authentication and historical payment indexing
