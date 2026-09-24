@@ -892,14 +892,12 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     return () => { cancelled = true }
   }, [])
 
-  // ── Arbitrum USDC relay state — relayer submits tx on payer's behalf ──────
-  const [arbitrumRelayHash,    setArbitrumRelayHash]    = useState<`0x${string}` | undefined>(undefined)
-  const [arbitrumRelayPending, setArbitrumRelayPending] = useState(false)
-  const [arbitrumRelayError,   setArbitrumRelayError]   = useState<string | null>(null)
-  const [arbitrumGasEstimate,  setArbitrumGasEstimate]  = useState<bigint>(0n)
 
-  const { isLoading: isArbitrumRelayConfirming, isSuccess: isArbitrumRelayConfirmed } =
-    useWaitForTransactionReceipt({ hash: arbitrumRelayHash, chainId: 42161 })
+
+
+
+
+
 
   const { signTypedDataAsync, isPending: isSignPending, reset: resetPermitSign } = useSignTypedData()
 
@@ -1117,11 +1115,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     }
   }, [activeRecipient, isPolymarketBridge])
 
-  const showArbitrumRelayCost =
-    chain === 'arbitrum' &&
-    payMode === 'wallet' &&
-    !showCircleEmailBridgePay &&
-    !showCirclePaymasterButton
+
   const walletConnectBlocked = isNgPosPaycrestOfframp || (smartWalletOnlyFunding && !PRIVY_AUTH_ENABLED)
   const grossUpPlatformCharges = true
   const grossUpEvmPlatformCharges = grossUpPlatformCharges && (chain === 'base' || chain === 'arc' || chain === 'arbitrum')
@@ -2215,83 +2209,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     setTimeout(() => setCircleSolanaCopied(false), 2200)
   }
 
-  // ── Fetch Arbitrum USDC gas estimate when Arbitrum chain is active ───────
-  useEffect(() => {
-    if (chain !== 'arbitrum') return
-    fetch('/api/relay-arbitrum-usdc')
-      .then(r => r.json())
-      .then((d: { ok: boolean; gasReimbUsdc?: string }) => {
-        if (d.gasReimbUsdc) setArbitrumGasEstimate(BigInt(d.gasReimbUsdc))
-      })
-      .catch(() => {})
-  }, [chain])
 
-  // ── Arbitrum USDC relay pay — relayer submits tx, payer only signs ───────
-  async function handleArbitrumRelayPay() {
-    if (!address || !activeRecipient) return
-    setArbitrumRelayError(null)
-    setArbitrumRelayPending(true)
 
-    const tokenAddress = CHAIN_META.arbitrum.tokenAddress
-    const totalUnits   = parseUnits(effectiveAmt || '0', CHAIN_META.arbitrum.decimals)
-    const deadline     = BigInt(Math.floor(Date.now() / 1000) + 3600)
-    const nonce        = permitNonce ?? 0n
-    let gasReimbUnitsForPermit = arbitrumGasEstimate ?? 0n
 
-    // Refresh gas estimate just before signing so it's accurate
-    try {
-      const est = await fetch('/api/relay-arbitrum-usdc').then(r => r.json()) as { ok: boolean; gasReimbUsdc?: string }
-      if (est.gasReimbUsdc) {
-        gasReimbUnitsForPermit = BigInt(est.gasReimbUsdc)
-        setArbitrumGasEstimate(gasReimbUnitsForPermit)
-      }
-    } catch { /* use cached */ }
-    const feeUnitsForPermit = totalUnits * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const permitUnits = grossUpEvmPlatformCharges
-      ? totalUnits + feeUnitsForPermit + gasReimbUnitsForPermit
-      : totalUnits
-
-    try {
-      const sig = await signTypedDataAsync({
-        domain: { name: 'USD Coin', version: '2', chainId: 42161, verifyingContract: tokenAddress },
-        types: {
-          Permit: [
-            { name: 'owner',    type: 'address' },
-            { name: 'spender',  type: 'address' },
-            { name: 'value',    type: 'uint256' },
-            { name: 'nonce',    type: 'uint256' },
-            { name: 'deadline', type: 'uint256' },
-          ],
-        },
-        primaryType: 'Permit',
-        message: { owner: address, spender: MULTICALL3_ADDRESS, value: permitUnits, nonce, deadline },
-      })
-
-      const { v, r, s } = parseSignature(sig)
-
-      const relayRes = await fetch('/api/relay-arbitrum-usdc', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          owner:     address,
-          recipient: activeRecipient,
-          amount:    totalUnits.toString(),
-          feeMode:   grossUpEvmPlatformCharges ? 'gross' : 'net',
-          deadline:  deadline.toString(),
-          v:         Number(v),
-          r,
-          s,
-        }),
-      })
-      const data = await relayRes.json() as { ok: boolean; txHash?: `0x${string}`; error?: string }
-      if (!data.ok || !data.txHash) throw new Error(data.error ?? 'Relay failed')
-      setArbitrumRelayHash(data.txHash)
-    } catch (err) {
-      setArbitrumRelayError(err instanceof Error ? friendlyErrorMsg(err.message) : 'Relay failed')
-    } finally {
-      setArbitrumRelayPending(false)
-    }
-  }
 
   // ── Payment handlers ──────────────────────────────────────────────────────
   function blockedAmountError() {
@@ -2324,12 +2244,12 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
       setBasePaymasterError('Use your Pocket wallet to approve this payment.')
       return
     }
+    if (chain === 'arbitrum') { setCirclePaymasterError('Use your Pocket wallet to approve this payment.'); return }
     if (!activeRecipient) return
     if (!await lockHostedCheckoutNetwork()) return
     setPaymentAttemptStarted(true)
     await beginPaymentVerificationWindow()
-    if (chain === 'arbitrum') await handleArbitrumPay()
-    else if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
+    if (chain === 'base' || chain === 'arc') await handleEvmPermitPay()
     else await handleSolanaPay()
   }
 
@@ -2723,9 +2643,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     }
   }
 
-  async function handleArbitrumPay() {
-    await handleArbitrumRelayPay()
-  }
+
 
   async function handleCirclePaymasterPay() {
     if (!address || !activeRecipient || !showCirclePaymasterButton) return
@@ -3317,12 +3235,12 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const txHash          = directStatus === 'success'   ? (directTxHash as `0x${string}` | null)
                         : manualPayDetected            ? (manualTxHash ?? circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
                         : chain === 'solana'           ? solanaTxHash
-                        : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? null)
+                        : chain === 'arbitrum'         ? (circlePaymasterTxHash ?? null)
                         : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash)
   const receiptConfirmed = chain === 'solana'
     ? isSolanaConfirmed
     : chain === 'arbitrum'
-      ? (isArbitrumRelayConfirmed || isCirclePaymasterConfirmed)
+      ? (isCirclePaymasterConfirmed)
       : (isEvmConfirmed || isBasePaymasterConfirmed || isCirclePaymasterConfirmed)
   const paymentConfirmed = receiptConfirmed || manualPayDetected || directStatus === 'success'
   // Funding requires mined on-chain proof. A submitted hash, wallet acceptance,
@@ -3330,9 +3248,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const fundingTransferLogConfirmed = manualPayDetected && Boolean(manualTxHash)
   const fundingProofConfirmed = receiptConfirmed || fundingTransferLogConfirmed || directStatus === 'success'
   const isConfirmed = isAgentOrWalletFunding ? fundingProofConfirmed : paymentConfirmed
-  const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (arbitrumRelayPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
-  const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isArbitrumRelayConfirming || isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
-  const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!arbitrumRelayError || !!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
+  const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
+  const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
+  const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
   const pocketRouteInsufficient = pocketCheckoutRoute?.kind === 'insufficient'
   const pocketMovePayExpected = privyAuthenticated && smartCheckoutOwnsWalletCta && chain !== 'arc' && circleRequiredUnits > 0n
   const pocketMovePayReady = pocketMovePayExpected && Boolean(pocketCheckoutRoute)
@@ -3375,7 +3293,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     }
     resetEvmSend()
     resetPermitSign()
-    setArbitrumRelayError(null)
+
     setBasePaymasterError(null)
     setCirclePaymasterError(null)
   }
@@ -3388,7 +3306,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     manualPayDetected
   )
   const sendErrorMsg    = chain === 'solana'   ? solanaError
-                        : chain === 'arbitrum' ? (circlePaymasterError ?? arbitrumRelayError)
+                        : chain === 'arbitrum' ? (circlePaymasterError)
                         : isBasePaymasterStatusError
                           ? (basePaymasterStatusError?.message ?? basePaymasterError ?? 'Sponsored transaction failed').slice(0, 140)
                         : isBasePaymasterFailed
@@ -3443,7 +3361,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
       : (address ?? circleEvmEmailSession?.wallet.address ?? circleSmartAccount ?? directVault ?? '')
     const txH    = manualPayDetected ? (manualTxHash ?? circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
                  : chain === 'solana'   ? (solanaTxHash ?? solanaDirectTxHash)
-                 : chain === 'arbitrum' ? (circlePaymasterTxHash ?? arbitrumRelayHash ?? directTxHash ?? null)
+                 : chain === 'arbitrum' ? (circlePaymasterTxHash ?? directTxHash ?? null)
                  : (circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null)
     if (isAgentOrWalletFunding && !txH) {
       eventRegistered.current = false
@@ -3507,7 +3425,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   function currentNgPosTxHash() {
     if (manualPayDetected) return manualTxHash ?? circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null
     if (chain === 'solana') return solanaTxHash ?? solanaDirectTxHash
-    if (chain === 'arbitrum') return circlePaymasterTxHash ?? arbitrumRelayHash ?? directTxHash ?? null
+    if (chain === 'arbitrum') return circlePaymasterTxHash ?? directTxHash ?? null
     return circlePaymasterTxHash ?? basePaymasterTxHash ?? evmTxHash ?? directTxHash ?? null
   }
 
@@ -4615,12 +4533,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         <div className={cn(isNgPosPaycrestOfframp ? 'space-y-2 px-4 pb-4 pt-3' : 'space-y-3 p-4')}>
           {/* Payment details */}
           {isHostedCheckout ? (
-            (feeAmount > 0 && effectiveAmt) || showArbitrumRelayCost ? (
+            (feeAmount > 0 && effectiveAmt) ? (
               <div className="space-y-1 text-center text-[11px] font-medium text-slate-400">
                 {feeAmount > 0 && effectiveAmt && <p>Fee {formatAmount(feeAmount.toString(), 6)} {meta.asset}</p>}
-                {showArbitrumRelayCost && arbitrumGasEstimate > 0n && (
-                  <p>Network fee ~{formatAmount(formatUnits(arbitrumGasEstimate, 6), 6)} USDC</p>
-                )}
+
               </div>
             ) : null
           ) : <div className={cn('space-y-1.5 text-center', isNgPosPaycrestOfframp && 'hidden')}>
@@ -4665,16 +4581,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                 Payment detected. Verifying transaction...
               </p>
             )}
-            {showArbitrumRelayCost && (
-              <div className="flex items-center justify-between bg-gray-50/60 px-4 py-2 border-t border-dashed border-gray-100">
-                <span className="text-[11px] font-normal text-slate-400 tracking-wide">Gas reimb (relayer pays ETH)</span>
-                <span className="font-mono text-[11px] text-slate-400">
-                  {arbitrumGasEstimate > 0n
-                    ? `~${(Number(arbitrumGasEstimate) / 1e6).toFixed(4)} USDC`
-                    : '…'}
-                </span>
-              </div>
-            )}
+
           </div>}
 
           {/* ── Attendee name (event mode) ───────────────────────────────── */}
@@ -5486,7 +5393,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
               </PrivyConnectButton>
               <CheckoutTrustLine />
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
+          ) : payMode === 'wallet' && chain !== 'arbitrum' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && !isConnected ? (
             <div className={cn(
               'flex flex-col items-center gap-1.5',
               requiresAttendeeName && !attendeeName.trim() && 'pointer-events-none opacity-50 select-none',
@@ -5503,7 +5410,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                 <p className="text-center text-xs text-gray-400">Gas in ETH</p>
               )}
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
+          ) : payMode === 'wallet' && chain !== 'arbitrum' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected && !isCorrectNetwork ? (
             <div className="space-y-2">
             <button onClick={() => switchChain({ chainId: targetChainId })} disabled={isSwitching}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200 dark:disabled:bg-white/10 dark:disabled:text-gray-400">
@@ -5513,7 +5420,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
             </button>
             <CheckoutTrustLine />
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
+          ) : payMode === 'wallet' && chain !== 'arbitrum' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && (!usePrivyCircleCheckout || hasExternalPrivyEvmWallet) && !walletConnectBlocked && !isTelegramSource && isConnected && !isPrivyEmbeddedWalletConnected ? (
             <div className="space-y-2">
               <SlideAction
                 status={checkoutSlideStatus}
@@ -5523,7 +5430,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
               />
               <CheckoutTrustLine />
             </div>
-          ) : payMode === 'wallet' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected ? (
+          ) : payMode === 'wallet' && chain !== 'arbitrum' && !isBankSendPayment && !smartWalletOnlyFunding && !smartCheckoutOwnsWalletCta && !walletConnectBlocked && !isTelegramSource && isPrivyEmbeddedWalletConnected ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center text-xs font-medium text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
               Privy email is signed in, but its embedded wallet is not your Circle Smart Wallet. Add the Circle wallet app id to enable Circle Smart Wallet payments, or connect an external wallet.
             </div>
