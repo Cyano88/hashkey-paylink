@@ -208,8 +208,6 @@ services:
         value: "no-reply@mail.hashpaylink.com"
       - key: STREAM_INVITE_FROM_NAME
         value: "StreamPay"
-      - key: AGENTIC_STREAMING_FROM_EMAIL
-        value: "no-reply@mail.hashpaylink.com"
       - key: ALERT_FROM_EMAIL
         value: "no-reply@mail.hashpaylink.com"
       - key: ZEROSCOUT_API_URL

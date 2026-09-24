@@ -8,7 +8,6 @@ const DATA_API_ORIGIN = 'https://data-api.polymarket.com'
 const REQUEST_TIMEOUT_MS = 10_000
 const ALERT_FROM_EMAIL = process.env.POLYMARKET_ALERT_FROM_EMAIL
   ?? process.env.ALERT_FROM_EMAIL
-  ?? process.env.AGENTIC_STREAMING_FROM_EMAIL
   ?? process.env.STREAM_INVITE_FROM_EMAIL
 const ALERT_FROM_NAME = process.env.POLYMARKET_ALERT_FROM_NAME ?? 'Hash PayLink Polymarket'
 const POLYMARKET_RELAYER_URL = (process.env.POLYMARKET_RELAYER_URL ?? process.env.RELAYER_URL ?? '').trim()
