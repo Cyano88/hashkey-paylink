@@ -42,7 +42,9 @@ export async function verifyMigrationReceipt(row: Row, transfer: Transfer, io: {
   if (!transaction || transaction.walletId !== row.source.walletId || !hash(transaction.transactionHash)) return null
   if (row.network === 'base' || row.network === 'arbitrum') {
     // Fast confirmation for same-owner USDC migration. The authenticated Circle
-    // resolver requires COMPLETE. Provider agreement is not L1 finality.
+    // resolver binds the submitted transaction; both RPCs must verify its exact
+    // successful receipt. Circle indexing need not reach COMPLETE first.
+    // Provider agreement is not L1 finality.
     const readProof = async (read: typeof readEvmRpc) => {
       const receipt = await read(row.network, 'eth_getTransactionReceipt', [transaction.transactionHash]) as Receipt | null
       if (!receipt || !quantity(receipt.blockNumber)) return null

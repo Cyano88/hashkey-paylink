@@ -70,7 +70,7 @@ export function createMigrationProvider(userToken: string, request?: Json) {
       const otherAssets=balances.filter(item=> /[1-9]/.test(item.amount) && String(item.token.tokenAddress??'').toLowerCase()!==tokens[row.network].toLowerCase())
       return {balances,otherAssets}
     },
-    async noPending(row: Row, noActivitySince?: number) {
+    async noPending(row: Row, noActivitySince?: number, verifiedMigrationHash?: string) {
       let path='/v1/w3s/transactions?'+new URLSearchParams({walletIds:row.source.walletId,includeAll:'true',pageSize:'50'})
       const pages=new Set<string>(),seen=new Set<string>()
       while(true) {
@@ -82,7 +82,10 @@ export function createMigrationProvider(userToken: string, request?: Json) {
           if(!uuid(tx?.id)||tx.walletId!==row.source.walletId||tx.blockchain!==chains[row.network]||seen.has(tx.id))throw new Error('Migration transaction history is inconsistent.')
           seen.add(tx.id)
           if(noActivitySince!==undefined && (!Number.isFinite(noActivitySince) || typeof tx.createDate!=='string' || !Number.isFinite(Date.parse(tx.createDate)) || Date.parse(tx.createDate)>=noActivitySince))return false
-          if(!['COMPLETE','FAILED','DENIED','CANCELLED'].includes(tx.state))return false
+          // Activation may ignore only this exact, independently receipt-verified
+          // migration while Circle's indexing trails the chain. Other activity blocks.
+          const verified=verifiedMigrationHash && /^0x[0-9a-f]{64}$/i.test(verifiedMigrationHash) && typeof tx.txHash==='string' && tx.txHash.toLowerCase()===verifiedMigrationHash.toLowerCase() && String(tx.contractAddress??'').toLowerCase()===row.source.address.toLowerCase() && ['SENT','CONFIRMED','COMPLETE'].includes(tx.state)
+          if(!verified && !['COMPLETE','FAILED','DENIED','CANCELLED'].includes(tx.state))return false
         }
         const next=migrationNextPage(data,path)
         if(!next)break
@@ -148,7 +151,7 @@ export function createMigrationProvider(userToken: string, request?: Json) {
       if(!Array.isArray(ids)||ids.length!==1||!uuid(ids[0])) return null
       const result=await json(row.network,'/v1/w3s/transactions/'+encodeURIComponent(ids[0]))
       const tx=result.transaction
-      if(!tx||tx.id!==ids[0]||tx.walletId!==row.source.walletId||tx.blockchain!==chains[row.network]||tx.state!=='COMPLETE'||String(tx.contractAddress??'').toLowerCase()!==row.source.address.toLowerCase()) return null
+      if(!tx||tx.id!==ids[0]||tx.walletId!==row.source.walletId||tx.blockchain!==chains[row.network]||!['SENT','CONFIRMED','COMPLETE'].includes(tx.state)||String(tx.contractAddress??'').toLowerCase()!==row.source.address.toLowerCase()) return null
       if(typeof tx.txHash!=='string'||!/^0x[0-9a-f]{64}$/i.test(tx.txHash)) return null
       return {walletId:tx.walletId as string,transactionHash:tx.txHash as string}
     },

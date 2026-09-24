@@ -1,3 +1,6 @@
+import { Link } from 'react-router-dom'
+import { useRef, useState } from 'react'
+import { downloadPocketQr } from '../../lib/pocketQrDownload'
 import { Store as PaymentStore } from 'lucide-react'
 import { ArrowRight, Copy, LayoutDashboard, Loader2, Mail } from '../../components/PocketIcons'
 import { QRCodeCanvas } from 'qrcode.react'
@@ -288,6 +291,18 @@ export function PocketPosReadyPanel({
   copied,
   onCopy,
 }: PocketPosReadyPanelProps) {
+  const qrRef = useRef<HTMLDivElement>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
+  const downloadQr = async () => {
+    const canvas = qrRef.current?.querySelector('canvas')
+    if (!canvas || downloading) return
+    setDownloading(true)
+    setDownloadError('')
+    try { await downloadPocketQr(canvas) }
+    catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) setDownloadError('Could not save QR. Please try again.') }
+    finally { setDownloading(false) }
+  }
   return (
     <div className="space-y-4">
       <div>
@@ -297,8 +312,8 @@ export function PocketPosReadyPanel({
 
       <div className="rounded-2xl border border-gray-200 bg-gray-50/70 p-4 dark:border-[#262626] dark:bg-[#171717]">
         <div className="flex items-center gap-4">
-          <div className="rounded-xl bg-white p-2 shadow-sm">
-            <QRCodeCanvas value={customerUrl} size={112} level="H" includeMargin />
+          <div ref={qrRef} className="shrink-0 rounded-xl bg-white p-2 shadow-sm">
+            <QRCodeCanvas value={customerUrl} size={1024} style={{ width: 112, height: 112 }} level="H" includeMargin />
           </div>
           <div className="min-w-0">
             <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{displayName}</p>
@@ -310,20 +325,20 @@ export function PocketPosReadyPanel({
               <Copy className="h-3.5 w-3.5" />
               {copied ? 'Copied' : 'Copy payer link'}
             </button>
+            <button type="button" onClick={() => void downloadQr()} disabled={downloading} className="mt-2 block py-1 text-xs font-semibold text-gray-500 hover:text-gray-900 disabled:opacity-50 dark:text-gray-400 dark:hover:text-white">{downloading ? 'Saving…' : 'Download QR'}</button>
+            {downloadError && <p role="alert" className="mt-1 text-xs text-red-600 dark:text-red-400">{downloadError}</p>}
           </div>
         </div>
       </div>
 
       <div className="grid gap-2">
-        <a
-          href={dashboardUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          to={dashboardUrl}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-button transition-all hover:bg-gray-800 active:scale-[0.98] dark:bg-white dark:text-gray-950 dark:hover:bg-gray-200"
         >
           <LayoutDashboard className="h-4 w-4" />
           View payments
-        </a>
+        </Link>
       </div>
     </div>
   )

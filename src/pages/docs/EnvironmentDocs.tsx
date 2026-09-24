@@ -16,7 +16,6 @@ export default function EnvironmentDocs() {
           rows={[
             ['DATABASE_URL', 'Yes', 'Render Postgres URL for receipts, agreement projections, agent/helper state, POS profiles, PolyDesk profiles, and Privy/Circle mappings.'],
             ['ADMIN_SECRET', 'Yes', 'Long random secret for protected maintenance endpoints.'],
-            ['CRON_SECRET', 'Optional', 'Secret for authenticated cron or background jobs.'],
             ['TREASURY_ADDRESS', 'Optional', 'EVM treasury wallet for platform fees.'],
           ]}
         />
@@ -33,7 +32,8 @@ export default function EnvironmentDocs() {
             ['CIRCLE_API_KEY_ARC_MAINNET', 'Arc Agreement operator', 'Production Circle LIVE_API_KEY for the separately configured mainnet operator.'],
             ['CIRCLE_BASE_URL', 'Optional', 'Circle API base URL. Defaults to https://api.circle.com.'],
             ['VITE_CIRCLE_USER_WALLET_APP_ID', 'Optional', 'Public Circle wallet app ID for browser wallet sessions.'],
-            ['POCKET_SWAP_QUOTE_SECRET', 'Arc swaps', 'Server-only random secret of at least 32 characters. Defaults to PRIVY_APP_SECRET.'],
+            ['POCKET_SWAP_QUOTE_SECRET', 'Arc and XStocks swaps', 'Required server-only signing secret of at least 32 characters; independent of Privy credentials.'],
+            ['POCKET_PIN_PEPPER', 'Pocket payments', 'Required stable PIN hashing secret. Preserve its existing value when rotating provider credentials.'],
           ]}
         />
       </Section>
@@ -118,7 +118,6 @@ export default function EnvironmentDocs() {
             ['STREAM_FACTORY_ADDRESS_MAINNET', 'Legacy stream', 'Compatibility StreamVaultFactory contract on Arc.'],
             ['VITE_STREAM_FACTORY_ADDRESS_MAINNET', 'Legacy stream', 'Browser-visible compatibility StreamVaultFactory address.'],
             ['ARENA_ESCROW_FACTORY_ADDRESS_MAINNET', 'Awaiting mainnet deployment', 'Experimental Arena escrow factory address.'],
-            ['VITE_ARENA_ESCROW_FACTORY_ADDRESS', 'Awaiting mainnet deployment', 'Browser-visible experimental Arena factory address.'],
             ['ARENA_RELAYER_PRIVATE_KEY', 'Awaiting mainnet deployment', 'Privileged experimental Arena relayer. Never use for public funds.'],
           ]}
         />

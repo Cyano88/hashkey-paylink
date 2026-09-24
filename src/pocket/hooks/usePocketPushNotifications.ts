@@ -13,6 +13,7 @@ import { pocketPushEnabled, POCKET_PUSH_PREFERENCE_EVENT, rememberPocketPushToke
 const POCKET_PUSH_ENABLED = import.meta.env.VITE_POCKET_PUSH_ENABLED === 'true'
 
 const ALLOWED_PATHS = new Set<string>([
+  '/xstocks/home', '/xstocks/activity', '/xstocks/notifications',
   POCKET_ROUTES.home,
   POCKET_ROUTES.activity,
   POCKET_ROUTES.notifications,

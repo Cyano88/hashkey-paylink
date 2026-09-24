@@ -13,6 +13,7 @@ import './index.css'
 import { ThemeProvider, useTheme } from './lib/ThemeContext'
 import { arcChain, baseMainnet } from './lib/chains'
 import { arbitrum, polygon } from 'viem/chains'
+import { pocketXLayer } from './pocket/lib/pocketXStocksWallet'
 import { PRIVY_APP_ID, PRIVY_AUTH_ENABLED } from './lib/authMode'
 import { PrivyLoginProvider } from './lib/PrivyLoginProvider'
 import { isPocketNativeRuntime, pocketRuntimeOrigin } from './pocket/lib/pocketRoutes'
@@ -85,7 +86,7 @@ function AppProviders() {
     loginMethods: ['email'],
     allowOAuthInEmbeddedBrowsers: true,
     defaultChain: baseMainnet,
-    supportedChains: [baseMainnet, arcChain, arbitrum, polygon],
+    supportedChains: [baseMainnet, arcChain, arbitrum, polygon, pocketXLayer],
     embeddedWallets: {
       ethereum: {
         createOnLogin: 'off',

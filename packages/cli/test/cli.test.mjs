@@ -140,3 +140,16 @@ test('an approved local session takes precedence over a broader environment key'
   assert.equal(code, 0)
   assert.equal(usedKey, token)
 })
+
+test('capabilities is public and never reads session credentials or sends the environment key', async () => {
+ const result = await invoke(['capabilities'], () => Response.json({ok:true,version:1,products:[],sandboxPaymentsEnabled:false}))
+ assert.equal(result.code,0); assert.equal(result.calls[0].url,'https://developer.hashpaylink.com/api/v2/capabilities')
+ assert.equal(result.calls[0].init.headers['X-API-Key'],undefined)
+ assert.equal(result.calls[0].init.headers.Authorization,undefined)
+ const anonymous = await invoke(['capabilities'], () => Response.json({ok:true,version:1,products:[],sandboxPaymentsEnabled:false}),{})
+ assert.equal(anonymous.code,0)
+})
+test('capabilities rejects incomplete or unsuccessful metadata',async()=>{
+ assert.equal((await invoke(['capabilities'],()=>Response.json({ok:true}))).code,1)
+ assert.equal((await invoke(['capabilities'],()=>Response.json({ok:false},{status:503}))).code,1)
+})

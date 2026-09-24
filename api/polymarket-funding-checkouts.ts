@@ -1,22 +1,26 @@
+import { assertLiveDeveloperRequest, DeveloperEnvironmentError } from './developer-environment.js'
+import { mutateWithDeveloperActivity } from './developer-activity-store.js'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { Request, Response } from 'express'
 import { getAddress, isAddress } from 'viem'
 import { resolveDeveloperApiKeyPolicy, type DeveloperCheckoutPolicy } from './developer-projects.js'
-import { createDepositAddress, getDepositStatus, minimumUsdcFor } from './polymarket-bridge.js'
+import { createDepositAddress, getDepositStatus, minimumUsdcFor, type BridgeNetwork } from './polymarket-bridge.js'
 import { createProviderRoutedHostedCheckout, hostedCheckoutPaymentAttempt, readVerifiedHostedCheckoutRecord, type HostedCheckoutNetwork } from './hosted-checkouts.js'
-import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
+import { hasRenderDurableStore, readDurableJson } from './render-durable-store.js'
 import { syncHostedCheckoutExecution } from './pocket/hosted-checkout-payment-executions.js'
 
 const STORE_KEY = (process.env.POLYMARKET_FUNDING_CHECKOUT_STORE_KEY ?? 'hashpaylink:polymarket-funding-checkouts:v1').trim()
-const NETWORKS = new Set<HostedCheckoutNetwork>(['base', 'arbitrum'])
+type FundingNetwork = Extract<HostedCheckoutNetwork, BridgeNetwork>
+const NETWORKS = new Set<FundingNetwork>(['base', 'arbitrum'])
 
 type FundingRecord = {
+  environment?: 'live'
   id: string
   checkoutId: string
   partnerId: string
   targetWallet: string
   depositAddress: string
-  networks: HostedCheckoutNetwork[]
+  networks: FundingNetwork[]
   amount: string
   returnUrl: string
   requestHash: string
@@ -25,6 +29,7 @@ type FundingRecord = {
   expiresAt: string
   createdAt: string
   integrity: string
+  observation?: {status:string;paymentStatus:string;bridgeStatus:string;network?:string;paymentTransaction?:string;bridgeTransaction?:string;observedAt:string}
 }
 type FundingStore = { records: Record<string, FundingRecord>; idempotency: Record<string, string> }
 
@@ -45,7 +50,7 @@ type Dependencies = {
 const defaults: Dependencies = {
   hasStore: hasRenderDurableStore,
   read: readDurableJson,
-  mutate: (key, update) => mutateDurableJson<FundingStore>(key, update),
+  mutate: (key, update) => mutateWithDeveloperActivity<FundingStore>('funding', key, update),
   policy: resolveDeveloperApiKeyPolicy,
   createDeposit: createDepositAddress,
   bridgeStatus: getDepositStatus,
@@ -76,9 +81,9 @@ function returnUrlWithFundingId(value: string, fundingId: string) {
 }
 
 function requestedNetworks(value: unknown, policy: DeveloperCheckoutPolicy) {
-  const allowed = new Set(policy.paymentOptions.map(option => option.network).filter(network => NETWORKS.has(network)))
+  const allowed = new Set(policy.paymentOptions.map(option => option.network).filter((network): network is FundingNetwork => NETWORKS.has(network as FundingNetwork)))
   const requested = Array.isArray(value) ? value.map(item => clean(item, 20).toLowerCase()) : []
-  const networks = (requested.length ? requested : [...allowed]).filter((item): item is HostedCheckoutNetwork => NETWORKS.has(item as HostedCheckoutNetwork) && allowed.has(item as HostedCheckoutNetwork))
+  const networks = (requested.length ? requested : [...allowed]).filter((item): item is FundingNetwork => NETWORKS.has(item as FundingNetwork) && allowed.has(item as FundingNetwork))
   return Array.from(new Set(networks))
 }
 
@@ -139,9 +144,11 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
   return async function polymarketFundingCheckoutsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
     try {
+      assertLiveDeveloperRequest(req)
       if (!dependencies.hasStore() || dependencies.signingSecret().length < 32) return res.status(503).json({ ok: false, error: 'Polymarket funding checkout is unavailable.' })
       const policy = await dependencies.policy(req)
       if (!policy) return res.status(401).json({ ok: false, error: 'Valid developer API credentials are required.' })
+      if (policy.environment !== 'live') return res.status(403).json({ ok: false, error: 'Polymarket Funding requires live credentials.' })
       if (!policy.capabilities.includes('polymarket_funding')) return res.status(403).json({ ok: false, error: 'Enable Polymarket funding for this developer project.' })
       if (policy.settlementMode !== 'usdc') return res.status(409).json({ ok: false, error: 'Polymarket funding requires a USDC developer project.' })
 
@@ -160,8 +167,25 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
         const latest = completed ?? transactions[0] ?? null
         const paymentStatus = checkout.payment?.status ?? (dependencies.now().getTime() >= Date.parse(checkout.expiresAt) ? 'expired' : 'pending')
         const fundingStatus = completed ? 'funded' : paymentStatus === 'paid' || paymentStatus === 'processing' ? 'bridging' : paymentStatus === 'expired' ? 'expired' : 'awaiting_payment'
-        if (checkout.payment) await dependencies.syncExecution?.(checkout, Boolean(completed))
         const attempt = hostedCheckoutPaymentAttempt(checkout)
+        const observation = {
+          status: fundingStatus, paymentStatus,
+          bridgeStatus: completed ? 'complete' : latest?.status ? clean(latest.status, 40).toLowerCase() : paymentStatus === 'paid' ? 'waiting' : 'not_started',
+          network: checkout.payment?.network ?? attempt.network,
+          paymentTransaction: checkout.payment?.txHash, bridgeTransaction: latest?.txHash,
+          observedAt: dependencies.now().toISOString(),
+        }
+        await dependencies.mutate(STORE_KEY, current => {
+          const saved = current?.records?.[record.id]
+          if (!saved || saved.partnerId !== policy.partnerId) throw new Error('Funding checkout changed during reconciliation.')
+          const {observedAt: _previousTime, ...previous} = saved.observation ?? {}
+          const {observedAt: _nextTime, ...next} = observation
+          if (JSON.stringify(previous) === JSON.stringify(next)) return current!
+          // Preserve a completed provider observation if a subsequent provider request is unavailable.
+          if (saved.observation?.status === 'funded' && observation.status !== 'funded') return current!
+          return {...current!,records:{...current!.records,[record.id]:{...saved,observation}}}
+        })
+        if (checkout.payment) await dependencies.syncExecution?.(checkout, Boolean(completed))
         return res.json({
           ok: true,
           fundingRequestId: record.id,
@@ -224,6 +248,7 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
       if (recorded.statusCode < 200 || recorded.statusCode >= 300 || !recorded.body?.checkoutId) return sendRecorded(res, recorded)
       const createdAt = dependencies.now().toISOString()
       const unsignedRecord: Omit<FundingRecord, 'integrity'> = {
+        environment: 'live',
         id: fundingId, checkoutId: recorded.body.checkoutId, partnerId: policy.partnerId,
         targetWallet: normalizedTarget, depositAddress: getAddress(deposit.depositAddress), networks,
         amount: requestedAmount, returnUrl, requestHash, checkoutUrl: recorded.body.checkoutUrl,
@@ -236,6 +261,7 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
       }))
       return res.status(recorded.statusCode).json(publicRecord(record, Boolean(recorded.body.replayed)))
     } catch (error) {
+      if (error instanceof DeveloperEnvironmentError) return res.status(error.status).json({ ok: false, error: error.message })
       console.error('[polymarket-funding-checkouts] request failed:', error instanceof Error ? error.message : String(error))
       return res.status(503).json({ ok: false, error: 'Polymarket funding checkout is temporarily unavailable.' })
     }

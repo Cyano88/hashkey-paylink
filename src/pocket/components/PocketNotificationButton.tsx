@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { isXStocksPath, xStockPath } from "../lib/pocketRail";
+import { stockNotificationsRequest } from '../api/pocketStockNotificationsClient';
 import { Bell } from "./PocketIcons";
 import { POCKET_BASE_PATH, POCKET_ROUTES } from "../lib/pocketRoutes";
 import usePocketIdentity from "../hooks/usePocketIdentity";
@@ -9,6 +11,7 @@ import { registerPocketRefreshHandler } from "../lib/pocketRefresh";
 
 export default function PocketNotificationButton() {
   const navigate = useNavigate();
+  const stocks = isXStocksPath(useLocation().pathname);
   const { authenticated, email, getAccessToken } = usePocketIdentity();
   const [unread, setUnread] = useState(0);
   const visible = usePocketPageVisible();
@@ -29,7 +32,7 @@ export default function PocketNotificationButton() {
       try {
         const token = await tokenRef.current();
         if (!token || cancelled || document.visibilityState !== 'visible') return;
-        const inbox = await readPocketRequestInbox(token);
+        const inbox = stocks ? { unreadCount: (await stockNotificationsRequest(() => Promise.resolve(token))).unread } : await readPocketRequestInbox(token);
         if (!cancelled) setUnread(inbox.unreadCount);
       } catch { /* Keep the last count when the session or inbox is unavailable. */ }
       finally { inFlight = false; }
@@ -44,12 +47,12 @@ export default function PocketNotificationButton() {
       unregister();
       window.removeEventListener(POCKET_REQUESTS_UPDATED_EVENT, refresh);
     };
-  }, [authenticated, email, visible]);
+  }, [authenticated, email, visible, stocks]);
   return (
     <button
       type="button"
       onClick={() =>
-        navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.notifications}`)
+        navigate(stocks ? xStockPath("notifications") : POCKET_BASE_PATH + POCKET_ROUTES.notifications)
       }
       className="pointer-events-auto relative flex h-10 w-10 items-center justify-center rounded-full text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-white/[0.06]"
       aria-label="Open notifications"

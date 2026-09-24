@@ -13,7 +13,7 @@ export function createStockBalanceCache(reader = readStockHoldings, now = Date.n
     peek(key: string) {
       const value = entries.get(key)
       const expired = !!value?.snapshot && now() - value.snapshot.observedAt >= STOCK_BALANCE_MAX_AGE_MS
-      return { snapshot: expired ? undefined : value?.snapshot, busy: !!value?.pending, error: value?.pending ? '' : value?.error || (expired ? 'Balances need a fresh update.' : '') }
+      return { displaySnapshot: value?.snapshot, stale: expired || !!value?.error, snapshot: expired ? undefined : value?.snapshot, busy: !!value?.pending, error: value?.pending ? '' : value?.error || (expired ? 'Balances need a fresh update.' : '') }
     },
     subscribe(key: string, listener: () => void) { const set = listeners.get(key) || new Set<() => void>(); set.add(listener); listeners.set(key, set); return () => { set.delete(listener); if (!set.size) listeners.delete(key) } },
     async load(key: string, address: Address, fresh = false, read = reader): Promise<void> {

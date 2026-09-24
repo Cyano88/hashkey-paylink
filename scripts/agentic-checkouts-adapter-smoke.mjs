@@ -166,6 +166,19 @@ assert.equal(recovered.res.statusCode, 200)
 assert.equal(recovered.res.body.transaction, gatewayTransferId)
 
 let reconciliationUrl = ''
+let transferStatus = 'received'
+const gatewayFetcher = async () => new Response(JSON.stringify({ transfers: [{ id: gatewayTransferId, status: transferStatus, token: 'USDC', sendingNetwork: 'eip155:8453', fromAddress: '0x2222222222222222222222222222222222222222', toAddress: '0x1111111111111111111111111111111111111111', amount: '250000', nonce: `0x${'a'.repeat(64)}`, createdAt: '2026-07-22T10:15:30.000Z' }] }))
+for (const status of ['failed', 'pending', 'unknown_future_status', '', null, undefined]) {
+  transferStatus = status
+  assert.equal(await reconcileGatewayPayment(active, { fetcher: gatewayFetcher, markPaid: async () => { throw new Error('Unrecognized status must never mark paid') } }), null)
+}
+for (const status of ['received', 'batched', 'confirmed', 'completed']) {
+  transferStatus = status
+  let accepted = false
+  await reconcileGatewayPayment(active, { fetcher: gatewayFetcher, markPaid: async () => { accepted = true; return paidRecord } })
+  assert.equal(accepted, true)
+}
+
 const reconciledRecord = await reconcileGatewayPayment(active, {
   fetcher: async url => {
     reconciliationUrl = String(url)
@@ -196,4 +209,24 @@ const replayed = await request(challengeHandler)
 assert.equal(replayed.res.statusCode, 200)
 assert.equal(replayed.res.body.status, 'paid')
 
+// Retired networks cannot reach Gateway or record a new payment attempt.
+for (const network of ['arbitrum', 'polygon', 'base-sepolia']) {
+  active = checkout({ network })
+  let protectedCalls = 0, attemptCalls = 0
+  const restricted = createAgenticCheckoutsHandler({ read: async () => active, reconcile: async () => null,
+    protect: async () => { protectedCalls++; throw Error('must not contact Gateway') },
+    beginAttempt: async () => { attemptCalls++; throw Error('must not start payment') },
+    now: () => new Date('2026-07-22T10:15:00.000Z') })
+  assert.equal((await request(restricted)).res.statusCode, 409)
+  assert.equal(protectedCalls, 0); assert.equal(attemptCalls, 0)
+}
+active = checkout({ network: 'arc', arcMainnetChainId: 5042 })
+assert.equal((await request(challengeHandler)).res.statusCode, 402)
+active = checkout({ network: 'arbitrum', payment: { status: 'paid', network: 'arbitrum', txHash: gatewayTransferId } })
+assert.equal((await request(challengeHandler)).res.body.status, 'paid', 'Historical payments remain readable')
+active = checkout({ network: 'arbitrum', agenticAttempts: [{ signatureHash: 'd'.repeat(64) }] })
+const historicalReconciliation = createAgenticCheckoutsHandler({ read: async () => active,
+  reconcile: async record => ({ ...record, payment: { status: 'paid', network: 'arbitrum', txHash: gatewayTransferId } }),
+  protect: async () => { throw Error('must not initiate another payment') }, now: () => new Date('2026-07-22T10:15:00.000Z') })
+assert.equal((await request(historicalReconciliation)).res.body.status, 'paid')
 console.log('Agentic checkout adapter smoke tests passed.')

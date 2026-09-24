@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto'
+import { adminBearerAuthorized, adminSecretConfigured } from '../admin-auth.js'
 import type { Request, Response } from 'express'
 import { isAddress } from 'viem'
 import {
@@ -39,14 +39,6 @@ type UserRefundDependencies = RefundDependencies & {
 
 function clean(value: unknown, max = 180) {
   return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max)
-}
-
-function bearerAuthorized(req: Request) {
-  const expected = process.env.ADMIN_SECRET?.trim() || process.env.CRON_SECRET?.trim() || ''
-  const authorization = req.headers.authorization || ''
-  const provided = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : ''
-  if (expected.length < 24 || provided.length !== expected.length) return false
-  return timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
 }
 
 function assertCircleTransactionMatches(transaction: CircleDeveloperTransaction, expected: {
@@ -226,11 +218,11 @@ export function createPocketBillsRefundHandler(dependencies: RefundDependencies)
       res.setHeader('Allow', 'POST')
       return res.status(405).json({ ok: false, code: 'METHOD_NOT_ALLOWED', error: 'Method not allowed.' })
     }
-    if (!bearerAuthorized(req)) {
-      return res.status(process.env.ADMIN_SECRET || process.env.CRON_SECRET ? 401 : 503).json({
+    if (!adminBearerAuthorized(req)) {
+      return res.status(adminSecretConfigured() ? 401 : 503).json({
         ok: false,
         code: 'BILLS_REFUND_AUTH_REQUIRED',
-        error: process.env.ADMIN_SECRET || process.env.CRON_SECRET ? 'Unauthorized.' : 'Admin authorization is not configured.',
+        error: adminSecretConfigured() ? 'Unauthorized.' : 'Admin authorization is not configured.',
       })
     }
     const intentId = clean(req.body?.intentId, 100)

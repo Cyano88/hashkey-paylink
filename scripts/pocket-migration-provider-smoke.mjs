@@ -133,3 +133,25 @@ for(const [status,expected] of [['PENDING','approval_required'],['IN_PROGRESS','
  }
 }
 console.log('PASS: complete Circle status/error matrix; EXPIRED without error fields retires only through verified reconciliation, COMPLETE never requests a second approval.')
+
+// Circle indexing can lag independently verified on-chain confirmation.
+for(const state of ['SENT','CONFIRMED','COMPLETE']) {
+ const confirmed=createMigrationProvider('synthetic',async(n,p,b)=>p.endsWith('/'+txid)?{transaction:{...(await json(n,p,b)).transaction,state}}:json(n,p,b))
+ assert.equal((await confirmed.resolveChallenge(row,id))?.transactionHash,'0x'+'a'.repeat(64))
+}
+for(const state of ['INITIATED','QUEUED','FAILED','STUCK','UNKNOWN']) {
+ const unconfirmed=createMigrationProvider('synthetic',async(n,p,b)=>p.endsWith('/'+txid)?{transaction:{...(await json(n,p,b)).transaction,state}}:json(n,p,b))
+ assert.equal(await unconfirmed.resolveChallenge(row,id),null)
+}
+const verifiedHash='0x'+'a'.repeat(64)
+for(const state of ['SENT','CONFIRMED']) {
+ const tx={id:txid,walletId:'source',blockchain:'BASE',contractAddress:row.source.address,state,txHash:verifiedHash,createDate:new Date().toISOString()}
+ const history=items=>createMigrationProvider('synthetic',async()=>({transactions:items,migrationPageLink:null}))
+ assert.equal(await history([tx]).noPending(row),false)
+ assert.equal(await history([tx]).noPending(row,undefined,verifiedHash),true)
+ assert.equal(await history([tx]).noPending(row,undefined,'0x'+'b'.repeat(64)),false)
+ assert.equal(await history([{...tx,contractAddress:row.target.address}]).noPending(row,undefined,verifiedHash),false)
+ assert.equal(await history([tx,{...tx,id,txHash:'0x'+'b'.repeat(64)}]).noPending(row,undefined,verifiedHash),false)
+ assert.equal(await history([tx]).noPending(row,Date.now()-10000,verifiedHash),false)
+}
+console.log('PASS: Circle lag permits receipt lookup, not proof; activation ignores only the exact verified migration and still blocks unrelated pending transactions.')

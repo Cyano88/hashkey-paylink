@@ -87,7 +87,7 @@ export async function quoteArcSwap(input: { ownerId: string; walletId: string; w
   }
 }
 function quoteSecret() {
-  const secret = process.env.POCKET_SWAP_QUOTE_SECRET || process.env.PRIVY_APP_SECRET || ''
+  const secret = process.env.POCKET_SWAP_QUOTE_SECRET || ''
   if (secret.length < 32) fail('Arc swap quote signing is not configured.', 503)
   return secret
 }

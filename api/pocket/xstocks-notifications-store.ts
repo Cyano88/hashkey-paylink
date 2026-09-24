@@ -1,11 +1,11 @@
 ﻿import { randomUUID } from 'node:crypto'
-import { createPublicClient, http, parseAbiItem, formatUnits, type Address } from 'viem'
+import { createPublicClient, http, parseAbiItem, decodeEventLog, formatUnits, type Address } from 'viem'
 import { xLayer } from 'viem/chains'
 import { mutateDurableJson, readDurableJson, hasRenderDurableStore } from '../render-durable-store.js'
 import { stockAssets, stockUsdc, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { formatStockQuantity } from '../../src/pocket/lib/pocketStockDisplay.js'
 import { sendPocketPush, pocketPushConfigured, listPocketPushOwners } from './push-devices.js'
-export type StockNotice = { id: string; owner: string; title: string; body: string; at: number; hash?: string; requestId?: string; delivered?: boolean }
+export type StockNotice = { id: string; owner: string; title: string; body: string; at: number; hash?: string; requestId?: string; delivered?: boolean; transfer?: {token:string;symbol:string;amount:string;from:string;to:string;direction:'in'|'out'} }
 export type StockRequest = { id: string; eventId: string; sender: string; payer: string; senderPocketId: string; payerPocketId: string; address: string; payerAddress: string; token: string; symbol: string; amount: string; units: string; decimals: number; status: 'pending' | 'accepted' | 'declined' | 'paid'; at: number; updatedAt: number; hash?: string }
 export type StockNoticeStore = { wallets: Record<string, { address: string; since: number }>; notices: Record<string, StockNotice>; requests: Record<string, StockRequest>; reads: Record<string, number>; cursor?: string; cursorHash?: string }
 export const STOCK_NOTICE_KEY = 'hashpaylink:pocket-xstocks-notifications:v1'
@@ -21,7 +21,7 @@ export async function stockNoticeAsset(token: string) {
   if(!decimals.has(key))decimals.set(key,Number(await stockNoticeClient.readContract({address:key as Address,abi:stockTokenAbi,functionName:'decimals'})))
   return {...asset,decimals:decimals.get(key)!}
 }
-export function putStockNotice(s: StockNoticeStore, notice: StockNotice) { if(!s.notices[notice.id])s.notices[notice.id]=notice }
+export function putStockNotice(s: StockNoticeStore, notice: StockNotice) { if(!s.notices[notice.id])s.notices[notice.id]=notice;else if(notice.transfer)s.notices[notice.id].transfer=notice.transfer }
 export type ConfirmedStockTransfer = { id: string; hash: string; from: string; to: string; token: string; symbol: string; units: string; decimals: number; at: number }
 export function recordStockTransfer(s: StockNoticeStore,t: ConfirmedStockTransfer) {
   if(BigInt(t.units)<=0n || t.from.toLowerCase()===t.to.toLowerCase())return
@@ -30,7 +30,7 @@ export function recordStockTransfer(s: StockNoticeStore,t: ConfirmedStockTransfe
     if(t.at<wallet.since)continue
     const incoming=wallet.address.toLowerCase()===t.to.toLowerCase(),outgoing=wallet.address.toLowerCase()===t.from.toLowerCase()
     if(!incoming&&!outgoing)continue
-    putStockNotice(s,{id:owner+':transfer:'+t.id+':'+(incoming?'in':'out'),owner,title:t.symbol+(incoming?' received':' sent'),body:display+' '+t.symbol+(incoming?' received':' sent')+' on X Layer.',at:t.at,hash:t.hash})
+    putStockNotice(s,{id:owner+':transfer:'+t.id+':'+(incoming?'in':'out'),owner,title:t.symbol+(incoming?' received':' sent'),body:display+' '+t.symbol+(incoming?' received':' sent')+' on X Layer.',at:t.at,hash:t.hash,transfer:{token:t.token,symbol:t.symbol,amount:formatUnits(BigInt(t.units),t.decimals),from:t.from,to:t.to,direction:incoming?'in':'out'}})
   }
   // One confirmed transfer can fulfill at most one accepted request.
   const already=Object.values(s.requests).some(r=>r.hash===t.id)
@@ -95,4 +95,22 @@ export async function deliverStockNotices(){
  const pushOwners=new Set(await listPocketPushOwners())
  const pending=Object.values((await readStockNotices()).notices).filter(n=>!n.delivered&&pushOwners.has(n.owner)).sort((a,b)=>b.at-a.at).slice(0,100)
  for(const n of pending){const delivered=await sendPocketPush(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await mutateStockNotices(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
+}
+
+const activityAttempts=new Map<string,number>()
+const activityHydrations=new Map<string,Promise<void>>()
+export function hydrateStockActivity(owner:string){
+ if(!activityHydrations.has(owner))activityHydrations.set(owner,(async()=>{
+  const snapshot=await readStockNotices(),hashes=[...new Set(Object.values(snapshot.notices).filter(n=>n.owner===owner&&!n.transfer&&n.id.includes(':transfer:')&&n.hash&&(activityAttempts.get(owner+':'+n.hash)||0)<Date.now()).sort((a,b)=>b.at-a.at).map(n=>n.hash!))].slice(0,3)
+  if(hashes.length&&await stockNoticeClient.getChainId()!==196)throw Error('Wrong stock activity chain')
+  for(const hash of hashes){if(activityAttempts.size>512)activityAttempts.delete(activityAttempts.keys().next().value!);activityAttempts.set(owner+':'+hash,Date.now()+60000);try{
+   const receipt=await stockNoticeClient.getTransactionReceipt({hash:hash as Address});if(receipt.status!=='success')continue
+   const block=await stockNoticeClient.getBlock({blockNumber:receipt.blockNumber});if(block.hash!==receipt.blockHash)continue
+   const transfers:ConfirmedStockTransfer[]=[]
+   for(const log of receipt.logs){if(!allowed.has(log.address.toLowerCase()))continue;try{const decoded=decodeEventLog({abi:[parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')],topics:log.topics,data:log.data});const asset=await stockNoticeAsset(log.address);transfers.push({id:hash+':'+log.logIndex,hash,from:decoded.args.from,to:decoded.args.to,token:log.address.toLowerCase(),symbol:asset.symbol,units:String(decoded.args.value),decimals:asset.decimals,at:Number(block.timestamp)*1000})}catch{}}
+   if(Object.values(snapshot.notices).some(n=>n.owner===owner&&n.hash===hash&&n.id.includes(':native:'))){const tx=await stockNoticeClient.getTransaction({hash:hash as Address});if(tx.to&&tx.value>0n)transfers.push({id:hash+':native',hash,from:tx.from,to:tx.to,token:'native',symbol:'OKB',units:String(tx.value),decimals:18,at:Number(block.timestamp)*1000})}
+   await mutateStockNotices(s=>transfers.forEach(t=>recordStockTransfer(s,t)))
+  }catch{/* Retry historical metadata on a later activity read. */}}
+ })().finally(()=>activityHydrations.delete(owner)))
+ return activityHydrations.get(owner)!
 }

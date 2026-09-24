@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Document Verification — Smile Identity</title>
 
-    <link rel="stylesheet" href="https://cdn.smileidentity.com/inline/v1/css/styles.css" />
+    <link rel="stylesheet" href="https://cdn.usesmileid.com/inline/v12/css/styles.css" />
 
     <!-- Start Font Loading -->
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -49,37 +49,8 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         SmileIdentity
       </p>
     </noscript>
-    <script>
-      // Configure sentryOnLoad before adding the Loader Script
-      window.sentryOnLoad = function () {
-        Sentry.init({
-          beforeSend(event) {
-            // Check if the error originates from the library's source files
-            /// https://sentry.zendesk.com/hc/en-us/articles/24076831568027--JS-Filter-events-based-on-their-entire-stack-trace
-            const traces = event.exception.values[0].stacktrace?.frames || [];
-            for (let i in traces) {
-              if (
-                !event.exception.values[0].stacktrace.frames[i].filename.match(
-                  /inline\/src/g,
-                )
-              )
-                return null;
-            }
-            if (!event.request.url.match(/doc-verification/g)) {
-              return null;
-            }
-            return event;
-          },
-          tracesSampleRate: 0.01,
-        });
-      };
-    </script>
-    <script
-      src="https://js.sentry-cdn.com/82cc89f6d5a076c26d3a3cdc03a8d954.min.js"
-      crossorigin="anonymous"
-    ></script>
 
-    <main>
+    <main hidden>
       <section id="loading-screen" class="flow center">
         <div class="nav justify-right">
           <button data-type="icon" type="button" class="close-iframe">
@@ -107,12 +78,18 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         <br />
         <p class="spinner"></p>
 
-        <h1 style="--flow-space: 4rem">Setting up</h1>
+        <h1 style="--flow-space: 4rem" data-i18n="pages.loading.title">
+          Setting up
+        </h1>
 
         <p>
-          Just a few more seconds
+          <span data-i18n="pages.loading.subtitle"
+            >Just a few more seconds</span
+          >
           <br />
-          We are setting up your verification flow
+          <span data-i18n="pages.loading.description"
+            >We are setting up your verification flow</span
+          >
         </p>
 
         <p class="center credits" hidden>
@@ -206,23 +183,39 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
             >
           </button>
         </div>
-        <h1 class="center font-size-500 max-width:100ch">Select ID Type</h1>
+        <h1
+          class="center font-size-500 max-width:100ch"
+          data-i18n="pages.idSelection.title"
+        >
+          Select ID Type
+        </h1>
 
         <form name="hosted-web-config" class="flow flow-space:800">
           <div class="flow flow-space:400">
             <div class="flow input-group">
-              <label for="country"> Select Country </label>
+              <label for="country" data-i18n="pages.idSelection.selectCountry">
+                Select Country
+              </label>
               <select disabled required id="country" name="country">
-                <option value="">--Please Select--</option>
+                <option value="" data-i18n="pages.idSelection.placeholder">
+                  --Please Select--
+                </option>
               </select>
             </div>
 
             <div id="id-type-selector" hidden class="flow input-group">
-              <label for="id_type"> Select ID Type </label>
+              <label for="id_type" data-i18n="pages.idSelection.selectIdType">
+                Select ID Type
+              </label>
             </div>
           </div>
 
-          <button data-variant="solid" type="submit" id="submitConfig">
+          <button
+            data-variant="solid"
+            type="submit"
+            id="submitConfig"
+            data-i18n="common.continue"
+          >
             Continue
             <svg
               aria-hidden="true"
@@ -255,32 +248,21 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
         </p>
       </section>
 
-      <smart-camera-web show-navigation capture-id hidden document-type="">
+      <smart-camera-web
+        show-navigation
+        show-back-on-guidelines
+        capture-id
+        hidden
+        document-type=""
+      >
       </smart-camera-web>
 
-      <section hidden id="upload-progress-screen" class="flow center">
-        <br />
-        <p class="spinner"></p>
-
-        <h1 style="--flow-space: 4rem">Uploading</h1>
-
-        <p>
-          Just a few more seconds
-          <br />
-          We are processing your request
-        </p>
-
-        <p class="center credits">
-          <span class="visually-hidden">Powered by SmileID</span>
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 90 9"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <use href="#attribution" />
-          </svg>
-        </p>
+      <section hidden id="upload-progress-screen">
+        <document-capture-submission
+          id="doc-submission"
+          submission-state="submitting"
+          style="display: block; width: 100%; min-height: 100vh"
+        ></document-capture-submission>
       </section>
 
       <section hidden id="upload-failure-screen" class="flow center">
@@ -364,16 +346,23 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           </defs>
         </svg>
 
-        <h1>Something went wrong</h1>
+        <h1 data-i18n="pages.error.title">Something went wrong</h1>
 
-        <p>We could not upload your information</p>
+        <p data-i18n="pages.error.uploadFailed">
+          We could not upload your information
+        </p>
 
-        <p>
+        <p data-i18n="pages.error.checkInternet">
           Please check that you have a stable internet connection. Then try
           again!
         </p>
 
-        <button data-variant="solid" type="button" id="retry-upload">
+        <button
+          data-variant="solid"
+          type="button"
+          id="retry-upload"
+          data-i18n="pages.error.tryAgain"
+        >
           Try again
           <svg
             aria-hidden="true"
@@ -432,9 +421,11 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           />
         </svg>
 
-        <h1>Submission Complete</h1>
+        <h1 data-i18n="pages.complete.title">Submission Complete</h1>
 
-        <p>That's all you need to verify your identity</p>
+        <p data-i18n="pages.complete.subtitle">
+          That's all you need to verify your identity
+        </p>
 
         <p class="center credits">
           <span class="visually-hidden">Powered by SmileID</span>
@@ -450,7 +441,7 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
       </section>
     </main>
 
-    <script src="https://cdn.smileidentity.com/inline/v1/js/doc-verification.min.js"></script>
+    <script src="https://cdn.usesmileid.com/inline/v12/js/doc-verification.min.js"></script>
   <script id="pocket-verification-inputs">
       // Smile renders BVN/OTP fields in open shadow roots. Style presentation only;
       // keep its input validation, events, consent and submission behavior intact.
@@ -495,5 +486,89 @@ smileid-combobox-trigger:focus-within,input:focus,select:focus,textarea:focus{bo
           .then(() => apply(document.querySelector('main')));
       })();
     </script>
+<script id="pocket-selfie-layout">
+      // Presentation only. Smile owns image capture and liveness verification.
+      (() => {
+        const css = `
+          .smartselfie-capture .camera-preview-container, .smartselfie-capture .video-wrapper { width:100%!important; max-width:320px!important; }
+          .smartselfie-capture { max-width:100%; }
+          #selfie-capture-screen { block-size:auto!important; min-block-size:0!important; padding-block:16px!important; max-inline-size:100%!important; }
+          #selfie-capture-screen .video-container { width:min(100%,320px)!important; aspect-ratio:215/245; margin-inline:auto; }
+          #selfie-capture-screen .video-container .video { width:100%!important; height:100%!important; left:0!important; top:0!important; clip-path:ellipse(46.8% 48% at 50% 50%)!important; }
+          #selfie-capture-screen .video-container video { width:100%!important; height:100%!important; min-height:0!important; object-fit:cover; top:50%!important; }
+          #selfie-capture-screen #image-outline { position:relative; width:100%!important; height:100%!important; display:block; filter:drop-shadow(0 0 2px white); pointer-events:none; }
+          #selfie-capture-screen #image-outline path { stroke:#171717; stroke-width:5; }
+          #selfie-capture-screen #smile-cta { text-shadow:0 1px 6px #000; }
+          #selfie-capture-screen .tips { display:block; max-width:100%; line-height:1.5; }
+          #selfie-capture-screen #start-image-capture { min-height:48px; margin-block:20px; }
+        `;
+        const watched = new WeakSet();
+        const apply = root => {
+          if (root instanceof ShadowRoot && root.host.localName === 'selfie-capture-wrapper') {
+            // Keep an exit available while the model is loading or cannot initialize.
+            const existing = root.querySelector('#pocket-capture-close');
+            if (!existing && root.childElementCount) {
+              const close = document.createElement('button');
+              close.id = 'pocket-capture-close'; close.type = 'button';
+              close.setAttribute('aria-label','Close verification'); close.textContent = '\u00d7';
+              close.style.cssText = 'position:fixed;top:12px;right:16px;width:44px;height:44px;border:0;border-radius:50%;background:#f3f4f6;color:#171717;font:28px/1 sans-serif;z-index:1000';
+              close.addEventListener('click',() => window.parent.postMessage('SmileIdentity::Close','*'));
+              root.append(close);
+            }
+          }
+
+          if (root instanceof ShadowRoot && ['selfie-capture','selfie-capture-wrapper'].includes(root.host.localName) && !root.querySelector('#pocket-selfie-style')) {
+            const style = document.createElement('style');
+            style.id = 'pocket-selfie-style'; style.textContent = css; root.append(style);
+          }
+          if (!watched.has(root)) {
+            watched.add(root);
+            new MutationObserver(() => apply(root)).observe(root,{childList:true,subtree:true});
+          }
+          root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) apply(el.shadowRoot); });
+        };
+        customElements.whenDefined('selfie-capture-wrapper').then(() => apply(document.querySelector('main')));
+      })();
+    </script>
+
+<script id="pocket-v12-recovery">
+(() => {
+  const roots = new WeakSet();
+  const css = `
+    .enhanced-instructions,.smartselfie-capture,.enhanced-submission { background:#fff!important; }
+    .smartselfie-capture { padding-top:72px!important; }
+    .smartselfie-capture .camera-preview-container { width:min(100%,320px)!important; height:auto!important; aspect-ratio:311/418; flex-shrink:0!important; }
+    .smartselfie-capture .video-wrapper { width:100%!important; max-width:none!important; height:100%!important; border:0!important; }
+    .camera-preview-container > div > svg path { stroke-width:6!important; }
+    .camera-preview-container > div > svg path[stroke="#C4C4C4"] { stroke:#64748b; }
+    .camera-video { width:100%!important; height:100%!important; object-fit:cover!important; }
+    .camera-canvas { visibility:hidden; } /* Hide the debug-like mesh, not inference or capture. */
+    .alert-title { font-size:18px!important; line-height:1.45!important; font-weight:600!important; }
+    .enhanced-instructions .hero-oval { margin-block:18px!important; }
+    #pocket-capture-help { margin:0 auto 12px; max-width:300px; text-align:center; font:14px/1.5 system-ui,sans-serif; color:#475569; }
+  `;
+  // Smile owns camera constraints and drawing-surface dimensions throughout capture.
+  const inspect=root=>{
+    if(root instanceof ShadowRoot && root.host.localName==='selfie-capture-wrapper'){
+      if(!root.querySelector('#pocket-v12-style')){const style=document.createElement('style');style.id='pocket-v12-style';style.textContent=css;root.append(style);}
+      const hero=root.querySelector('.hero-oval');
+      if(hero&&!root.querySelector('#pocket-capture-help')){const help=document.createElement('p');help.id='pocket-capture-help';help.textContent='Look at the camera. When prompted, smile with your mouth slightly open.';hero.after(help);}
+    }
+    if(!roots.has(root)){roots.add(root);new MutationObserver(()=>inspect(root)).observe(root,{childList:true,subtree:true});}
+    root.querySelectorAll('*').forEach(el=>{if(el.shadowRoot)inspect(el.shadowRoot);});
+  };
+  customElements.whenDefined('selfie-capture-wrapper').then(()=>inspect(document.querySelector('main')));
+  addEventListener('message',event=>{
+    if(event.source!==window.parent||!['https://app.hashpaylink.com','http://localhost:5173'].includes(event.origin)||event.data?.source!=='Pocket::SubmissionError')return;
+    const screen=document.getElementById('upload-failure-screen');if(!screen)return;
+    const {status,retryable,message}=event.data;
+    const title=screen.querySelector('h1');if(title)title.textContent='Verification not submitted';
+    const text=screen.querySelector('[data-i18n="pages.error.uploadFailed"]');
+    if(text)text.textContent=status===401?'Your session expired. Close this screen and continue verification.':status===402?'Smile could not confirm the service wallet balance. Please contact Pocket support.':status===403?'Smile could not authorize this verification. Please contact Pocket support.':status===429?'Too many attempts. Please wait before continuing.':status===400||status===422?String(message||'Please review your verification details.').slice(0,300):'We could not confirm your submission. Check your connection before trying again.';
+    const hint=screen.querySelector('[data-i18n="pages.error.checkInternet"]');if(hint)hint.textContent=retryable?'You can retry here without taking another selfie.':'Close this screen to return to Pocket.';
+    const retry=document.getElementById('retry-upload');if(retry)retry.hidden=retryable!==true;
+  });
+})();
+</script>
 </body>
 </html>

@@ -5,6 +5,19 @@ import { existsSync } from 'node:fs'
 import { join, delimiter, isAbsolute } from 'node:path'
 import { activeManager, keysApi } from './key-management.mjs'
 const VARIABLE = 'HASHPAYLINK_API_KEY'
+const AGREEMENT_VARIABLE = 'HASHPAYSTREAM_ARC_MAINNET_API_KEY'
+function targetVariable(target) {
+  const variable = target.variable ?? VARIABLE
+  if (![VARIABLE, AGREEMENT_VARIABLE].includes(variable)) throw safeError('Unsupported backend variable.')
+  return variable
+}
+function requireAgreementKey(target, key) {
+  if (targetVariable(target) !== AGREEMENT_VARIABLE) return
+  if (!key.scopes?.includes('agreement:read') || !key.scopes.includes('agreement:create')
+    || key.scopes.some(scope => !['project:read','agreement:read','agreement:create'].includes(scope))) {
+    throw safeError('Agreement hosting requires a key limited to Agreement read/create and optional project read.')
+  }
+}
 const digest = value => createHash('sha256').update(value === undefined ? 'absent' : 'value:' + value).digest('hex')
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
 export function railwayRun(args, input, env = process.env) {
@@ -39,10 +52,11 @@ export function providerAdapter({ env, fetcher, railway = railwayRun }) {
   const flags = target => ['--project', target.project, '--environment', target.environment, '--service', target.service, '--json']
   return {
     async read(target) {
+      const variableName = targetVariable(target)
       if (target.provider === 'render') {
         const service = await render('/services/' + target.service)
         if (service?.id !== target.service || !['web_service','private_service','background_worker','cron_job'].includes(service.type)) throw safeError('Select a supported backend Render service, not a static site.')
-        const variable = await render('/services/' + target.service + '/env-vars/' + VARIABLE)
+        const variable = await render('/services/' + target.service + '/env-vars/' + variableName)
         const value = variable?.value ?? variable?.envVar?.value
         if (variable !== undefined && typeof value !== 'string') throw safeError('Unknown provider variable response.')
         return { label: service.name, value }
@@ -52,20 +66,26 @@ export function providerAdapter({ env, fetcher, railway = railwayRun }) {
       const service = status.services?.edges?.find(edge => edge.node.id === target.service)?.node
       if (status.id !== target.project || !environment || !service) throw safeError('Railway target does not match the selected project, environment and service.')
       const vars = await railway(['variable','list', ...flags(target)], undefined, env)
-      if (!vars || typeof vars !== 'object' || Array.isArray(vars) || (vars[VARIABLE] !== undefined && typeof vars[VARIABLE] !== 'string')) throw safeError('Invalid Railway variables response.')
-      return { label: status.name + ' / ' + environment.name + ' / ' + service.name, value: vars[VARIABLE] }
+      if (!vars || typeof vars !== 'object' || Array.isArray(vars) || (vars[variableName] !== undefined && typeof vars[variableName] !== 'string')) throw safeError('Invalid Railway variables response.')
+      return { label: status.name + ' / ' + environment.name + ' / ' + service.name, value: vars[variableName] }
     },
     async write(target, value) {
-      if (target.provider === 'render') await render('/services/' + target.service + '/env-vars/' + VARIABLE, 'PUT', { value })
+      const variableName = targetVariable(target)
+      if (target.provider === 'render') await render('/services/' + target.service + '/env-vars/' + variableName, 'PUT', { value })
       else {
-        const result = await railway(['variable','set',VARIABLE,'--stdin','--skip-deploys', ...flags(target)], value, env)
-        if (result?.set !== true || !result.keys?.includes(VARIABLE)) throw safeError('Railway did not confirm the variable update.')
+        const result = await railway(['variable','set',variableName,'--stdin','--skip-deploys', ...flags(target)], value, env)
+        if (result?.set !== true || !result.keys?.includes(variableName)) throw safeError('Railway did not confirm the variable update.')
       }
     },
   }
 }
 function validateTarget(options) {
   const target = { provider: options.provider, service: options.service }
+  if (options.product !== undefined && !['checkout', 'agreement'].includes(options.product)) throw safeError('Choose checkout or agreement.')
+  if (options.product === 'agreement') {
+    if (options.provider !== 'render') throw safeError('Agreement handoff currently supports Render only.')
+    target.variable = AGREEMENT_VARIABLE
+  }
   if (target.provider === 'render') {
     if (!/^srv-[a-z0-9]{8,40}$/.test(target.service ?? '') || options.project || options.environment) throw safeError('Render requires an explicit service ID only.')
   } else if (target.provider === 'railway') {
@@ -89,6 +109,7 @@ export async function hostingCommand(command, options, deps) {
     const live = await keysApi({action:'list'}, {fetcher, session})
     const remote = live.keys.find(key => key.id === entry.metadata.id && !key.revokedAt && Date.parse(key.expiresAt) > Date.now())
     if (!remote) throw safeError('Scoped key is inactive.')
+    requireAgreementKey(target, remote)
     const current = await provider.read(target)
     const replace = current.value !== undefined && current.value !== entry.value
     if (replace && !options.replace) throw safeError('The variable already exists. Review the target and explicitly use --replace to plan replacement.')
@@ -98,7 +119,7 @@ export async function hostingCommand(command, options, deps) {
     vault.plans = [...(vault.plans ?? []).slice(-9), plan]
     await vaultStore.write(vault)
     return { ok:true, plan: { id:plan.id, target, label:plan.label, keyId:plan.keyId, projectId:plan.projectId,
-      variable:VARIABLE, replace, variableScope: target.provider === 'render' ? 'Service-local; may override an inherited environment-group value' : 'Selected service and environment', expiresAt:plan.expiresAt, deploy:false }, next:'Review the target, then run hosting apply --plan ' + plan.id }
+      variable:targetVariable(target), replace, variableScope: target.provider === 'render' ? 'Service-local; may override an inherited environment-group value' : 'Selected service and environment', expiresAt:plan.expiresAt, deploy:false }, next:'Review the target, then run hosting apply --plan ' + plan.id }
   }
   if (!uuid.test(options.plan ?? '')) throw safeError('Specify a reviewed hosting plan ID.')
   plan = vault.plans?.find(item => item.id === options.plan && item.projectId === session.grant.projectId)
@@ -107,6 +128,7 @@ export async function hostingCommand(command, options, deps) {
   if (!entry) throw safeError('Local key is unavailable.')
   const live = await keysApi({action:'list'}, {fetcher, session})
   if (!live.keys.some(key => key.id === plan.keyId && !key.revokedAt && Date.parse(key.expiresAt) > Date.now())) throw safeError('Scoped key is inactive.')
+  requireAgreementKey(plan.target, live.keys.find(key => key.id === plan.keyId))
   const current = await provider.read(plan.target)
   if (current.value !== entry.value) {
     if (digest(current.value) !== plan.expected) throw safeError('The provider variable changed since planning. Review a new plan.')
@@ -116,5 +138,5 @@ export async function hostingCommand(command, options, deps) {
   if (confirmed.value !== entry.value) throw safeError('Provider readback did not match. Retry this same plan to reconcile; do not create another key.')
   plan.state = 'applied'; plan.appliedAt = new Date().toISOString()
   await vaultStore.write(vault)
-  return {ok:true, planId:plan.id, target:plan.target, keyId:plan.keyId, variable:VARIABLE, verified:true, deploymentTriggered:false}
+  return {ok:true, planId:plan.id, target:plan.target, keyId:plan.keyId, variable:targetVariable(plan.target), verified:true, deploymentTriggered:false}
 }

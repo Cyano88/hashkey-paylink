@@ -14,7 +14,7 @@ export async function activateVerifiedMigration(plan:MigrationPlan,userToken:str
     const checkedAt=Date.now(),provider=createMigrationProvider(userToken)
     const [checks,intents,receiptsCurrent]=await Promise.all([
      Promise.all(current.rows.map(async row=>{
-      const [units,inventory,pending]=await Promise.all([readFreshMigrationUsdcUnits(row.network,row.source.address as `0x${string}`),provider.inventory(row),provider.noPending(row)])
+      const [units,inventory,pending]=await Promise.all([readFreshMigrationUsdcUnits(row.network,row.source.address as `0x${string}`),provider.inventory(row),provider.noPending(row,undefined,current.transfers[row.network]?.transactionHash)])
       return {empty:units===0n,accounted:await migrationAssetsAccountedFor(current,inventory),noPending:pending}
      })),
      paymentExecutionRepository.listOwned(current.userId,undefined,['prepared','authorized','submitted','processing','needs_review']),

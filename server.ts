@@ -1,3 +1,4 @@
+import pocketCheckoutConfig from './api/pocket/checkout-config.js'
 import pocketMigrationLegacyFlowHandler from './api/pocket/wallet-migration-legacy-flow.js'
 /**
  * Express server for Render deployment.
@@ -95,6 +96,7 @@ import pocketPaylinksHandler from './api/pocket/paylinks.js'
 import pocketRequestsHandler from './api/pocket/requests.js'
 import pocketPushDevicesHandler from './api/pocket/push-devices.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
+import pocketXPayHandler, { drainXPayPayments } from './api/pocket/xpay.js'
 import pocketStockNotificationsHandler from './api/pocket/xstocks-notifications.js'
 import { drainStockNotifications } from './api/pocket/xstocks-notifications-store.js'
 import pocketStockBalancesHandler from './api/pocket/xstocks-balances.js'
@@ -145,6 +147,8 @@ import publicConfigHandler from './api/public-config.js'
 import { runtimePublicConfigScript } from './api/runtime-public-config.js'
 import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
+import developerCapabilitiesHandler from './api/developer-capabilities.js'
+import { developerEnvironmentBoundary } from './api/developer-environment.js'
 import arcAgreementsHandler from './api/arc-agreements.js'
 import verifiedArcRecipientsHandler from './api/arc-agreement-verified-recipients.js'
 import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
@@ -191,7 +195,7 @@ app.use((_req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY')
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
-  res.setHeader('Permissions-Policy', 'camera=(self "https://cdn.smileidentity.com" "https://hashkey-paylink.onrender.com"), microphone=(), geolocation=()')
+  res.setHeader('Permissions-Policy', 'camera=(self "https://cdn.smileidentity.com" "https://cdn.usesmileid.com" "https://hashkey-paylink.onrender.com"), microphone=(), geolocation=()')
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   }
@@ -199,13 +203,13 @@ app.use((_req, res, next) => {
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com https://cdn.smileidentity.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://www.youtube.com https://s.ytimg.com https://cdn.smileidentity.com https://cdn.usesmileid.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' https: wss:",
-      "frame-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
-      "child-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+      "frame-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://cdn.usesmileid.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
+      "child-src 'self' https://hashkey-paylink.onrender.com https://cdn.smileidentity.com https://cdn.usesmileid.com https://auth.privy.io https://pw-auth.circle.com https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://www.youtube.com https://www.youtube-nocookie.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -219,23 +223,19 @@ app.get('/pocket/identity-frame', (req, res) => {
   if (req.hostname !== 'hashkey-paylink.onrender.com' && process.env.NODE_ENV === 'production') return res.sendStatus(404)
   res.removeHeader('X-Frame-Options')
   res.setHeader('Referrer-Policy', 'no-referrer')
-  res.setHeader('Cache-Control', 'public, max-age=300')
-  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
+  res.setHeader('Cache-Control', 'no-store')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   res.setHeader('Content-Security-Policy', [
     "default-src 'none'",
-    "script-src 'unsafe-inline' 'unsafe-eval' https://cdn.smileidentity.com https://js.sentry-cdn.com https://browser.sentry-cdn.com",
-    "style-src 'unsafe-inline' https://cdn.smileidentity.com https://fonts.googleapis.com",
-    "font-src https://fonts.gstatic.com data:",
-    "img-src https: data: blob:",
-    "connect-src https: wss:",
-    "worker-src blob: https://cdn.smileidentity.com",
-    "media-src blob:",
-    "frame-ancestors https://app.hashpaylink.com http://localhost:5173",
+    "script-src 'unsafe-inline'",
+    "style-src 'unsafe-inline'",
+    "connect-src 'none'",
+    "frame-ancestors https://app.hashpaylink.com https://pocket.hashpaylink.com http://localhost:5173",
     "base-uri 'none'",
     "form-action 'none'",
-    "sandbox allow-scripts allow-same-origin allow-forms allow-popups",
   ].join('; '))
-  return res.sendFile(join(__dirname, 'vendor', 'smile-id', req.query.method === 'government_id' ? 'doc-verification.html' : 'biometric-kyc.html'))
+  // Enrollment is paused, including hosted frames reached by older app sessions.
+  return res.sendFile(join(__dirname, 'vendor', 'smile-id', 'coming-soon.html'))
 })
 
 const vtpassWebhookLimiter = rateLimit({ name: 'vtpass-webhook', windowMs: 60_000, max: 60 })
@@ -257,6 +257,9 @@ app.use(express.json({ limit: '256kb' }))
 
 // A CLI credential must not activate a different API surface, including public
 // mutations that do not otherwise resolve a developer policy.
+app.all('/api/v2/capabilities', developerCapabilitiesHandler)
+app.use(['/api/v2/checkouts', '/api/v2/agreements', '/api/v2/funding'], developerEnvironmentBoundary)
+
 app.use('/api', (req, res, next) => {
   const usesScoped = [req.headers.authorization, req.headers['x-api-key']].some(value => /hpl_(?:cli|app)_/.test(String(value ?? '')))
   if (usesScoped && req.path !== '/v2/cli/auth' && !cliRequestScope(req)) {
@@ -385,6 +388,8 @@ app.get('/api/pocket/requests',          readLimiter, pocketRequestsHandler)
 app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
+app.get('/api/pocket/checkout-config', readLimiter, pocketCheckoutConfig)
+app.all('/api/pocket/xstocks/xpay', strictLimiter, pocketXPayHandler)
 app.all('/api/pocket/xstocks/notifications', strictLimiter, pocketStockNotificationsHandler)
 app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)
 app.post('/api/pocket/xstocks/prices', readLimiter, pocketStockPricesHandler)
@@ -558,7 +563,7 @@ void drainPocketReconciliation().catch(error => {
   console.error('[pocket-reconciliation] startup run failed:', error instanceof Error ? error.message : String(error))
 })
 
-const stockNotificationTimer = setInterval(() => { void drainStockNotifications().catch(() => console.warn('[xstocks-notifications] scan deferred')) }, 30_000)
+const stockNotificationTimer = setInterval(() => { void drainStockNotifications().catch(() => console.warn('[xstocks-notifications] scan deferred')); void drainXPayPayments().catch(() => console.warn('[xpay] confirmation deferred')) }, 30_000)
 stockNotificationTimer.unref()
 void drainStockNotifications().catch(() => console.warn('[xstocks-notifications] startup deferred'))
 const pocketMoneyPushTimer = setInterval(() => {

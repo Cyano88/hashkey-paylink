@@ -1,0 +1,10 @@
+﻿import assert from 'node:assert/strict';
+import {missingPocketEvmWalletPlan} from '../api/pocket/wallet-setup.ts';
+const base={id:'owned-base',address:'0x'+'1'.repeat(40),blockchain:'BASE',accountType:'SCA',state:'LIVE'};
+const p=missingPocketEvmWalletPlan('ARB',base.id,[base]);assert.equal(p.walletReady,false);assert.match(p.idempotencyKey,/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-a[a-f0-9]{3}-[a-f0-9]{12}$/);assert.deepEqual(missingPocketEvmWalletPlan('ARB',base.id,[base]),p);
+assert.deepEqual(missingPocketEvmWalletPlan('ARB',base.id,[base,{...base,id:'owned-arb',blockchain:'ARB'}]),{walletReady:true});
+for(const peer of [{...base,blockchain:'BASE-SEPOLIA'},{...base,accountType:'EOA'},{...base,state:'FROZEN'}])assert.throws(()=>missingPocketEvmWalletPlan('ARB',base.id,[peer]));
+assert.throws(()=>missingPocketEvmWalletPlan('ARB','unowned',[base]));assert.throws(()=>missingPocketEvmWalletPlan('ETH',base.id,[base]));
+assert.throws(()=>missingPocketEvmWalletPlan('ARB',base.id,[base,{...base,id:'frozen-arb',blockchain:'ARB',state:'FROZEN'}]));
+assert.notEqual(missingPocketEvmWalletPlan('ARB','another-base',[{...base,id:'another-base'}]).idempotencyKey,p.idempotencyKey);
+console.log('PASS missing-network creation is owner-bound, mainnet SCA-only, idempotent, skips existing wallets and does not bypass a frozen wallet.');
