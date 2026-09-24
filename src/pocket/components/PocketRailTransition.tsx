@@ -12,7 +12,7 @@ export default function PocketRailTransition() {
     const timer = window.setTimeout(() => setVisible(false), 2200)
     return () => { window.clearTimeout(timer); setVisible(false) }
   }, [location.key, location.state])
-  if (!visible) return null
+  if (!visible || !location.state?.pocketRailTransition) return null
   return <div key={location.key} className="pocket-mode-curtain" aria-hidden="true">
     <div className="pocket-mode-brand">
       <div className="pocket-mode-wordmark"><span className="pocket-mode-mark"><CPurseIcon size={56} title="" /></span><span className="pocket-mode-name">Pocket</span></div>
