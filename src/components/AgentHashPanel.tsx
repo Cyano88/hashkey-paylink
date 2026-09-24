@@ -2358,18 +2358,8 @@ export function TelegramHelperPanel({
     return `${shareOrigin()}/polydesk?${params.toString()}`
   }
 
-  function buildLpScoutWalletManagerUrl(context: string) {
-    const params = new URLSearchParams()
-    params.set('profile', 'agent')
-    params.set('walletManager', 'service')
-    params.set('src', 'lp-scout')
-    params.set('run', 'polymarket-scout')
-    params.set('scoutMode', /\b(url|market|slug|theme|specific|this)\b/i.test(context) ? 'theme' : 'best')
-    params.set('maxAmount', lpScoutOptions[0]?.amount ?? '0.01')
-    params.set('serviceUrl', '/api/x402/polymarket-scout')
-    params.set('n', 'base')
-    if (context.trim()) params.set('context', context.trim().slice(0, 180))
-    return `${shareOrigin()}/agent?${params.toString()}`
+  function buildLpScoutWalletManagerUrl(_context: string) {
+    return 'https://polydesk.trade'
   }
 
   function lpScoutTreasuryAccessRequest(): SavedRequest {

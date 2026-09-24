@@ -204,10 +204,6 @@ services:
         sync: false                   # scoped server token for PolyDesk funding checkout creation
       - key: RESEND_API_KEY
         sync: false                   # Resend API key for Hash PayLink transactional emails
-      - key: STREAM_INVITE_FROM_EMAIL
-        value: "no-reply@mail.hashpaylink.com"
-      - key: STREAM_INVITE_FROM_NAME
-        value: "StreamPay"
       - key: ALERT_FROM_EMAIL
         value: "no-reply@mail.hashpaylink.com"
       - key: ZEROSCOUT_API_URL
