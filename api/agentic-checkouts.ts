@@ -1,3 +1,4 @@
+import { isAgentCheckoutNetwork } from '../src/lib/developerNetworkPolicy.js'
 import type { Request, Response } from 'express'
 import { createHash } from 'crypto'
 import { formatUnits, isAddress, parseUnits } from 'viem'
@@ -151,6 +152,7 @@ export async function reconcileGatewayPayment(record: CheckoutRecord, dependenci
 }
 
 async function createGatewayProtection(record: CheckoutRecord): Promise<GatewayMiddleware> {
+  if (!isAgentCheckoutNetwork(record.network)) throw Object.assign(new Error('Unsupported agent checkout network.'), { status: 409 })
   const route = hostedCheckoutPaymentOption(record, record.network)
   if (!route) throw new Error('Agentic checkout routing is unavailable.')
   const config = NETWORK_CONFIG[route.network]
@@ -204,6 +206,9 @@ export function createAgenticCheckoutsHandler(dependencies: Dependencies = defau
           transaction: current.payment.txHash,
         })
       }
+
+      // Existing accepted attempts may still reconcile above; never initiate a new unsupported payment.
+      if (!isAgentCheckoutNetwork(current.network)) return res.status(409).json({ ok: false, error: 'Agent checkout supports Base and Arc only. Request a new checkout on a supported network.' })
 
       if (dependencies.now().getTime() >= Date.parse(current.expiresAt)) return res.status(410).json({ ok: false, error: 'Checkout expired.' })
 

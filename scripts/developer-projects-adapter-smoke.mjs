@@ -188,6 +188,17 @@ const agenticPolicy = developerPolicyFromStore(store, agenticKey.body.apiKey, po
 assert.equal(agenticPolicy.checkoutMode, 'agentic')
 assert.deepEqual(agenticPolicy.capabilities, ['hosted_checkout', 'arc_agreements'])
 assert.equal(agenticPolicy.environment, 'live')
+const savedAgent = structuredClone(store.projects[agenticProject.body.project.id])
+const legacyAgent = store.projects[agenticProject.body.project.id]
+legacyAgent.networks = ['arbitrum', 'arc']; legacyAgent.defaultNetwork = 'arbitrum'; legacyAgent.recipients.arbitrum = linkedWallet
+const restrictedPolicy = developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret)
+assert.deepEqual(restrictedPolicy.paymentOptions.map(option => option.network), ['arc'])
+assert.equal(restrictedPolicy.defaultNetwork, 'arc')
+assert.equal((await request(handler, 'POST', { action: 'create-key', projectId: legacyAgent.id, name: 'Blocked legacy route', environment: 'live' })).statusCode, 409)
+assert.equal((await request(handler, 'PUT', { ...legacyAgent, action: 'configure', projectId: legacyAgent.id })).statusCode, 400)
+legacyAgent.networks = ['arbitrum']
+assert.equal(developerPolicyFromStore(store, agenticKey.body.apiKey, portalSecret), null)
+store.projects[savedAgent.id] = savedAgent
 
 activeIdentity = { userId: 'did:privy:operations', email: 'operations@example.com' }
 const operationsProjects = await request(handler, 'GET', undefined, { resource: 'admin' })

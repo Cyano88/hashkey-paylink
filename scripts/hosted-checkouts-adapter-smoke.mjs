@@ -231,6 +231,10 @@ const multiExecution = await executions.findByResource('partner:polydesk', multi
 assert.equal(multiExecution.sourceNetwork, 'multi')
 assert.equal(multiExecution.state, 'completed')
 
+assert.equal((await request(handler, 'POST', {
+  body: { ...valid, checkoutMode: 'agentic', agenticType: 'agent_treasury', network: 'arbitrum' },
+  headers: { ...headers, 'idempotency-key': 'partner:agentic:unsupported' },
+})).statusCode, 400)
 const agenticCreated = await request(handler, 'POST', {
   body: { ...valid, checkoutMode: 'agentic', agenticType: 'creator_earnings' },
   headers: { ...headers, 'idempotency-key': 'partner:agentic:00000001' },
@@ -413,16 +417,22 @@ assert.equal((await request(managedAgenticHandler, 'POST', {
   body: managedBody,
   headers: { ...managedHeaders, 'idempotency-key': 'managed:human:blocked0001' },
 })).statusCode, 403)
-const scopedManagedAgentic = await request(managedAgenticHandler, 'POST', {
+const blockedManagedAgentic = await request(managedAgenticHandler, 'POST', {
   body: { ...managedBody, checkoutMode: 'agentic', agenticType: 'agent_treasury', network: 'arbitrum' },
+  headers: { ...managedHeaders, 'idempotency-key': 'managed:agentic:unsupported' },
+})
+assert.equal(blockedManagedAgentic.statusCode, 400)
+assert.equal(managedAgenticStore, undefined, 'Unsupported network must not create a checkout')
+const scopedManagedAgentic = await request(managedAgenticHandler, 'POST', {
+  body: { ...managedBody, checkoutMode: 'agentic', agenticType: 'agent_treasury', network: 'base' },
   headers: { ...managedHeaders, 'idempotency-key': 'managed:agentic:scoped0001' },
 })
 assert.equal(scopedManagedAgentic.statusCode, 201)
-assert.equal(scopedManagedAgentic.body.network, 'arbitrum')
-assert.deepEqual(scopedManagedAgentic.body.availableNetworks, ['arbitrum'])
+assert.equal(scopedManagedAgentic.body.network, 'base')
+assert.deepEqual(scopedManagedAgentic.body.availableNetworks, ['base'])
 const managedAgenticLookup = await request(managedAgenticHandler, 'GET', { query: { id: scopedManagedAgentic.body.checkoutId } })
-assert.equal(managedAgenticLookup.body.checkout.network, 'arbitrum')
-assert.deepEqual(managedAgenticLookup.body.checkout.availableNetworks, ['arbitrum'])
+assert.equal(managedAgenticLookup.body.checkout.network, 'base')
+assert.deepEqual(managedAgenticLookup.body.checkout.availableNetworks, ['base'])
 assert.equal(managedAgenticLookup.body.paymentUrl, undefined)
 assert.equal((await request(managedAgenticHandler, 'POST', {
   body: { ...managedBody, checkoutMode: 'agentic', agenticType: 'agent_treasury' },
