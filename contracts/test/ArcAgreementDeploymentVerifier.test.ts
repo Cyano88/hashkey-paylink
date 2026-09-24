@@ -101,9 +101,9 @@ describe('Arc Agreement deployment verifier', () => {
       observations: { ...observations, ...overrides },
     })
 
-    expect(() => verify({ chainId: 84532 })).to.throw(/approved Arc Testnet chain/)
+    expect(() => verify({ chainId: 84532 })).to.throw(/approved Arc Mainnet chain/)
     expect(() => verify({ runtimeBytecode: '0x60006000' })).to.throw(/runtime bytecode/)
-    expect(() => verify({ factoryUsdc: operator.address })).to.throw(/official Arc Testnet USDC/)
+    expect(() => verify({ factoryUsdc: operator.address })).to.throw(/official Arc Mainnet USDC/)
     expect(() => verify({ factoryOperator: observations.factoryUsdc })).to.throw(/operator/)
     expect(() => verify({
       deploymentTransaction: { ...observations.deploymentTransaction, to: operator.address },
@@ -174,7 +174,7 @@ describe('Arc Agreement deployment verifier', () => {
     })
     expect(proof.verified).to.equal(true)
     expect(observedUrl).to.equal(
-      `https://testnet.arcscan.app/api/v2/smart-contracts/${observations.factoryAddress}`,
+      `https://explorer.arc.io/api/v2/smart-contracts/${observations.factoryAddress}`,
     )
     expect(observedInit?.method).to.equal('GET')
     expect(observedInit?.redirect).to.equal('error')

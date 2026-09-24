@@ -1,3 +1,4 @@
+import { requireMainnetDeploymentChain } from '../lib/arcAgreementDeploymentConfig'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -90,7 +91,8 @@ async function main() {
   const provider = new JsonRpcProvider(ARC_RPC_URL, ARC_CHAIN_ID, {
     staticNetwork: true,
   })
-  const network = await readWithBoundedRetry(() => provider.getNetwork())
+  const reportedChainId = BigInt(await readWithBoundedRetry(() => provider.send('eth_chainId', [])))
+  requireMainnetDeploymentChain(reportedChainId)
   const deployerCode = await readWithBoundedRetry(() => provider.getCode(deployer))
   const deployerBalance = await readWithBoundedRetry(() => provider.getBalance(deployer))
   const usdcCode = await readWithBoundedRetry(() => provider.getCode(manifest.network.usdc))
@@ -119,7 +121,7 @@ async function main() {
   const result = evaluateArcAgreementDeploymentSimulation({
     manifest,
     expectedSourceCommit: sourceCommit,
-    chainId: Number(network.chainId),
+    chainId: Number(reportedChainId),
     deployer,
     deployerCode,
     deployerBalance,
