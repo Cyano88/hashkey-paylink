@@ -14,8 +14,6 @@ services:
         value: production
 
       # ── Frontend (baked in at build time by Vite) ──────────────────────────
-      - key: VITE_WALLETCONNECT_PROJECT_ID
-        sync: false                   # set manually in Render dashboard
       - key: VITE_AUTH_BRIDGE
         value: "hybrid"               # enables Privy-backed public PolyDesk sessions
       - key: VITE_PRIVY_APP_ID
@@ -56,8 +54,6 @@ services:
         sync: false
       - key: ARENA_ESCROW_FACTORY_ADDRESS_MAINNET
         sync: false                   # Server-side Arena escrow factory after multiplayer contract deploy
-      - key: VITE_ARENA_ESCROW_FACTORY_ADDRESS_MAINNET
-        sync: false                   # Browser-visible Arena escrow factory after deploy
       - key: ARENA_RELAYER_PRIVATE_KEY_MAINNET
         sync: false                   # Server-side Arena relayer key; must match deployed Arena factory relayer
       - key: CIRCLE_API_KEY
@@ -260,8 +256,8 @@ services:
         value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
 
       # Operational endpoint authentication and historical payment indexing
-      - key: CRON_SECRET
-        sync: false                   # authenticates current operational/refund endpoints
+      - key: ADMIN_SECRET
+        sync: false                   # Authorization Bearer credential, at least 24 characters
       - key: FACTORY_FROM_BLOCK
         value: "45786000"             # Base block before the 0.2% router factory deployment
       - key: SOLANA_RPC_URL

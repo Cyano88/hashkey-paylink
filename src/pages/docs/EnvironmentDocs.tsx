@@ -16,7 +16,6 @@ export default function EnvironmentDocs() {
           rows={[
             ['DATABASE_URL', 'Yes', 'Render Postgres URL for receipts, agreement projections, agent/helper state, POS profiles, PolyDesk profiles, and Privy/Circle mappings.'],
             ['ADMIN_SECRET', 'Yes', 'Long random secret for protected maintenance endpoints.'],
-            ['CRON_SECRET', 'Optional', 'Secret for authenticated cron or background jobs.'],
             ['TREASURY_ADDRESS', 'Optional', 'EVM treasury wallet for platform fees.'],
           ]}
         />
@@ -118,7 +117,6 @@ export default function EnvironmentDocs() {
             ['STREAM_FACTORY_ADDRESS_MAINNET', 'Legacy stream', 'Compatibility StreamVaultFactory contract on Arc.'],
             ['VITE_STREAM_FACTORY_ADDRESS_MAINNET', 'Legacy stream', 'Browser-visible compatibility StreamVaultFactory address.'],
             ['ARENA_ESCROW_FACTORY_ADDRESS_MAINNET', 'Awaiting mainnet deployment', 'Experimental Arena escrow factory address.'],
-            ['VITE_ARENA_ESCROW_FACTORY_ADDRESS', 'Awaiting mainnet deployment', 'Browser-visible experimental Arena factory address.'],
             ['ARENA_RELAYER_PRIVATE_KEY', 'Awaiting mainnet deployment', 'Privileged experimental Arena relayer. Never use for public funds.'],
           ]}
         />
