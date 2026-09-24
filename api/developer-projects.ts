@@ -43,7 +43,7 @@ type DeveloperKey = {
   createdAt: string
   lastUsedAt?: string
   revokedAt?: string
-  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create'>
+  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create'>
   expiresAt?: string
   createdByGrant?: string
   operationId?: string
@@ -1176,8 +1176,8 @@ export function createScopedDeveloperKeysHandler(
       if (action === 'create') {
         if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId) || !/^hpl_app_[a-f0-9]{64}$/.test(rawKey)
           || !name || !Number.isInteger(days) || days < 1 || days > 30
-          || !Array.isArray(scopes) || !scopes.length || scopes.length > 3 || new Set(scopes).size !== scopes.length
-          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create'].includes(scope) || !grant.scopes.includes(scope))) {
+          || !Array.isArray(scopes) || !scopes.length || scopes.length > 5 || new Set(scopes).size !== scopes.length
+          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
           return res.status(400).json({ ok: false, error: 'Use a unique operation id, a scoped key, 1-30 days, and permissions included in the approved grant.' })
         }
         requestDigest = keyDigest(dependencies.portalSecret(), JSON.stringify([rawKey, name, [...scopes].sort(), days]))
@@ -1190,6 +1190,12 @@ export function createScopedDeveloperKeysHandler(
         if (action === 'create') {
           if (projectCheckoutMode(latest) !== 'human' || !policyForDeveloperProject(latest, 'live', dependencies.portalSecret())) {
             throw Object.assign(new Error('An active, ready human checkout project is required.'), { status: 409 })
+          }
+          if (scopes.some((scope: string) => scope.startsWith('agreement:'))
+            && (!latest.capabilities?.includes('arc_agreements') || latest.settlementMode !== 'usdc'
+              || latest.arcMainnetChainId !== 5042 || !latest.networks.includes('arc') || !latest.recipients.arc
+              || !latest.webhookUrl || !latest.webhookSecretCipher)) {
+            throw Object.assign(new Error('Agreement keys require Arc Mainnet USDC routing, the Agreements product and a signed webhook.'), { status: 409 })
           }
           const previous = latest.keys.find(key => key.operationId === operationId)
           if (previous) {

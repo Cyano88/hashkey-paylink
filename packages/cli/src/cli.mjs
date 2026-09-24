@@ -19,7 +19,7 @@ Commands:
   keys create --name <name> --idempotency-key <stable-key> [--scopes project:read,checkout:read] [--expires-in-days 30]
   keys list
   keys revoke --key-id <id>
-  hosting plan --provider <render|railway> --service <id> --key-id <id> --backend
+  hosting plan --provider <render|railway> [--product checkout|agreement] --service <id> --key-id <id> --backend
     [--project <railway-id> --environment <railway-id>] [--replace]
   hosting apply --plan <reviewed-plan-id>
   agent-prompt
@@ -38,7 +38,7 @@ const invalid = message => { throw new CliError('INVALID_ARGUMENT', message) }
 function parse(argv) {
   const words = [], options = Object.create(null)
   const booleans = new Set(['json', 'no-interactive', 'help', 'version', 'dry-run', 'replace', 'backend'])
-  const values = new Set(['amount', 'idempotency-key', 'title', 'description', 'return-url', 'expires-in-minutes', 'id', 'project', 'scopes', 'name', 'expires-in-days', 'key-id', 'provider', 'service', 'environment', 'plan'])
+  const values = new Set(['amount', 'idempotency-key', 'title', 'description', 'return-url', 'expires-in-minutes', 'id', 'project', 'scopes', 'name', 'expires-in-days', 'key-id', 'provider', 'service', 'environment', 'plan', 'product'])
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (!arg.startsWith('--')) { words.push(arg); continue }
@@ -118,12 +118,12 @@ export async function run(argv, { env = process.env, fetcher = globalThis.fetch,
   try {
     const { command, options } = parse(argv)
     if (options.help || !command && !options.version) { emit(json ? { ok: true, help: HELP } : HELP); return 0 }
-    if (options.version) { emit(json ? { ok: true, version: '0.3.1' } : '0.3.1'); return 0 }
+    if (options.version) { emit(json ? { ok: true, version: '0.3.2' } : '0.3.2'); return 0 }
     const allowed = {
       'project show': [], doctor: [], capabilities: [], 'agent-prompt': [],
       'auth login': ['project', 'scopes'], 'auth complete': [], 'auth status': [], 'auth logout': [],
       'keys create': ['name', 'scopes', 'expires-in-days', 'idempotency-key'], 'keys list': [], 'keys revoke': ['key-id'],
-      'hosting plan': ['provider', 'service', 'project', 'environment', 'key-id', 'replace', 'backend'], 'hosting apply': ['plan'],
+      'hosting plan': ['provider', 'service', 'project', 'environment', 'key-id', 'replace', 'backend', 'product'], 'hosting apply': ['plan'],
       'checkout status': ['id'],
       'checkout create': ['amount', 'idempotency-key', 'title', 'description', 'return-url', 'expires-in-minutes', 'dry-run'],
     }
