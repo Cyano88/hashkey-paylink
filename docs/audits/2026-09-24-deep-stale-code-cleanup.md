@@ -28,3 +28,9 @@ Passed: admin authentication boundary fixtures (including missing configuration,
 The older agent-hash-payments-parser-smoke test passes its assistant checks then fails an unchanged assertion that pending Paycrest history should be absent. The tested source includes pending before this patch; this unrelated payment-history/test mismatch remains recorded, not silently altered. No funded transactions performed.
 
 Runtime deployment checks to be appended after release.
+
+## Live verification � 06:08 UTC
+
+Commit 42adb58e8bd2cb232ee49037bc606d79dfb7bf80 deployed live as dep-daqbq1qd0e5s73a126t0 after a successful fresh production build. Runtime confirms all four removed environment names absent, ADMIN_SECRET configured, and retired StreamPay assistant import absent. Loopback refund without auth returns 401; valid admin with empty body returns 400 before refund execution; reconciliation without auth returns 401. Public health, retired assistant rejection, Pocket authentication and archive input-validation checks all pass. Rollout had temporary unavailable responses while the new server started.
+
+A separate queued developer-portal release 77f0500d57c05abc8272443958dce0a776da31c5 merges this cleanup: ancestor check passes and admin-auth, assistant, security, refunds, render.yaml and environment example are identical to the verified cleanup. That separate rollout was not initiated here.
