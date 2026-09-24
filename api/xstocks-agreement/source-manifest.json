@@ -38,6 +38,14 @@
     {
       "file": "api/work-xlayer.ts",
       "sha256": "19feacce27afd512fe8dd4af22f2bce2ee3bc660892a0243a53a743eda9a4924"
+    },
+    {
+      "file": "src/components/WorkXLayerCheckout.tsx",
+      "sha256": "30f6dedd3814d02e00227398542b750c94c02322d8226708a22d057c4f1c10ac"
+    },
+    {
+      "file": "src/components/ui/StreamConfirmSheet.tsx",
+      "sha256": "68889f289f106023492e773be79e31f64ca18282403dbebc51b5076e6ba13ca9"
     }
   ]
 }

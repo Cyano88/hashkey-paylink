@@ -7,12 +7,13 @@ import { resolveDeveloperApiKeyPolicy, resolveXStocksAgreementProjectEnabled } f
 import { hasRenderDurableStore, readDurableJson, mutateDurableJson } from '../render-durable-store.js'
 import { parseWorkPayment, prepareWorkBinding, prepareWorkAction, workPaymentAssets, workXLayerEnabled, type WorkTermsForBinding } from './work.js'
 import { verifyAgreementPrivyWallet } from './wallet.js'
+import { agreementPrivyAuthority } from './authority.js'
 import { TRADE_ACTION_LABELS, type TradeXLayerAction, type TradeXLayerStatus } from '../../src/lib/xstocksAgreement/protocol.js'
 
 type Role = 'customer' | 'provider'
 type Acceptance = { address: `0x${string}`; at: string }
 export type XStocksAgreementRecord = {
-  id: string; partnerId: string; digest: string; terms: WorkTermsForBinding
+  id: string; partnerId: string; walletAppId: string; digest: string; terms: WorkTermsForBinding
   participants: Record<Role, string>; accepted: Partial<Record<Role, Acceptance>>
   binding?: ReturnType<typeof prepareWorkBinding>
   observed?: Pick<TradeXLayerStatus, 'observedBlock' | 'state' | 'escrow'>
@@ -24,7 +25,7 @@ type Deps = {
   env: () => NodeJS.ProcessEnv; hasStore: () => boolean; now: () => Date
   policy: typeof resolveDeveloperApiKeyPolicy
   projectEnabled: (partnerId: string) => Promise<boolean>
-  identity: (req: Request) => Promise<string>
+  identity: (req: Request, env: NodeJS.ProcessEnv) => Promise<string>
   wallet: typeof verifyAgreementPrivyWallet; plan: typeof prepareWorkAction; assets: typeof workPaymentAssets
   read: (key: string) => Promise<XStocksAgreementRecord | undefined>
   mutate: (key: string, update: (record: XStocksAgreementRecord | undefined) => XStocksAgreementRecord) => Promise<XStocksAgreementRecord>
@@ -40,9 +41,9 @@ function field(value: unknown, name: string, max: number) {
   if (typeof value !== 'string' || !value.trim() || value.length > max) fail(400, `Enter a valid ${name}.`)
   return (value as string).trim()
 }
-async function identity(req: Request) {
-  const appId = process.env.PRIVY_APP_ID || process.env.VITE_PRIVY_APP_ID
-  const secret = process.env.PRIVY_APP_SECRET
+async function identity(req: Request, env: NodeJS.ProcessEnv) {
+  const appId = env.PRIVY_APP_ID || env.VITE_PRIVY_APP_ID
+  const secret = env.PRIVY_APP_SECRET
   if (!appId || !secret) fail(503, 'Authentication is unavailable.')
   const token = String(req.headers.authorization ?? '').match(/^Bearer\s+(.+)$/i)?.[1]
   if (!token || req.headers['x-api-key']) fail(401, 'Sign in with your participant account.')
@@ -61,7 +62,7 @@ function roleFor(record: XStocksAgreementRecord, userId: string): Role {
   return fail(404, 'Agreement not found.')
 }
 function view(record: XStocksAgreementRecord) {
-  return { id: record.id, projectId: record.partnerId, terms: record.terms, consentHash: record.digest,
+  return { id: record.id, projectId: record.partnerId, walletAppId: record.walletAppId, checkoutPath: `/agreements/xstocks/${record.id}`, terms: record.terms, consentHash: record.digest,
     accepted: record.accepted, binding: record.binding, observed: record.observed,
     evidence: record.evidence, events: record.events, createdAt: record.createdAt }
 }
@@ -95,6 +96,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
         || (req.body?.network !== undefined && req.body.network !== 'xlayer')
         || (req.body?.checkoutMode !== undefined && req.body.checkoutMode !== 'human')) fail(400, 'This route supports human xStocks Agreements on X Layer only.')
       if (!workXLayerEnabled(d.env())) fail(409, 'New xStocks Agreements are paused.')
+      const authority = agreementPrivyAuthority(d.env())
       const replayKey = field(req.headers['idempotency-key'], 'idempotency key', 128)
       if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(replayKey)) fail(400, 'Use a 16-128 character idempotency key.')
       const customer = field(req.body?.customerUserId, 'customer account', 150)
@@ -107,14 +109,14 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
         description: field(req.body?.description, 'work description', 4000), amount, durationSeconds, xlayerPayment: payment }
       const agreementId = 'xag_' + hash(JSON.stringify([policy.partnerId, replayKey]))
       const participants = { customer, provider }
-      const digest = hash(JSON.stringify({ partnerId: policy.partnerId, terms, participants }))
+      const digest = hash(JSON.stringify({ partnerId: policy.partnerId, walletAppId: authority.appId, terms, participants }))
       const at = d.now().toISOString()
       const record = await d.mutate(key(agreementId), current => {
         if (current) {
           if (current.partnerId !== policy.partnerId || current.digest !== digest) fail(409, 'Idempotency key already used with different terms.')
           return current
         }
-        return { id: agreementId, partnerId: policy.partnerId, digest, terms, participants, accepted: {},
+        return { id: agreementId, partnerId: policy.partnerId, walletAppId: authority.appId, digest, terms, participants, accepted: {},
           evidence: [], events: [{ type: 'draft_created', at }], createdAt: at }
       })
       return res.status(201).json({ ok: true, agreement: view(record) })
@@ -126,16 +128,19 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       if (req.method !== 'POST') fail(405, 'Method not allowed.')
       assertLiveDeveloperRequest(req)
       if (!d.hasStore()) fail(503, 'Durable storage is unavailable.')
-      const userId = await d.identity(req)
       const agreementId = id(req.body?.agreementId)
       let record = await d.read(key(agreementId))
       if (!record) fail(404, 'Agreement not found.')
+      const authority = agreementPrivyAuthority(d.env())
+      if (record!.walletAppId !== authority.appId) fail(409, 'The Agreement wallet app changed. Contact support.')
+      const userId = await d.identity(req, authority.env)
       const role = roleFor(record!, userId)
       const action = req.body?.action
       if (!['read', 'accept_terms', 'prepare'].includes(action)) fail(400, 'Choose a supported participant action.')
-      if (action === 'read') return res.json({ ok: true, role, agreement: view(record!) })
-      const env = { ...d.env() }
+      const env: NodeJS.ProcessEnv = { ...authority.env }
       if (!await d.projectEnabled(record!.partnerId)) env.HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED = 'false'
+      const fundingEnabled = workXLayerEnabled(env)
+      if (action === 'read') return res.json({ ok: true, role, fundingEnabled, agreement: view(record!) })
       if (action === 'accept_terms') {
         if (!workXLayerEnabled(env)) fail(409, 'New xStocks Agreements are paused.')
         if (req.body?.consentHash !== record!.digest) fail(409, 'Review and accept the exact Agreement terms.')
@@ -157,7 +162,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
           }
           return current!
         })
-        return res.json({ ok: true, role, agreement: view(record) })
+        return res.json({ ok: true, role, fundingEnabled, agreement: view(record) })
       }
       if (!record!.binding || !record!.accepted[role]) fail(409, 'Both participants must accept the terms first.')
       const operation = req.body?.operation as TradeXLayerAction | undefined
@@ -192,7 +197,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
         }
         return current!
       })
-      return res.json({ ok: true, role, agreement: view(record), status })
+      return res.json({ ok: true, role, fundingEnabled, agreement: view(record), status })
     } catch (error) { return responseError(res, error) }
   }
   return { developer, participant }

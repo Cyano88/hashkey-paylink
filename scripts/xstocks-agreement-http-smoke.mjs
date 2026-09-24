@@ -6,7 +6,7 @@ const stock=JSON.parse(readFileSync('src/lib/xstocksAgreement/xStocksCatalog.jso
 const buyer='0x'+'11'.repeat(20),seller='0x'+'22'.repeat(20),store=new Map();
 let who='did:privy:customer',project='project-one',enabled=true,projectEnabled=true,capability=true,failWrite=false,walletOverride,state=1,block='10',lastPlan;
 const handlers=createXStocksAgreementHandlers({
- env:()=>({HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED:enabled?'true':'false',HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:18}])}),
+ env:()=>({PRIVY_APP_ID:'fixture-app-id',PRIVY_APP_SECRET:'fixture-only',HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED:enabled?'true':'false',HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:18}])}),
  assets:async()=>({enabled,assets:enabled?[stock]:[]}),
  hasStore:()=>true,now:()=>new Date('2026-09-24T12:00:00Z'),
  policy:async()=>({partnerId:project,environment:'live',checkoutMode:'human',capabilities:capability?['xstocks_agreements']:['arc_agreements']}),
@@ -58,3 +58,14 @@ assert.equal(cliRequestScope({method:'GET',originalUrl:'/api/v2/xstocks-agreemen
 assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/xstocks-agreements/participant',body:{action:'prepare'}}),null);
 assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/xstocks-agreements',body:{action:'fund'}}),null);
 console.log('xStocks API passed: project isolation, exact consent, immutable wallets, idempotency, durable evidence, monotonic state, paused recovery and separate scopes.');
+
+// Hash PayLink's own authority is persisted; clients cannot choose another app.
+const boundRecord=[...store.values()].find(record=>record.id===agreementId)
+assert.equal(boundRecord.walletAppId,'fixture-app-id')
+assert.equal((await participant('read')).body.agreement.walletAppId,'fixture-app-id')
+const mismatchedHandlers=createXStocksAgreementHandlers({
+ env:()=>({PRIVY_APP_ID:'different-app-id',PRIVY_APP_SECRET:'fixture-only'}),hasStore:()=>true,
+ read:async key=>structuredClone(store.get(key)),identity:async()=>{throw Error('Must reject the changed authority before session verification')},
+})
+assert.equal((await call(mismatchedHandlers.participant,{agreementId,action:'read'})).statusCode,409)
+console.log('Persisted wallet authority blocks silent Privy app replacement.')

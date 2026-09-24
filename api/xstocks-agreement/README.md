@@ -2,7 +2,7 @@
 
 Reuses the newer Hash PayStream work escrow from hashpaystream-production-20260907.
 Early Pay and Pocket direct payments are not involved. This API is implemented
-locally; it has not been deployed or connected to the hosted checkout UI.
+locally, including the hosted checkout UI; it has not been deployed.
 
 ## Project access
 
@@ -65,7 +65,7 @@ core; new API drafts use project-namespaced IDs. Never recreate old funded work 
 a new draft or regenerate its original binding. source-manifest.json records the
 exact source fingerprints used for extraction.
 
-Remaining before cutover: hosted Privy app/wallet continuity, checkout UI and HPS
+Remaining before cutover: verified Hash PayLink identity linking from HPS, the HPS
 adapter, old-origin pending recovery, migration rehearsal, project activity/webhook
 integration and two-party signing/lifecycle verification. Do not remove the old
 HPS signer until those checks pass. Production settings remain unchanged.
@@ -81,3 +81,34 @@ passed. Full npm run typecheck failed in unchanged Circle wallet, PaymentPage,
 Pocket and legacy StreamPay files (including missing idempotencyKey, ES library
 mismatches, nullable values and legacy component state/type errors). No full-repo
 pass or production readiness is claimed. Resolve those failures before release.
+
+
+## Hosted checkout and provider ownership
+
+The new route is /agreements/xstocks/:agreementId on app.hashpaylink.com. It uses
+Hash PayLink's own Privy app only, custom email sign-in, explicit terms acceptance
+and the newer HPS work checkout's signing/recovery controls. Each record stores
+its walletAppId. Provider configuration changes fail closed; no app-specific
+secret or developer key is sent to the browser. New wallet setup is available
+only when no existing embedded wallet or accepted wallet needs recovery.
+
+All payment signing remains user-authorized in the hosted UI. Standard Privy
+transaction popups are hidden. A first-party confirmation states the exact token
+quantity, beneficiary and network fee. Pending intent is saved before signing;
+uncertain submissions block retries. Returning to an earlier account does not
+revive a stale confirmation. Server confirmation remains authoritative.
+
+Mobile preview at 390px and first-party confirmation were inspected with synthetic
+data and no signing. No horizontal overflow was observed. Added hosted adapter,
+wallet-authority and rendered signing tests pass; the page/API focused typecheck
+passes. React rendering tests require the declared react-test-renderer 18.3.1 dev
+dependency; an already-installed matching runtime was used for local validation.
+
+Existing HPS user IDs, wallets and balances are not Hash PayLink identities. HPS
+must establish a verified HPL identity before submitting new participant IDs.
+Do not relabel an old wallet as an HPL wallet or discard historical recovery.
+
+Circle consolidation uses HPL's existing hosted Arc Agreement payer checkout
+(Arc mainnet) rather than copying HPS's direct Arc-testnet wallet adapter. Wallet
+onboarding/identity linking and HPS routing still need integration. This commit
+does not migrate Circle wallet balances, pending payments or native app accounts.
