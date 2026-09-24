@@ -20,3 +20,7 @@ Render DELETE readback succeeded at 05:40 UTC. Provider keys were not revoked, w
 CRON_SECRET is used by current security and bills/refund endpoints. FACTORY_FROM_BLOCK remains used by historical payments and stream indexing. Pocket migration/bridge/payment recovery and checkpoint history remain. Current Circle, Privy, OKX, Alchemy, VTPass, Paycrest, database, encryption, PIN and signing settings remain. Smile is paused, not retired; its configured integration is retained pending a separate decision. Operator wallet provisioning references and unused ETH relayer candidate require separate ownership/recovery review; not deleted merely for lacking a runtime reader. PolyDesk service authentication and Polygon RPC remain.
 
 Validation: existing Pocket migration recovery and checkpoint recovery regression suites pass. Template changes remove obsolete keeper cron instructions while preserving current endpoint authentication. No whole-platform readiness or full credential revocation claim.
+
+## Deployment verification
+
+Commit c17c0156a23aae1482b7a6cd0cc8670e162828cb is live as dep-daqbg9p42hec73931pk0. Runtime SSH confirms all six removed environment names are absent, the deleted script is absent, and PIN pepper/CRON_SECRET remain configured. Public health, retired assistant rejection, Pocket authentication rejection, and historical proof input validation all pass at 05:47 UTC. Transient 502 responses during rolling deployment recovered; no zero-downtime claim.
