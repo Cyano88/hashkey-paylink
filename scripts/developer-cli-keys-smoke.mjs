@@ -99,3 +99,24 @@ for(const action of ['request_release','rotate_payer_link','activate','unknown']
 assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements',body:{checkoutMode:'agentic'}}),null)
 assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements?override=true',body:{}}),null)
 console.log('Agreement key isolation passed: Arc mainnet setup required; no checkout, key management or signing/lifecycle routes.')
+
+// xStocks permissions must never inherit an Arc grant or use developer keys for signing.
+grant={...original,scopes:['project:read','xstocks-agreement:read','xstocks-agreement:create','keys:manage']}
+const stockSpec={...spec,operationId:'fixture_xstocks_0001',apiKey:'hpl_app_'+'e'.repeat(64),scopes:['project:read','xstocks-agreement:read','xstocks-agreement:create'],expiresInDays:7}
+assert.equal((await call(stockSpec)).statusCode,409,'Explicit xStocks capability required')
+store.projects[id].capabilities.push('xstocks_agreements')
+assert.equal((await call(stockSpec)).statusCode,201)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,'xstocks-agreement:read',now)?.partnerId,id)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,'xstocks-agreement:create',now)?.partnerId,id)
+assert.equal(developerPolicyFromStore(store,agreementSpec.apiKey,secret,'xstocks-agreement:read',now),null)
+assert.equal(developerPolicyFromStore(store,agreementSpec.apiKey,secret,'xstocks-agreement:create',now),null)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,'agreement:create',now),null)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,'checkout:create',now),null)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,null,now),null)
+assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/xstocks-agreements/participant',body:{action:'prepare'}}),null)
+console.log('xStocks keys passed: dedicated capability and scopes; Arc, checkout and participant signing access remain isolated.')
+const stockCli=await keyCommand('keys create',{name:'Stock Agreement fixture','idempotency-key':'fixture_stock_cli_0001',scopes:'project:read,xstocks-agreement:read,xstocks-agreement:create','expires-in-days':'7'},deps)
+assert.equal(stockCli.secretStoredLocally,true)
+assert.ok(stockCli.key.scopes.includes('xstocks-agreement:create'))
+assert.ok(!JSON.stringify(stockCli).includes(vault.keys.find(entry=>entry.operationId==='fixture_stock_cli_0001').value))
+console.log('CLI xStocks key creation stores the secret locally without returning it.')

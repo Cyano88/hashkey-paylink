@@ -1,56 +1,83 @@
-# Agreement xStocks extraction
+# xStocks Agreement API
 
-This internal module reuses the newer Hash PayStream work escrow implementation
-from `hashpaystream-production-20260907`, not Early Pay or Pocket direct payments.
+Reuses the newer Hash PayStream work escrow from hashpaystream-production-20260907.
+Early Pay and Pocket direct payments are not involved. This API is implemented
+locally; it has not been deployed or connected to the hosted checkout UI.
 
-It is not a public API or an enabled checkout rail. Callers must load accepted,
-project-owned terms from durable storage, verify both Privy wallets, preserve an
-existing binding on retries, and persist evidence before returning a transaction.
-The planner never signs or broadcasts.
+## Project access
 
-New funding is restricted to configured stock metadata intersected with factory
-approval. Arc USDC remains separate. Pausing new funding must retain recovery for
-existing escrows, including previously bound X Layer USDC records.
+The separate xstocks_agreements capability is an add-on to an existing ready
+human developer project in this release. It does not add X Layer to merchant
+checkout, Arc Agreements, agent checkout or Polymarket funding networks.
 
-Do not remove the Hash PayStream signer until project authorization, hosted
-Privy wallet continuity, pending transaction recovery and migration parity pass.
+- GET /api/v2/xstocks-agreements?id=xag_... requires xstocks-agreement:read.
+- GET /api/v2/xstocks-agreements?purpose=assets returns the approved stock list
+  under the same read permission.
+- POST /api/v2/xstocks-agreements requires xstocks-agreement:create and an
+  Idempotency-Key header (16-128 letters, numbers, colons, underscores or hyphens).
+- POST /api/v2/xstocks-agreements/participant requires a Privy user access token.
+  Developer keys and CLI grants cannot authorize this participant endpoint.
 
-## Entry points and configuration
+New CLI scopes appear on the owner consent screen. Existing Arc-only scoped keys
+receive no xStocks permissions. Keys can create drafts, not sign or release funds.
 
-- work.ts: accepted work terms, deterministic binding, stock assets and transaction
-  planning. No persistence, HTTP handler or authorization is implied.
-- wallet.ts: server lookup of the authenticated user's one embedded Ethereum
-  wallet, adapted to Hash PayLink's installed Privy server SDK. The caller must
-  verify the access token using the same configured Privy app first.
-- planner.ts and assets.ts: internal helpers, not public API entry points.
-- source-manifest.json: SHA-256 fingerprints of the newer uncommitted source.
+Draft JSON fields: title, description, amount (exact stock quantity as a string),
+durationSeconds (1-30 days), paymentToken (approved stock address), reviewHours
+(24, 48 or 72), customerUserId and providerUserId. Both user IDs must belong to the
+same configured Privy app used by the participant endpoint. Only human, live,
+X Layer work Agreements are accepted; Arc USDC uses the existing Arc API.
 
-HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED=true permits new funding in this module.
-Default off. Registry settings: HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON or
-HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_FILE. These do not enable merchant checkout,
-Early Pay, Trade or HTTP routes. The low-level planner flag is set internally so
-a funding pause cannot block recovery.
+The response has agreement.id and agreement.consentHash. Draft terms cannot be
+edited. Repeating an idempotency key returns the same record; changing the terms
+with that key returns 409. The ID includes the project namespace.
 
-Original work namespace, canonical hash order, factory, arbiter and ABI remain.
-Existing bindings must be loaded, not regenerated. New multi-project creation
-must namespace the input request ID by project before binding. Imports preserve
-original IDs and bindings. The synthetic binding fixture was compared directly
-with the original source.
+## Participant operations
 
-## Remaining integration gates
+All participant requests contain agreementId and action:
 
-1. Dedicated xStocks Agreement project capability and explicit endpoint scopes.
-   Existing Arc-only keys must not silently gain X Layer permissions.
-2. Durable project-owned accepted terms, participant identities, immutable
-   wallets and bindings. Participant actions need separate authentication from
-   developer draft creation; evidence must persist before signing payloads return.
-3. Verify hosted Privy app/wallet continuity with Hash PayStream. Matching email
-   is not proof. Do not rebind wallets or reset pending payments.
-4. Connect the existing first-party confirmation and hidden Privy signing UI to
-   authorized endpoints; retain pending recovery at the original app origin.
-5. Rehearse both participants and recovery before deployment or deleting HPS code.
+- read: returns accepted terms, consentHash, accepted wallets, stored confirmed
+  state, evidence notes and events. A read is a last-observed snapshot.
+- accept_terms: requires consentHash and address. Server verifies the exact
+  participant's single Privy embedded Ethereum wallet. Both acceptances freeze
+  the binding and funding deadline. Wallets cannot be replaced on retry.
+- prepare: optional operation selects an available escrow action; omit it to
+  reconcile confirmed chain state. Evidence is required for submission, refund
+  and dispute operations. The response status may contain an unsigned transaction.
 
-Validation: npm run test:xstocks-agreement covers terms, source binding parity,
-pinned factory, lifecycle permissions, exact allowances/zero reset, delisting,
-paused recovery, asset authorization failures and Privy ownership. Local mocked
-tests do not prove a live funded transaction or constitute an external audit.
+The planner verifies the pinned factory and all immutable terms, exact allowance,
+role and deadlines. It never signs or broadcasts. Evidence is saved before a
+transaction is returned; unsigned evidence notes do not prove on-chain execution.
+Confirmed state cannot be overwritten by an older observation. Losing a previously
+observed escrow in the chain view fails closed instead of preparing a replacement.
+Each record belongs to its project and uses atomic durable PostgreSQL mutation.
+
+## Rollout and recovery
+
+HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED defaults off. Approved stock registry settings:
+HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON or HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_FILE.
+Metadata alone never authorizes funding; factory approval and precision must match.
+Suspension, capability removal or a funding pause blocks new actions but preserves
+existing participant refunds, release and dispute recovery.
+
+Existing Hash PayStream bindings and pending transactions have not been imported.
+The source work namespace and canonical binding hashes are preserved in the shared
+core; new API drafts use project-namespaced IDs. Never recreate old funded work as
+a new draft or regenerate its original binding. source-manifest.json records the
+exact source fingerprints used for extraction.
+
+Remaining before cutover: hosted Privy app/wallet continuity, checkout UI and HPS
+adapter, old-origin pending recovery, migration rehearsal, project activity/webhook
+integration and two-party signing/lifecycle verification. Do not remove the old
+HPS signer until those checks pass. Production settings remain unchanged.
+
+Validation: npm run test:xstocks-agreement plus developer-cli-grants-smoke and
+ developer-cli-keys-smoke. These use synthetic data and mocked chain/storage;
+they do not prove a funded production transaction or an external audit.
+
+
+Validation on 24 September 2026: the five xStocks suites, CLI grants/keys suites,
+focused API TypeScript check and focused DeveloperCliAccessPage TypeScript check
+passed. Full npm run typecheck failed in unchanged Circle wallet, PaymentPage,
+Pocket and legacy StreamPay files (including missing idempotencyKey, ES library
+mismatches, nullable values and legacy component state/type errors). No full-repo
+pass or production readiness is claimed. Resolve those failures before release.

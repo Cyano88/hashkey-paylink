@@ -8,6 +8,8 @@ const labels: Record<string, string> = {
   'project:read': 'Read project configuration',
   'checkout:read': 'Read checkout payment status',
   'checkout:create': 'Create hosted checkouts',
+  'xstocks-agreement:read': 'Read xStocks Agreement records for this project',
+  'xstocks-agreement:create': 'Create xStocks Agreement drafts (no funding, release or signing)',
   'agreement:read': 'Read Agreement records for this project',
   'agreement:create': 'Create Agreement drafts (no funding, release or signing)',
   'keys:manage': 'Create and revoke scoped backend keys (up to 30 days)',
