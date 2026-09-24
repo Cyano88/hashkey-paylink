@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { readEvmRpc } from './evm-read.js'
 import { createPublicClient, defineChain, http, encodeFunctionData } from 'viem'
-import { base, baseSepolia, arbitrum } from 'viem/chains'
+import { base, baseSepolia, arbitrum, mainnet, polygon } from 'viem/chains'
 
 const ERC20_BALANCE_OF_ABI = [{
   name: 'balanceOf',
@@ -23,6 +23,8 @@ const arc = defineChain({
 })
 
 const CHAIN_CONFIG = {
+  ethereum: { chain: mainnet, label: 'Ethereum', tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', decimals: 6, rpcEnv: 'PRIVATE_RPC_URL_ETHEREUM', fallbackRpc: 'https://ethereum-rpc.publicnode.com' },
+  polygon: { chain: polygon, label: 'Polygon', tokenAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', decimals: 6, rpcEnv: 'PRIVATE_RPC_URL_POLYGON', fallbackRpc: 'https://polygon-bor-rpc.publicnode.com' },
   base: {
     chain: base,
     label: 'Base',
@@ -60,7 +62,7 @@ const CHAIN_CONFIG = {
 type EvmBalanceChain = keyof typeof CHAIN_CONFIG
 
 function isEvmBalanceChain(value: unknown): value is EvmBalanceChain {
-  return value === 'base' || value === 'base-sepolia' || value === 'arc' || value === 'arbitrum'
+  return value === 'ethereum' || value === 'polygon' || value === 'base' || value === 'base-sepolia' || value === 'arc' || value === 'arbitrum'
 }
 
 function isAddress(value: unknown): value is `0x${string}` {

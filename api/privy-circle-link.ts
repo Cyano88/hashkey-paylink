@@ -41,12 +41,12 @@ function ensureSchema() {
   return schemaReady
 }
 
-const SUPPORTED_CHAINS = new Set(['base', 'arbitrum', 'arc', 'solana'])
+const SUPPORTED_CHAINS = new Set(['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'])
 
 export type CircleLinkRecord = {
   privyUserId: string
   email?: string
-  chain: 'base' | 'arbitrum' | 'arc' | 'solana'
+  chain: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
   purpose?: 'payment' | 'agent'
   circleWalletId: string
   circleWalletAddress: string
@@ -152,6 +152,8 @@ function isSolanaAddress(address: string) {
 }
 
 function expectedBlockchain(chain: CircleLinkChain) {
+  if (chain === 'ethereum') return 'ETH'
+  if (chain === 'polygon') return 'MATIC'
   if (chain === 'base') return 'BASE'
   if (chain === 'arbitrum') return 'ARB'
   if (chain === 'arc') return 'ARC'

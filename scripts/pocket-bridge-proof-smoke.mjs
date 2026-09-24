@@ -31,3 +31,10 @@ const res={statusCode:200,status(value){this.statusCode=value;return this},json(
 await handler({method:'POST',headers:{},body:{action:'record',source:'base',destination:'arc',amount:'2',txHash:expected.txHash}},res)
 assert.equal(res.statusCode,403);assert.equal(records,0)
 console.log('Bridge ownership proof: valid source accepted; forged owner, destination, amount and unconfirmed/multiple messages rejected before recording.')
+
+for (const [source,domain,token] of [['ethereum',0,'0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'],['polygon',7,'0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359']]) {
+ const data=Buffer.from(bytes);data.writeUInt32BE(domain,4);Buffer.from(token.slice(2).padStart(64,'0'),'hex').copy(data,152);
+ await validatePocketBridgeMessage('0x'+data.toString('hex'),{...expected,source});
+ await assert.rejects(()=>validatePocketBridgeMessage(raw,{...expected,source}));
+}
+console.log('PASS: Ethereum and Polygon bridge proofs require their own domain and native USDC mint.');

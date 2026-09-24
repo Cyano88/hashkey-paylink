@@ -6,8 +6,8 @@ import { paymentApprovalTimeoutMs, unsignedApprovalExpired } from './payment-tim
 export type PocketRequestStatus = 'pending' | 'accepted' | 'declined' | 'paid'
 export type PocketRequestRoute = {
   phase: 'started' | 'submitted' | 'completed' | 'failed'
-  source: 'base' | 'arbitrum' | 'solana'
-  destination: 'base' | 'arbitrum' | 'solana'
+  source: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
+  destination: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
   amount: string
   txHash: string
   updatedAt: number
@@ -16,7 +16,7 @@ export type PocketMoneyRequest = {
   id: string; eventId: string; senderId: string; senderPocketId: string; senderName: string
   senderAddress?: string; recipientId: string; recipientPocketId: string; recipientName?: string
   title: string; amount: string; flexibleAmount: boolean
-  network: 'base' | 'arbitrum' | 'solana' | 'multi'; paymentPath?: string
+  network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon' | 'multi'; paymentPath?: string
   route?: PocketRequestRoute
   transactionHash?: string; paidAt?: number; status: PocketRequestStatus; createdAt: number; updatedAt: number
 }
@@ -58,7 +58,7 @@ export function createPocketRequestRepository(options: Options = {}) {
       if (input.senderId === input.recipientId) throw Object.assign(new Error('Choose another Pocket user.'), { status: 400 })
       const amount = clean(input.amount, 30)
       if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) throw Object.assign(new Error('Enter a valid USDC amount.'), { status: 400 })
-      const network = input.network === 'solana' || input.network === 'arbitrum' ? input.network : 'base'
+      const network = input.network === 'solana' || input.network === 'arbitrum' || input.network === 'arc' || input.network === 'ethereum' || input.network === 'polygon' ? input.network : 'base'
       const senderAddress = clean(input.senderAddress, 120)
       if (network === 'solana' ? !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(senderAddress) : !/^0x[a-fA-F0-9]{40}$/.test(senderAddress)) {
         throw Object.assign(new Error(`Open your ${network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : 'Base'} Pocket wallet before requesting payment.`), { status: 409 })
@@ -135,7 +135,7 @@ export function createPocketRequestRepository(options: Options = {}) {
         const source = clean(input.source, 20)
         const destination = clean(input.destination, 20)
         const amount = clean(input.amount, 30)
-        const networks = new Set(['base', 'arbitrum', 'solana'])
+        const networks = new Set(['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'])
         if (!networks.has(source) || !networks.has(destination) || source === destination || destination !== request.network) {
           throw Object.assign(new Error('Pocket payment route is invalid.'), { status: 400 })
         }

@@ -1,7 +1,7 @@
 import type { PocketPaymentLiquidityCheckpoint } from '../controllers/usePocketPaymentLiquidityController'
 import { POCKET_API } from '../lib/pocketSchemas'
 
-export type PocketRequestItem = { id: string; eventId: string; direction: 'incoming' | 'outgoing'; senderPocketId: string; senderName: string; recipientPocketId: string; recipientName: string; title: string; amount: string; flexibleAmount: boolean; network: 'base' | 'arbitrum' | 'solana' | 'multi'; paymentPath: string; status: 'pending' | 'accepted' | 'declined' | 'paid'; transactionHash: string; createdAt: number; updatedAt: number }
+export type PocketRequestItem = { id: string; eventId: string; direction: 'incoming' | 'outgoing'; senderPocketId: string; senderName: string; recipientPocketId: string; recipientName: string; title: string; amount: string; flexibleAmount: boolean; network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon' | 'multi'; paymentPath: string; status: 'pending' | 'accepted' | 'declined' | 'paid'; transactionHash: string; createdAt: number; updatedAt: number }
 export const POCKET_REQUESTS_UPDATED_EVENT = 'pocket:requests-updated'
 function announcePocketRequestsUpdated() { window.dispatchEvent(new Event(POCKET_REQUESTS_UPDATED_EVENT)) }
 const message = (data: unknown, fallback: string) => {
@@ -71,7 +71,7 @@ export async function resolvePocketRequestUser(accessToken: string, pocketId: st
   return data.user
 }
 
-export type PocketResolvedRecipient = { pocketId: string; name: string; network: 'base' | 'arbitrum' | 'solana'; address: string }
+export type PocketResolvedRecipient = { pocketId: string; name: string; network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'; address: string }
 export async function resolvePocketRecipient(accessToken: string, pocketId: string, network: PocketResolvedRecipient['network']) {
   const response = await fetch(POCKET_API.requests, { method: 'POST', headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'resolve-recipient', pocketId, network }) })
   const data = await response.json().catch(() => undefined) as { ok?: boolean; recipient?: PocketResolvedRecipient } | undefined

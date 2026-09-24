@@ -1,6 +1,6 @@
 import { POCKET_API } from '../lib/pocketSchemas'
 
-export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
+export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
 export type PocketBridgeQuote = {
   source: PocketBridgeNetwork
   destination: PocketBridgeNetwork

@@ -28,7 +28,7 @@ const handler = createPocketWalletsHandler({
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   readLink: async key => {
     readKeys.push(key)
-    if (key.endsWith(':arbitrum') || key.endsWith(':arc')) return null
+    if (!key.endsWith(':base') && !key.endsWith(':solana')) return null
     const chain = key.endsWith(':solana') ? 'solana' : 'base'
     return {
       privyUserId: 'privy-user-1',
@@ -54,8 +54,10 @@ assert.equal(isPocketWalletsReadData(loaded.body), true)
 assert.deepEqual(readKeys, [
   'privy-user-1:base',
   'privy-user-1:arbitrum',
-  'privy-user-1:arc',
+  'privy-user-1:arc-mainnet',
   'privy-user-1:solana',
+  'privy-user-1:ethereum',
+  'privy-user-1:polygon',
 ])
 assert.deepEqual(loaded.body.wallets.base, {
   network: 'base',

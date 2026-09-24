@@ -40,7 +40,7 @@ export function createPocketRecipientBalanceHandler(overrides: PocketRecipientBa
     if (req.method !== 'POST') return fail(405, 'Method not allowed.', false)
     const body = (req.body ?? {}) as Record<string, unknown>
     const network = body.network
-    if (network !== 'solana' && network !== 'base' && network !== 'arc' && network !== 'arbitrum') return fail(400, 'Unsupported recipient balance network.', false)
+    if (network !== 'ethereum' && network !== 'polygon' && network !== 'solana' && network !== 'base' && network !== 'arc' && network !== 'arbitrum') return fail(400, 'Unsupported recipient balance network.', false)
     const address = typeof body.address === 'string' ? body.address.trim() : ''
     if (!address || address.length > 64 || !(network === 'solana' ? overrides.isValidAddress(address) : isAddress(address))) {
       return fail(400, 'Enter a valid wallet address.', false)

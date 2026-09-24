@@ -109,6 +109,10 @@ export async function readPocketSecureWalletSession(email: string) {
 
 export function secureSessionForNetwork(session: CircleEvmEmailSession, network: Exclude<PocketNetwork, 'solana'>, walletAddress: string) {
   const expected = walletAddress.toLowerCase()
+  if (network==='ethereum' || network==='polygon') {
+    const wallet=session.additionalWallets?.[network]
+    if (wallet?.blockchain===(network==='ethereum'?'ETH':'MATIC') && wallet.address.toLowerCase()===expected) return {...session,chain:network,wallet}
+  }
   if (network === 'arc' && session.arcMainnetWallet?.blockchain === 'ARC' && session.arcMainnetWallet.address.toLowerCase() === expected) return { ...session, chain: 'arc' as const, wallet: session.arcMainnetWallet }
   if ((network !== 'arc' || session.wallet.blockchain === 'ARC') && session.chain === network && session.wallet.address.toLowerCase() === expected) return session
   if (network === 'base' || network === 'arbitrum') {

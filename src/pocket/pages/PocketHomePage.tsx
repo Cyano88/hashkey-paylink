@@ -32,7 +32,7 @@ const NETWORKS = [
 
 function initialNetwork(): HomeNetwork {
   const saved = window.localStorage.getItem(NETWORK_KEY)
-  return saved === 'arbitrum' || saved === 'solana' || saved === 'arc' ? saved : 'base'
+  return saved === 'ethereum' || saved === 'polygon' || saved === 'arbitrum' || saved === 'solana' || saved === 'arc' ? saved : 'base'
 }
 
 function navPath(tab: PocketNavTab) {
@@ -62,9 +62,9 @@ export default function PocketHomePage() {
   const open = (path: string) => navigate(POCKET_BASE_PATH + path)
   const selectedRow = wallets.displayRows.find(row => row.key === selected)
   const selectedVisible = !authenticated || selectedRow?.known
-  const comingSoon = selected === 'polygon' || selected === 'ethereum'
+  const comingSoon = false
   const selectedBalance = selectedRow?.balance ?? 0
-  const setSelected = (network: HomeNetwork) => { if (network !== 'polygon' && network !== 'ethereum') window.localStorage.setItem(NETWORK_KEY, network); setSelectedState(network) }
+  const setSelected = (network: HomeNetwork) => { window.localStorage.setItem(NETWORK_KEY, network); setSelectedState(network) }
   const toggleBalance = () => setBalanceVisible(current => { window.localStorage.setItem(BALANCE_VISIBLE_KEY, String(!current)); return !current })
   const hidden = '....'
 
@@ -89,7 +89,7 @@ export default function PocketHomePage() {
         </div>
       </div>
       <div className="mt-4 flex items-center gap-2"><div className="pocket-network-page grid min-w-0 flex-1 grid-cols-4 gap-2" aria-label="Balance networks" key={networkPage}>
-        {NETWORKS.slice(networkPage * 4, networkPage * 4 + 4).map(network => <button key={network.key} type="button" onClick={() => setSelected(network.key)} className={cn('relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl transition', selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={network.key === 'polygon' || network.key === 'ethereum' ? network.label + ' - Coming soon' : 'Show ' + network.label + ' balance'} aria-pressed={selected === network.key}>
+        {NETWORKS.slice(networkPage * 4, networkPage * 4 + 4).map(network => <button key={network.key} type="button" onClick={() => setSelected(network.key)} className={cn('relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl transition', selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={'Show ' + network.label + ' balance'} aria-pressed={selected === network.key}>
           <img src={network.logo} alt="" className={cn('h-6 w-6 rounded-md object-cover grayscale contrast-200', network.dark ? 'invert dark:invert-0' : 'dark:invert')} />
           <span className="text-[9px] font-semibold">{network.label}</span>
         </button>)}

@@ -25,7 +25,7 @@ import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRou
 import { savePocketCollection } from '../api/pocketPaylinksClient'
 import { createPocketUserRequest, resolvePocketRequestUser, type PocketRequestUser } from '../api/pocketRequestsClient'
 
-const POCKET_NETWORKS: ChainKey[] = ['base', 'solana', 'arbitrum']
+const POCKET_NETWORKS: ChainKey[] = ['base', 'solana', 'arbitrum', 'ethereum', 'polygon']
 type ReceiveMode = 'idle' | 'paste' | 'email' | 'bank'
 type ReceiveFlow = 'request' | 'collection'
 type CollectionRail = 'usdc' | 'local'
@@ -63,7 +63,7 @@ export default function PocketMoveUsdcPage() {
     invalidateResult: draft.invalidateResult,
   })
 
-  useEffect(() => { if (!POCKET_NETWORKS.includes(selectedNet)) onNetworkSelect('base') }, [onNetworkSelect, selectedNet])
+  useEffect(() => { if (!POCKET_NETWORKS.includes(selectedNet) || (flow === 'collection' && (selectedNet === 'ethereum' || selectedNet === 'polygon'))) onNetworkSelect('base') }, [onNetworkSelect, selectedNet, flow])
   useEffect(() => {
     if (receiveMode !== 'email' && connectedEvm && !draft.evmAddress && (isEvmNetwork || draft.multiChain)) {
       manualEvmAddress.current = connectedEvm
@@ -163,7 +163,7 @@ export default function PocketMoveUsdcPage() {
         eventId: window.crypto.randomUUID().replace(/-/g, ''),
         title: draft.memo.trim() || 'USDC request',
         amount: draft.amount,
-        network: selectedNet === 'solana' ? 'solana' : selectedNet === 'arbitrum' ? 'arbitrum' : 'base',
+        network: selectedNet === 'ethereum' || selectedNet === 'polygon' || selectedNet === 'solana' || selectedNet === 'arbitrum' ? selectedNet : 'base',
       })
       setRequestNotice(`Request sent to ${resolvedPayer.displayName}.`)
       setPayerPocketId('')
@@ -228,7 +228,7 @@ export default function PocketMoveUsdcPage() {
             {[['Ghana', 'GHS'], ['Kenya', 'KES']].map(([country, currency]) => <button key={country} type="button" disabled className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-gray-200 px-4 text-left opacity-55 dark:border-[#262626]"><span><span className="block text-sm font-bold">{country}</span><span className="mt-0.5 block text-[11px] text-gray-400">{currency} local-currency collection</span></span><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[9px] font-black uppercase text-gray-500 dark:bg-white/[0.08]">Soon</span></button>)}
             <p className="px-2 pt-1 text-center text-[11px] leading-5 text-gray-400 dark:text-gray-500">Nigeria is available now. Ghana and Kenya will become selectable when their local payment rails are ready.</p>
           </div> : <>
-            <PocketPayerNetworkPanel showSelector selectedNetwork={selectedNet} selectedNetworkLabel={CHAIN_META[selectedNet].label} options={POCKET_NETWORKS.map(network => ({ value: network, label: CHAIN_META[network].label }))} multiChain={flow === 'collection' && draft.multiChain} emailReceive={flow !== 'collection' && receiveMode === 'email'} onNetworkSelect={network => onNetworkSelect(network as ChainKey)} onMultiChainToggle={toggleMultiChain} showMultiChainToggle={flow === 'collection'} managedNetworkRouting={flow === 'collection'} embedded />
+            <PocketPayerNetworkPanel showSelector selectedNetwork={selectedNet} selectedNetworkLabel={CHAIN_META[selectedNet].label} options={POCKET_NETWORKS.filter(network => flow === 'request' || (network !== 'ethereum' && network !== 'polygon')).map(network => ({ value: network, label: CHAIN_META[network].label }))} multiChain={flow === 'collection' && draft.multiChain} emailReceive={flow !== 'collection' && receiveMode === 'email'} onNetworkSelect={network => onNetworkSelect(network as ChainKey)} onMultiChainToggle={toggleMultiChain} showMultiChainToggle={flow === 'collection'} managedNetworkRouting={flow === 'collection'} embedded />
 
             {flow === 'request' ? <>
               <label className="block space-y-1.5"><span className="text-sm font-medium text-gray-700 dark:text-gray-200">Payer Pocket ID</span><span className="relative block"><input type="text" inputMode="numeric" value={payerPocketId} onChange={event => setPayerPocketId(event.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="Enter 6 to 12 digits" className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-3 pr-11 text-sm font-semibold tabular-nums outline-none focus:border-blue-400 dark:border-[#262626] dark:bg-[#171717]" />{resolvingPayer ? <span className="absolute right-4 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-gray-400"><Loader2 className="h-4 w-4" /></span> : resolvedPayer ? <Check className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" /> : null}</span><span className="block text-[11px] leading-5 text-gray-400">Only this Pocket user will receive the request. No public link or QR code is created.</span></label>

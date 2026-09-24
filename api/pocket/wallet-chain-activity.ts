@@ -11,6 +11,8 @@ import type { PocketActivityRow } from '../../src/pocket/lib/pocketSchemas.js'
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const SOLANA_USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const EVM = {
+  ethereum: { token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+  polygon: { token: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' },
   base: { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' },
   arbitrum: { token: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' },
   arc: { token: '0xfffffffffffffffffffffffffffffffffffffffe' },
@@ -256,7 +258,7 @@ export async function readPocketWalletChainActivity(
 }
 
 export async function readPocketLinkedWalletAddresses(ownerId: string) {
-  const links = await Promise.all(['base', 'arbitrum', 'arc', 'solana'].map(async network => ({
+  const links = await Promise.all(['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'].map(async network => ({
     network,
     link: await readCircleLink(circleLinkKey(ownerId, network, 'payment')),
   })))

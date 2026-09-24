@@ -76,3 +76,28 @@ try {
  assert.deepEqual(destinations,['https://private.invalid/secret'])
 } finally {if(originalPrivate===undefined)delete process.env.PRIVATE_RPC_URL;else process.env.PRIVATE_RPC_URL=originalPrivate}
 console.log('PASS: strict private reader requires a distinct configured host and never falls back to public.')
+
+for (const [network,chainId] of [['ethereum','0x1'],['polygon','0x89']]) {
+ const methods=[];
+ const checked=createReadService(async (_url,init)=>{const {method}=JSON.parse(init.body);methods.push(method);return Response.json({result:method==='eth_chainId'?chainId:'0x123'})});
+ assert.equal(await checked(network,'eth_blockNumber',[]),'0x123');
+ assert.equal(await checked(network,'eth_getBalance',[wallet,'latest']),'0x123');
+ assert.equal(methods.filter(method=>method==='eth_chainId').length,1);
+ let calls=0;
+ const wrong=createReadService(async()=>{calls++;return Response.json({result:'0x2105'})});
+ await assert.rejects(wrong(network,'eth_blockNumber',[]),error=>error.code===-32003);
+ assert.equal(calls,1,'wrong-network endpoint must fail closed before reading balances');
+}
+console.log('PASS: Ethereum and Polygon verified chain identity and fail-closed reads.');
+
+const savedEth=process.env.PRIVATE_RPC_URL_ETHEREUM,savedPol=process.env.PRIVATE_RPC_URL_POLYGON;
+try {
+ process.env.PRIVATE_RPC_URL_ETHEREUM=process.env.PRIVATE_RPC_URL_POLYGON='https://same-network-fixture.invalid';
+ const shared=createReadService(async(_url,init)=>Response.json({result:JSON.parse(init.body).method==='eth_chainId'?'0x1':'0x123'}),()=>0);
+ assert.equal(await shared('ethereum','eth_blockNumber',[]),'0x123');
+ await assert.rejects(shared('polygon','eth_blockNumber',[]),e=>e.code===-32003);
+} finally {
+ if(savedEth===undefined)delete process.env.PRIVATE_RPC_URL_ETHEREUM;else process.env.PRIVATE_RPC_URL_ETHEREUM=savedEth;
+ if(savedPol===undefined)delete process.env.PRIVATE_RPC_URL_POLYGON;else process.env.PRIVATE_RPC_URL_POLYGON=savedPol;
+}
+console.log('PASS: sharing an RPC URL cannot reuse Ethereum verification for Polygon, including at clock zero.');

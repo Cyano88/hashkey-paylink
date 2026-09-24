@@ -44,9 +44,10 @@ export type CircleEvmEmailSession = {
   refreshToken?: string
   deviceId?: string
   wallet: CircleEvmWallet
-  chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>
+  chain: Exclude<ChainKey, 'solana'>
   appId?: string
   productionEvmTopology?: PocketProductionEvmTopology
+  additionalWallets?: Partial<Record<'ethereum' | 'polygon', CircleEvmWallet>>
   arcMainnetWallet?: CircleEvmWallet
 }
 
@@ -68,6 +69,8 @@ const CHAIN_CONFIG = {
   base: { blockchain: 'BASE', label: 'Base' },
   arbitrum: { blockchain: 'ARB', label: 'Arbitrum' },
   arc: { blockchain: 'ARC', label: 'Arc' },
+  ethereum: { blockchain: 'ETH', label: 'Ethereum' },
+  polygon: { blockchain: 'MATIC', label: 'Polygon' },
 } as const
 
 function circleRuntimeUrl(path: string) {
@@ -75,7 +78,7 @@ function circleRuntimeUrl(path: string) {
 }
 
 export function canUseCircleEvmEmailWallet(chain: ChainKey) {
-  return ENABLED && (chain === 'base' || chain === 'arbitrum' || chain === 'arc')
+  return ENABLED && chain !== 'solana'
 }
 
 function appIdForChain(chain: ChainKey) {
@@ -631,7 +634,7 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
   })
 }
 
-async function getWalletSnapshot(userToken: string, chain: Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>) {
+async function getWalletSnapshot(userToken: string, chain: Exclude<ChainKey, 'solana'>) {
   const data = await circleWalletApi<{ wallet?: CircleEvmWallet | null; wallets?: CircleEvmWallet[] }>({
     action: 'listWallets',
     userToken,
@@ -776,6 +779,18 @@ export async function resumeCircleProductionEvmWallet(session: CircleEvmEmailSes
   }
   const ensured = await ensureProductionEvmWallet(sdk, session.userToken, session.encryptionKey, chain)
   return { ...session, ...ensured, chain }
+}
+
+export async function resumeCircleAdditionalEvmWallet(session: CircleEvmEmailSession, chain: 'ethereum' | 'polygon', privyAccessToken: string): Promise<CircleEvmEmailSession> {
+  const read = () => circleWalletApi<{wallet?:CircleEvmWallet;challengeId?:string}>({action:'prepareAdditionalPocketWallet',userToken:session.userToken,chain},{privyAccessToken})
+  let result=await read()
+  if (!result.wallet) {
+    if (!result.challengeId) throw new Error('Circle did not finish '+CHAIN_CONFIG[chain].label+' wallet setup. Try again.')
+    await executeChallenge(authenticatedSdk(session),result.challengeId)
+    result=await read()
+  }
+  if (!result.wallet || result.wallet.blockchain!==CHAIN_CONFIG[chain].blockchain) throw new Error('The '+CHAIN_CONFIG[chain].label+' wallet is not ready yet.')
+  return {...session,chain,wallet:result.wallet,additionalWallets:{...session.additionalWallets,[chain]:result.wallet}}
 }
 
 export async function resumeCircleArcMainnetWallet(session: CircleEvmEmailSession): Promise<CircleEvmEmailSession> {
@@ -1019,6 +1034,7 @@ export async function executeCircleEvmEmailChallenge(params: {
 export async function sendCircleEvmEmailWithdraw(params: {
   session: CircleEvmEmailSession
   recipient: Address
+  feeQuoteToken?: string
   amount: string
   idempotencyKey: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
@@ -1038,7 +1054,9 @@ export async function sendCircleEvmEmailWithdraw(params: {
     transactionId?: string
     transaction?: Record<string, unknown>
   }>({
-    action: 'executeEvmWithdraw',
+    action: params.feeQuoteToken ? 'executeEvmPayment' : 'executeEvmWithdraw',
+    feeQuoteToken: params.feeQuoteToken,
+    feeMode: 'gross',
     userToken: params.session.userToken,
     walletId: params.session.wallet.id,
     walletAddress: params.session.wallet.address,
@@ -1144,7 +1162,7 @@ export async function bridgeCircleEvmEmailWallet(params: {
   idempotencyKey?: string
   onChallenge?: (challengeId: string) => void
   session: CircleEvmEmailSession
-  destination: 'base' | 'arbitrum' | 'arc' | 'solana'
+  destination: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
   destinationAddress: string
   amount: string
 }) {

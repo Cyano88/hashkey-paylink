@@ -1,6 +1,6 @@
 import { pocketApiUrl } from './pocketRoutes'
 
-export const POCKET_NETWORKS = ['base', 'arbitrum', 'arc', 'solana'] as const
+export const POCKET_NETWORKS = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'] as const
 export type PocketNetwork = typeof POCKET_NETWORKS[number]
 
 export const POCKET_ACCESS_LEVELS = ['public', 'guest', 'authenticated'] as const

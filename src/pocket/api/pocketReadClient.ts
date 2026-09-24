@@ -51,7 +51,7 @@ export type PocketActivityReadResult = {
   collections: PocketCollectionResource[]
 }
 
-const POCKET_BALANCE_NETWORKS: UnifiedBalanceChainKey[] = ['base', 'arbitrum', 'arc', 'solana']
+const POCKET_BALANCE_NETWORKS: UnifiedBalanceChainKey[] = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon']
 
 type PocketRecipientEvmNetwork = Exclude<ChainKey, 'solana'>
 

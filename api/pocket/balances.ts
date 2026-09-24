@@ -40,6 +40,8 @@ const LABELS: Record<PocketNetwork, string> = {
   arbitrum: 'Arbitrum',
   arc: 'Arc',
   solana: 'Solana',
+  ethereum: 'Ethereum',
+  polygon: 'Polygon',
 }
 
 const CIRCLE_CHAINS: Record<PocketNetwork, UnifiedBalanceChainIdentifier> = {
@@ -47,6 +49,8 @@ const CIRCLE_CHAINS: Record<PocketNetwork, UnifiedBalanceChainIdentifier> = {
   arbitrum: 'Arbitrum',
   arc: 'Arc',
   solana: 'Solana',
+  ethereum: 'Ethereum',
+  polygon: 'Polygon',
 }
 
 const DIRECT_BALANCE_TIMEOUT_MS = 2_000

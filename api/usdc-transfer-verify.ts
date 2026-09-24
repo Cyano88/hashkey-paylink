@@ -7,6 +7,8 @@ const usdcEventUnits = (chain: EvmUsdcChain, data?: string) => BigInt(data || '0
 const BASE_PUBLIC_RPC = 'https://mainnet.base.org'
 
 const USDC_TOKENS = {
+  ethereum: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+  polygon: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
   base: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
   arc: '0x3600000000000000000000000000000000000000',
   arbitrum: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
@@ -26,7 +28,7 @@ type TxReceipt = {
   logs?: TxReceiptLog[]
 }
 
-type RpcBlock = { timestamp?: `0x${string}` }
+type RpcBlock = { timestamp?: `0x${string}`; number?: `0x${string}` }
 
 type TransferLog = {
   transactionHash?: `0x${string}`
@@ -37,6 +39,8 @@ type TransferLog = {
 }
 
 function rpcFor(chain: EvmUsdcChain) {
+  if (chain === 'ethereum') return process.env.PRIVATE_RPC_URL_ETHEREUM || 'https://ethereum-rpc.publicnode.com'
+  if (chain === 'polygon') return process.env.PRIVATE_RPC_URL_POLYGON || 'https://polygon-bor-rpc.publicnode.com'
   if (chain === 'arc') return process.env.PRIVATE_RPC_URL_ARC_MAINNET || 'https://rpc.mainnet.arc.io'
   if (chain === 'arbitrum') return process.env.PRIVATE_RPC_URL_ARB
   return process.env.PRIVATE_RPC_URL
@@ -57,7 +61,7 @@ async function rpcCall<T>(rpcUrl: string, method: string, params: unknown[]): Pr
 }
 
 export function normalizeEvmUsdcChain(value: unknown): EvmUsdcChain | null {
-  if (value === 'base' || value === 'arc' || value === 'arbitrum') return value
+  if (value === 'ethereum' || value === 'polygon' || value === 'base' || value === 'arc' || value === 'arbitrum') return value
   return null
 }
 
@@ -254,14 +258,16 @@ export async function findEvmUsdcTransfer(input: {
     match = [...candidates].reverse()[0]
   }
   if (!match?.transactionHash) return null
-  const amountUnits = match.data ? BigInt(match.data) : 0n
+  // Discovery is only a hint: verify the receipt on the configured chain before accepting it.
+  const verified = await verifyEvmUsdcTransfer({ ...input, txHash: match.transactionHash })
+  if (input.exactAmount && BigInt(verified.amountUnits) !== minUnits) return null
   return {
     txHash: match.transactionHash,
-    amountUnits: amountUnits.toString(),
-    amount: formatUnits(amountUnits, 6),
+    amountUnits: verified.amountUnits,
+    amount: verified.amount,
     blockNumber: match.blockNumber ? BigInt(match.blockNumber).toString() : null,
     logIndex: match.logIndex ? Number(BigInt(match.logIndex)) : null,
-    confirmedAt,
+    confirmedAt: verified.confirmedAt ?? confirmedAt,
   }
 }
 
@@ -280,9 +286,20 @@ export async function verifyEvmUsdcTransfer(input: {
   const rpcUrl = rpcFor(input.chain)
   if (!rpcUrl) throw new Error(`PRIVATE_RPC_URL is not configured for ${input.chain}.`)
 
+  const expectedChainId = { base: 8453n, arbitrum: 42161n, arc: 5042n, ethereum: 1n, polygon: 137n }[input.chain]
+  const actualChainId = await rpcCall<string>(rpcUrl, 'eth_chainId', [])
+  if (!/^0x[0-9a-f]+$/i.test(actualChainId) || BigInt(actualChainId) !== expectedChainId) {
+    throw new Error('Payment RPC chain does not match the requested mainnet.')
+  }
   const receipt = await rpcCall<TxReceipt | null>(rpcUrl, 'eth_getTransactionReceipt', [input.txHash])
   if (!receipt) throw new Error('Transaction receipt was not found yet.')
   if (receipt.status !== '0x1') throw new Error('Transaction did not succeed.')
+  if (!receipt.blockNumber || !/^0x[0-9a-f]+$/i.test(receipt.blockNumber)) throw new Error('Transaction confirmation block was not available.')
+  // Never treat a sequencer/latest receipt as finalized payment proof.
+  const finalized = await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', ['finalized', false])
+  if (!finalized.number || !/^0x[0-9a-f]+$/i.test(finalized.number) || BigInt(receipt.blockNumber) > BigInt(finalized.number)) {
+    throw new Error('Transaction is not finalized yet.')
+  }
 
   let confirmedAt: string | undefined
   if (input.notBefore || input.notAfter) {

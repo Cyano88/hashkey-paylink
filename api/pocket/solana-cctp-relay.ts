@@ -37,7 +37,7 @@ const BRIDGE_WITH_HOOK_DISCRIMINATOR = Buffer.from('f2113f250ab3a918', 'hex')
 const CCTP_EVENT_RENT_LAMPORTS = 3_900_000n
 const RELAYER_OPERATIONAL_BUFFER_LAMPORTS = 100_000n
 const MAX_TRANSACTION_BYTES = 16_384
-const DESTINATION_DOMAINS = { arbitrum: 3, base: 6, arc: 26 } as const
+const DESTINATION_DOMAINS = { arbitrum: 3, base: 6, arc: 26, ethereum: 0, polygon: 7 } as const
 
 type Destination = keyof typeof DESTINATION_DOMAINS
 type ExpectedBridge = { destination: Destination; destinationAddress: string; amount: string }
@@ -412,7 +412,7 @@ export async function validatePocketSolanaCctpSignedTransaction(input: {
 function parseExpected(body: unknown): ExpectedBridge & { transaction?: string; lastValidBlockHeight?: number } {
   if (!body || typeof body !== 'object') throw fail(400, 'Solana CCTP bridge request is invalid.')
   const value = body as Record<string, unknown>
-  if (value.destination !== 'base' && value.destination !== 'arbitrum' && value.destination !== 'arc') throw fail(400, 'Solana CCTP destination is invalid.')
+  if (value.destination !== 'base' && value.destination !== 'arbitrum' && value.destination !== 'arc' && value.destination !== 'ethereum' && value.destination !== 'polygon') throw fail(400, 'Solana CCTP destination is invalid.')
   if (typeof value.destinationAddress !== 'string' || typeof value.amount !== 'string') {
     throw fail(400, 'Solana CCTP bridge request is invalid.')
   }

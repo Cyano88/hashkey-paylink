@@ -62,14 +62,14 @@ export default function PocketMoveBankPage() {
     profileDraft: profile.draft,
     allowThirdPartyAccount: mode === 'withdraw',
   })
-  const onWalletReady = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana', wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
+  const onWalletReady = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon', wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
     wallets.setWallets(current => ({ ...current, [network]: wallet }))
   }, [wallets.setWallets])
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
   const ensureBaseWallet = useCallback(async () => walletController.ensureWallet('base'), [walletController.ensureWallet])
   const getBaseEvmSession = useCallback((walletAddress: string) => walletController.getEvmSession('base', walletAddress), [walletController.getEvmSession])
-  const ensureLiquidityWallet = useCallback((network: 'base' | 'arbitrum' | 'solana') => walletController.ensureWallet(network), [walletController.ensureWallet])
-  const getLiquidityEvmSession = useCallback((network: 'base' | 'arbitrum', walletAddress: string) => walletController.getEvmSession(network, walletAddress), [walletController.getEvmSession])
+  const ensureLiquidityWallet = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon') => walletController.ensureWallet(network), [walletController.ensureWallet])
+  const getLiquidityEvmSession = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon', walletAddress: string) => walletController.getEvmSession(network, walletAddress), [walletController.getEvmSession])
   const getLiquiditySolanaSession = useCallback((walletAddress: string) => walletController.getSolanaSession(walletAddress), [walletController.getSolanaSession])
   const direct = usePocketBankWithdrawController({
     authenticated,

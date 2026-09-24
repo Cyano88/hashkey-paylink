@@ -5,6 +5,7 @@ import { mkdirSync } from 'node:fs'
 import { decodeFunctionData, parseAbi } from 'viem'
 mkdirSync('.codex-temp', {recursive:true})
 const mocks = {
+ './evm-read.js': `export const readEvmRpc=async()=> '0x'+BigInt(globalThis.fixtureBalance??10000000000n).toString(16).padStart(64,'0')`,
  './paycrest-pos.js': `export const getPaycrestPosOrder=async()=>globalThis.fixturePayout`,
  './privy-circle-link.js': `export const circleLinkKey=()=>''; export const readCircleLink=async()=>null; export const findPaymentCircleLinkByWallet=async()=>null; export const verifiedPrivyUser=async()=>{throw Error('Unexpected Pocket identity lookup')}`,
  './pocket/payment-security.js': `export const requiresPocketPaymentApproval=async()=>{throw Error('Unexpected approval lookup')}; export const consumePocketPaymentApproval=async()=>false`,
@@ -20,7 +21,7 @@ const originalFetch=globalThis.fetch
 // Every upstream call is intercepted: this test cannot submit a real transaction.
 globalThis.fetch=async(url,init)=>{
  const path=new URL(url).pathname
- if(new URL(url).hostname==='api.coingecko.com')return Response.json({ethereum:{usd:3000,last_updated_at:Math.floor(Date.now()/1000)},'usd-coin':{usd:1,last_updated_at:Math.floor(Date.now()/1000)}})
+ if(new URL(url).hostname==='api.coingecko.com')return Response.json({'polygon-ecosystem-token':{usd:0.5,last_updated_at:Math.floor(Date.now()/1000)},ethereum:{usd:3000,last_updated_at:Math.floor(Date.now()/1000)},'usd-coin':{usd:1,last_updated_at:Math.floor(Date.now()/1000)}})
  if(path==='/v1/w3s/transactions/contractExecution/estimateFee'){estimateCalls++;return Response.json({data:{high:{networkFeeRaw:'0.0001'}}})}
  if(path==='/v1/w3s/wallets/fixture-wallet')return Response.json({data:{wallet:{id:'fixture-wallet',address:payer,blockchain,accountType:'SCA',state:'LIVE'}}})
  assert.equal(path,'/v1/w3s/user/transactions/contractExecution')
@@ -56,9 +57,11 @@ try {
  globalThis.fixturePayout.valid_until='invalid-date'
  await call(payoutRequest,400)
  delete globalThis.fixturePayout
- for(const [index,chain,network] of [[1,'base','BASE'],[2,'arbitrum','ARB'],[3,'arc','ARC']]){
+ for(const [index,chain,network] of [[1,'base','BASE'],[2,'arbitrum','ARB'],[3,'arc','ARC'],[4,'ethereum','ETH'],[5,'polygon','MATIC']]){
   blockchain=network
   const request={...base,chain,idempotencyKey:`11111111-1111-4111-8111-11111111111${index}`}
+  const actualQuote=await call({...request,action:'quoteEvmPayment'})
+  assert.equal(actualQuote.quote.networkFeeUnits,chain==='polygon'?'50':chain==='arc'?'100':'300000')
   request.feeQuoteToken=quoteFor(request)
   const first=await call(request),retry=await call(request)
   assert.equal(first.challengeId,retry.challengeId)
@@ -72,8 +75,12 @@ try {
   assert.equal(fee.args[1],1050000n)
   assert.equal(fee.args[0].toLowerCase(),'0xce5df9e1115f81a2fc2f65941b20b820d508e753')
  }
- assert.equal(deduplicated.size,3)
+ assert.equal(deduplicated.size,5)
  const count=executions.length
+ blockchain='BASE';globalThis.fixtureBalance=100000000n
+ await call(base,400)
+ assert.equal(executions.length,count,'insufficient balance must not open a Circle challenge')
+ delete globalThis.fixtureBalance
  await call({...base,idempotencyKey:'invalid'},400)
  await call({...base,idempotencyKey:''},400)
  await call({...base,feeQuoteToken:''},409)
@@ -82,5 +89,5 @@ try {
  blockchain='ETH'
  await call(base,403)
  assert.equal(executions.length,count)
- console.log('PASS: three deployed EVM rails preserve retry key and exact gross recipient; invalid keys and wrong-chain wallet submit nothing. Provider deduplication is mocked, not a live guarantee.')
+ console.log('PASS: five configured EVM rails preserve retry key and exact gross recipient; invalid keys and wrong-chain wallet submit nothing. Provider deduplication is mocked, not a live guarantee.')
 }finally{globalThis.fetch=originalFetch}

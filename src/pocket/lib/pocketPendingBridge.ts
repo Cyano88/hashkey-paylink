@@ -15,7 +15,7 @@ export type PocketPendingBridge = {
   historySynced?: boolean
   sourceConfirmed?: boolean
 }
-const networks = new Set(['base', 'arbitrum', 'arc', 'solana'])
+const networks = new Set(['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'])
 const states = new Set(['submitted', 'arriving', 'completed', 'failed', 'needs_attention'])
 export const POCKET_BRIDGES_UPDATED = 'pocket:bridges-updated'
 export function parsePocketPendingBridge(value: unknown): PocketPendingBridge {

@@ -24,7 +24,7 @@ export type PocketBankWithdrawData = {
 export type PocketBankWithdrawRouteData = {
   intentId: string
   phase: 'started' | 'submitted' | 'completed' | 'failed'
-  source: 'arbitrum' | 'solana'
+  source: 'arbitrum' | 'solana' | 'arc' | 'ethereum' | 'polygon'
   destination: 'base'
   amount: string
   txHash: string
@@ -129,7 +129,7 @@ export function readPocketBankWithdrawRoute(input: { accessToken: string; intent
   return routeRequest({ ...input, body: { action: 'routeStatus', intent_id: input.intentId } })
 }
 
-export function startPocketBankWithdrawRoute(input: { accessToken: string; intentId: string; source: 'arbitrum' | 'solana'; amount: string; fetcher?: typeof fetch }) {
+export function startPocketBankWithdrawRoute(input: { accessToken: string; intentId: string; source: 'arbitrum' | 'solana' | 'arc' | 'ethereum' | 'polygon'; amount: string; fetcher?: typeof fetch }) {
   return routeRequest({ ...input, body: { action: 'routeStart', intent_id: input.intentId, source: input.source, destination: 'base', amount: input.amount } })
 }
 

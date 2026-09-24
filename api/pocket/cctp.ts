@@ -1,9 +1,11 @@
 import { Connection, PublicKey } from '@solana/web3.js'
 import { getAssociatedTokenAddress } from '../solana-token.js'
 
-export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'arc' | 'solana'
+export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
 
 export const CCTP_DOMAIN: Record<PocketBridgeNetwork, number> = {
+  ethereum: 0,
+  polygon: 7,
   base: 6,
   arbitrum: 3,
   solana: 5,

@@ -153,7 +153,7 @@ async function syncExecution(ownerId: string, order: any, dependencies: BankWith
 function routeRecord(record: CirclePocketActionRecord | undefined, claimed?: boolean) {
   if (!record || record.action !== 'bank-withdraw.route') return null
   const source = record.metadata?.source
-  if (source !== 'arbitrum' && source !== 'solana') return null
+  if (source !== 'arbitrum' && source !== 'solana' && source !== 'arc' && source !== 'ethereum' && source !== 'polygon') return null
   const phase = record.status
   if (phase !== 'started' && phase !== 'submitted' && phase !== 'completed' && phase !== 'failed') return null
   return {
@@ -200,7 +200,7 @@ async function syncOwnedRoute(identity: VerifiedLinkUser, intentId: string, depe
   if (existing.status !== 'submitted') return existing
   const source = existing.metadata?.source
   const txHash = existing.metadata?.txHash || ''
-  if ((source !== 'arbitrum' && source !== 'solana') || !txHash) return existing
+  if ((source !== 'arbitrum' && source !== 'solana' && source !== 'arc' && source !== 'ethereum' && source !== 'polygon') || !txHash) return existing
   const provider = await dependencies.readBridgeStatus(source, txHash).catch(() => null)
   if (!provider) return existing
   if (!isCircleBridgeComplete(provider.status)) return existing
@@ -376,7 +376,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         const source = text(req.body?.source, 20)
         const destination = text(req.body?.destination, 20)
         const amount = text(req.body?.amount, 30)
-        if ((source !== 'arbitrum' && source !== 'solana') || destination !== 'base') {
+        if ((source !== 'arbitrum' && source !== 'solana' && source !== 'arc' && source !== 'ethereum' && source !== 'polygon') || destination !== 'base') {
           return res.status(400).json({ ok: false, error: 'Bank payout routing supports Arbitrum or Solana to Base.' })
         }
         const routeAmountUnits = usdcUnits(amount)
@@ -435,7 +435,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         const txHash = text(req.body?.tx_hash, 128) || existing.metadata?.txHash || ''
         if (phase !== 'failed' && !txHash) return res.status(400).json({ ok: false, error: 'Bank payout routing transaction is required.' })
         if (phase === 'completed') {
-          const provider = await dependencies.readBridgeStatus(existing.metadata?.source as 'arbitrum' | 'solana', txHash)
+          const provider = await dependencies.readBridgeStatus(existing.metadata?.source as 'arbitrum' | 'solana' | 'arc' | 'ethereum' | 'polygon', txHash)
           if (!isCircleBridgeComplete(provider.status)) {
             return res.status(409).json({ ok: false, error: 'Circle has not confirmed this bank payout route yet.' })
           }

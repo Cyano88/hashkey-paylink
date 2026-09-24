@@ -433,11 +433,26 @@ async function pollCircleSolanaChallenge(userToken: string, challengeId: string,
 }
 
 export async function reconcileCircleSolanaTransfer(params: {
+  accessToken?: string
   session: SolanaEmailSession
   challengeId: string
   transactionId?: string
   timeoutMs?: number
 }): Promise<{ state: 'submitted' | 'confirmed'; txHash: string; transactionId: string }> {
+  if (params.challengeId.startsWith('relay:')) {
+    if (!params.accessToken) throw new Error('Sign in again to check this payment.')
+    const txHash = params.challengeId.slice(6)
+    const { readSolanaRelayStatus, clearConfirmedSolanaRelay } = await import('./solanaPaymentFees')
+    const deadline = Date.now() + (params.timeoutMs ?? 180_000)
+    do {
+      if (await readSolanaRelayStatus(txHash, params.accessToken)) {
+        clearConfirmedSolanaRelay(params.session.wallet.address, txHash)
+        return { state: 'confirmed' as const, txHash, transactionId: params.challengeId }
+      }
+      await new Promise(resolve => setTimeout(resolve, 2500))
+    } while (Date.now() < deadline)
+    return { state: 'submitted' as const, txHash: '', transactionId: params.challengeId }
+  }
   const startedAt = Date.now()
   const timeoutMs = Math.max(2_500, params.timeoutMs ?? 180_000)
   const transactionId = params.transactionId || await pollCircleSolanaChallenge(
@@ -522,7 +537,7 @@ export async function sendCircleSolanaTransfer(params: {
 }
 
 export async function signCircleSolanaTransaction(params: {
-  bridge?: { destination: 'base' | 'arbitrum' | 'arc'; destinationAddress: string; amount: string; accessToken: string }
+  bridge?: { destination: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'; destinationAddress: string; amount: string; accessToken: string }
   session: SolanaEmailSession
   rawTransaction: string
   memo: string

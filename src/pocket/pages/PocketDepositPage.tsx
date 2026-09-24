@@ -12,8 +12,10 @@ import usePocketWalletController from '../controllers/usePocketWalletController'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 import { cn } from '../../lib/utils'
 
-type DepositNetwork = 'base' | 'arbitrum' | 'solana' | 'arc'
+type DepositNetwork = 'base' | 'arbitrum' | 'solana' | 'arc' | 'ethereum' | 'polygon'
 const NETWORKS = [
+  { key: 'ethereum', label: 'Ethereum', logo: '/brand/ethereum-logo.png', dark: false },
+  { key: 'polygon', label: 'Polygon', logo: '/brand/polygon-logo.png', dark: false },
   { key: 'base', label: 'Base', logo: '/brand/base-logo.jpeg', dark: false },
   { key: 'arbitrum', label: 'Arbitrum', logo: '/brand/arbitrum-logo.jpeg', dark: false },
   { key: 'arc', label: 'Arc', logo: '/brand/arc-logo.jpeg', dark: true },
@@ -33,7 +35,7 @@ export default function PocketDepositPage() {
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const [network, setNetwork] = useState<DepositNetwork>(() => {
     const saved = window.localStorage.getItem('pocket.home.network')
-    return saved === 'arbitrum' || saved === 'solana' || saved === 'arc' ? saved : 'base'
+    return saved === 'ethereum' || saved === 'polygon' || saved === 'arbitrum' || saved === 'solana' || saved === 'arc' ? saved : 'base'
   })
   const [opening, setOpening] = useState(false)
   const [copied, setCopied] = useState(false)

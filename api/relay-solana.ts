@@ -1,3 +1,5 @@
+import { createPaymentFeeQuote, verifyPaymentFeeQuote } from './payment-fee-quotes.js'
+import { readNativeUsdcRate } from './payment-network-fees.js'
 /**
  * Solana gasless USDC relay.
  *
@@ -221,7 +223,7 @@ async function ensureATA(
 
 // ── POST /api/solana-build-tx ─────────────────────────────────────────────────
 export async function buildSolanaTx(req: Request, res: Response): Promise<void> {
-  const { from, to, amount, mode, feeMode } = req.body as { from?: string; to?: string; amount?: string; mode?: string; feeMode?: string }
+  const { from, to, amount, mode, quoteOnly, feeQuoteToken } = req.body as { from?: string; to?: string; amount?: string; mode?: string; quoteOnly?: boolean; feeQuoteToken?: string }
 
   if (!from || !to || !amount) {
     res.status(400).json({ ok: false, error: 'Missing from / to / amount' })
@@ -245,37 +247,51 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
     // Ensure sender ATA exists (if it doesn't, payment will fail — sender must have USDC)
     const fromATA = await getAssociatedTokenAddress(USDC_MINT, fromPubkey)
     const fromAmount = await readTokenAccountAmount(connection, fromATA)
-    if (fromAmount === null || fromAmount < totalRaw) {
+    if (!quoteOnly && (fromAmount === null || fromAmount < totalRaw)) {
       throw new Error('Sender has insufficient Solana USDC for this payment')
     }
     // Ensure recipient ATA exists (relayer creates it if needed, covers rent)
     const { ata: toATA, created: createsRecipientAta } = await ensureATA(connection, tx, USDC_MINT, toPubkey, relayer.publicKey)
 
     const isWithdraw = mode === 'withdraw'
-    const grossFees = feeMode === 'gross'
-    const feeRaw         = isWithdraw ? 0n : totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
-    const gasRecoveryRaw = isWithdraw ? 0n : getGasRecoveryRaw(totalRaw, feeRaw, createsRecipientAta, grossFees)
-    const treasuryRaw    = feeRaw + gasRecoveryRaw
-    const requiredRaw    = grossFees ? totalRaw + treasuryRaw : totalRaw
-    const recipientRaw   = grossFees ? totalRaw : totalRaw - treasuryRaw
-    if (recipientRaw <= 0n) throw new Error('Payment amount is too small after fees')
-    if (fromAmount < requiredRaw) {
-      throw new Error('Sender has insufficient Solana USDC for this payment')
+    const feeRaw = isWithdraw ? 0n : totalRaw * BigInt(PLATFORM_FEE_BPS) / 10_000n
+    // Build the exact instruction topology before asking the RPC for its fee.
+    const treasuryPubkey = isWithdraw ? null : getSolanaTreasury(1n)
+    const treasury = treasuryPubkey?.equals(toPubkey) ? { ata: toATA, created: false } : treasuryPubkey ? await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey) : null
+    tx.add(createTransferCheckedInstruction(fromATA, USDC_MINT, toATA, fromPubkey, totalRaw, USDC_DECIMALS))
+    if (treasury) tx.add(createTransferCheckedInstruction(fromATA, USDC_MINT, treasury.ata, fromPubkey, feeRaw || 1n, USDC_DECIMALS))
+    let gasRecoveryRaw = 0n
+    let quote: ReturnType<typeof createPaymentFeeQuote> | undefined
+    if (!isWithdraw) {
+      const fee = await connection.getFeeForMessage(tx.compileMessage(), 'confirmed')
+      if (!Number.isSafeInteger(fee.value) || fee.value === null || fee.value <= 0) throw new Error('Solana network fee quote is unavailable. Try again.')
+      const setupCount = Number(createsRecipientAta) + Number(treasury?.created ?? false)
+      const rent = setupCount ? await connection.getMinimumBalanceForRentExemption(165, 'confirmed') : 0
+      if (!Number.isSafeInteger(rent) || rent < 0) throw new Error('Solana account setup quote is unavailable.')
+      const lamports = BigInt(fee.value) + BigInt(rent) * BigInt(setupCount)
+      const rate = await readNativeUsdcRate('solana')
+      // lamports (1e9 SOL), rate (1e8 USDC), output USDC base units (1e6).
+      gasRecoveryRaw = (lamports * rate + 100_000_000_000n - 1n) / 100_000_000_000n
+      const binding = { chain: 'solana', walletId: fromPubkey.toBase58(), walletAddress: fromPubkey.toBase58(), recipient: toPubkey.toBase58(), amountUnits: totalRaw.toString(), mode: 'gross' as const }
+      if (quoteOnly) {
+        quote = createPaymentFeeQuote(binding, gasRecoveryRaw)
+        res.json({ ok: true, ...quote, includesAccountSetup: setupCount > 0 })
+        return
+      }
+      let accepted
+      try { accepted = verifyPaymentFeeQuote(feeQuoteToken || '', binding) }
+      catch (error) { res.status(409).json({ ok: false, error: (error as Error).message }); return }
+      if (accepted.exemption !== 'none' || BigInt(accepted.networkFeeUnits) < gasRecoveryRaw) {
+        res.status(409).json({ ok: false, error: 'Network fees changed. Review the refreshed quote.' }); return
+      }
+      gasRecoveryRaw = BigInt(accepted.networkFeeUnits)
     }
-
-    // Transfer to recipient. Withdraw mode sends the full requested amount.
-    tx.add(createTransferCheckedInstruction(
-      fromATA, USDC_MINT, toATA, fromPubkey, recipientRaw, USDC_DECIMALS,
-    ))
-
-    // Transfer platform fee + sponsored gas/rent recovery to treasury.
-    const treasuryPubkey = getSolanaTreasury(treasuryRaw)
-    if (treasuryPubkey) {
-      const { ata: treasuryATA } = await ensureATA(connection, tx, USDC_MINT, treasuryPubkey, relayer.publicKey)
-      tx.add(createTransferCheckedInstruction(
-        fromATA, USDC_MINT, treasuryATA, fromPubkey, treasuryRaw, USDC_DECIMALS,
-      ))
+    const treasuryRaw = feeRaw + gasRecoveryRaw
+    const requiredRaw = totalRaw + treasuryRaw
+    if (fromAmount === null || fromAmount < requiredRaw) {
+      res.status(400).json({ ok: false, error: 'Insufficient USDC to cover the amount and fees. Try a lower amount.' }); return
     }
+    if (treasury) tx.instructions[tx.instructions.length - 1] = createTransferCheckedInstruction(fromATA, USDC_MINT, treasury.ata, fromPubkey, treasuryRaw, USDC_DECIMALS)
 
     // Relayer partial-signs as fee payer
     tx.partialSign(relayer)
@@ -285,8 +301,10 @@ export async function buildSolanaTx(req: Request, res: Response): Promise<void> 
       ok: true,
       tx: Buffer.from(serialised).toString('base64'),
       lastValidBlockHeight,
-      feeAmount: (Number(feeRaw) / Math.pow(10, USDC_DECIMALS)).toFixed(USDC_DECIMALS),
-      gasRecoveryAmount: (Number(gasRecoveryRaw) / Math.pow(10, USDC_DECIMALS)).toFixed(USDC_DECIMALS),
+      feeAmount: formatUsdc(feeRaw),
+      totalAmount: formatUsdc(requiredRaw),
+      recipientAmount: formatUsdc(totalRaw),
+      gasRecoveryAmount: formatUsdc(gasRecoveryRaw),
       ataRecoveryApplied: createsRecipientAta,
     })
   } catch (err) {

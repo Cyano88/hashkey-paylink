@@ -29,7 +29,7 @@ const handler = createPocketBalancesHandler({
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   readLink: async key => {
     readKeys.push(key)
-    if (key.endsWith(':arbitrum')) return null
+    if (key.endsWith(':arbitrum') || key.endsWith(':ethereum') || key.endsWith(':polygon')) return null
     const chain = key.split(':').at(-1).replace('arc-mainnet', 'arc')
     return {
       privyUserId: 'privy-user-1',
@@ -62,6 +62,8 @@ assert.deepEqual(readKeys, [
   'privy-user-1:arbitrum',
   'privy-user-1:arc-mainnet',
   'privy-user-1:solana',
+  'privy-user-1:ethereum',
+  'privy-user-1:polygon',
 ])
 assert.deepEqual(balanceCalls, [
   { network: 'base', address: 'base-wallet-address' },
@@ -73,6 +75,8 @@ assert.deepEqual(loaded.body.rows.map(({ walletRevision, observedAt, ...row }) =
   { key: 'arbitrum', label: 'Arbitrum', balance: 0, status: 'ok' },
   { key: 'arc', label: 'Arc', balance: 0, status: 'error', error: 'Arc balance is temporarily unavailable.' },
   { key: 'solana', label: 'Solana', balance: 3.25, status: 'ok' },
+  { key: 'ethereum', label: 'Ethereum', balance: 0, status: 'ok' },
+  { key: 'polygon', label: 'Polygon', balance: 0, status: 'ok' },
 ])
 assert(loaded.body.rows.every(row => /^[a-f0-9]{64}$/.test(row.walletRevision)))
 assert(loaded.body.rows.filter(row => row.status === 'ok').every(row => Number.isSafeInteger(row.observedAt)))
@@ -102,7 +106,9 @@ const mainnetBalanceHandler = createPocketBalancesHandler({
 })
 const mainnetBalance = await request(mainnetBalanceHandler)
 assert.equal(mainnetBalance.body.rows.find(row => row.key === 'arc').balance, 66)
-assert.equal(mainnetBalance.body.total, 69)
+assert.equal(mainnetBalance.body.total, 71)
+assert.equal(mainnetBalance.body.rows.find(row => row.key === 'ethereum').balance, 1)
+assert.equal(mainnetBalance.body.rows.find(row => row.key === 'polygon').balance, 1)
 assert.equal(mainnetBalance.body.totalComplete, true)
 assert.equal(isPocketBalancesReadData(mainnetBalance.body), true)
 

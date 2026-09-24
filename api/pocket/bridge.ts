@@ -20,8 +20,8 @@ type Dependencies = {
 }
 
 function network(value: unknown): PocketBridgeNetwork {
-  if (value === 'base' || value === 'arbitrum' || value === 'arc' || value === 'solana') return value
-  throw Object.assign(new Error('Choose Base, Arbitrum, Arc, or Solana.'), { status: 400 })
+  if (value === 'base' || value === 'arbitrum' || value === 'arc' || value === 'solana' || value === 'ethereum' || value === 'polygon') return value
+  throw Object.assign(new Error('Choose a supported Pocket network.'), { status: 400 })
 }
 
 export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {}) {

@@ -832,6 +832,9 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const [circleFeeQuoteError, setCircleFeeQuoteError] = useState('')
   const [circleFeeQuoteLoading, setCircleFeeQuoteLoading] = useState(false)
   const [feeQuoteRefresh, setFeeQuoteRefresh] = useState(0)
+  const [solanaFeeQuote, setSolanaFeeQuote] = useState<CirclePaymentFeeQuote | null>(null)
+  const [solanaFeeQuoteError, setSolanaFeeQuoteError] = useState('')
+  const [solanaFeeQuoteLoading, setSolanaFeeQuoteLoading] = useState(false)
   const [circleEvmEmailSession, setCircleEvmEmailSession] = useState<CircleEvmEmailSession | null>(null)
   const [circleEvmPaymentProcessing, setCircleEvmPaymentProcessing] = useState(false)
   const [circleWalletCopied, setCircleWalletCopied] = useState(false)
@@ -1148,6 +1151,44 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   }, [circleQuoteNeeded, circleEvmEmailSession?.userToken, circleEvmEmailSession?.wallet.id, chain, activeRecipient, payableAmt, hashPaylinkFeeBps, quotedPayoutId, feeQuoteRefresh])
 
 
+  const solanaQuoteSender = circleSolanaSession?.wallet.address || solanaWalletAddr || ''
+  const solanaQuoteNeeded = chain === 'solana' && Boolean(solanaQuoteSender && resolvedSolana && effectiveAmt)
+  const currentSolanaFeeQuote = (() => {
+    const q = solanaFeeQuote?.quote
+    if (!q || q.chain !== 'solana' || q.walletAddress !== solanaQuoteSender || q.recipient !== resolvedSolana || q.mode !== 'gross') return null
+    try { if (q.amountUnits !== parseUnits(effectiveAmt || '0', 6).toString()) return null } catch { return null }
+    return solanaFeeQuote
+  })()
+  useEffect(() => {
+    if (!solanaQuoteNeeded) { setSolanaFeeQuote(null); setSolanaFeeQuoteError(''); setSolanaFeeQuoteLoading(false); return }
+    let cancelled = false
+    const abort = new AbortController()
+    setSolanaFeeQuote(null); setSolanaFeeQuoteLoading(true); setSolanaFeeQuoteError('')
+    const timer = window.setTimeout(() => {
+      void fetch('/api/solana-build-tx', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: abort.signal,
+        body: JSON.stringify({ from: solanaQuoteSender, to: resolvedSolana, amount: effectiveAmt, quoteOnly: true }) })
+        .then(async response => {
+          const data = await readApiJson<CirclePaymentFeeQuote & { ok?: boolean; error?: string }>(response, 'Solana fee quote')
+          if (!response.ok || !data.ok || !data.quote || !data.token) throw new Error(data.error || 'Fee quote unavailable. Try again.')
+          if (!cancelled) setSolanaFeeQuote(data)
+        })
+        .catch(error => { if (!cancelled) setSolanaFeeQuoteError(readableErrorMsg(error, 'Fee quote unavailable. Try again.')) })
+        .finally(() => { if (!cancelled) setSolanaFeeQuoteLoading(false) })
+    }, 350)
+    return () => { cancelled = true; window.clearTimeout(timer); abort.abort() }
+  }, [solanaQuoteNeeded, solanaQuoteSender, resolvedSolana, effectiveAmt, feeQuoteRefresh])
+  const displayedPaymentQuote = chain === 'solana' ? currentSolanaFeeQuote : currentCircleFeeQuote
+  const paymentQuoteNeeded = chain === 'solana' ? solanaQuoteNeeded : circleQuoteNeeded
+  const paymentQuoteLoading = chain === 'solana' ? solanaFeeQuoteLoading : circleFeeQuoteLoading
+  const paymentQuoteError = chain === 'solana' ? solanaFeeQuoteError : circleFeeQuoteError
+  function approvedSolanaQuoteToken() {
+    if (!currentSolanaFeeQuote || currentSolanaFeeQuote.quote.expiresAt <= Date.now() + 15_000) {
+      setFeeQuoteRefresh(value => value + 1)
+      throw new Error('Review the refreshed fee quote, then confirm again.')
+    }
+    return currentSolanaFeeQuote.token
+  }
+
   function evmPaymentBreakdown(totalUnits: bigint, decimals = meta.decimals) {
     const feeUnits = totalUnits * BigInt(hashPaylinkFeeBps) / 10_000n
     const gasRecoveryUnits = hashPaylinkFeeBps === 0 ? 0n : getSponsoredGasRecoveryUnits(chain, totalUnits, feeUnits, decimals)
@@ -1175,9 +1216,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   }
 
   function solanaPaymentRequiredUnits(totalUnits: bigint) {
-    const feeUnits = totalUnits * BigInt(hashPaylinkFeeBps) / 10_000n
-    const gasRecoveryUnits = hashPaylinkFeeBps === 0 ? 0n : getSponsoredGasRecoveryUnits('solana', totalUnits, feeUnits, CHAIN_META.solana.decimals)
-    return totalUnits + feeUnits + gasRecoveryUnits
+    if (currentSolanaFeeQuote?.quote.amountUnits === totalUnits.toString()) return BigInt(currentSolanaFeeQuote.quote.totalUnits)
+    return totalUnits + totalUnits * BigInt(hashPaylinkFeeBps) / 10_000n
   }
 
   function circleEvmPaymentBreakdown(totalUnits: bigint) {
@@ -2374,6 +2414,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         return
       }
 
+      const feeQuoteToken = approvedSolanaQuoteToken()
       const buildRes = await fetch('/api/solana-build-tx', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2381,11 +2422,12 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
           from: session.wallet.address,
           to: resolvedSolana,
           amount: effectiveAmt,
-          feeMode: grossUpSolanaPlatformCharges ? 'gross' : 'net',
+          feeMode: 'gross',
+          feeQuoteToken,
         }),
       })
       const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
-      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build transaction')
+      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) { if (buildRes.status === 409) setFeeQuoteRefresh(value => value + 1); throw new Error(buildData.error ?? 'Failed to build transaction') }
 
       if(pocketScan)await requestPocketPaymentApproval()
       const signedB64 = await signCircleSolanaTransaction({
@@ -2515,6 +2557,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     }
     setIsSolanaPending(true); setSolanaError(null)
     try {
+      const feeQuoteToken = approvedSolanaQuoteToken()
       const buildRes = await fetch('/api/solana-build-tx', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2522,11 +2565,12 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
           from: solanaWalletAddr,
           to: resolvedSolana,
           amount: effectiveAmt,
-          feeMode: grossUpSolanaPlatformCharges ? 'gross' : 'net',
+          feeMode: 'gross',
+          feeQuoteToken,
         }),
       })
       const buildData = await readApiJson<{ ok: boolean; tx?: string; lastValidBlockHeight?: number; error?: string }>(buildRes, 'Solana build')
-      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) throw new Error(buildData.error ?? 'Failed to build transaction')
+      if (!buildData.ok || !buildData.tx || !buildData.lastValidBlockHeight) { if (buildRes.status === 409) setFeeQuoteRefresh(value => value + 1); throw new Error(buildData.error ?? 'Failed to build transaction') }
 
       const { Transaction } = await import('@solana/web3.js')
       const txBytes = Uint8Array.from(atob(buildData.tx), c => c.charCodeAt(0))
@@ -4576,17 +4620,17 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         )}
 
         <div className={cn(isNgPosPaycrestOfframp ? 'space-y-2 px-4 pb-4 pt-3' : 'space-y-3 p-4')}>
-          {circleQuoteNeeded && <div className="space-y-1 text-center text-[11px] font-medium text-slate-500">
-            {currentCircleFeeQuote ? <>
-              <p>Platform fee: {formatUnits(BigInt(currentCircleFeeQuote.quote.platformFeeUnits), 6)} USDC{currentCircleFeeQuote.quote.feeBps ? ' (0.25%)' : ''}</p>
-              <p>Network estimate: {formatUnits(BigInt(currentCircleFeeQuote.quote.networkFeeUnits), 6)} USDC</p>
-              <p className="font-semibold text-gray-900 dark:text-white">Total: {formatUnits(BigInt(currentCircleFeeQuote.quote.totalUnits), 6)} USDC</p>
-            </> : circleFeeQuoteLoading ? <div role="status" aria-label="Calculating fees" className="mx-auto h-10 w-44 animate-pulse rounded bg-slate-100 dark:bg-white/10" /> : null}
-            {circleFeeQuoteError && <p>{circleFeeQuoteError} <button type="button" className="underline" onClick={() => setFeeQuoteRefresh(value => value + 1)}>Retry</button></p>}
+          {paymentQuoteNeeded && <div className="space-y-1 text-center text-[11px] font-medium text-slate-500">
+            {displayedPaymentQuote ? <>
+              <p>Platform fee: {formatUnits(BigInt(displayedPaymentQuote.quote.platformFeeUnits), 6)} USDC{displayedPaymentQuote.quote.feeBps ? ' (0.25%)' : ''}</p>
+              <p>Network estimate: {formatUnits(BigInt(displayedPaymentQuote.quote.networkFeeUnits), 6)} USDC</p>
+              <p className="font-semibold text-gray-900 dark:text-white">Total: {formatUnits(BigInt(displayedPaymentQuote.quote.totalUnits), 6)} USDC</p>
+            </> : paymentQuoteLoading ? <div role="status" aria-label="Calculating fees" className="mx-auto h-10 w-44 animate-pulse rounded bg-slate-100 dark:bg-white/10" /> : null}
+            {paymentQuoteError && <p>{paymentQuoteError} <button type="button" className="underline" onClick={() => setFeeQuoteRefresh(value => value + 1)}>Retry</button></p>}
           </div>}
           {/* Payment details */}
           {isHostedCheckout ? (
-            (!circleQuoteNeeded && feeAmount > 0 && effectiveAmt) ? (
+            (!paymentQuoteNeeded && feeAmount > 0 && effectiveAmt) ? (
               <div className="space-y-1 text-center text-[11px] font-medium text-slate-400">
                 {feeAmount > 0 && effectiveAmt && <p>Fee {formatAmount(feeAmount.toString(), 6)} {meta.asset}</p>}
 
@@ -4607,7 +4651,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                 ? `Recipient receives ${bankSendDestinationLabel} USDC after your bank transfer is confirmed.`
                 : isWalletManagerFunding
                 ? <>Pocket Wallet receives USDC on {pocketFundingNetworkName}. Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>
-                : circleQuoteNeeded ? null : <>Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>}
+                : paymentQuoteNeeded ? null : <>Platform fee: {feeAmount > 0 && effectiveAmt ? `${feeAmount.toFixed(meta.decimals <= 6 ? 4 : 6)} ${meta.asset}` : 'not applied'}</>}
             </p>
             {isWalletManagerFunding && (walletFundingConfirming || isConfirmed) ? (
               <p className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-500 dark:bg-white/[0.07] dark:text-gray-300">

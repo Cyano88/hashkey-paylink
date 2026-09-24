@@ -6,6 +6,7 @@ import {
   canUseCircleEvmEmailWallet,
   connectCircleEvmEmailWallet,
   resumeCircleArcMainnetWallet,
+  resumeCircleAdditionalEvmWallet,
   resumeCircleProductionEvmWallet,
   restoreActivatedCircleEvmSession,
   type CircleEvmEmailSession,
@@ -43,6 +44,10 @@ function solanaSessionKey(email: string, walletAddress: string) {
 }
 
 function cacheEvmSession(email: string, session: CircleEvmEmailSession) {
+  for (const network of ['ethereum','polygon'] as const) {
+    const wallet=session.additionalWallets?.[network]
+    if(wallet)sharedEvmSessions.set(evmSessionKey(email,network,wallet.address),{...session,chain:network,wallet})
+  }
   if (session.chain === 'arc' && session.wallet.blockchain !== 'ARC') return
   sharedEvmSessions.set(evmSessionKey(email, session.chain, session.wallet.address), session)
   if (session.chain === 'base' || session.chain === 'arbitrum') {
@@ -198,11 +203,12 @@ export async function ensurePocketWallet({
     ? secureSessionForNetwork(storedSession, network as Exclude<PocketNetwork, 'solana'>, storedWallet.address)
     : null
   const mainnetSession = network === 'arc' ? await restorePocketWalletSession(email) : null
-  const session = resumedSession ?? (mainnetSession && mainnetSession.wallet.blockchain !== 'ARC-TESTNET' ? await resumeCircleArcMainnetWallet(mainnetSession) : await dependencies.connectEvm(email, network))
+  const additionalSession = !resumedSession && (network==='ethereum'||network==='polygon') ? await resumeCircleAdditionalEvmWallet(storedSession ?? await dependencies.connectEvm(email,'base'),network,accessToken) : null
+  const session = resumedSession ?? additionalSession ?? (mainnetSession && mainnetSession.wallet.blockchain !== 'ARC-TESTNET' ? await resumeCircleArcMainnetWallet(mainnetSession) : await dependencies.connectEvm(email, network))
   if (!shouldContinue()) return null
   await onEvmSession?.(session)
   const productionWallets = session.productionEvmTopology?.wallets
-  const linkTargets = network !== 'arc' && productionWallets?.base && productionWallets.arbitrum
+  const linkTargets = (network === 'base' || network === 'arbitrum') && productionWallets?.base && productionWallets.arbitrum
     ? ([['base', productionWallets.base], ['arbitrum', productionWallets.arbitrum]] as const)
     : ([[network, session.wallet]] as const)
   const linkedRecords = await Promise.all(linkTargets.map(([targetNetwork, wallet]) => dependencies.linkWallet({
@@ -293,7 +299,7 @@ export async function preparePocketWalletsAfterSignIn(params: {
   // open immediately. Normal balance/link refresh still runs quietly.
   const cachedWallets = readCachedPocketBalance(owner)?.wallets
   if (cachedWallets?.solana?.address && cachedWallets.solana.walletId &&
-      (['base', 'arbitrum', 'arc'] as const).every(network => {
+      (['base', 'arbitrum', 'arc', 'ethereum', 'polygon'] as const).every(network => {
         const wallet = cachedWallets[network]
         return wallet?.walletId && secureSessionForNetwork(params.session, network, wallet.address)?.wallet.id === wallet.walletId
       })) return params.session
@@ -311,6 +317,7 @@ export async function preparePocketWalletsAfterSignIn(params: {
       read: () => readPocketWallets({ accessToken: token }),
       evm: resumeCircleProductionEvmWallet,
       arc: resumeCircleArcMainnetWallet,
+      additional: (session,chain) => resumeCircleAdditionalEvmWallet(session,chain,token),
       solana: resumeCircleSolanaEmailWallet,
       link: (network, candidate) => linkPocketWallet({ accessToken: token, network, circleUserToken: candidate.userToken, wallet: candidate.wallet }),
       save: complete => savePocketSecureWalletSession(params.email, complete),

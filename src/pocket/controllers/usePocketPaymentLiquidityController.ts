@@ -33,9 +33,9 @@ function liquidityError(reason: unknown) {
     ? 'Pocket could not connect. Check your connection and try again.'
     : message || 'Pocket routing is temporarily unavailable.'
 }
-const NETWORKS: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'solana']
+const NETWORKS: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon']
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
-const networkLabel = (network: PocketCheckoutNetwork) => network === 'base' ? 'Base' : network === 'arbitrum' ? 'Arbitrum' : 'Solana'
+const networkLabel = (network: PocketCheckoutNetwork) => ({ base: 'Base', arbitrum: 'Arbitrum', arc: 'Arc', solana: 'Solana', ethereum: 'Ethereum', polygon: 'Polygon' })[network]
 export const pocketBridgePollDelay = (attempt: number) => attempt < 12 ? 1_500 : attempt < 32 ? 3_000 : 5_000
 
 async function inspectLiquidity(input: {
@@ -62,14 +62,20 @@ async function inspectLiquidity(input: {
     balances,
     bridgeTotals,
   })
-  for (let attempt = 0; attempt < 2 && route.kind === 'quote-required'; attempt += 1) {
-    const quote = await readPocketBridgeQuote({
+  for (let attempt = 0; attempt < NETWORKS.length - 1 && route.kind === 'quote-required'; attempt += 1) {
+    let quote
+    try { quote = await readPocketBridgeQuote({
       accessToken: input.accessToken,
       source: route.source,
       destination: route.destination,
       amount: formatUnits(route.amountUnits, 6),
     })
-    bridgeTotals[route.source] = parseUnits(quote.total, 6)
+    } catch {
+      const failedSource = route.source
+      const failed = balances.find(balance => balance.network === failedSource)
+      if (failed) failed.available = false
+    }
+    if (quote) bridgeTotals[route.source] = parseUnits(quote.total, 6)
     route = selectPocketCheckoutRoute({
       destination: input.destination,
       amountUnits: input.amountUnits,
@@ -87,7 +93,7 @@ export default function usePocketPaymentLiquidityController(input: {
   destination: PocketCheckoutNetwork
   getAccessToken(): Promise<string | null>
   ensureWallet(network: PocketCheckoutNetwork): Promise<CirclePocketWallet | null>
-  getEvmSession(network: 'base' | 'arbitrum', walletAddress: string): Promise<CircleEvmEmailSession>
+  getEvmSession(network: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon', walletAddress: string): Promise<CircleEvmEmailSession>
   getSolanaSession(walletAddress: string): Promise<PocketSolanaEmailSession>
   refreshBalances(): Promise<unknown>
   persistence?: PocketPaymentLiquidityPersistence
@@ -221,7 +227,7 @@ export default function usePocketPaymentLiquidityController(input: {
           txHash = currentRoute.source === 'solana'
             ? await bridgeCircleSolanaWallet({
                 session: await input.getSolanaSession(sourceWallet.address),
-                destination: currentRoute.destination as 'base' | 'arbitrum',
+                destination: currentRoute.destination as 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon',
                 destinationAddress: destinationWallet.address,
                 amount,
                 accessToken: inspected.accessToken,

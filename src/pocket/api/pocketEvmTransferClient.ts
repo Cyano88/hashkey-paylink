@@ -6,13 +6,14 @@ type PocketEvmTransferExecutor = (input: {
   session: CircleEvmEmailSession
   recipient: Address
   amount: string
+  feeQuoteToken?: string
   idempotencyKey?: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
   onAccepted?: (value: { challengeId: string; transactionId: string }) => void
 }) => Promise<`0x${string}` | null>
 
 type PocketEvmTransferConfirmer = (input: {
-  chain: 'base' | 'arbitrum' | 'arc'
+  chain: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'
   txHash: `0x${string}`
 }) => Promise<'confirmed' | 'submitted'>
 
@@ -39,6 +40,7 @@ export async function executePocketEvmTransfer({
   recipient,
   amount,
   idempotencyKey,
+  feeQuoteToken,
   onChallenge,
   onAccepted,
   confirm = true,
@@ -49,6 +51,7 @@ export async function executePocketEvmTransfer({
   linkedWalletAddress: string
   recipient: Address
   amount: string
+  feeQuoteToken?: string
   idempotencyKey?: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
   onAccepted?: (value: { challengeId: string; transactionId: string }) => void
@@ -56,7 +59,7 @@ export async function executePocketEvmTransfer({
   executor?: PocketEvmTransferExecutor
   confirmer?: PocketEvmTransferConfirmer
 }) {
-  if (!['base', 'arbitrum', 'arc'].includes(session.chain)) {
+  if (!['base', 'arbitrum', 'arc', 'ethereum', 'polygon'].includes(session.chain)) {
     throw new Error('Circle Pocket EVM withdrawal does not support this network.')
   }
   if (!isAddress(session.wallet.address) || !isAddress(linkedWalletAddress)) {
@@ -76,7 +79,7 @@ export async function executePocketEvmTransfer({
     throw new Error('Enter a valid USDC withdrawal amount.')
   }
   if (amountUnits <= 0n) throw new Error('Enter a USDC withdrawal amount greater than zero.')
-  const txHash = await executor({ session, recipient, amount, idempotencyKey: idempotencyKey ?? crypto.randomUUID(), onChallenge, onAccepted })
+  const txHash = await executor({ session, recipient, amount, feeQuoteToken, idempotencyKey: idempotencyKey ?? crypto.randomUUID(), onChallenge, onAccepted })
   if (!txHash) return { txHash, status: 'submitted' as const }
   if (!confirm) return { txHash, status: 'submitted' as const }
   const status = await confirmer({ chain: session.chain, txHash })

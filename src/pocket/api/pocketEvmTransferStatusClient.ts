@@ -10,7 +10,7 @@ export async function readPocketEvmTransferStatus({
   fetcher = fetch,
 }: {
   accessToken: string
-  chain: 'base' | 'arbitrum' | 'arc'
+  chain: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'
   txHash: `0x${string}`
   recipient: Address
   amount: string
@@ -37,7 +37,7 @@ export async function recoverPocketEvmTransfer({
   fetcher = fetch,
 }: {
   accessToken: string
-  chain: 'base' | 'arbitrum' | 'arc'
+  chain: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon'
   payer: Address
   recipient: Address
   amount: string

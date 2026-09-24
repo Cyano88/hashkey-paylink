@@ -7,7 +7,7 @@ import type {
   UnifiedBalanceChainIdentifier,
 } from '@circle-fin/unified-balance-kit'
 
-export type UnifiedBalanceChainKey = 'base' | 'arc' | 'arbitrum' | 'solana'
+export type UnifiedBalanceChainKey = 'base' | 'arc' | 'arbitrum' | 'solana' | 'ethereum' | 'polygon'
 
 export interface UnifiedBalanceBreakdown {
   walletRevision?: string
@@ -39,6 +39,8 @@ const CIRCLE_CHAIN_BY_KEY: Partial<Record<UnifiedBalanceChainKey, UnifiedBalance
   base: 'Base',
   arbitrum: 'Arbitrum',
   solana: 'Solana',
+  ethereum: 'Ethereum',
+  polygon: 'Polygon',
 }
 
 const LABEL_BY_KEY: Record<UnifiedBalanceChainKey, string> = {
@@ -46,6 +48,8 @@ const LABEL_BY_KEY: Record<UnifiedBalanceChainKey, string> = {
   arc: 'Arc',
   arbitrum: 'Arbitrum',
   solana: 'Solana',
+  ethereum: 'Ethereum',
+  polygon: 'Polygon',
 }
 
 const BALANCE_TIMEOUT_MS = 10_000
@@ -126,7 +130,7 @@ async function queryCircleBalance(address: string, chain: UnifiedBalanceChainIde
   return amountForCircleChain(result, chain)
 }
 
-async function queryEvmTokenBalance(key: 'base' | 'arc' | 'arbitrum', address: string): Promise<number> {
+async function queryEvmTokenBalance(key: 'base' | 'arc' | 'arbitrum' | 'ethereum' | 'polygon', address: string): Promise<number> {
   const response = await fetchJsonWithTimeout('/api/evm-balance', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

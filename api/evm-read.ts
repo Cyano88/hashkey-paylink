@@ -4,7 +4,8 @@ const NETWORKS = {
   base: { id: 8453, env: 'PRIVATE_RPC_URL', fallback: 'https://mainnet.base.org' },
   arc: { id: 5042, env: 'PRIVATE_RPC_URL_ARC_MAINNET', fallback: 'https://rpc.mainnet.arc.io' },
   arbitrum: { id: 42161, env: 'PRIVATE_RPC_URL_ARB', fallback: 'https://arb1.arbitrum.io/rpc' },
-  polygon: { id: 137, env: 'POLYMARKET_RPC_URL', fallback: 'https://polygon-rpc.com' },
+  polygon: { id: 137, env: 'PRIVATE_RPC_URL_POLYGON', fallback: 'https://polygon-bor-rpc.publicnode.com' },
+  ethereum: { id: 1, env: 'PRIVATE_RPC_URL_ETHEREUM', fallback: 'https://ethereum-rpc.publicnode.com' },
 } as const
 export type ReadNetwork = keyof typeof NETWORKS
 const address = (v: unknown) => typeof v === 'string' && /^0x[\da-f]{40}$/i.test(v)
@@ -63,6 +64,7 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
   const cache = new Map<string, { expires: number; result: unknown }>()
   const pending = new Map<string | symbol, Promise<unknown>>()
   const cooldown = new Map<string, number>()
+  const verifiedEndpoints = new Map<string, number>()
   let windowStart = now(), used = 0
   async function upstream(url: string, method: string, params: any[], signal?: AbortSignal) {
     signal?.throwIfAborted()
@@ -111,17 +113,25 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
     const pendingKey = signal ? Symbol(key) : key
     if (pending.size >= 16) throw new ReadRpcError(-32005, 'Read service busy. Try again shortly.')
     const work = (async () => {
-      const configured = options.publicOnly ? config.fallback : process.env[config.env]?.trim() || config.fallback
+      const configured = options.publicOnly ? config.fallback : process.env[config.env]?.trim() || (network === 'polygon' ? process.env.POLYMARKET_RPC_URL?.trim() : '') || config.fallback
       if (options.privateOnly && new URL(configured).hostname === new URL(config.fallback).hostname) throw new ReadRpcError(-32003, 'Independent private RPC unavailable.', 'configuration')
       const primary = !options.privateOnly && (cooldown.get(network) ?? 0) > now() ? config.fallback : configured
+      const checkedUpstream = async (url: string) => {
+        if ((network === 'ethereum' || network === 'polygon') && (verifiedEndpoints.get(`${network}:${url}`) ?? 0) <= now()) {
+          const id = await upstream(url, 'eth_chainId', [], signal)
+          if (typeof id !== 'string' || !/^0x[0-9a-f]+$/i.test(id) || BigInt(id) !== BigInt(config.id)) throw new ReadRpcError(-32003, 'RPC chain does not match the requested network.', 'configuration')
+          verifiedEndpoints.set(`${network}:${url}`, now() + 300_000)
+        }
+        return upstream(url, method, validated.params, signal)
+      }
       let result: unknown
-      try { result = await upstream(primary, method, validated.params, signal) }
+      try { result = await checkedUpstream(primary) }
       catch (error) {
         signal?.throwIfAborted()
         if (options.privateOnly || primary === config.fallback || (error instanceof ReadRpcError && error.code !== -32004)) throw error
         cooldown.set(network, now() + 60_000)
         console.warn('[evm-read] provider cooldown', { network })
-        result = await upstream(config.fallback, method, validated.params, signal)
+        result = await checkedUpstream(config.fallback)
       }
       signal?.throwIfAborted()
       if (cache.size >= 256) cache.delete(cache.keys().next().value!)

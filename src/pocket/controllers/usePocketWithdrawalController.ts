@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Address } from 'viem'
+import { parseUnits, formatUnits, type Address } from 'viem'
+import { readCirclePaymentFeeQuote, type CirclePaymentFeeQuote } from '../../lib/circleEvmEmailWallet'
+import { readSolanaPaymentQuote, sendQuotedSolanaPayment } from '../../lib/solanaPaymentFees'
 import { reconcileCircleSolanaTransfer, sendCircleSolanaTransfer } from '../../lib/circleSolanaEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
 import { recoverPocketEvmTransfer } from '../api/pocketEvmTransferStatusClient'
@@ -44,6 +46,7 @@ export default function usePocketWithdrawalController({
   resetKey,
   restoreOperations = true,
   operationContext = 'send',
+  chargeFees = false,
   allowLegacyOperation = false,
   ensureWallet,
   getEvmSession,
@@ -60,6 +63,7 @@ export default function usePocketWithdrawalController({
   resetKey: string
   restoreOperations?: boolean
   operationContext?: string
+  chargeFees?: boolean
   allowLegacyOperation?: boolean
   ensureWallet: (network: PocketNetwork) => Promise<CirclePocketWallet | null>
   getEvmSession: (network: Exclude<PocketNetwork, 'solana'>, walletAddress: string) => Promise<CircleEvmEmailSession>
@@ -69,6 +73,7 @@ export default function usePocketWithdrawalController({
   clearExternalError: () => void
   onActivity: (message: string) => void
 }) {
+  const [feeQuote, setFeeQuote] = useState<CirclePaymentFeeQuote | null>(null)
   const [address, setAddress] = useState('')
   const [amount, setAmount] = useState('')
   const [pending, setPending] = useState(false)
@@ -76,6 +81,16 @@ export default function usePocketWithdrawalController({
   const [status, setStatus] = useState<'idle' | 'pending' | 'submitted' | 'successful'>('idle')
   const [txHash, setTxHash] = useState('')
   const [error, setError] = useState('')
+  useEffect(() => { setFeeQuote(null) }, [network, address, amount, chargeFees])
+  const feePreview = feeQuote ? { platform: formatUnits(BigInt(feeQuote.quote.platformFeeUnits), 6), network: formatUnits(BigInt(feeQuote.quote.networkFeeUnits), 6), total: formatUnits(BigInt(feeQuote.quote.totalUnits), 6) } : null
+  const acceptedFeeToken = () => {
+    if (!chargeFees) return undefined
+    const q = feeQuote?.quote
+    const normalize = (value: string) => network === 'solana' ? value : value.toLowerCase()
+    if (!q || q.chain !== network || q.amountUnits !== parseUnits(amount, 6).toString() || normalize(q.recipient) !== normalize(address) || !wallet?.address || normalize(q.walletAddress) !== normalize(wallet.address) || q.expiresAt <= Date.now() + 15000) throw new Error('Review the refreshed fees before confirming.')
+    if (BigInt(Math.floor(balance * 1e6)) < BigInt(q.totalUnits)) throw new Error('Insufficient USDC to cover the amount and fees. Try a lower amount.')
+    return feeQuote!.token
+  }
   const recoverEvmOperation = useCallback(async (operation: EvmSendOperation) => {
     const accessToken = await getAccessToken()
     if (!accessToken) throw new Error('Sign in again to check this transfer.')
@@ -180,11 +195,22 @@ export default function usePocketWithdrawalController({
       if (!selectedWallet) throw new Error('Circle wallet setup was cancelled.')
       if (network === 'solana') await getSolanaSession(selectedWallet.address)
       else await getEvmSession(network, selectedWallet.address)
+      if (chargeFees) {
+        if (!feeQuote || feeQuote.quote.expiresAt <= Date.now() + 15000) {
+          const next = network === 'solana'
+            ? await readSolanaPaymentQuote(selectedWallet.address, address, amount)
+            : await readCirclePaymentFeeQuote({ session: await getEvmSession(network, selectedWallet.address), recipient: address, amount, feeMode: 'gross' })
+          setFeeQuote(next)
+          if (BigInt(Math.floor(balance * 1e6)) < BigInt(next.quote.totalUnits)) throw new Error('Insufficient USDC to cover the amount and fees. Try a lower amount.')
+          throw new Error('FEE_REVIEW_REQUIRED')
+        }
+        acceptedFeeToken()
+      }
     } catch (reason) {
-      setError(reason instanceof Error && reason.message ? reason.message : 'Pocket could not prepare this wallet.')
+      setError(reason instanceof Error && reason.message === 'FEE_REVIEW_REQUIRED' ? '' : reason instanceof Error && reason.message ? reason.message : 'Pocket could not prepare this wallet.')
       throw reason
     }
-  }, [address, amount, balance, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, wallet])
+  }, [address, amount, balance, chargeFees, feeQuote, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, wallet])
 
   useEffect(() => registerPocketPaymentPreparer(prepare), [prepare])
 
@@ -219,6 +245,7 @@ export default function usePocketWithdrawalController({
           setStatus(operation.state === 'accepted' ? 'successful' : 'submitted')
           setNotice(operation.state === 'accepted' ? `${formatPocketDisplayAmount(operation.amount ?? amount)} USDC sent on ${networkLabel}` : 'Transfer submitted. Pocket is checking Circle acceptance.')
           void reconcileCircleSolanaTransfer({
+            accessToken: (await getAccessToken()) || '',
             session,
             challengeId: operation.challengeId,
             transactionId: operation.transactionId,
@@ -233,8 +260,9 @@ export default function usePocketWithdrawalController({
           }).catch(() => undefined)
           return operation.state === 'accepted'
         }
+        const feeQuoteToken = acceptedFeeToken()
         writeSolanaOperation(operation)
-        const result = await sendCircleSolanaTransfer({
+        const result = chargeFees ? await sendQuotedSolanaPayment({ session, recipient, amount: amount.trim(), feeQuoteToken: feeQuoteToken!, accessToken: (await getAccessToken()) || '', onChallenge: identifiers => writeSolanaOperation({ ...operation, ...identifiers, state: 'submitted', updatedAt: Date.now() }) }) : await sendCircleSolanaTransfer({
           session,
           recipient,
           amount: amount.trim(),
@@ -253,6 +281,7 @@ export default function usePocketWithdrawalController({
           const sentAmount = amount
           const submittedOperation = { ...operation, challengeId: result.challengeId, transactionId: result.transactionId, state: circleAccepted ? 'accepted' as const : 'submitted' as const, updatedAt: Date.now() }
           void reconcileCircleSolanaTransfer({
+            accessToken: (await getAccessToken()) || '',
             session,
             challengeId: result.challengeId,
             transactionId: result.transactionId,
@@ -296,10 +325,12 @@ export default function usePocketWithdrawalController({
           return operation.state === 'accepted'
         }
         const session = await getEvmSession(network, selectedWallet.address)
+        const feeQuoteToken = acceptedFeeToken()
         writeEvmOperation(operation)
         const result = await executePocketEvmTransfer({
           session,
           linkedWalletAddress: selectedWallet.address,
+          feeQuoteToken,
           recipient: recipient as Address,
           amount,
           idempotencyKey: operation.idempotencyKey,
@@ -354,6 +385,7 @@ export default function usePocketWithdrawalController({
     } catch (reason) {
       setStatus('idle')
       const message = reason instanceof Error && reason.message ? reason.message : typeof reason === 'string' && reason ? reason : 'Withdraw failed.'
+      if (/quote|fees changed/i.test(message)) setFeeQuote(null)
       if (/cancelled|failed|denied/i.test(message)) {
         if (network === 'solana') clearSolanaOperation()
         else clearEvmOperation()
@@ -363,9 +395,10 @@ export default function usePocketWithdrawalController({
     } finally {
       setPending(false)
     }
-  }, [address, allowLegacyOperation, amount, balance, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, networkLabel, onActivity, operationContext, recoverEvmOperation, refreshBalances, wallet])
+  }, [address, allowLegacyOperation, amount, balance, chargeFees, feeQuote, getAccessToken, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, networkLabel, onActivity, operationContext, recoverEvmOperation, refreshBalances, wallet])
 
   return {
+    feePreview,
     address,
     setAddress: updateAddress,
     amount,

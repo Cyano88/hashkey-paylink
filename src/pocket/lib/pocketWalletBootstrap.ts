@@ -9,12 +9,13 @@ type SolanaSession = SolanaEmailSession
 export type WalletBootstrapDependencies = {
   read(): Promise<{ wallets: Partial<Record<PocketNetwork, Link>> }>
   evm(session: CircleEvmEmailSession, chain: 'base' | 'arbitrum'): Promise<CircleEvmEmailSession>
+  additional(session: CircleEvmEmailSession, chain: 'ethereum' | 'polygon'): Promise<CircleEvmEmailSession>
   arc(session: CircleEvmEmailSession): Promise<CircleEvmEmailSession>
   solana(session: CircleEvmEmailSession, expectedAddress?: string): Promise<SolanaSession>
   link(network: PocketNetwork, session: { userToken: string; wallet: ProviderWallet }): Promise<unknown>
   save(session: CircleEvmEmailSession): Promise<void>
 }
-const networks = ['base', 'arbitrum', 'arc', 'solana'] as const
+const networks = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'] as const
 const matches = (network: PocketNetwork, a: ProviderWallet, b: ProviderWallet) => a.id === b.id && a.blockchain === b.blockchain && (network === 'solana' ? a.address === b.address : a.address.toLowerCase() === b.address.toLowerCase())
 
 /** One authenticated Circle session; never prompts for a separate network login or replaces a linked wallet. */
@@ -42,6 +43,11 @@ export async function preparePocketWalletNetworks(session: CircleEvmEmailSession
   await accept('arc', arc)
   const solana = await deps.solana(base, before.solana?.wallet.address)
   await accept('solana', solana)
+  let additional = base
+  for (const network of ['ethereum', 'polygon'] as const) {
+    additional = await deps.additional(additional, network)
+    await accept(network, additional)
+  }
   const after = (await deps.read()).wallets
   check()
   const wallets: CirclePocketWallets = {}
@@ -50,7 +56,7 @@ export async function preparePocketWalletNetworks(session: CircleEvmEmailSession
     if (!link || !matches(network, link.wallet, expected)) throw new Error('Pocket could not confirm ' + network + ' wallet setup. Try again.')
     wallets[network] = { address: link.wallet.address, walletId: link.wallet.id, blockchain: link.wallet.blockchain, updatedAt: link.updatedAt }
   }
-  const complete = { ...base, productionEvmTopology: arb.productionEvmTopology ?? base.productionEvmTopology, arcMainnetWallet: arc.wallet }
+  const complete = { ...base, additionalWallets: additional.additionalWallets, productionEvmTopology: arb.productionEvmTopology ?? base.productionEvmTopology, arcMainnetWallet: arc.wallet }
   await deps.save(complete)
   check()
   return { session: complete, solana, wallets }

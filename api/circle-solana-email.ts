@@ -1,5 +1,6 @@
+import { readEvmRpc } from './evm-read.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote, type PaymentFeeBinding } from './payment-fee-quotes.js'
-import { readEthUsdcRate, nativeFeeToUsdcUnits } from './payment-network-fees.js'
+import { readNativeUsdcRate, nativeFeeToUsdcUnits } from './payment-network-fees.js'
 import { paymentFeeBreakdown } from '../src/lib/platformFees.js'
 import { missingPocketEvmWalletPlan } from './pocket/wallet-setup.js'
 import { withOrdinaryWalletMutation } from './pocket/wallet-migration-guard.js'
@@ -22,6 +23,8 @@ const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 const BPS_DENOMINATOR = 10_000n
 
 const EVM_CHAINS = {
+  ethereum: { blockchain: 'ETH', tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+  polygon: { blockchain: 'MATIC', tokenAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' },
   base: {
     blockchain: 'BASE',
     tokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
@@ -182,6 +185,8 @@ function solanaWallet(wallets: Array<{ id: string; address: string; blockchain: 
 function evmWallet(wallets: CircleUserWallet[], chain: keyof typeof EVM_CHAINS) {
   const expected = EVM_CHAINS[chain].blockchain
   const aliases: Record<keyof typeof EVM_CHAINS, string[]> = {
+    ethereum: ['ETH'],
+    polygon: ['MATIC'],
     base: ['BASE'],
     arbitrum: ['ARB', 'ARBITRUM', 'ARBITRUM-ONE', 'ARBITRUM_ONE', 'ARBITRUMONE'],
     arc: ['ARC'],
@@ -485,6 +490,36 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...data })
     }
 
+    if (action === 'prepareAdditionalPocketWallet') {
+      res.setHeader('Cache-Control', 'no-store')
+      const identity = await verifiedPrivyUser(req)
+      const { userToken, chain } = params
+      if (!userToken || userToken.length > 8000 || (chain !== 'ethereum' && chain !== 'polygon')) return res.status(400).json({ ok: false, error: 'Invalid additional wallet setup.' })
+      const baseLink = await readCircleLink(circleLinkKey(identity.userId, 'base', 'payment'))
+      if (!baseLink) return res.status(409).json({ ok: false, error: 'Finish your Pocket wallet setup first.' })
+      const anchor = await readCircleUserWallet(userToken, 'base', baseLink.circleWalletId)
+      requireCircleGasStationEvmWallet({chain:'base',walletId:baseLink.circleWalletId,walletAddress:baseLink.circleWalletAddress,wallets:anchor?[anchor]:[]})
+      const existingLink = await readCircleLink(circleLinkKey(identity.userId, chain, 'payment'))
+      if (existingLink) {
+        const existing = await readCircleUserWallet(userToken, chain, existingLink.circleWalletId)
+        const wallet = requireCircleGasStationEvmWallet({chain,walletId:existingLink.circleWalletId,walletAddress:existingLink.circleWalletAddress,wallets:existing?[existing]:[]})
+        return res.json({ok:true,wallet})
+      }
+      const inventory = await listCircleUserWallets(userToken, chain)
+      if (inventory.length >= 50) return res.status(409).json({ok:false,error:'Wallet inventory needs review before adding this network.'})
+      const candidates = inventory.filter(wallet=>wallet.blockchain===EVM_CHAINS[chain].blockchain && !isEvmReplacementCandidate(wallet))
+      if (candidates.length > 1) return res.status(409).json({ok:false,error:'Multiple wallets exist on this network. Contact Pocket support before linking.'})
+      if (candidates.length === 1) {
+        const candidate=candidates[0]
+        const wallet=requireCircleGasStationEvmWallet({chain,walletId:candidate.id,walletAddress:candidate.address,wallets:candidates})
+        return res.json({ok:true,wallet})
+      }
+      const hash=crypto.createHash('sha256').update('pocket-additional-sca-v1|'+identity.userId+'|'+chain).digest('hex')
+      const idempotencyKey=hash.slice(0,8)+'-'+hash.slice(8,12)+'-4'+hash.slice(13,16)+'-a'+hash.slice(17,20)+'-'+hash.slice(20,32)
+      const data=await circleJson('/v1/w3s/user/wallets',{method:'POST',userToken,apiKey:circleApiKey({chain}),body:JSON.stringify({idempotencyKey,accountType:'SCA',blockchains:[EVM_CHAINS[chain].blockchain],metadata:[{name:'Pocket '+chain}]})})
+      return res.json({ok:true,...data})
+    }
+
     if (action === 'restoreActivatedEvmWallets') {
       res.setHeader('Cache-Control', 'no-store')
       if (!/^Bearer .+/i.test(String(req.headers.authorization ?? ''))) return res.status(401).json({ ok: false, error: 'Sign in to restore your Pocket wallets.' })
@@ -584,7 +619,7 @@ export default async function handler(req: Request, res: Response) {
       if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
       // Older installed clients must not discover candidates through normal recovery.
       const wallets = (await listCircleUserWallets(userToken, chain)).filter(wallet => !isEvmReplacementCandidate(wallet))
-      const wallet = chain === 'base' || chain === 'arbitrum' || chain === 'arc'
+      const wallet = chain === 'base' || chain === 'arbitrum' || chain === 'arc' || chain === 'ethereum' || chain === 'polygon'
         ? evmWallet(wallets, chain)
         : solanaWallet(wallets)
       return res.json({ ok: true, wallets, wallet })
@@ -634,7 +669,7 @@ export default async function handler(req: Request, res: Response) {
 
     if (action === 'quoteEvmPayment') {
       const { userToken, walletId, walletAddress, chain, recipient, totalUnits } = params
-      if (!userToken || !walletId || !isAddress(walletAddress || '') || !isAddress(recipient || '') || !/^\d{1,78}$/.test(totalUnits || '') || BigInt(totalUnits) <= 0n || !['base','arbitrum','arc'].includes(chain)) return res.status(400).json({ ok: false, error: 'Valid payment details are required.' })
+      if (!userToken || !walletId || !isAddress(walletAddress || '') || !isAddress(recipient || '') || !/^\d{1,78}$/.test(totalUnits || '') || BigInt(totalUnits) <= 0n || !['base','arbitrum','arc','ethereum','polygon'].includes(chain)) return res.status(400).json({ ok: false, error: 'Valid payment details are required.' })
       const network = chain as keyof typeof EVM_CHAINS
       const owned = await readCircleUserWallet(userToken, network, walletId)
       const wallet = requireCircleGasStationEvmWallet({ chain: network, walletId, walletAddress, wallets: owned ? [owned] : [] })
@@ -642,7 +677,7 @@ export default async function handler(req: Request, res: Response) {
       const mode = params.feeMode === 'net' ? 'net' as const : 'gross' as const
       let recovery = 0n
       if (!exempt) {
-        const rate = network === 'arc' ? 100_000_000n : await readEthUsdcRate()
+        const rate = network === 'arc' ? 100_000_000n : await readNativeUsdcRate(network === 'polygon' ? 'polygon' : 'ethereum')
         // Estimate both transfers, then include the quoted recovery transfer amount.
         for (let pass = 0; pass < 2; pass++) {
           const fees = paymentFeeBreakdown(BigInt(totalUnits), recovery, mode)
@@ -666,7 +701,7 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Missing EVM withdrawal details or idempotency key.' })
       }
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) return res.status(400).json({ ok: false, error: 'Invalid withdrawal idempotency key.' })
-      if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') {
+      if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc' && chain !== 'ethereum' && chain !== 'polygon') {
         return res.status(400).json({ ok: false, error: 'Unsupported EVM email wallet chain' })
       }
       if (!isAddress(walletAddress) || !isAddress(recipient)) {
@@ -678,6 +713,9 @@ export default async function handler(req: Request, res: Response) {
       try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
       catch (error) { return res.status(409).json({ ok: false, code: 'PAYMENT_QUOTE_REQUIRED', error: error instanceof Error ? error.message : 'Refresh the payment quote.' }) }
       if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' })
+      const rawBalance = await readEvmRpc(chain, 'eth_call', [{ to: EVM_CHAINS[chain].tokenAddress, data: '0x70a08231' + walletAddress.slice(2).padStart(64, '0') }, 'latest'])
+      if (typeof rawBalance !== 'string' || !/^0x[0-9a-f]{64}$/i.test(rawBalance)) throw new Error('Balance could not be verified. Try again.')
+      if (BigInt(rawBalance) < BigInt(quote.totalUnits)) return res.status(400).json({ ok: false, error: 'Insufficient USDC to cover the amount and fees. Try a lower amount.' })
       const batchCallData = paymentCallData(chain, recipient, BigInt(quote.recipientUnits), BigInt(quote.treasuryUnits))
 
       const data = await createCircleGasStationEvmChallenge({
@@ -697,7 +735,7 @@ export default async function handler(req: Request, res: Response) {
       if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits || !idempotencyKey) {
         return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, chain, recipient, totalUnits, or idempotencyKey' })
       }
-      if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') {
+      if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc' && chain !== 'ethereum' && chain !== 'polygon') {
         return res.status(400).json({ ok: false, error: 'Unsupported EVM withdraw chain' })
       }
       if (!isAddress(walletAddress) || !isAddress(recipient)) {
@@ -744,7 +782,7 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Missing bridge parameters' })
       }
       if (idempotencyKey && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) return res.status(400).json({ ok: false, error: 'Invalid bridge idempotency key.' })
-      if ((chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') || (destination !== 'base' && destination !== 'arbitrum' && destination !== 'arc' && destination !== 'solana') || chain === destination) {
+      if ((chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc' && chain !== 'ethereum' && chain !== 'polygon') || (destination !== 'base' && destination !== 'arbitrum' && destination !== 'arc' && destination !== 'solana' && destination !== 'ethereum' && destination !== 'polygon') || chain === destination) {
         return res.status(400).json({ ok: false, error: 'Unsupported mainnet bridge route' })
       }
       if (!isAddress(walletAddress) || (destination !== 'solana' && !isAddress(destinationAddress))) {
@@ -1013,7 +1051,7 @@ export default async function handler(req: Request, res: Response) {
       if (!userToken || !walletId || !walletAddress || !chain) {
         return res.status(400).json({ ok: false, error: 'Missing userToken, walletId, walletAddress, or chain' })
       }
-      if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') {
+      if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc' && chain !== 'ethereum' && chain !== 'polygon') {
         return res.status(400).json({ ok: false, error: 'Unsupported EVM email wallet chain' })
       }
       if (!isAddress(walletAddress)) {

@@ -46,7 +46,7 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const [walletBusy, setWalletBusy] = useState(false)
   const [walletOpenError, setWalletOpenError] = useState('')
-  const onWalletReady = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana', wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
+  const onWalletReady = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon', wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
     wallets.setWallets(current => ({ ...current, [network]: wallet }))
   }, [wallets.setWallets])
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })

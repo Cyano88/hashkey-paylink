@@ -7,11 +7,13 @@
  */
 
 import { createPublicClient } from 'viem'
-import { base, arbitrum } from 'viem/chains'
+import { base, arbitrum, mainnet, polygon } from 'viem/chains'
 import { arcChain } from './chains'
 import { backendEvmTransport } from './backendEvmTransport'
 
 export const EVM_CLIENTS = {
+  ethereum: createPublicClient({ chain: mainnet, transport: backendEvmTransport('ethereum') }),
+  polygon: createPublicClient({ chain: polygon, transport: backendEvmTransport('polygon') }),
   base:     createPublicClient({ chain: base,           transport: backendEvmTransport('base') }),
   arc:      createPublicClient({ chain: arcChain,       transport: backendEvmTransport('arc') }),
   arbitrum: createPublicClient({ chain: arbitrum,       transport: backendEvmTransport('arbitrum') }),

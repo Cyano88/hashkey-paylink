@@ -1,7 +1,7 @@
 import { defineChain } from 'viem'
 import { base } from 'viem/chains'
 
-export type ChainKey = 'base' | 'arc' | 'solana' | 'arbitrum'
+export type ChainKey = 'base' | 'arc' | 'solana' | 'arbitrum' | 'ethereum' | 'polygon'
 
 // ─── Platform fee engine ─────────────────────────────────────────────────────
 export { PLATFORM_FEE_BPS } from './platformFees'
@@ -120,4 +120,6 @@ export const CHAIN_META = {
     dotColor:     'bg-[#28A0F0]',
     engineLabel:  'Smart Wallet · Gas Sponsored',
   },
+  ethereum: { key: 'ethereum' as const, label: 'Ethereum', asset: 'USDC', decimals: 6, chainId: 1, tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' as `0x${string}`, explorerUrl: 'https://etherscan.io', explorerName: 'Etherscan', glowStyle: '0 0 0 1px rgba(100,100,100,0.12)', accentColor: '#64748b', badgeBg: 'bg-gray-50', badgeText: 'text-gray-700', badgeBorder: 'border-gray-200', toggleActive: 'bg-gray-950 text-white shadow-sm', headerBg: 'from-gray-50 to-white', dotColor: 'bg-gray-500', engineLabel: 'Smart Wallet - Gas Sponsored' },
+  polygon: { key: 'polygon' as const, label: 'Polygon', asset: 'USDC', decimals: 6, chainId: 137, tokenAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`, explorerUrl: 'https://polygonscan.com', explorerName: 'Polygonscan', glowStyle: '0 0 0 1px rgba(100,100,100,0.12)', accentColor: '#64748b', badgeBg: 'bg-gray-50', badgeText: 'text-gray-700', badgeBorder: 'border-gray-200', toggleActive: 'bg-gray-950 text-white shadow-sm', headerBg: 'from-gray-50 to-white', dotColor: 'bg-gray-500', engineLabel: 'Smart Wallet - Gas Sponsored' },
 } as const
