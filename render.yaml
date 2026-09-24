@@ -259,11 +259,9 @@ services:
       - key: VITE_FACTORY_V2_ARB
         value: "0x2268B8aad138a550FEf46C621756fEb26b587F78"
 
-      # ── V1 sweep keeper (api/sweep.ts + api/sweep-keeper.ts) ──────────────
-      - key: KEEPER_PRIVATE_KEY
-        sync: false                   # 0x-prefixed keeper wallet private key
+      # Operational endpoint authentication and historical payment indexing
       - key: CRON_SECRET
-        sync: false                   # random string; authenticate sweep-keeper cron
+        sync: false                   # authenticates current operational/refund endpoints
       - key: FACTORY_FROM_BLOCK
         value: "45786000"             # Base block before the 0.2% router factory deployment
       - key: SOLANA_RPC_URL
@@ -294,9 +292,3 @@ services:
         value: "64"
       - key: POLYMARKET_MATCH_URLS
         sync: false                   # JSON map from fixture/team keys to eligible World Cup Polymarket URLs
-
-# ── External cron (sweep-keeper) ──────────────────────────────────────────────
-# Render free tier does not include cron jobs.
-# Continue using cron-job.org (free) pointing to:
-#   GET https://<your-render-app>.onrender.com/api/sweep-keeper
-#   Header: Authorization: Bearer <CRON_SECRET>
