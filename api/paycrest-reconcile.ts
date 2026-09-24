@@ -24,7 +24,7 @@ function delayMs(attempt: number) {
   return 30_000
 }
 
-function validTxHash(value: string | undefined) {
+function validTxHash(value: string | undefined): value is string {
   return !!value && /^0x[a-fA-F0-9]{64}$/.test(value)
 }
 
@@ -109,7 +109,7 @@ export async function registerPaycrestBankSendReceipt(order: PaycrestOrderRecord
 }
 
 export async function reconcilePaycrestOrderPayment(id: string, options: { allowTerminalScan?: boolean } = {}) {
-  let order = await refreshPaycrestOrderStatus(id).catch(() => null)
+  let order: PaycrestOrderRecord | null = await refreshPaycrestOrderStatus(id).catch(() => null)
   order ??= await getPaycrestPosOrder(id)
   if (!order) return { ok: false, found: false, error: 'Paycrest order not found.' }
 

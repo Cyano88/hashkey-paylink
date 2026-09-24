@@ -1,0 +1,9 @@
+/* Shared developer surface: Pocket's existing sans font and accessible controls. */
+.developer-surface { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
+.developer-surface :is(button, a, input, textarea, select):focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+.developer-surface button:disabled { cursor: not-allowed; }
+.developer-surface :is(pre, code) { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.developer-primary { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border-radius: 9999px; padding: 0 20px; background: #111827; color: white; font-size: 14px; font-weight: 600; }
+.developer-primary:disabled { opacity: .4; }
+.dark .developer-primary { background: white; color: #111827; }
+@media (prefers-reduced-motion: reduce) { .developer-surface *, .developer-surface *::before, .developer-surface *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

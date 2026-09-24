@@ -135,7 +135,7 @@ function payableCryptoAmount(data: any) {
 async function paycrestFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const apiKey = paycrestApiKey()
   if (!apiKey) throw new Error('PAYCREST_API_KEY is required for Paycrest POS off-ramp.')
-  let response: Response
+  let response: Awaited<ReturnType<typeof fetch>>
   try {
     response = await fetch(`${paycrestBaseUrl()}${path}`, {
       ...init,

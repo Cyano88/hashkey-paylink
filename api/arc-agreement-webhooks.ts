@@ -1,3 +1,4 @@
+import { mutateWithDeveloperActivity } from './developer-activity-store.js'
 import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash } from 'node:crypto'
 import {
@@ -10,7 +11,7 @@ import {
   type ArcAgreementConfirmationClient,
 } from './arc-agreement-confirmed-snapshot.js'
 import { dispatchDeveloperWebhook } from './developer-projects.js'
-import { hasRenderDurableStore, mutateDurableJson } from './render-durable-store.js'
+import { hasRenderDurableStore } from './render-durable-store.js'
 
 const STORE_KEY = arcMainnetStoreKey('webhooks', process.env.ARC_AGREEMENT_WEBHOOK_STORE_KEY_MAINNET)
 
@@ -62,7 +63,7 @@ type Dependencies = {
 
 const defaults: Dependencies = {
   hasStore: hasRenderDurableStore,
-  mutate: (key, update) => mutateDurableJson<ArcAgreementWebhookStore>(key, update),
+  mutate: (key, update) => mutateWithDeveloperActivity<ArcAgreementWebhookStore>('agreement_event', key, update),
   notify: dispatchDeveloperWebhook,
   now: () => new Date(),
 }

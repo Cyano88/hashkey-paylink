@@ -61,8 +61,8 @@ export default function DeveloperCliAccessPage() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Request failed.') }
     finally { setBusy(false) }
   }
-  const button = 'rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950'
-  return <main className="mx-auto max-w-5xl px-4 py-12">
+  const button = 'developer-primary'
+  return <main className="mx-auto max-w-6xl px-4 py-8 sm:py-10">
     <Link to="/" className="text-sm text-gray-500">Back to developer platform</Link>
     <section className="mt-6 grid overflow-hidden rounded-[2rem] border border-gray-200 bg-white dark:border-white/10 dark:bg-[#101114] lg:grid-cols-2">
       <div className="bg-[#050609] p-8 text-white sm:p-10">
