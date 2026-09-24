@@ -80,6 +80,16 @@ describe('ArcAgreementEscrow', () => {
     return ethers.getContractAt('ArcAgreementEscrow', escrowAddress) as Promise<ArcAgreementEscrow>
   }
 
+  it('rejects the predicted escrow itself as recipient before funds move', async () => {
+    const factoryAddress = await factory.getAddress()
+    const predicted = ethers.getCreateAddress({ from: factoryAddress, nonce: await ethers.provider.getTransactionCount(factoryAddress) })
+    const input = await params({ recipient: predicted })
+    const before = await token.balanceOf(payer.address)
+    await expect(factory.connect(payer).createAndFund(input)).to.be.revertedWithCustomError(factory, 'InvalidParameters')
+    expect(await token.balanceOf(payer.address)).to.equal(before)
+    expect(await factory.agreementEscrow(await factory.agreementIdFor(payer.address, input.clientReference))).to.equal(ethers.ZeroAddress)
+  })
+
   it('deploys and pulls exact USDC funding atomically', async () => {
     const input = await params()
     const agreementId = await factory.agreementIdFor(payer.address, reference)

@@ -115,6 +115,7 @@ contract ArcAgreementEscrow is ReentrancyGuard {
         }
         if (
             config.payer == config.recipient
+                || config.recipient == address(this)
                 || config.operator == config.payer
                 || config.operator == config.recipient
                 || config.usdc == config.payer
