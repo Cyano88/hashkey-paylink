@@ -192,7 +192,7 @@ export default function PocketSendPage() {
   const resultOpen = !resultDismissed && (send.status !== 'idle' || requestConfirmed || requestAccepted || Boolean(paymentTxHash) || Boolean(attemptedAt && send.error))
   const resultReceipt = (send.reference || paymentRequest?.transactionHash) ? pocketActivityReceipt({eventId: requestId || send.reference, txHash: paymentRequest?.transactionHash || send.txHash, chain: network, payer: wallets.wallets[network]?.address || '', recipient: send.address || resolved?.address || '', memo: paymentRequest ? 'Request payment' : 'USDC sent', amount: paymentRequest?.amount || send.amount, ts: attemptedAt || paymentRequest?.updatedAt || Date.now(), source: paymentRequest ? 'request' : 'wallet-withdrawal', settlementType: 'wallet_transfer', direction: 'out', paycrestStatus: transactionState === 'successful' ? (paymentRequest ? 'paid' : 'confirmed') : transactionState === 'failed' ? 'failed' : 'submitted'}, { allowPending: true }) : null
 
-  if (authenticated && (!wallets.resolved || requestLoading)) return <PocketLoadingState active="home" />
+  if (authenticated && (!wallets.resolved || requestLoading && !paymentRequest)) return <PocketLoadingState active="home" />
   const recipientReady = mode === 'pocket' ? Boolean(resolved) : Boolean(send.address.trim())
   return <PocketRouteShell active="home" onSelect={tab => navigate(POCKET_BASE_PATH + navPath(tab))}>
     <PocketFlowHeader centered title={paymentRequest ? 'Pay request' : mode === 'pocket' ? 'Pocket ID' : 'Send USDC'} onBack={() => navigate(requestId ? POCKET_BASE_PATH + POCKET_ROUTES.notifications : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />

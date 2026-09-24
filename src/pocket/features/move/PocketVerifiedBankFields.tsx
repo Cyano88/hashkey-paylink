@@ -1,3 +1,4 @@
+import { PocketLoadingField } from '../../components/PocketContentSkeletons'
 import { Loader2 } from '../../components/PocketIcons'
 import PocketResolvedNameRow from '../../components/PocketResolvedNameRow'
 import { cn } from '../../../lib/utils'
@@ -68,7 +69,7 @@ export function PocketVerifiedBankFields({
         <div className="space-y-2.5 border-t border-gray-100 pt-2.5 dark:border-[#262626]">
           <label className="block">
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Bank</span>
-            {institutions.length ? (
+            {institutionsBusy && !institutions.length ? <PocketLoadingField label="Loading banks" /> : institutions.length ? (
               <PocketSelect
                 value={bankCode}
                 options={institutions.map(institution => ({ value: institution.code, label: institution.name }))}
@@ -76,7 +77,7 @@ export function PocketVerifiedBankFields({
                   const selected = institutions.find(institution => institution.code === value)
                   onInstitutionChange(value, selected?.name ?? '', true)
                 }}
-                placeholder={institutionsBusy ? 'Loading banks...' : 'Select bank'}
+                placeholder="Select bank"
                 ariaLabel="Bank"
                 searchable
                 searchPlaceholder="Search banks"

@@ -63,7 +63,7 @@ export default function PocketMovePosPage() {
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
-  if (authenticated && (!profile.loaded || profile.busy)) {
+  if (authenticated && (!profile.loaded && !profile.profile)) {
     return <PocketLoadingState active="home" />
   }
 

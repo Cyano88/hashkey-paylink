@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict'
+import {build} from 'esbuild'
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright')
+const contents=`import React,{useState}from'react';import{createRoot}from'react-dom/client';import{MemoryRouter}from'react-router-dom';import Loading from './src/pocket/components/PocketLoadingState';const root=createRoot(document.getElementById('root'));function Page({path,fast}){const[loaded,setLoaded]=useState(false);React.useEffect(()=>{if(fast){const timer=setTimeout(()=>setLoaded(true),30);return()=>clearTimeout(timer)}},[]);return loaded?<p>Available content</p>:<Loading active={path.includes('profile')?'profile':'home'}/>};window.openRoute=(path,fast=false)=>root.render(<MemoryRouter key={path+fast} initialEntries={[path]}><Page path={path} fast={fast}/></MemoryRouter>);window.observedSkeleton=false;new MutationObserver(()=>{if(document.querySelector('[data-pocket-skeleton]'))window.observedSkeleton=true}).observe(document.getElementById('root'),{subtree:true,childList:true});`
+const bundle=await build({stdin:{contents,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,format:'iife',define:{'process.env.NODE_ENV':'"test"'}})
+const browser=await chromium.launch({headless:true,channel:'chrome'})
+try{
+ const page=await browser.newPage();await page.route('https://fixture.invalid/',r=>r.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('https://fixture.invalid/');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await page.evaluate(()=>window.openRoute('/home/send',true));await page.getByText('Available content').waitFor();await page.waitForTimeout(150);assert.equal(await page.evaluate(()=>window.observedSkeleton),false);
+ for(const [path,shape] of [['/home','home'],['/home/send','send'],['/home/deposit','deposit'],['/home/swap','swap'],['/home/transfer','menu'],['/move/bank','bank'],['/move/pos','pos'],['/profile','profile'],['/profile?feature=kyc','form'],['/bills/data','bills'],['/notifications','notifications']]){await page.evaluate(path=>window.openRoute(path),path);await page.locator('[data-pocket-skeleton="'+shape+'"]').waitFor({state:'attached'});if(shape!=='home')assert.equal(await page.locator('[data-pocket-skeleton="home"]').count(),0)}
+ console.log('PASS fast available content never flashes a skeleton; section-specific loading layouts replace Home outside Home')
+}finally{await browser.close()}

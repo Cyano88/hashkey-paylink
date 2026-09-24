@@ -111,7 +111,9 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
 
   const flowHeader = <PocketFlowHeader centered title={BILL_ACTIONS.find(action => action.view === view)!.label} onBack={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'bills', view: 'overview' }))} />
 
-  if (authenticated && (!wallets.resolved || (wallets.error && !wallets.wallets.base?.address))) return <PocketRouteShell active="bills" onSelect={selectNav}>{flowHeader}<PocketBillsSkeleton /></PocketRouteShell>
+  if (authenticated && !wallets.resolved) return <PocketRouteShell active="bills" onSelect={selectNav}>{flowHeader}<PocketBillsSkeleton /></PocketRouteShell>
+
+  if (authenticated && wallets.error && !wallets.wallets.base?.address) return <PocketRouteShell active="bills" onSelect={selectNav}>{flowHeader}<div role="alert" className="mt-6 space-y-3 text-sm text-gray-500"><p>Bills could not load. Please try again.</p><button type="button" onClick={() => void wallets.refreshBalances()} className="font-semibold underline">Try again</button></div></PocketRouteShell>
 
   const baseBalance = wallets.rows.find(row => row.key === 'base')?.balance ?? 0
   return (

@@ -95,7 +95,7 @@ export default function PocketVerifyNamePage() {
     }
   }
 
-  if (!profile.loaded) return <PocketLoadingState active="profile" />
+  if (!profile.loaded && !profile.profile) return <PocketLoadingState active="profile" />
   return <div className="fixed inset-0 z-[45] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-[#0A0A0A] dark:text-white">
     <main className="mx-auto min-h-full w-full max-w-[462px] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]">
       <PocketFlowHeader centered title="Bank account name" onBack={() => { if (!confirming) returnToCaller() }} />

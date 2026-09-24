@@ -202,7 +202,7 @@ export default function PocketMoveBankPage() {
     navigate(`${POCKET_BASE_PATH}${path}`)
   }
 
-  if (authenticated && (!profile.loaded || !wallets.resolved || bank.institutionsBusy)) {
+  if (authenticated && ((!profile.loaded && !profile.profile) || !wallets.resolved)) {
     return <PocketLoadingState active="home" />
   }
 

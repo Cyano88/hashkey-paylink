@@ -29,10 +29,22 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   const [autoRetry, setAutoRetry] = useState(true)
   const mounted = useRef(true)
   const inFlight = useRef(false)
+  const tokenReader = useRef(getAccessToken); tokenReader.current = getAccessToken
+  const retryNotBefore = useRef(0)
+  const [retryAt, setRetryAt] = useState(0)
   const api = useCallback(async (action: 'status' | 'start' | 'resume' | 'uploaded', jobId?: string, method?: VerificationMethod, submission?: {jobId:string;userId:string}) => {
-    const token = await getAccessToken()
+    if (Date.now() < retryNotBefore.current) throw Object.assign(new Error('Verification is busy. Please wait a moment.'), {retryable:true})
+    const token = await tokenReader.current()
     if (!token) throw Object.assign(new Error('Sign in again to continue.'), {retryable:false})
     const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(method ? { method } : {}), ...(jobId ? { jobId } : {}), ...(submission ? {submission} : {}), ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) }).catch(() => { throw new Error(TEMPORARY_ERROR) })
+    if (response.status === 429) {
+      const header = response.headers.get('Retry-After')
+      const seconds = header ? Number(header) : NaN
+      const delay = Number.isFinite(seconds) ? seconds * 1000 : header ? Date.parse(header) - Date.now() : 60000
+      retryNotBefore.current = Date.now() + Math.max(1000, Number.isFinite(delay) ? delay : 60000)
+      if (mounted.current) setRetryAt(retryNotBefore.current)
+      throw Object.assign(new Error('Verification is busy. Please wait a moment.'), {retryable:true})
+    }
     const data = await response.json().catch(() => null)
     if (!response.ok || data?.ok !== true) {
       const retryable = data?.retryable !== false && (response.status >= 500 || response.status === 429)
@@ -40,14 +52,19 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
     }
     if (!['sandbox', 'production'].includes(data.environment) || !['not_started', 'pending', 'passed', 'failed', 'review'].includes(data.status)) throw new Error(TEMPORARY_ERROR)
     return data as Session
-  }, [getAccessToken])
+  }, [])
   const refresh = useCallback(async () => {
-    if (inFlight.current) return
+    if (inFlight.current || Date.now() < retryNotBefore.current) return
     inFlight.current = true
     try { const next = await api('status'); if (mounted.current) { setState(current => current?.jobId === next.jobId && current?.uploadReported && next.status === 'pending' ? { ...next, canResume: false, uploadReported: true } : next); setError(''); setAutoRetry(true) } }
     catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not load.'); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false) } }
     finally { inFlight.current = false }
   }, [api])
+  useEffect(() => {
+    if (!retryAt) return
+    const timer = window.setTimeout(() => { setRetryAt(0); if (autoRetry && !document.hidden) void refresh() }, Math.max(0, retryAt - Date.now()))
+    return () => clearTimeout(timer)
+  }, [retryAt, autoRetry, refresh])
   useEffect(() => protectSmileViewport(setProviderVisible), [])
   useEffect(() => { mounted.current = true; void refresh(); return () => { mounted.current = false; document.getElementById('smile-identity-hosted-web-integration')?.remove() } }, [refresh])
   useEffect(() => {
@@ -59,7 +76,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
     return () => { clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible) }
   }, [state?.status, error, autoRetry, refresh])
   const start = async () => {
-    if (!consent || busy) return
+    if (!consent || busy || Date.now() < retryNotBefore.current) return
     setBusy(true); setError(''); setAutoRetry(true)
     try {
       await loadSmile()
@@ -134,7 +151,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
       </fieldset>}
       {retryable && <>
         <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />I agree to share my identity details and selfie with Smile ID for verification.</label>
-        <button type="button" disabled={!consent || busy} onClick={() => void start()} className="w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{busy ? 'Opening verification...' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Start verification'}</button>
+        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className="w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{busy ? 'Opening verification...' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Start verification'}</button>
       </>}
       {(failed || state.status === 'review' && !state.canResume) && <a href={POCKET_BASE_PATH + POCKET_ROUTES.assistant} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
     </>}
@@ -146,6 +163,6 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         <button type="button" onClick={() => setSubmittedSheet(false)} className="mt-7 w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">{needsAdditional ? 'Choose NIN or government ID' : 'Continue'}</button>
       </div>
     </PocketBottomSheet>}
-    {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400">{error}{autoRetry && <button type="button" onClick={() => void refresh()} className="ml-2 underline">Try again</button>}</div>}
+    {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400"><p>{error}</p>{autoRetry && !retryAt && <button type="button" onClick={() => void refresh()} className="mt-3 block min-h-10 font-semibold underline">Try again</button>}</div>}
   </section>
 }

@@ -82,7 +82,7 @@ export default function PocketProfilePage() {
     window.addEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
     return () => window.removeEventListener(POCKET_NATIVE_BACK_EVENT, handleNativeBack)
   }, [currencyOpen, deleteBusy, deleteOpen, editing, feature, stocks, navigate])
-  if (!profile.loaded || profile.busy && !profile.profile) return <PocketLoadingState active="home" />
+  if (!profile.loaded && !profile.profile) return <PocketLoadingState active="profile" />
   const current = profile.profile
   const copyId = async () => { if (!current?.pocketId) return; await navigator.clipboard.writeText(current.pocketId); setCopied(true); window.setTimeout(() => setCopied(false), 1200) }
   const save = async () => { if (await profile.save()) setEditing(false) }
