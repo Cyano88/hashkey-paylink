@@ -1,3 +1,4 @@
+import { developerEnvironment } from './developer-environment.js'
 import { isAgentCheckoutNetwork, developerCheckoutNetworks } from '../src/lib/developerNetworkPolicy.js'
 import { listDeveloperActivity } from './developer-activity-store.js'
 import { cliRequestScope, resolveCliGrant } from './developer-cli-grants.js'
@@ -835,6 +836,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       }
 
       if (req.method === 'POST' && action === 'create-key') {
+        const environment = developerEnvironment(req.body?.environment, 'live')
+        if (environment === 'test') return res.status(409).json({ ok: false, error: 'Sandbox keys are not enabled until isolated testnet execution is available.' })
         if (currentProject.operationalStatus === 'suspended') {
           return res.status(409).json({ ok: false, error: 'This project is suspended. Contact Hash PayLink operations.' })
         }
@@ -844,16 +847,13 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (!currentProject.allowedOrigins.length || (currentProject.settlementMode === 'usdc' && currentProject.networks.some(network => !currentProject.recipients[network]))) {
           return res.status(409).json({ ok: false, error: 'Complete checkout routing before creating a key.' })
         }
-        const environment: DeveloperEnvironment = clean(req.body?.environment, 10).toLowerCase() === 'test' ? 'test' : 'live'
         if (projectCheckoutMode(currentProject) === 'agentic' && currentProject.networks.some(network => !isAgentCheckoutNetwork(network))) return res.status(409).json({ ok: false, error: 'Agent checkout supports Base and Arc only. Update project networks before creating a key.' })
-        const environmentNetworks = environment === 'test' ? [] : developerCheckoutNetworks(projectCheckoutMode(currentProject))
-        if (currentProject.settlementMode === 'ngn' && environment === 'test') {
-          return res.status(409).json({ ok: false, error: 'Naira settlement requires a live key.' })
-        }
+        const environmentNetworks = developerCheckoutNetworks(projectCheckoutMode(currentProject))
+
         if (currentProject.settlementMode === 'usdc' && !currentProject.networks.some(network => environmentNetworks.includes(network))) {
-          return res.status(409).json({ ok: false, error: `Configure ${environment === 'test' ? 'a supported sandbox (Arc now requires live keys)' : 'Base, Arbitrum, or Arc Mainnet'} before creating this key.` })
+          return res.status(409).json({ ok: false, error: 'Configure a supported live network before creating this key.' })
         }
-        const rawKey = dependencies.createSecret(environment === 'test' ? 'hpl_test' : 'hpl_live')
+        const rawKey = dependencies.createSecret('hpl_live')
         const key: DeveloperKey = {
           id: dependencies.createKeyId(), name: clean(req.body?.name, 60) || 'Backend key',
           prefix: rawKey.slice(0, 18), digest: keyDigest(secret, rawKey), environment, createdAt: dependencies.now().toISOString(),

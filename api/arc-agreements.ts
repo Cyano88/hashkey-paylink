@@ -1,3 +1,4 @@
+import { assertLiveDeveloperRequest } from './developer-environment.js'
 import { mutateWithDeveloperActivity } from './developer-activity-store.js'
 import { arcMainnetStoreKey } from './arc-mainnet-boundary.js'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
@@ -395,6 +396,7 @@ export function createArcAgreementsHandler(overrides: Partial<Dependencies> = {}
   return async function arcAgreementsHandler(req: Request, res: Response) {
     noStore(res)
     try {
+      assertLiveDeveloperRequest(req)
       if (!dependencies.hasStore()) throw Object.assign(new Error('Agreement storage is not configured.'), { status: 503 })
       if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
       const policy = requirePreviewPolicy(await dependencies.policy(req))

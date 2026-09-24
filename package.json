@@ -142,6 +142,7 @@
     "start": "tsx server-entry.ts",
     "test:pocket-mobile-recovery": "node --import tsx scripts/pocket-wallet-readiness-smoke.mjs && node --import tsx scripts/pocket-bridge-recovery-smoke.mjs && node --import tsx scripts/pocket-bridge-journal-smoke.mjs && node --import tsx scripts/pocket-solana-recovery-smoke.mjs && node --import tsx scripts/pocket-bridge-activity-smoke.mjs",
     "test:pocket-bridge-proof": "node --import tsx scripts/pocket-bridge-proof-smoke.mjs",
+    "test:developer-sandbox-boundary": "node --import tsx scripts/developer-sandbox-boundary-smoke.mjs",
     "test:developer-activity": "node --import tsx scripts/developer-activity-smoke.mjs && node scripts/developer-activity-atomic-smoke.mjs",
     "migrate:developer-activity": "node --import tsx scripts/developer-activity-backfill.mjs",
     "test:developer-activity:postgres": "node --import tsx scripts/developer-activity-postgres-smoke.mjs",

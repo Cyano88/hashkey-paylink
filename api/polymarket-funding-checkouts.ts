@@ -1,3 +1,4 @@
+import { assertLiveDeveloperRequest, DeveloperEnvironmentError } from './developer-environment.js'
 import { mutateWithDeveloperActivity } from './developer-activity-store.js'
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import type { Request, Response } from 'express'
@@ -143,9 +144,11 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
   return async function polymarketFundingCheckoutsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
     try {
+      assertLiveDeveloperRequest(req)
       if (!dependencies.hasStore() || dependencies.signingSecret().length < 32) return res.status(503).json({ ok: false, error: 'Polymarket funding checkout is unavailable.' })
       const policy = await dependencies.policy(req)
       if (!policy) return res.status(401).json({ ok: false, error: 'Valid developer API credentials are required.' })
+      if (policy.environment !== 'live') return res.status(403).json({ ok: false, error: 'Polymarket Funding requires live credentials.' })
       if (!policy.capabilities.includes('polymarket_funding')) return res.status(403).json({ ok: false, error: 'Enable Polymarket funding for this developer project.' })
       if (policy.settlementMode !== 'usdc') return res.status(409).json({ ok: false, error: 'Polymarket funding requires a USDC developer project.' })
 
@@ -258,6 +261,7 @@ export function createPolymarketFundingCheckoutsHandler(dependencies: Dependenci
       }))
       return res.status(recorded.statusCode).json(publicRecord(record, Boolean(recorded.body.replayed)))
     } catch (error) {
+      if (error instanceof DeveloperEnvironmentError) return res.status(error.status).json({ ok: false, error: error.message })
       console.error('[polymarket-funding-checkouts] request failed:', error instanceof Error ? error.message : String(error))
       return res.status(503).json({ ok: false, error: 'Polymarket funding checkout is temporarily unavailable.' })
     }

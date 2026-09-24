@@ -3,7 +3,7 @@ import { keyCommand } from './key-management.mjs'
 import { hostingCommand } from './hosting.mjs'
 import { createSessionStore, createVaultStore } from './session.mjs'
 const ORIGIN = 'https://developer.hashpaylink.com'
-const HELP = `Hash PayLink CLI 0.3.0
+const HELP = `Hash PayLink CLI 0.3.1
 Commands:
   auth login --project <project-id> [--scopes project:read,checkout:read,checkout:create]
   auth complete
@@ -11,6 +11,7 @@ Commands:
   auth logout
   project show
   doctor
+  capabilities
   checkout create --amount 2 --idempotency-key <stable-order-key>
     [--title <text>] [--description <text>] [--return-url <https-url>]
     [--expires-in-minutes 60] [--dry-run]
@@ -76,13 +77,13 @@ function createBody(options) {
   }
   return body
 }
-async function request(path, { key, fetcher, body, idempotencyKey }) {
-  if (!/^(?:hpl_live_[a-zA-Z0-9_-]+|hpl_app_[a-f0-9]{64}|hpl_cli_[a-f0-9]{64})$/.test(key ?? '') || key.length > 240) throw new CliError('AUTH_REQUIRED', 'Complete auth login or inject a live project key as HASHPAYLINK_API_KEY.')
+async function request(path, { key, fetcher, body, idempotencyKey, publicRequest = false }) {
+  if (!publicRequest && (!/^(?:hpl_live_[a-zA-Z0-9_-]+|hpl_app_[a-f0-9]{64}|hpl_cli_[a-f0-9]{64})$/.test(key ?? '') || key.length > 240)) throw new CliError('AUTH_REQUIRED', 'Complete auth login or inject a live project key as HASHPAYLINK_API_KEY.')
   let response, data
   try {
     response = await fetcher(ORIGIN + path, {
       method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(20_000),
-      headers: { Accept: 'application/json', 'X-API-Key': key,
+      headers: { Accept: 'application/json', ...(!publicRequest ? { 'X-API-Key': key } : {}),
         ...(body ? { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     })
@@ -117,9 +118,9 @@ export async function run(argv, { env = process.env, fetcher = globalThis.fetch,
   try {
     const { command, options } = parse(argv)
     if (options.help || !command && !options.version) { emit(json ? { ok: true, help: HELP } : HELP); return 0 }
-    if (options.version) { emit(json ? { ok: true, version: '0.3.0' } : '0.3.0'); return 0 }
+    if (options.version) { emit(json ? { ok: true, version: '0.3.1' } : '0.3.1'); return 0 }
     const allowed = {
-      'project show': [], doctor: [], 'agent-prompt': [],
+      'project show': [], doctor: [], capabilities: [], 'agent-prompt': [],
       'auth login': ['project', 'scopes'], 'auth complete': [], 'auth status': [], 'auth logout': [],
       'keys create': ['name', 'scopes', 'expires-in-days', 'idempotency-key'], 'keys list': [], 'keys revoke': ['key-id'],
       'hosting plan': ['provider', 'service', 'project', 'environment', 'key-id', 'replace', 'backend'], 'hosting apply': ['plan'],
@@ -128,6 +129,11 @@ export async function run(argv, { env = process.env, fetcher = globalThis.fetch,
     }
     if (!Object.hasOwn(allowed, command)) invalid('Unknown command. Use --help for supported commands.')
     if (Object.keys(options).some(name => !['json', 'no-interactive'].includes(name) && !allowed[command].includes(name))) invalid('An option is not supported for this command.')
+    if (command === 'capabilities') {
+      const data = await request('/api/v2/capabilities', { fetcher, publicRequest: true })
+      if (data.version !== 1 || !Array.isArray(data.products) || typeof data.sandboxPaymentsEnabled !== 'boolean') throw new CliError('INVALID_RESPONSE', 'Capability response is incomplete.')
+      emit(data); return 0
+    }
     if (command.startsWith('auth ')) {
       try { emit(await authCommand(command, options, { fetcher, sessionStore })) }
       catch { throw new CliError('AUTH_FAILED', 'Authorization did not complete. Check the project, permissions and approval state. Existing sessions require auth logout before a new login. No secrets were printed.') }

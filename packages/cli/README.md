@@ -226,3 +226,7 @@ Adapter tests use synthetic credentials and mocked provider mutations.
 The implementation is not evidence that a particular live Render/Railway
 service has received a key. Live handoff requires an owner-approved project
 session plus a reviewed target plan and provider authorization.
+
+### Product and sandbox availability (0.3.1)
+
+Run `hashpaylink capabilities --json` to fetch the public product/network contract without logging in or sending credentials. The response distinguishes planned testnet networks from enabled payment execution. Sandbox keys and payments remain disabled; this command cannot create a test payment. Polymarket Funding has no sandbox route.
