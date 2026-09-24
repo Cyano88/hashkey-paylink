@@ -7,3 +7,5 @@ Removed PRIVY_APP_SECRET fallback from production PIN hashing and Arc/XStocks qu
 Validation passed: full Pocket payment security, PIN key separation (including missing dedicated production pepper), XStocks execution, Arc swap checks and quote key isolation (same signatures before/after provider credential changes, missing/short quote key rejection). All synthetic, no live transaction or wallet operation.
 
 Merged already-queued developer-portal release 77f0500d5 into security branch before this change to preserve concurrent release work. Operator provisioning idempotency references remain held pending provisioning/recovery ownership review. Remaining shared relayer aliases, provider-key rotations and historical compatibility code are not declared obsolete.
+
+Live verification: c5460ceba38ed82015bdee600727b8654054137d deployed as dep-daqbvjad0e5s73a1mdcg. Runtime confirms unused ETH alias absent, dedicated PIN/quote secrets present, all three Privy fallbacks absent, and developer activity implementation preserved. Public health, retired-assistant rejection, Pocket authentication and archive validation all pass at 06:21 UTC.
