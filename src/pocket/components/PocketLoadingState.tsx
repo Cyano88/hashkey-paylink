@@ -14,7 +14,7 @@ function Skeleton({ className }: { className: string }) {
 export default function PocketLoadingState({ active }: { active: PocketNavTab }) {
   if (active === 'activity') return <PocketActivityLoadingState />
   return (
-    <div aria-busy="true" aria-label="Opening Pocket">
+    <div className="h-full min-h-0" aria-busy="true" aria-label="Opening Pocket">
       <PocketRouteShell active={active} navigationDisabled onSelect={() => undefined}>
         <section className="space-y-5" aria-hidden="true">
           <div className="overflow-hidden rounded-[28px] bg-gray-950 p-6 text-white shadow-[0_22px_60px_rgba(15,23,42,0.16)] dark:bg-white dark:text-gray-950">

@@ -5,7 +5,7 @@ function Bar({ className }: { className: string }) {
 }
 
 export default function PocketActivityLoadingState() {
-  return <div aria-busy="true" aria-label="Loading activity">
+  return <div className="h-full min-h-0" aria-busy="true" aria-label="Loading activity">
     <PocketRouteShell active="activity" navigationDisabled onSelect={() => undefined}>
       <section className="space-y-5" aria-hidden="true">
         <div className="flex items-center justify-between px-1"><Bar className="h-3 w-16" /><Bar className="h-8 w-8 rounded-full" /></div>

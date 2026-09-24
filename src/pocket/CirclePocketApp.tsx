@@ -13,6 +13,7 @@ import usePocketIdentity from './hooks/usePocketIdentity'
 import usePocketSessionSplash from './hooks/usePocketSessionSplash'
 import usePocketProfile from './hooks/usePocketProfile'
 import usePocketPushNotifications from './hooks/usePocketPushNotifications'
+import { balanceOwner, readCachedPocketBalance } from './lib/pocketBalanceCache'
 import { prefetchPocketWalletSnapshot } from './hooks/usePocketWallets'
 import { prefetchPocketActivity } from './hooks/usePocketActivity'
 import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
@@ -29,7 +30,8 @@ const PocketActivityPage = lazy(() => import('./pages/PocketActivityPage'))
 const PocketAssistantPage = lazy(() => import('./pages/PocketAssistantPage'))
 const PocketBillsPage = lazy(() => import('./pages/PocketBillsPage'))
 const PocketLandingPage = lazy(() => import('./pages/PocketLandingPage'))
-const PocketHomePage = lazy(() => import('./pages/PocketHomePage'))
+const loadPocketHome = () => import('./pages/PocketHomePage')
+const PocketHomePage = lazy(loadPocketHome)
 const PocketXStocksPage = lazy(() => import('./pages/PocketXStocksPage'))
 const PocketProfilePage = lazy(() => import('./pages/PocketProfilePage'))
 const PocketVerifyNamePage = lazy(() => import('./pages/PocketVerifyNamePage'))
@@ -104,17 +106,20 @@ export default function CirclePocketApp() {
   const [walletUnlockBusy, setWalletUnlockBusy] = useState(false)
   const [initialDataReady, setInitialDataReady] = useState(false)
   const [paymentSecurityReady, setPaymentSecurityReady] = useState(false)
+  // Cached data is owner-scoped and display-only. Payment execution still
+  // restores its session and obtains a fresh server approval independently.
+  const cachedWallets = authenticated && email ? readCachedPocketBalance(balanceOwner(email))?.wallets : undefined
+  const canShowCachedHome = Boolean(cachedWallets?.base?.walletId)
+  useEffect(() => { if (ready && authenticated && !stocks) void loadPocketHome().catch(() => undefined) }, [ready, authenticated, stocks])
   const sessionResolved = ready && (!authenticated || (
-    profile.loaded
-    && !profile.busy
-    && (stocks || initialDataReady)
+    canShowCachedHome || (profile.loaded && !profile.busy && (stocks || initialDataReady))
   ))
   const [launchSurface] = useState(() => landing || isPocketNativeRuntime())
   // Keep the launcher above every authenticated startup gate. It should fade
   // directly onto Home (or a real recovery screen), never onto a blank loader.
   const launchDestinationReady = sessionResolved && (!authenticated || (
     !landing
-    && (stocks ? paymentSecurityReady : walletUnlockState === 'reconnect' || (walletUnlockState === 'ready' && paymentSecurityReady))
+    && (stocks || canShowCachedHome ? paymentSecurityReady : walletUnlockState === 'reconnect' || (walletUnlockState === 'ready' && paymentSecurityReady))
   ))
   const splashState = usePocketSessionSplash(launchSurface, launchDestinationReady)
 
@@ -182,11 +187,11 @@ export default function CirclePocketApp() {
   }, [authenticated, email, getAccessToken, ready, walletUnlockBusy, stocks])
 
   useEffect(() => {
-    if (stocks || walletUnlockState !== 'reconnect' || walletUnlockBusy || !email || automaticWalletSignInEmail.current === email) return
+    if (stocks || canShowCachedHome || walletUnlockState !== 'reconnect' || walletUnlockBusy || !email || automaticWalletSignInEmail.current === email) return
     automaticWalletSignInEmail.current = email
     const timer = window.setTimeout(() => { void reconnectWallet() }, 450)
     return () => window.clearTimeout(timer)
-  }, [email, reconnectWallet, walletUnlockBusy, walletUnlockState, stocks])
+  }, [email, reconnectWallet, walletUnlockBusy, walletUnlockState, stocks, canShowCachedHome])
 
   useEffect(() => {
     if (!isPocketNativeRuntime()) return
@@ -292,8 +297,8 @@ export default function CirclePocketApp() {
           : 'home'
   let content: ReactNode = null
   const concealLaunchContent = splashState !== 'idle' && (!sessionResolved || (authenticated && landing))
-  if (!stocks && ready && authenticated && email && walletUnlockState === 'checking') content = <PocketLoadingState active={active} />
-  else if (!stocks && ready && authenticated && email && walletUnlockState === 'reconnect') content = <PocketWalletAccessScreen error={walletUnlockError} busy={walletUnlockBusy || automaticWalletSignInEmail.current !== email} onRetry={() => { void reconnectWallet() }} />
+  if (!stocks && !canShowCachedHome && ready && authenticated && email && walletUnlockState === 'checking') content = <PocketLoadingState active={active} />
+  else if (!stocks && !canShowCachedHome && ready && authenticated && email && walletUnlockState === 'reconnect') content = <PocketWalletAccessScreen error={walletUnlockError} busy={walletUnlockBusy || automaticWalletSignInEmail.current !== email} onRetry={() => { void reconnectWallet() }} />
   else if (concealLaunchContent) content = <main className="min-h-screen bg-[#F5F5F7]" aria-hidden="true" />
   else if (!ready) content = <PocketLoadingState active={active} />
   else if (!authenticated) content = <PocketPageBoundary active='home'><PocketLandingPage /></PocketPageBoundary>
@@ -318,7 +323,7 @@ export default function CirclePocketApp() {
   else if (route?.section === 'move' && route.view === 'bank') content = <PocketPageBoundary active="home"><PocketMoveBankPage /></PocketPageBoundary>
   else if (route?.section === 'move' && route.view === 'pos') content = <PocketPageBoundary active="home"><PocketMovePosPage /></PocketPageBoundary>
 
-  const securedContent = ready && authenticated && email && (stocks || walletUnlockState === 'ready')
+  const securedContent = ready && authenticated && email && (stocks || canShowCachedHome || walletUnlockState === 'ready')
     ? <PocketPaymentSecurityGate email={email} getAccessToken={getAccessToken} onInitialStateResolved={() => setPaymentSecurityReady(true)}>{content}</PocketPaymentSecurityGate>
     : content
   return (

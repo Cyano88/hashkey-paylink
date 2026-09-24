@@ -38,11 +38,15 @@ export function readCachedPocketBalance(owner: string): PocketBalanceSnapshot | 
   }
   try {
     const saved = JSON.parse(localStorage.getItem(prefix + encodeURIComponent(owner)) || 'null') as PocketBalanceSnapshot | null
-    if (!saved || !saved.wallets || !Number.isFinite(saved.savedAt) || !Array.isArray(saved.displayRows) || saved.displayRows.length !== 4) return
+    if (!saved || !saved.wallets || !Number.isFinite(saved.savedAt) || !Array.isArray(saved.displayRows) || ![4, POCKET_NETWORKS.length].includes(saved.displayRows.length)) return
     if (!saved.displayRows.every((row, index) => row.key === POCKET_NETWORKS[index] && typeof row.known === 'boolean'
       && Number.isFinite(row.balance) && row.balance >= 0 && (!row.known || (Number.isSafeInteger(row.observedAt) && row.observedAt! > 0 && /^[a-f0-9]{64}$/.test(row.walletRevision ?? ''))))) return
     // A restored snapshot is display-only until wallet binding and balances are refreshed.
-    const displayRows = saved.displayRows.map(row => ({ ...row, stale: true, status: 'error' as const }))
+    const displayRows: BalanceDisplayRow[] = POCKET_NETWORKS.map((key, index) => {
+      const row = saved.displayRows[index]
+      return row ? { ...row, stale: true, status: 'error' as const }
+        : { key, label: key, balance: 0, known: false, stale: true, status: 'error' as const }
+    })
     const snapshot: PocketBalanceSnapshot = { ...saved, displayRows, rows: displayRows.map(row => ({ ...row, balance: 0 })), total: 0, totalComplete: false,
       displayTotal: displayRows.reduce((sum, row) => sum + (row.known ? row.balance : 0), 0), displayComplete: displayRows.every(row => row.known), walletUpdate: 'hidden' }
     cache.set(owner, snapshot)
