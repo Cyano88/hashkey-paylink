@@ -33,3 +33,10 @@ These establish provider/network support, not Hash PayLink integration readiness
 5. Agreements: Arc Testnet only; review the testnet factory/operator deployment before activation and lifecycle execution.
 6. Test webhook retry/replay and cross-environment rejection end to end before allowing sandbox keys/payments.
 7. Extend Agreement/Funding CLI scopes and commands without broadening existing checkout-only grants. Polymarket Funding remains live-only.
+
+## Activity HTML failure follow-up
+- Confirmed transient Render 502 HTML during rollout; service subsequently recovered (homepage/health 200; unauthenticated Activity 401).
+- Activity now handles server errors and malformed JSON with safe retry messages; 401/403 have explicit session/access messages.
+- Browser fixture verified HTML 502, successful retry, retained loaded records during refresh failure, and recovery. Existing project/environment checks remain.
+- Response smoke checks and Vite build passed. Both sign-in headings verified with normal letter spacing on the live site.
+- Live capabilities and CLI discovery passed; test-mode route requests return 409, invalid environment returns 400. Actual sandbox execution remains disabled.
