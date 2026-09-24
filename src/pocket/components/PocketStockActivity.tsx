@@ -15,11 +15,25 @@ export function stockActivityRows(inbox:StockInbox|null,payments:XPayPayment[],a
  const requests=(inbox?.requests||[]).map<PocketActivityRow>(r=>({eventId:r.id,txHash:r.txHash||'',chain:'xlayer',payer:'ID:'+r.payerPocketId,recipient:'ID:'+r.senderPocketId,memo:'Request · '+r.symbol,amount:r.amount,assetSymbol:r.symbol,ts:r.at,source:'request',direction:r.direction==='incoming'?'out':'in',paycrestStatus:r.status==='paid'?'paid':r.status==='declined'?'cancelled':r.status==='accepted'?'pending':'awaiting response'}))
  return [...transfers,...xpay,...requests]
 }
+let activityCache:{scope:string;inbox:StockInbox|null;payments:XPayPayment[]}|null=null
 export default function PocketStockActivity({wallet,payments:provided,historyOnly=false}:{wallet:ReturnType<typeof usePocketStockWallet>;payments?:XPayPayment[];historyOnly?:boolean}){
  const {authenticated,user,getAccessToken}=usePocketIdentity(),scope=(user?.id||'')+':'+(wallet.address||'')
  const [inbox,setInbox]=useState<StockInbox|null>(null),[payments,setPayments]=useState<XPayPayment[]>([]),[busy,setBusy]=useState(true),[error,setError]=useState('')
- useEffect(()=>{if(historyOnly){setBusy(false);return}let cancelled=false,reading=false;setInbox(null);setPayments([]);setBusy(true);setError('')
-  const refresh=async()=>{if(reading||!authenticated||document.visibilityState==='hidden')return;reading=true;try{const [notices,xpay]=await Promise.all([stockNotificationsRequest(getAccessToken,undefined,true),xpayRequest(getAccessToken,{action:'mine'})]);if(!cancelled){setInbox(notices);setPayments(xpay.payments||[]);setError('')}}catch(e){if(!cancelled)setError(e instanceof Error?e.message:'Activity could not load.')}finally{reading=false;if(!cancelled)setBusy(false)}}
+ useEffect(()=>{if(historyOnly){setBusy(false);return}let cancelled=false,reading=false;if(!authenticated||activityCache?.scope!==scope)activityCache=null;setInbox(activityCache?.inbox||null);setPayments(activityCache?.payments||[]);setBusy(!activityCache);setError('')
+  const refresh=async()=>{
+   if(reading||!authenticated||document.visibilityState==='hidden')return
+   reading=true
+   try{
+    const [notices,xpay]=await Promise.allSettled([stockNotificationsRequest(getAccessToken,undefined,true),xpayRequest(getAccessToken,{action:'mine'})])
+    if(cancelled)return
+    const previous=activityCache?.scope===scope?activityCache:null
+    const nextInbox=notices.status==='fulfilled'?notices.value:previous?.inbox||null
+    const nextPayments=xpay.status==='fulfilled'?xpay.value.payments||[]:previous?.payments||[]
+    if(notices.status==='fulfilled'||xpay.status==='fulfilled')activityCache={scope,inbox:nextInbox,payments:nextPayments}
+    setInbox(nextInbox);setPayments(nextPayments)
+    setError(notices.status==='rejected'||xpay.status==='rejected'?'Activity is temporarily unavailable. Please try again shortly.':'')
+   }finally{reading=false;if(!cancelled)setBusy(false)}
+  }
   void refresh();const timer=window.setInterval(refresh,15000),unregister=registerPocketRefreshHandler(refresh);window.addEventListener('focus',refresh);return()=>{cancelled=true;clearInterval(timer);unregister();window.removeEventListener('focus',refresh)}
  },[scope,historyOnly,authenticated])
  const rows=stockActivityRows(historyOnly?null:inbox,provided||payments,wallet.address||'')
