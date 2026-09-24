@@ -1,3 +1,6 @@
+import { createPaymentFeeQuote, verifyPaymentFeeQuote, type PaymentFeeBinding } from './payment-fee-quotes.js'
+import { readEthUsdcRate, nativeFeeToUsdcUnits } from './payment-network-fees.js'
+import { paymentFeeBreakdown } from '../src/lib/platformFees.js'
 import { missingPocketEvmWalletPlan } from './pocket/wallet-setup.js'
 import { withOrdinaryWalletMutation } from './pocket/wallet-migration-guard.js'
 import type { Request, Response } from 'express'
@@ -5,7 +8,7 @@ import { consumePocketPaymentApproval, requiresPocketPaymentApproval } from './p
 import crypto from 'crypto'
 import { inspectEvmReplacement, isEvmReplacementCandidate, replacementBatchRequest, replacementAlignmentRef, replacementAlignmentRequest, canAlignReplacementInventory } from '../src/lib/circleEvmReplacement.js'
 import { PublicKey } from '@solana/web3.js'
-import { encodeFunctionData, isAddress, parseAbi } from 'viem'
+import { encodeFunctionData, isAddress, parseAbi, parseUnits } from 'viem'
 import { CCTP_DOMAIN, CCTP_FORWARD_HOOK, CCTP_TOKEN_MESSENGER_V2, cctpForwardHookForSolana, cctpMintRecipient, readCctpForwardQuote, solanaRecipient, type PocketBridgeNetwork } from './pocket/cctp.js'
 import {
   requireCircleGasStationEvmWallet,
@@ -16,7 +19,6 @@ import { circleLinkKey, readCircleLink, findPaymentCircleLinkByWallet, verifiedP
 
 const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
-const PLATFORM_FEE_BPS = 20n
 const BPS_DENOMINATOR = 10_000n
 
 const EVM_CHAINS = {
@@ -344,6 +346,26 @@ function isBytes32(value: string | undefined): value is `0x${string}` {
   return typeof value === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value)
 }
 
+
+function paymentCallData(chain: keyof typeof EVM_CHAINS, recipient: string, recipientUnits: bigint, treasuryUnits: bigint) {
+  const target = EVM_CHAINS[chain].tokenAddress as `0x${string}`
+  const calls = [{ target, value: 0n, data: encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [recipient as `0x${string}`, recipientUnits] }) }]
+  if (treasuryUnits > 0n) calls.push({ target, value: 0n, data: encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [EVM_TREASURY as `0x${string}`, treasuryUnits] }) })
+  return encodeFunctionData({ abi: SMART_WALLET_BATCH_ABI, functionName: 'executeBatch', args: [calls] })
+}
+async function verifiedPayoutExemption(params: Record<string, string>) {
+  if (String(params.feeBps ?? '') !== '0') return false
+  if (!params.payoutIntentId || params.chain !== 'base') throw Object.assign(new Error('A verified payout is required for a fee exemption.'), { status: 400 })
+  const { getPaycrestPosOrder } = await import('./paycrest-pos.js')
+  const order = await getPaycrestPosOrder(params.payoutIntentId)
+  const expired = order?.valid_until ? (!Number.isFinite(Date.parse(order.valid_until)) || Date.parse(order.valid_until) <= Date.now()) : false
+  if (!order || expired || ['settled','completed','failed','expired','refunded'].includes(String(order.status).toLowerCase())
+    || order.receive_address.toLowerCase() !== params.recipient.toLowerCase()
+    || order.refund_address.toLowerCase() !== params.walletAddress.toLowerCase()
+    || parseUnits(order.amount_usdc, 6).toString() !== params.totalUnits) throw Object.assign(new Error('Payout fee exemption does not match this payment.'), { status: 400 })
+  return true
+}
+
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -610,6 +632,34 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, ...data })
     }
 
+    if (action === 'quoteEvmPayment') {
+      const { userToken, walletId, walletAddress, chain, recipient, totalUnits } = params
+      if (!userToken || !walletId || !isAddress(walletAddress || '') || !isAddress(recipient || '') || !/^\d{1,78}$/.test(totalUnits || '') || BigInt(totalUnits) <= 0n || !['base','arbitrum','arc'].includes(chain)) return res.status(400).json({ ok: false, error: 'Valid payment details are required.' })
+      const network = chain as keyof typeof EVM_CHAINS
+      const owned = await readCircleUserWallet(userToken, network, walletId)
+      const wallet = requireCircleGasStationEvmWallet({ chain: network, walletId, walletAddress, wallets: owned ? [owned] : [] })
+      const exempt = await verifiedPayoutExemption(params)
+      const mode = params.feeMode === 'net' ? 'net' as const : 'gross' as const
+      let recovery = 0n
+      if (!exempt) {
+        const rate = network === 'arc' ? 100_000_000n : await readEthUsdcRate()
+        // Estimate both transfers, then include the quoted recovery transfer amount.
+        for (let pass = 0; pass < 2; pass++) {
+          const fees = paymentFeeBreakdown(BigInt(totalUnits), recovery, mode)
+          const estimate = await circleJson<{ high?: { networkFeeRaw?: string; networkFee?: string } }>('/v1/w3s/transactions/contractExecution/estimateFee', {
+            method: 'POST', userToken, apiKey: circleApiKey({ chain: network }),
+            body: JSON.stringify({ walletId: wallet.id, contractAddress: wallet.address, callData: paymentCallData(network, recipient, fees.recipient, fees.treasury) }),
+          })
+          const native = estimate.high?.networkFeeRaw || estimate.high?.networkFee
+          if (!native) throw Object.assign(new Error('Network fee quote is unavailable. Try again.'), { status: 503 })
+          const next = nativeFeeToUsdcUnits(native, rate)
+          recovery = next > recovery ? next : recovery
+        }
+      }
+      const binding: PaymentFeeBinding = { chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }
+      return res.json({ ok: true, ...createPaymentFeeQuote(binding, recovery, exempt) })
+    }
+
     if (action === 'executeEvmPayment') {
       const { userToken, walletId, walletAddress, chain, recipient, totalUnits, idempotencyKey } = params
       if (!userToken || !walletId || !walletAddress || !chain || !recipient || !totalUnits || !idempotencyKey) {
@@ -623,40 +673,12 @@ export default async function handler(req: Request, res: Response) {
         return res.status(400).json({ ok: false, error: 'Invalid EVM wallet or recipient address' })
       }
 
-      const total = BigInt(totalUnits)
-      const requestedFeeBps = String(params.feeBps ?? '') === '0'
-        ? 0n
-        : PLATFORM_FEE_BPS
-      const fee = total * requestedFeeBps / BPS_DENOMINATOR
-      const grossFees = params.feeMode === 'gross'
-      const treasuryAmount = fee
-      const recipientAmount = grossFees ? total : total - treasuryAmount
-      if (total <= 0n || recipientAmount <= 0n) {
-        return res.status(400).json({ ok: false, error: 'Invalid payment amount' })
-      }
-
-      const tokenAddress = EVM_CHAINS[chain].tokenAddress
-      const recipientCallData = encodeFunctionData({
-        abi: ERC20_TRANSFER_ABI,
-        functionName: 'transfer',
-        args: [recipient as `0x${string}`, recipientAmount],
-      })
-      const batchCalls = [
-        { target: tokenAddress as `0x${string}`, value: 0n, data: recipientCallData },
-      ]
-      if (treasuryAmount > 0n) {
-        const treasuryCallData = encodeFunctionData({
-          abi: ERC20_TRANSFER_ABI,
-          functionName: 'transfer',
-          args: [EVM_TREASURY as `0x${string}`, treasuryAmount],
-        })
-        batchCalls.push({ target: tokenAddress as `0x${string}`, value: 0n, data: treasuryCallData })
-      }
-      const batchCallData = encodeFunctionData({
-        abi: SMART_WALLET_BATCH_ABI,
-        functionName: 'executeBatch',
-        args: [batchCalls],
-      })
+      const mode = params.feeMode === 'net' ? 'net' as const : 'gross' as const
+      let quote
+      try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
+      catch (error) { return res.status(409).json({ ok: false, code: 'PAYMENT_QUOTE_REQUIRED', error: error instanceof Error ? error.message : 'Refresh the payment quote.' }) }
+      if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' })
+      const batchCallData = paymentCallData(chain, recipient, BigInt(quote.recipientUnits), BigInt(quote.treasuryUnits))
 
       const data = await createCircleGasStationEvmChallenge({
         userToken,

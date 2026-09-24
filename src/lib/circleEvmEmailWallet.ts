@@ -1,3 +1,4 @@
+import type { PaymentFeeQuote } from '../../api/payment-fee-quotes'
 import { executeRecoverableCircleApproval } from './circleRecoverableApproval'
 import { prepareEvmReplacement } from './circleEvmReplacement'
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
@@ -933,12 +934,19 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
   return null
 }
 
+export type CirclePaymentFeeQuote = { quote: PaymentFeeQuote; token: string }
+export async function readCirclePaymentFeeQuote(params: { session: CircleEvmEmailSession; recipient: string; amount: string; feeMode?: 'gross' | 'net'; feeBps?: number; payoutIntentId?: string }): Promise<CirclePaymentFeeQuote> {
+  return circleWalletApi<CirclePaymentFeeQuote>({ action: 'quoteEvmPayment', userToken: params.session.userToken, walletId: params.session.wallet.id, walletAddress: params.session.wallet.address, chain: params.session.chain, recipient: params.recipient, totalUnits: parseUnits(params.amount, 6).toString(), feeMode: params.feeMode ?? 'gross', feeBps: params.feeBps, payoutIntentId: params.payoutIntentId })
+}
+
 export async function sendCircleEvmEmailPayment(params: {
   session: CircleEvmEmailSession
   recipient: Address
   amount: string
   feeMode?: 'net' | 'gross'
   feeBps?: number
+  feeQuoteToken: string
+  payoutIntentId?: string
   privyAccessToken?: string
 }) {
   const sdk = authenticatedSdk(params.session)
@@ -965,6 +973,8 @@ export async function sendCircleEvmEmailPayment(params: {
     idempotencyKey: crypto.randomUUID(),
     feeMode: params.feeMode ?? 'net',
     feeBps: params.feeBps,
+    feeQuoteToken: params.feeQuoteToken,
+    payoutIntentId: params.payoutIntentId,
   }, { privyAccessToken: params.privyAccessToken })
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
   const result = await executeChallengeWithTimeout(

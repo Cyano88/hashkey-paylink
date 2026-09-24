@@ -4,8 +4,7 @@ import { base } from 'viem/chains'
 export type ChainKey = 'base' | 'arc' | 'solana' | 'arbitrum'
 
 // ─── Platform fee engine ─────────────────────────────────────────────────────
-/** 0.2% platform fee in basis points (20 bps). Collected by Hash PayLink settlement flows. */
-export const PLATFORM_FEE_BPS = 20
+export { PLATFORM_FEE_BPS } from './platformFees'
 /** EVM treasury — receives the platform fee on supported EVM USDC networks. */
 export const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753' as `0x${string}`
 /** Multicall3 — canonical address on all EVM chains; used for atomic permit+split */

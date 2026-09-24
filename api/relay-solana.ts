@@ -22,7 +22,7 @@
  * Env vars required:
  *   SOLANA_RPC_URL                — RPC endpoint (defaults to mainnet public node)
  *   RELAYER_PRIVATE_KEY_SOLANA    — base64 OR JSON-array encoded 64-byte keypair
- *   SOLANA_TREASURY               — recipient Solana address for the 0.2% fee
+ *   SOLANA_TREASURY               — recipient Solana address for the 0.25% fee
  *                                   (optional — fee skipped if not set)
  *   SOLANA_GAS_RECOVERY_USDC      — optional USDC recovery amount routed to
  *                                   SOLANA_TREASURY to offset sponsored SOL
@@ -51,7 +51,7 @@ import bs58   from 'bs58'
 // ── Constants ─────────────────────────────────────────────────────────────────
 const USDC_MINT     = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 const USDC_DECIMALS = 6
-const PLATFORM_FEE_BPS = 20 // 0.2%
+import { PLATFORM_FEE_BPS } from '../src/lib/platformFees.js'
 const DEFAULT_GAS_RECOVERY_RAW = 10_000n // 0.01 USDC
 const DEFAULT_ATA_RECOVERY_RAW = 400_000n // 0.40 USDC
 const DEFAULT_MIN_RECIPIENT_RAW = 100_000n // 0.10 USDC

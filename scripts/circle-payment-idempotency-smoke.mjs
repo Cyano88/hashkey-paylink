@@ -1,4 +1,5 @@
 ﻿import assert from 'node:assert/strict'
+import { createPaymentFeeQuote } from '../api/payment-fee-quotes.ts'
 import { build } from 'esbuild'
 import { mkdirSync } from 'node:fs'
 import { decodeFunctionData, parseAbi } from 'viem'
@@ -10,13 +11,16 @@ const mocks = {
 }
 await build({entryPoints:['api/circle-solana-email.ts'],outfile:'.codex-temp/circle-payment-retry-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'mock',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'mock'}:undefined);b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}))}}]})
 process.env.CIRCLE_API_KEY='mock-only-no-network'
+process.env.POCKET_SWAP_QUOTE_SECRET='fixture-only-quote-secret-not-production-123456'
 const {default:handler}=await import('../.codex-temp/circle-payment-retry-test.mjs')
 const payer='0x1111111111111111111111111111111111111111', recipient='0x2222222222222222222222222222222222222222'
-let blockchain='BASE', executions=[], deduplicated=new Map()
+let blockchain='BASE', executions=[], deduplicated=new Map(), estimateCalls=0
 const originalFetch=globalThis.fetch
 // Every upstream call is intercepted: this test cannot submit a real transaction.
 globalThis.fetch=async(url,init)=>{
  const path=new URL(url).pathname
+ if(new URL(url).hostname==='api.coingecko.com')return Response.json({ethereum:{usd:3000,last_updated_at:Math.floor(Date.now()/1000)},'usd-coin':{usd:1,last_updated_at:Math.floor(Date.now()/1000)}})
+ if(path==='/v1/w3s/transactions/contractExecution/estimateFee'){estimateCalls++;return Response.json({data:{high:{networkFeeRaw:'0.0001'}}})}
  if(path==='/v1/w3s/wallets/fixture-wallet')return Response.json({data:{wallet:{id:'fixture-wallet',address:payer,blockchain,accountType:'SCA',state:'LIVE'}}})
  assert.equal(path,'/v1/w3s/user/transactions/contractExecution')
  const body=JSON.parse(init.body); executions.push(body)
@@ -27,11 +31,21 @@ globalThis.fetch=async(url,init)=>{
  return Response.json({data:{challengeId:result.challengeId}})
 }
 const base={action:'executeEvmPayment',userToken:'fixture-session',walletId:'fixture-wallet',walletAddress:payer,chain:'base',recipient,totalUnits:'100000000',feeMode:'gross',idempotencyKey:'11111111-1111-4111-8111-111111111111'}
+function quoteFor(request) { return createPaymentFeeQuote({chain:request.chain,walletId:request.walletId,walletAddress:request.walletAddress,recipient:request.recipient,amountUnits:request.totalUnits,mode:request.feeMode},800000n).token }
+base.feeQuoteToken=quoteFor(base)
 async function call(body,expected=200){let status=200,result;await handler({method:'POST',body,headers:{}},{status(s){status=s;return this},json(r){result=r;return this}});assert.equal(status,expected,JSON.stringify(result));return result}
 try {
+ const priced=await call({...base,action:'quoteEvmPayment'})
+ assert.equal(priced.quote.platformFeeUnits,'250000')
+ assert.equal(priced.quote.networkFeeUnits,'300000')
+ assert.equal(priced.quote.totalUnits,'100550000')
+ assert.equal(estimateCalls,2)
+ assert.equal(executions.length,0)
+ await call({...base,action:'quoteEvmPayment',feeBps:'0'},400)
  for(const [index,chain,network] of [[1,'base','BASE'],[2,'arbitrum','ARB'],[3,'arc','ARC']]){
   blockchain=network
   const request={...base,chain,idempotencyKey:`11111111-1111-4111-8111-11111111111${index}`}
+  request.feeQuoteToken=quoteFor(request)
   const first=await call(request),retry=await call(request)
   assert.equal(first.challengeId,retry.challengeId)
   assert.equal(executions.at(-1).idempotencyKey,request.idempotencyKey)
@@ -40,11 +54,17 @@ try {
   const transfer=decodeFunctionData({abi:parseAbi(['function transfer(address to,uint256 amount) returns (bool)']),data:batch.args[0][0].data})
   assert.equal(transfer.args[0].toLowerCase(),recipient)
   assert.equal(transfer.args[1],100000000n)
+  const fee=decodeFunctionData({abi:parseAbi(['function transfer(address to,uint256 amount) returns (bool)']),data:batch.args[0][1].data})
+  assert.equal(fee.args[1],1050000n)
+  assert.equal(fee.args[0].toLowerCase(),'0xce5df9e1115f81a2fc2f65941b20b820d508e753')
  }
  assert.equal(deduplicated.size,3)
  const count=executions.length
  await call({...base,idempotencyKey:'invalid'},400)
  await call({...base,idempotencyKey:''},400)
+ await call({...base,feeQuoteToken:''},409)
+ await call({...base,totalUnits:'200000000'},409)
+ await call({...base,feeQuoteToken:base.feeQuoteToken+'invalid'},409)
  blockchain='ETH'
  await call(base,403)
  assert.equal(executions.length,count)

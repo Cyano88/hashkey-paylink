@@ -11,7 +11,7 @@ export default function PaymentLinks() {
       <Section title="Single-payer links">
         <p>A standard payment link is a URL with your recipient address, amount, and optional memo encoded as query params. Share it as a link or QR code. The payer completes payment inside the current Circle-aligned hosted checkout.</p>
         <CodeBlock lang="url">{`https://hashpaylink.com/pay?e=0xYourAddress&a=25&m=Invoice+042`}</CodeBlock>
-        <p className="mt-2">The 0.2% platform fee is deducted atomically in the transaction. Gas-sponsored EVM payments may also route a small configured recovery amount to treasury. The payer sees the exact amount they'll send before signing.</p>
+        <p className="mt-2">The 0.25% platform fee is added to the checkout amount. Supported Circle EVM checkouts also show a network estimate before approval. The recipient receives the payment amount, and the quoted fees are sent to treasury in the same transaction.</p>
       </Section>
 
       <Section title="Multi-payer collection">

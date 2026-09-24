@@ -109,7 +109,7 @@ export default function DocsHome() {
       <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/60 p-6 dark:border-gray-800 dark:bg-gray-900/40">
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">Key facts</h2>
         <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-          <li>- <strong className="text-gray-800 dark:text-gray-200">Payment fee:</strong> 0.2% standard platform fee; sponsored EVM payments may include gas recovery.</li>
+          <li>- <strong className="text-gray-800 dark:text-gray-200">Payment fee:</strong> 0.25% standard checkout platform fee; sponsored payments may include a separately displayed network estimate.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Identity:</strong> Privy email sign-in plus Circle wallet mapping on the app surfaces that need user sessions.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">Archive contract:</strong> <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs dark:bg-gray-800">0x79a804C49e1E5EBC279A228Ab73a7570A0D0819a</code> on 0G Mainnet.</li>
           <li>- <strong className="text-gray-800 dark:text-gray-200">SDK:</strong> <code className="rounded bg-gray-100 px-1 py-0.5 font-mono text-xs dark:bg-gray-800">@hashpaylink/sdk</code> for hosted checkout URLs and buttons.</li>
