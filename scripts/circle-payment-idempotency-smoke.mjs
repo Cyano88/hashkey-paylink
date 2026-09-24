@@ -5,11 +5,12 @@ import { mkdirSync } from 'node:fs'
 import { decodeFunctionData, parseAbi } from 'viem'
 mkdirSync('.codex-temp', {recursive:true})
 const mocks = {
+ './paycrest-pos.js': `export const getPaycrestPosOrder=async()=>globalThis.fixturePayout`,
  './privy-circle-link.js': `export const circleLinkKey=()=>''; export const readCircleLink=async()=>null; export const findPaymentCircleLinkByWallet=async()=>null; export const verifiedPrivyUser=async()=>{throw Error('Unexpected Pocket identity lookup')}`,
  './pocket/payment-security.js': `export const requiresPocketPaymentApproval=async()=>{throw Error('Unexpected approval lookup')}; export const consumePocketPaymentApproval=async()=>false`,
  './pocket/wallet-migration-guard.js': `export const withOrdinaryWalletMutation=async(id,run)=>run()`,
 }
-await build({entryPoints:['api/circle-solana-email.ts'],outfile:'.codex-temp/circle-payment-retry-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'mock',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'mock'}:undefined);b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}))}}]})
+await build({entryPoints:['api/circle-solana-email.ts'],outfile:'.codex-temp/circle-payment-retry-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'mock',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path] && (a.path!=='./paycrest-pos.js'||a.importer.endsWith('circle-solana-email.ts'))?{path:a.path,namespace:'mock'}:undefined);b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}))}}]})
 process.env.CIRCLE_API_KEY='mock-only-no-network'
 process.env.POCKET_SWAP_QUOTE_SECRET='fixture-only-quote-secret-not-production-123456'
 const {default:handler}=await import('../.codex-temp/circle-payment-retry-test.mjs')
@@ -42,6 +43,19 @@ try {
  assert.equal(estimateCalls,2)
  assert.equal(executions.length,0)
  await call({...base,action:'quoteEvmPayment',feeBps:'0'},400)
+ const payoutRequest={...base,action:'quoteEvmPayment',feeBps:'0',payoutIntentId:'fixture-payout'}
+ globalThis.fixturePayout={receive_address:recipient,refund_address:payer,amount_usdc:'100',status:'pending',valid_until:new Date(Date.now()+60000).toISOString()}
+ const exempt=await call(payoutRequest)
+ assert.equal(exempt.quote.totalUnits,'100000000')
+ assert.equal(exempt.quote.platformFeeUnits,'0')
+ assert.equal(exempt.quote.networkFeeUnits,'0')
+ assert.equal(estimateCalls,2)
+ globalThis.fixturePayout.refund_address=recipient
+ await call(payoutRequest,400)
+ globalThis.fixturePayout.refund_address=payer
+ globalThis.fixturePayout.valid_until='invalid-date'
+ await call(payoutRequest,400)
+ delete globalThis.fixturePayout
  for(const [index,chain,network] of [[1,'base','BASE'],[2,'arbitrum','ARB'],[3,'arc','ARC']]){
   blockchain=network
   const request={...base,chain,idempotencyKey:`11111111-1111-4111-8111-11111111111${index}`}
