@@ -327,3 +327,13 @@ assert.ok(operationsSource.includes("usePrivy()") && operationsSource.includes("
 assert.equal(/localStorage|sessionStorage|x-[a-z-]*admin-key/i.test(operationsSource), false)
 
 console.log('Developer projects adapter smoke tests passed.')
+
+// An Agreement-only project cannot configure other product networks.
+const agreementOnlyConfig={action:'configure',projectId:created.body.project.id,name:'Agreement fixture',website:'https://polydesk.trade',useCase:'Work Agreements for a synthetic service platform.',settlementMode:'usdc',capabilities:['arc_agreements'],arcMainnetChainId:5042,networks:['arc'],defaultNetwork:'arc',recipients:{arc:linkedWallet},allowedOrigins:['https://polydesk.trade'],webhookUrl:''}
+for(const network of ['base','arbitrum']) {
+ const response=await request(handler,'PUT',{...agreementOnlyConfig,networks:[network],defaultNetwork:network,recipients:{[network]:linkedWallet}})
+ assert.equal(response.statusCode,400)
+ assert.match(response.body.error,/Agreements support Arc only/)
+}
+assert.equal((await request(handler,'PUT',agreementOnlyConfig)).statusCode,200)
+console.log('Agreement-only project routing rejects Base/Arbitrum and accepts Arc.')

@@ -1,4 +1,4 @@
-import { isAgentCheckoutNetwork } from '../lib/developerNetworkPolicy'
+import { isAgentCheckoutNetwork, developerProductNetworks } from '../lib/developerNetworkPolicy'
 import PaymentActivityPanel from '../developer/PaymentActivityPanel'
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -389,6 +389,16 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
 
 function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, onSave }: { draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void }) {
   const bankAccountNumber = draft.bankAccountNumber ?? ''
+  const agreementOnly = draft.capabilities.length === 1 && draft.capabilities[0] === 'arc_agreements'
+  const supportedNetworks = developerProductNetworks(draft.checkoutMode, draft.capabilities)
+  const unsupportedNetworks = draft.networks.some(network => !supportedNetworks.includes(network))
+  function updateProducts(capabilities: Capability[]) {
+    const supported = developerProductNetworks(draft.checkoutMode, capabilities)
+    let networks = draft.networks.filter(network => supported.includes(network))
+    if (!networks.length) networks = [...supported]
+    const onlyAgreements = capabilities.length === 1 && capabilities[0] === 'arc_agreements'
+    setDraft({ ...draft, capabilities, networks, ...(onlyAgreements ? { settlementMode: 'usdc' as const } : {}), defaultNetwork: networks.includes(draft.defaultNetwork) ? draft.defaultNetwork : networks[0] ?? 'arc' })
+  }
   function toggleNetwork(network: Network) {
     const selected = draft.networks.includes(network)
     const networks = selected ? draft.networks.filter(item => item !== network) : [...draft.networks, network]
@@ -397,6 +407,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
   }
   return <div>
     {draft.checkoutMode === 'agentic' && draft.networks.some(network => !isAgentCheckoutNetwork(network)) && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Agent checkout now supports Base and Arc only. Remove unsupported routes, then save your settings. <button type="button" className="ml-2 underline" onClick={() => { const networks = draft.networks.filter(isAgentCheckoutNetwork); if (!networks.length) networks.push('base'); setDraft({ ...draft, networks, defaultNetwork: networks.includes(draft.defaultNetwork as 'base' | 'arc') ? draft.defaultNetwork : networks[0] }) }}>Remove unsupported networks</button></div>}
+    {unsupportedNetworks && <div role="alert" className="mb-4 rounded-xl border border-amber-300 p-4 text-sm">Some saved networks do not support the selected products. <button type="button" className="ml-2 underline" onClick={() => updateProducts(draft.capabilities)}>Use supported networks</button></div>}
     <PanelHeader eyebrow="Project" title="Settings" copy="Configure the products, receiving accounts and return URLs for this project." status={draft.operationalStatus === 'suspended' ? 'Suspended' : draft.settlementStatus === 'ready' ? 'Configured' : 'Setup required'} />
     <div className="mt-7 grid gap-4 sm:grid-cols-2">
       <Field label="Platform name"><input className={fieldClass()} value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Field>
@@ -407,7 +418,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       <p className="flex items-center gap-2 text-xs font-semibold text-gray-950 dark:text-white">{draft.checkoutMode === 'agentic' ? <Bot className="h-4 w-4 text-blue-600" /> : <UserRound className="h-4 w-4 text-blue-600" />}{draft.checkoutMode === 'agentic' ? 'Agentic x402 project' : 'Human checkout project'}</p>
       <p className="mt-2 text-sm leading-5 text-gray-500 dark:text-gray-400">This payment path is locked to the project and every API key it issues. Create a separate project to use the other path.</p>
     </div>
-    <CapabilityPicker checkoutMode={draft.checkoutMode} value={draft.capabilities} onChange={capabilities => setDraft({ ...draft, capabilities })} />
+    <CapabilityPicker checkoutMode={draft.checkoutMode} value={draft.capabilities} onChange={updateProducts} />
 
     <div className="mt-7 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
       <div className="flex items-start gap-3">
@@ -433,7 +444,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
 
     <div className="mt-7">
       <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Settlement</p>
-      {draft.checkoutMode === 'agentic'
+      {draft.checkoutMode === 'agentic' || agreementOnly
         ? <div className="mt-2 rounded-xl bg-gray-100 px-3 py-3 text-xs font-semibold text-gray-700 dark:bg-white/[0.05] dark:text-gray-200">Receive USDC</div>
         : <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.05]">
           {[['usdc', 'Receive USDC'], ['ngn', 'Receive Naira']] .map(([value, label]) => <button key={value} type="button" onClick={() => setDraft({ ...draft, settlementMode: value as 'usdc' | 'ngn', ...(value === 'ngn' ? { networks: ['base'], defaultNetwork: 'base', recipients: {} } : {}) })} className={cn('rounded-xl px-3 py-2.5 text-xs font-semibold transition', draft.settlementMode === value ? 'bg-white text-gray-950 shadow-sm dark:bg-white/10 dark:text-white' : 'text-gray-500 dark:text-gray-400')}>{label}</button>)}
@@ -442,9 +453,9 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     </div>
 
     <div className="mt-7">
-      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Payment networks</p>
+      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{agreementOnly ? 'Agreement network' : 'Payment networks'}</p>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {NETWORKS.filter(network => draft.checkoutMode !== 'agentic' || isAgentCheckoutNetwork(network.key)).map(network => {
+        {NETWORKS.filter(network => network.key !== 'solana' && supportedNetworks.includes(network.key)).map(network => {
           const active = network.key !== 'solana' && draft.networks.includes(network.key)
           const disabled = network.disabled || (draft.settlementMode === 'ngn' && network.key !== 'base')
           return <button key={network.key} type="button" disabled={disabled} onClick={() => network.key !== 'solana' && toggleNetwork(network.key)} className={cn('flex min-h-12 items-center justify-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition', active ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500/10 dark:bg-blue-400/15 dark:text-blue-200' : 'border-gray-200 text-gray-500 hover:border-blue-300 hover:bg-blue-50/60 dark:border-white/10 dark:text-gray-400 dark:hover:bg-blue-400/10', disabled && 'cursor-not-allowed opacity-45')}>{network.label}{network.note && <span className="text-xs font-black uppercase opacity-70">{network.note}</span>}</button>
@@ -452,14 +463,15 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       </div>
     </div>
 
+    {draft.capabilities.includes('arc_agreements') && <p className="mt-3 text-sm leading-6 text-gray-500">Agreements use Arc Mainnet USDC only. {agreementOnly ? '' : 'Other networks shown here apply to your other selected products.'}</p>}
     <div className="mt-5 space-y-3">
-      {draft.settlementMode === 'usdc' && draft.networks.map(network => <Field key={network} label={`${network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)} receiving address`}>
+      {draft.settlementMode === 'usdc' && draft.networks.filter(network => supportedNetworks.includes(network)).map(network => <Field key={network} label={`${network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)} receiving address`}>
         <input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder="0x..." />
       </Field>)}
-      {draft.settlementMode === 'usdc' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">Enter the treasury or Circle wallet address that should receive payments on each enabled network.</p>}
+      {draft.settlementMode === 'usdc' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">{draft.capabilities.includes('arc_agreements') ? 'The Arc address is the fixed project recipient for Agreements. Paying different workers or sellers requires the backend verified-recipient integration; do not substitute a platform wallet for their payout wallets. This is not an escrow deposit address.' : 'Enter the treasury or Circle wallet address that should receive payments on each enabled network.'}</p>}
     </div>
 
-    {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect value={draft.defaultNetwork} options={draft.networks.map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
+    {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect value={draft.defaultNetwork} options={draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
     <Field label="Allowed return origin" className="mt-4"><input className={fieldClass()} value={draft.allowedOrigins[0] ?? ''} onChange={event => setDraft({ ...draft, allowedOrigins: [event.target.value] })} placeholder="https://yourplatform.com" /></Field>
 
     {draft.settlementMode === 'ngn' && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
@@ -560,7 +572,7 @@ function ArcPilotStatus({ project }: { project: Project }) {
   return <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-400/20 dark:bg-blue-400/10"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-blue-900 dark:text-blue-100">Arc Agreements · Private pilot</p><span className="rounded-full bg-white/80 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-blue-700 dark:bg-white/10 dark:text-blue-200">{label}</span></div><p className="mt-2 text-sm leading-5 text-blue-800/80 dark:text-blue-100/70">Agreements use Arc only. Mainnet activation remains unavailable until the deployment and operator are reviewed. Project approval alone does not enable funding.</p>{pilot?.status === 'approved' && <p className="mt-3 text-xs leading-5 text-blue-700/70 dark:text-blue-200/60">Up to {pilot.maxAgreementUsdc} USDC per agreement · {pilot.dailyVolumeUsdc} USDC daily · {pilot.maxActiveAgreements} active · {Math.round(pilot.maxDurationSeconds / 3600)}h maximum</p>}</div>
 }
 
-function PortalTop({ onLogout }: { onLogout: () => Promise<void> }) { return <header className="flex items-center justify-between"><Link to="/" className="text-sm font-bold text-gray-950 dark:text-white">Hash PayLink <span className="font-medium text-gray-400">Developers</span></Link><button type="button" onClick={() => void onLogout()} className="flex h-9 items-center gap-1.5 rounded-full border border-gray-200 px-3 text-xs font-semibold text-gray-500 dark:border-white/10 dark:text-gray-300"><LogOut className="h-3.5 w-3.5" /> Sign out</button></header> }
+function PortalTop({ onLogout }: { onLogout: () => Promise<void> }) { return <header className="flex items-center justify-end"><button type="button" onClick={() => void onLogout()} className="flex h-9 items-center gap-1.5 rounded-full border border-gray-200 px-3 text-xs font-semibold text-gray-500 dark:border-white/10 dark:text-gray-300"><LogOut className="h-3.5 w-3.5" /> Sign out</button></header> }
 function PortalLoading({ delayed = false }: { delayed?: boolean }) {
   return <main className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-xl items-center px-4 py-12">
     <section className="w-full rounded-[1.75rem] border border-gray-200 bg-white p-7 text-center shadow-[0_24px_80px_rgba(15,23,42,.08)] dark:border-white/10 dark:bg-[#111216]">
