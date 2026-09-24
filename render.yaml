@@ -164,8 +164,6 @@ services:
         value: "https://app.hashpaylink.com"
       - key: PUBLIC_APP_URL
         value: "https://hashpaylink.com"
-      - key: CREATOR_ADMIN_KEY
-        sync: false                   # admin review key for /creator-admin approvals
       - key: CREATOR_OFFICIAL_WALLET
         sync: false                   # official StreamPay creator wallet used for official cards
       - key: CREATOR_WORLD_CUP_NEWS_URL
@@ -264,20 +262,6 @@ services:
         sync: false                   # Builder API secret from Polymarket Builders dashboard
       - key: POLYMARKET_BUILDER_PASSPHRASE
         sync: false                   # Builder API passphrase from Polymarket Builders dashboard
-      - key: POLY_STREAM_PROVIDER
-        value: "sportmonks"
-      - key: POLY_STREAM_API_KEY
-        sync: false                   # Sportmonks or API-Football key for World Cup live board
-      - key: POLY_STREAM_LEAGUE_ID
-        value: "732"
-      - key: POLY_STREAM_SEASON
-        value: "2026"
-      - key: POLY_STREAM_FIXTURE_MODE
-        value: "auto"
-      - key: POLY_STREAM_LIMIT
-        value: "64"
-      - key: POLYMARKET_MATCH_URLS
-        sync: false                   # JSON map from fixture/team keys to eligible World Cup Polymarket URLs
 
       # Dedicated Pocket cryptographic secrets; never substitute provider credentials.
       - key: POCKET_PIN_PEPPER

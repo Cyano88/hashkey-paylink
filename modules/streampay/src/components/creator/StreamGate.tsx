@@ -1,3 +1,4 @@
+import { isRetiredSportsContent, RETIRED_SPORTS_MESSAGE } from '../../../../../src/lib/retiredSports'
 import { backendEvmTransport } from '../../../../../src/lib/backendEvmTransport'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
@@ -565,6 +566,12 @@ function saveAgentAccessHint(contentId: string, walletAddress: string, mode: 'x4
 }
 
 export function StreamGate() {
+ const [params, setParams] = useSearchParams()
+ if (!params.get('vault') && params.get('recovery') !== '1') return <section className="mx-auto max-w-md px-6 py-12 text-center"><h1 className="text-xl font-semibold">Creator services retired</h1><p className="mt-3 text-sm text-gray-500">New purchases are closed. Existing purchases and escrow refunds remain accessible.</p><button className="mt-6 underline" onClick={() => { const next = new URLSearchParams(params); next.set('recovery', '1'); setParams(next) }}>Open existing purchase</button></section>
+ return <><p className="mx-auto max-w-md px-6 pt-6 text-sm text-gray-500">Existing purchase recovery only. New payments are disabled.</p><ActiveStreamGate /></>
+}
+
+function ActiveStreamGate() {
   const [params] = useSearchParams()
 
   const contentId = params.get('id')   ?? ''
@@ -820,23 +827,7 @@ export function StreamGate() {
     return () => { cancelled = true }
   }, [paymentMode, initialAgentSlug, privyAuthenticated, privyEmail, getAccessToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleApprove() {
-    if (!POA_CONTRACT || !isConnected || !isOnArc) return
-    setApproving(true); setApproveError(null)
-    try {
-      const tx = await writeContractAsync({
-        address: ARC_USDC, abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [POA_CONTRACT, BigInt(capRaw)],
-        gas: 100_000n,
-      })
-      setApproveTx(tx); setApprovePending(true)
-      pollApproval(tx)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (!/rejected|denied/i.test(msg)) setApproveError(msg.slice(0, 140))
-    } finally { setApproving(false) }
-  }
+  async function handleApprove() { setApproveError('New creator payments have been retired.'); return }
 
   const pollApproval = useCallback((hash: `0x${string}`, attempts = 0) => {
     if (attempts > 40) {
@@ -972,6 +963,7 @@ export function StreamGate() {
   }, [gatewayReceiptId])
 
   async function unlockWithAgentX402(agentSlugOverride?: string) {
+
     if (gatewayPaying) return
     const paymentSlug = cleanAgentSlug(agentSlugOverride || safeAgentSlug)
     if (!paymentSlug) {
@@ -1041,27 +1033,7 @@ export function StreamGate() {
     }
   }
 
-  async function handlePrimaryGatewayPay() {
-    setCircleNotice(null)
-    if (PRIVY_AUTH_ENABLED && !privyAuthenticated) {
-      loginPrivy()
-      return
-    }
-    if (unlockStep === 'intro') {
-      setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
-      return
-    }
-    if (!selectedAgent?.connected) {
-      setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
-      return
-    }
-    if (!hasActivatedGatewayBalance(selectedAgent, sessionCap)) {
-      setUnlockStep('fund')
-      setFundMessage(null)
-      return
-    }
-    await unlockWithAgentX402(selectedAgent.slug)
-  }
+  async function handlePrimaryGatewayPay() { setApproveError('New creator payments have been retired.'); return }
 
   async function fetchCheckpointContent(vaultAddress: string) {
     setContentState('loading')
@@ -1128,94 +1100,9 @@ export function StreamGate() {
     }).catch(() => undefined)
   }
 
-  async function startCheckpointEscrow() {
-    const email = cleanEmail(walletEmail || privyEmail)
-    setCheckpointError(null)
-    setContentError(null)
-    setCircleNotice(null)
-    if (!checkpointContentAvailable) {
-      setCheckpointError('Pay-as-you-read is only available for articles and books.')
-      return
-    }
-    if (!email && !checkpointSession) {
-      setCheckpointError('Enter your email to open your Circle reader wallet.')
-      return
-    }
-    setCheckpointBusy(true)
-    try {
-      const session = checkpointSession ?? await connectCircleEvmEmailWallet(email, 'arc')
-      setCheckpointSession(session)
-      setReaderWalletAddress(session.wallet.address)
+  async function startCheckpointEscrow() { setApproveError('New creator payments have been retired.'); return }
 
-      if (!checkpointVault && await restoreCheckpointVaultForWallet(session.wallet.address)) {
-        return
-      }
-
-      if (!CHECKPOINT_FACTORY_ADDRESS_MAINNET || !/^0x[a-fA-F0-9]{40}$/.test(CHECKPOINT_FACTORY_ADDRESS_MAINNET)) {
-        setCheckpointError('Checkpoint escrow is not configured yet.')
-        return
-      }
-
-      const amountUnits = BigInt(Math.max(1, capRaw))
-      const contentId32 = toContentBytes32(contentId)
-      const saltSeed = `${contentId}:${session.wallet.address}:${Date.now()}:${Math.random()}`
-      const salt = keccak256(toBytes(saltSeed))
-      const predicted = await arcClient.readContract({
-        address: CHECKPOINT_FACTORY_ADDRESS_MAINNET,
-        abi: CHECKPOINT_VAULT_FACTORY_ABI,
-        functionName: 'getVaultAddress',
-        args: [session.wallet.address, creator, contentId32, amountUnits, salt],
-      }) as `0x${string}`
-
-      setCircleNotice('Confirm checkpoint escrow in Circle.')
-      const txHash = await sendCircleArcCheckpointVault({
-        session,
-        factoryAddress: CHECKPOINT_FACTORY_ADDRESS_MAINNET,
-        recipient: creator,
-        amountUnits: amountUnits.toString(),
-        contentId: contentId32,
-        salt,
-        predictedVault: predicted,
-      })
-      if (txHash) await arcClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` })
-      await waitForCheckpointVaultCode(predicted)
-      setCheckpointVault(predicted)
-      const nextParams = new URLSearchParams(window.location.search)
-      nextParams.set('pay', 'checkpoint')
-      nextParams.set('checkpointVault', predicted)
-      window.history.replaceState(null, '', `${window.location.pathname}?${nextParams.toString()}${window.location.hash}`)
-      await fetchCheckpointContent(predicted)
-      await saveCheckpointVaultForWallet(session.wallet.address, predicted)
-      setCircleNotice(isVideoContent ? 'Pay-as-you-watch active.' : 'Pay-as-you-read active.')
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not start checkpoint escrow.'
-      setCheckpointError(message.slice(0, 180))
-      setContentState('error')
-      setContentError(message.slice(0, 180))
-    } finally {
-      setCheckpointBusy(false)
-    }
-  }
-
-  const releaseCheckpoint = useCallback(async (checkpointPct: number) => {
-    if (!checkpointVault || checkpointReleaseRef.current.has(checkpointPct)) return
-    checkpointReleaseRef.current.add(checkpointPct)
-    try {
-      const res = await fetch('/api/relay-checkpoint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vaultAddress: checkpointVault, checkpointPct }),
-      })
-      const data = await res.json().catch(() => ({})) as { ok?: boolean; txHash?: string; releasedAmount?: string; error?: string }
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Checkpoint release failed.')
-      setCheckpointError(null)
-      setCheckpointReleased(current => ({ ...current, [checkpointPct]: data.txHash || data.releasedAmount || 'released' }))
-    } catch (err) {
-      checkpointReleaseRef.current.delete(checkpointPct)
-      const message = err instanceof Error ? err.message : 'Checkpoint release failed.'
-      setCheckpointError(`Checkpoint ${checkpointPct}% release failed: ${message}`.slice(0, 180))
-    }
-  }, [checkpointVault])
+  const releaseCheckpoint = useCallback(async (checkpointPct: number) => { /* Retired creator flow: recovery must never accrue or release new charges. */ return }, [checkpointVault])
 
   async function refundCheckpointEscrow() {
     const vault = checkpointVault.trim()
@@ -1568,77 +1455,7 @@ export function StreamGate() {
     return `/app?${p.toString()}`
   }
 
-  async function activatePaymentBalance() {
-    const paymentSlug = selectedAgent?.slug || safeAgentSlug
-    setFundMessage(null)
-    setWalletError(null)
-    if (!paymentSlug) {
-      setWalletError('Choose a reader wallet first.')
-      setUnlockStep('choose')
-      return
-    }
-    if (fundingNeedsReconnect) {
-      setWalletError('Sign in once to refresh this reader wallet.')
-      return
-    }
-    if (fundingAmountInvalid) {
-      setWalletError('Enter a valid USDC amount.')
-      return
-    }
-    if (fundingAmountExceedsBalance) {
-      setWalletError(`Fund this wallet with more USDC on ${CREATOR_X402_GATEWAY_LABEL}, then activate x402.`)
-      return
-    }
-    setFundBusy(true)
-    try {
-      const res = await fetch('/api/agent-wallet', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'gateway-deposit-arc', agentSlug: paymentSlug, amount: fundAmount }),
-      })
-      const data = await res.json().catch(() => ({})) as {
-        ok?: boolean
-        code?: string
-        error?: string
-        gatewayBalance?: string
-        walletAddress?: string
-      }
-      if (res.status === 202 && data.code === 'gateway_deposit_pending') {
-        await refreshPaymentWalletStatus(paymentSlug)
-        setFundMessage(data.error || 'Activation is pending. Wait a moment, then check activation again.')
-        setWalletError(null)
-        setContentError(null)
-        return
-      }
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not activate x402.')
-      setAgentOptions(current => current.map(agent => (
-        agent.slug === paymentSlug
-          ? { ...agent, connected: true, walletAddress: data.walletAddress || agent.walletAddress, gatewayBalance: data.gatewayBalance, gatewayBalanceChecked: true }
-          : agent
-      )))
-      await refreshPaymentWalletStatus(paymentSlug)
-      setFundMessage('x402 activated. You can unlock now.')
-      setUnlockStep('choose')
-      setContentState('idle')
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not activate x402.'
-      const recoveryStep = unlockRecoveryStep(message)
-      if (recoveryStep === 'email') {
-        setAgentOptions(current => current.map(agent => (
-          agent.slug === paymentSlug ? { ...agent, connected: false } : agent
-        )))
-        setUnlockStep(agentOptions.length > 0 ? 'choose' : 'email')
-        setCircleNotice('Sign in once to refresh this reader wallet.')
-        setWalletError(null)
-        setContentError(null)
-      } else {
-        if (recoveryStep === 'fund') setUnlockStep('fund')
-        setWalletError(message.slice(0, 180))
-      }
-    } finally {
-      setFundBusy(false)
-    }
-  }
+  async function activatePaymentBalance() { setApproveError('New creator payments have been retired.'); return }
 
   async function checkPaymentActivation() {
     const paymentSlug = selectedAgent?.slug || safeAgentSlug
@@ -3467,148 +3284,7 @@ function VideoUnlocked({
   )
 }
 
-function WorldCupScoresUnlocked() {
-  const [feed, setFeed] = useState<WorldCupScoreFeed | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  const matches = feed?.matches ?? []
-  const providerReady = Boolean(feed?.providerConfigured && feed.providerStatus === 'connected' && matches.length)
-  const status = loading
-    ? 'Refreshing'
-    : error
-    ? 'Provider error'
-    : providerReady
-    ? 'Live'
-    : 'Waiting'
-
-  const loadScores = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const res = await fetch(`/api/poly-stream?date=${todayMatchdayKey()}`)
-      const data = await res.json() as WorldCupScoreFeed
-      if (!res.ok || !data.ok) throw new Error('Live scores are not available.')
-      setFeed(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Live scores are not available.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadScores()
-  }, [loadScores])
-
-  return (
-    <div className="space-y-3 p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">Unlocked</p>
-          <h2 className="mt-1 text-[18px] font-black tracking-tight text-gray-950">World Cup Scores</h2>
-          <p className="mt-1 text-[12px] leading-5 text-gray-500">
-            Live score context with a full fixture route when an exact match is available.
-          </p>
-        </div>
-        <span className={[
-          'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase',
-          providerReady ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100' : 'bg-gray-100 text-gray-500',
-        ].join(' ')}>
-          {status}
-        </span>
-      </div>
-
-      {loading && (
-        <div className="flex items-center justify-center gap-2 rounded-2xl border border-gray-100 bg-gray-50 py-10 text-[12px] font-semibold text-gray-500">
-          <Spinner />
-          Loading scores
-        </div>
-      )}
-
-      {!loading && error && (
-        <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4 text-center">
-          <p className="text-[13px] font-bold text-rose-700">{error}</p>
-          <button
-            type="button"
-            onClick={() => void loadScores()}
-            className="mt-3 rounded-xl bg-white px-4 py-2 text-[12px] font-bold text-rose-700 shadow-sm"
-          >
-            Refresh
-          </button>
-        </div>
-      )}
-
-      {!loading && !error && matches.length === 0 && (
-        <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 text-center">
-          <p className="text-[13px] font-bold text-gray-900">Live board is waiting for match data</p>
-          <p className="mx-auto mt-1 max-w-xs text-[12px] leading-5 text-gray-500">
-            Scores appear when the provider returns live, upcoming, or completed World Cup fixtures.
-          </p>
-          <button
-            type="button"
-            onClick={() => void loadScores()}
-            className="mt-3 rounded-xl bg-gray-950 px-4 py-2 text-[12px] font-bold text-white"
-          >
-            Refresh
-          </button>
-        </div>
-      )}
-
-      {!loading && !error && matches.length > 0 && (
-        <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1 [scrollbar-width:none]">
-          {matches.slice(0, 16).map(match => {
-            const state = worldCupMatchDisplayState(match)
-            const marketUrl = match.marketStatus === 'matched' && match.polymarketUrl ? match.polymarketUrl : ''
-            const matched = Boolean(marketUrl)
-            return (
-              <div
-                key={match.fixtureId || `${match.title}-${match.time}`}
-                className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-black uppercase text-gray-600">{state.tag}</span>
-                      <span className="text-[10px] font-semibold text-gray-400">{match.time}</span>
-                    </div>
-                    <p className="mt-1.5 line-clamp-2 text-[13px] font-black leading-snug text-gray-950">{match.title}</p>
-                    <p className="mt-1 text-[11px] leading-4 text-gray-500">{state.sub || match.status}</p>
-                    {match.probability && <p className="mt-1 text-[11px] font-semibold text-gray-600">{match.probability}</p>}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className="rounded-xl bg-gray-950 px-3 py-2 text-[14px] font-black tabular-nums text-white">
-                      {state.center}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between gap-2 border-t border-gray-100 pt-3">
-                  <span className="text-[10px] font-semibold text-gray-400">
-                    {matched ? 'Exact market matched' : 'Market pending'}
-                  </span>
-                  {matched ? (
-                    <button
-                      type="button"
-                      onClick={() => window.open(marketUrl, '_blank', 'noopener,noreferrer')}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-gray-950 px-3 py-2 text-[11px] font-black text-white transition-all active:scale-[0.98]"
-                    >
-                      <img src={POLYMARKET_LOGO} alt="" className="h-3.5 w-3.5" />
-                      Trade
-                    </button>
-                  ) : (
-                    <span className="rounded-xl border border-gray-100 px-3 py-2 text-[11px] font-bold text-gray-400">
-                      Pending
-                    </span>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
+function WorldCupScoresUnlocked() { return <p className="p-4 text-sm text-gray-500">{RETIRED_SPORTS_MESSAGE}</p> }
 
 function OverlayShell({
   dripRate, sessionCap, paymentMode, gateMode, children,
