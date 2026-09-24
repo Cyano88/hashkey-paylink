@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
+import { readActivityResponse } from './activityResponse'
 
 type Event = {
   id: string; cursor: string; projectId: string; environment: string; product: string;
@@ -44,10 +45,10 @@ export default function PaymentActivityPanel({ projectId }: { projectId: string 
       const response = await fetch('/api/developer-projects?' + query, {
         headers: { authorization: `Bearer ${token}` }, cache: 'no-store',
       })
-      const data = await response.json()
-      if (!response.ok || !data.ok) throw Error(data.error || 'Activity could not be loaded.')
+      const data = await readActivityResponse(response)
+
       if (request !== generation.current) return
-      if (!Array.isArray(data.events) || data.events.some((e: Event) => e.projectId !== projectId || e.environment !== 'live')) {
+      if (!Array.isArray(data.events) || data.events.some((e: Event) => !e || e.projectId !== projectId || e.environment !== 'live')) {
         throw Error('Activity response does not match this project.')
       }
       setPage(current => ({
