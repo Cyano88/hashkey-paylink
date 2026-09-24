@@ -11,7 +11,8 @@ export default async function handler(req:Request,res:Response){
   if(req.method!=='GET'&&req.method!=='POST')return res.sendStatus(405)
   const identity=await verifiedPrivyUser(req),owner=identity.userId
   if(req.method==='GET'){
-   if(req.query?.activity==='1')await hydrateStockActivity(owner).catch(()=>undefined)
+   // Serve saved activity immediately; historical metadata RPCs must not block reads.
+   if(req.query?.activity==='1')void hydrateStockActivity(owner).catch(()=>undefined)
    const s=await readStockNotices(),notices=Object.values(s.notices).filter(n=>n.owner===owner).sort((a,b)=>b.at-a.at).slice(0,100)
    return res.json({ok:true,notices:notices.map(({owner,delivered,...n})=>n),unread:notices.filter(n=>n.at>(s.reads[owner]||0)).length,requests:Object.values(s.requests).filter(r=>r.sender===owner||r.payer===owner).sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,100).map(r=>publicRequest(r,owner))})
   }
