@@ -9,3 +9,5 @@ Removed from Hash PayLink Render: CREATOR_ADMIN_KEY, POLY_STREAM_API_KEY, POLY_S
 Retained CREATOR_OFFICIAL_WALLET for historical attribution and ARENA_RELAYER_PRIVATE_KEY pending historical signer/fund reconciliation. Mainnet contract/recovery configuration remains where historical readers or settlement use it. No databases, stored records, wallet keys or balances were deleted.
 
 Passed: creator-retirement-smoke; checkpoint-recovery-scan-smoke; archive-handler-smoke; changed TS/TSX parsing. The creator test verifies 410 without fetch and compares historical receipt/recovery/refund function bodies and article-ID generation against the prior release. Local changes were synced to main using git apply --check before applying. Live build and endpoint checks follow deployment.
+
+Live verification: deployment dep-daqddec9v7es73cp7pl0 (2194f7629) is live. Health 200; both sports feeds, creator publish/discovery/admin/new-payment, and Arena creation 410. Checkpoint recovery validation remains 400 for missing arguments. All nine probes passed.
