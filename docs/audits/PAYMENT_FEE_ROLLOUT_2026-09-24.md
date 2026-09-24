@@ -21,6 +21,7 @@
 - Existing Circle EVM/Solana gas-station, Pocket payment-security and Solana token-security smoke tests pass.
 - Full repository typecheck is not a passing release gate: an earlier run reported numerous repository errors; a repeated run stalled and was stopped. Do not describe typecheck as passing.
 - The existing Render quote-signing secret is configured; its value was not printed.
+- Android debug APK assembled successfully with Java 21 and passed apksigner verification. Package identity remains com.hashpaylink.pocket, versionCode 4, versionName 1.0.3. Artifact: android/app/build/outputs/apk/debug/app-debug.apk (35,450,272 bytes).
 - No live payment or live authenticated Circle quote has been executed for this change.
 
 ## Release gate
