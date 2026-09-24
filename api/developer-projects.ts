@@ -1,3 +1,4 @@
+import { listDeveloperActivity } from './developer-activity-store.js'
 import { cliRequestScope, resolveCliGrant } from './developer-cli-grants.js'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
@@ -121,6 +122,7 @@ export type DeveloperCheckoutPolicy = {
 
 type VerifiedDeveloper = { userId: string; email: string }
 type Dependencies = {
+  activity?: typeof listDeveloperActivity
   hasStore: () => boolean
   read: (key: string) => Promise<DeveloperStore | undefined>
   mutate: (key: string, update: (current: DeveloperStore | undefined) => DeveloperStore) => Promise<DeveloperStore>
@@ -568,6 +570,15 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.json({ ok: true, institutions })
         }
         const store = await dependencies.read(STORE_KEY)
+        if (resource === 'activity') {
+          const projectId = clean(req.query?.projectId, 80)
+          const project = findOwnedProject(store, projectId, identity.userId)
+          if (!project) return res.status(404).json({ ok: false, error: 'Project not found.' })
+          const environment = req.query?.environment
+          if (environment !== 'live' && environment !== 'test') return res.status(400).json({ ok: false, error: 'Choose live or test activity.' })
+          const activity = await (dependencies.activity ?? listDeveloperActivity)({projectId:project.id,environment,cursor: req.query?.cursor ? String(req.query.cursor) : undefined,recordId:req.query?.recordId ? String(req.query.recordId) : undefined,limit:req.query?.limit ? Number(req.query.limit) : 50})
+          return res.json({ok:true,...activity})
+        }
         if (resource === 'admin') {
           requireDeveloperAdmin(identity, dependencies)
           return res.json(adminProjectIndex(store))

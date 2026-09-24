@@ -1,7 +1,8 @@
+import { mutateWithDeveloperActivity } from './developer-activity-store.js'
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto'
 import type { Request, Response } from 'express'
 import { formatUnits, getAddress, isAddress } from 'viem'
-import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
+import { hasRenderDurableStore, readDurableJson } from './render-durable-store.js'
 import { dispatchDeveloperWebhook, prepareDeveloperNairaCheckout, resolveDeveloperApiKeyPolicy, type DeveloperCheckoutPolicy } from './developer-projects.js'
 import { paymentExecutionRepository, type PaymentExecutionRepository } from './pocket/payment-execution-intents.js'
 import { ensureHostedCheckoutExecution, expireHostedCheckoutExecution, syncHostedCheckoutExecution } from './pocket/hosted-checkout-payment-executions.js'
@@ -79,6 +80,7 @@ type HostedCheckoutSettlement = {
   accountName: string
 }
 export type CheckoutRecord = {
+  environment?: 'live'
   id: string
   partnerId: string
   kind: 'usdc_request' | 'service'
@@ -175,7 +177,7 @@ export async function resolveHostedCheckoutPartnerPolicy(req: Pick<Request, 'hea
 const defaults: Dependencies = {
   hasStore: hasRenderDurableStore,
   read: readDurableJson,
-  mutate: (key, update) => mutateDurableJson<CheckoutStore>(key, update),
+  mutate: (key, update) => mutateWithDeveloperActivity<CheckoutStore>('checkout', key, update),
   policy: resolveHostedCheckoutPartnerPolicy,
   notify: dispatchDeveloperWebhook,
   prepareNaira: prepareDeveloperNairaCheckout,
@@ -1108,6 +1110,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       const providerExpiry = nairaOrder?.validUntil ? Date.parse(nairaOrder.validUntil) : Number.POSITIVE_INFINITY
       const unsigned: Omit<CheckoutRecord, 'integrity'> = {
         id: createdId,
+        environment: 'live',
         partnerId: policy.partnerId,
         kind: kind as CheckoutRecord['kind'],
         merchantName,

@@ -166,6 +166,19 @@ assert.equal(recovered.res.statusCode, 200)
 assert.equal(recovered.res.body.transaction, gatewayTransferId)
 
 let reconciliationUrl = ''
+let transferStatus = 'received'
+const gatewayFetcher = async () => new Response(JSON.stringify({ transfers: [{ id: gatewayTransferId, status: transferStatus, token: 'USDC', sendingNetwork: 'eip155:8453', fromAddress: '0x2222222222222222222222222222222222222222', toAddress: '0x1111111111111111111111111111111111111111', amount: '250000', nonce: `0x${'a'.repeat(64)}`, createdAt: '2026-07-22T10:15:30.000Z' }] }))
+for (const status of ['failed', 'pending', 'unknown_future_status', '', null, undefined]) {
+  transferStatus = status
+  assert.equal(await reconcileGatewayPayment(active, { fetcher: gatewayFetcher, markPaid: async () => { throw new Error('Unrecognized status must never mark paid') } }), null)
+}
+for (const status of ['received', 'batched', 'confirmed', 'completed']) {
+  transferStatus = status
+  let accepted = false
+  await reconcileGatewayPayment(active, { fetcher: gatewayFetcher, markPaid: async () => { accepted = true; return paidRecord } })
+  assert.equal(accepted, true)
+}
+
 const reconciledRecord = await reconcileGatewayPayment(active, {
   fetcher: async url => {
     reconciliationUrl = String(url)

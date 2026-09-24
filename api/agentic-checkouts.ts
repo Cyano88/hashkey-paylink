@@ -124,7 +124,8 @@ export async function reconcileGatewayPayment(record: CheckoutRecord, dependenci
     const transfer = body?.transfers?.find(item => {
       const createdAt = Date.parse(clean(item.createdAt, 40))
       return validGatewayTransferId(clean(item.id, 80))
-        && clean(item.status, 20).toLowerCase() !== 'failed'
+        // Circle SDK TransferStatus: only recognized accepted/settling states.
+        && ['received', 'batched', 'confirmed', 'completed'].includes(clean(item.status, 20).toLowerCase())
         && clean(item.token, 20).toUpperCase() === 'USDC'
         && clean(item.sendingNetwork, 80) === config.caip
         && clean(item.fromAddress, 80).toLowerCase() === attempt.payer.toLowerCase()
