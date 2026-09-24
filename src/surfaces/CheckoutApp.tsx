@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-
 import { SolanaProvider } from '../lib/SolanaContext'
 import SurfaceLayout from './SurfaceLayout'
 import ExternalRedirect from './ExternalRedirect'
+const PublicPosCheckoutPage = lazy(() => import('../pages/PublicPosCheckoutPage'))
+const XPayCheckout = lazy(() => import('../pocket/pages/PocketXPayCheckoutPage'))
 const PaymentPage = lazy(() => import('../pages/PaymentPage'))
 const HostedCheckoutEntry = lazy(() => import('../pages/HostedCheckoutEntry'))
 const AgentCheckoutPage = lazy(() => import('../pages/AgentCheckoutPage'))
@@ -29,6 +31,8 @@ export default function CheckoutApp() {
     <Route path="admin/*" element={<ExternalRedirect origin="https://developer.hashpaylink.com" />} />
     <Route element={<SurfaceLayout />}>
       <Route index element={<CheckoutHome />} />
+      <Route path="pos/ng" element={<PublicPosCheckoutPage />} />
+      <Route path="xpay/:merchantId" element={<XPayCheckout />} />
       <Route path="pay" element={<PaymentPage />} />
       <Route path="pay/c/:checkoutId" element={<HostedCheckoutEntry />} />
       <Route path="pay/a/:checkoutId" element={<AgentCheckoutPage />} />

@@ -566,10 +566,10 @@ function createPdfWithJpeg(dataUrl: string, width: number, height: number) {
   return new Blob(parts, { type: 'application/pdf' })
 }
 
-export function paymentReceiptOutcome(receipt: Pick<PaylinkReceipt, 'status'>) {
+export function paymentReceiptOutcome(receipt: Pick<PaylinkReceipt, 'status'> & Partial<Pick<PaylinkReceipt, 'source'>>) {
   const status = String(receipt.status || '').trim().toLowerCase()
   if (['refunded', 'reversed'].includes(status)) return { state: 'reversed' as const, label: 'Payment reversed', color: '#d97706' }
   if (['failed', 'cancelled', 'canceled', 'rejected'].includes(status)) return { state: 'failed' as const, label: 'Payment failed', color: '#dc2626' }
   if (['completed', 'confirmed', 'delivered', 'paid', 'settled', 'successful', 'test complete', 'validated'].includes(status)) return { state: 'successful' as const, label: status === 'test complete' ? 'Test complete' : 'Payment successful', color: '#16a34a' }
-  return { state: 'pending' as const, label: status === 'payout incomplete' ? 'Payout incomplete' : ['needs review','verification pending','status unavailable'].includes(status) ? 'Payment needs review' : 'Payment pending', color: '#d97706' }
+  return { state: 'pending' as const, label: status === 'payout incomplete' ? 'Payout incomplete' : ['needs review','verification pending','status unavailable'].includes(status) ? 'Payment needs review' : receipt.source === 'bank-withdraw' ? 'Bank delivery pending' : 'Payment pending', color: '#d97706' }
 }

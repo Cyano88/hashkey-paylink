@@ -104,9 +104,7 @@ function durationCeiling(value: unknown) {
 function requireOperatorConfiguration(env: NodeJS.ProcessEnv) {
   const walletId = required(env.ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET, 'ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET')
   if (!UUID.test(walletId)) throw new Error('ARC_AGREEMENT_OPERATOR_WALLET_ID_MAINNET is invalid.')
-  if (!TEST_API_KEY.test(required(env.CIRCLE_API_KEY, 'CIRCLE_API_KEY'))) {
-    throw new Error('CIRCLE_API_KEY must be a Circle mainnet API key.')
-  }
+  requireArcMainnetCircleKey(env.CIRCLE_API_KEY_ARC_MAINNET)
   if (!ENTITY_SECRET.test(required(env.CIRCLE_ENTITY_SECRET_ARC_MAINNET, 'CIRCLE_ENTITY_SECRET_ARC_MAINNET'))) {
     throw new Error('CIRCLE_ENTITY_SECRET_ARC_MAINNET must be the registered 32-byte hexadecimal entity secret.')
   }

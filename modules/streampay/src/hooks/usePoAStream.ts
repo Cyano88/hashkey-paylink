@@ -138,52 +138,7 @@ export function usePoAStream(config: PoAConfig): PoAState {
     return () => events.forEach(e => window.removeEventListener(e, onActivity))
   }, [])
 
-  const doSign = useCallback(async () => {
-    const addr = addrRef.current
-    const cfg  = cfgRef.current
-    if (!addr || signingRef.current) return
-    const amtUsdc = Math.min(accruedRef.current, cfg.sessionCap)
-    if (amtUsdc <= 0) return
-    signingRef.current = true
-    try {
-      const amountRaw = BigInt(Math.round(amtUsdc * 1_000_000))
-      const nonce     = BigInt(nonceRef.current)
-      const deadline  = BigInt(Math.floor(Date.now() / 1000) + 7_200)
-
-      if (!/^0x[0-9a-fA-F]{40}$/.test(POA_DOMAIN.verifyingContract) || /^0x0{40}$/i.test(POA_DOMAIN.verifyingContract)) {
-        throw new Error('Arc mainnet settlement contract is not configured.')
-      }
-      const sig = await signTypedDataAsync({
-        domain:      POA_DOMAIN,
-        types:       POA_TYPES,
-        primaryType: 'SessionIntent',
-        message: {
-          viewer:    addr,
-          creator:   cfg.creator,
-          contentId: toBytes32(cfg.contentId),
-          amount:    amountRaw,
-          nonce,
-          deadline,
-        },
-      })
-
-      const entry: GhostVaultEntry = {
-        sig,
-        amountRaw: amountRaw.toString(),
-        nonce:     nonce.toString(),
-        deadline:  deadline.toString(),
-        viewer:    addr,
-        creator:   cfg.creator,
-        contentId: cfg.contentId,
-        ts:        Date.now(),
-      }
-      writeGhostVault(entry)
-      pushVaultToServer(entry)  // cross-device: push to server after every sign
-      setGhostVault(entry)
-      nonceRef.current += 1
-    } catch { /* user rejected */ }
-    finally { signingRef.current = false }
-  }, [signTypedDataAsync])
+  const doSign = useCallback(async () => { /* Retired creator flow: recovery must never accrue or release new charges. */ return }, [signTypedDataAsync])
 
   function clearTickers() {
     if (tickRef.current) { clearInterval(tickRef.current); tickRef.current = null }
@@ -198,41 +153,7 @@ export function usePoAStream(config: PoAConfig): PoAState {
     // No doSign here — scroll in/out of view must never open the wallet
   }, [])
 
-  const sessionStart = useCallback(() => {
-    if (activeRef.current || !addrRef.current) return
-    if (accruedRef.current >= cfgRef.current.sessionCap) return
-
-    lastActivityRef.current = Date.now()
-    isPausedRef.current = false
-    setIsPaused(false)
-    activeRef.current = true
-    setIsActive(true)
-
-    // 1-second drip ticker — no signing here, only idle detection + cap check
-    tickRef.current = setInterval(() => {
-      const cfg    = cfgRef.current
-      const idleMs = cfg.idleTimeout ?? 30_000
-      const isIdle = Date.now() - lastActivityRef.current > idleMs
-
-      if (isIdle) {
-        if (!isPausedRef.current) { isPausedRef.current = true; setIsPaused(true) }
-        return
-      }
-      if (isPausedRef.current) { isPausedRef.current = false; setIsPaused(false) }
-
-      if (accruedRef.current >= cfg.sessionCap) {
-        accruedRef.current = cfg.sessionCap
-        setAccrued(cfg.sessionCap)
-        clearTickers()
-        activeRef.current = false
-        setIsActive(false)
-        void doSign() // only auto-sign when cap is fully hit
-        return
-      }
-      accruedRef.current += cfg.dripRate
-      setAccrued(accruedRef.current)
-    }, 1_000)
-  }, [doSign])
+  const sessionStart = useCallback(() => { /* Retired creator flow: recovery must never accrue or release new charges. */ return }, [doSign])
 
   // Send existing vault via beacon if viewer closes the tab without ending session
   useEffect(() => {

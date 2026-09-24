@@ -32,7 +32,14 @@ export function rateLimit({ windowMs, max, name }: RateLimitOptions) {
         for (const [bucketKey, bucket] of buckets) {
           if (bucket.resetAt <= now) buckets.delete(bucketKey)
         }
-        if (buckets.size >= MAX_BUCKETS_PER_LIMITER) buckets.delete(buckets.keys().next().value as string)
+        // Never evict an unexpired limit: identity churn could reset a blocked caller.
+        if (buckets.size >= MAX_BUCKETS_PER_LIMITER) {
+          const resetAt = Math.min(...Array.from(buckets.values(), bucket => bucket.resetAt))
+          res.setHeader('RateLimit-Remaining', '0')
+          res.setHeader('RateLimit-Reset', Math.ceil(resetAt / 1000).toString())
+          res.setHeader('Retry-After', Math.max(1, Math.ceil((resetAt - now) / 1000)).toString())
+          return res.status(429).json({ ok: false, error: 'Too many requests. Try again shortly.' })
+        }
       }
       buckets.set(key, { count: 1, resetAt: now + windowMs })
       res.setHeader('RateLimit-Remaining', Math.max(0, max - 1).toString())

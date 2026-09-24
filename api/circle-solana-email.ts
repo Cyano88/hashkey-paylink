@@ -1,8 +1,9 @@
+import { missingPocketEvmWalletPlan } from './pocket/wallet-setup.js'
 import { withOrdinaryWalletMutation } from './pocket/wallet-migration-guard.js'
 import type { Request, Response } from 'express'
 import { consumePocketPaymentApproval, requiresPocketPaymentApproval } from './pocket/payment-security.js'
 import crypto from 'crypto'
-import { inspectEvmReplacement, isEvmReplacementCandidate, replacementBatchRequest } from '../src/lib/circleEvmReplacement.js'
+import { inspectEvmReplacement, isEvmReplacementCandidate, replacementBatchRequest, replacementAlignmentRef, replacementAlignmentRequest, canAlignReplacementInventory } from '../src/lib/circleEvmReplacement.js'
 import { PublicKey } from '@solana/web3.js'
 import { encodeFunctionData, isAddress, parseAbi } from 'viem'
 import { CCTP_DOMAIN, CCTP_FORWARD_HOOK, CCTP_TOKEN_MESSENGER_V2, cctpForwardHookForSolana, cctpMintRecipient, readCctpForwardQuote, solanaRecipient, type PocketBridgeNetwork } from './pocket/cctp.js'
@@ -439,14 +440,21 @@ export default async function handler(req: Request, res: Response) {
     }
 
     if (action === 'createWallet') {
-      const { userToken, blockchain, accountType, name } = params
+      const { userToken, blockchain, accountType, name, pocketSetupFor } = params
       if (!userToken) return res.status(400).json({ ok: false, error: 'Missing userToken' })
+      let setupKey: string | undefined
+      if (pocketSetupFor) {
+        if (!['BASE', 'ARB'].includes(blockchain) || accountType !== 'SCA' || typeof pocketSetupFor !== 'string' || pocketSetupFor.length > 256) return res.status(400).json({ ok: false, error: 'Invalid wallet setup.' })
+        const plan = missingPocketEvmWalletPlan(blockchain, pocketSetupFor, await listCircleUserWallets(userToken, 'base'))
+        if (plan.walletReady) return res.json({ ok: true, walletReady: true })
+        setupKey = plan.idempotencyKey
+      }
       const data = await circleJson('/v1/w3s/user/wallets', {
         method: 'POST',
         userToken,
         apiKey: circleApiKey({ blockchain }),
         body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: setupKey || crypto.randomUUID(),
           accountType: accountType || 'EOA',
           blockchains: [blockchain || solanaBlockchain()],
           metadata: [{ name: name || 'Hash PayLink Solana' }],
@@ -469,7 +477,7 @@ export default async function handler(req: Request, res: Response) {
       return res.json({ ok: true, wallets })
     }
 
-    if (action === 'prepareEvmReplacement' || action === 'listEvmReplacement' || action === 'reviewEvmReplacement') {
+    if (action === 'prepareEvmReplacement' || action === 'alignEvmReplacement' || action === 'listEvmReplacement' || action === 'reviewEvmReplacement') {
       if (!/^Bearer .+/i.test(String(req.headers.authorization ?? ''))) return res.status(401).json({ ok: false, error: 'Sign in to prepare replacement wallets.' })
       const { userToken, attemptId, walletId, walletAddress } = params
       if (!userToken || !attemptId || !walletId || !walletAddress) return res.status(400).json({ ok: false, error: 'Missing replacement preparation details.' })
@@ -480,10 +488,19 @@ export default async function handler(req: Request, res: Response) {
       if (!link || link.privyUserId !== identity.userId || link.chain !== 'base') return res.status(403).json({ ok: false, error: 'Reconnect your current Pocket Base wallet first.' })
       const owned = await readCircleUserWallet(userToken, 'base', walletId)
       if (!owned || owned.state !== 'LIVE' || isEvmReplacementCandidate(owned) || owned.blockchain !== 'BASE' || owned.accountType !== 'SCA' || owned.address.toLowerCase() !== link.circleWalletAddress.toLowerCase()) return res.status(403).json({ ok: false, error: 'Circle could not verify the current wallet.' })
-      if (action === 'listEvmReplacement' || action === 'reviewEvmReplacement') {
-        const data = await circleJson<{ wallets: CircleUserWallet[] }>('/v1/w3s/wallets?pageSize=50&refId=' + encodeURIComponent(body.metadata[0].refId), {
+      if (action === 'listEvmReplacement' || action === 'reviewEvmReplacement' || action === 'alignEvmReplacement') {
+        const records = await Promise.all([body.metadata[0].refId, replacementAlignmentRef(attemptId)].map(refId => circleJson<{ wallets: CircleUserWallet[] }>('/v1/w3s/wallets?pageSize=50&refId=' + encodeURIComponent(refId), {
           method: 'GET', userToken, apiKey: circleApiKey({ chain: 'base' }),
-        })
+        })))
+        const data = { wallets: records.flatMap(result => result.wallets ?? []) }
+        if (action === 'alignEvmReplacement') {
+          const request = replacementAlignmentRequest(data.wallets as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[], attemptId)
+          if (!request) return res.json({ ok: true, walletReady: true })
+          const inventory = await listCircleUserWallets(userToken, 'base')
+          if (!canAlignReplacementInventory(inventory as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[])) return res.status(409).json({ ok: false, error: 'This wallet preparation needs a separate alignment review. Your current wallets are unchanged.' })
+          const aligned = await circleJson('/v1/w3s/user/wallets', { method: 'POST', userToken, apiKey: circleApiKey({ chain: 'base' }), body: JSON.stringify(request) })
+          return res.json({ ok: true, ...aligned })
+        }
         if (action === 'reviewEvmReplacement') {
           const candidates = inspectEvmReplacement((data.wallets ?? []) as import('../src/lib/circleEvmWalletTopology.js').CircleEvmWalletRecord[], attemptId)
           if (candidates.status !== 'matching') return res.status(409).json({ ok: false, error: 'Verify all three replacement wallets before reviewing balances.' })
@@ -646,6 +663,7 @@ export default async function handler(req: Request, res: Response) {
         walletId,
         walletAddress,
         chain,
+        idempotencyKey,
         refId: `hashpaylink-${chain}`,
         callData: batchCallData,
       })

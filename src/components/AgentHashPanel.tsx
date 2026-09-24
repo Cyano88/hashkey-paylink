@@ -2358,18 +2358,8 @@ export function TelegramHelperPanel({
     return `${shareOrigin()}/polydesk?${params.toString()}`
   }
 
-  function buildLpScoutWalletManagerUrl(context: string) {
-    const params = new URLSearchParams()
-    params.set('profile', 'agent')
-    params.set('walletManager', 'service')
-    params.set('src', 'lp-scout')
-    params.set('run', 'polymarket-scout')
-    params.set('scoutMode', /\b(url|market|slug|theme|specific|this)\b/i.test(context) ? 'theme' : 'best')
-    params.set('maxAmount', lpScoutOptions[0]?.amount ?? '0.01')
-    params.set('serviceUrl', '/api/x402/polymarket-scout')
-    params.set('n', 'base')
-    if (context.trim()) params.set('context', context.trim().slice(0, 180))
-    return `${shareOrigin()}/agent?${params.toString()}`
+  function buildLpScoutWalletManagerUrl(_context: string) {
+    return 'https://polydesk.trade'
   }
 
   function lpScoutTreasuryAccessRequest(): SavedRequest {
@@ -2539,167 +2529,8 @@ export function TelegramHelperPanel({
     }
   }
 
-  async function worldCupAnswer(nextQuestion: string) {
-    const scoresUrl = polyDeskUrl('poly-stream')
-    const newsUrl = polyDeskUrl('poly-worldcup-news')
-    const wantsFixture = /\b(match|matches|fixture|fixtures|playing|play|game|games|score|scores|live|today|tonight|next|upcoming|schedule)\b/i.test(nextQuestion)
-    const wantsNews = !wantsFixture && /\b(news|headline|headlines|latest|update|updates)\b/i.test(nextQuestion)
-    if (wantsNews) {
-      const response = await fetch('/api/poly-worldcup-news')
-      const data = await response.json() as PolyWorldCupFeed
-      if (!response.ok || !data.ok) throw new Error('World Cup news is unavailable right now.')
-      const articles = (data.articles ?? []).slice(0, 3)
-      if (!articles.length) {
-        return {
-          answer: 'I do not have verified World Cup news from the feed right now.',
-          actionLink: { label: 'News', url: newsUrl },
-        }
-      }
-      const lines = articles.map((article, index) => `${index + 1}. ${article.title}${article.source ? ` (${article.source})` : ''}`)
-      return {
-        answer: `Latest verified World Cup market news:\n${lines.join('\n')}`,
-        actionLink: { label: 'News', url: newsUrl },
-      }
-    }
-
-    const response = await fetch('/api/poly-stream')
-    const data = await response.json() as PolyStreamFeed
-    if (!response.ok || !data.ok) throw new Error('World Cup live board is unavailable right now.')
-    const matches = data.matches ?? []
-    const wantsToday = /\b(today|tonight|now|live|playing)\b/i.test(nextQuestion)
-    const wantsUpcoming = /\b(upcoming|next|schedule|fixtures|all fixtures|all upcoming)\b/i.test(nextQuestion)
-    const wantsTradeLink = /\b(trade|trading|link|open market|market link)\b/i.test(nextQuestion)
-    const wantsLiquidity = /\b(liquidity|volume|market price|prices?|odds)\b/i.test(nextQuestion)
-    const wantsGoals = /\b(goal|goals|scored|scorer|scorers|goalscorer|goalscorers)\b/i.test(nextQuestion)
-    const wantsCards = /\b(card|cards|yellow|red)\b/i.test(nextQuestion)
-    const wantsCorners = /\b(corner|corners)\b/i.test(nextQuestion)
-    const wantsStats = /\b(stat|stats|statistics)\b/i.test(nextQuestion) || wantsCards || wantsCorners
-    const wantsMatchDetail = wantsTradeLink || wantsLiquidity || wantsGoals || wantsCards || wantsCorners || wantsStats
-    const todayMatches = matches.filter(match => {
-      const kickoffTime = Date.parse(match.kickoffAt || match.time)
-      if (/^(live|today)$/i.test(match.tag)) return true
-      if (!Number.isFinite(kickoffTime)) return false
-      return new Date(kickoffTime).toDateString() === new Date().toDateString()
-    })
-    const words = nextQuestion.toLowerCase().match(/[a-z]{3,}/g)?.filter(word => !['what', 'when', 'score', 'scores', 'between', 'playing', 'their', 'next', 'world', 'cup', 'game', 'games', 'match', 'matches', 'fixture', 'fixtures', 'current', 'latest', 'today', 'tonight', 'live', 'upcoming', 'schedule', 'all', 'trade', 'trading', 'link', 'open', 'market', 'polymarket', 'liquidity', 'volume', 'price', 'prices', 'odds', 'goal', 'goals', 'scored', 'scorer', 'scorers', 'goalscorer', 'goalscorers', 'card', 'cards', 'yellow', 'red', 'corner', 'corners', 'stat', 'stats', 'statistics', 'played', 'particular'].includes(word)) ?? []
-    const matchedByWords = words.length ? matches.find(item => {
-      const title = item.title.toLowerCase()
-      const hits = words.filter(word => title.includes(word))
-      return hits.length >= Math.min(2, Math.max(1, words.length))
-    }) : undefined
-    if (wantsToday && todayMatches.length && !matchedByWords && !wantsMatchDetail) {
-      const lines = todayMatches.slice(0, 4).map(match => {
-        const state = matchDisplayState(match)
-        const score = hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : state.center
-        return `${match.title}: ${state.tag}${state.phase ? `, ${state.phase}` : ''}. ${score}. ${state.sub || match.time}.`
-      })
-      return {
-        answer: `Today's verified World Cup matches:\n${lines.join('\n')}`,
-        actionLink: { label: 'Live board', url: scoresUrl },
-      }
-    }
-    const match = matchedByWords || (words.length || wantsMatchDetail ? undefined : matches[0])
-    if (wantsMatchDetail && !match) {
-      return {
-        answer: 'Which match should I check? Send the fixture name, for example: South Africa vs Canada.',
-        actionLink: { label: 'Live board', url: scoresUrl },
-      }
-    }
-    if (match && wantsMatchDetail) {
-      const state = matchDisplayState(match)
-      const score = hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : state.center
-      const actionLinks = [
-        { label: 'Live board', url: scoresUrl },
-        ...(match.polymarketUrl ? [{ label: 'Market', url: match.polymarketUrl }] : []),
-      ]
-      if (wantsTradeLink) {
-        return {
-          answer: match.polymarketUrl
-            ? `Trade route found for ${match.title}. Current board status: ${state.tag}, ${score}.`
-            : `I do not have a verified Polymarket trade route for ${match.title} right now.`,
-          actionLinks,
-        }
-      }
-      if (wantsLiquidity) {
-        const liquidity = match.polymarketLiquidity ? `Liquidity: ${match.polymarketLiquidity}.` : 'Liquidity is not verified in the feed right now.'
-        const volume = match.polymarketVolume ? `Volume: ${match.polymarketVolume}.` : ''
-        const price = match.probability ? `Market price: ${match.probability}.` : ''
-        return {
-          answer: `${match.title}: ${liquidity}${volume ? ` ${volume}` : ''}${price ? ` ${price}` : ''}`,
-          actionLinks,
-        }
-      }
-      if (wantsGoals) {
-        const goals = (match.goalScorers || []).map(goal => formatGoalScorer(goal, ...splitFixtureTitle(match.title))).filter(Boolean)
-        return {
-          answer: goals.length
-            ? `${match.title} goals:\n${goals.slice(0, 6).join('\n')}`
-            : `${match.title}: no verified goalscorer names are available in the feed right now. Score/status: ${score}.`,
-          actionLinks,
-        }
-      }
-      if (wantsCards) {
-        const [home, away] = splitFixtureTitle(match.title)
-        const cardEvents = (match.events || [])
-          .filter(event => /\b(card|yellow|red)\b/i.test(event))
-          .map(event => formatMatchEvent(event, home, away))
-          .filter((event): event is MatchEventDetail => Boolean(event))
-        const yellowCount = cardEvents.filter(event => event.kind === 'yellow' || event.kind === 'yellow-red').length
-        const redCount = cardEvents.filter(event => event.kind === 'red' || event.kind === 'yellow-red').length
-        return {
-          answer: cardEvents.length
-            ? `${match.title} cards: ${yellowCount} yellow, ${redCount} red.\n${cardEvents.slice(0, 6).map(event => event.text).join('\n')}`
-            : `${match.title}: no verified card events are available in the feed right now.`,
-          actionLinks,
-        }
-      }
-      if (wantsCorners) {
-        const cornerStats = (match.stats || []).filter(stat => /\bcorner|corners\b/i.test(stat))
-        return {
-          answer: cornerStats.length
-            ? `${match.title} corner stats:\n${cornerStats.slice(0, 4).join('\n')}`
-            : `${match.title}: verified corner stats are not available in the feed right now.`,
-          actionLinks,
-        }
-      }
-      const stats = (match.stats || []).filter(Boolean)
-      return {
-        answer: stats.length
-          ? `${match.title} verified stats:\n${stats.slice(0, 6).join('\n')}`
-          : `${match.title}: detailed verified match stats are not available in the feed right now. Score/status: ${score}.`,
-        actionLinks,
-      }
-    }
-    const upcomingMatches = matches.filter(match => {
-      const state = matchDisplayState(match)
-      const kickoffTime = Date.parse(match.kickoffAt || match.time)
-      return state.tag === 'NS' || /upcoming|scheduled|not started|fixture/i.test(`${match.tag} ${match.status}`) || (Number.isFinite(kickoffTime) && kickoffTime > Date.now())
-    })
-    if (wantsUpcoming && upcomingMatches.length) {
-      const lines = upcomingMatches.slice(0, 6).map(match => {
-        const state = matchDisplayState(match)
-        return `${match.title}: ${state.sub || match.time}.`
-      })
-      return {
-        answer: `Upcoming verified World Cup fixtures:\n${lines.join('\n')}`,
-        actionLink: { label: 'Live board', url: scoresUrl },
-      }
-    }
-    if (!match) {
-      return {
-        answer: 'I do not have verified World Cup match data from the feed right now.',
-        actionLink: { label: 'Live board', url: scoresUrl },
-      }
-    }
-    const state = matchDisplayState(match)
-    const score = hasMatchScore(match) ? `${match.homeScore}-${match.awayScore}` : state.center
-    return {
-      answer: `${match.title}: ${state.tag}${state.phase ? `, ${state.phase}` : ''}. Score/status: ${score}. ${state.sub || match.time}.`,
-      actionLinks: [
-        { label: 'Live board', url: scoresUrl },
-        ...(match.polymarketUrl ? [{ label: 'Market', url: match.polymarketUrl }] : []),
-      ],
-    }
+  async function worldCupAnswer(_nextQuestion: string) {
+    return { answer: 'Sports feeds are available in PolyDesk.', actionLink: { label: 'Open PolyDesk', url: 'https://polydesk.trade' } }
   }
 
   async function handlePolyDeskConversation(nextQuestion: string) {
@@ -2972,10 +2803,6 @@ export function TelegramHelperPanel({
         proof?: { ogTxHash: string; ogExplorer: string }
         zeroscoutSponsorship?: ZeroScoutSponsorship
         error?: string
-        upgradeRequired?: boolean
-        upgradeLink?: string
-        upgradeAmount?: string
-        upgradeCurrency?: string
         suggestedAction?: { label: string; url: string }
       }
       try {
@@ -2988,12 +2815,6 @@ export function TelegramHelperPanel({
         }
       }
       if (!data.answer) {
-        if (data.upgradeRequired && data.upgradeLink) {
-          finishHelperMessage(nextQuestion, {
-            answer: `Deep research is paused after today's free uses. Agent Hash Pro is ${data.upgradeAmount ?? '10'} ${data.upgradeCurrency ?? 'USDC'} monthly: ${data.upgradeLink}`,
-          })
-          return
-        }
         throw new Error(data.error ?? 'No helper response returned.')
       }
       setThinkingState('proof')

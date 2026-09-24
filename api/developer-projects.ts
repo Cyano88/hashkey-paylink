@@ -1,3 +1,6 @@
+import { developerEnvironment } from './developer-environment.js'
+import { isAgentCheckoutNetwork, developerProductNetworks } from '../src/lib/developerNetworkPolicy.js'
+import { listDeveloperActivity } from './developer-activity-store.js'
 import { cliRequestScope, resolveCliGrant } from './developer-cli-grants.js'
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
@@ -40,7 +43,7 @@ type DeveloperKey = {
   createdAt: string
   lastUsedAt?: string
   revokedAt?: string
-  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create'>
+  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create'>
   expiresAt?: string
   createdByGrant?: string
   operationId?: string
@@ -121,6 +124,7 @@ export type DeveloperCheckoutPolicy = {
 
 type VerifiedDeveloper = { userId: string; email: string }
 type Dependencies = {
+  activity?: typeof listDeveloperActivity
   hasStore: () => boolean
   read: (key: string) => Promise<DeveloperStore | undefined>
   mutate: (key: string, update: (current: DeveloperStore | undefined) => DeveloperStore) => Promise<DeveloperStore>
@@ -568,6 +572,15 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.json({ ok: true, institutions })
         }
         const store = await dependencies.read(STORE_KEY)
+        if (resource === 'activity') {
+          const projectId = clean(req.query?.projectId, 80)
+          const project = findOwnedProject(store, projectId, identity.userId)
+          if (!project) return res.status(404).json({ ok: false, error: 'Project not found.' })
+          const environment = req.query?.environment
+          if (environment !== 'live' && environment !== 'test') return res.status(400).json({ ok: false, error: 'Choose live or test activity.' })
+          const activity = await (dependencies.activity ?? listDeveloperActivity)({projectId:project.id,environment,cursor: req.query?.cursor ? String(req.query.cursor) : undefined,recordId:req.query?.recordId ? String(req.query.recordId) : undefined,limit:req.query?.limit ? Number(req.query.limit) : 50})
+          return res.json({ok:true,...activity})
+        }
         if (resource === 'admin') {
           requireDeveloperAdmin(identity, dependencies)
           return res.json(adminProjectIndex(store))
@@ -778,6 +791,9 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (currentCheckoutMode === 'agentic' && settlementMode !== 'usdc') return res.status(400).json({ ok: false, error: 'Agentic x402 projects support USDC settlement only.' })
         if (currentCheckoutMode === 'agentic' && capabilities.includes('polymarket_funding')) return res.status(400).json({ ok: false, error: 'Agentic x402 projects cannot enable human funding products.' })
         if (settlementMode !== 'usdc' && settlementMode !== 'ngn') return res.status(400).json({ ok: false, error: 'Choose USDC or Naira settlement.' })
+        if (currentCheckoutMode === 'agentic' && networks.some(network => !isAgentCheckoutNetwork(network))) return res.status(400).json({ ok: false, error: 'Agent checkout supports Base and Arc only. Remove unsupported networks in Settings.' })
+        if (networks.some(network => !developerProductNetworks(currentCheckoutMode, capabilities).includes(network))) return res.status(400).json({ ok: false, error: 'Choose networks supported by the selected products. Agreements support Arc only.' })
+        if (capabilities.length === 1 && capabilities[0] === 'arc_agreements' && settlementMode !== 'usdc') return res.status(400).json({ ok: false, error: 'Agreements require Arc USDC settlement.' })
         if (!networks.length || !networks.includes(defaultNetwork)) return res.status(400).json({ ok: false, error: 'Choose a valid default payment network.' })
         if (settlementMode === 'usdc' && networks.some(network => !recipients[network])) return res.status(400).json({ ok: false, error: 'Add a valid receiving address for every selected network.' })
         if (!allowedOrigins.length) return res.status(400).json({ ok: false, error: 'Add at least one allowed return origin.' })
@@ -822,6 +838,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
       }
 
       if (req.method === 'POST' && action === 'create-key') {
+        const environment = developerEnvironment(req.body?.environment, 'live')
+        if (environment === 'test') return res.status(409).json({ ok: false, error: 'Sandbox keys are not enabled until isolated testnet execution is available.' })
         if (currentProject.operationalStatus === 'suspended') {
           return res.status(409).json({ ok: false, error: 'This project is suspended. Contact Hash PayLink operations.' })
         }
@@ -831,15 +849,13 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (!currentProject.allowedOrigins.length || (currentProject.settlementMode === 'usdc' && currentProject.networks.some(network => !currentProject.recipients[network]))) {
           return res.status(409).json({ ok: false, error: 'Complete checkout routing before creating a key.' })
         }
-        const environment: DeveloperEnvironment = clean(req.body?.environment, 10).toLowerCase() === 'test' ? 'test' : 'live'
-        const environmentNetworks: DeveloperNetwork[] = environment === 'test' ? [] : ['base', 'arbitrum', 'arc']
-        if (currentProject.settlementMode === 'ngn' && environment === 'test') {
-          return res.status(409).json({ ok: false, error: 'Naira settlement requires a live key.' })
-        }
+        if (projectCheckoutMode(currentProject) === 'agentic' && currentProject.networks.some(network => !isAgentCheckoutNetwork(network))) return res.status(409).json({ ok: false, error: 'Agent checkout supports Base and Arc only. Update project networks before creating a key.' })
+        const environmentNetworks = developerProductNetworks(projectCheckoutMode(currentProject), currentProject.capabilities ?? ['hosted_checkout'])
+
         if (currentProject.settlementMode === 'usdc' && !currentProject.networks.some(network => environmentNetworks.includes(network))) {
-          return res.status(409).json({ ok: false, error: `Configure ${environment === 'test' ? 'a supported sandbox (Arc now requires live keys)' : 'Base, Arbitrum, or Arc Mainnet'} before creating this key.` })
+          return res.status(409).json({ ok: false, error: 'Configure a supported live network before creating this key.' })
         }
-        const rawKey = dependencies.createSecret(environment === 'test' ? 'hpl_test' : 'hpl_live')
+        const rawKey = dependencies.createSecret('hpl_live')
         const key: DeveloperKey = {
           id: dependencies.createKeyId(), name: clean(req.body?.name, 60) || 'Backend key',
           prefix: rawKey.slice(0, 18), digest: keyDigest(secret, rawKey), environment, createdAt: dependencies.now().toISOString(),
@@ -904,7 +920,7 @@ function policyForDeveloperProject(
   if (secret.length < 32 || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended') return null
   const allowedNetworks = environment === 'test'
     ? new Set<DeveloperNetwork>()
-    : new Set<DeveloperNetwork>(['base', 'arbitrum', 'arc'])
+    : new Set<DeveloperNetwork>(developerProductNetworks(projectCheckoutMode(project), project.capabilities ?? ['hosted_checkout']))
   if (project.settlementMode === 'ngn' && environment !== 'live') return null
   const paymentOptions = project.settlementMode === 'ngn'
     ? (project.refundAddress ? [{ network: 'base' as const, recipient: project.refundAddress }] : [])
@@ -1162,8 +1178,8 @@ export function createScopedDeveloperKeysHandler(
       if (action === 'create') {
         if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId) || !/^hpl_app_[a-f0-9]{64}$/.test(rawKey)
           || !name || !Number.isInteger(days) || days < 1 || days > 30
-          || !Array.isArray(scopes) || !scopes.length || scopes.length > 3 || new Set(scopes).size !== scopes.length
-          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create'].includes(scope) || !grant.scopes.includes(scope))) {
+          || !Array.isArray(scopes) || !scopes.length || scopes.length > 5 || new Set(scopes).size !== scopes.length
+          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
           return res.status(400).json({ ok: false, error: 'Use a unique operation id, a scoped key, 1-30 days, and permissions included in the approved grant.' })
         }
         requestDigest = keyDigest(dependencies.portalSecret(), JSON.stringify([rawKey, name, [...scopes].sort(), days]))
@@ -1176,6 +1192,12 @@ export function createScopedDeveloperKeysHandler(
         if (action === 'create') {
           if (projectCheckoutMode(latest) !== 'human' || !policyForDeveloperProject(latest, 'live', dependencies.portalSecret())) {
             throw Object.assign(new Error('An active, ready human checkout project is required.'), { status: 409 })
+          }
+          if (scopes.some((scope: string) => scope.startsWith('agreement:'))
+            && (!latest.capabilities?.includes('arc_agreements') || latest.settlementMode !== 'usdc'
+              || latest.arcMainnetChainId !== 5042 || !latest.networks.includes('arc') || !latest.recipients.arc
+              || !latest.webhookUrl || !latest.webhookSecretCipher)) {
+            throw Object.assign(new Error('Agreement keys require Arc Mainnet USDC routing, the Agreements product and a signed webhook.'), { status: 409 })
           }
           const previous = latest.keys.find(key => key.operationId === operationId)
           if (previous) {

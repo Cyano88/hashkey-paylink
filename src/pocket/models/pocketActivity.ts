@@ -1,6 +1,7 @@
 import type { PocketPendingBridge } from '../lib/pocketPendingBridge'
 
 export type PocketActivityRow = {
+  assetSymbol?: string
   bridge?: PocketPendingBridge
   eventId: string
   txHash: string

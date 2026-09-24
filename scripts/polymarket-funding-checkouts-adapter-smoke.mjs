@@ -21,9 +21,11 @@ const depositAddress = '0x3333333333333333333333333333333333333333'
 const secret = 'hosted-checkout-test-secret-longer-than-thirty-two-characters'
 let store
 let checkoutPaid = false
+let executionFailure = false
 let bridgeComplete = false
 let capturedRouting
 const basePolicy = {
+  environment: 'live',
   partnerId: 'dev_testproject1234', merchantName: 'PolyDesk', allowedOrigins: ['https://polydesk.trade'],
   defaultNetwork: 'base', paymentOptions: [
     { network: 'base', recipient: '0x1111111111111111111111111111111111111111' },
@@ -40,6 +42,7 @@ const handler = createPolymarketFundingCheckoutsHandler({
     assert.equal(wallet, targetWallet)
     return { addressType: 'evm', depositAddress, note: '' }
   },
+  syncExecution: async () => { if (executionFailure) throw Error('synthetic execution failure') },
   bridgeStatus: async () => ({
     transactions: bridgeComplete ? [{ status: 'COMPLETED', txHash: '0xbridge', createdTimeMs: Date.parse('2026-07-22T12:03:00.000Z') }] : [],
     latest: null,
@@ -99,18 +102,29 @@ assert.equal(conflict.statusCode, 409)
 
 const pending = await request(handler, 'GET', { query: { id: created.body.fundingRequestId } })
 assert.equal(pending.body.status, 'awaiting_payment')
+assert.equal(store.records[created.body.fundingRequestId].observation.status, 'awaiting_payment')
 assert.equal(pending.body.receiptUrl, undefined)
 
 checkoutPaid = true
 const bridging = await request(handler, 'GET', { query: { id: created.body.fundingRequestId } })
 assert.equal(bridging.body.status, 'bridging')
+assert.equal(store.records[created.body.fundingRequestId].observation.status, 'bridging')
 assert.equal(bridging.body.receiptUrl, undefined)
 
 bridgeComplete = true
+executionFailure = true
+assert.equal((await request(handler, 'GET', { query: { id: created.body.fundingRequestId } })).statusCode, 503)
+assert.equal(store.records[created.body.fundingRequestId].observation.status, 'funded', 'secondary sync failure must not lose provider observation')
+executionFailure = false
 const funded = await request(handler, 'GET', { query: { id: created.body.fundingRequestId } })
 assert.equal(funded.body.status, 'funded')
+assert.equal(store.records[created.body.fundingRequestId].observation.status, 'funded')
 assert.equal(funded.body.receiptUrl, '/receipt/r1.test.signature')
 assert.equal(funded.body.returnUrl, `https://polydesk.trade/funding/complete?fundingRequestId=${created.body.fundingRequestId}`)
+
+bridgeComplete = false
+await request(handler, 'GET', { query: { id: created.body.fundingRequestId } })
+assert.equal(store.records[created.body.fundingRequestId].observation.status, 'funded', 'provider outage must not erase the completed observation')
 
 const forbiddenHandler = createPolymarketFundingCheckoutsHandler({
   hasStore: () => true, read: async () => undefined, mutate: async () => ({ records: {}, idempotency: {} }),
@@ -121,3 +135,4 @@ const forbiddenHandler = createPolymarketFundingCheckoutsHandler({
 assert.equal((await request(forbiddenHandler, 'POST', { body: {} })).statusCode, 403)
 
 console.log('Polymarket funding checkout adapter smoke tests passed')
+

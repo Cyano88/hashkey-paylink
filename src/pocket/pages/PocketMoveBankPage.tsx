@@ -98,9 +98,11 @@ export default function PocketMoveBankPage() {
     if (!intentId) return undefined
     return {
       read: accessToken => readPocketBankWithdrawRoute({ accessToken, intentId }),
-      start: (accessToken, route) => {
+      start: async (accessToken, route) => {
         if (route.destination !== 'base' || route.source === 'base') throw new Error('Bank payout route is invalid.')
-        return startPocketBankWithdrawRoute({ accessToken, intentId, source: route.source, amount: route.amount })
+        const checkpoint = await startPocketBankWithdrawRoute({ accessToken, intentId, source: route.source, amount: route.amount })
+        if (!checkpoint) throw new Error('The bank payout route could not be prepared.')
+        return checkpoint
       },
       update: (accessToken, route) => updatePocketBankWithdrawRoute({ accessToken, intentId, phase: route.phase, txHash: route.txHash }),
     }
@@ -174,7 +176,7 @@ export default function PocketMoveBankPage() {
     merchantId: direct.result.merchantId,
     contextLabel: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
     settlementType: 'INSTANT_FIAT',
-    paycrestStatus: direct.status === 'sent' ? 'successful' : 'pending',
+    paycrestStatus: direct.result.providerStatus || 'pending',
     direction: 'out',
     recipient: direct.result.accountName,
     destination: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
@@ -206,7 +208,7 @@ export default function PocketMoveBankPage() {
   return (
     <PocketRouteShell active="home" onSelect={selectNav}>
       {payoutToast && (
-        <div role="status" aria-live="polite" className="fixed left-1/2 top-[max(1rem,env(safe-area-inset-top))] z-[100] w-[min(calc(100%-2rem),26rem)] -translate-x-1/2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm font-semibold text-gray-600 shadow-xl dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">
+        <div role="status" aria-live="polite" className="fixed left-1/2 top-[max(1rem,var(--pocket-safe-top))] z-[100] w-[min(calc(100%-2rem),26rem)] -translate-x-1/2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm font-semibold text-gray-600 shadow-xl dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">
           {payoutToast}
         </div>
       )}
@@ -411,7 +413,7 @@ export default function PocketMoveBankPage() {
         onCopy={bank.copy}
         onClose={bank.closeShare}
       />
-      {mode === 'withdraw' && reviewOpen && !bankReceipt && <PocketBottomSheet title="Review bank transfer" dismissible={!directLocked && !approvalBusy} onClose={() => setReviewOpen(false)}>
+      {mode === 'withdraw' && reviewOpen && !bankReceipt && <PocketBottomSheet title="Review bank transfer" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !['preparing', 'routing', 'authorizing'].includes(direct.status)} onClose={() => setReviewOpen(false)}>
         <h2 className="mb-6 text-center text-2xl font-bold">NGN {formatNgnAmount(direct.amount)}</h2>
         <dl className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs dark:border-[#262626] dark:bg-[#171717]">
           {[['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', 'NGN ' + formatNgnAmount(direct.amount)], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo]] : [])].map(([label,value]) => <div key={label} className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="max-w-[65%] break-words text-right font-semibold">{value}</dd></div>)}
@@ -436,7 +438,7 @@ export default function PocketMoveBankPage() {
       {mode === 'withdraw' && bankReceipt && (
         <PocketPaymentSuccess
           receipt={bankReceipt}
-          outcome={direct.status === 'sent' ? 'handed-off' : 'pending'}
+          outcome={direct.status === 'sent' ? direct.result?.state === 'sent' ? 'completed' : 'handed-off' : 'pending'}
           onDone={() => {
             direct.resetResult()
             navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)

@@ -229,7 +229,7 @@ export default function PocketMarketplacePanel({ connected, network, gatewayBala
       {selected && (
         <>
           <button type="button" aria-label="Close purchase confirmation" onClick={() => { if (!buying) setSelected(null) }} className="fixed inset-0 z-40 bg-gray-950/30 backdrop-blur-[2px] dark:bg-black/60" />
-          <div role="dialog" aria-modal="true" aria-label="Confirm Marketplace purchase" className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[430px] -translate-x-1/2 overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.32)] dark:border-[#262626] dark:bg-[#171717]">
+          <div role="dialog" aria-modal="true" aria-label="Confirm Marketplace purchase" className="fixed bottom-[calc(5.25rem+var(--pocket-safe-bottom))] left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-[430px] -translate-x-1/2 overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.32)] dark:border-[#262626] dark:bg-[#171717]">
             <div className="flex justify-center pt-2.5"><span className="h-1 w-9 rounded-full bg-gray-200 dark:bg-white/15" /></div>
             <div className="p-5 pt-3.5">
               <div className="flex items-center gap-3">

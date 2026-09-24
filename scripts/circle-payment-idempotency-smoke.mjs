@@ -1,0 +1,52 @@
+﻿import assert from 'node:assert/strict'
+import { build } from 'esbuild'
+import { mkdirSync } from 'node:fs'
+import { decodeFunctionData, parseAbi } from 'viem'
+mkdirSync('.codex-temp', {recursive:true})
+const mocks = {
+ './privy-circle-link.js': `export const circleLinkKey=()=>''; export const readCircleLink=async()=>null; export const findPaymentCircleLinkByWallet=async()=>null; export const verifiedPrivyUser=async()=>{throw Error('Unexpected Pocket identity lookup')}`,
+ './pocket/payment-security.js': `export const requiresPocketPaymentApproval=async()=>{throw Error('Unexpected approval lookup')}; export const consumePocketPaymentApproval=async()=>false`,
+ './pocket/wallet-migration-guard.js': `export const withOrdinaryWalletMutation=async(id,run)=>run()`,
+}
+await build({entryPoints:['api/circle-solana-email.ts'],outfile:'.codex-temp/circle-payment-retry-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'mock',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'mock'}:undefined);b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path],loader:'js'}))}}]})
+process.env.CIRCLE_API_KEY='mock-only-no-network'
+const {default:handler}=await import('../.codex-temp/circle-payment-retry-test.mjs')
+const payer='0x1111111111111111111111111111111111111111', recipient='0x2222222222222222222222222222222222222222'
+let blockchain='BASE', executions=[], deduplicated=new Map()
+const originalFetch=globalThis.fetch
+// Every upstream call is intercepted: this test cannot submit a real transaction.
+globalThis.fetch=async(url,init)=>{
+ const path=new URL(url).pathname
+ if(path==='/v1/w3s/wallets/fixture-wallet')return Response.json({data:{wallet:{id:'fixture-wallet',address:payer,blockchain,accountType:'SCA',state:'LIVE'}}})
+ assert.equal(path,'/v1/w3s/user/transactions/contractExecution')
+ const body=JSON.parse(init.body); executions.push(body)
+ const existing=deduplicated.get(body.idempotencyKey)
+ if(existing)assert.deepEqual(body,existing.body)
+ const result=existing??{body,challengeId:`challenge-${deduplicated.size+1}`}
+ deduplicated.set(body.idempotencyKey,result)
+ return Response.json({data:{challengeId:result.challengeId}})
+}
+const base={action:'executeEvmPayment',userToken:'fixture-session',walletId:'fixture-wallet',walletAddress:payer,chain:'base',recipient,totalUnits:'100000000',feeMode:'gross',idempotencyKey:'11111111-1111-4111-8111-111111111111'}
+async function call(body,expected=200){let status=200,result;await handler({method:'POST',body,headers:{}},{status(s){status=s;return this},json(r){result=r;return this}});assert.equal(status,expected,JSON.stringify(result));return result}
+try {
+ for(const [index,chain,network] of [[1,'base','BASE'],[2,'arbitrum','ARB'],[3,'arc','ARC']]){
+  blockchain=network
+  const request={...base,chain,idempotencyKey:`11111111-1111-4111-8111-11111111111${index}`}
+  const first=await call(request),retry=await call(request)
+  assert.equal(first.challengeId,retry.challengeId)
+  assert.equal(executions.at(-1).idempotencyKey,request.idempotencyKey)
+  const batch=decodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),data:executions.at(-1).callData})
+  assert.equal(batch.args[0].length,2)
+  const transfer=decodeFunctionData({abi:parseAbi(['function transfer(address to,uint256 amount) returns (bool)']),data:batch.args[0][0].data})
+  assert.equal(transfer.args[0].toLowerCase(),recipient)
+  assert.equal(transfer.args[1],100000000n)
+ }
+ assert.equal(deduplicated.size,3)
+ const count=executions.length
+ await call({...base,idempotencyKey:'invalid'},400)
+ await call({...base,idempotencyKey:''},400)
+ blockchain='ETH'
+ await call(base,403)
+ assert.equal(executions.length,count)
+ console.log('PASS: three deployed EVM rails preserve retry key and exact gross recipient; invalid keys and wrong-chain wallet submit nothing. Provider deduplication is mocked, not a live guarantee.')
+}finally{globalThis.fetch=originalFetch}

@@ -16,7 +16,7 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
   if (receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={onClose} extraActions={actions} />
   return <PocketBottomSheet title="Transaction details" onClose={onClose}>
     <h2 className="mb-4 text-center text-lg font-bold">{row.activityLabel || row.memo || 'Transaction details'}</h2>
-    <dl className="space-y-3 text-xs"><div className="flex justify-between gap-4"><dt>Status</dt><dd className="capitalize">{pocketActivityStatus(row)}</dd></div><div className="flex justify-between gap-4"><dt>Amount</dt><dd>{row.amountNgn ? 'NGN ' + row.amountNgn : row.amount + ' USDC'}</dd></div><div><dt className="text-gray-500">Reference</dt><dd className="mt-1 break-all font-mono">{row.supportReference || row.txHash || row.eventId}</dd></div></dl>
+    <dl className="space-y-3 text-xs"><div className="flex justify-between gap-4"><dt>Status</dt><dd className="capitalize">{pocketActivityStatus(row)}</dd></div><div className="flex justify-between gap-4"><dt>Amount</dt><dd>{row.amountNgn ? 'NGN ' + row.amountNgn : row.amount + ' ' + (row.assetSymbol || 'USDC')}</dd></div><div><dt className="text-gray-500">Reference</dt><dd className="mt-1 break-all font-mono">{row.supportReference || row.txHash || row.eventId}</dd></div></dl>
     {actions}
   </PocketBottomSheet>
 }

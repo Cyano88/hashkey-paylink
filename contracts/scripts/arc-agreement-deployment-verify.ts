@@ -1,3 +1,4 @@
+import { mainnetDeploymentAddress, requireMainnetDeploymentChain } from '../lib/arcAgreementDeploymentConfig'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -25,17 +26,15 @@ function currentSourceCommit() {
 
 async function main() {
   if (network.name !== 'arc') {
-    throw new Error('Deployment verification is restricted to the configured Arc Testnet network.')
+    throw new Error('Deployment verification is restricted to the configured Arc Mainnet network.')
   }
   const manifestPath = resolve(
     process.cwd(),
     required(process.env.ARC_AGREEMENT_MANIFEST_PATH, 'ARC_AGREEMENT_MANIFEST_PATH'),
   )
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as ArcAgreementDeploymentManifest
-  const factoryAddress = required(
-    process.env.ARC_AGREEMENT_FACTORY_ADDRESS,
-    'ARC_AGREEMENT_FACTORY_ADDRESS',
-  )
+  const factoryAddress = mainnetDeploymentAddress(process.env, 'ARC_AGREEMENT_FACTORY_ADDRESS_MAINNET')
+  requireMainnetDeploymentChain((await ethers.provider.getNetwork()).chainId)
   const deploymentTransactionHash = required(
     process.env.ARC_AGREEMENT_DEPLOYMENT_TX_HASH,
     'ARC_AGREEMENT_DEPLOYMENT_TX_HASH',

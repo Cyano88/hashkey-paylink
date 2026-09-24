@@ -1,7 +1,10 @@
+import { assertLiveDeveloperRequest } from './developer-environment.js'
+import { isAgentCheckoutNetwork } from '../src/lib/developerNetworkPolicy.js'
+import { mutateWithDeveloperActivity } from './developer-activity-store.js'
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto'
 import type { Request, Response } from 'express'
 import { formatUnits, getAddress, isAddress } from 'viem'
-import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from './render-durable-store.js'
+import { hasRenderDurableStore, readDurableJson } from './render-durable-store.js'
 import { dispatchDeveloperWebhook, prepareDeveloperNairaCheckout, resolveDeveloperApiKeyPolicy, type DeveloperCheckoutPolicy } from './developer-projects.js'
 import { paymentExecutionRepository, type PaymentExecutionRepository } from './pocket/payment-execution-intents.js'
 import { ensureHostedCheckoutExecution, expireHostedCheckoutExecution, syncHostedCheckoutExecution } from './pocket/hosted-checkout-payment-executions.js'
@@ -79,6 +82,7 @@ type HostedCheckoutSettlement = {
   accountName: string
 }
 export type CheckoutRecord = {
+  environment?: 'live'
   id: string
   partnerId: string
   kind: 'usdc_request' | 'service'
@@ -175,7 +179,7 @@ export async function resolveHostedCheckoutPartnerPolicy(req: Pick<Request, 'hea
 const defaults: Dependencies = {
   hasStore: hasRenderDurableStore,
   read: readDurableJson,
-  mutate: (key, update) => mutateDurableJson<CheckoutStore>(key, update),
+  mutate: (key, update) => mutateWithDeveloperActivity<CheckoutStore>('checkout', key, update),
   policy: resolveHostedCheckoutPartnerPolicy,
   notify: dispatchDeveloperWebhook,
   prepareNaira: prepareDeveloperNairaCheckout,
@@ -891,6 +895,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
   return async function hostedCheckoutsHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
     try {
+      assertLiveDeveloperRequest(req)
     if (!dependencies.hasStore()) return res.status(503).json({ ok: false, error: 'Hosted checkout storage is unavailable.' })
     const secret = dependencies.signingSecret()
     if (secret.length < 32) return res.status(503).json({ ok: false, error: 'Hosted checkout signing is not configured.' })
@@ -908,6 +913,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       }
       if (req.query?.purpose === 'status') {
         const policy = await dependencies.policy(req)
+    if (policy && 'environment' in policy && policy.environment !== 'live') return res.status(403).json({ ok: false, error: 'This checkout route requires live credentials.' })
         if (!policy || policy.partnerId !== record.partnerId) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
         const expired = dependencies.now().getTime() >= Date.parse(record.expiresAt)
         if (expired && !record.payment) await expireHostedCheckoutExecution(record, dependencies.executions)
@@ -972,6 +978,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       }
     }
     const policy = await dependencies.policy(req)
+    if (policy && 'environment' in policy && policy.environment !== 'live') return res.status(403).json({ ok: false, error: 'This checkout route requires live credentials.' })
     if (!policy) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
     const providerRouting = verifiedProviderRouting.get(req)
     if (providerRouting && (!('projectManaged' in policy) || !policy.capabilities.includes(providerRouting.capability))) {
@@ -1018,6 +1025,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
 
     if (!KINDS.has(kind)) return res.status(400).json({ ok: false, error: 'Private beta supports usdc_request and service checkouts.' })
     if (checkoutMode !== 'human' && checkoutMode !== 'agentic') return res.status(400).json({ ok: false, error: 'checkoutMode must be human or agentic.' })
+    if (checkoutMode === 'agentic' && !isAgentCheckoutNetwork(network)) return res.status(400).json({ ok: false, error: 'Agent checkout supports Base and Arc only.' })
     if (checkoutMode === 'agentic' && agenticType !== 'creator_earnings' && agenticType !== 'agent_treasury') return res.status(400).json({ ok: false, error: 'Agentic checkout requires agenticType creator_earnings or agent_treasury.' })
     if (checkoutMode === 'human' && requestedAgenticType) return res.status(400).json({ ok: false, error: 'agenticType is only valid for agentic checkout.' })
     if (checkoutMode === 'agentic' && (kind !== 'service' || flexible || isNairaProject)) return res.status(400).json({ ok: false, error: 'Agentic checkout requires a fixed USDC service payment.' })
@@ -1108,6 +1116,7 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
       const providerExpiry = nairaOrder?.validUntil ? Date.parse(nairaOrder.validUntil) : Number.POSITIVE_INFINITY
       const unsigned: Omit<CheckoutRecord, 'integrity'> = {
         id: createdId,
+        environment: 'live',
         partnerId: policy.partnerId,
         kind: kind as CheckoutRecord['kind'],
         merchantName,
