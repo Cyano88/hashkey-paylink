@@ -24,3 +24,7 @@ The hosted SDK sends accepted submissions through Result and actual errors throu
 ## Launch gates
 
 Smile must enable/confirm the required partner methods. Then run a consented end-to-end production verification, confirming camera capture, callback delivery and matching second-step identity before enabling enrollment. Authentication success alone does not satisfy these gates.
+
+## Testing reopened — 2026-09-25
+
+At the user's request, Profile now exposes Verify with Smile ID and hosted camera capture is available again. Existing BVN/NIN entitlement preflight remains mandatory; opening enrollment does not grant provider permissions or bypass verification. Payments remain unchanged and no KYC gates were reintroduced. POCKET_KYC_ENROLLMENT_PAUSED=true can pause new/resumed sessions and hosted capture again without deleting records. A real production verification is still required before declaring KYC ready.

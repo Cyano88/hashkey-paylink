@@ -1,3 +1,4 @@
+import PocketKycPanel from './PocketKycPanel'
 import PocketFlowHeader from './PocketFlowHeader'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 import PocketWalletPreparation from './PocketWalletPreparation'
@@ -12,7 +13,7 @@ import { updatePocketPaymentSecurity, verifyPocketPaymentPin } from '../api/pock
 import { disablePocketPaymentBiometrics, enablePocketPaymentBiometrics, pocketPaymentBiometricsAvailable, pocketPaymentBiometricsEnabled } from '../lib/pocketPaymentBiometrics'
 import { reconnectPocketBaseWallet } from '../controllers/usePocketWalletController'
 
-export type PocketProfileFeature = 'rates' | 'limits' | 'notifications' | 'security' | 'wallet-setup'
+export type PocketProfileFeature = 'rates' | 'limits' | 'notifications' | 'security' | 'wallet-setup' | 'kyc'
 
 function ngn(value: number, maximumFractionDigits = 0) {
   return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits }).format(value)
@@ -224,10 +225,11 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
     return () => { cancelled = true; limitsEpoch.current++; limitsPending.current = null; clearTimeout(timer); unregister(); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', visible) }
   }, [feature, email, refreshLimits])
 
-  const title = feature === 'wallet-setup' ? 'Wallet preparation' : feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
+  const title = feature === 'kyc' ? 'Identity verification' : feature === 'wallet-setup' ? 'Wallet preparation' : feature === 'rates' ? 'Rates' : feature === 'limits' ? 'Spending limits' : feature === 'security' ? 'Payment security' : 'Notifications'
   return <div className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white'>
     <main className='mx-auto min-h-full w-full max-w-[462px] px-4 pb-[max(2.5rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]'>
       <PocketFlowHeader title={title} onBack={onBack} centered />
+      {feature === 'kyc' && <PocketKycPanel getAccessToken={getAccessToken} />}
       {feature === 'wallet-setup' && <PocketWalletPreparation key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={setCurrency} />}
       {feature === 'limits' && <LimitsPanel usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}

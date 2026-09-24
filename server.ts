@@ -225,18 +225,27 @@ app.get('/pocket/identity-frame', (req, res) => {
   res.removeHeader('X-Frame-Options')
   res.setHeader('Referrer-Policy', 'no-referrer')
   res.setHeader('Cache-Control', 'no-store')
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+  if (process.env.POCKET_KYC_ENROLLMENT_PAUSED === 'true') {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors https://app.hashpaylink.com https://pocket.hashpaylink.com http://localhost:5173; base-uri 'none'; form-action 'none'")
+    return res.sendFile(join(__dirname, 'vendor', 'smile-id', 'coming-soon.html'))
+  }
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
   res.setHeader('Content-Security-Policy', [
     "default-src 'none'",
-    "script-src 'unsafe-inline'",
-    "style-src 'unsafe-inline'",
-    "connect-src 'none'",
+    "script-src 'unsafe-inline' 'unsafe-eval' https://cdn.smileidentity.com https://cdn.usesmileid.com https://web-models.smileidentity.com https://secure.smileidentity.com https://js.sentry-cdn.com https://browser.sentry-cdn.com",
+    "style-src 'unsafe-inline' https://cdn.smileidentity.com https://cdn.usesmileid.com https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com data:",
+    "img-src https: data: blob:",
+    "connect-src https: wss: data:",
+    "worker-src blob: https://cdn.smileidentity.com https://cdn.usesmileid.com",
+    "media-src blob:",
     "frame-ancestors https://app.hashpaylink.com https://pocket.hashpaylink.com http://localhost:5173",
     "base-uri 'none'",
     "form-action 'none'",
+    "sandbox allow-scripts allow-same-origin allow-forms allow-popups",
   ].join('; '))
-  // Enrollment is paused, including hosted frames reached by older app sessions.
-  return res.sendFile(join(__dirname, 'vendor', 'smile-id', 'coming-soon.html'))
+  return res.sendFile(join(__dirname, 'vendor', 'smile-id', req.query.method === 'government_id' ? 'doc-verification.html' : 'biometric-kyc.html'))
 })
 
 const vtpassWebhookLimiter = rateLimit({ name: 'vtpass-webhook', windowMs: 60_000, max: 60 })

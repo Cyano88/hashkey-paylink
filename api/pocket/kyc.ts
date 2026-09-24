@@ -203,8 +203,8 @@ export async function pocketLegacyKycCallback(req: Request, res: Response) {
 }
 
 export default async function pocketKyc(req: Request, res: Response) {
-  // Enrollment is paused. Preserve records, results and callback reconciliation.
-  if (req.method === 'POST' && ['start', 'resume'].includes(req.body?.action)) {
+  // Emergency pause preserves records, results and callback reconciliation.
+  if (process.env.POCKET_KYC_ENROLLMENT_PAUSED === 'true' && req.method === 'POST' && ['start', 'resume'].includes(req.body?.action)) {
     res.setHeader('Cache-Control', 'no-store')
     try { await verifiedPrivyUser(req) } catch { return res.status(401).json({ ok: false, error: 'Sign in to continue.' }) }
     return res.status(503).json({ ok: false, code: 'KYC_COMING_SOON', error: 'Identity verification is coming soon.', retryable: false })

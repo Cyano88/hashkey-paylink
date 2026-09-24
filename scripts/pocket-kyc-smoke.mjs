@@ -124,6 +124,7 @@ const missingDob=await request('missing-dob',{action:'start',consent:true});
 assert.equal((await passJob('missing-dob',missingDob,'bvn','Test Person','')).body.status,'review');
 console.log('PASS new BVN policy requires government ID type and matching attributes; legacy policy remains readable.')
 
+process.env.POCKET_KYC_ENROLLMENT_PAUSED = 'true';
 // Pausing enrollment must not mint tokens, change records, or mark anyone verified.
 const rolloutSnapshot = JSON.stringify([...state.values]);
 const rolloutCalls = state.calls.length;
@@ -137,3 +138,5 @@ await m.default({method:'POST',headers:{},body:{action:'start'}},unauthorizedRol
 assert.equal(unauthorizedRollout.code,401);
 assert.equal(state.calls.length,rolloutCalls); assert.equal(JSON.stringify([...state.values]),rolloutSnapshot);
 console.log('PASS paused public enrollment preserves authentication and records, makes no provider calls, and never grants verification.');
+
+delete process.env.POCKET_KYC_ENROLLMENT_PAUSED;
