@@ -120,3 +120,12 @@ assert.equal(stockCli.secretStoredLocally,true)
 assert.ok(stockCli.key.scopes.includes('xstocks-agreement:create'))
 assert.ok(!JSON.stringify(stockCli).includes(vault.keys.find(entry=>entry.operationId==='fixture_stock_cli_0001').value))
 console.log('CLI xStocks key creation stores the secret locally without returning it.')
+
+// Explicit account-link scope never grants drafting, payment or participant authority.
+grant={...original,scopes:['wallet:connect','keys:manage']}
+const connectionSpec={...spec,operationId:'fixture_connection_0001',apiKey:'hpl_app_'+'f'.repeat(64),scopes:['wallet:connect'],expiresInDays:7}
+assert.equal((await call(connectionSpec)).statusCode,201)
+assert.equal(developerPolicyFromStore(store,connectionSpec.apiKey,secret,'wallet:connect',now)?.partnerId,id)
+for(const scope of ['agreement:create','xstocks-agreement:create','checkout:create',null]) assert.equal(developerPolicyFromStore(store,connectionSpec.apiKey,secret,scope,now),null)
+for(const previous of [agreementSpec,stockSpec]) assert.equal(developerPolicyFromStore(store,previous.apiKey,secret,'wallet:connect',now),null)
+console.log('Wallet connection scope passed: older keys cannot link accounts; connection-only keys cannot draft, pay or sign.')

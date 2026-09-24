@@ -43,7 +43,7 @@ type DeveloperKey = {
   createdAt: string
   lastUsedAt?: string
   revokedAt?: string
-  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create' | 'xstocks-agreement:read' | 'xstocks-agreement:create'>
+  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create' | 'xstocks-agreement:read' | 'wallet:connect' | 'xstocks-agreement:create'>
   expiresAt?: string
   createdByGrant?: string
   operationId?: string
@@ -1178,8 +1178,8 @@ export function createScopedDeveloperKeysHandler(
       if (action === 'create') {
         if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId) || !/^hpl_app_[a-f0-9]{64}$/.test(rawKey)
           || !name || !Number.isInteger(days) || days < 1 || days > 30
-          || !Array.isArray(scopes) || !scopes.length || scopes.length > 7 || new Set(scopes).size !== scopes.length
-          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'xstocks-agreement:read', 'xstocks-agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
+          || !Array.isArray(scopes) || !scopes.length || scopes.length > 8 || new Set(scopes).size !== scopes.length
+          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'xstocks-agreement:read', 'wallet:connect', 'xstocks-agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
           return res.status(400).json({ ok: false, error: 'Use a unique operation id, a scoped key, 1-30 days, and permissions included in the approved grant.' })
         }
         requestDigest = keyDigest(dependencies.portalSecret(), JSON.stringify([rawKey, name, [...scopes].sort(), days]))

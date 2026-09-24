@@ -3,7 +3,7 @@ import type { Request, Response } from 'express'
 import { hasRenderDurableStore, readDurableJson, mutateDurableJson } from './render-durable-store.js'
 
 const STORE = 'hashpaylink:cli-grants:v1'
-export const CLI_SCOPES = ['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'xstocks-agreement:read', 'xstocks-agreement:create', 'keys:manage'] as const
+export const CLI_SCOPES = ['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'xstocks-agreement:read', 'wallet:connect', 'xstocks-agreement:create', 'keys:manage'] as const
 export type CliScope = typeof CLI_SCOPES[number]
 type Grant = {
   id: string; projectId: string; challenge: string; codeHash: string; scopes: CliScope[];
@@ -43,6 +43,8 @@ export function cliRequestScope(req: Partial<Pick<Request, 'method' | 'originalU
   try { url = new URL(req.originalUrl ?? '', 'https://developer.hashpaylink.com') } catch { return null }
   if (req.method === 'GET' && url.pathname === '/api/v2/project' && !url.search) return 'project:read'
   if (req.method === 'POST' && url.pathname === '/api/v2/cli/keys' && !url.search) return 'keys:manage'
+  if (req.method === 'POST' && url.pathname === '/api/v2/wallet-connections' && !url.search
+    && ['create', 'redeem'].includes(req.body?.action)) return 'wallet:connect'
   if (url.pathname === '/api/v2/xstocks-agreements') {
     if (req.method === 'GET') return 'xstocks-agreement:read'
     if (req.method === 'POST' && !url.search && req.body?.action === undefined) return 'xstocks-agreement:create'
