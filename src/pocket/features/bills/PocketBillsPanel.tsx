@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import PocketBottomSheet from '../../components/PocketBottomSheet'
 import { PocketBillsSkeleton, PocketLoadingField } from '../../components/PocketContentSkeletons'
 import { AlertCircle, ArrowRight, Check, Clock3, Lightbulb, Loader2, Mail, Phone, Tv, Wallet, Wifi } from '../../components/PocketIcons'
@@ -77,7 +77,9 @@ function SignInCard() {
 }
 
 export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet, onPreparePayment, paymentRouting }: PocketBillsPanelProps) {
+  const [resultDismissed, setResultDismissed] = useState(false)
   const [approvalBusy, setApprovalBusy] = useState(false)
+  useEffect(() => { if (bills.status === 'ready') setResultDismissed(false) }, [bills.status])
   const meta = billMeta[view]
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
@@ -97,10 +99,10 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     type: bills.intent.category,
     receiptId: bills.intent.requestId,
     receiptHash: bills.intent.txHash || bills.intent.requestId,
-    title: `${billMeta[bills.intent.category].title} payment confirmed`,
-    status: 'confirmed',
+    title: 'Payment',
+    status: bills.intent.state === 'delivered' ? 'confirmed' : bills.intent.state === 'refunded' ? 'reversed' : ['failed','refund_eligible'].includes(bills.intent.state) ? 'failed' : 'processing',
     eventId: bills.intent.id,
-    txHash: bills.intent.txHash || bills.intent.requestId,
+    txHash: bills.intent.txHash || '',
     chain: bills.intent.network,
     payer: bills.intent.payerWallet,
     memo: bills.intent.variationName || bills.intent.serviceName,
@@ -119,6 +121,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     brandName: 'Pocket',
     brandKind: 'pocket',
   } : null
+  const showResult = Boolean(bills.intent && (bills.status === 'successful' || ['confirming','processing'].includes(bills.status) || ['failed','refunded','refund_eligible','refund_pending','refund_submitted','refunding','needs_review'].includes(bills.intent.state)))
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
   const paymentRouteBusy = paymentRouting?.status === 'checking' || paymentRouting?.status === 'moving' || paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling'
   const paymentRouteInsufficient = paymentRouting?.insufficient
@@ -285,7 +288,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
             {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200">View Bills activity</Link>}
 
-            {showPayment && bills.status !== 'successful' && bills.intent && (
+            {showPayment && !showResult && bills.intent && (
               <PocketBottomSheet title="Review payment" dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
                 <>
                     <h2 className="mb-1 text-center text-2xl font-bold">{money(bills.intent.amountNgn)}</h2>
@@ -342,8 +345,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
           </div>
         </>
       )}
-      {bills.status === 'successful' && billReceipt && (
-        <PocketPaymentSuccess receipt={billReceipt} title={billName} onDone={bills.edit} />
+      {showResult && !resultDismissed && billReceipt && (
+        <PocketPaymentSuccess receipt={billReceipt} title="Payment" onDone={() => {setResultDismissed(true); if (bills.status === 'successful') bills.edit()}} />
       )}
     </div>
   )

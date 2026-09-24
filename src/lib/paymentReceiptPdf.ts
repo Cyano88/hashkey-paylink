@@ -154,10 +154,9 @@ function parseHumanUsdcAmount(value?: string) {
   return numeric.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: 6 })
 }
 
-export function receiptChainKey(value?: string): ChainKey {
-  return value === 'solana' || value === 'arc' || value === 'arbitrum'
-    ? value
-    : 'base'
+export function receiptChainKey(value?: string): ChainKey | 'xlayer' | undefined {
+  const chain = String(value || '').toLowerCase()
+  return chain === 'xlayer' ? 'xlayer' : Object.prototype.hasOwnProperty.call(CHAIN_META, chain) ? chain as ChainKey : undefined
 }
 
 export function compactReceiptAmount(value?: string) {
@@ -227,6 +226,7 @@ function receiptType(receipt: PaylinkReceipt) {
     const category = settlement.replace(/^bill_payment:?/, '') || receipt.type
     return titleCase(category || 'Bill payment')
   }
+  if (receipt.brandKind === 'pocket' || receipt.brandName === 'Pocket') return receipt.title || (receipt.type === 'money_in' ? 'Received' : receipt.type === 'money_out' ? 'Sent' : 'Payment')
   if (receipt.source === 'bank-send' || settlement === 'paycrest_onramp') return 'USDC Settlement'
   if (receipt.source === 'bank-receive' || settlement === 'instant_fiat') return 'Bank Transfer'
   if (receipt.source === 'ngpos') return 'POS Funding'
@@ -238,7 +238,8 @@ function receiptType(receipt: PaylinkReceipt) {
 
 export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView {
   const variant = receipt.variant === 'bills' || receipt.source === 'bills' || String(receipt.settlementType || '').startsWith('bill_payment') ? 'bills' : 'general'
-  const network = CHAIN_META[receiptChainKey(receipt.chain)]?.label || titleCase(receipt.chain || 'Base')
+  const networkKey = receiptChainKey(receipt.chain)
+  const network = networkKey === 'xlayer' ? 'X Layer' : networkKey ? CHAIN_META[networkKey].label : titleCase(receipt.chain || 'Network unavailable')
   const localAmount = formatNgn(receipt.amountNgn)
   const amount = localAmount || `${compactReceiptAmount(receipt.amount)} ${receipt.asset}`
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
@@ -287,13 +288,14 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const narration = receipt.narration || receipt.memo || receipt.title || '-'
   return {
     variant,
-    badge: isBank ? 'Bank Transfer' : 'On-Chain',
+    badge: receipt.title || (isBank ? 'Bank transfer' : 'Transfer'),
     amount,
     timestamp: fmtTime(receipt.createdAt),
     rows: [
       { label: 'Type', value: type },
-      { label: 'Sent by', value: receipt.payer || '-', mono: true },
-      { label: 'Sent to', value: recipient, mono: /^0x/.test(recipient) },
+      { label: 'Network', value: network },
+      { label: 'From', value: receipt.payer || '-', mono: true },
+      { label: 'To', value: recipient, mono: /^0x/.test(recipient) },
       { label: isBank ? 'Receiver account' : 'Destination', value: destination, mono: /^0x/.test(destination) },
       { label: 'Amount & narration', value: `${amount} · ${narration}` },
     ],
@@ -568,8 +570,8 @@ function createPdfWithJpeg(dataUrl: string, width: number, height: number) {
 
 export function paymentReceiptOutcome(receipt: Pick<PaylinkReceipt, 'status'> & Partial<Pick<PaylinkReceipt, 'source'>>) {
   const status = String(receipt.status || '').trim().toLowerCase()
-  if (['refunded', 'reversed'].includes(status)) return { state: 'reversed' as const, label: 'Payment reversed', color: '#d97706' }
-  if (['failed', 'cancelled', 'canceled', 'rejected'].includes(status)) return { state: 'failed' as const, label: 'Payment failed', color: '#dc2626' }
-  if (['completed', 'confirmed', 'delivered', 'paid', 'settled', 'successful', 'test complete', 'validated'].includes(status)) return { state: 'successful' as const, label: status === 'test complete' ? 'Test complete' : 'Payment successful', color: '#16a34a' }
-  return { state: 'pending' as const, label: status === 'payout incomplete' ? 'Payout incomplete' : ['needs review','verification pending','status unavailable'].includes(status) ? 'Payment needs review' : receipt.source === 'bank-withdraw' ? 'Bank delivery pending' : 'Payment pending', color: '#d97706' }
+  if (['refunded', 'reversed'].includes(status)) return { state: 'reversed' as const, label: 'Reversed', color: '#d97706' }
+  if (['failed', 'cancelled', 'canceled', 'rejected'].includes(status)) return { state: 'failed' as const, label: 'Failed', color: '#dc2626' }
+  if (['completed', 'confirmed', 'delivered', 'paid', 'settled', 'successful', 'test complete', 'validated'].includes(status)) return { state: 'successful' as const, label: status === 'test complete' ? 'Test complete' : 'Successful', color: '#16a34a' }
+  return { state: 'pending' as const, label: 'Processing', color: '#d97706' }
 }

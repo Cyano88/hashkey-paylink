@@ -1,3 +1,4 @@
+import PocketTransactionSheet from '../pocket/components/PocketTransactionSheet'
 import { readCirclePaymentFeeQuote, type CirclePaymentFeeQuote } from '../lib/circleEvmEmailWallet'
 import { isRetiredAssistantCheckout } from '../lib/retiredAssistantCheckout'
 import PocketGetApp from '../pocket/components/PocketGetApp'
@@ -3909,6 +3910,16 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   // ────────────────────────────────────────────────────────────────────────────
   //  SUCCESS STATE
   // ────────────────────────────────────────────────────────────────────────────
+  if (pocketScan && (isConfirmed || isConfirming || Boolean(txHash) || circleEvmAcceptedPending || isSendError)) {
+    const delivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || paycrestOrder?.status === 'settled')
+    const state = delivered ? 'successful' : isEvmReverted || isBasePaymasterFailed || (isSendError && !txHash) ? 'failed' : 'pending'
+    const status = state === 'successful' ? 'confirmed' : state === 'failed' ? 'failed' : 'processing'
+    const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash ? {
+      type:'app_purchase',receiptId:paymentReceiptId || txHash,receiptHash:txHash,title:'Payment',status,eventId:eventId || txHash,txHash,chain,payer:circleEvmEmailSession?.wallet.address || '',recipient:activeRecipient || '',memo: memo || 'Payment',amount:String(payableAmt),asset:meta.asset,createdAt:Date.now(),source:'purchase',settlementType:'hosted_checkout',brandName:'Pocket',brandKind:'pocket'
+    } : null
+    return <PocketTransactionSheet title="Payment" state={state} amount={String(payableAmt)+' '+meta.asset} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/>
+  }
+
   if (isConfirmed && !isWalletManagerFunding) {
     const explorerTxUrl    = txHash      ? `${meta.explorerUrl}/tx/${txHash}`      : null
     void explorerTxUrl

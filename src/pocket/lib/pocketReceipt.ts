@@ -59,11 +59,12 @@ export function pocketReceiptKind(row: PocketActivityRow): PocketReceiptKind | n
 
   if ((source === 'wallet-bridge' || source === 'wallet-swap') || settlement === 'wallet_bridge') return null
   if (source === 'bills' || settlement === 'bill_payment' || settlement.startsWith('bill_payment:')) return 'bill_purchase'
+  if (source === 'xpay') return row.direction === 'in' ? 'money_in' : 'app_purchase'
   if (isOutgoingPosPurchase(row)) return 'app_purchase'
   if (source === 'purchase' || source === 'app-pay' || settlement === 'app_pay' || settlement === 'hosted_checkout' || settlement === 'service_funding') return 'app_purchase'
   if (source === 'wallet-deposit') return 'money_in'
   if (source === 'collection') return 'money_in'
-  if (source === 'request' && row.paycrestStatus === 'paid' && row.txHash) return row.direction === 'in' ? 'money_in' : 'money_out'
+  if (source === 'request' && (row.txHash || ['paid', 'processing', 'submitted', 'failed'].includes(String(row.paycrestStatus)))) return row.direction === 'in' ? 'money_in' : 'money_out'
   if (source === 'wallet-withdrawal') return 'money_out'
   if (source === 'bank-withdraw') return 'money_out'
   if (source === 'bank-send' || source === 'bank-receive' || source === 'ngpos' || source === 'pos') return 'money_in'
@@ -81,17 +82,17 @@ export function pocketReceiptAvailability(row: PocketActivityRow): PocketReceipt
   if (kind === 'money_in' && source === 'wallet-deposit' && row.chain === 'solana' && (!row.payer || row.payer === 'Solana wallet')) return 'none'
   const status = pocketActivityStatus(row)
   if (FINAL_STATUSES.has(status)) return 'ready'
-  if (PENDING_STATUSES.has(status) || status === 'reversing' || status === 'failed') return 'pending'
+  if (PENDING_STATUSES.has(status) || status === 'reversing' || ['failed', 'cancelled', 'canceled', 'rejected', 'expired'].includes(status)) return 'pending'
   return 'none'
 }
 
-function receiptTitle(kind: PocketReceiptKind, row: PocketActivityRow) {
-  if (kind === 'bill_purchase') return `${row.billCategory === 'tv' ? 'TV' : row.billCategory ? `${row.billCategory[0].toUpperCase()}${row.billCategory.slice(1)}` : 'Bill'} payment`
-  if (kind === 'app_purchase') return row.activityLabel || 'Web purchase'
-  if (normalizedSource(row) === 'ngpos' || normalizedSource(row) === 'pos') return 'Retail payment'
-  if (normalizedSource(row) === 'collection') return row.activityLabel || 'Request payment'
-  if (normalizedSource(row).startsWith('bank-')) return kind === 'money_out' ? 'Bank payout' : 'Bank funding'
-  return kind === 'money_out' ? (row.assetSymbol || 'USDC') + ' sent' : (row.assetSymbol || 'USDC') + ' received'
+export function pocketMovementTitle(row: PocketActivityRow): string {
+  const kind = pocketReceiptKind(row)
+  if (normalizedSource(row) === 'xpay' && row.direction === 'in') return 'Received'
+  if (normalizedSource(row) === 'request' || normalizedSource(row) === 'collection') return 'Request payment'
+  if (normalizedSource(row).startsWith('bank-')) return 'Bank transfer'
+  if (kind === 'bill_purchase' || kind === 'app_purchase' || isOutgoingPosPurchase(row) || ['pos', 'ngpos'].includes(normalizedSource(row))) return 'Payment'
+  return row.direction === 'in' || kind === 'money_in' ? 'Received' : 'Sent'
 }
 
 export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPending?: boolean } = {}): PaylinkReceipt | null {
@@ -110,7 +111,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     type: kind === 'bill_purchase' ? category : kind,
     receiptId: row.receiptId || row.billReference || row.eventId,
     receiptHash: row.txHash || reference,
-    title: receiptTitle(kind, row),
+    title: pocketMovementTitle(row),
     status: pocketActivityStatus(row),
     eventId: row.eventId,
     txHash: row.txHash,

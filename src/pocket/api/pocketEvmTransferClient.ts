@@ -82,6 +82,11 @@ export async function executePocketEvmTransfer({
   const txHash = await executor({ session, recipient, amount, feeQuoteToken, idempotencyKey: idempotencyKey ?? crypto.randomUUID(), onChallenge, onAccepted })
   if (!txHash) return { txHash, status: 'submitted' as const }
   if (!confirm) return { txHash, status: 'submitted' as const }
-  const status = await confirmer({ chain: session.chain, txHash })
-  return { txHash, status }
+  try {
+    const status = await confirmer({ chain: session.chain, txHash })
+    return { txHash, status }
+  } catch (error) {
+    // Preserve the broadcast reference even when its receipt confirms a revert.
+    throw Object.assign(error instanceof Error ? error : new Error('Transfer confirmation failed.'), { txHash })
+  }
 }

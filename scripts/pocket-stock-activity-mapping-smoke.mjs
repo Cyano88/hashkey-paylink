@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict'
+import {build} from 'esbuild'
+const mocks={usePocketIdentity:'export default ()=>null',PocketActivityPanel:'export default ()=>null',pocketStockNotificationsClient:'export const stockNotificationsRequest=()=>null',pocketXPayClient:'export const xpayRequest=()=>null',pocketRefresh:'export const registerPocketRefreshHandler=()=>null'}
+const out=await build({stdin:{contents:"export {stockActivityRows} from './src/pocket/components/PocketStockActivity'",resolveDir:process.cwd(),loader:'ts'},bundle:true,write:false,format:'esm',platform:'node',jsx:'automatic',plugins:[{name:'isolated',setup(b){b.onResolve({filter:/.*/},a=>{const key=a.path.split('/').at(-1);if(mocks[key])return{path:key,namespace:'mock'}});b.onLoad({filter:/.*/,namespace:'mock'},a=>({contents:mocks[a.path]}))}}]})
+const {stockActivityRows}=await import('data:text/javascript;base64,'+Buffer.from(out.outputFiles[0].text).toString('base64'))
+const transfer={token:'fixture',symbol:'NVDAx',amount:'0.01',from:'sender',to:'recipient',direction:'in'}
+const inbox={notices:[{id:'deposit',hash:'deposit-hash',at:1,transfer},{id:'request-transfer',hash:'request-hash',at:2,transfer}],requests:[{id:'paid-request',txHash:'request-hash',status:'paid',direction:'outgoing',symbol:'NVDAx',amount:'0.01',at:2,senderPocketId:'1',payerPocketId:'2'}]}
+const rows=stockActivityRows(inbox,[],'recipient');assert.equal(rows.length,2);assert.equal(rows[0].direction,'in');assert.equal(rows[0].memo,'NVDAx received');assert.equal(rows[1].source,'request');assert.equal(rows[1].paycrestStatus,'paid');assert.equal(rows[1].direction,'in');assert.equal(rows.filter(r=>r.txHash==='request-hash').length,1)
+console.log('PASS: deposit remains incoming, paid request retains classification and its transfer is not duplicated')

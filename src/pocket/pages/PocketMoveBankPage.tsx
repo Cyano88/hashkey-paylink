@@ -1,3 +1,4 @@
+import PocketTransactionSheet from '../components/PocketTransactionSheet'
 import PocketBottomSheet from '../components/PocketBottomSheet'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
@@ -163,7 +164,7 @@ export default function PocketMoveBankPage() {
         ? 'pending'
         : 'idle'
   const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing' || direct.status === 'processing' || direct.status === 'pending'
-  const bankReceipt = useMemo(() => (direct.status === 'sent' || direct.status === 'pending') && direct.result ? pocketActivityReceipt({
+  const bankReceipt = useMemo(() => (['sent','pending','processing'].includes(direct.status)) && direct.result ? pocketActivityReceipt({
     eventId: `bank-withdraw:${direct.result.intentId}`,
     txHash: direct.result.txHash,
     chain: 'base',
@@ -413,7 +414,7 @@ export default function PocketMoveBankPage() {
         onCopy={bank.copy}
         onClose={bank.closeShare}
       />
-      {mode === 'withdraw' && reviewOpen && !bankReceipt && <PocketBottomSheet title="Review bank transfer" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !['preparing', 'routing', 'authorizing'].includes(direct.status)} onClose={() => setReviewOpen(false)}>
+      {mode === 'withdraw' && reviewOpen && !bankReceipt && !direct.error && <PocketBottomSheet title="Review bank transfer" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !['preparing', 'routing', 'authorizing'].includes(direct.status)} onClose={() => setReviewOpen(false)}>
         <h2 className="mb-6 text-center text-2xl font-bold">NGN {formatNgnAmount(direct.amount)}</h2>
         <dl className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs dark:border-[#262626] dark:bg-[#171717]">
           {[['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', 'NGN ' + formatNgnAmount(direct.amount)], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo]] : [])].map(([label,value]) => <div key={label} className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="max-w-[65%] break-words text-right font-semibold">{value}</dd></div>)}
@@ -435,6 +436,7 @@ export default function PocketMoveBankPage() {
         {direct.error && <p role="alert" className="mt-3 text-center text-xs text-red-500">{direct.error}</p>}
         {bankLiquidity.notice && directLocked && <p className="mt-3 text-center text-xs text-gray-500">{bankLiquidity.notice}</p>}
       </PocketBottomSheet>}
+      {mode === 'withdraw' && reviewOpen && !bankReceipt && direct.error && !directLocked && <PocketTransactionSheet title="Bank transfer" state="failed" detail={direct.error} onDone={()=>setReviewOpen(false)}/>}
       {mode === 'withdraw' && bankReceipt && (
         <PocketPaymentSuccess
           receipt={bankReceipt}

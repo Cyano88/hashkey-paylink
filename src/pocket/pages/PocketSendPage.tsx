@@ -1,3 +1,5 @@
+import PocketTransactionSheet from '../components/PocketTransactionSheet'
+import { pocketActivityReceipt } from '../lib/pocketReceipt'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Check, Loader2 } from '../components/PocketIcons'
@@ -43,6 +45,8 @@ export default function PocketSendPage() {
   const [paymentRequest, setPaymentRequest] = useState<PocketRequestItem | null>(null)
   const [requestLoading, setRequestLoading] = useState(Boolean(requestId))
   const [requestError, setRequestError] = useState('')
+  const [resultDismissed, setResultDismissed] = useState(false)
+  const [attemptedAt, setAttemptedAt] = useState(0)
   const [requestConfirmed, setRequestConfirmed] = useState(false)
   const [requestAccepted, setRequestAccepted] = useState(() => requestId ? window.localStorage.getItem(`pocket.request.accepted.${requestId}`) === 'true' : false)
   const [paymentTxHash, setPaymentTxHash] = useState(() => requestId ? window.localStorage.getItem(`pocket.request.payment.${requestId}`) ?? '' : '')
@@ -165,8 +169,9 @@ export default function PocketSendPage() {
     return () => { cancelled = true; window.clearInterval(interval) }
   }, [getAccessToken, paymentRequest, requestAccepted, requestConfirmed])
   const submitPayment = useCallback(async () => {
+    setResultDismissed(false); setAttemptedAt(Date.now())
     if (!paymentRequest) {
-      await send.withdraw()
+      await send.withdraw({ preserveForm: true })
       return
     }
     try {
@@ -182,7 +187,10 @@ export default function PocketSendPage() {
     }
   }, [paymentRequest, requestLiquidity.ensureLiquidity, send.withdraw, sameChainOnly])
 
-  const requestPaid = requestConfirmed || requestAccepted
+  const requestPaid = requestConfirmed
+  const transactionState = paymentRequest && requestConfirmed ? 'successful' : send.status === 'successful' && !paymentRequest ? 'successful' : send.status === 'pending' || send.status === 'submitted' || requestAccepted || Boolean(paymentTxHash) ? 'pending' : 'failed'
+  const resultOpen = !resultDismissed && (send.status !== 'idle' || requestConfirmed || requestAccepted || Boolean(paymentTxHash) || Boolean(attemptedAt && send.error))
+  const resultReceipt = (send.reference || paymentRequest?.transactionHash) ? pocketActivityReceipt({eventId: requestId || send.reference, txHash: paymentRequest?.transactionHash || send.txHash, chain: network, payer: wallets.wallets[network]?.address || '', recipient: send.address || resolved?.address || '', memo: paymentRequest ? 'Request payment' : 'USDC sent', amount: paymentRequest?.amount || send.amount, ts: attemptedAt || paymentRequest?.updatedAt || Date.now(), source: paymentRequest ? 'request' : 'wallet-withdrawal', settlementType: 'wallet_transfer', direction: 'out', paycrestStatus: transactionState === 'successful' ? (paymentRequest ? 'paid' : 'confirmed') : transactionState === 'failed' ? 'failed' : 'submitted'}, { allowPending: true }) : null
 
   if (authenticated && (!wallets.resolved || requestLoading)) return <PocketLoadingState active="home" />
   const recipientReady = mode === 'pocket' ? Boolean(resolved) : Boolean(send.address.trim())
@@ -204,5 +212,6 @@ export default function PocketSendPage() {
       {(requestError || send.error || wallets.error || requestLiquidity.error) && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{requestError || send.error || wallets.error || requestLiquidity.error}</p>}
       <p className="text-center text-[10px] leading-4 text-gray-400">{paymentRequest ? 'The recipient, network, and amount are fixed by the accepted request. Network fees may apply.' : 'Pocket resolves the recipient on the selected network before sending. Network fees may apply.'}</p>
     </section>}
+    {resultOpen && <PocketTransactionSheet title={paymentRequest ? 'Request payment' : 'Sent'} state={transactionState} amount={(paymentRequest?.amount || send.amount) + ' USDC'} receipt={resultReceipt} detail={transactionState === 'failed' ? send.error : transactionState === 'pending' ? 'Waiting for confirmation. You can check Activity for updates.' : undefined} onDone={() => { setResultDismissed(true); if (transactionState !== 'failed') navigate(POCKET_BASE_PATH + POCKET_ROUTES.home) }} />}
   </PocketRouteShell>
 }
