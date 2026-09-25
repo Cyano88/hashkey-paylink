@@ -16,7 +16,7 @@ export default function WalletSwapPage(){
  const {sessionId=''}=useParams(),{ready,authenticated,user}=usePrivy()
  if(!/^wss_[a-f0-9]{64}$/.test(sessionId))return <p role='alert'>Invalid swap link.</p>
  return <section className='mx-auto w-full max-w-md'><HashPayLinkCheckoutBrand/>
- {!ready?<p role='status' className='p-5 text-sm'>Opening wallet?</p>:!authenticated?<div className='rounded-3xl border p-5'><h1 className='mb-4 text-lg font-bold'>Sign in to swap</h1><PocketEmailLogin context='agreement'/></div>:<ConnectedSwap key={user?.id+':'+sessionId} sessionId={sessionId}/>}
+ {!ready?<p role='status' className='p-5 text-sm'>Opening wallet...</p>:!authenticated?<div className='rounded-3xl border p-5'><h1 className='mb-4 text-lg font-bold'>Sign in to swap</h1><PocketEmailLogin context='agreement'/></div>:<ConnectedSwap key={user?.id+':'+sessionId} sessionId={sessionId}/>}
  <CheckoutTrustLine provider='hashpaylink'/></section>
 }
 function ConnectedSwap({sessionId}:{sessionId:string}){
@@ -36,7 +36,7 @@ function ConnectedSwap({sessionId}:{sessionId:string}){
  const request=useCallback((body?:Record<string,unknown>,token?:string)=>call({action:'request',method:body?'POST':'GET',payload:body||{},token}),[call])
  const stockRequest=useCallback<typeof stockSwapRequest>((_getToken,body)=>request(body),[request])
  return <>
- {session?<><h1 className='my-4 text-center text-lg font-bold'>{session.rail==='arc'?'Swap on Arc':'Swap xStocks'}</h1><p className='mb-4 text-center text-xs text-gray-500'>{session.projectName} ? Your Hash PayLink wallet</p>
+ {session?<><h1 className='my-4 text-center text-lg font-bold'>{session.rail==='arc'?'Swap on Arc':'Swap xStocks'}</h1><p className='mb-4 text-center text-xs text-gray-500'>{session.projectName} &middot; Your Hash PayLink wallet</p>
  {!enabled&&<p role='status' className='mb-4 text-xs text-gray-500'>New swaps are paused. Existing transaction recovery remains available.</p>}
  {session.rail==='arc'?<ArcSwap request={request} scope={session.id}/>:<PocketPaymentSecurityGate email={email} getAccessToken={getAccessToken}><StockSwap request={stockRequest}/></PocketPaymentSecurityGate>}
  </>:!error&&<div className='h-40 animate-pulse rounded-3xl bg-gray-100 dark:bg-white/5' role='status' aria-label='Loading swap'/>}
