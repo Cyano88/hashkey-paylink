@@ -1,6 +1,7 @@
+import { formatUnits, isAddress, parseUnits } from 'viem'
+import { paymentFeeBreakdown } from '../../src/lib/platformFees.js'
 import { rankPocketDataPlans } from './bills-popularity.js'
 import { randomUUID } from 'node:crypto'
-import { isAddress } from 'viem'
 import { createVtpassRequestId, type VtpassTransactionResult } from '../vtpass-client.js'
 import type { VtpassPhase0Config } from '../vtpass-config.js'
 import {
@@ -44,6 +45,8 @@ export type PocketBillsIntent = {
   amountNgn: string
   amountNgnMinor: string
   amountUsdc: string
+  billAmountUsdc?: string
+  platformFeeUsdc?: string
   fxRateNgnPerUsdc: string
   network: 'base'
   treasuryAddress: string
@@ -342,6 +345,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     customerAddress?: string
     amountNgn: string | number
     amountUsdc: string | number
+    chargePlatformFee?: boolean
     fxRateNgnPerUsdc: string | number
     payerWallet: string
     quoteExpiresAt: number
@@ -359,7 +363,10 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const customerAddress = cleanText(input.customerAddress, 220)
     const amountNgn = canonicalDecimal(input.amountNgn, 2, 'Naira amount')
     const amountNgnMinor = decimalToMinor(amountNgn, 2)
-    const amountUsdc = canonicalDecimal(input.amountUsdc, 6, 'USDC amount')
+    const billAmountUsdc = canonicalDecimal(input.amountUsdc, 6, 'USDC amount')
+    const fees = paymentFeeBreakdown(parseUnits(billAmountUsdc, 6), 0n, 'gross', !input.chargePlatformFee)
+    const amountUsdc = formatUnits(fees.total, 6)
+    const platformFeeUsdc = formatUnits(fees.platformFee, 6)
     const fxRateNgnPerUsdc = canonicalDecimal(input.fxRateNgnPerUsdc, 6, 'FX rate')
     const payerWallet = cleanText(input.payerWallet, 80)
     const treasuryAddress = config.treasuryAddress
@@ -448,6 +455,8 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         amountNgn,
         amountNgnMinor,
         amountUsdc,
+        billAmountUsdc,
+        platformFeeUsdc,
         fxRateNgnPerUsdc,
         network: 'base',
         treasuryAddress,

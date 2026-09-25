@@ -113,12 +113,18 @@ export function createVtpassBillsWebhookHandler(dependencies: VtpassWebhookDepen
   }
 }
 
+export function vtpassWebhookReconciliationEnabled(config: ReturnType<typeof readVtpassPhase0Config>) {
+  // Reconcile existing purchases even when new vending is paused.
+  // The callback itself is never evidence: an authenticated requery is required.
+  return config.canReadProvider
+}
+
 function defaultDependencies(): VtpassWebhookDependencies {
   const config = readVtpassPhase0Config()
   return {
     store: createPocketBillsStore({ config }),
     provider: createVtpassClient({ config }),
-    enabled: config.enabled && (config.canSandboxVend || config.canLiveVend),
+    enabled: vtpassWebhookReconciliationEnabled(config),
     log: (message, details) => console.warn(message, details),
   }
 }

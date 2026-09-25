@@ -380,6 +380,7 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
         customerAddress,
         amountNgn,
         amountUsdc: usdcForNgn(amountNgn, fx.rate),
+        chargePlatformFee: true,
         fxRateNgnPerUsdc: String(fx.rate),
         payerWallet,
         // The FX rate is validated when it is read, then fixed for this intent.
