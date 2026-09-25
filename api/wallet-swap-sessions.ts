@@ -35,7 +35,7 @@ export function createWalletSwapSessionHandlers(overrides:Partial<typeof default
    if(!d.hasStore())fail(503,'Durable storage is unavailable.')
    const rail=req.body?.rail as Rail,userId=req.body?.userId,replay=req.headers['idempotency-key']
    if(!['arc','xlayer'].includes(rail)||typeof userId!=='string'||!/^did:privy:[a-zA-Z0-9_-]+$/.test(userId))fail(400,'Choose a supported network and linked wallet account.')
-   if(!policy.capabilities.includes(rail==='arc'?'arc_agreements':'xstocks_agreements'))fail(403,'This wallet network is not enabled for your project.')
+   if(!policy.capabilities.includes(rail==='arc'?'swap_arc':'swap_xlayer'))fail(403,'This wallet network is not enabled for your project.')
    if(typeof replay!=='string'||!/^[a-zA-Z0-9:_-]{16,128}$/.test(replay))fail(400,'A 16-128 character idempotency key is required.')
    const authority=agreementPrivyAuthority(d.env()),id='wss_'+hash(JSON.stringify([policy.partnerId,replay]))
    const digest=hash(JSON.stringify([policy.partnerId,authority.appId,userId,rail]))

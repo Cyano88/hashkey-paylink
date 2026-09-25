@@ -1,3 +1,5 @@
+import ProductPicker from '../developer/ProductPicker'
+import {needsSettlementRouting, type ProductCapability} from '../lib/developerProducts'
 import { isAgentCheckoutNetwork, developerProductNetworks } from '../lib/developerNetworkPolicy'
 import PaymentActivityPanel from '../developer/PaymentActivityPanel'
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
@@ -10,7 +12,7 @@ import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
 
 type Network = 'base' | 'arbitrum' | 'arc'
-type Capability = 'hosted_checkout' | 'polymarket_funding' | 'arc_agreements' | 'xstocks_agreements'
+type Capability = ProductCapability
 type CheckoutMode = 'human' | 'agentic'
 type CreateProjectForm = { name: string; website: string; useCase: string; checkoutMode: CheckoutMode | ''; capabilities: Capability[] }
 type Project = {
@@ -365,39 +367,20 @@ function CheckoutModePicker({ value, onChange }: { value: CheckoutMode | ''; onC
 }
 
 function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: CheckoutMode; value: Capability[]; onChange: (value: Capability[]) => void }) {
-  const allOptions: Array<{ key: Capability; title: string; copy: string }> = [
-    { key: 'hosted_checkout', title: checkoutMode === 'agentic' ? 'Agentic x402 checkout' : 'Hosted checkout', copy: checkoutMode === 'agentic' ? 'Accept fixed-price service payments from compatible agent wallets.' : 'Accept payments through the hosted human payer experience.' },
-    { key: 'polymarket_funding', title: 'Polymarket funding', copy: 'Create verified bridge-backed checkouts for a customer Polymarket wallet.' },
-    { key: 'arc_agreements', title: 'Arc Agreements · Private pilot', copy: 'Create fixed, progressive, or milestone USDC agreements on Arc Mainnet. Drafts are available; mainnet activation awaits deployment review.' },
-  ]
-  allOptions.push({ key: 'xstocks_agreements', title: 'xStocks', copy: 'Add X Layer stock payments and swaps to your configured project. Separate keys and project activation are required; selecting this does not enable funding.' })
-  const options = allOptions.filter(option => checkoutMode === 'human' || !['polymarket_funding', 'xstocks_agreements'].includes(option.key))
-  function toggle(key: Capability) {
-    const next = value.includes(key) ? value.filter(item => item !== key) : [...value, key]
-    if (next.length && next.some(product => product !== 'xstocks_agreements')) onChange(next)
-  }
-  return <div className="mt-6">
-    <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">API products</p>
-    <div className="mt-2 grid gap-2 sm:grid-cols-2">{options.map(option => {
-      const active = value.includes(option.key)
-      return <button key={option.key} type="button" onClick={() => toggle(option.key)} className={cn('rounded-2xl border p-4 text-left transition', active ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/10 dark:bg-blue-400/10' : 'border-gray-200 dark:border-white/10')}>
-        <span className="flex items-center gap-2 text-xs font-semibold text-gray-950 dark:text-white"><span className={cn('grid h-4 w-4 place-items-center rounded-full border', active ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300')}>{active ? <Check className="h-2.5 w-2.5" /> : null}</span>{option.title}</span>
-        <span className="mt-2 block text-sm leading-5 text-gray-500 dark:text-gray-400">{option.copy}</span>
-      </button>
-    })}</div>
-  </div>
+  return <ProductPicker mode={checkoutMode} value={value} onChange={onChange}/>
 }
 
 function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, onSave }: { draft: Project; setDraft: (project: Project) => void; institutions: Institution[]; institutionsLoading: boolean; busy: boolean; onSave: () => void }) {
   const bankAccountNumber = draft.bankAccountNumber ?? ''
-  const agreementOnly = draft.capabilities.length === 1 && draft.capabilities[0] === 'arc_agreements'
+  const routingRequired = needsSettlementRouting(draft.capabilities)
+  const agreementOnly = draft.capabilities.includes('arc_agreements') && !draft.capabilities.some(capability=>['hosted_checkout','polymarket_funding'].includes(capability))
   const supportedNetworks = developerProductNetworks(draft.checkoutMode, draft.capabilities)
   const unsupportedNetworks = draft.networks.some(network => !supportedNetworks.includes(network))
   function updateProducts(capabilities: Capability[]) {
     const supported = developerProductNetworks(draft.checkoutMode, capabilities)
     let networks = draft.networks.filter(network => supported.includes(network))
     if (!networks.length) networks = [...supported]
-    const onlyAgreements = capabilities.length === 1 && capabilities[0] === 'arc_agreements'
+    const onlyAgreements = !capabilities.includes('hosted_checkout')
     setDraft({ ...draft, capabilities, networks, ...(onlyAgreements ? { settlementMode: 'usdc' as const } : {}), defaultNetwork: networks.includes(draft.defaultNetwork) ? draft.defaultNetwork : networks[0] ?? 'arc' })
   }
   function toggleNetwork(network: Network) {
@@ -429,6 +412,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
             alt="Checkout brand mark preview"
             className={cn('h-8 w-8 object-contain', !draft.brandImageUrl && 'invert dark:invert-0')}
             onError={event => {
+              if (event.currentTarget.getAttribute('src') === '/hash-logo-transparent.png') { event.currentTarget.style.visibility = 'hidden'; return }
               event.currentTarget.onerror = null
               event.currentTarget.src = '/hash-logo-transparent.png'
               event.currentTarget.className = 'h-8 w-8 object-contain invert dark:invert-0'
@@ -443,8 +427,8 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       <Field label="Brand mark URL" className="mt-3"><input className={fieldClass()} value={draft.brandImageUrl} onChange={event => setDraft({ ...draft, brandImageUrl: event.target.value })} placeholder="https://yourplatform.com/brand/mark.png" /></Field>
     </div>
 
-    <div className="mt-7">
-      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Settlement</p>
+    {routingRequired && <><div className="mt-7">
+      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Settlement for checkout and Arc agreements</p>
       {draft.checkoutMode === 'agentic' || agreementOnly
         ? <div className="mt-2 rounded-xl bg-gray-100 px-3 py-3 text-xs font-semibold text-gray-700 dark:bg-white/[0.05] dark:text-gray-200">Receive USDC</div>
         : <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1 dark:bg-white/[0.05]">
@@ -454,7 +438,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     </div>
 
     <div className="mt-7">
-      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{agreementOnly ? 'Agreement network' : 'Payment networks'}</p>
+      <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">{agreementOnly ? 'Arc agreement settlement' : 'Settlement networks'}</p>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {NETWORKS.filter(network => network.key !== 'solana' && supportedNetworks.includes(network.key)).map(network => {
           const active = network.key !== 'solana' && draft.networks.includes(network.key)
@@ -464,7 +448,7 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
       </div>
     </div>
 
-    {draft.capabilities.includes('arc_agreements') && <p className="mt-3 text-sm leading-6 text-gray-500">Agreements use Arc Mainnet USDC only. {agreementOnly ? '' : 'Other networks shown here apply to your other selected products.'}</p>}
+    {draft.capabilities.includes('arc_agreements') && <p className="mt-3 text-sm leading-6 text-gray-500">Arc agreements use USDC on Arc Mainnet. X Layer agreements and Swap use the networks selected in their own sections above.</p>}
     <div className="mt-5 space-y-3">
       {draft.settlementMode === 'usdc' && draft.networks.filter(network => supportedNetworks.includes(network)).map(network => <Field key={network} label={`${network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1)} receiving address`}>
         <input className={fieldClass()} value={draft.recipients[network] ?? ''} onChange={event => setDraft({ ...draft, recipients: { ...draft.recipients, [network]: event.target.value } })} placeholder="0x..." />
@@ -473,6 +457,8 @@ function SetupPanel({ draft, setDraft, institutions, institutionsLoading, busy, 
     </div>
 
     {draft.settlementMode === 'usdc' && <Field label="Default network" className="mt-4"><PocketSelect value={draft.defaultNetwork} options={draft.networks.filter(network => supportedNetworks.includes(network)).map(network => ({ value: network, label: network === 'arc' ? 'Arc' : network[0].toUpperCase() + network.slice(1) }))} onChange={value => setDraft({ ...draft, defaultNetwork: value as Network })} ariaLabel="Default payment network" /></Field>}
+    </>}
+    {!routingRequired && <p className="mt-5 rounded-xl bg-gray-50 p-4 text-sm leading-6 text-gray-500 dark:bg-white/5">No project receiving address is needed for these products. Swaps use the connected user wallet; X Layer agreement recipients and eligible stock assets are bound to each agreement.</p>}
     <Field label="Allowed return origin" className="mt-4"><input className={fieldClass()} value={draft.allowedOrigins[0] ?? ''} onChange={event => setDraft({ ...draft, allowedOrigins: [event.target.value] })} placeholder="https://yourplatform.com" /></Field>
 
     {draft.settlementMode === 'ngn' && <div className="mt-6 grid gap-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03] sm:grid-cols-2">
@@ -499,9 +485,9 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
       {newKey?.environment === environment && <SecretReveal label="Copy this key now" value={newKey.value} />}
       <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
         <input className={fieldClass()} value={keyNames[environment]} onChange={event => setKeyNames({ ...keyNames, [environment]: event.target.value })} aria-label={`${title} key name`} placeholder="Key name" />
-        <button type="button" disabled={environment === 'test' || busy || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create API key</button>
+        <button type="button" disabled={environment === 'test' || !needsSettlementRouting(project.capabilities) || busy || project.settlementStatus !== 'ready' || project.operationalStatus === 'suspended' || !keyNames[environment].trim()} onClick={() => onCreate(environment)} className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"><Plus className="h-4 w-4" /> Create API key</button>
       </div>
-      <div className="mt-4 space-y-2">{keys.length ? keys.map(key => <div key={key.id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm dark:bg-white/[0.06] dark:text-gray-300"><KeyRound className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{key.name}</p><p className="mt-0.5 font-mono text-xs text-gray-400">{key.prefix}••••</p>{key.scopes && <p className="mt-1 text-xs text-gray-500">Scoped checkout key · {key.expiresAt && Date.parse(key.expiresAt) <= Date.now() ? 'Expired' : 'Expires ' + new Date(key.expiresAt!).toLocaleDateString()}</p>}</div>{key.revokedAt ? <span className="text-xs font-semibold text-gray-400">Revoked</span> : <button type="button" disabled={busy} onClick={() => onRevoke(key.id)} className="text-xs font-semibold text-red-500">Revoke</button>}</div>) : <EmptyState icon={KeyRound} text={`No ${environment} keys yet.`} />}</div>
+      <div className="mt-4 space-y-2">{keys.length ? keys.map(key => <div key={key.id} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 dark:bg-white/[0.04]"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-gray-600 shadow-sm dark:bg-white/[0.06] dark:text-gray-300"><KeyRound className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{key.name}</p><p className="mt-0.5 font-mono text-xs text-gray-400">{key.prefix}••••</p>{key.scopes && <p className="mt-1 text-xs text-gray-500">Scoped backend key · {key.expiresAt && Date.parse(key.expiresAt) <= Date.now() ? 'Expired' : 'Expires ' + new Date(key.expiresAt!).toLocaleDateString()}</p>}</div>{key.revokedAt ? <span className="text-xs font-semibold text-gray-400">Revoked</span> : <button type="button" disabled={busy} onClick={() => onRevoke(key.id)} className="text-xs font-semibold text-red-500">Revoke</button>}</div>) : <EmptyState icon={KeyRound} text={`No ${environment} keys yet.`} />}</div>
     </section>
   }
 
@@ -509,9 +495,10 @@ function KeysPanel({ project, keyNames, setKeyNames, newKey, busy, onCreate, onR
     <div className="mt-5 rounded-xl border border-gray-200 px-3 py-3 text-xs font-semibold text-gray-700 dark:border-white/10 dark:text-gray-200">{project.checkoutMode === 'agentic' ? 'Agent project keys' : 'Human project keys'} <span className="ml-1 font-normal text-gray-400">Access follows the enabled products, network rules and key scopes.</span></div>
     {project.settlementStatus !== 'ready' && <p className="mt-5 text-xs text-amber-600 dark:text-amber-300">Complete and save the active settlement configuration before creating a key.</p>}
     {project.operationalStatus === 'suspended' && <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200">This project is suspended. {project.suspensionReason || 'Contact Hash PayLink operations before creating new credentials.'}</p>}
+    <p className="mt-4 text-sm leading-6 text-gray-500">Swap requires a separate <code>wallet:swap</code> key. X Layer agreements require <code>xstocks-agreement:read</code> and <code>xstocks-agreement:create</code>. Create these using the owner-approved CLI; general checkout keys do not enable Swap.</p>
     <div className="mt-6 grid gap-4 lg:grid-cols-2">
       {environmentSection('test', 'Sandbox keys - unavailable', `New sandbox keys are disabled until test environments are connected. Existing keys remain separate from live keys. Project mode: ${project.checkoutMode === 'agentic' ? 'agentic x402' : 'human checkout'}.`)}
-      {environmentSection('live', 'Live keys', `Use this project's configured live routes. Scoped CLI keys may permit checkout only.`)}
+      {environmentSection('live', 'Live keys', `General keys use configured settlement routes. Create separate scoped keys through the CLI for wallet operations.`)}
     </div>
   </div>
 }
