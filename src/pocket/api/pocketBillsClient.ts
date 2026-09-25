@@ -403,6 +403,7 @@ export async function processPocketBillRefund(input: {
 }) {
   const response = await (input.fetcher ?? fetch)(POCKET_API.billsRefund, {
     method: 'POST',
+    signal: AbortSignal.timeout(15_000),
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${input.accessToken}`,

@@ -103,9 +103,10 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     receiptId: bills.intent.requestId,
     receiptHash: bills.intent.txHash || bills.intent.requestId,
     title: pocketBillTitle(bills.intent.category),
-    status: bills.intent.state === 'delivered' ? 'confirmed' : bills.intent.state === 'refunded' ? 'reversed' : ['failed','refund_eligible'].includes(bills.intent.state) ? 'failed' : 'processing',
+    status: bills.intent.state === 'delivered' ? 'confirmed' : bills.intent.state === 'refunded' ? 'refunded' : bills.intent.state === 'refund_eligible' ? 'refund available' : ['refunding','refund_submitted','refund_pending'].includes(bills.intent.state) ? 'refunding' : bills.intent.state === 'failed' ? 'failed' : 'processing',
     eventId: bills.intent.id,
     txHash: bills.intent.txHash || '',
+    refundTxHash: bills.intent.refundTxHash || undefined,
     chain: bills.intent.network,
     payer: bills.intent.payerWallet,
     memo: bills.intent.variationName || bills.intent.serviceName,
@@ -279,7 +280,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
               <label className="block">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Electricity amount</span>
                 <span className="mt-1 flex items-center rounded-xl border border-gray-200 bg-white px-3 focus-within:border-gray-400 dark:border-[#262626] dark:bg-[#171717]"><span className="text-sm font-black text-gray-400">₦</span><input type="text" inputMode="decimal" disabled={locked} value={bills.amountNgn} onChange={event => bills.setAmountNgn(event.target.value)} placeholder="100" className="min-w-0 flex-1 bg-transparent px-2 py-3 text-sm font-medium text-gray-900 outline-none disabled:opacity-60 dark:text-white" /></span>
-                {bills.verification?.minimumAmount !== null && bills.verification?.minimumAmount !== undefined && <span className="mt-1.5 block text-[10px] font-semibold text-gray-400">Minimum for this meter: {money(String(bills.verification.minimumAmount))}</span>}
+                {Number(bills.verification?.minimumAmount) > 0 && <span className="mt-1.5 block text-[10px] font-semibold text-gray-400">Minimum amount: {money(String(bills.verification?.minimumAmount))}</span>}
               </label>
             )}
 
@@ -350,7 +351,9 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
         </>
       )}
       {showResult && !resultDismissed && billReceipt && (
-        <PocketPaymentSuccess receipt={billReceipt} onDone={() => {setResultDismissed(true); bills.dismiss()}} />
+        <PocketPaymentSuccess receipt={billReceipt} onDone={() => {setResultDismissed(true); bills.dismiss()}}>
+          {['refund_eligible','refunding','refund_submitted'].includes(bills.intent?.state || '') && <button type="button" disabled={bills.refundBusy} onClick={() => void bills.claimRefund()} className="min-h-12 w-full rounded-xl bg-gray-950 text-xs font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950">{bills.refundBusy ? 'Checking refund' : bills.intent?.state === 'refund_eligible' ? 'Claim refund' : 'Check refund'}</button>}
+        </PocketPaymentSuccess>
       )}
     </div>
   )

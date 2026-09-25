@@ -162,6 +162,7 @@ const handler = createPocketBillsRefundHandler({
   provider,
   async verifyTransfer(input) {
     calls.verified += 1
+    assert.equal(input.confirmation, 'base-included')
     assert.equal(input.payer, treasuryAddress)
     assert.equal(input.recipient, payerWallet)
     return { ok: true, amountUnits: '72000', amount: '0.072' }

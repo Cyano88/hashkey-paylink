@@ -100,7 +100,7 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
         break
       }
     }
-    await activity.refresh()
+    await activity.refresh(true)
     return result.intent.state
   }, [activity.refresh, getAccessToken])
 

@@ -121,6 +121,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     bankSettlementStatus: source === 'bank-withdraw' ? row.bankSettlementStatus || row.paycrestStatus : undefined,
     eventId: row.eventId,
     txHash: row.txHash,
+    refundTxHash: row.refundTxHash,
     chain: row.chain || 'base',
     payer: row.payer,
     memo: row.memo,

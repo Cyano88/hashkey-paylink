@@ -34,9 +34,11 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
     rows.set(rowKey(row), { ...row, ...savedStatus, ...receiptIdentity, ...(bank && row.handoffVerified === undefined && old?.handoffVerified ? {handoffVerified:true} : {}), ...(bank && !row.bankSettlementStatus && !row.paycrestStatus?.trim() && old?.bankSettlementStatus ? {bankSettlementStatus:old.bankSettlementStatus} : {}), ts: old?.ts || row.ts })
   }
   const values = [...rows.values()]
+  const refundDeposits = new Set(values.filter(row => row.source === 'bills' && row.refundTxHash).map(row => transactionKey({ ...row, txHash: row.refundTxHash! }) + ':' + Number(row.amount)))
   const contextual = new Set(values.filter(row => row.source && !['wallet-deposit', 'wallet-withdrawal'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))
   return values.filter(row => !['wallet-deposit', 'wallet-withdrawal'].includes(row.source || '')
-    || !contextual.has(transactionKey(row) + ':' + (row.direction || 'in')))
+    || (!contextual.has(transactionKey(row) + ':' + (row.direction || 'in'))
+      && !(row.source === 'wallet-deposit' && (!row.assetSymbol || row.assetSymbol === 'USDC') && refundDeposits.has(transactionKey(row) + ':' + Number(row.amount)))))
     .sort((a, b) => b.ts - a.ts || rowKey(a).localeCompare(rowKey(b)))
 }
 
