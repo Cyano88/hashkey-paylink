@@ -1,3 +1,4 @@
+import { selectHostedWallet } from '../../lib/xstocksAgreement/hostedWallet';
 // Signing/reconciliation adapted from PrivyTradeCheckout; work terms remain independent.
 import { useEffect, useRef, useState } from 'react';
 import { usePrivy, useWallets, useSendTransaction } from '@privy-io/react-auth';
@@ -11,8 +12,8 @@ const button='block min-h-11 w-full rounded-full bg-gray-950 px-4 text-xs font-b
 type WorkStatus=TradeXLayerStatus&{wallet:{address:string}|null;clientAddress?:string;workerAddress?:string;customerReady:boolean;providerReady:boolean;fundBy?:number;workEvidence?:Array<{hash:string;body:string;actor:string;createdAt:string}>};
 type Pending={transaction:TradeXLayerTransaction;hash?:Hex};
 export default function HostedWorkCheckout({item,request,onUpdated}:{item:ServiceRequest;request(payload:Record<string,unknown>):Promise<unknown>;onUpdated():void}){
-  const {user}=usePrivy(),{ready,wallets}=useWallets(),{sendTransaction}=useSendTransaction();
-  const embedded=wallets.filter(wallet=>wallet.walletClientType==='privy'),wallet=ready&&embedded.length===1?embedded[0]:undefined;
+  const {user,authenticated}=usePrivy(),{wallets}=useWallets(),{sendTransaction}=useSendTransaction();
+  const wallet=selectHostedWallet(authenticated,user,wallets);
   const terms=item.terms.find(term=>term.version===item.activeVersion)!,payment=terms.xlayerPayment!;
   const isTrade=terms.kind==='trade',labels=isTrade?TRADE_ACTION_LABELS:WORK_ACTION_LABELS;
   const sellerLabel=isTrade?'Seller':'Worker',buyerLabel=isTrade?'Buyer':'Client';

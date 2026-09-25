@@ -1,3 +1,4 @@
+import { pocketEmbeddedAddresses, retryPocketEmbeddedWallet } from '../pocket/lib/pocketEmbeddedWallet'
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth'
@@ -32,7 +33,7 @@ export default function XStocksAgreementPage(){
   </section>
 }
 function ConnectedAgreement({agreementId}:{agreementId:string}){
-  const {user,getAccessToken}=usePrivy(),{ready,wallets}=useWallets(),{createWallet}=useCreateWallet()
+  const {user,getAccessToken,ready,authenticated}=usePrivy(),{wallets}=useWallets(),{createWallet}=useCreateWallet()
   const [session,setSession]=useState<{reply:HostedReply;request:ReturnType<typeof createHostedWorkRequest>}>()
   const [error,setError]=useState(''),[retry,setRetry]=useState(0),[creating,setCreating]=useState(false)
   const creatingRef=useRef(false),alive=useRef(true)
@@ -58,11 +59,11 @@ function ConnectedAgreement({agreementId}:{agreementId:string}){
     return()=>{active=false;controller.abort()}
   },[agreementId,retry,getAccessToken])
   const embedded=wallets.filter(wallet=>wallet.walletClientType==='privy')
-  const hasLinkedWallet=user?.linkedAccounts.some(account=>account.type==='wallet'&&account.chainType==='ethereum'&&account.walletClientType==='privy')
+  const hasLinkedWallet=pocketEmbeddedAddresses(user).length>0
   async function setupWallet(){
-    if(creatingRef.current||!ready||hasLinkedWallet||embedded.length||!session||session.reply.agreement.accepted[session.reply.role])return
+    if(creatingRef.current||!ready||!authenticated||!user?.id||hasLinkedWallet||embedded.length||!session||session.reply.agreement.accepted[session.reply.role])return
     creatingRef.current=true;setCreating(true);setError('')
-    try{await createWallet()}catch(error){if(alive.current)setError((error as Error).message)}
+    try{await retryPocketEmbeddedWallet(user.id,createWallet)}catch(error){if(alive.current)setError((error as Error).message)}
     finally{if(alive.current){creatingRef.current=false;setCreating(false)}}
   }
   const agreement=session?.reply.agreement
@@ -78,7 +79,7 @@ function ConnectedAgreement({agreementId}:{agreementId:string}){
       {agreement.terms.kind==='trade'&&agreement.terms.trade&&<dl className='mt-4 space-y-2 text-xs text-gray-500'>
         <div><dt>Item quantity</dt><dd>{agreement.terms.trade.price}</dd></div>
         <div><dt>Delivery fee</dt><dd>{agreement.terms.trade.deliveryFee}</dd></div>
-        <div><dt>Handover</dt><dd>{agreement.terms.trade.handover} ? {agreement.terms.trade.location}</dd></div>
+        <div><dt>Handover</dt><dd>{agreement.terms.trade.handover} - {agreement.terms.trade.location}</dd></div>
         {agreement.terms.trade.carrier&&<div><dt>Carrier</dt><dd>{agreement.terms.trade.carrier}</dd></div>}
         <div><dt>Return terms</dt><dd className='whitespace-pre-wrap break-words'>{agreement.terms.trade.returns}</dd></div>
       </dl>}
