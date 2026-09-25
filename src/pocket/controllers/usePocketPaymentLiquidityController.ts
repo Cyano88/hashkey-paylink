@@ -1,3 +1,5 @@
+import { cachedPocketDirectLiquidity } from '../lib/pocketDirectLiquidity'
+import type { PocketBalanceSnapshot } from '../lib/pocketBalanceCache'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formatUnits, parseUnits } from 'viem'
 import { bridgeCircleEvmEmailWallet, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
@@ -96,6 +98,7 @@ export default function usePocketPaymentLiquidityController(input: {
   getEvmSession(network: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon', walletAddress: string): Promise<CircleEvmEmailSession>
   getSolanaSession(walletAddress: string): Promise<PocketSolanaEmailSession>
   refreshBalances(): Promise<unknown>
+  readRoutingSnapshot?(): PocketBalanceSnapshot | undefined
   persistence?: PocketPaymentLiquidityPersistence
 }) {
   const amountUnits = useMemo(() => {
@@ -110,18 +113,23 @@ export default function usePocketPaymentLiquidityController(input: {
   const [status, setStatus] = useState<LiquidityStatus>('idle')
   const [error, setError] = useState('')
   const run = useRef(0)
+  const inspection = useRef<{key:string;promise:Promise<Awaited<ReturnType<typeof inspectLiquidity>>>} | null>(null)
 
   const inspect = useCallback(async () => {
     if (amountUnits <= 0n) throw new Error('Payment amount is unavailable.')
     const accessToken = await input.getAccessToken()
     if (!accessToken) throw new Error('Sign in again to check Pocket balances.')
-    const result = await inspectLiquidity({
-      accessToken,
-      destination: input.destination,
-      amountUnits,
-    })
-    return { ...result, accessToken }
-  }, [amountUnits, input.destination, input.getAccessToken])
+    const direct = cachedPocketDirectLiquidity(input.readRoutingSnapshot?.(), input.destination, amountUnits)
+    if (direct) return { ...direct, accessToken }
+    const key = accessToken + ':' + input.destination + ':' + amountUnits
+    let pending = inspection.current?.key === key ? inspection.current.promise : null
+    if (!pending) {
+      pending = inspectLiquidity({ accessToken, destination: input.destination, amountUnits })
+      inspection.current = {key, promise:pending}
+    }
+    try { return { ...await pending, accessToken } }
+    finally { if (inspection.current?.promise === pending) inspection.current = null }
+  }, [amountUnits, input.destination, input.getAccessToken, input.readRoutingSnapshot])
 
   useEffect(() => {
     const current = ++run.current
@@ -180,7 +188,7 @@ export default function usePocketPaymentLiquidityController(input: {
         return destinationWallet
       }
       if (currentRoute.kind === 'direct') {
-        if (checkpoint?.phase === 'submitted' || checkpoint?.phase === 'completed') {
+        if (checkpoint?.phase === 'submitted') {
           await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash: checkpoint.txHash })
         } else if (checkpoint?.phase === 'started') {
           await input.persistence?.update(inspected.accessToken, { phase: 'failed' })
@@ -188,7 +196,7 @@ export default function usePocketPaymentLiquidityController(input: {
         setStatus('ready')
         return destinationWallet
       }
-      let activeCheckpoint = checkpoint?.phase === 'completed' ? null : checkpoint
+      let activeCheckpoint = checkpoint
       const sourceWallet = inspected.wallets[currentRoute.source]
         ?? await input.ensureWallet(currentRoute.source)
       if (!sourceWallet?.walletId || !sourceWallet.blockchain || !destinationWallet.address) {

@@ -1101,7 +1101,7 @@ export async function reconcileCircleEvmEmailWithdraw(params: {
 }) {
   const startedAt = Date.now()
   const timeoutMs = Math.max(2_500, params.timeoutMs ?? 180_000)
-  const transactionId = params.transactionId ?? await pollChallengeTransactionId(
+  const transactionId = params.transactionId?.trim() || await pollChallengeTransactionId(
     params.session,
     params.challengeId,
     Math.min(30_000, timeoutMs),

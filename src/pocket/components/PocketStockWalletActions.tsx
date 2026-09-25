@@ -1,3 +1,5 @@
+import PocketSlideAction from './PocketSlideAction'
+import PocketBottomSheet from './PocketBottomSheet'
 import PocketTransactionSheet from './PocketTransactionSheet'
 import { pocketActivityReceipt } from '../lib/pocketReceipt'
 import { useEffect, useState } from 'react'
@@ -45,9 +47,9 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
   const send = async () => {
     if (!review || busy) return
     setBusy(true); setError('')
-    setResult({amount:review.amount,symbol:review.asset.symbol,recipient:review.recipient,hash:'',at:Date.now(),failed:false}); setResultOpen(true)
-    try { const hash = await wallet.send(review, {onSubmitted:hash=>setResult(previous=>previous?{...previous,hash}:previous)}); setResult(previous=>previous?{...previous,hash}:previous); setReview(null); setAmount('') }
-    catch (e) { setResult(previous=>previous?{...previous,failed:true}:previous); setReconnectWallet(!!(e as {reconnectWallet?:boolean})?.reconnectWallet);setError(e instanceof Error ? e.message : 'Could not send. Check Activity before retrying.') }
+    setResult({amount:review.amount,symbol:review.asset.symbol,recipient:review.recipient,hash:'',at:Date.now(),failed:false}); setResultOpen(false)
+    try { const hash = await wallet.send(review, {beforeSubmit:async()=>{setResultOpen(true)},onSubmitted:hash=>setResult(previous=>previous?{...previous,hash}:previous)}); setResult(previous=>previous?{...previous,hash}:previous); setReview(null); setAmount('') }
+    catch (e) { setResult(previous=>previous?{...previous,failed:true}:previous); setResultOpen(true); setReconnectWallet(!!(e as {reconnectWallet?:boolean})?.reconnectWallet);setError(e instanceof Error ? e.message : 'Could not send. Check Activity before retrying.') }
     finally { setBusy(false) }
   }
   if (!wallet.address) return <section className={panel}><h2 className="text-sm font-bold">Your XStocks wallet</h2><p className="my-4 text-xs leading-5 text-gray-400">Open your Pocket wallet on X Layer to deposit or send assets.</p><button type="button" className={button} disabled={!wallet.ready || wallet.busy} onClick={wallet.connect}>{wallet.busy ? 'Opening…' : 'Open wallet'}</button>{wallet.error && <p role="alert" className="mt-3 text-xs text-red-500">{wallet.error}</p>}</section>
@@ -69,22 +71,24 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
       <p className="my-5 break-all rounded-2xl bg-gray-100 p-4 font-mono text-xs dark:bg-white/5">{wallet.address}</p>
       <button type="button" className={button} onClick={async () => { try { await navigator.clipboard.writeText(wallet.address!); setCopied(true) } catch { setError('Could not copy. Select the address above.') } }}><Copy className="mr-2 inline h-4 w-4" />{copied ? 'Copied' : 'Copy deposit address'}</button>
       <p className="mt-4 text-xs leading-5 text-gray-400">Keep a small amount of OKB for X Layer network fees.</p>
-    </> : review ? <>
-      <h2 className="text-sm font-bold">Review send</h2><p className="mt-5 text-2xl font-bold">{review.amount} {review.asset.symbol}</p>
-      <p className="mt-4 text-[10px] text-gray-400">To · X Layer</p><p className="mt-1 break-all font-mono text-xs">{review.recipient}</p>
-      <p className="my-5 text-xs text-gray-400">Estimated network fee: {stockQuantity(review.fee, 18)} OKB</p>
-      <button type="button" className={button} disabled={busy || wallet.busy || pending} onClick={send}>{busy || wallet.busy ? 'Sending…' : 'Send ' + review.asset.symbol}</button>
-      <button type="button" disabled={busy || wallet.busy} onClick={() => setReview(null)} className="mt-2 min-h-11 w-full text-xs text-gray-500">Edit</button>
     </> : <>
       <h2 className="mb-5 text-sm font-bold">Send on X Layer</h2>
       <div className="mb-4"><p className="mb-2 text-[11px] text-gray-400">Asset</p>{assetPicker}<p className="mt-2 text-[11px] text-gray-400">{wallet.balanceStale ? 'Last known' : 'Available'} · {tokens.find(t => t.address === asset.address)?.balance == null ? '\u2014' : formatStockQuantity(tokens.find(t => t.address === asset.address)!.balance!)} {asset.symbol}</p></div>
       <label className="mb-4 block text-[11px] text-gray-400">Recipient<input className={field + ' mt-2'} autoComplete="off" spellCheck={false} placeholder="0x…" value={recipient} onChange={e => setRecipient(e.target.value)} /></label>
       <label className="mb-5 block text-[11px] text-gray-400">Amount<input className={field + ' mt-2'} inputMode="decimal" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} /></label>
-      <button type="button" className={button} disabled={busy || wallet.busy || pending || !recipient || !amount} onClick={prepare}>{busy ? 'Checking…' : pending ? 'Transaction pending' : 'Review send'}</button>
+      <PocketSlideAction approvalRequired={false} onPrepare={async()=>{}} status={busy ? 'pending' : 'idle'} disabled={wallet.busy || pending || !recipient || !amount} onConfirm={()=>void prepare()} labels={{idle:'Review send',disabled:pending?'Transaction pending':!recipient?'Choose recipient':'Enter amount',pending:'Checking fees'}} />
     </>}
+    {review && !resultOpen && <PocketBottomSheet title="Review send" showCloseButton dismissOnBackdrop={false} dismissible={!busy && !wallet.busy} onClose={()=>setReview(null)}>
+      <p className="text-2xl font-bold">{review.amount} {review.asset.symbol}</p>
+      <p className="mt-4 text-[10px] text-gray-400">To &middot; X Layer</p><p className="mt-1 break-all font-mono text-xs">{review.recipient}</p>
+      <p className="my-5 text-xs text-gray-400">Network estimate: {stockQuantity(review.fee, 18)} OKB</p>
+      <PocketSlideAction approvalRequired={false} onPrepare={async()=>{}} status={busy || wallet.busy ? 'pending' : 'idle'} disabled={pending} onConfirm={()=>void send()} labels={{idle:'Confirm send',disabled:'Transaction pending',pending:'Confirm send'}} />
+      {error && <p role="alert" className="mt-3 text-xs text-red-500">{error}</p>}
+    </PocketBottomSheet>}
     {wallet.uncertain && !busy && !wallet.busy && <p role="alert" className="mt-4 text-xs leading-5 text-amber-600">Submission needs review. Check your X Layer wallet activity before another send.</p>}
-    {wallet.pending && <a className="mt-5 block break-all text-xs text-gray-500" href={'https://www.oklink.com/x-layer/tx/' + wallet.pending.hash} target="_blank" rel="noreferrer">{wallet.pending.status === 'confirmed' ? 'Transfer confirmed' : wallet.pending.status === 'failed' ? 'Transfer failed' : 'Transfer pending'} · View transaction</a>}
+    {wallet.pending?.status === 'pending' && <a className="mt-5 block break-all text-xs text-gray-500" href={'https://www.oklink.com/x-layer/tx/' + wallet.pending.hash} target="_blank" rel="noreferrer">Transfer pending · View transaction</a>}
     {reconnectWallet && <button type="button" onClick={() => window.location.reload()} className="mt-3 min-h-11 w-full text-xs font-bold">Reload Pocket</button>}
-    {(error || wallet.error) && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error || wallet.error}</p>}
+    {(error || wallet.actionError) && <p role="alert" className="mt-4 text-xs leading-5 text-red-500">{error || wallet.actionError}</p>}
+    {wallet.balanceError && <p role="status" className="mt-3 text-xs text-gray-500">Balance refresh unavailable. <button type="button" className="underline" disabled={busy || wallet.busy} onClick={()=>void wallet.refresh()}>Retry</button></p>}
   </section>
 }

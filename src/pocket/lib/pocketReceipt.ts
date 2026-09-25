@@ -49,7 +49,7 @@ function normalizedSettlement(row: PocketActivityRow) {
 export function pocketActivityStatus(row: PocketActivityRow) {
   const status = String(row.paycrestStatus || '').trim().toLowerCase()
   const source = normalizedSource(row)
-  if (source.startsWith('bank-') || normalizedSettlement(row) === 'instant_fiat') return pocketBankStatus(status, source, /^0x[a-f0-9]{64}$/i.test(row.txHash))
+  if (source.startsWith('bank-') || normalizedSettlement(row) === 'instant_fiat') return pocketBankStatus(row.bankSettlementStatus || status, source, /^0x[a-f0-9]{64}$/i.test(row.txHash), row.handoffVerified === true)
   return status || 'status unavailable'
 }
 
@@ -113,6 +113,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     receiptHash: row.txHash || reference,
     title: pocketMovementTitle(row),
     status: pocketActivityStatus(row),
+    bankSettlementStatus: source === 'bank-withdraw' ? row.bankSettlementStatus || row.paycrestStatus : undefined,
     eventId: row.eventId,
     txHash: row.txHash,
     chain: row.chain || 'base',

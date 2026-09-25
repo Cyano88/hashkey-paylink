@@ -1,3 +1,4 @@
+import { readCachedPocketBalance, balanceOwner } from '../lib/pocketBalanceCache'
 import PocketTransactionSheet from '../components/PocketTransactionSheet'
 import PocketBottomSheet from '../components/PocketBottomSheet'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -108,7 +109,9 @@ export default function PocketMoveBankPage() {
       update: (accessToken, route) => updatePocketBankWithdrawRoute({ accessToken, intentId, phase: route.phase, txHash: route.txHash }),
     }
   }, [direct.result?.intentId])
+  const readRoutingSnapshot = useCallback(() => readCachedPocketBalance(balanceOwner(email)), [email])
   const bankLiquidity = usePocketPaymentLiquidityController({
+    readRoutingSnapshot,
     enabled: direct.status === 'routing' && Boolean(direct.result?.amountUsdc),
     amount: direct.result?.amountUsdc ?? '',
     destination: 'base',
@@ -177,6 +180,8 @@ export default function PocketMoveBankPage() {
     merchantId: direct.result.merchantId,
     contextLabel: `${direct.result.bankName} ****${direct.result.bankLast4}`.trim(),
     settlementType: 'INSTANT_FIAT',
+    handoffVerified: direct.result.handoffVerified,
+    bankSettlementStatus: direct.result.providerStatus || 'pending',
     paycrestStatus: direct.result.providerStatus || 'pending',
     direction: 'out',
     recipient: direct.result.accountName,
