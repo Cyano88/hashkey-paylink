@@ -170,6 +170,7 @@ async function postBills({
 }) {
   const response = await fetcher(endpoint, {
     method: 'POST',
+    signal: AbortSignal.timeout(15_000),
     headers: {
       'content-type': 'application/json',
       authorization: `Bearer ${accessToken}`,

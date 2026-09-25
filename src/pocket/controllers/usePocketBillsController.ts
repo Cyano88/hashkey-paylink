@@ -185,6 +185,7 @@ export default function usePocketBillsController({
   }, [view])
 
   const displayedAttempt=useRef('')
+  const terminalAttempts = useRef(new Set<string>())
   const billPayInFlight=useRef(false)
   const [confirming,setConfirming]=useState(false)
   const billScope=useRef(activeBillKey);billScope.current=activeBillKey
@@ -243,18 +244,25 @@ export default function usePocketBillsController({
 
   const settleResult = useCallback((next: PocketBillIntent) => {
     if (!mounted.current) return
+    if (terminalAttempts.current.has(next.id) && !['delivered', 'refunded', 'failed'].includes(next.state)) return
+    if (['delivered', 'refunded', 'failed'].includes(next.state)) {
+      terminalAttempts.current.add(next.id)
+      if (terminalAttempts.current.size > 32) terminalAttempts.current.delete(terminalAttempts.current.values().next().value!)
+      try {
+        window.localStorage.removeItem(activeBillKey + ':attempt:' + next.id)
+        if (readActive(activeBillKey)?.intentId === next.id) window.localStorage.removeItem(activeBillKey)
+      } catch { /* Storage cleanup must not hide a verified result. */ }
+    }
     setIntent(next)
     if (next.state === 'delivered') {
       setStatus('successful')
       setNotice(environment === 'sandbox' ? 'VTpass sandbox test completed.' : `${next.serviceName} sent to ${next.phone}`)
-      window.localStorage.removeItem(activeBillKey)
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
       void refreshBalances().catch(() => undefined)
     } else if (next.state === 'refunded') {
       setStatus('error')
       setErrorCode('BILLS_REFUNDED')
       setError(`Your ${billLabel(category)} payment was returned. No retry is needed.`)
-      window.localStorage.removeItem(activeBillKey)
     } else if (next.state === 'provider_failed_unverified') {
       setStatus('processing')
       setNotice(`Verifying the final ${billLabel(category)} delivery status. Do not retry.`)
@@ -270,7 +278,6 @@ export default function usePocketBillsController({
     } else if (next.state === 'failed') {
       setStatus('error')
       setError(next.failureReason || `${billLabel(category)} was not delivered. No payment was completed.`)
-      window.localStorage.removeItem(activeBillKey)
     } else if (next.state === 'needs_review') {
       setStatus('error')
       setError('This payment needs review. Check Bills activity before retrying.')
@@ -281,7 +288,7 @@ export default function usePocketBillsController({
   }, [activeBillKey, category, environment, refreshBalances])
 
   const reconcile = useCallback(async (intentId: string, txHash: string, accessToken: string, restoring = false) => {
-    const visible=()=>mounted.current&&billScope.current===activeBillKey&&displayedAttempt.current===intentId
+    const visible=()=>mounted.current&&billScope.current===activeBillKey&&displayedAttempt.current===intentId&&!terminalAttempts.current.has(intentId)
     let next: PocketBillIntent | null = null
     if (txHash) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -299,7 +306,7 @@ export default function usePocketBillsController({
     }
     if (!next) throw new Error('Payment confirmation is temporarily unavailable.')
     if(visible())setIntent(next)
-    for (let attempt = 0; !finalState(next) && attempt < 12; attempt += 1) {
+    for (let attempt = 0; !finalState(next) && !terminalAttempts.current.has(intentId) && attempt < 12; attempt += 1) {
       if (visible()) {
         setStatus('processing')
         setNotice(`Payment received. ${billLabel(category)} delivery is processing.`)
@@ -309,8 +316,11 @@ export default function usePocketBillsController({
       if (visible()) setIntent(next)
     }
     if(['delivered','refunded','failed'].includes(next.state)){
+      // A storage failure cannot suppress the server result.
+      try {
       window.localStorage.removeItem(activeBillKey+':attempt:'+intentId)
       if(readActive(activeBillKey)?.intentId===intentId)window.localStorage.removeItem(activeBillKey)
+      } catch { /* Keep rendering the verified result. */ }
     }
     if(visible())settleResult(next)
     return next
@@ -352,6 +362,37 @@ export default function usePocketBillsController({
       document.removeEventListener('visibilitychange', resumeWhenVisible)
     }
   }, [activeBillKey, authenticated, availability, category, reconcile, token])
+
+  // The visible sheet follows server truth independently of the retry journal.
+  // A different reader may consume that journal while this sheet is still open.
+  useEffect(() => {
+    if (!authenticated || !intent || !['confirming', 'processing'].includes(status)) return
+    const intentId = intent.id
+    let cancelled = false, reading = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      if (cancelled || reading) return
+      reading = true
+      try {
+        if (document.visibilityState === 'hidden') return
+        const accessToken = await token()
+        if (cancelled) return
+        const next = await refreshPocketAirtime({ accessToken, intentId, refresh: false,
+          fetcher: (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(8_000) }),
+        })
+        if (!cancelled && mounted.current && billScope.current === activeBillKey && displayedAttempt.current === intentId && finalState(next)) settleResult(next)
+      } catch { /* Read failures do not change a financial outcome. */ }
+      finally {
+        reading = false
+        if (!cancelled && !terminalAttempts.current.has(intentId)) timer = setTimeout(poll, 5_000)
+      }
+    }
+    timer = setTimeout(poll, 2_000)
+    const visible = () => { if (document.visibilityState === 'visible') { clearTimeout(timer); void poll() } }
+    document.addEventListener('visibilitychange', visible)
+    window.addEventListener('online', visible)
+    return () => { cancelled = true; clearTimeout(timer); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', visible) }
+  }, [activeBillKey, authenticated, intent?.id, status, settleResult, token])
 
   useEffect(() => {
     if (!intent || status !== 'ready') return
@@ -502,7 +543,7 @@ export default function usePocketBillsController({
       if(mounted.current&&billScope.current===activeBillKey&&displayedAttempt.current===intent.id)setStatus('confirming')
       await reconcile(prepared.id, transfer.txHash, accessToken)
     } catch (reason) {
-      if (!mounted.current || displayedAttempt.current!==intent.id) return
+      if (!mounted.current || displayedAttempt.current!==intent.id || terminalAttempts.current.has(intent.id)) return
       const active=readActive(activeBillKey)
       setStatus(active?.intentId===intent.id&&(active.txHash||active.challengeId)?'processing':'error')
       setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
