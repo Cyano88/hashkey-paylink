@@ -20,6 +20,7 @@ export function createStockWalletBalancesHandler(overrides: Partial<typeof defau
       if (!policy || policy.environment !== 'live' || policy.checkoutMode !== 'human') fail(403, 'A live stock balance read key is required.')
       const wallet = req.body?.wallet
       if (typeof wallet !== 'string' || !isAddress(wallet) || getAddress(wallet) === zeroAddress) fail(400, 'Provide a valid X Layer wallet.')
+      if (req.originalUrl?.split('?')[0] === '/api/v2/wallets/stocks/receive') return res.json({ ok: true, wallet: getAddress(wallet), chainId: 196, receive: walletReceiveDetails('xlayer', getAddress(wallet)) })
       const snapshot = await d.balances('developer:' + policy.partnerId, getAddress(wallet))
       const stale = d.now() - snapshot.observedAt >= 60000
       let prices: Awaited<ReturnType<typeof readStockMarketPrices>> = {}

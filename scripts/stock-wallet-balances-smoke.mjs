@@ -16,3 +16,9 @@ console.log('Stock API checks passed: shared read service, project cache scope, 
 
 assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/wallets/stocks/balances'}),'wallet:stocks:read')
 assert.equal(cliRequestScope({method:'GET',originalUrl:'/api/v2/wallets/stocks/balances'}),null)
+
+const receiving=createStockWalletBalancesHandler({policy:async()=>({partnerId:'project_a',environment:'live',checkoutMode:'human'}),balances:async()=>{throw Error('Receive must not wait for portfolio reads')}})
+const receiveRes={statusCode:200,setHeader(){},status(n){this.statusCode=n;return this},json(body){this.body=body;return this}}
+await receiving({method:'POST',body:{wallet:address},headers:{},originalUrl:'/api/v2/wallets/stocks/receive'},receiveRes)
+assert.equal(receiveRes.statusCode,200);assert.equal(receiveRes.body.receive.qrValue,address)
+assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/wallets/stocks/receive'}),'wallet:stocks:read')

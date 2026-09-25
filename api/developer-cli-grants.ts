@@ -52,7 +52,7 @@ export function cliRequestScope(req: Partial<Pick<Request, 'method' | 'originalU
       && ['brand', 'link-wallet', 'review', 'status', 'prepare', 'challenge', 'recover', 'record'].includes(req.body?.action)) return 'agreement:fund'
   }
   if (req.method === 'POST' && url.pathname === '/api/v2/wallets/arc' && !url.search) return 'wallet:arc'
-  if (req.method === 'POST' && url.pathname === '/api/v2/wallets/stocks/balances' && !url.search) return 'wallet:stocks:read'
+  if (req.method === 'POST' && ['/api/v2/wallets/stocks/balances', '/api/v2/wallets/stocks/receive'].includes(url.pathname) && !url.search) return 'wallet:stocks:read'
   if (url.pathname === '/api/v2/xstocks-agreements') {
     if (req.method === 'GET') return 'xstocks-agreement:read'
     if (req.method === 'POST' && !url.search && req.body?.action === undefined) return 'xstocks-agreement:create'

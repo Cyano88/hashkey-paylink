@@ -7,6 +7,8 @@ POST /api/v2/wallets/stocks/balances with the existing wallet:stocks:read key an
 
 The response now includes gas: {symbol: OKB, decimals: 18, units: exact integer string, balance: exact decimal string, observedAt, stale} and receive metadata. This reuses Pocket's block-pinned snapshot; OKB is not included in estimated stock value. Never display stale/missing gas as zero.
 
+For immediate QR rendering, POST /api/v2/wallets/stocks/receive with the same scope and {wallet}. This lightweight endpoint returns receiving metadata without waiting for portfolio scans or prices.
+
 ## Arc
 POST /api/v2/wallets/arc with the existing wallet:arc key and {path: /receive, method: GET, userToken: the active Circle user token}. data.wallets contains walletId and receive metadata for verified live ARC smart wallets owned by that Circle session. Missing user tokens are rejected; testnet wallets are filtered out.
 
