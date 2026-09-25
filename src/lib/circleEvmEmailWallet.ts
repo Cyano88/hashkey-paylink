@@ -110,7 +110,7 @@ async function appIdForChainAsync(chain: ChainKey) {
   return circle?.userWalletAppId || baked || ''
 }
 
-function apiError(data: { error?: string; message?: string; code?: number; detail?: string }, status?: number, action?: unknown) {
+function apiError(data: { error?: string; message?: string; code?: number | string; detail?: string }, status?: number, action?: unknown) {
   const step = typeof action === 'string' ? action : 'request'
   const msg = data.error ?? data.message ?? (status ? `Circle email wallet request failed with HTTP ${status}.` : 'Circle email wallet request failed.')
   if (data.code === 155106 || msg.toLowerCase().includes('already initialized')) return 'already_initialized'
@@ -417,14 +417,14 @@ async function circleWalletApi<T>(
   } catch (err) {
     throw new Error(`Circle email wallet request could not reach Hash PayLink (${label}). ${readableError(err)}`)
   }
-  const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number; detail?: string }
+  const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number | string; detail?: string }
   if (!res.ok || data.ok === false) {
     // Preserve explicit rejection; a lost response remains uncertain.
     const submissionRejected = paymentAction && (
       [400, 401, 403, 404, 422, 429].includes(res.status)
       || (res.status === 409 && String(data.code) === 'PAYMENT_QUOTE_REQUIRED')
     )
-    throw Object.assign(new Error(`Circle email wallet ${label} failed: ${apiError(data, res.status, action)}`), {
+    throw Object.assign(new Error(data.code === 'INSUFFICIENT_PAYMENT_BALANCE' && data.error ? data.error : `Circle email wallet ${label} failed: ${apiError(data, res.status, action)}`), {
       status: res.status, code: data.code, submissionRejected,
     })
   }
