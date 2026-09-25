@@ -1,6 +1,6 @@
 import { readPocketActivity, type PocketActivityReadResult } from '../api/pocketReadClient'
 import { isPocketActivityReadData, isPocketActivityRow } from './pocketSchemas'
-import { mergePocketActivitySnapshot } from './pocketActivitySnapshot'
+import { mergePocketActivityRows, mergePocketActivitySnapshot } from './pocketActivitySnapshot'
 
 type Snapshot = PocketActivityReadResult & { savedAt: number; full: boolean }
 const snapshots = new Map<string, Snapshot>()
@@ -18,7 +18,8 @@ export function cachedPocketActivity(scope: string): Snapshot | undefined {
     const saved = JSON.parse(localStorage.getItem(prefix + encodeURIComponent(scope)) || 'null')
     if (isPocketActivityReadData(saved)) {
       const metadata = saved as unknown as { savedAt?: number; full?: boolean }
-      const snapshot: Snapshot = { ...saved, savedAt: Number(metadata.savedAt) || 0, full: metadata.full === true }
+      const snapshot: Snapshot = { ...saved, payments: mergePocketActivityRows([], saved.payments), savedAt: Number(metadata.savedAt) || 0, full: metadata.full === true }
+      if (snapshot.payments.length !== saved.payments.length) dirtyScopes.add(scope)
       snapshots.set(scope, snapshot)
       return snapshot
     }
@@ -26,7 +27,7 @@ export function cachedPocketActivity(scope: string): Snapshot | undefined {
     for (const mode of ['all', 'recent']) {
       const old = JSON.parse(localStorage.getItem('pocket:activity:snapshot:v1:' + encodeURIComponent(scope) + ':' + mode) || 'null')
       if (Array.isArray(old?.rows)) {
-        const snapshot = { payments: old.rows.filter(isPocketActivityRow), merchants: [], collections: [], savedAt: 0, full: false }
+        const snapshot = { payments: mergePocketActivityRows([], old.rows.filter(isPocketActivityRow)), merchants: [], collections: [], savedAt: 0, full: false }
         snapshots.set(scope, snapshot)
         return snapshot
       }
