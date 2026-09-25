@@ -1,7 +1,7 @@
 import type { WorkPayment } from './workXLayer'
 import type { TradeXLayerStatus } from './protocol'
 export type HostedWorkItem = {id:string;activeVersion:number;role:'customer'|'provider';terms:Array<{
-  version:number;title:string;description:string;amount:string;durationSeconds:number;xlayerPayment:WorkPayment
+  kind?:'trade';trade?:{price:string;deliveryFee:string;handover:'Pickup'|'Delivery';location:string;carrier:string;returns:string;dispatchDays:number;deliveryDays:number;inspectionHours:number;offerId:string;listingRevision:number;snapshotHash:string};version:number;title:string;description:string;amount:string;durationSeconds:number;xlayerPayment:WorkPayment
 }>}
 export type HostedAgreement = {
   id:string;walletAppId:string;consentHash:string;terms:HostedWorkItem['terms'][number]

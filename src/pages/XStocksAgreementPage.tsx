@@ -70,11 +70,18 @@ function ConnectedAgreement({agreementId}:{agreementId:string}){
     {agreement?<>
       <h1 className='mt-2 break-words text-xl font-bold'>{agreement.terms.title}</h1>
       <p className='mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-gray-500'>{agreement.terms.description}</p>
-      <p className='mt-3 text-xs text-gray-500'>You are the {session.reply.role==='customer'?'client':'worker'} · X Layer</p>
+      <p className='mt-3 text-xs text-gray-500'>You are the {session.reply.role==='customer'?(agreement.terms.kind==='trade'?'buyer':'client'):(agreement.terms.kind==='trade'?'seller':'worker')} · X Layer</p>
       {ready&&!embedded.length&&!hasLinkedWallet&&!agreement.accepted[session.reply.role]&&session.reply.fundingEnabled&&
         <button className={button+' mt-4'} disabled={creating} onClick={()=>void setupWallet()}>{creating?'Setting up wallet…':'Set up payment wallet'}</button>}
       {hasLinkedWallet&&ready&&!embedded.length&&<p className='mt-3 text-sm'>Restoring your existing payment wallet. Sign in again if it does not load.</p>}
       {embedded.length>1&&<p className='mt-3 text-sm' role='alert'>More than one embedded wallet is linked. Contact support to continue.</p>}
+      {agreement.terms.kind==='trade'&&agreement.terms.trade&&<dl className='mt-4 space-y-2 text-xs text-gray-500'>
+        <div><dt>Item quantity</dt><dd>{agreement.terms.trade.price}</dd></div>
+        <div><dt>Delivery fee</dt><dd>{agreement.terms.trade.deliveryFee}</dd></div>
+        <div><dt>Handover</dt><dd>{agreement.terms.trade.handover} ? {agreement.terms.trade.location}</dd></div>
+        {agreement.terms.trade.carrier&&<div><dt>Carrier</dt><dd>{agreement.terms.trade.carrier}</dd></div>}
+        <div><dt>Return terms</dt><dd className='whitespace-pre-wrap break-words'>{agreement.terms.trade.returns}</dd></div>
+      </dl>}
       <HostedWorkCheckout item={{id:agreement.id,activeVersion:agreement.terms.version,role:session.reply.role,terms:[agreement.terms]}}
         request={session.request} onUpdated={()=>{}}/>
     </>:!error&&<p className='mt-4 text-sm' role='status'>Loading Agreement…</p>}
