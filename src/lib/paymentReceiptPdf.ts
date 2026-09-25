@@ -238,6 +238,19 @@ function receiptType(receipt: PaylinkReceipt) {
   return titleCase(receipt.settlementType || receipt.source || 'USDC Payment')
 }
 
+function electricityProviderBadge(provider?: string) {
+  const name = String(provider || '').trim()
+  const abbreviation = name.match(/\b(AEDC|PHED|PHEDC|IKEDC|EKEDC|IBEDC|EEDC|KEDCO|KAEDCO|JED|JEDC|BEDC|YEDC|APLE)\b/i)
+  if (abbreviation) return abbreviation[0].toUpperCase()
+  const providers: [RegExp, string][] = [
+    [/abuja/i, 'AEDC'], [/port\s*harcourt/i, 'PHED'], [/ikeja/i, 'IKEDC'],
+    [/eko\b/i, 'EKEDC'], [/ibadan/i, 'IBEDC'], [/enugu/i, 'EEDC'],
+    [/kano/i, 'KEDCO'], [/kaduna/i, 'KAEDCO'], [/jos/i, 'JED'],
+    [/benin/i, 'BEDC'], [/yola/i, 'YEDC'], [/aba\b/i, 'APLE'],
+  ]
+  return providers.find(([pattern]) => pattern.test(name))?.[1] || 'Electricity'
+}
+
 export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView {
   const variant = receipt.variant === 'bills' || receipt.source === 'bills' || String(receipt.settlementType || '').startsWith('bill_payment') ? 'bills' : 'general'
   const networkKey = receiptChainKey(receipt.chain)
@@ -268,14 +281,16 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
     }
   }
   if (variant === 'bills') {
+    const isElectricity = type.toLowerCase().includes('electric')
     const targetLabel = receipt.targetLabel || (type.toLowerCase().includes('electric') ? 'Meter Number' : type.toLowerCase().includes('tv') ? 'Smartcard Number' : 'Phone Number')
     return {
       variant,
-      badge: receipt.providerName || 'Utility payment',
+      badge: isElectricity ? electricityProviderBadge(receipt.providerName) : receipt.providerName || 'Utility payment',
       amount,
       timestamp: fmtTime(receipt.createdAt),
       rows: [
         { label: 'Type', value: type },
+        ...(isElectricity && receipt.providerName ? [{ label: 'Provider', value: receipt.providerName }] : []),
         { label: targetLabel, value: receipt.targetValue || receipt.recipient || '-' },
         { label: 'Amount', value: amount },
         ...(localAmount ? [{ label: 'Total USDC', value: `${compactReceiptAmount(receipt.amount)} ${receipt.asset}` }] : []),
