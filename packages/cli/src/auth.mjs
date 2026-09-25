@@ -20,7 +20,7 @@ export async function authCommand(command, options, { fetcher, sessionStore }) {
   if (command === 'auth login') {
     if (!/^dev_[a-z0-9]{8,64}$/i.test(options.project ?? '')) throw new Error('Specify an existing developer project with --project.')
     const scopes = (options.scopes ?? 'project:read,checkout:read').split(',')
-    const allowed = ['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'xstocks-agreement:create', 'keys:manage']
+    const allowed = ['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'xstocks-agreement:create', 'keys:manage']
     if (!scopes.length || scopes.some(scope => !allowed.includes(scope)) || new Set(scopes).size !== scopes.length) throw new Error('Unsupported CLI scope.')
     if (await sessionStore.read()) throw new Error('Run auth logout before starting another login.')
     const token = 'hpl_cli_' + randomBytes(32).toString('hex')

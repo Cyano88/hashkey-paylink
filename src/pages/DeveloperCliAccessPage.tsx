@@ -9,6 +9,7 @@ const labels: Record<string, string> = {
   'checkout:read': 'Read checkout payment status',
   'checkout:create': 'Create hosted checkouts',
   'xstocks-agreement:read': 'Read xStocks Agreement records for this project',
+  'wallet:stocks:read': 'Read public X Layer stock balances and estimated values (no signing)',
   'wallet:arc': 'Open Arc Circle sessions and prepare USDC transfers (wallet approval required)',
   'wallet:connect': 'Link user accounts with their consent (no wallet signing)',
   'xstocks-agreement:create': 'Create xStocks Agreement drafts (no funding, release or signing)',
