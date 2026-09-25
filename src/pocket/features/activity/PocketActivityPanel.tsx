@@ -1,10 +1,9 @@
-import { formatStockQuantity } from '../../lib/pocketStockDisplay'
+import { pocketActivityAmount, currentPocketActivityRow } from '../../lib/pocketActivityPresentation'
 import { pocketActivityArchiveKey } from '../../lib/pocketActivityArchive'
 import { useEffect, useState } from 'react'
 import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Receipt, Landmark, Store, Filter, Deposit, RequestMoney, CreditCard } from '../../components/PocketIcons'
 import type { PocketActivityRow } from '../../models/pocketActivity'
 import { isIncomingPosPayment, isOutgoingPosPurchase, pocketBankRecipientLabel } from '../../lib/pocketPurchaseKind'
-import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
 import { pocketActivityStatus } from '../../lib/pocketReceipt'
 import PocketActivityReceipt from '../../components/PocketActivityReceipt'
 import PocketBridgeActivityDetails from '../../components/PocketBridgeActivityDetails'
@@ -69,7 +68,7 @@ export default function PocketActivityPanel({rail='stablecoins',hideHeading=fals
     const last=groups[groups.length-1]
     if(last?.key===key)last.rows.push(row);else groups.push({key,label,rows:[row]})
   }
-  const selectedRow=selected ? rows.find(row=>row.eventId===selected.eventId&&row.txHash===selected.txHash) ?? selected : null
+  const selectedRow=currentPocketActivityRow(selected, rows)
   if(!authenticated)return <p className="py-12 text-center text-sm text-gray-500">Sign in to view your transactions.</p>
   return <div className="space-y-4">
     <header className="relative flex min-h-14 items-center justify-center">
@@ -107,7 +106,7 @@ export default function PocketActivityPanel({rail='stablecoins',hideHeading=fals
         return <button key={row.eventId+':'+row.txHash} type="button" onClick={()=>{setSelected(row)}} className="flex w-full items-center gap-3 py-4 text-left" data-pocket-transaction-row>
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-[#171717] dark:text-gray-200"><Icon className="h-5 w-5"/></span>
           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{title}</span><span className="mt-1 block truncate text-[11px] text-gray-500">{detail}</span></span>
-          <span className="shrink-0 text-right"><span className={`block text-xs font-semibold tabular-nums ${incoming?'text-emerald-600 dark:text-emerald-400':''}`}>{row.source==='wallet-swap'?'Swap':(incoming?'+':'-')+(row.amountNgn?'NGN '+Number(row.amountNgn).toLocaleString('en-NG'):(row.assetSymbol?formatStockQuantity(row.amount):formatPocketDisplayAmount(Number(row.amount)))+' '+(row.assetSymbol||'USDC'))}</span><span className={`mt-1 block text-[10px] capitalize ${outcome.state==='failed'?'text-red-600 dark:text-red-400':outcome.state==='successful'?'text-emerald-600 dark:text-emerald-400':'text-amber-600 dark:text-amber-400'}`}>{status}</span></span>
+          <span className="shrink-0 text-right"><span className={`block text-xs font-semibold tabular-nums ${incoming?'text-emerald-600 dark:text-emerald-400':''}`}>{row.source==='wallet-swap'?'Swap':(incoming?'+':'-')+pocketActivityAmount(row)}</span><span className={`mt-1 block text-[10px] capitalize ${outcome.state==='failed'?'text-red-600 dark:text-red-400':outcome.state==='successful'?'text-emerald-600 dark:text-emerald-400':'text-amber-600 dark:text-amber-400'}`}>{status}</span></span>
         </button>
       })}</div></section>)}
     </div>}

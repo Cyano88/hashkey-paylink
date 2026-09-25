@@ -92,6 +92,7 @@ export default function usePocketBillsController({
   ensureBaseWallet,
   getEvmSession,
   refreshBalances,
+  recoverTransfer,
 }: {
   owner: string
   view: 'airtime' | 'data' | 'tv' | 'electricity'
@@ -100,9 +101,13 @@ export default function usePocketBillsController({
   getAccessToken: AccessTokenReader
   ensureBaseWallet: () => Promise<CirclePocketWallet | null>
   getEvmSession: (walletAddress: string) => Promise<CircleEvmEmailSession>
+  recoverTransfer?: (input: { session: CircleEvmEmailSession | null; challengeId: string; transactionId?: string }) => Promise<string | null>
   refreshBalances: () => Promise<void>
 }) {
+  const recoveryReader = useRef(recoverTransfer); recoveryReader.current = recoverTransfer
   const category = view
+  const tokenReader = useRef(getAccessToken); tokenReader.current = getAccessToken
+  const balanceRefresher = useRef(refreshBalances); balanceRefresher.current = refreshBalances
   const activeBillKey = `pocket:bills:owned:${encodeURIComponent(owner.trim().toLowerCase())}:${category}`
   const savedAvailability = cachedPocketBillsAvailability()
   const [availability, setAvailability] = useState<'loading' | 'enabled' | 'disabled'>(savedAvailability ? savedAvailability.enabled ? 'enabled' : 'disabled' : 'loading')
@@ -184,6 +189,7 @@ export default function usePocketBillsController({
     return () => { cancelled = true; clearTimeout(timer); unregister(); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', visible) }
   }, [view])
 
+  const activePaymentSession = useRef<{ scope: string; session: CircleEvmEmailSession } | null>(null)
   const displayedAttempt=useRef('')
   const terminalAttempts = useRef(new Set<string>())
   const billPayInFlight=useRef(false)
@@ -237,10 +243,16 @@ export default function usePocketBillsController({
   }, [category, dataVariations, environment, resetResult])
 
   const token = useCallback(async () => {
-    const accessToken = await getAccessToken()
-    if (!accessToken) throw new Error('Sign in again to continue.')
-    return accessToken
-  }, [getAccessToken])
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const accessToken = await Promise.race([
+        tokenReader.current(),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Sign-in verification is taking longer. Please try again.')), 10_000) }),
+      ])
+      if (!accessToken) throw new Error('Sign in again to continue.')
+      return accessToken
+    } finally { clearTimeout(timer) }
+  }, [])
 
   const settleResult = useCallback((next: PocketBillIntent) => {
     if (!mounted.current) return
@@ -258,7 +270,7 @@ export default function usePocketBillsController({
       setStatus('successful')
       setNotice(environment === 'sandbox' ? 'VTpass sandbox test completed.' : `${next.serviceName} sent to ${next.phone}`)
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(8)
-      void refreshBalances().catch(() => undefined)
+      void balanceRefresher.current().catch(() => undefined)
     } else if (next.state === 'refunded') {
       setStatus('error')
       setErrorCode('BILLS_REFUNDED')
@@ -285,11 +297,22 @@ export default function usePocketBillsController({
       setStatus('processing')
       setNotice(`Payment received. ${billLabel(category)} delivery is processing.`)
     }
-  }, [activeBillKey, category, environment, refreshBalances])
+  }, [activeBillKey, category, environment])
 
   const reconcile = useCallback(async (intentId: string, txHash: string, accessToken: string, restoring = false) => {
     const visible=()=>mounted.current&&billScope.current===activeBillKey&&displayedAttempt.current===intentId&&!terminalAttempts.current.has(intentId)
     let next: PocketBillIntent | null = null
+    // Circle approval may finish before its transaction hash becomes available.
+    // Resume only a recorded challenge; never execute another transfer here.
+    const saved = readActive(activeBillKey + ':attempt:' + intentId)
+    if (!txHash && saved?.challengeId) {
+      const session = activePaymentSession.current?.scope === activeBillKey ? activePaymentSession.current.session : null
+      const recoveredHash = await recoveryReader.current?.({ session, challengeId: saved.challengeId, transactionId: saved.transactionId })
+      if (recoveredHash && billScope.current === activeBillKey) {
+        txHash = recoveredHash
+        try { persistActive(activeBillKey, intentId, txHash, saved.idempotencyKey) } catch { /* Submit proof even if device storage is full. */ }
+      }
+    }
     if (txHash) {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
@@ -324,7 +347,7 @@ export default function usePocketBillsController({
     }
     if(visible())settleResult(next)
     return next
-  }, [activeBillKey, category, settleResult])
+  }, [activeBillKey, category, owner, settleResult])
 
   useEffect(() => {
     if (!authenticated || availability !== 'enabled') return
@@ -528,6 +551,7 @@ export default function usePocketBillsController({
       persistActive(activeBillKey, prepared.id, '', idempotencyKey)
       const session = await getEvmSession(wallet.address)
       stillCurrent()
+      activePaymentSession.current = { scope: activeBillKey, session }
       const transfer = await executePocketEvmTransfer({
         session,
         linkedWalletAddress: wallet.address,
@@ -538,10 +562,11 @@ export default function usePocketBillsController({
         onAccepted:ids=>persistActive(activeBillKey,prepared.id,'',idempotencyKey,ids),
         confirm: false,
       })
-      if (!transfer.txHash) throw new Error('Circle did not return a Base transaction hash. Check Activity before retrying.')
-      persistActive(activeBillKey, prepared.id, transfer.txHash, idempotencyKey)
+      if (transfer.txHash) {
+        try { persistActive(activeBillKey, prepared.id, transfer.txHash, idempotencyKey) } catch { /* A submitted payment must still reach reconciliation. */ }
+      }
       if(mounted.current&&billScope.current===activeBillKey&&displayedAttempt.current===intent.id)setStatus('confirming')
-      await reconcile(prepared.id, transfer.txHash, accessToken)
+      await reconcile(prepared.id, transfer.txHash || '', accessToken)
     } catch (reason) {
       if (!mounted.current || displayedAttempt.current!==intent.id || terminalAttempts.current.has(intent.id)) return
       const active=readActive(activeBillKey)

@@ -7,7 +7,8 @@ import PocketRouteShell from '../components/PocketRouteShell'
 import { PocketBillsSkeleton } from '../components/PocketContentSkeletons'
 import usePocketBillsController from '../controllers/usePocketBillsController'
 import usePocketPaymentLiquidityController from '../controllers/usePocketPaymentLiquidityController'
-import usePocketWalletController from '../controllers/usePocketWalletController'
+import usePocketWalletController, { activePocketEvmSession, restorePocketWalletSession } from '../controllers/usePocketWalletController'
+import { reconcileCircleEvmEmailWithdraw } from '../../lib/circleEvmEmailWallet'
 import PocketBillsPanel from '../features/bills/PocketBillsPanel'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketWallets from '../hooks/usePocketWallets'
@@ -52,6 +53,15 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
   const ensureBaseWallet = useCallback(async () => walletController.ensureWallet('base'), [walletController])
   const bills = usePocketBillsController({
+    recoverTransfer: async ({ session, challengeId, transactionId }) => {
+      if (!session) {
+        await restorePocketWalletSession(email)
+        session = activePocketEvmSession(email, 'base', wallets.wallets.base?.address)
+      }
+      if (!session) return null
+      const result = await reconcileCircleEvmEmailWithdraw({ session, challengeId, transactionId, timeoutMs: 8_000 })
+      return result.txHash
+    },
     owner: email,
     view,
     authenticated,
@@ -88,7 +98,6 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
 
   const openBaseWallet = useCallback(async () => {
     setWalletBusy(true); setWalletOpenError('')
-    setWalletOpenError('')
     try {
       await ensureBaseWallet()
       await wallets.refreshBalances()
