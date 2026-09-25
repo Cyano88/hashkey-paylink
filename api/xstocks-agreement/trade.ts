@@ -20,10 +20,12 @@ export function parseTradeCheckout(body: Record<string, unknown>, env: NodeJS.Pr
     if (typeof value !== 'string' || value.trim().length < min || value.length > max) fail('Complete the Trade description and handover terms.')
     return (value as string).trim()
   }
-  for (const value of [raw.price, raw.deliveryFee]) if (typeof value !== 'string' || !/^\d{1,9}(\.\d{1,2})?$/.test(value)) fail('Use an exact stock quantity with up to two decimal places.')
-  const price = parseUnits(raw.price, 2), fee = parseUnits(raw.deliveryFee, 2)
+  for (const value of [raw.price, raw.deliveryFee]) if (typeof value !== 'string' || !/^\d{1,9}(\.\d{1,18})?$/.test(value)) fail('Use an exact stock quantity with up to 18 decimal places.')
+  const decimals = Math.max(2, raw.price.split('.')[1]?.length || 0, raw.deliveryFee.split('.')[1]?.length || 0)
+  const price = parseUnits(raw.price, decimals), fee = parseUnits(raw.deliveryFee, decimals)
   if (price <= 0n || (raw.handover === 'Pickup' && fee !== 0n)) fail('Invalid Trade quantity or pickup fee.')
-  const total = price + fee, amount = `${total / 100n}.${String(total % 100n).padStart(2,'0')}`
+  const scale = 10n ** BigInt(decimals)
+  const total = price + fee, amount = `${total / scale}.${String(total % scale).padStart(decimals,'0')}`
   if (body.amount !== amount) fail('The payment quantity must equal the item price plus delivery fee.')
   const trade: TradeDetails = {
     offerId: raw.offerId.toLowerCase(), listingRevision: raw.listingRevision, snapshotHash: raw.snapshotHash,

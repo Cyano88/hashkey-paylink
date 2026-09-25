@@ -15,6 +15,12 @@ assert.equal(binding.contractTerms.inspectionWindow,48*3600)
 assert.equal(binding.contractTerms.amount,'1250000000000000000')
 assert.notEqual(binding.termsHash,prepareWorkBinding('fixture',terms,buyer,seller,100).termsHash)
 for(const change of [{amount:'1.00'},{trade:{...trade,deliveryDays:61}},{trade:{...trade,handover:'Pickup'}},{trade:{...trade,returns:'short'}},{trade:{...trade,snapshotHash:'invalid'}}])assert.throws(()=>parseTradeCheckout({...body,...change},env))
+const small={...body,amount:'0.00223',trade:{...trade,price:'0.00223',deliveryFee:'0',handover:'Pickup'}}
+assert.equal(parseTradeCheckout(small,env).xlayerPayment.amountUnits,'2230000000000000')
+assert.equal(parseTradeCheckout({...small,amount:'0.01000',trade:{...trade,price:'0.00999',deliveryFee:'0.00001'}},env).xlayerPayment.amountUnits,'10000000000000000')
+assert.throws(()=>parseTradeCheckout({...small,amount:'0.00224'},env))
+assert.throws(()=>parseTradeCheckout({...small,amount:'0.0000000000000000001',trade:{...small.trade,price:'0.0000000000000000001'}},env))
+assert.throws(()=>parseTradeCheckout({...small,amount:'0.0000001',trade:{...small.trade,price:'0.0000001'}},{...env,HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:6}])}))
 const store=new Map();let who='did:privy:buyer',project='project-a'
 const h=createXStocksAgreementHandlers({env:()=>env,hasStore:()=>true,now:()=>new Date('2026-09-25T12:00:00Z'),policy:async()=>({partnerId:project,environment:'live',checkoutMode:'human',capabilities:['xstocks_agreements']}),projectEnabled:async()=>true,identity:async()=>who,wallet:async()=>({address:who.endsWith('buyer')?buyer:seller,chainId:196}),read:async key=>structuredClone(store.get(key)),mutate:async(key,fn)=>{const r=fn(structuredClone(store.get(key)));store.set(key,structuredClone(r));return r},plan:async()=>({enabled:true,actions:['refund'],state:2,observedBlock:'100'})})
 async function call(handler,body={},method='POST',query={}){const res={statusCode:200,setHeader(){},status(c){this.statusCode=c;return this},json(b){this.body=b;return this}};await handler({method,headers:{'idempotency-key':'trade_fixture_00001'},body,query},res);return res}
