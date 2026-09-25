@@ -51,11 +51,10 @@ function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
-function confirmationPollDelay(attempt: number) {
-  if (attempt === 0) return 10_000
-  if (attempt === 1) return 10_000
-  if (attempt === 2) return 1_500
-  return 2_500
+function confirmationPollDelay(attempt: number, code: string) {
+  // Base inclusion usually arrives within a few blocks. Check the first
+  // pending result sooner; retain the longer backoff for provider outages.
+  return attempt === 0 && code !== 'BILLS_PAYMENT_VERIFIER_UNAVAILABLE' ? 4_000 : 10_000
 }
 
 function deliveryPollDelay(attempt: number) {
@@ -326,7 +325,7 @@ export default function usePocketBillsController({
         } catch (reason) {
           if (!(reason instanceof PocketBillsApiError) || !['CONFIRMATION_REQUIRED', 'BILLS_PAYMENT_PENDING', 'BILLS_PAYMENT_VERIFIER_UNAVAILABLE'].includes(reason.code) || attempt === 2) throw reason
           if (visible()) setStatus('confirming')
-          await sleep(confirmationPollDelay(attempt))
+          await sleep(confirmationPollDelay(attempt, reason.code))
         }
       }
     } else {
