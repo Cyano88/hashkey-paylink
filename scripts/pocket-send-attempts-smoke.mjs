@@ -12,3 +12,10 @@ storage.setItem('pocket:evm-send:operation:v1',JSON.stringify({...base,idempoten
 saveActivePocketBankPayout('bank-one','0xhash','alice@test',base.sourceAddress);saveActivePocketBankPayoutAcceptance('bank-two',{challengeId:'c',transactionId:'t'},'alice@test',base.sourceAddress);detachActivePocketBankPayout('bank-two');assert.equal(readPendingBankPayouts('alice@test').length,2);clearActivePocketBankPayout('bank-one');assert.equal(readPendingBankPayouts('alice@test')[0].intentId,'bank-two');assert.equal(readPendingBankPayouts('bob@test').length,0)
 console.log('PASS per-account durable sends, >24h recovery, exact-attempt settlement, terminal monotonicity, Activity deduplication, ownership-checked migration, independent bank payout recovery.')
 const confirmed=readSendAttempts('alice@test',storage).find(r=>r.state==='confirmed');const observed={...rows.find(r=>r.txHash==='0xabc'),paycrestStatus:'pending'};assert.equal(mergeSendActivity([observed],[confirmed])[0].paycrestStatus,'confirmed');assert.equal(mergeSendActivity([{...observed,source:'request'}],[confirmed])[0].paycrestStatus,'pending');console.log('PASS receipt proof advances ordinary Activity, without marking request settlement paid.');
+
+const policyError='Circle email wallet executeEvmPayment/polygon failed: Entity needs to setup paymaster policy in developer console before sending transaction on mainnet · code 155509 · HTTP 400';
+for(const [id,patch,expected] of [['policy',{},'failed'],['timeout',{error:'Response lost'},'preparing'],['challenge',{challengeId:'known'},'preparing'],['hash',{txHash:'0xabc'},'preparing']]){
+ saveSendAttempt({...base,owner:'repair@test',network:'polygon',idempotencyKey:id,state:'preparing',challengeId:'',transactionId:'',error:policyError,...patch},storage);
+ assert.equal(readSendAttempts('repair@test',storage).find(r=>r.idempotencyKey===id).state,expected);
+}
+console.log('PASS explicit pre-challenge policy rejection repairs to failed; timeout and known transaction evidence remain intact.');

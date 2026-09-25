@@ -418,7 +418,16 @@ async function circleWalletApi<T>(
     throw new Error(`Circle email wallet request could not reach Hash PayLink (${label}). ${readableError(err)}`)
   }
   const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string; code?: number; detail?: string }
-  if (!res.ok || data.ok === false) throw new Error(`Circle email wallet ${label} failed: ${apiError(data, res.status, action)}`)
+  if (!res.ok || data.ok === false) {
+    // Preserve explicit rejection; a lost response remains uncertain.
+    const submissionRejected = paymentAction && (
+      [400, 401, 403, 404, 422, 429].includes(res.status)
+      || (res.status === 409 && String(data.code) === 'PAYMENT_QUOTE_REQUIRED')
+    )
+    throw Object.assign(new Error(`Circle email wallet ${label} failed: ${apiError(data, res.status, action)}`), {
+      status: res.status, code: data.code, submissionRejected,
+    })
+  }
   return data as T
 }
 

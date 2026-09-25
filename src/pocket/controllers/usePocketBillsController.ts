@@ -186,6 +186,7 @@ export default function usePocketBillsController({
 
   const displayedAttempt=useRef('')
   const billPayInFlight=useRef(false)
+  const [confirming,setConfirming]=useState(false)
   const billScope=useRef(activeBillKey);billScope.current=activeBillKey
   const dismiss=useCallback(()=>{displayedAttempt.current='';setIntent(null);setStatus('idle');setError('');setErrorCode('');setNotice('');setAmountNgnState('')},[])
   useEffect(() => { dismiss() }, [owner, dismiss])
@@ -463,6 +464,7 @@ export default function usePocketBillsController({
   const pay = useCallback(async () => {
     if (!intent || status !== 'ready' || billPayInFlight.current) return
     billPayInFlight.current=true
+    setConfirming(true)
     const stillCurrent=()=>{if(!mounted.current||billScope.current!==activeBillKey||displayedAttempt.current!==intent.id)throw Error('Your Pocket account or bill changed.')}
     displayedAttempt.current=intent.id
     setStatus('paying')
@@ -503,7 +505,7 @@ export default function usePocketBillsController({
       setStatus(active?.intentId===intent.id&&(active.txHash||active.challengeId)?'processing':'error')
       setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
       setError(active?.txHash||active?.challengeId?'':reason instanceof Error?reason.message:'Could not submit payment.')
-    } finally { billPayInFlight.current=false }
+    } finally { billPayInFlight.current=false;setConfirming(false) }
   }, [activeBillKey, baseWallet, category, ensureBaseWallet, getEvmSession, intent, reconcile, status, token])
 
   const preparePaymentApproval = useCallback(async () => {
@@ -543,6 +545,7 @@ export default function usePocketBillsController({
       : ((category !== 'tv' && category !== 'electricity') || (Boolean(verification) && /^0\d{10}$/.test(contactPhone))))
 
   return {
+    confirming,
     dismiss,
     availability,
     environment,

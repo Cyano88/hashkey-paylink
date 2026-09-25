@@ -95,6 +95,7 @@ export default function usePocketBankWithdrawController({
 }) {
   const [amount, setAmountState] = useState('')
   const [memo, setMemoState] = useState('')
+  const [confirming, setConfirming] = useState(false)
   const [status, setStatus] = useState<PocketBankWithdrawStatus>('idle')
   const [error, setError] = useState('')
   const [result, setResult] = useState<PocketBankWithdrawData | null>(null)
@@ -471,6 +472,7 @@ export default function usePocketBankWithdrawController({
     let transactionSubmitted = Boolean(readActivePocketBankPayoutTransfer(prepared.intentId) || acceptedTransfer)
     setError('')
     setStatus('authorizing')
+    setConfirming(true)
     try {
       const accessToken = await getAccessToken()
       if (!accessToken) throw new Error('Sign in again to continue this bank payout.')
@@ -613,7 +615,7 @@ export default function usePocketBankWithdrawController({
       }
       setStatus('idle')
       setError(message)
-    }
+    } finally { setConfirming(false) }
   }, [firstName, getAccessToken, getEvmSession, lastName, pollUntilSettled, result, status])
 
   const failRouting = useCallback((reason: unknown, expectedIntentId?: string) => {
@@ -626,5 +628,5 @@ export default function usePocketBankWithdrawController({
     setError(review ? 'USDC move submitted. Pocket will continue the payout automatically after confirmation.' : message)
   }, [result])
 
-  return { amount, memo, status, error, result, canSubmit, setAmount, setMemo, resetResult, prepareApproval, submit, continueAfterRouting, failRouting }
+  return { confirming, amount, memo, status, error, result, canSubmit, setAmount, setMemo, resetResult, prepareApproval, submit, continueAfterRouting, failRouting }
 }

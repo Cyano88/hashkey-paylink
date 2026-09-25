@@ -168,8 +168,8 @@ export default function PocketMoveBankPage() {
         ? 'pending'
         : 'idle'
   const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing' || direct.status === 'processing' || direct.status === 'pending'
-  const slowConfirmation=usePocketSlowConfirmation(['pending','processing'].includes(direct.status),direct.result?.intentId||'')
-  const bankTerminal=direct.status==='sent'||['failed','refunded','sent'].includes(direct.result?.state||'')
+  const slowConfirmation=usePocketSlowConfirmation(['pending','processing'].includes(direct.status),direct.result?.intentId||'',20_000,direct.confirming)
+  const bankTerminal=direct.result?.handoffVerified===true||['failed','refunded','sent'].includes(direct.result?.state||'')
   const bankReceipt = useMemo(() => (reviewOpen && (bankTerminal || slowConfirmation)) && direct.result ? pocketActivityReceipt({
     eventId: `bank-withdraw:${direct.result.intentId}`,
     txHash: direct.result.txHash,

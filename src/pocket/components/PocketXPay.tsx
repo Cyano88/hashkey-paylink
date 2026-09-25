@@ -30,7 +30,7 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
  const [merchant,setMerchant]=useState<XPayMerchant|null>(null),[payments,setPayments]=useState<XPayPayment[]>([])
  const [token,setToken]=useState(''),[usd,setUsd]=useState(''),[payment,setPayment]=useState<XPayPayment|null>(null),[review,setReview]=useState<StockTransfer|null>(null)
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[open,setOpen]=useState(!!merchantId),[receipt,setReceipt]=useState<PaylinkReceipt|null>(null)
- const slowConfirmation=usePocketSlowConfirmation(payment?.status==='submitted'&&Boolean(payment.hash),payment?.id||'')
+ const slowConfirmation=usePocketSlowConfirmation(payment?.status==='submitted'&&Boolean(payment.hash),payment?.id||'',20_000,busy)
  const guard=useRef(false),mounted=useRef(true)
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
  const saveActive=(id:string,hash?:string)=>localStorage.setItem(storageKey,JSON.stringify({id,hash}))

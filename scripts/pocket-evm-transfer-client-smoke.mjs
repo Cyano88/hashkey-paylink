@@ -220,3 +220,8 @@ assert.equal(fastResult.status,'confirmed')
 const mismatchResult = await executePocketEvmTransfer({session,linkedWalletAddress:walletAddress,recipient,amount:'1',executor:async input=>{input.onConfirmed(confirmedHash);return '0x'+'d'.repeat(64)},confirmer:async()=> 'submitted'})
 assert.equal(mismatchResult.status,'submitted')
 console.log('PASS verified confirmation avoids a second wait only for the same transaction hash.')
+let resolveChallenge;let settled=false;let submissions=0;
+const delayed=executePocketEvmTransfer({session,linkedWalletAddress:walletAddress,recipient,amount:'1',executor:async input=>{submissions++;input.onAccepted({challengeId:'accepted-fixture',transactionId:'fixture'});return null},challengeConfirmer:()=>new Promise(r=>{resolveChallenge=r})}).then(r=>{settled=true;return r});
+await new Promise(r=>setTimeout(r,0));assert.equal(settled,false,'No Processing result while active challenge confirmation is running');resolveChallenge({state:'confirmed',txHash:confirmedHash});assert.equal((await delayed).status,'confirmed');assert.equal(submissions,1);
+const unresolved=await executePocketEvmTransfer({session,linkedWalletAddress:walletAddress,recipient,amount:'1',executor:async input=>{input.onAccepted({challengeId:'fixture',transactionId:''});return null},challengeConfirmer:async()=>({state:'submitted',txHash:null})});assert.equal(unresolved.status,'submitted');
+console.log('PASS accepted challenge keeps active confirmation; verified result goes directly to success; unresolved result alone hands off; one submission.');

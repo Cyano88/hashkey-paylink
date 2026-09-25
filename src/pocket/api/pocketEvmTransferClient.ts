@@ -18,6 +18,12 @@ type PocketEvmTransferConfirmer = (input: {
   txHash: `0x${string}`
 }) => Promise<'confirmed' | 'submitted'>
 
+type PocketEvmChallengeConfirmer = (input: { session: CircleEvmEmailSession; challengeId: string; transactionId: string; timeoutMs: number }) => Promise<{ state: 'confirmed' | 'submitted'; txHash: string | null }>
+const defaultChallengeConfirmer: PocketEvmChallengeConfirmer = async input => {
+  const { reconcileCircleEvmEmailWithdraw } = await import('../../lib/circleEvmEmailWallet')
+  return reconcileCircleEvmEmailWithdraw(input)
+}
+
 const defaultExecutor: PocketEvmTransferExecutor = async input => {
   const { sendCircleEvmEmailWithdraw } = await import('../../lib/circleEvmEmailWallet')
   return sendCircleEvmEmailWithdraw({ ...input, idempotencyKey: input.idempotencyKey ?? crypto.randomUUID() })
@@ -47,6 +53,7 @@ export async function executePocketEvmTransfer({
   confirm = true,
   executor = defaultExecutor,
   confirmer = defaultConfirmer,
+  challengeConfirmer = defaultChallengeConfirmer,
 }: {
   session: CircleEvmEmailSession
   linkedWalletAddress: string
@@ -58,6 +65,7 @@ export async function executePocketEvmTransfer({
   onAccepted?: (value: { challengeId: string; transactionId: string }) => void
   confirm?: boolean
   executor?: PocketEvmTransferExecutor
+  challengeConfirmer?: PocketEvmChallengeConfirmer
   confirmer?: PocketEvmTransferConfirmer
 }) {
   if (!['base', 'arbitrum', 'arc', 'ethereum', 'polygon'].includes(session.chain)) {
@@ -81,9 +89,24 @@ export async function executePocketEvmTransfer({
   }
   if (amountUnits <= 0n) throw new Error('Enter a USDC withdrawal amount greater than zero.')
   let verifiedHash: `0x${string}` | null = null
-  const txHash = await executor({ session, recipient, amount, feeQuoteToken, idempotencyKey: idempotencyKey ?? crypto.randomUUID(), onChallenge, onAccepted, onConfirmed: hash => { verifiedHash = hash } })
+  let identifiers = { challengeId: '', transactionId: '' }
+  const txHash = await executor({ session, recipient, amount, feeQuoteToken, idempotencyKey: idempotencyKey ?? crypto.randomUUID(),
+    onChallenge: value => { identifiers = value; onChallenge?.(value) },
+    onAccepted: value => { identifiers = value; onAccepted?.(value) },
+    onConfirmed: hash => { verifiedHash = hash }
+  })
   if (txHash && verifiedHash === txHash) return { txHash, status: 'confirmed' as const }
-  if (!txHash) return { txHash, status: 'submitted' as const }
+  if (!txHash) {
+    if (confirm && identifiers.challengeId) {
+      // Finish the active check before handing an unresolved attempt to Activity.
+      // Approval or a transaction reference alone must never become success.
+      try {
+        const recovered = await challengeConfirmer({ session, ...identifiers, timeoutMs: 30_000 })
+        if (recovered.state === 'confirmed' && recovered.txHash) return { txHash: recovered.txHash as `0x${string}`, status: 'confirmed' as const }
+      } catch (reason) { if ((reason as { terminalFailure?: boolean })?.terminalFailure) throw reason }
+    }
+    return { txHash, status: 'submitted' as const }
+  }
   if (!confirm) return { txHash, status: 'submitted' as const }
   try {
     const status = await confirmer({ chain: session.chain, txHash })

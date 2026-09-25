@@ -13,6 +13,7 @@ import { reconcileCircleEvmEmailWithdraw, type CircleEvmEmailSession } from '../
 import { validatePocketWithdrawal } from './pocketWithdrawalValidation'
 
 function sendError(reason: unknown) {
+  if (String((reason as {code?: unknown})?.code) === '155509') return 'Sending is temporarily unavailable on this network. Please try another network or contact Pocket support.'
   const message = reason instanceof Error ? reason.message : 'Could not prepare this transfer.'
   return /transfer amount exceeds balance|insufficient.*funds|insufficient usdc/i.test(message)
     ? 'Insufficient USDC to cover the amount and fees. Try a lower amount.' : message
@@ -217,8 +218,9 @@ export default function usePocketWithdrawalController({
       }
       return confirmed||Boolean(operation.txHash)||operation.state==='accepted'
     }catch(reason){
-      const failure=reason as {terminalFailure?:boolean;txHash?:string;code?:number}
-      const terminal=failure?.terminalFailure===true||(!recoveredAttempt&&(failure?.code===4001||/reverted on-chain|user (rejected|cancelled)|user denied/i.test(sendError(reason))))
+      const failure=reason as {terminalFailure?:boolean;submissionRejected?:boolean;txHash?:string;code?:number}
+      const rejectedBeforeChallenge=failure?.submissionRejected===true&&!recoveredAttempt&&!operation?.challengeId&&!operation?.transactionId&&!operation?.txHash
+      const terminal=rejectedBeforeChallenge||failure?.terminalFailure===true||(!recoveredAttempt&&(failure?.code===4001||/reverted on-chain|user (rejected|cancelled)|user denied/i.test(sendError(reason))))
       const unknown=Boolean(operation&&(recoveredAttempt||submissionStarted||operation.challengeId||operation.state==='accepted'||operation.txHash))&&!terminal
       if(operation)publish({state:unknown?(operation.challengeId?'submitted':'preparing'):'failed',error:sendError(reason),...(failure?.txHash?{txHash:failure.txHash}:{})})
       if(operation?.state==='confirmed'){if(visible()){setTxHash(operation.txHash);setStatus('successful');setError('')}return true}

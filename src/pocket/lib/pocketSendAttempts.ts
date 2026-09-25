@@ -18,6 +18,11 @@ export function readSendAttempts(owner:string, storage:Storage=localStorage):Poc
  for(let i=0;i<storage.length;i++) {const k=storage.key(i);if(!k?.startsWith(prefix))continue
   const record=JSON.parse(storage.getItem(k)||'null') as PocketSendAttempt|null
   if(!record||record.owner!==sendOwner(owner)||!record.idempotencyKey||!record.sourceAddress||!record.recipient||!record.amount||!['solana','base','arbitrum','arc','ethereum','polygon'].includes(record.network)||!['preparing','submitted','accepted','confirmed','failed'].includes(record.state)||!Number.isFinite(record.createdAt))throw Error('A saved transfer could not be read. Check Activity before repeating it.')
+  // Repair only the explicit pre-challenge policy rejection, not lost responses.
+  if(record.state==='preparing'&&!record.challengeId&&!record.transactionId&&!record.txHash
+    &&/code 155509/.test(record.error||'')&&/needs to setup paymaster policy/i.test(record.error||'')){
+   record.state='failed';record.updatedAt=Date.now();storage.setItem(k,JSON.stringify(record))
+  }
   records.push(record)
  }
  return records.sort((a,b)=>b.createdAt-a.createdAt)
