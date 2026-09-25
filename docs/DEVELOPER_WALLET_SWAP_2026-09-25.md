@@ -4,6 +4,8 @@ Hash PayStream Home exposes Send, Receive, Swap, xStocks. Swap offers USDC on Ar
 
 ## Builder API
 
+Product setup now uses independent `swap_arc` and `swap_xlayer` capabilities. Select these under Swap in the portal; Arc or X Layer Agreement selection alone does not grant Swap. See `BUILDER_PRODUCT_SETUP_2026-09-25.md` for migration, wallet-only setup, and bridge availability.
+
 Use a separate live `wallet:swap` key. POST `/api/v2/wallets/swap-sessions` with an `Idempotency-Key` (16-128 safe characters) and `{ "rail": "arc" | "xlayer", "userId": "did:privy:..." }`. Obtain the participant ID from the verified wallet-connection flow, not an untrusted client field. Response `session` includes ID, project name, wallet authority, network/chain and `/wallet/swap/:id` checkout path. Retrying the same project reference returns the same session; changing the participant or network conflicts.
 
 The authenticated participant POSTs `/api/v2/wallets/swap-sessions/participant` with `{sessionId,action:"read"}` for metadata. Custom interfaces use `{sessionId,action:"request",method:"GET"|"POST",payload,token?}` with the Hash PayLink participant Bearer token. Builder keys are rejected on this route. Arc GET returns tokens/pending state (optional `token` discovery); POST supports Pocket's existing `quote`, `execute`, `status`. X Layer POST supports `quote` and `verify`; signing and receipt recovery remain in the user's wallet. Arbitrary contract execution is not exposed. Existing cross-origin application restrictions still apply.

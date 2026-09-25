@@ -14,7 +14,15 @@ export async function keysApi(body, { fetcher, session }) {
   const chunks = []; let size = 0
   for await (const chunk of response.body ?? []) { size += chunk.length; if (size > 131072) throw safeError('Response limit.'); chunks.push(chunk) }
   const data = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-  if (!response.ok || !data.ok || data.projectId !== session.grant.projectId) throw safeError('Key operation failed. Keep the same operation id when retrying.')
+  if (!response.ok || !data.ok || data.projectId !== session.grant.projectId) {
+    const configurationErrors = new Map([
+      ['Select a Swap network in project settings before creating a Swap key.', 'Select Arc or X Layer under Swap in project Settings, save, then retry with the same operation id.'],
+      ['xStocks Agreement keys require the separate xStocks Agreements capability.', 'Select X Layer under Agreements in project Settings, save, then retry with the same operation id.'],
+      ['An active, ready human checkout project is required.', 'Save a complete human project configuration before creating this scoped key.'],
+    ])
+    if (response.status === 409 && data.ok === false && configurationErrors.has(data.error)) throw safeError(configurationErrors.get(data.error))
+    throw safeError('Key operation failed. Keep the same operation id when retrying.')
+  }
   return data
 }
 export async function keyCommand(command, options, { fetcher, sessionStore, vaultStore }) {

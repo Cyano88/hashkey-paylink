@@ -25,3 +25,9 @@ Production source build passed. Full TypeScript still reports existing errors ou
 ## Builder contract
 
 Configure project capabilities via the owner portal. Create separate scoped backend keys through owner-approved CLI access. Swap: wallet:swap. X Layer Agreements: xstocks-agreement:read and xstocks-agreement:create. Existing Arc scopes are unchanged. Capabilities API version is 2. Configured indicates saved settings, not payment activation or settlement completion.
+
+## Verified live deployment
+
+Source 89b2dd1a8699586c5aa2996078414d6e0fa22d0d is live on Render deployment dep-dar5s57avr4c73fsp5n0. Health and public capabilities return JSON 200; capabilities version 2 exposes separate Agreement and Swap rails and no enabled Bridge networks. The existing Hash PayStream project reports arc_agreements and preserved swap_arc. Invalid-idempotency probes create no records: Arc reaches its input validation (400), while unselected X Layer is rejected (403). No project selection or payment was changed by these probes.
+
+CLI follow-up: missing Swap or X Layer Agreement selection now returns a specific configuration instruction using a fixed safe-message allowlist. Unrecognized server errors remain redacted. All 40 CLI tests pass.
