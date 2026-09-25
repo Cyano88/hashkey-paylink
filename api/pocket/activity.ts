@@ -164,7 +164,7 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
           ? 'needs review'
           : ['quoted', 'awaiting_payment', 'payment_confirmed', 'pending', 'vending'].includes(intent.state)
             ? 'processing'
-            : 'paid'
+            : 'failed'
   const supportReference = [intent.providerCode ? `VTpass ${intent.providerCode}` : '', intent.requestId]
     .filter(Boolean)
     .join(' · ')

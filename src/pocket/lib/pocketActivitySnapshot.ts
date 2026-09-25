@@ -21,7 +21,8 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
       const compatibleReference = !candidate.providerReference || !row.providerReference || sameReference
       const alias = sameHash && compatibleReference && (candidate.direction === row.direction || isBank(row) && (!candidate.direction || !row.direction))
       const sameOrder = isBank(row) && isBank(candidate) && sameReference && candidate.chain.toLowerCase() === row.chain.toLowerCase() && candidate.source === row.source
-      if(alias || sameOrder){if(!old || candidate.ts<old.ts)old=candidate;rows.delete(key)}
+      const sameBill = row.source === 'bills' && candidate.source === 'bills' && row.chain === candidate.chain && row.eventId === candidate.eventId
+      if(alias || sameOrder || sameBill){if(!old || candidate.ts<old.ts)old=candidate;rows.delete(key)}
     }
     // The current source owns mutable fields, including removal of refund actions.
     const bank = String(row.source || '').replace(/_/g, '-').startsWith('bank-')

@@ -1,3 +1,4 @@
+import { pocketActivityAmount } from '../lib/pocketActivityPresentation'
 import { useState, type ReactNode } from 'react'
 import { paymentReceiptOutcome } from '../../lib/paymentReceiptPdf'
 import PocketTransactionSheet from './PocketTransactionSheet'
@@ -14,7 +15,7 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
     {message && <p role="status" className="mt-2 text-xs">{message}</p>}
   </div>}</>
   const state = paymentReceiptOutcome({status: pocketActivityStatus(row)}).state
-  return <PocketTransactionSheet title={pocketMovementTitle(row)} state={state} receipt={receipt} amount={row.amount + ' ' + (row.assetSymbol || 'USDC')} onDone={onClose}
+  return <PocketTransactionSheet title={pocketMovementTitle(row)} state={state} receipt={receipt} amount={pocketActivityAmount(row)} onDone={onClose}
     detail={state === 'pending' ? 'Waiting for confirmation. You can check Activity for updates.' : undefined}>
     <dl className="space-y-3 text-xs text-gray-500">
       {row.direction === 'in' && row.payer && <div className="flex justify-between gap-4"><dt>From</dt><dd className="max-w-[70%] break-all text-right">{row.payer}</dd></div>}
