@@ -94,6 +94,8 @@ const handler = createPocketActivityHandler({
           settlementType: 'INSTANT_FIAT',
           amountNgn: '6000',
           paycrestStatus: 'settled',
+          handoffVerified: true,
+          bankSettlementStatus: 'settled',
           bankName: 'Example Bank',
           bankLast4: '1234',
           accountName: 'Ada Lovelace',
@@ -194,6 +196,7 @@ assert.equal(loaded.body.merchants[0].display_name, 'Ada Shop')
 assert.equal(loaded.body.collections[0].title, "Shy's wedding")
 assert.deepEqual(ownerIds, ['privy-user-1', 'privy-user-1', 'privy-user-1', 'privy-user-1'])
 assert.deepEqual(loaded.body.payments.map(row => row.txHash), ['0xwedding', '0xpolydesk', '0xreverted', '0xbill', 'paycrest_intent-2', '0xolder'])
+assert.equal(loaded.body.payments.find(row=>row.handoffVerified)?.bankSettlementStatus, 'settled')
 assert.equal(loaded.body.payments[0].source, 'collection')
 assert.equal(loaded.body.payments[0].activityLabel, "Shy's wedding")
 assert.equal(loaded.body.payments[0].paycrestStatus, 'confirmed')

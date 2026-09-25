@@ -30,7 +30,7 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
     const savedStatus = bank && !row.paycrestStatus?.trim() && old?.paycrestStatus
       ? { paycrestStatus: old.paycrestStatus } : {}
     const receiptIdentity=bank && old?.eventId.startsWith('ngpos-') && !row.eventId.startsWith('ngpos-') ? {eventId:old.eventId,txHash:old.txHash} : {}
-    rows.set(rowKey(row), { ...row, ...savedStatus, ...receiptIdentity, ts: old?.ts || row.ts })
+    rows.set(rowKey(row), { ...row, ...savedStatus, ...receiptIdentity, ...(bank && row.handoffVerified === undefined && old?.handoffVerified ? {handoffVerified:true} : {}), ...(bank && !row.bankSettlementStatus && !row.paycrestStatus?.trim() && old?.bankSettlementStatus ? {bankSettlementStatus:old.bankSettlementStatus} : {}), ts: old?.ts || row.ts })
   }
   const values = [...rows.values()]
   const contextual = new Set(values.filter(row => row.source && !['wallet-deposit', 'wallet-withdrawal'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))

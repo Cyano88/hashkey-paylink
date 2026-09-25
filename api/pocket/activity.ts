@@ -219,6 +219,8 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     ...(value.settlementType !== undefined ? { settlementType: value.settlementType } : {}),
     ...(value.amountNgn !== undefined ? { amountNgn: value.amountNgn } : {}),
     ...(value.paycrestStatus !== undefined ? { paycrestStatus: value.paycrestStatus } : {}),
+    ...(value.handoffVerified !== undefined ? { handoffVerified:value.handoffVerified } : {}),
+    ...(value.bankSettlementStatus !== undefined ? { bankSettlementStatus:value.bankSettlementStatus } : {}),
     ...(value.activityLabel !== undefined ? { activityLabel: value.activityLabel } : {}),
     ...(value.direction !== undefined ? { direction: value.direction } : {}),
     ...(value.recipient !== undefined ? { recipient: value.recipient } : {}),

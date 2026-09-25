@@ -633,6 +633,8 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
             : isBankWithdrawOrder ? 'Direct bank payout' : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
         settlementType: isBankSendOrder ? 'PAYCREST_ONRAMP' : 'INSTANT_FIAT',
         amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
+        handoffVerified: isBankWithdrawOrder && /^0x[a-f0-9]{64}$/i.test(order.tx_hash || ''),
+        bankSettlementStatus: isBankWithdrawOrder ? order.status : undefined,
         paycrestStatus: isBankWithdrawOrder ? bankWithdrawActivityStatus(order) : order.status,
         direction: isBankWithdrawOrder ? 'out' : 'in',
         recipient: isBankSendOrder
@@ -1370,7 +1372,11 @@ export default async function handler(req: Request, res: Response) {
         payerEmail: cleanText(body.payer_email, ''),
         payerWallet: cleanText(body.payer_wallet, ''),
       })
-      const reconciled = await reconcilePaycrestOrderPayment(id).catch(() => null)
+      if (!order) return res.status(404).json({ ok:false, error:'Paycrest POS order not found.' })
+      // Exact on-chain handoff is already verified and durable. Receipt repair
+      // must not hold the bank confirmation sheet open behind another RPC scan.
+      if (order.source === 'bank-withdraw') schedulePaycrestOrderReconciliation(id)
+      const reconciled = order.source === 'bank-withdraw' ? null : await reconcilePaycrestOrderPayment(id).catch(() => null)
       const currentOrder = reconciled?.order ?? order
       const execution = await syncOwnedPosExecution(currentOrder)
       return res.json({

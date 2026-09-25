@@ -175,6 +175,8 @@ export type PocketActivityRow = {
   contextLabel?: string
   settlementType?: string
   amountNgn?: string
+  handoffVerified?: boolean
+  bankSettlementStatus?: string
   paycrestStatus?: string
   activityLabel?: string
   direction?: 'in' | 'out'
@@ -589,6 +591,8 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.contextLabel, 500)
     && isOptionalBoundedString(value.settlementType, 80)
     && isOptionalBoundedString(value.amountNgn, 80)
+    && (value.handoffVerified === undefined || typeof value.handoffVerified === 'boolean')
+    && isOptionalBoundedString(value.bankSettlementStatus, 80)
     && isOptionalBoundedString(value.paycrestStatus, 80)
     && isOptionalBoundedString(value.activityLabel, 80)
     && (value.direction === undefined || value.direction === 'in' || value.direction === 'out')

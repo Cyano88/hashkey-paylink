@@ -17,6 +17,7 @@ export type PaylinkReceipt = {
   createdAt: number
   source?: string
   merchantId?: string
+  bankSettlementStatus?: string
   settlementType?: string
   amountNgn?: string
   variant?: 'general' | 'bills'
@@ -298,6 +299,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       { label: 'To', value: recipient, mono: /^0x/.test(recipient) },
       { label: isBank ? 'Receiver account' : 'Destination', value: destination, mono: /^0x/.test(destination) },
       { label: 'Amount & narration', value: `${amount} · ${narration}` },
+      ...(receipt.source === 'bank-withdraw' && receipt.bankSettlementStatus ? [{label:'Bank delivery',value:['settled','completed','successful'].includes(receipt.bankSettlementStatus) ? 'Delivered' : ['refunded','reversed'].includes(receipt.bankSettlementStatus) ? 'Refunded' : ['refunding','reversing'].includes(receipt.bankSettlementStatus) ? 'Refund pending' : ['failed','expired','cancelled','canceled'].includes(receipt.bankSettlementStatus) ? 'Not completed' : 'Processing'}] : []),
     ],
     reference,
   }

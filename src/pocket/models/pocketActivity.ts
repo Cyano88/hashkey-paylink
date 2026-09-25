@@ -15,6 +15,8 @@ export type PocketActivityRow = {
   contextLabel?: string
   settlementType?: string
   amountNgn?: string
+  handoffVerified?: boolean
+  bankSettlementStatus?: string
   paycrestStatus?: string
   activityLabel?: string
   direction?: 'in' | 'out'
