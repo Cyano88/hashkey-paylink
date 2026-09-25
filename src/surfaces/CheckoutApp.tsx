@@ -8,6 +8,7 @@ const XPayCheckout = lazy(() => import('../pocket/pages/PocketXPayCheckoutPage')
 const PaymentPage = lazy(() => import('../pages/PaymentPage'))
 const HostedCheckoutEntry = lazy(() => import('../pages/HostedCheckoutEntry'))
 const AgentCheckoutPage = lazy(() => import('../pages/AgentCheckoutPage'))
+const StockWalletPage = lazy(() => import('../pages/StockWalletPage'))
 const WalletSwapPage = lazy(() => import('../pages/WalletSwapPage'))
 const WalletConnectionPage = lazy(() => import('../pages/WalletConnectionPage'))
 const XStocksAgreementPage = lazy(() => import('../pages/XStocksAgreementPage'))
@@ -39,6 +40,7 @@ export default function CheckoutApp() {
       <Route path="pay" element={<PaymentPage />} />
       <Route path="pay/c/:checkoutId" element={<HostedCheckoutEntry />} />
       <Route path="pay/a/:checkoutId" element={<AgentCheckoutPage />} />
+      <Route path="wallet/stocks/:sessionId" element={<StockWalletPage />} />
       <Route path="wallet/swap/:sessionId" element={<WalletSwapPage />} />
       <Route path="wallet/connect/:connectionId" element={<WalletConnectionPage />} />
       <Route path="agreements/xstocks/:agreementId" element={<XStocksAgreementPage />} />

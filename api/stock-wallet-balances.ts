@@ -1,3 +1,4 @@
+import { resolveStockWalletAccount } from './stock-wallet-account.js'
 import type { Request, Response } from 'express'
 import { walletReceiveDetails } from './wallet-receive-details.js'
 import { formatUnits, getAddress, isAddress, zeroAddress } from 'viem'
@@ -6,7 +7,7 @@ import { assertLiveDeveloperRequest } from './developer-environment.js'
 import { readServerStockBalances } from './pocket/xstocks-balances.js'
 import { readStockMarketPrices } from './pocket/xstocks-prices.js'
 const fail = (status: number, message: string): never => { throw Object.assign(new Error(message), { status }) }
-const defaults = { policy: resolveDeveloperApiKeyPolicy, balances: readServerStockBalances, prices: readStockMarketPrices, now: Date.now }
+const defaults = { policy: resolveDeveloperApiKeyPolicy, balances: readServerStockBalances, prices: readStockMarketPrices, now: Date.now, account: resolveStockWalletAccount }
 // Read-only public on-chain data. The builder must authenticate its user and select
 // the user's verified wallet. This endpoint never asserts ownership or grants signing.
 export function createStockWalletBalancesHandler(overrides: Partial<typeof defaults> = {}) {
@@ -18,9 +19,13 @@ export function createStockWalletBalancesHandler(overrides: Partial<typeof defau
       assertLiveDeveloperRequest(req)
       const policy = await d.policy(req)
       if (!policy || policy.environment !== 'live' || policy.checkoutMode !== 'human') fail(403, 'A live stock balance read key is required.')
-      const wallet = req.body?.wallet
+      const linked = req.body?.userId !== undefined || req.body?.walletAppId !== undefined
+      if (linked && req.body?.wallet !== undefined) fail(400, 'Choose an address or a connected account, not both.')
+      const account = linked ? await d.account(req.body.userId, req.body.walletAppId) : undefined
+      const wallet = account?.wallet ?? req.body?.wallet
+      const identity = account ? { userId: account.userId, walletAppId: account.walletAppId } : {}
       if (typeof wallet !== 'string' || !isAddress(wallet) || getAddress(wallet) === zeroAddress) fail(400, 'Provide a valid X Layer wallet.')
-      if (req.originalUrl?.split('?')[0] === '/api/v2/wallets/stocks/receive') return res.json({ ok: true, wallet: getAddress(wallet), chainId: 196, receive: walletReceiveDetails('xlayer', getAddress(wallet)) })
+      if (req.originalUrl?.split('?')[0] === '/api/v2/wallets/stocks/receive') return res.json({ ok: true, ...identity, wallet: getAddress(wallet), chainId: 196, receive: walletReceiveDetails('xlayer', getAddress(wallet)) })
       const snapshot = await d.balances('developer:' + policy.partnerId, getAddress(wallet))
       const stale = d.now() - snapshot.observedAt >= 60000
       let prices: Awaited<ReturnType<typeof readStockMarketPrices>> = {}
@@ -32,7 +37,7 @@ export function createStockWalletBalancesHandler(overrides: Partial<typeof defau
       })
       const pricingComplete = holdings.every(h => h.estimatedValueUsd !== null)
       const sum = holdings.reduce((total, h) => total + (h.estimatedValueUsd ?? 0), 0)
-      return res.json({ ok: true, wallet: getAddress(wallet), chainId: 196, receive: walletReceiveDetails('xlayer', getAddress(wallet)), gas: { symbol: 'OKB', decimals: 18, units: snapshot.gas.toString(), balance: formatUnits(snapshot.gas, 18), observedAt: snapshot.observedAt, stale }, holdings, complete: snapshot.complete, stale, observedAt: snapshot.observedAt, blockNumber: snapshot.blockNumber.toString(), pricingComplete, estimatedValueUsd: snapshot.complete && !stale && pricingComplete && Number.isFinite(sum) ? sum : null })
+      return res.json({ ok: true, ...identity, wallet: getAddress(wallet), chainId: 196, receive: walletReceiveDetails('xlayer', getAddress(wallet)), gas: { symbol: 'OKB', decimals: 18, units: snapshot.gas.toString(), balance: formatUnits(snapshot.gas, 18), observedAt: snapshot.observedAt, stale }, holdings, complete: snapshot.complete, stale, observedAt: snapshot.observedAt, blockNumber: snapshot.blockNumber.toString(), pricingComplete, estimatedValueUsd: snapshot.complete && !stale && pricingComplete && Number.isFinite(sum) ? sum : null })
     } catch (reason) {
       const error = reason as Error & { status?: number }
       return res.status(error.status || 503).json({ ok: false, error: error.status ? error.message : 'Stock balances are unavailable. Try again.' })
