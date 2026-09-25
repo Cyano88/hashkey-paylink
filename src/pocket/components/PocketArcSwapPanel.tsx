@@ -8,7 +8,7 @@ import { pocketApiUrl } from '../lib/pocketRoutes'
 type Token = { address: string; symbol: string; name: string; decimals: number; balance: string | null; balanceStatus: string; logoURI?: string }
 type Quote = { id: string; amount: string; expectedOut: string; minimumOut: string; expiresAt: number; tokenIn: Token; tokenOut: Token; gasUsdc: string; fees: { name: string; amount: string; symbol: string; included: boolean }[] }
 type Pending = { quoteToken: string; quote: Quote; challengeId?: string; txHash?: string; walletAddress: string }
-type Props = { enabled?: boolean; onBusyChange?(busy: boolean): void; email: string; getAccessToken(): Promise<string | null>; ensureWallet(): Promise<{ address: string } | null>; getSession(address: string): Promise<CircleEvmEmailSession>; refresh(): Promise<unknown> }
+type Props = { request?(body?:Record<string,unknown>,tokenAddress?:string):Promise<any>; storageScope?:string; enabled?: boolean; onBusyChange?(busy: boolean): void; email: string; getAccessToken(): Promise<string | null>; ensureWallet(): Promise<{ address: string } | null>; getSession(address: string): Promise<CircleEvmEmailSession>; refresh(): Promise<unknown> }
 
 export default function PocketArcSwapPanel(props: Props) {
   const visible = usePocketPageVisible()
@@ -25,7 +25,7 @@ export default function PocketArcSwapPanel(props: Props) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [now, setNow] = useState(Date.now())
-  const storageKey = 'pocket:arc-mainnet:swap:' + props.email
+  const storageKey = 'pocket:arc-mainnet:swap:' + (props.storageScope || props.email)
   const [pending, setPending] = useState<Pending | null>(() => { try { return JSON.parse(sessionStorage.getItem(storageKey) || 'null') } catch { return null } })
   const busy = status === 'pending' || status === 'submitted'
   useEffect(() => { props.onBusyChange?.(busy || approvalBusy); return () => props.onBusyChange?.(false) }, [busy, approvalBusy, props.onBusyChange])
@@ -33,6 +33,7 @@ export default function PocketArcSwapPanel(props: Props) {
   const locked = useRef(false)
   const session = useRef<CircleEvmEmailSession | null>(null)
   const api = useCallback(async (body?: Record<string, unknown>, tokenAddress?: string) => {
+    if(props.request)return props.request(body,tokenAddress)
     const accessToken = await props.getAccessToken()
     if (!accessToken) throw new Error('Sign in again to use Arc swaps.')
     const response = await fetch(pocketApiUrl('/api/pocket/arc-swap' + (tokenAddress ? '?token=' + encodeURIComponent(tokenAddress) : '')), {
@@ -44,7 +45,7 @@ export default function PocketArcSwapPanel(props: Props) {
     const data = await response.json()
     if (!response.ok || !data.ok) throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || 'Arc swap request failed.')
     return data
-  }, [props.getAccessToken])
+  }, [props.getAccessToken,props.request])
   const load = useCallback(async () => {
     setLoadingTokens(true); setCatalogError('')
     try { const data = await api(); setTokens(data.tokens); if (data.pending) savePending(data.pending) }

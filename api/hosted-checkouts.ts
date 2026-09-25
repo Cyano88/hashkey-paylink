@@ -981,6 +981,9 @@ export function createHostedCheckoutsHandler(dependencies: Dependencies = defaul
     if (policy && 'environment' in policy && policy.environment !== 'live') return res.status(403).json({ ok: false, error: 'This checkout route requires live credentials.' })
     if (!policy) return res.status(401).json({ ok: false, error: 'Valid partner API credentials are required.' })
     const providerRouting = verifiedProviderRouting.get(req)
+    if (!providerRouting && 'projectManaged' in policy && !policy.capabilities.includes('hosted_checkout')) {
+      return res.status(403).json({ok:false,error:'Enable Checkout for this project before creating a checkout.'})
+    }
     if (providerRouting && (!('projectManaged' in policy) || !policy.capabilities.includes(providerRouting.capability))) {
       return res.status(403).json({ ok: false, error: 'This API key is not enabled for the requested funding product.' })
     }

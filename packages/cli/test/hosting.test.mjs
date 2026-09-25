@@ -136,7 +136,9 @@ test('Funding and account connection handoffs require separate exact scopes',asy
  for(const [product,scopes,variable] of [
  ['agreement-funding',['agreement:recipient','agreement:fund'],'HASHPAYSTREAM_ARC_MAINNET_FUNDING_API_KEY'],
  ['wallet-connection',['wallet:connect'],'HASHPAYSTREAM_WALLET_CONNECTION_API_KEY'],
- ['arc-wallet',['wallet:arc'],'HASHPAYSTREAM_ARC_WALLET_API_KEY']]) {
+ ['arc-wallet',['wallet:arc'],'HASHPAYSTREAM_ARC_WALLET_API_KEY'],
+ ['xstocks-agreement',['xstocks-agreement:read','xstocks-agreement:create'],'HASHPAYSTREAM_XSTOCKS_AGREEMENT_API_KEY'],
+ ['wallet-swap',['wallet:swap'],'HASHPAYSTREAM_WALLET_SWAP_API_KEY']]) {
   const f=setup();
   await assert.rejects(hostingCommand('hosting plan',{...options,product},f.deps));
   f.deps.fetcher=async()=>Response.json({ok:true,projectId,keys:[{...metadata,scopes}]});

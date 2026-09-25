@@ -24,7 +24,7 @@ export function parseWorkPayment(body:Record<string,unknown>,amount:string,durat
   const reviewHours=Number(body.reviewHours??prior?.reviewHours??48);if(![24,48,72].includes(reviewHours))fail('Choose a 24, 48 or 72 hour review period.');
   return {policy:'work-xlayer-v1',chainId:196,token:getAddress(token),decimals,amountUnits:amountUnits.toString(),reviewHours:reviewHours as 24|48|72,responseDays:7};
 }
-export type WorkTermsForBinding={version:number;title:string;description:string;amount:string;durationSeconds:number;xlayerPayment?:WorkPayment};
+export type WorkTermsForBinding={kind?:'trade';trade?:import('./trade.js').TradeDetails;version:number;title:string;description:string;amount:string;durationSeconds:number;xlayerPayment?:WorkPayment};
 export function prepareWorkBinding(id:string,terms:WorkTermsForBinding,buyer:string,seller:string,now:number){
   const p=terms.xlayerPayment;if(!p||p.policy!=='work-xlayer-v1'||p.chainId!==196)throw Error('Work payment terms are unavailable.');
   const roles=[buyer,seller,TRADE_XLAYER_ARBITER,TRADE_XLAYER_FACTORY,p.token].map(value=>getAddress(value));

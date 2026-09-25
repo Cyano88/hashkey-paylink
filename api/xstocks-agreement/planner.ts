@@ -1,9 +1,10 @@
+import { xLayer } from 'viem/chains';
 import { createPublicClient, http, encodeAbiParameters, encodeFunctionData, getAddress, keccak256, stringToHex, zeroAddress, type Address, type Hex } from 'viem';
 import { TRADE_FACTORY_ABI as factoryAbi, TRADE_ESCROW_ABI as escrowAbi, TRADE_TOKEN_ABI as tokenAbi, TRADE_XLAYER_FACTORY as factory, TRADE_XLAYER_ARBITER as arbiter, type TradeXLayerAction, type TradeXLayerStatus } from '../../src/lib/xstocksAgreement/protocol.js';
 
 const runtimeHash = '0xcc80a2e8e46179070a0a664636e29fa5a83f62eed9d97139aacca5d95c14ec26';
 export function tradeXLayerClient(env: NodeJS.ProcessEnv) {
-  return createPublicClient({ transport: http(env.XLAYER_MAINNET_RPC_URL || 'https://rpc.xlayer.tech', { timeout: 15000, retryCount: 1 }) });
+  return createPublicClient({ chain: xLayer, transport: http(env.XLAYER_MAINNET_RPC_URL || 'https://rpc.xlayer.tech', { timeout: 15000, retryCount: 1 }) });
 }
 export function tradeXLayerEnabled(env: NodeJS.ProcessEnv) { return env.HASHPAYLINK_XSTOCKS_AGREEMENT_PLANNER_ENABLED === 'true'; }
 export async function verifyFactory(client: ReturnType<typeof tradeXLayerClient>, blockNumber?: bigint) {

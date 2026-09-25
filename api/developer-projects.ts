@@ -1,3 +1,4 @@
+import { effectiveProductCapabilities, needsSettlementRouting, type ProductCapability } from '../src/lib/developerProducts.js'
 import { developerEnvironment } from './developer-environment.js'
 import { isAgentCheckoutNetwork, developerProductNetworks } from '../src/lib/developerNetworkPolicy.js'
 import { listDeveloperActivity } from './developer-activity-store.js'
@@ -18,7 +19,7 @@ type DeveloperNetwork = typeof NETWORKS[number]
 type SettlementMode = 'usdc' | 'ngn'
 type DeveloperEnvironment = 'test' | 'live'
 export type DeveloperCheckoutMode = 'human' | 'agentic'
-export type DeveloperCapability = 'hosted_checkout' | 'polymarket_funding' | 'arc_agreements' | 'xstocks_agreements'
+export type DeveloperCapability = ProductCapability
 export type ArcAgreementPilotPolicy = {
   status: 'draft_only' | 'approved' | 'disabled'
   maxAgreementUsdc: string
@@ -43,7 +44,7 @@ type DeveloperKey = {
   createdAt: string
   lastUsedAt?: string
   revokedAt?: string
-  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create' | 'agreement:recipient' | 'agreement:fund' | 'xstocks-agreement:read' | 'wallet:connect' | 'wallet:arc' | 'wallet:stocks:read' | 'xstocks-agreement:create'>
+  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create' | 'agreement:recipient' | 'agreement:fund' | 'xstocks-agreement:read' | 'wallet:connect' | 'wallet:arc' | 'wallet:stocks:read' | 'wallet:swap' | 'xstocks-agreement:create'>
   expiresAt?: string
   createdByGrant?: string
   operationId?: string
@@ -60,6 +61,7 @@ type DeveloperProject = {
   useCase: string
   checkoutMode?: DeveloperCheckoutMode
   capabilities?: DeveloperCapability[]
+  productSettingsVersion?: number
   settlementMode: SettlementMode
   settlementStatus: 'ready' | 'review_required'
   operationalStatus?: 'active' | 'suspended'
@@ -371,7 +373,8 @@ function projectPublic(project: DeveloperProject, includeOperations = false) {
     brandImageUrl: project.brandImageUrl ?? '',
     useCase: project.useCase,
     checkoutMode: projectCheckoutMode(project),
-    capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
+    capabilities: effectiveProductCapabilities(project),
+    productSettingsVersion: project.productSettingsVersion,
     settlementMode: project.settlementMode,
     settlementStatus: project.settlementStatus,
     operationalStatus: project.operationalStatus === 'suspended' ? 'suspended' : 'active',
@@ -425,7 +428,7 @@ export async function verifyDeveloperProjectOwner(req: Request, projectIdValue: 
     ownerId: project.ownerId,
     name: project.name,
     checkoutMode: projectCheckoutMode(project),
-    capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'] as DeveloperCapability[],
+    capabilities: effectiveProductCapabilities(project) as DeveloperCapability[],
     operationalStatus: project.operationalStatus === 'suspended' ? 'suspended' as const : 'active' as const,
   }
 }
@@ -450,10 +453,11 @@ function requestedCapabilities(value: unknown, checkoutMode: DeveloperCheckoutMo
   const allowed = new Set<DeveloperCapability>(
     checkoutMode === 'agentic'
       ? ['hosted_checkout', 'arc_agreements']
-      : ['hosted_checkout', 'polymarket_funding', 'arc_agreements', 'xstocks_agreements'],
+      : ['hosted_checkout', 'polymarket_funding', 'arc_agreements', 'xstocks_agreements', 'swap_arc', 'swap_xlayer'],
   )
+  if (value.some(item => typeof item !== 'string' || !allowed.has(clean(item, 40).toLowerCase() as DeveloperCapability))) throw Object.assign(new Error('Choose products supported for this project mode. Bridge is not available.'), {status:400})
   const capabilities = value.map(item => clean(item, 40).toLowerCase()).filter((item): item is DeveloperCapability => allowed.has(item as DeveloperCapability))
-  return Array.from(new Set(capabilities)).slice(0, 4)
+  return Array.from(new Set(capabilities)).slice(0, 6)
 }
 
 function statusCode(error: unknown) {
@@ -614,8 +618,8 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         const now = dependencies.now().toISOString()
         const project: DeveloperProject = {
           id: dependencies.createProjectId(), ownerId: identity.userId, ownerEmail: identity.email,
-          name, website, brandImageUrl: '', useCase, checkoutMode, capabilities, settlementMode: 'usdc', settlementStatus: 'review_required',
-          networks: ['base'], defaultNetwork: 'base', recipients: {}, refundAddress: '',
+          name, website, brandImageUrl: '', useCase, checkoutMode, capabilities, productSettingsVersion: 2, settlementMode: 'usdc', settlementStatus: 'review_required',
+          networks: developerProductNetworks(checkoutMode, capabilities).slice(0,1), defaultNetwork: developerProductNetworks(checkoutMode, capabilities)[0] ?? 'arc', recipients: {}, refundAddress: '',
           allowedOrigins: [new URL(website).origin], webhookUrl: '', webhookSecretCipher: '',
           bankCode: '', bankName: '', bankAccountName: '', bankAccountLast4: '', bankAccountCipher: '', bankVerifiedAt: undefined,
           arcAgreementPilot: {
@@ -766,12 +770,13 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           return res.status(400).json({ ok: false, error: 'Agentic x402 projects cannot enable human funding products.' })
         }
         const capabilities: DeveloperCapability[] = req.body?.capabilities === undefined
-          ? (currentProject.capabilities?.length ? currentProject.capabilities : ['hosted_checkout'])
+          ? effectiveProductCapabilities(currentProject)
           : requestedCapabilities(req.body.capabilities, currentCheckoutMode)
-        const settlementMode = clean(req.body?.settlementMode, 10) as SettlementMode
+        const routingRequired = needsSettlementRouting(capabilities)
+        const settlementMode = (routingRequired ? clean(req.body?.settlementMode, 10) : 'usdc') as SettlementMode
         const requestedPaymentNetworks = requestedNetworks(req.body?.networks)
-        const networks = settlementMode === 'ngn' ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
-        const defaultNetwork = settlementMode === 'ngn' ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
+        const networks = !routingRequired ? [] : settlementMode === 'ngn' ? ['base'] as DeveloperNetwork[] : requestedPaymentNetworks
+        const defaultNetwork = !routingRequired ? 'arc' : settlementMode === 'ngn' ? 'base' : clean(req.body?.defaultNetwork, 20) as DeveloperNetwork
         const recipients = Object.fromEntries(NETWORKS.flatMap(network => {
           const recipient = validRecipient(req.body?.recipients?.[network])
           return recipient ? [[network, recipient]] : []
@@ -792,9 +797,9 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
         if (currentCheckoutMode === 'agentic' && capabilities.includes('polymarket_funding')) return res.status(400).json({ ok: false, error: 'Agentic x402 projects cannot enable human funding products.' })
         if (settlementMode !== 'usdc' && settlementMode !== 'ngn') return res.status(400).json({ ok: false, error: 'Choose USDC or Naira settlement.' })
         if (currentCheckoutMode === 'agentic' && networks.some(network => !isAgentCheckoutNetwork(network))) return res.status(400).json({ ok: false, error: 'Agent checkout supports Base and Arc only. Remove unsupported networks in Settings.' })
-        if (networks.some(network => !developerProductNetworks(currentCheckoutMode, capabilities).includes(network))) return res.status(400).json({ ok: false, error: 'Choose networks supported by the selected products. Agreements support Arc only.' })
+        if (networks.some(network => !developerProductNetworks(currentCheckoutMode, capabilities).includes(network))) return res.status(400).json({ ok: false, error: 'Choose supported settlement networks. X Layer agreements and swaps use their own product settings.' })
         if (capabilities.length === 1 && capabilities[0] === 'arc_agreements' && settlementMode !== 'usdc') return res.status(400).json({ ok: false, error: 'Agreements require Arc USDC settlement.' })
-        if (!networks.length || !networks.includes(defaultNetwork)) return res.status(400).json({ ok: false, error: 'Choose a valid default payment network.' })
+        if (routingRequired && (!networks.length || !networks.includes(defaultNetwork))) return res.status(400).json({ ok: false, error: 'Choose a valid default payment network.' })
         if (settlementMode === 'usdc' && networks.some(network => !recipients[network])) return res.status(400).json({ ok: false, error: 'Add a valid receiving address for every selected network.' })
         if (!allowedOrigins.length) return res.status(400).json({ ok: false, error: 'Add at least one allowed return origin.' })
         if (clean(req.body?.webhookUrl, 300) && !webhookUrl) return res.status(400).json({ ok: false, error: 'Enter a valid HTTPS webhook URL.' })
@@ -823,7 +828,7 @@ export function createDeveloperProjectsHandler(dependencies: Dependencies = defa
           const latest = findOwnedProject(current, projectId, identity.userId)
           if (!latest) throw Object.assign(new Error('Developer project not found.'), { status: 404 })
           const next: DeveloperProject = {
-            ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, settlementMode,
+            ...latest, name, website, brandImageUrl, useCase, checkoutMode: currentCheckoutMode, capabilities, productSettingsVersion: 2, settlementMode,
             settlementStatus: settlementMode === 'usdc' || bankVerifiedAt ? 'ready' : 'review_required',
             arcMainnetChainId: networks.includes('arc') && req.body?.arcMainnetChainId === 5042 ? 5042 : undefined,
             networks, defaultNetwork, recipients: settlementMode === 'usdc' ? recipients : {}, refundAddress, allowedOrigins, webhookUrl,
@@ -929,7 +934,7 @@ function policyForDeveloperProject(
           ? [{ network, recipient: project.recipients[network]! }]
           : []
       ))
-  if (!paymentOptions.length) return null
+  if (!paymentOptions.length && (environment !== 'live' || needsSettlementRouting(effectiveProductCapabilities(project)))) return null
   if (project.settlementMode === 'ngn') {
     if (!project.bankAccountCipher || !project.bankCode || !project.bankName || !project.bankAccountName || !project.refundAddress) return null
     return {
@@ -944,7 +949,7 @@ function policyForDeveloperProject(
       settlementMode: 'ngn',
       environment,
       checkoutMode: projectCheckoutMode(project),
-      capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
+      capabilities: effectiveProductCapabilities(project),
       nairaSettlement: {
         bankCode: project.bankCode,
         bankName: project.bankName,
@@ -959,7 +964,7 @@ function policyForDeveloperProject(
   }
   const defaultNetwork = paymentOptions.some(option => option.network === project.defaultNetwork)
     ? project.defaultNetwork
-    : paymentOptions[0].network
+    : paymentOptions[0]?.network ?? 'arc'
   return {
     partnerId: project.id,
     ownerId: project.ownerId,
@@ -972,7 +977,7 @@ function policyForDeveloperProject(
     settlementMode: 'usdc',
     environment,
     checkoutMode: projectCheckoutMode(project),
-    capabilities: project.capabilities?.length ? project.capabilities : ['hosted_checkout'],
+    capabilities: effectiveProductCapabilities(project),
     webhookConfigured: Boolean(project.webhookUrl && project.webhookSecretCipher),
     arcAgreementPilot: project.arcAgreementPilot,
     projectManaged: true,
@@ -986,6 +991,7 @@ export function developerPolicyFromStore(store: DeveloperStore | undefined, apiK
   for (const project of Object.values(store?.projects ?? {})) {
     const key = project.keys.find(item => !item.revokedAt && safeDigestEqual(item.digest, digest))
     if (!key) continue
+    if (scope === 'wallet:swap' && !key.scopes?.includes(scope)) return null
     if (apiKey.startsWith('hpl_app_') && (!scope || scope === 'keys:manage' || !key.scopes?.includes(scope)
       || !key.expiresAt || !Number.isFinite(Date.parse(key.expiresAt)) || Date.parse(key.expiresAt) <= now
       || projectCheckoutMode(project) !== 'human')) return null
@@ -1179,7 +1185,7 @@ export function createScopedDeveloperKeysHandler(
         if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId) || !/^hpl_app_[a-f0-9]{64}$/.test(rawKey)
           || !name || !Number.isInteger(days) || days < 1 || days > 30
           || !Array.isArray(scopes) || !scopes.length || scopes.length > 11 || new Set(scopes).size !== scopes.length
-          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'xstocks-agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
+          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'wallet:swap', 'xstocks-agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
           return res.status(400).json({ ok: false, error: 'Use a unique operation id, a scoped key, 1-30 days, and permissions included in the approved grant.' })
         }
         requestDigest = keyDigest(dependencies.portalSecret(), JSON.stringify([rawKey, name, [...scopes].sort(), days]))
@@ -1202,6 +1208,9 @@ export function createScopedDeveloperKeysHandler(
           if (scopes.some((scope: string) => scope.startsWith('xstocks-agreement:'))
             && !latest.capabilities?.includes('xstocks_agreements')) {
             throw Object.assign(new Error('xStocks Agreement keys require the separate xStocks Agreements capability.'), { status: 409 })
+          }
+          if (scopes.includes('wallet:swap') && !effectiveProductCapabilities(latest).some(capability => capability === 'swap_arc' || capability === 'swap_xlayer')) {
+            throw Object.assign(new Error('Select a Swap network in project settings before creating a Swap key.'), {status:409})
           }
           const previous = latest.keys.find(key => key.operationId === operationId)
           if (previous) {
@@ -1247,4 +1256,11 @@ export async function resolveXStocksAgreementProjectEnabled(projectId: string): 
   return Boolean(project && projectCheckoutMode(project) === 'human'
     && project.operationalStatus !== 'suspended' && project.settlementStatus === 'ready'
     && project.capabilities?.includes('xstocks_agreements'))
+}
+
+export async function resolveWalletSwapProjectEnabled(projectId:string,rail:'arc'|'xlayer'):Promise<boolean>{
+  if(!defaults.hasStore())return false
+  const project=(await defaults.read(STORE_KEY))?.projects[projectId]
+  return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&project.settlementStatus==='ready'
+    &&effectiveProductCapabilities(project).includes(rail==='arc'?'swap_arc':'swap_xlayer'))
 }

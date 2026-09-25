@@ -1,3 +1,4 @@
+import {createWalletSwapSessionHandlers} from './api/wallet-swap-sessions.js'
 import stockWalletBalancesHandler from './api/stock-wallet-balances.js'
 import pocketCheckoutConfig from './api/pocket/checkout-config.js'
 import pocketMigrationLegacyFlowHandler from './api/pocket/wallet-migration-legacy-flow.js'
@@ -456,6 +457,9 @@ app.post('/api/v2/agreements/payer',   strictLimiter, arcAgreementPayerHandler)
 app.post('/api/v2/agreements/project-payer', strictLimiter, arcAgreementProjectPayerHandler)
 app.post('/api/v2/agreements/agent',   strictLimiter, arcAgreementAgentHandler)
 const walletConnectionHandlers = createWalletConnectionHandlers()
+const walletSwapSessions=createWalletSwapSessionHandlers()
+app.all('/api/v2/wallets/swap-sessions', strictLimiter, walletSwapSessions.developer)
+app.all('/api/v2/wallets/swap-sessions/participant', strictLimiter, walletSwapSessions.participant)
 app.all('/api/v2/wallets/arc', strictLimiter, arcWalletHandler)
 app.all('/api/v2/wallets/stocks/balances', strictLimiter, stockWalletBalancesHandler)
 app.all('/api/v2/wallets/stocks/receive', strictLimiter, stockWalletBalancesHandler)

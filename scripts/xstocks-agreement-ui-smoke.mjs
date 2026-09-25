@@ -3,14 +3,14 @@ const testRequire=createRequire(process.env.HASHPAYLINK_TEST_RUNTIME_PACKAGE||ne
 const React=testRequire('react'),TestRenderer=testRequire('react-test-renderer'),{act}=TestRenderer;
 import {getAddress} from 'viem';
 import {WORK_ACTION_LABELS,WORK_STATES,workPaymentLabel,workTermsNotice,WORK_USDC} from '../src/lib/xstocksAgreement/workXLayer.ts';
-import {TRADE_XLAYER_ARBITER} from '../src/lib/xstocksAgreement/protocol.ts';
+import {TRADE_XLAYER_ARBITER,TRADE_ACTION_LABELS} from '../src/lib/xstocksAgreement/protocol.ts';
 const source=fs.readFileSync('src/components/xstocksAgreement/HostedWorkCheckout.tsx','utf8').replace(/^import .*\r?\n/gm,'');
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
 const address=getAddress('0x'+'11'.repeat(20)),worker=getAddress('0x'+'22'.repeat(20)),escrow=getAddress('0x'+'33'.repeat(20)),hash='0x'+'aa'.repeat(32);
 let user='a',stage='approve',signs=[],consent=true,confirmCalls=0,sendError,lastTx,resolveConfirm,mismatch=false;
 const storage=new Map(),payment={policy:'work-xlayer-v1',chainId:196,token:WORK_USDC,decimals:6,amountUnits:'1234567',reviewHours:48,responseDays:7};
 const props={item:{id:'work-test',activeVersion:1,role:'customer',terms:[{version:1,title:'Test work',amount:'1.234567',durationSeconds:86400,xlayerPayment:payment}]},onUpdated(){},request:async body=>({enabled:true,state:stage==='done'?2:1,actions:stage==='done'?[]:[stage],wallet:{address},customerReady:true,providerReady:true,workerAddress:worker,amount:mismatch?'1':'1234567',token:WORK_USDC,decimals:6,...(body.operation?{transaction:{account:address,to:body.operation==='approve'?WORK_USDC:escrow,data:'0x1234',chainId:196,value:'0'}}:{})})};
-const context={exports:{},React,...React,getAddress,WORK_ACTION_LABELS,WORK_STATES,workPaymentLabel,workTermsNotice,TRADE_XLAYER_ARBITER,
+const context={exports:{},TRADE_ACTION_LABELS,React,...React,getAddress,WORK_ACTION_LABELS,WORK_STATES,workPaymentLabel,workTermsNotice,TRADE_XLAYER_ARBITER,
  usePrivy:()=>({user:{id:user}}),useWallets:()=>({ready:true,wallets:[{walletClientType:'privy',address,switchChain:async c=>assert.equal(c,196)}]}),
  useSendTransaction:()=>({sendTransaction:async(tx,options)=>{signs.push({tx,options});if(sendError)throw sendError;lastTx=tx;stage=stage==='approve'?'fund':'done';return {hash};}}),
  useStreamConfirm:()=>({confirmation:null,confirm:async()=>{confirmCalls++;return consent==='wait'?new Promise(resolve=>{resolveConfirm=resolve}):consent;}}),
@@ -25,3 +25,12 @@ consent='wait';await mount();await act(async()=>{button('Pay into escrow').props
 consent='wait';user='a';await mount();await act(async()=>{button('Pay into escrow').props.onClick();await drain();});user='b';await act(async()=>{renderer.update(React.createElement(context.exports.default,props));await drain();});user='a';await act(async()=>{renderer.update(React.createElement(context.exports.default,props));await drain();});await act(async()=>{resolveConfirm(true);await drain();});assert.equal(signs.length,0,'Switching away and back must invalidate old consent');await act(async()=>renderer.unmount());
 consent=true;sendError=Error('Response lost');await mount();await act(async()=>{button('Pay into escrow').props.onClick();await drain();});assert.equal(signs.length,1);assert.equal(storage.size,1);assert.equal(button('Pay into escrow'),undefined);await act(async()=>{button('Check pending transaction').props.onClick();await drain();});assert.equal(signs.length,1);await act(async()=>renderer.unmount());
 console.log('Hosted work checkout UI passed: first-party consent, hidden Privy transaction UI, exact amount binding, double-click protection, cancellation, account change and uncertain submission recovery.');
+
+// The same signing/recovery implementation must render delivery semantics for Trade.
+sendError=undefined;storage.clear();signs=[];stage='receipt';
+props.item.terms[0].kind='trade';props.item.terms[0].trade={dispatchDays:3,deliveryDays:12,inspectionHours:48};
+await mount();assert.ok(button('Confirm received'));assert.equal(button('Submit work'),undefined);
+assert.match(JSON.stringify(renderer.toJSON()),/Delivery window: 12 days/);
+await act(async()=>{button('Confirm received').props.onClick();await drain()});assert.equal(signs.length,1);
+await act(async()=>renderer.unmount());
+console.log('Hosted Trade UI passed: delivery rules, buyer receipt action and shared signing recovery.');

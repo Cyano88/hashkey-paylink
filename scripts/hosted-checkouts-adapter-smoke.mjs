@@ -337,7 +337,7 @@ const managedDependencies = {
   policy: () => ({
     partnerId: 'dev_managedproject', merchantName: 'Managed Platform', allowedOrigins: ['https://managed.example'],
     brandImageUrl: 'https://managed.example/brand/mark.webp',
-    defaultNetwork: 'base', projectManaged: true,
+    defaultNetwork: 'base', projectManaged: true, capabilities: ['hosted_checkout'],
     settlementMode: 'usdc', checkoutMode: 'human',
     paymentOptions: [
       { network: 'base', recipient: '0x1111111111111111111111111111111111111111' },
@@ -403,9 +403,8 @@ const managedAgenticHandler = createHostedCheckoutsHandler({
   policy: () => ({
     partnerId: 'dev_managedagent', merchantName: 'Managed Agent', allowedOrigins: ['https://managed.example'],
     brandImageUrl: 'https://managed.example/brand/mark.webp',
-    defaultNetwork: 'base', projectManaged: true,
+    defaultNetwork: 'base', projectManaged: true, capabilities: ['hosted_checkout'],
     settlementMode: 'usdc', checkoutMode: 'agentic',
-    capabilities: ['hosted_checkout'],
     paymentOptions: [
       { network: 'base', recipient: '0x1111111111111111111111111111111111111111' },
       { network: 'arbitrum', recipient: '0x3333333333333333333333333333333333333333' },
@@ -448,7 +447,7 @@ const nairaDependencies = {
   mutate: async (_key, update) => { nairaStore = update(nairaStore); return nairaStore },
   policy: () => ({
     partnerId: 'dev_nairaproject', merchantName: 'Naira Platform', allowedOrigins: ['https://naira.example'],
-    defaultNetwork: 'base', projectManaged: true, settlementMode: 'ngn', checkoutMode: 'human',
+    defaultNetwork: 'base', projectManaged: true, capabilities: ['hosted_checkout'], settlementMode: 'ngn', checkoutMode: 'human',
     paymentOptions: [{ network: 'base', recipient: '0x1111111111111111111111111111111111111111' }],
     nairaSettlement: {
       bankCode: 'OPAYNGPC', bankName: 'OPay', accountName: 'NAIRA PLATFORM',
@@ -573,3 +572,11 @@ const expiredExecution = await executions.findByResource('partner:polydesk', age
 assert.equal(expiredExecution.state, 'expired')
 
 console.log('Hosted checkout adapter smoke tests passed.')
+
+for (const capabilities of [['arc_agreements'],['xstocks_agreements'],['swap_arc'],['swap_xlayer']]) {
+ const before=managedCreatedCount
+ const handler=createHostedCheckoutsHandler({...managedDependencies,policy:()=>({...managedDependencies.policy(),capabilities})})
+ const denied=await request(handler,'POST',{body:managedBody,headers:managedHeaders})
+ assert.equal(denied.statusCode,403);assert.equal(managedCreatedCount,before)
+}
+console.log('Unselected Checkout is denied for Agreement and Swap projects without creating a payment.')

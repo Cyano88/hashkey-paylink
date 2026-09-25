@@ -8,6 +8,7 @@ import { hasRenderDurableStore, readDurableJson, mutateDurableJson } from '../re
 import { parseWorkPayment, prepareWorkBinding, prepareWorkAction, workPaymentAssets, workXLayerEnabled, type WorkTermsForBinding } from './work.js'
 import { verifyAgreementPrivyWallet } from './wallet.js'
 import { agreementPrivyAuthority } from './authority.js'
+import { parseTradeCheckout, prepareTradeCheckoutBinding, tradeCheckoutEnvironment } from './trade.js'
 import { TRADE_ACTION_LABELS, type TradeXLayerAction, type TradeXLayerStatus } from '../../src/lib/xstocksAgreement/protocol.js'
 
 type Role = 'customer' | 'provider'
@@ -84,10 +85,12 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       if (!policy || policy.environment !== 'live' || policy.checkoutMode !== 'human'
         || !policy.capabilities.includes('xstocks_agreements')) fail(403, 'An xStocks Agreement project key is required.')
       if (req.method === 'GET' && req.query.purpose === 'assets') {
-        return res.json({ ok: true, ...await d.assets(d.env()) })
+        return res.json({ ok: true, ...await d.assets(req.query.kind === 'trade' ? tradeCheckoutEnvironment(d.env(), policy.partnerId) : d.env()) })
       }
       if (req.method === 'GET') {
-        const record = await d.read(key(id(req.query.id)))
+        const lookup = req.query.idempotencyKey
+        if (lookup !== undefined && (typeof lookup !== 'string' || !/^[a-zA-Z0-9:_-]{16,128}$/.test(lookup))) fail(400, 'Invalid idempotency key.')
+        const record = await d.read(key(id(lookup ? 'xag_' + hash(JSON.stringify([policy.partnerId, lookup])) : req.query.id)))
         if (!record || record.partnerId !== policy.partnerId) fail(404, 'Agreement not found.')
         return res.json({ ok: true, agreement: view(record!) })
       }
@@ -95,18 +98,20 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       if ((req.body?.paymentRail !== undefined && req.body.paymentRail !== 'xlayer')
         || (req.body?.network !== undefined && req.body.network !== 'xlayer')
         || (req.body?.checkoutMode !== undefined && req.body.checkoutMode !== 'human')) fail(400, 'This route supports human xStocks Agreements on X Layer only.')
-      if (!workXLayerEnabled(d.env())) fail(409, 'New xStocks Agreements are paused.')
+      const paymentEnv = req.body?.kind === 'trade' ? tradeCheckoutEnvironment(d.env(), policy.partnerId) : d.env()
+      if (!workXLayerEnabled(paymentEnv)) fail(409, 'New xStocks Agreements are paused.')
       const authority = agreementPrivyAuthority(d.env())
       const replayKey = field(req.headers['idempotency-key'], 'idempotency key', 128)
       if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(replayKey)) fail(400, 'Use a 16-128 character idempotency key.')
       const customer = field(req.body?.customerUserId, 'customer account', 150)
       const provider = field(req.body?.providerUserId, 'provider account', 150)
       if (!/^did:privy:[a-zA-Z0-9_-]+$/.test(customer) || !/^did:privy:[a-zA-Z0-9_-]+$/.test(provider) || customer === provider) fail(400, 'Choose two distinct Privy participants.')
+      if (req.body?.kind !== undefined && req.body.kind !== 'trade') fail(400, 'Unsupported Agreement kind.')
       const amount = field(req.body?.amount, 'stock quantity', 100)
       const durationSeconds = req.body?.durationSeconds
-      const payment = parseWorkPayment({ ...req.body, paymentRail: 'xlayer' }, amount, durationSeconds, d.env())
-      const terms: WorkTermsForBinding = { version: 1, title: field(req.body?.title, 'title', 160),
-        description: field(req.body?.description, 'work description', 4000), amount, durationSeconds, xlayerPayment: payment }
+      const terms: WorkTermsForBinding = req.body?.kind === 'trade' ? parseTradeCheckout(req.body, paymentEnv) : { version: 1, title: field(req.body?.title, 'title', 160),
+        description: field(req.body?.description, 'work description', 4000), amount, durationSeconds,
+        xlayerPayment: parseWorkPayment({ ...req.body, paymentRail: 'xlayer' }, amount, durationSeconds, d.env()) }
       const agreementId = 'xag_' + hash(JSON.stringify([policy.partnerId, replayKey]))
       const participants = { customer, provider }
       const digest = hash(JSON.stringify({ partnerId: policy.partnerId, walletAppId: authority.appId, terms, participants }))
@@ -137,7 +142,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       const role = roleFor(record!, userId)
       const action = req.body?.action
       if (!['read', 'accept_terms', 'prepare'].includes(action)) fail(400, 'Choose a supported participant action.')
-      const env: NodeJS.ProcessEnv = { ...authority.env }
+      const env: NodeJS.ProcessEnv = record!.terms.kind === 'trade' ? tradeCheckoutEnvironment(authority.env, record!.partnerId) : { ...authority.env }
       if (!await d.projectEnabled(record!.partnerId)) env.HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED = 'false'
       const fundingEnabled = workXLayerEnabled(env)
       if (action === 'read') return res.json({ ok: true, role, fundingEnabled, agreement: view(record!) })
@@ -157,7 +162,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
           current!.accepted[currentRole] = { address: wallet.address, at }
           current!.events.push({ type: 'terms_accepted', role: currentRole, at })
           if (current!.accepted.customer && current!.accepted.provider) {
-            current!.binding = prepareWorkBinding(current!.id, current!.terms,
+            current!.binding = (current!.terms.kind === 'trade' ? prepareTradeCheckoutBinding : prepareWorkBinding)(current!.id, current!.terms,
               current!.accepted.customer.address, current!.accepted.provider.address, Math.floor(d.now().getTime() / 1000))
           }
           return current!

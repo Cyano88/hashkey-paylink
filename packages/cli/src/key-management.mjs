@@ -14,7 +14,15 @@ export async function keysApi(body, { fetcher, session }) {
   const chunks = []; let size = 0
   for await (const chunk of response.body ?? []) { size += chunk.length; if (size > 131072) throw safeError('Response limit.'); chunks.push(chunk) }
   const data = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-  if (!response.ok || !data.ok || data.projectId !== session.grant.projectId) throw safeError('Key operation failed. Keep the same operation id when retrying.')
+  if (!response.ok || !data.ok || data.projectId !== session.grant.projectId) {
+    const configurationErrors = new Map([
+      ['Select a Swap network in project settings before creating a Swap key.', 'Select Arc or X Layer under Swap in project Settings, save, then retry with the same operation id.'],
+      ['xStocks Agreement keys require the separate xStocks Agreements capability.', 'Select X Layer under Agreements in project Settings, save, then retry with the same operation id.'],
+      ['An active, ready human checkout project is required.', 'Save a complete human project configuration before creating this scoped key.'],
+    ])
+    if (response.status === 409 && data.ok === false && configurationErrors.has(data.error)) throw safeError(configurationErrors.get(data.error))
+    throw safeError('Key operation failed. Keep the same operation id when retrying.')
+  }
   return data
 }
 export async function keyCommand(command, options, { fetcher, sessionStore, vaultStore }) {
@@ -37,7 +45,7 @@ export async function keyCommand(command, options, { fetcher, sessionStore, vaul
   const days = Number(options['expires-in-days'] ?? 30)
   if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId ?? '') || !name?.trim() || name.length > 60
     || !Number.isInteger(days) || days < 1 || days > 30 || !scopes.length || new Set(scopes).size !== scopes.length
-    || scopes.some(scope => !['project:read','checkout:read','checkout:create','agreement:read','agreement:create', 'agreement:recipient', 'agreement:fund','xstocks-agreement:read','wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'xstocks-agreement:create'].includes(scope) || !session.grant.scopes.includes(scope))) throw safeError('Invalid key inputs or permissions exceed the approved grant.')
+    || scopes.some(scope => !['project:read','checkout:read','checkout:create','agreement:read','agreement:create', 'agreement:recipient', 'agreement:fund','xstocks-agreement:read','wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'wallet:swap', 'xstocks-agreement:create'].includes(scope) || !session.grant.scopes.includes(scope))) throw safeError('Invalid key inputs or permissions exceed the approved grant.')
   const vault = await vaultStore.read() ?? { keys: [], plans: [] }
   let entry = vault.keys.find(key => key.operationId === operationId && key.projectId === session.grant.projectId)
   const spec = { name: name.trim(), scopes, expiresInDays: days }

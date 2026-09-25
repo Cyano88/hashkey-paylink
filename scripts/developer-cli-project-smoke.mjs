@@ -5,7 +5,7 @@ function response() {
 }
 const policy = {
   partnerId: 'project_fixture', merchantName: 'Fixture', environment: 'live',
-  checkoutMode: 'human', defaultNetwork: 'arc', paymentOptions: [{ network: 'arc', recipient: 'private-recipient' }],
+  capabilities: ['swap_arc'], checkoutMode: 'human', defaultNetwork: 'arc', paymentOptions: [{ network: 'arc', recipient: 'private-recipient' }],
   settlementMode: 'ngn', webhookConfigured: true, ownerEmail: 'private@example.com',
   ownerId: 'private-owner', nairaSettlement: { accountNumber: 'private-bank' },
 }
@@ -14,7 +14,7 @@ const read = response()
 await handler({ method: 'GET', headers: {} }, read)
 assert.equal(read.statusCode, 200)
 assert.equal(read.headers['Cache-Control'], 'no-store')
-assert.deepEqual(Object.keys(read.body.project).sort(), ['id', 'name', 'environment', 'checkoutMode', 'defaultNetwork', 'networks', 'settlementMode', 'webhookConfigured'].sort())
+assert.deepEqual(Object.keys(read.body.project).sort(), ['capabilities', 'id', 'name', 'environment', 'checkoutMode', 'defaultNetwork', 'networks', 'settlementMode', 'webhookConfigured'].sort())
 assert.ok(!JSON.stringify(read.body).includes('private'))
 let resolutions = 0
 const post = response()
@@ -29,3 +29,5 @@ await createDeveloperCliProjectHandler(async () => { throw new Error('private-se
 assert.equal(failed.statusCode, 503)
 assert.ok(!JSON.stringify(failed.body).includes('private-secret'))
 console.log('Developer CLI project: read-only, authentication, sensitive-field exclusion and safe failure checks passed.')
+
+policy.paymentOptions=[];const walletOnly=response();await handler({method:'GET',headers:{}},walletOnly);assert.equal(walletOnly.body.project.defaultNetwork,null);assert.deepEqual(walletOnly.body.project.capabilities,['swap_arc']);

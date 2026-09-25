@@ -333,7 +333,20 @@ const agreementOnlyConfig={action:'configure',projectId:created.body.project.id,
 for(const network of ['base','arbitrum']) {
  const response=await request(handler,'PUT',{...agreementOnlyConfig,networks:[network],defaultNetwork:network,recipients:{[network]:linkedWallet}})
  assert.equal(response.statusCode,400)
- assert.match(response.body.error,/Agreements support Arc only/)
+ assert.match(response.body.error,/supported settlement networks/)
 }
 assert.equal((await request(handler,'PUT',agreementOnlyConfig)).statusCode,200)
 console.log('Agreement-only project routing rejects Base/Arbitrum and accepts Arc.')
+
+// Wallet/stock-only products do not inherit Arc settlement requirements.
+for (const capabilities of [['swap_arc'], ['swap_xlayer'], ['xstocks_agreements'], ['swap_arc','swap_xlayer']]) {
+ const reply=await request(handler,'PUT',{...agreementOnlyConfig,capabilities,networks:[],defaultNetwork:'arc',recipients:{}})
+ assert.equal(reply.statusCode,200,JSON.stringify(reply.body))
+ assert.deepEqual(reply.body.project.networks,[])
+ assert.deepEqual(reply.body.project.capabilities,capabilities)
+ assert.equal(reply.body.project.productSettingsVersion,2)
+}
+for (const capability of ['bridge','swap_base','unknown']) {
+ assert.equal((await request(handler,'PUT',{...agreementOnlyConfig,capabilities:[capability]})).statusCode,400)
+}
+console.log('Product setup passed: standalone wallet and xStocks projects; unsupported routes rejected.')

@@ -21,11 +21,14 @@ export async function arcSwapQuotePreview(quote: ArcSwapQuote, readBalance: () =
   return { ok: true, quote: publicQuote, quoteToken: sealArcSwapQuote(quote), balance: balance === null ? null : formatUnits(balance, quote.tokenIn.decimals), balanceStatus: balance === null ? 'unavailable' : 'ok', sufficientBalance: balance === null ? null : balance >= BigInt(quote.amountUnits) }
 }
 
-export default async function arcSwapHandler(req: Request, res: Response) {
+export function createArcSwapHandler(overrides: Partial<{ identity: typeof verifiedPrivyUser; readLink: typeof readCircleLink }> = {}) {
+ const d = {identity:verifiedPrivyUser, readLink:readCircleLink, ...overrides}
+ return async function arcSwapHandler(req: Request, res: Response) {
+  res.setHeader('Cache-Control','no-store')
   try {
     if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
-    const identity = await verifiedPrivyUser(req)
-    const link = await readCircleLink(circleLinkKey(identity.userId, 'arc'))
+    const identity = await d.identity(req)
+    const link = await d.readLink(circleLinkKey(identity.userId, 'arc'))
     if (req.method === 'GET') {
       const requested = typeof req.query.token === 'string' ? req.query.token.trim() : ''
       const tokens = requested ? [await readArcSwapToken(requested)] : (await readArcSwapTokens()).sort((a, b) => Number(same(b.address, '0x3600000000000000000000000000000000000000')) - Number(same(a.address, '0x3600000000000000000000000000000000000000')))
@@ -111,3 +114,6 @@ export default async function arcSwapHandler(req: Request, res: Response) {
     return res.status(error.status ?? 503).json({ ok: false, error: error.status ? error.message : 'Arc swap is temporarily unavailable. Refresh and try again.' })
   }
 }
+
+}
+export default createArcSwapHandler()

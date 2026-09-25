@@ -15,7 +15,7 @@ import PocketStockWalletActions from './PocketStockWalletActions'
 const card = 'rounded-[24px] border border-gray-100 bg-white p-5 dark:border-[#262626] dark:bg-[#121212]'
 const field = 'mt-2 min-h-12 w-full rounded-xl bg-gray-100 px-3 text-xs outline-none dark:bg-white/10'
 const button = 'min-h-12 w-full rounded-xl bg-black px-4 text-xs font-bold text-white disabled:opacity-40 dark:bg-black dark:text-white'
-export default function PocketStockTrade({ wallet, initialAsset, initialMode = 'buy' }: { wallet: ReturnType<typeof usePocketStockWallet>; initialAsset?: string; initialMode?: 'buy' | 'sell' | 'swap' }) {
+export default function PocketStockTrade({ wallet, initialAsset, initialMode = 'buy', swapRequest = stockSwapRequest }: { swapRequest?:typeof stockSwapRequest; wallet: ReturnType<typeof usePocketStockWallet>; initialAsset?: string; initialMode?: 'buy' | 'sell' | 'swap' }) {
   const { getAccessToken } = usePocketIdentity()
   const [mode, setMode] = useState(initialMode)
   const [stock, setStock] = useState(stockAssets.some(a => a.symbol === initialAsset) ? initialAsset! : 'NVDAx')
@@ -54,7 +54,7 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
     setQuoting(true)
     const timer = window.setTimeout(async () => {
       try {
-        const response = await stockSwapRequest(getAccessToken, { action: 'quote', wallet: wallet.address!, tokenIn: tokenIn.address, tokenOut: tokenOut.address, amount: amount.trim() })
+        const response = await swapRequest(getAccessToken, { action: 'quote', wallet: wallet.address!, tokenIn: tokenIn.address, tokenOut: tokenOut.address, amount: amount.trim() })
         if (!cancelled) { setNow(Date.now()); setReview({ ...response, key: requestKey }) }
       } catch (e) { if (!cancelled) { setReview(null); setError(e instanceof Error ? e.message : 'Quote unavailable.') } }
       finally { if (!cancelled) setQuoting(false) }

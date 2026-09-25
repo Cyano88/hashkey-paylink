@@ -15,7 +15,8 @@ export function createDeveloperCliProjectHandler(resolve = resolveDeveloperApiKe
       return res.json({ ok: true, project: {
         id: policy.partnerId, name: policy.merchantName,
         environment: policy.environment, checkoutMode: policy.checkoutMode,
-        defaultNetwork: policy.defaultNetwork,
+        defaultNetwork: policy.paymentOptions.length ? policy.defaultNetwork : null,
+        capabilities: policy.capabilities,
         networks: policy.paymentOptions.map(option => option.network),
         settlementMode: policy.settlementMode, webhookConfigured: policy.webhookConfigured,
       } })

@@ -14,7 +14,8 @@ import { requestPocketPaymentApproval, takePocketPaymentApproval } from '../lib/
 
 const stockApprovalAbi = parseAbi(['function allowance(address,address) view returns(uint256)', 'function approve(address,uint256) returns(bool)'])
 
-export default function usePocketStockWallet() {
+export default function usePocketStockWallet(options: {swapRequest?:typeof stockSwapRequest} = {}) {
+  const requestSwap=options.swapRequest || stockSwapRequest
   const { authenticated, user, getAccessToken } = usePocketIdentity()
   const { ready, wallets } = useWallets()
   const [walletWaitExpired, setWalletWaitExpired] = useState(false)
@@ -122,7 +123,7 @@ export default function usePocketStockWallet() {
       await requestPocketPaymentApproval()
       if (!takePocketPaymentApproval()) throw Error('Payment approval expired.')
       stillCurrent()
-      const verified = await stockSwapRequest(getAccessToken, { action: 'verify', wallet: address, quoteToken })
+      const verified = await requestSwap(getAccessToken, { action: 'verify', wallet: address, quoteToken })
       validateStockSwap(verified.quote, address)
       if (JSON.stringify(verified.quote) !== JSON.stringify(review)) throw Error('The quote changed. Review it again.')
       const units = BigInt(review.amountUnits)
@@ -138,7 +139,7 @@ export default function usePocketStockWallet() {
       }
       stillCurrent()
       // Approval can consume quote lifetime. Refresh, but never lower the minimum the user accepted.
-      const fresh = await stockSwapRequest(getAccessToken, { action: 'quote', wallet: address, tokenIn: review.tokenIn.address, tokenOut: review.tokenOut.address, amount: review.amount })
+      const fresh = await requestSwap(getAccessToken, { action: 'quote', wallet: address, tokenIn: review.tokenIn.address, tokenOut: review.tokenOut.address, amount: review.amount })
       validateStockSwap(fresh.quote, address)
       if (JSON.stringify(fresh.quote.positiveSlippageFee) !== JSON.stringify(review.positiveSlippageFee) || fresh.quote.amountUnits !== review.amountUnits || fresh.quote.tokenIn.address !== review.tokenIn.address || fresh.quote.tokenOut.address !== review.tokenOut.address
         || BigInt(fresh.quote.minimumOutUnits) < BigInt(review.minimumOutUnits) || Number(fresh.quote.gasFee) > Number(review.gasFee) * 1.2) throw Error('Price or network fee changed. Review a new quote. Any completed approval is limited to your trade amount.')

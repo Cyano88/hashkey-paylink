@@ -1,3 +1,4 @@
+import {tradeXLayerClient} from '../api/xstocks-agreement/planner.ts';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
@@ -28,3 +29,5 @@ assert.equal(xStockPaymentLabel({currency:'XLAYER_ASSET',settlementToken:a.addre
 assert.equal(xStockPaymentLabel({currency:'USDC'}),'USDC');
 assert.match(xStockPaymentLabel({currency:'XLAYER_ASSET',settlementToken:'0x123'}),/0x123/);
 console.log('Stock asset selection passed: disabled gate, configured catalogue intersection, factory pin, approval, precision, chain, freshness, reorg, RPC failures and exact identity.');
+
+const configuredClient=tradeXLayerClient({});assert.equal(configuredClient.chain.id,196);assert.equal(configuredClient.chain.contracts.multicall3.address.toLowerCase(),'0xca11bde05977b3631167028862be2a173976ca11');
