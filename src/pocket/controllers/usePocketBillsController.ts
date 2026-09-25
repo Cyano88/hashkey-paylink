@@ -50,8 +50,8 @@ function sleep(ms: number) {
 }
 
 function confirmationPollDelay(attempt: number) {
-  if (attempt === 0) return 600
-  if (attempt === 1) return 1_000
+  if (attempt === 0) return 10_000
+  if (attempt === 1) return 10_000
   if (attempt === 2) return 1_500
   return 2_500
 }
@@ -281,15 +281,15 @@ export default function usePocketBillsController({
   }, [activeBillKey, category, environment, refreshBalances])
 
   const reconcile = useCallback(async (intentId: string, txHash: string, accessToken: string, restoring = false) => {
-    const visible=()=>mounted.current&&!restoring&&displayedAttempt.current===intentId
+    const visible=()=>mounted.current&&billScope.current===activeBillKey&&displayedAttempt.current===intentId
     let next: PocketBillIntent | null = null
     if (txHash) {
-      for (let attempt = 0; attempt < 16; attempt += 1) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           next = await confirmPocketAirtime({ accessToken, intentId, txHash })
           break
         } catch (reason) {
-          if (!(reason instanceof PocketBillsApiError) || reason.code !== 'CONFIRMATION_REQUIRED' || attempt === 15) throw reason
+          if (!(reason instanceof PocketBillsApiError) || !['CONFIRMATION_REQUIRED', 'BILLS_PAYMENT_PENDING', 'BILLS_PAYMENT_VERIFIER_UNAVAILABLE'].includes(reason.code) || attempt === 2) throw reason
           if (visible()) setStatus('confirming')
           await sleep(confirmationPollDelay(attempt))
         }
@@ -321,7 +321,7 @@ export default function usePocketBillsController({
     let cancelled = false
     let restoring = false
     const resume = () => {
-      if (cancelled || restoring || document.visibilityState === 'hidden') return
+      if (cancelled || restoring || billPayInFlight.current || document.visibilityState === 'hidden') return
       const active = readActive(activeBillKey)
       if (!active && !Object.keys(localStorage).some(key=>key.startsWith(activeBillKey+':attempt:'))) return
       restoring = true
@@ -340,11 +340,13 @@ export default function usePocketBillsController({
     }
     const resumeWhenVisible = () => { if (document.visibilityState === 'visible') resume() }
     resume()
+    const recoveryTimer = window.setInterval(resume, 30_000)
     window.addEventListener('focus', resume)
     window.addEventListener('online', resume)
     document.addEventListener('visibilitychange', resumeWhenVisible)
     return () => {
       cancelled = true
+      window.clearInterval(recoveryTimer)
       window.removeEventListener('focus', resume)
       window.removeEventListener('online', resume)
       document.removeEventListener('visibilitychange', resumeWhenVisible)
@@ -521,12 +523,12 @@ export default function usePocketBillsController({
     if (!intent || !authenticated) return
     try {
       const accessToken = await token()
-      await reconcile(intent.id, intent.txHash, accessToken)
+      await reconcile(intent.id, intent.txHash || readActive(activeBillKey + ':attempt:' + intent.id)?.txHash || '', accessToken)
     } catch (reason) {
       if (!mounted.current) return
       setError(reason instanceof Error ? reason.message : `Could not refresh the ${billLabel(category)} payment.`)
     }
-  }, [authenticated, category, intent, reconcile, token])
+  }, [activeBillKey, authenticated, category, intent, reconcile, token])
 
   const processing = ['quoting', 'paying', 'confirming', 'processing'].includes(status)
   const expectedSandboxRecipient = category === 'data' ? sandboxDataRecipient(serviceId) : category === 'tv' || category === 'electricity' ? sandboxBillAccount(category, variationCode, serviceId) : VTPASS_SANDBOX_SUCCESS_PHONE

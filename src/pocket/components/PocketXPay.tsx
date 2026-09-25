@@ -30,7 +30,7 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
  const [merchant,setMerchant]=useState<XPayMerchant|null>(null),[payments,setPayments]=useState<XPayPayment[]>([])
  const [token,setToken]=useState(''),[usd,setUsd]=useState(''),[payment,setPayment]=useState<XPayPayment|null>(null),[review,setReview]=useState<StockTransfer|null>(null)
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[open,setOpen]=useState(!!merchantId),[receipt,setReceipt]=useState<PaylinkReceipt|null>(null)
- const slowConfirmation=usePocketSlowConfirmation(payment?.status==='submitted'&&Boolean(payment.hash),payment?.id||'',20_000,busy)
+ const slowConfirmation=usePocketSlowConfirmation(payment?.status==='submitted'&&Boolean(payment.hash),payment?.id||'',60_000,busy)
  const guard=useRef(false),mounted=useRef(true)
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
  const saveActive=(id:string,hash?:string)=>localStorage.setItem(storageKey,JSON.stringify({id,hash}))
@@ -93,7 +93,7 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>
   {!merchantId&&<PocketXPayLinks key={scope} wallet={wallet} merchants={merchants} payments={payments} loading={loading} onChange={setMerchants}/>}
-  {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&(!busy||slowConfirmation)))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface title="XPay" onClose={close} showCloseButton dismissible={!busy} dismissOnBackdrop={false}>
+  {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&slowConfirmation))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface title="XPay" onClose={close} showCloseButton dismissible={!busy} dismissOnBackdrop={false}>
    <h2 className="mb-5 text-lg font-bold">{payment?.merchantName||merchant?.name||'XPay'}</h2>
    {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center"><Clock3 className="mx-auto h-12 w-12 text-blue-500"/><p className="mt-4 text-sm font-bold">{payment.status==='failed'?'Payment failed':'Confirming payment'}</p><p className="mt-2 text-xs text-gray-400">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>
     <p className="text-2xl font-bold">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-2 text-sm text-gray-500">${payment.usd} USD</p><p className="mb-6 mt-3 text-xs text-gray-400">Network fee · ≈ {formatStockQuantity(stockQuantity(review.fee,18))} OKB</p><button className={cta} disabled={busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onClick={pay}>{busy?<><span aria-hidden="true" className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"/>Confirming payment</>:'Pay '+payment.merchantName}</button><button className="min-h-11 w-full text-xs text-gray-400" disabled={busy} onClick={()=>{setPayment(null);setReview(null)}}>Edit amount</button>

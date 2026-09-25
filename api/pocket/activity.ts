@@ -138,7 +138,7 @@ function closedBankPayoutActivityRow(intent: PaymentExecutionIntent): PocketActi
 }
 
 function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boolean; treasuryAddress: string }): PocketActivityRow | undefined {
-  if (!intent.txHash) return undefined
+  if (!intent.txHash && !intent.submittedTxHash) return undefined
   const sandboxTest = intent.providerEnvironment === 'sandbox'
   const refundEligible = refundPolicy.enabled
     && Boolean(refundPolicy.treasuryAddress)
@@ -162,7 +162,7 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
           ? 'refunding'
         : intent.state === 'needs_review'
           ? 'needs review'
-          : intent.state === 'pending' || intent.state === 'vending'
+          : ['quoted', 'awaiting_payment', 'payment_confirmed', 'pending', 'vending'].includes(intent.state)
             ? 'processing'
             : 'paid'
   const supportReference = [intent.providerCode ? `VTpass ${intent.providerCode}` : '', intent.requestId]
@@ -170,7 +170,7 @@ function billActivityRow(intent: PocketBillsIntent, refundPolicy: { enabled: boo
     .join(' · ')
   return {
     eventId: `pocket-bill:${intent.id}`,
-    txHash: intent.txHash,
+    txHash: intent.txHash || intent.submittedTxHash || '',
     chain: intent.network,
     payer: 'Circle Pocket',
     memo: intent.serviceName,

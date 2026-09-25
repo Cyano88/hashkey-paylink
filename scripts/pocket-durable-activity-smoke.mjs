@@ -75,6 +75,16 @@ try {
   assert.equal(mergePocketActivityRows([row('1')], [row('1', 'arbitrum')]).length, 2)
   assert.equal(mergePocketActivityRows([row('1')], [row('1', 'base', { source: 'purchase' })]).length, 1)
   assert.equal(mergePocketActivityRows([row('1')], [row('1', 'base', { direction: 'in', source: 'wallet-deposit' })]).length, 2)
+  for (const source of ['bills', 'bank-withdraw']) {
+    const debit = row('42')
+    const payment = {...debit, source, eventId: source + '-42', paycrestStatus: 'processing', amountNgn: '200'}
+    for (const [previous, incoming] of [[[debit], [payment]], [[payment], [debit]]]) {
+      const grouped = mergePocketActivityRows(previous, incoming)
+      assert.equal(grouped.length, 1, source + ' funding must not appear as another debit')
+      assert.equal(grouped[0].source, source)
+      assert.equal(grouped[0].paycrestStatus, 'processing', 'Funding confirmation is not provider delivery')
+    }
+  }
   // Short client deadlines must not discard persistence on eventual scan completion.
   let finish, observed = []
   const reader = createWalletActivityReader(async () => { await new Promise(resolve => { finish = resolve }); return [row('8')] }, Date.now, 1000, async (owner, rows) => { observed.push({ owner, rows }) })

@@ -3343,7 +3343,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const isConfirmed = isAgentOrWalletFunding ? fundingProofConfirmed : paymentConfirmed
   const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
-  const pocketSlowConfirmation=usePocketSlowConfirmation(Boolean(pocketScan&&(isConfirming||txHash||circleEvmAcceptedPending)),String(txHash||eventId||'scan'),20_000,isWalletPending||pocketMovePayBusy)
+  const pocketSlowConfirmation=usePocketSlowConfirmation(Boolean(pocketScan&&(isConfirming||txHash||circleEvmAcceptedPending)),String(txHash||eventId||'scan'),60_000,isWalletPending||pocketMovePayBusy)
   const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
   const pocketRouteInsufficient = pocketCheckoutRoute?.kind === 'insufficient'
   const pocketMovePayExpected = privyAuthenticated && smartCheckoutOwnsWalletCta && chain !== 'arc' && circleRequiredUnits > 0n

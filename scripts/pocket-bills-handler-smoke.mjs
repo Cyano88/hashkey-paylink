@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createPocketBillsCatalogHandler, createPocketBillsQuoteHandler, createPocketBillsPayHandler, createPocketBillsVerifyHandler } from '../api/pocket/bills.ts'
+import { createPocketBillsCatalogHandler, createPocketBillsQuoteHandler, createPocketBillsPayHandler, createPocketBillsVerifyHandler, confirmPocketBillPayment } from '../api/pocket/bills.ts'
 import { createPocketBillsStore } from '../api/pocket/bills-store.ts'
 import { VtpassClientError } from '../api/vtpass-client.ts'
 import { readVtpassPhase0Config } from '../api/vtpass-config.ts'
@@ -205,6 +205,7 @@ const dependencies = {
     assert.equal(input.recipient, config.treasuryAddress)
     assert.equal(input.payer, '0x2222222222222222222222222222222222222222')
     assert.ok(/^\d+(?:\.\d{1,6})?$/.test(input.minAmount))
+    if (verifyMode === 'finalizing') throw new Error('Transaction is not finalized yet.')
     if (verifyMode === 'pending') throw new Error('Transaction receipt was not found yet.')
     if (verifyMode === 'invalid') throw new Error('No matching USDC transfer to recipient for at least 0.071429 USDC.')
     return { ok: true, amountUnits: String(BigInt(Math.round(Number(input.minAmount) * 1_000_000))), amount: input.minAmount, confirmedAt: new Date(now + 10_000).toISOString() }
@@ -399,6 +400,7 @@ const [concurrentA, concurrentB] = await Promise.all([
 ])
 assert.equal(purchaseCalls, beforeConcurrentCalls + 1)
 assert.ok(['vending', 'delivered'].includes(concurrentA.body.data.intent.state))
+assert.ok(concurrentB.body.data?.intent, JSON.stringify(concurrentB.body))
 assert.ok(['vending', 'delivered'].includes(concurrentB.body.data.intent.state))
 
 // An ambiguous provider submission must remain pending and become delivered
@@ -459,7 +461,21 @@ assert.equal(unverified.body.error.code, 'CONFIRMATION_REQUIRED')
 assert.equal(unverified.body.error.retryable, true)
 assert.equal(purchaseCalls, callsBeforeUnverified)
 assert.equal((await store.getOwnedIntent('did:privy:owner-1', unverifiedId)).txHash, '')
+assert.equal((await store.getOwnedIntent('did:privy:owner-1', unverifiedId)).submittedTxHash, `0x${'e'.repeat(64)}`)
+now += 60_001
+verifyMode = 'finalizing'
+const finalizing = await request(payHandler, { action: 'confirm', intent_id: unverifiedId, tx_hash: `0x${'e'.repeat(64)}` })
+assert.equal(finalizing.body.error.reason, 'BILLS_PAYMENT_PENDING')
+assert.equal(finalizing.body.error.retryable, true)
+assert.equal((await executions.findByResource('did:privy:owner-1', unverifiedId))?.state, 'submitted')
+assert.equal(purchaseCalls, callsBeforeUnverified)
+
 verifyMode = 'success'
+const recovered = await confirmPocketBillPayment(dependencies, 'did:privy:owner-1', unverifiedId, `0x${'e'.repeat(64)}`)
+assert.equal(recovered.state, 'delivered')
+assert.equal(purchaseCalls, callsBeforeUnverified + 1)
+await confirmPocketBillPayment(dependencies, 'did:privy:owner-1', unverifiedId, `0x${'e'.repeat(64)}`)
+assert.equal(purchaseCalls, callsBeforeUnverified + 1, 'Recovery cannot vend twice')
 
 const forbidden = await request(payHandler, { action: 'status', intent_id: quoted.body.data.intent.id }, { owner: 'did:privy:other-owner' })
 assert.equal(forbidden.statusCode, 403)
