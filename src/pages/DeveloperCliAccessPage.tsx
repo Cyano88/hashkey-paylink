@@ -8,8 +8,13 @@ const labels: Record<string, string> = {
   'project:read': 'Read project configuration',
   'checkout:read': 'Read checkout payment status',
   'checkout:create': 'Create hosted checkouts',
+  'xstocks-agreement:read': 'Read xStocks Agreement records for this project',
+  'wallet:connect': 'Link user accounts with their consent (no wallet signing)',
+  'xstocks-agreement:create': 'Create xStocks Agreement drafts (no funding, release or signing)',
   'agreement:read': 'Read Agreement records for this project',
   'agreement:create': 'Create Agreement drafts (no funding, release or signing)',
+  'agreement:recipient': 'Register verified Arc Agreement recipients (signed attestation required)',
+  'agreement:fund': 'Prepare and track Agreement funding (payer access and wallet approval required; no release or refund)',
   'keys:manage': 'Create and revoke scoped backend keys (up to 30 days)',
 }
 export default function DeveloperCliAccessPage() {

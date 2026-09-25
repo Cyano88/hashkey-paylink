@@ -94,8 +94,51 @@ assert.equal(developerPolicyFromStore(store,agreementSpec.apiKey,secret,'agreeme
 const {cliRequestScope}=await import('../api/developer-cli-grants.ts')
 assert.equal(cliRequestScope({method:'GET',originalUrl:'/api/v2/agreements?id=agr_fixture123456'}),'agreement:read')
 assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements',body:{checkoutMode:'human'}}),'agreement:create')
-for(const path of ['/api/v2/agreements/payer','/api/v2/agreements/project-payer','/api/v2/agreements/agent','/api/v2/agreements/verified-recipient'])assert.equal(cliRequestScope({method:'POST',originalUrl:path,body:{}}),null)
+for(const path of ['/api/v2/agreements/payer','/api/v2/agreements/project-payer','/api/v2/agreements/agent'])assert.equal(cliRequestScope({method:'POST',originalUrl:path,body:{}}),null)
 for(const action of ['request_release','rotate_payer_link','activate','unknown'])assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements',body:{action}}),null)
 assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements',body:{checkoutMode:'agentic'}}),null)
 assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements?override=true',body:{}}),null)
 console.log('Agreement key isolation passed: Arc mainnet setup required; no checkout, key management or signing/lifecycle routes.')
+
+// xStocks permissions must never inherit an Arc grant or use developer keys for signing.
+grant={...original,scopes:['project:read','xstocks-agreement:read','xstocks-agreement:create','keys:manage']}
+const stockSpec={...spec,operationId:'fixture_xstocks_0001',apiKey:'hpl_app_'+'e'.repeat(64),scopes:['project:read','xstocks-agreement:read','xstocks-agreement:create'],expiresInDays:7}
+assert.equal((await call(stockSpec)).statusCode,409,'Explicit xStocks capability required')
+store.projects[id].capabilities.push('xstocks_agreements')
+assert.equal((await call(stockSpec)).statusCode,201)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,'xstocks-agreement:read',now)?.partnerId,id)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,'xstocks-agreement:create',now)?.partnerId,id)
+assert.equal(developerPolicyFromStore(store,agreementSpec.apiKey,secret,'xstocks-agreement:read',now),null)
+assert.equal(developerPolicyFromStore(store,agreementSpec.apiKey,secret,'xstocks-agreement:create',now),null)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,'agreement:create',now),null)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,'checkout:create',now),null)
+assert.equal(developerPolicyFromStore(store,stockSpec.apiKey,secret,null,now),null)
+assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/xstocks-agreements/participant',body:{action:'prepare'}}),null)
+console.log('xStocks keys passed: dedicated capability and scopes; Arc, checkout and participant signing access remain isolated.')
+const stockCli=await keyCommand('keys create',{name:'Stock Agreement fixture','idempotency-key':'fixture_stock_cli_0001',scopes:'project:read,xstocks-agreement:read,xstocks-agreement:create','expires-in-days':'7'},deps)
+assert.equal(stockCli.secretStoredLocally,true)
+assert.ok(stockCli.key.scopes.includes('xstocks-agreement:create'))
+assert.ok(!JSON.stringify(stockCli).includes(vault.keys.find(entry=>entry.operationId==='fixture_stock_cli_0001').value))
+console.log('CLI xStocks key creation stores the secret locally without returning it.')
+
+// Explicit account-link scope never grants drafting, payment or participant authority.
+grant={...original,scopes:['wallet:connect','keys:manage']}
+const connectionSpec={...spec,operationId:'fixture_connection_0001',apiKey:'hpl_app_'+'f'.repeat(64),scopes:['wallet:connect'],expiresInDays:7}
+assert.equal((await call(connectionSpec)).statusCode,201)
+assert.equal(developerPolicyFromStore(store,connectionSpec.apiKey,secret,'wallet:connect',now)?.partnerId,id)
+for(const scope of ['agreement:create','xstocks-agreement:create','checkout:create',null]) assert.equal(developerPolicyFromStore(store,connectionSpec.apiKey,secret,scope,now),null)
+for(const previous of [agreementSpec,stockSpec]) assert.equal(developerPolicyFromStore(store,previous.apiKey,secret,'wallet:connect',now),null)
+console.log('Wallet connection scope passed: older keys cannot link accounts; connection-only keys cannot draft, pay or sign.')
+
+// Draft keys must never silently gain funding or recipient authority.
+for(const scope of ['agreement:recipient','agreement:fund']) assert.equal(developerPolicyFromStore(store,agreementSpec.apiKey,secret,scope,now),null)
+grant={...original,scopes:['agreement:recipient','agreement:fund','keys:manage']}
+const fundingSpec={...spec,operationId:'fixture_funding_0001',apiKey:'hpl_app_'+'9'.repeat(64),scopes:['agreement:recipient','agreement:fund'],expiresInDays:7}
+assert.equal((await call(fundingSpec)).statusCode,201)
+for(const scope of fundingSpec.scopes) assert.equal(developerPolicyFromStore(store,fundingSpec.apiKey,secret,scope,now)?.partnerId,id)
+for(const scope of ['agreement:create','agreement:read','checkout:create','wallet:connect',null]) assert.equal(developerPolicyFromStore(store,fundingSpec.apiKey,secret,scope,now),null)
+assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements/verified-recipient',body:{}}),'agreement:recipient')
+for(const action of ['link-wallet','review','status','prepare','challenge','recover','record']) assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements/project-payer',body:{action}}),'agreement:fund')
+for(const action of ['lifecycle-challenge','lifecycle-record','lifecycle-recover','delivery-decision','recover-access','unknown']) assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements/project-payer',body:{action}}),null)
+assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements/project-payer?override=true',body:{action:'challenge'}}),null)
+console.log('Funding scopes require a new owner grant; old keys stay draft-only; lifecycle and participant routes remain excluded.')

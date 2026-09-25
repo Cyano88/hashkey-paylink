@@ -8,6 +8,8 @@ const XPayCheckout = lazy(() => import('../pocket/pages/PocketXPayCheckoutPage')
 const PaymentPage = lazy(() => import('../pages/PaymentPage'))
 const HostedCheckoutEntry = lazy(() => import('../pages/HostedCheckoutEntry'))
 const AgentCheckoutPage = lazy(() => import('../pages/AgentCheckoutPage'))
+const WalletConnectionPage = lazy(() => import('../pages/WalletConnectionPage'))
+const XStocksAgreementPage = lazy(() => import('../pages/XStocksAgreementPage'))
 const ArcAgreementPayerPage = lazy(() => import('../pages/ArcAgreementPayerPage'))
 const X402Receipt = lazy(() => import('../pages/X402Receipt'))
 const StreamPayApp = lazy(() => import('../../modules/streampay/src/StreamPayApp'))
@@ -36,6 +38,8 @@ export default function CheckoutApp() {
       <Route path="pay" element={<PaymentPage />} />
       <Route path="pay/c/:checkoutId" element={<HostedCheckoutEntry />} />
       <Route path="pay/a/:checkoutId" element={<AgentCheckoutPage />} />
+      <Route path="wallet/connect/:connectionId" element={<WalletConnectionPage />} />
+      <Route path="agreements/xstocks/:agreementId" element={<XStocksAgreementPage />} />
       <Route path="agreements/:agreementId" element={<ArcAgreementPayerPage />} />
       <Route path="receipt/:activityId" element={<X402Receipt />} />
       <Route path="p/:network/:amount/:recipient/:memo" element={<ShortPayRedirect />} />

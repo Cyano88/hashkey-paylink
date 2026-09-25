@@ -146,7 +146,9 @@
     "test:developer-activity": "node --import tsx scripts/developer-activity-smoke.mjs && node scripts/developer-activity-atomic-smoke.mjs",
     "migrate:developer-activity": "node --import tsx scripts/developer-activity-backfill.mjs",
     "test:developer-activity:postgres": "node --import tsx scripts/developer-activity-postgres-smoke.mjs",
-    "check:developer-activity": "node --import tsx scripts/developer-activity-preflight.mjs"
+    "check:developer-activity": "node --import tsx scripts/developer-activity-preflight.mjs",
+    "test:xstocks-agreement": "node --import tsx scripts/xstocks-agreement-work-smoke.mjs && node --import tsx scripts/xstocks-agreement-planner-smoke.mjs && node --import tsx scripts/xstocks-agreement-assets-smoke.mjs && node --import tsx scripts/xstocks-agreement-wallet-smoke.mjs && node --import tsx scripts/xstocks-agreement-http-smoke.mjs && node --import tsx scripts/xstocks-agreement-hosted-smoke.mjs && node --import tsx scripts/xstocks-agreement-ui-smoke.mjs",
+    "test:wallet-connections": "node --import tsx scripts/wallet-connections-smoke.mjs"
   },
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.8",
@@ -228,6 +230,7 @@
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.3",
     "vite": "7.3.6",
-    "vite-plugin-node-polyfills": "0.28.0"
+    "vite-plugin-node-polyfills": "0.28.0",
+    "react-test-renderer": "18.3.1"
   }
 }

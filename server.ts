@@ -150,6 +150,8 @@ import partnerAccessHandler from './api/partner-access.js'
 import developerProjectsHandler from './api/developer-projects.js'
 import developerCapabilitiesHandler from './api/developer-capabilities.js'
 import { developerEnvironmentBoundary } from './api/developer-environment.js'
+import { createWalletConnectionHandlers } from './api/wallet-connections.js'
+import { createXStocksAgreementHandlers } from './api/xstocks-agreement/http.js'
 import arcAgreementsHandler from './api/arc-agreements.js'
 import verifiedArcRecipientsHandler from './api/arc-agreement-verified-recipients.js'
 import arcAgreementPayerHandler from './api/arc-agreement-payer.js'
@@ -449,6 +451,13 @@ app.all('/api/arc-agreement-operations', strictLimiter, arcAgreementOperationsHa
 app.post('/api/v2/agreements/payer',   strictLimiter, arcAgreementPayerHandler)
 app.post('/api/v2/agreements/project-payer', strictLimiter, arcAgreementProjectPayerHandler)
 app.post('/api/v2/agreements/agent',   strictLimiter, arcAgreementAgentHandler)
+const walletConnectionHandlers = createWalletConnectionHandlers()
+app.all('/api/v2/wallet-connections', strictLimiter, walletConnectionHandlers.developer)
+app.all('/api/v2/wallet-connections/participant', strictLimiter, walletConnectionHandlers.participant)
+const xstocksAgreementHandlers = createXStocksAgreementHandlers()
+app.get('/api/v2/xstocks-agreements', readLimiter, xstocksAgreementHandlers.developer)
+app.all('/api/v2/xstocks-agreements', strictLimiter, xstocksAgreementHandlers.developer)
+app.all('/api/v2/xstocks-agreements/participant', strictLimiter, xstocksAgreementHandlers.participant)
 app.get('/api/v2/agreements',          readLimiter, arcAgreementsHandler)
 app.post('/api/v2/agreements',         strictLimiter, arcAgreementsHandler)
 app.post('/api/v2/agreements/verified-recipient', strictLimiter, verifiedArcRecipientsHandler)

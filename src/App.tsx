@@ -55,6 +55,8 @@ export default function App() {
       <Route path="pay" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
       <Route path="pay/c/:checkoutId" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
       <Route path="pay/a/:checkoutId" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
+      <Route path="wallet/connect/:connectionId" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
+      <Route path="agreements/xstocks/:agreementId" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
       <Route path="agreements/:agreementId" element={<ExternalRedirect origin="https://app.hashpaylink.com" />} />
       <Route path="admin/*" element={<ExternalRedirect origin="https://developer.hashpaylink.com" />} />
       <Route path="developers" element={<ExternalRedirect origin="https://developer.hashpaylink.com" pathname="/" />} />
