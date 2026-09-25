@@ -1,3 +1,4 @@
+import { xStockMetadata } from '../../src/lib/xstocksAgreement/xStocksAssets.js';
 import { xLayer } from 'viem/chains';
 import { createPublicClient, http, encodeAbiParameters, encodeFunctionData, getAddress, keccak256, stringToHex, zeroAddress, type Address, type Hex } from 'viem';
 import { TRADE_FACTORY_ABI as factoryAbi, TRADE_ESCROW_ABI as escrowAbi, TRADE_TOKEN_ABI as tokenAbi, TRADE_XLAYER_FACTORY as factory, TRADE_XLAYER_ARBITER as arbiter, type TradeXLayerAction, type TradeXLayerStatus } from '../../src/lib/xstocksAgreement/protocol.js';
@@ -81,6 +82,13 @@ export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; 
       const functions = { cancel:'cancelUnfunded', receipt:'confirmReceipt', release:'approveRelease', missedDispatch:'refundUndispatched', inspectionRelease:'releaseAfterInspection' } as const;
       if (action in functions) data = encodeFunctionData({ abi:escrowAbi, functionName:functions[action as keyof typeof functions] });
     }
+  }
+  // This pinned factory uses nominal ERC20 accounting, incompatible with stock shares/rebases.
+  // Preserve cancellation and already-funded recovery while a versioned share escrow is reviewed.
+  if (xStockMetadata(t.token) && (result.state === undefined || result.state <= 1)) {
+    result.fundingIssue = 'This agreement uses an escrow that cannot safely accept xStocks. No stock payment has been taken. A replacement agreement is required.';
+    result.actions = result.actions.filter(action => !['create','accept','approve','fund'].includes(action));
+    if (input.action && ['create','accept','approve','fund'].includes(input.action)) throw Object.assign(new Error(result.fundingIssue), {status:422});
   }
   if (input.action) {
     if (!result.actions.includes(input.action) || !data) throw Error('This action is no longer available. Refresh the trade.');
