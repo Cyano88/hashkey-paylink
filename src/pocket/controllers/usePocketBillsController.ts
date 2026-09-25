@@ -1,3 +1,4 @@
+import { markPocketActivityDirty } from '../lib/pocketActivityCache'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
@@ -5,6 +6,7 @@ import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
 import { registerPocketPaymentPreparer } from '../lib/pocketPaymentApproval'
 import {
   PocketBillsApiError,
+  processPocketBillRefund,
   confirmPocketAirtime,
   preparePocketAirtime,
   quotePocketData,
@@ -194,6 +196,8 @@ export default function usePocketBillsController({
   const terminalAttempts = useRef(new Set<string>())
   const billPayInFlight=useRef(false)
   const [confirming,setConfirming]=useState(false)
+  const [refundBusy, setRefundBusy] = useState(false)
+  const refundInFlight = useRef(false)
   const billScope=useRef(activeBillKey);billScope.current=activeBillKey
   const dismiss=useCallback(()=>{displayedAttempt.current='';setIntent(null);setStatus('idle');setError('');setErrorCode('');setNotice('');setAmountNgnState('')},[])
   useEffect(() => { dismiss() }, [owner, dismiss])
@@ -265,6 +269,7 @@ export default function usePocketBillsController({
         if (readActive(activeBillKey)?.intentId === next.id) window.localStorage.removeItem(activeBillKey)
       } catch { /* Storage cleanup must not hide a verified result. */ }
     }
+    markPocketActivityDirty(owner)
     setIntent(next)
     if (next.state === 'delivered') {
       setStatus('successful')
@@ -297,7 +302,7 @@ export default function usePocketBillsController({
       setStatus('processing')
       setNotice(`Payment received. ${billLabel(category)} delivery is processing.`)
     }
-  }, [activeBillKey, category, environment])
+  }, [activeBillKey, category, environment, owner])
 
   const reconcile = useCallback(async (intentId: string, txHash: string, accessToken: string, restoring = false) => {
     const visible=()=>mounted.current&&billScope.current===activeBillKey&&displayedAttempt.current===intentId&&!terminalAttempts.current.has(intentId)
@@ -328,6 +333,7 @@ export default function usePocketBillsController({
       next = await refreshPocketAirtime({ accessToken, intentId, refresh: true })
     }
     if (!next) throw new Error('Payment confirmation is temporarily unavailable.')
+    markPocketActivityDirty(owner)
     if(visible())setIntent(next)
     for (let attempt = 0; !finalState(next) && !terminalAttempts.current.has(intentId) && attempt < 12; attempt += 1) {
       if (visible()) {
@@ -389,7 +395,7 @@ export default function usePocketBillsController({
   // The visible sheet follows server truth independently of the retry journal.
   // A different reader may consume that journal while this sheet is still open.
   useEffect(() => {
-    if (!authenticated || !intent || !['confirming', 'processing'].includes(status)) return
+    if (!authenticated || !intent || !['confirming', 'processing'].includes(status) && !['refunding', 'refund_submitted'].includes(intent.state)) return
     const intentId = intent.id
     let cancelled = false, reading = false
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -415,7 +421,7 @@ export default function usePocketBillsController({
     document.addEventListener('visibilitychange', visible)
     window.addEventListener('online', visible)
     return () => { cancelled = true; clearTimeout(timer); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', visible) }
-  }, [activeBillKey, authenticated, intent?.id, status, settleResult, token])
+  }, [activeBillKey, authenticated, intent?.id, intent?.state, status, settleResult, token])
 
   useEffect(() => {
     if (!intent || status !== 'ready') return
@@ -576,6 +582,19 @@ export default function usePocketBillsController({
     } finally { billPayInFlight.current=false;setConfirming(false) }
   }, [activeBillKey, baseWallet, category, ensureBaseWallet, getEvmSession, intent, reconcile, status, token])
 
+  const claimRefund = useCallback(async () => {
+    if (!intent || refundInFlight.current || !['refund_eligible', 'refunding', 'refund_submitted'].includes(intent.state)) return
+    refundInFlight.current = true; setRefundBusy(true)
+    try {
+      const accessToken = await token()
+      const result = await processPocketBillRefund({ accessToken, intentId: intent.id })
+      if (mounted.current && billScope.current === activeBillKey && displayedAttempt.current === intent.id) settleResult(result.intent)
+      markPocketActivityDirty(owner)
+      if (result.intent.state === 'refunded') void balanceRefresher.current().catch(() => undefined)
+    } catch (reason) { if (mounted.current && billScope.current === activeBillKey) setError(reason instanceof Error ? reason.message : 'Refund status is unavailable.') }
+    finally { refundInFlight.current = false; setRefundBusy(false) }
+  }, [activeBillKey, intent, owner, settleResult, token])
+
   const preparePaymentApproval = useCallback(async () => {
     if (!intent || status !== 'ready') throw new Error('Review the bill payment before confirming.')
     const wallet = baseWallet ?? await ensureBaseWallet()
@@ -648,6 +667,8 @@ export default function usePocketBillsController({
     edit: resetResult,
     review,
     preparePaymentApproval,
+    claimRefund,
+    refundBusy,
     pay,
     refresh,
   }

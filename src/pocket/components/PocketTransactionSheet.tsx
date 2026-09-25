@@ -6,13 +6,13 @@ import PocketGetApp from './PocketGetApp'
 import { Check, Clock3, X, Undo2 } from './PocketIcons'
 
 export type PocketTransactionState = 'successful' | 'pending' | 'failed' | 'reversed'
-export default function PocketTransactionSheet({ title, state, amount, detail, receipt, onDone, inline = false, children }: {
-  title: string; state: PocketTransactionState; amount?: string; detail?: string; receipt?: PaylinkReceipt | null; onDone: () => void; inline?: boolean; children?: ReactNode
+export default function PocketTransactionSheet({ title, state, statusLabel, amount, detail, receipt, onDone, inline = false, children }: {
+  statusLabel?: string; title: string; state: PocketTransactionState; amount?: string; detail?: string; receipt?: PaylinkReceipt | null; onDone: () => void; inline?: boolean; children?: ReactNode
 }) {
   const [viewReceipt, setViewReceipt] = useState(false)
   const canViewReceipt = Boolean(receipt)
-  const label = state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing'
-  const Icon = state === 'failed' ? X : state === 'reversed' ? Undo2 : Clock3
+  const label = statusLabel || (state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing')
+  const Icon = label.toLowerCase().startsWith('refund') ? Undo2 : state === 'failed' ? X : state === 'reversed' ? Undo2 : Clock3
   if (viewReceipt && receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={() => setViewReceipt(false)} />
   const content = <>
     <p className="text-right text-xs font-semibold text-gray-500">{title}</p>

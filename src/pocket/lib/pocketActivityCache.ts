@@ -4,6 +4,8 @@ import { mergePocketActivitySnapshot } from './pocketActivitySnapshot'
 
 type Snapshot = PocketActivityReadResult & { savedAt: number; full: boolean }
 const snapshots = new Map<string, Snapshot>()
+const dirtyScopes = new Set<string>()
+export function markPocketActivityDirty(scope: string) { if (scope) dirtyScopes.add(activityScope(scope)) }
 const pending = new Map<string, { promise: Promise<void>; fresh: boolean }>()
 const listeners = new Map<string, Set<() => void>>()
 const prefix = 'pocket:activity:snapshot:v2:'
@@ -42,6 +44,7 @@ export function subscribePocketActivity(scope: string, callback: () => void) {
 
 export async function refreshPocketActivity(scope: string, getAccessToken: () => Promise<string | null>, recent: boolean, isCurrent: () => boolean = () => true, fresh = false): Promise<void> {
   if (!scope) return
+  fresh = fresh || dirtyScopes.has(scope)
   const active = pending.get(scope)
   if (active) {
     await active.promise
@@ -65,6 +68,7 @@ export async function refreshPocketActivity(scope: string, getAccessToken: () =>
           const snapshot: Snapshot = { ...mergePocketActivitySnapshot(previous, incoming), savedAt: Date.now(), full: !recent || Boolean(previous?.full) }
           if (snapshots.size >= 32 && !snapshots.has(scope)) snapshots.delete(snapshots.keys().next().value!)
           snapshots.set(scope, snapshot)
+          if (fresh) dirtyScopes.delete(scope)
           try { localStorage.setItem(prefix + encodeURIComponent(scope), JSON.stringify(snapshot)) } catch { /* Keep memory cache on a full device. */ }
           listeners.get(scope)?.forEach(notify => notify())
         })(),

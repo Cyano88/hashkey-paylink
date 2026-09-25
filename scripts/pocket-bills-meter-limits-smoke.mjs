@@ -1,0 +1,5 @@
+import assert from 'node:assert/strict';import {createPocketBillsVerifyHandler} from '../api/pocket/bills.ts';
+const handler=createPocketBillsVerifyHandler({config:{canVend:true,liveCategories:['electricity']},verifyUser:async()=>({userId:'fixture'}),store:{consumeMutationLimit:async()=>{}},requestId:()=> 'fixture',provider:{listElectricityServices:async()=>[{serviceId:'portharcourt-electric',name:'PHED',minimumAmount:200,maximumAmount:10000000}],verifyCustomer:async()=>({valid:true,minimumAmount:0,maximumAmount:null})}});
+const res={statusCode:200,setHeader(){return this},status(n){this.statusCode=n;return this},json(b){this.body=b;return this}};
+await handler({method:'POST',headers:{},body:{category:'electricity',service_id:'portharcourt-electric',billers_code:'12345678901',variation_code:'prepaid'}},res);
+assert.equal(res.statusCode,200);assert.equal(res.body.data.verification.minimumAmount,200);assert.equal(res.body.data.verification.maximumAmount,10000000);console.log('PASS: zero meter minimum uses verified PHED catalog floor; no invented limit.');

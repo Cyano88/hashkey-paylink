@@ -172,6 +172,7 @@ async function processPocketBillsRefund(dependencies: RefundDependencies, intent
     try {
       const verified = await dependencies.verifyTransfer({
         chain: 'base',
+        confirmation: 'base-included',
         txHash: intent.refundTxHash,
         payer: dependencies.circleConfig.treasuryAddress,
         recipient: intent.payerWallet,
@@ -302,4 +303,13 @@ export async function pocketBillsRefundHandler(req: Request, res: Response) {
 
 export async function pocketBillsUserRefundHandler(req: Request, res: Response) {
   return createPocketBillsUserRefundHandler({ ...defaultDependencies(), verifyUser: verifiedPrivyUser })(req, res)
+}
+
+/** Read-only reconciliation: this worker must never initiate a refund. */
+export async function reconcileSubmittedPocketBillRefund(intentId: string) {
+  const dependencies = defaultDependencies()
+  const intent = await dependencies.store.getIntentById(intentId)
+  if (!intent.refundCircleTransactionId || !['refunding', 'refund_submitted'].includes(intent.state)) return intent
+  await processPocketBillsRefund({ ...dependencies, circle: { ...dependencies.circle, createUsdcTransfer: async () => { throw new Error('A refund must already be submitted before background reconciliation.') } } }, intentId, intent.ownerId)
+  return dependencies.store.getIntentById(intentId)
 }

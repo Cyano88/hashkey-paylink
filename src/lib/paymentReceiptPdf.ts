@@ -8,6 +8,7 @@ export type PaylinkReceipt = {
   status: string
   eventId: string
   txHash: string
+  refundTxHash?: string
   chain: string
   payer: string
   memo: string
@@ -278,6 +279,8 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
         { label: targetLabel, value: receipt.targetValue || receipt.recipient || '-' },
         { label: 'Amount', value: amount },
         ...(localAmount ? [{ label: 'Total USDC', value: `${compactReceiptAmount(receipt.amount)} ${receipt.asset}` }] : []),
+        ...(receipt.refundTxHash ? [{ label: 'Refund transaction', value: receipt.refundTxHash, mono: true }] : []),
+        ...(receipt.status === 'refunded' ? [{ label: 'USDC returned', value: `${compactReceiptAmount(receipt.amount)} ${receipt.asset}` }] : []),
         ...(receipt.billToken ? [{ label: 'Meter Token', value: receipt.billToken.replace(/^token\s*:\s*/i, '').trim(), mono: true }] : []),
       ],
       reference,
@@ -574,6 +577,9 @@ function createPdfWithJpeg(dataUrl: string, width: number, height: number) {
 
 export function paymentReceiptOutcome(receipt: Pick<PaylinkReceipt, 'status'> & Partial<Pick<PaylinkReceipt, 'source'>>) {
   const status = String(receipt.status || '').trim().toLowerCase()
+  if (receipt.source === 'bills' && status === 'refund available') return { state: 'pending' as const, label: 'Refund available', color: '#d97706' }
+  if (receipt.source === 'bills' && ['refunding', 'refund pending', 'refund_submitted'].includes(status)) return { state: 'pending' as const, label: 'Refunding', color: '#2563eb' }
+  if (receipt.source === 'bills' && status === 'refunded') return { state: 'reversed' as const, label: 'Refunded', color: '#16a34a' }
   if (['refunded', 'reversed'].includes(status)) return { state: 'reversed' as const, label: 'Reversed', color: '#d97706' }
   if (['failed', 'cancelled', 'canceled', 'rejected'].includes(status)) return { state: 'failed' as const, label: 'Failed', color: '#dc2626' }
   if (['completed', 'confirmed', 'delivered', 'paid', 'settled', 'successful', 'test complete', 'validated'].includes(status)) return { state: 'successful' as const, label: status === 'test complete' ? 'Test complete' : 'Successful', color: '#16a34a' }

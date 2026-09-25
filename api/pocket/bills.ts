@@ -607,7 +607,10 @@ export function createPocketBillsVerifyHandler(dependencies: BillsDependencies) 
         return respond.fail(new PocketBillsStoreError('BILLS_VERIFY_NOT_REQUIRED', 'This provider uses the subscriber phone number and does not require account verification.', 409))
       }
       const verification = await dependencies.provider.verifyCustomer({ category, serviceId, billersCode, variationCode })
-      return respond.success({ verification: { ...verification, serviceId, billersCode, variationCode } })
+      const service = services.find(item => item.serviceId === serviceId)!
+      const minimums = [verification.minimumAmount, service.minimumAmount].filter((value): value is number => value !== null && value > 0)
+      const maximums = [verification.maximumAmount, service.maximumAmount].filter((value): value is number => value !== null && value > 0)
+      return respond.success({ verification: { ...verification, minimumAmount: minimums.length ? Math.max(...minimums) : null, maximumAmount: maximums.length ? Math.min(...maximums) : null, serviceId, billersCode, variationCode } })
     } catch (error) {
       return respond.fail(error)
     }
@@ -658,6 +661,10 @@ export async function reconcilePocketBillExecutionByResource(intentId: string) {
   let intent = await dependencies.store.getIntentById(intentId)
   if (!intent.txHash && intent.submittedTxHash) {
     intent = await confirmPocketBillPayment(dependencies, intent.ownerId, intent.id, intent.submittedTxHash)
+  }
+  if (intent.refundCircleTransactionId && ['refunding', 'refund_submitted'].includes(intent.state)) {
+    const { reconcileSubmittedPocketBillRefund } = await import('./bills-refunds.js')
+    intent = await reconcileSubmittedPocketBillRefund(intent.id)
   }
   const canRequery = Boolean(intent.providerAttemptedAt)
     && ['vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_eligible', 'needs_review'].includes(intent.state)
