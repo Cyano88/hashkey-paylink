@@ -151,3 +151,11 @@ assert.equal(developerPolicyFromStore(store,walletSpec.apiKey,secret,'wallet:arc
 for(const scope of ['agreement:fund','agreement:recipient','agreement:create','checkout:create',null])assert.equal(developerPolicyFromStore(store,walletSpec.apiKey,secret,scope,now),null)
 for(const old of [agreementSpec,fundingSpec,connectionSpec])assert.equal(developerPolicyFromStore(store,old.apiKey,secret,'wallet:arc',now),null)
 console.log('Arc wallet scope is independent from drafting, funding, checkout and account linking.')
+
+grant={...original,scopes:['wallet:swap','keys:manage']}
+const swapSpec={...spec,operationId:'fixture_wallet_swap_001',apiKey:'hpl_app_'+'7'.repeat(64),scopes:['wallet:swap'],expiresInDays:7}
+assert.equal((await call(swapSpec)).statusCode,201)
+assert.equal(developerPolicyFromStore(store,swapSpec.apiKey,secret,'wallet:swap',now)?.partnerId,id)
+for(const old of [agreementSpec,fundingSpec,connectionSpec,walletSpec])assert.equal(developerPolicyFromStore(store,old.apiKey,secret,'wallet:swap',now),null)
+for(const scope of ['wallet:arc','wallet:stocks:read','agreement:fund',null])assert.equal(developerPolicyFromStore(store,swapSpec.apiKey,secret,scope,now),null)
+console.log('Swap scope is separate from wallet reads, Arc transfers, funding and key management.')

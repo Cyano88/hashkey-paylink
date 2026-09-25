@@ -4,16 +4,18 @@ import { getAddress, isAddress } from 'viem'
 import { verifiedPrivyUser } from '../privy-circle-link.js'
 import { okxConfigured, openStockQuote, quoteStockSwap, sealStockQuote } from './xstocks-swap-provider.js'
 
-export default async function pocketStockSwapHandler(req: Request, res: Response) {
+const loadUser = async (userId:string) => new PrivyClient((process.env.PRIVY_APP_ID || process.env.VITE_PRIVY_APP_ID)!, process.env.PRIVY_APP_SECRET!).getUserById(userId)
+export function createStockSwapHandler(overrides: Partial<{identity:typeof verifiedPrivyUser; user:typeof loadUser}> = {}) {
+ const d={identity:verifiedPrivyUser,user:loadUser,...overrides}
+ return async function pocketStockSwapHandler(req: Request, res: Response) {
   res.setHeader('Cache-Control', 'no-store')
   try {
     if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed.' })
-    const identity = await verifiedPrivyUser(req)
+    const identity = await d.identity(req)
     if (req.method === 'GET') return res.json({ ok: true, chainId: 196, configured: okxConfigured() })
     const wallet = String(req.body?.wallet || '')
     if (!isAddress(wallet)) return res.status(400).json({ ok: false, error: 'Open your X Layer wallet first.' })
-    const privy = new PrivyClient((process.env.PRIVY_APP_ID || process.env.VITE_PRIVY_APP_ID)!, process.env.PRIVY_APP_SECRET!)
-    const user = await privy.getUserById(identity.userId)
+    const user = await d.user(identity.userId)
     const owns = user.linkedAccounts.some(a => a.type === 'wallet' && a.chainType === 'ethereum' && a.walletClientType === 'privy' && a.address.toLowerCase() === wallet.toLowerCase())
     if (!owns) return res.status(403).json({ ok: false, error: 'This wallet is not your Pocket embedded wallet.' })
     if (req.body?.action === 'quote') {
@@ -31,3 +33,6 @@ export default async function pocketStockSwapHandler(req: Request, res: Response
     return res.status(error.status || 503).json({ ok: false, error: error.status ? error.message : 'Stock quotes are temporarily unavailable. Please try again.' })
   }
 }
+
+}
+export default createStockSwapHandler()

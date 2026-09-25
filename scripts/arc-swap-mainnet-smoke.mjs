@@ -71,7 +71,7 @@ try{
  assert.ok(base.maxFeeUnits>=19153n+(base.totalUnits*325n+9999999n)/10000000n)
  globalThis.fetch=async(_url,init)=>{
  const {method}=JSON.parse(init.body)
- return new Response(JSON.stringify({result:method==='eth_getBlockByNumber'?{timestamp:'0x65000000'}:{status:'0x1',blockNumber:'0x10',logs:[transfer('0xfffffffffffffffffffffffffffffffffffffffe',wallet,other,10000000000000000000n),transfer(tokenIn.address,wallet,other,10000000n)]}}))
+ return new Response(JSON.stringify({result:method==='eth_chainId'?'0x13b2':method==='eth_getBlockByNumber'?{number:'0x20',timestamp:'0x65000000'}:{status:'0x1',blockNumber:'0x10',logs:[transfer('0xfffffffffffffffffffffffffffffffffffffffe',wallet,other,10000000000000000000n),transfer(tokenIn.address,wallet,other,10000000n)]}}))
  }
  const receipt=await verifyEvmUsdcTransfer({chain:'arc',txHash:'0x'+'a'.repeat(64),payer:wallet,recipient:other,minAmount:'10'})
  assert.equal(receipt.amount,'10','Native and ERC20 USDC logs must not double count')

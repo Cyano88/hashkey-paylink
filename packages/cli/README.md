@@ -248,3 +248,8 @@ hashpaylink hosting apply --plan PLAN_UUID --json
 `agreement:read` permits GET on `/api/v2/agreements`; `agreement:create` permits human draft creation at that exact path without an action or query. It cannot rotate payer links, request releases, register recipients, reach payer/agent signing routes, administer the project or activate escrow. Existing contract and pilot gates remain unchanged. No new Agreement create/status CLI command is added in this increment; the scoped credential is for the backend API integration.
 
 Agreement handoff is Render-only and writes `HASHPAYSTREAM_ARC_MAINNET_API_KEY`, leaving the retired test credential untouched. It requires Agreement read/create scopes and permits only optional project read in addition. Checkout handoff retains `HASHPAYLINK_API_KEY`. Neither flow accepts arbitrary or frontend variable names, prints the secret or triggers deployment. The app needs a separately reviewed integration/cutover to consume the mainnet variable. Key expiry remains at most 30 days; plan rotation before production use.
+
+
+## Hosted wallet swaps
+
+Request `wallet:swap` and `keys:manage` in the owner CLI grant. Create a separate backend key containing only `wallet:swap`; existing balance-read, Arc transfer and Agreement keys cannot open swap sessions. `hosting plan --product wallet-swap --provider render --service SERVICE_ID --key-id KEY_ID --backend --json` targets only `HASHPAYSTREAM_WALLET_SWAP_API_KEY`. Review then apply the returned plan. The key opens project-bound hosted sessions; participants approve their own wallet operations. See `docs/DEVELOPER_WALLET_SWAP_2026-09-25.md` for the session and custom UI API contract.

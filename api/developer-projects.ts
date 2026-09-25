@@ -43,7 +43,7 @@ type DeveloperKey = {
   createdAt: string
   lastUsedAt?: string
   revokedAt?: string
-  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create' | 'agreement:recipient' | 'agreement:fund' | 'xstocks-agreement:read' | 'wallet:connect' | 'wallet:arc' | 'wallet:stocks:read' | 'xstocks-agreement:create'>
+  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create' | 'agreement:recipient' | 'agreement:fund' | 'xstocks-agreement:read' | 'wallet:connect' | 'wallet:arc' | 'wallet:stocks:read' | 'wallet:swap' | 'xstocks-agreement:create'>
   expiresAt?: string
   createdByGrant?: string
   operationId?: string
@@ -1179,7 +1179,7 @@ export function createScopedDeveloperKeysHandler(
         if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId) || !/^hpl_app_[a-f0-9]{64}$/.test(rawKey)
           || !name || !Number.isInteger(days) || days < 1 || days > 30
           || !Array.isArray(scopes) || !scopes.length || scopes.length > 11 || new Set(scopes).size !== scopes.length
-          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'xstocks-agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
+          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'wallet:swap', 'xstocks-agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
           return res.status(400).json({ ok: false, error: 'Use a unique operation id, a scoped key, 1-30 days, and permissions included in the approved grant.' })
         }
         requestDigest = keyDigest(dependencies.portalSecret(), JSON.stringify([rawKey, name, [...scopes].sort(), days]))
@@ -1247,4 +1247,11 @@ export async function resolveXStocksAgreementProjectEnabled(projectId: string): 
   return Boolean(project && projectCheckoutMode(project) === 'human'
     && project.operationalStatus !== 'suspended' && project.settlementStatus === 'ready'
     && project.capabilities?.includes('xstocks_agreements'))
+}
+
+export async function resolveWalletSwapProjectEnabled(projectId:string,rail:'arc'|'xlayer'):Promise<boolean>{
+  if(!defaults.hasStore())return false
+  const project=(await defaults.read(STORE_KEY))?.projects[projectId]
+  return Boolean(project&&projectCheckoutMode(project)==='human'&&project.operationalStatus!=='suspended'&&project.settlementStatus==='ready'
+    &&project.capabilities?.includes(rail==='arc'?'arc_agreements':'xstocks_agreements'))
 }
