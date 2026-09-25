@@ -28,7 +28,7 @@ async function request(getAccessToken: AccessTokenReader, init?: RequestInit) {
 
 export async function readPocketPaymentSecurity(getAccessToken: AccessTokenReader) {
   const data = await request(getAccessToken)
-  return { configured: data.configured === true, lockedUntil: Number(data.lockedUntil || 0) }
+  return { configured: data.configured === true, pinLength: data.pinLength === 4 ? 4 : 6, lockedUntil: Number(data.lockedUntil || 0) }
 }
 
 export async function updatePocketPaymentSecurity(getAccessToken: AccessTokenReader, body: Record<string, unknown>) {

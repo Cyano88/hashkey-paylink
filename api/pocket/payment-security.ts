@@ -5,12 +5,12 @@ import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.j
 import { deleteDurableJson, hasRenderDurableStore, mutateDurableJson, readDurableJson, writeDurableJson } from '../render-durable-store.js'
 
 const scrypt = promisify(nodeScrypt)
-const PIN_PATTERN = /^\d{6}$/
+const PIN_PATTERN = /^\d{4}$/
 const APPROVAL_TTL_MS = 2 * 60_000
 const RESET_TTL_MS = 15 * 60_000
 const localStore = new Map<string, unknown>()
 
-type PinRecord = { version: 1; salt: string; hash: string; failedAttempts: number; lockedUntil: number; createdAt: number; updatedAt: number }
+type PinRecord = { version: 1; pinLength?: 4 | 6; salt: string; hash: string; failedAttempts: number; lockedUntil: number; createdAt: number; updatedAt: number }
 type ApprovalRecord = { version: 1; ownerId: string; expiresAt: number; uses: number }
 type ResetRecord = { version: 1; ownerId: string; previousAuthorizationHash: string; previousSessionId?: string; previousEmailVerifiedAt?: number; startedAt?: number; expiresAt: number; used: boolean }
 type Dependencies = { verifyUser(req: Request): Promise<VerifiedLinkUser>; now(): number; random(size: number): Buffer }
@@ -59,7 +59,7 @@ async function pinHash(pin: string, salt: Buffer) {
 }
 async function newPinRecord(pin: string, now: number, random: Dependencies['random']): Promise<PinRecord> {
   const salt = random(16)
-  return { version: 1, salt: salt.toString('base64'), hash: await pinHash(pin, salt), failedAttempts: 0, lockedUntil: 0, createdAt: now, updatedAt: now }
+  return { version: 1, pinLength: pin.length as 4 | 6, salt: salt.toString('base64'), hash: await pinHash(pin, salt), failedAttempts: 0, lockedUntil: 0, createdAt: now, updatedAt: now }
 }
 async function verifyPin(record: PinRecord, pin: string) {
   const actual = Buffer.from(await pinHash(pin, Buffer.from(record.salt, 'base64')), 'base64')
@@ -67,9 +67,9 @@ async function verifyPin(record: PinRecord, pin: string) {
   return actual.length === expected.length && timingSafeEqual(actual, expected)
 }
 function cooldownMs(attempts: number) { return attempts < 5 ? 0 : Math.min(30 * 60_000, 30_000 * 2 ** Math.min(6, attempts - 5)) }
-function cleanPin(value: unknown) {
+function cleanPin(value: unknown, existing = false) {
   const pin = String(value ?? '').trim()
-  if (!PIN_PATTERN.test(pin)) throw Object.assign(new Error('Enter your six-digit Pocket PIN.'), { status: 400 })
+  if (!(existing ? /^(?:\d{4}|\d{6})$/ : PIN_PATTERN).test(pin)) throw Object.assign(new Error('Enter your Pocket PIN. New PINs must have four digits.'), { status: 400 })
   return pin
 }
 
@@ -101,7 +101,7 @@ export function createPocketPaymentSecurityHandler(overrides: Partial<Dependenci
       const identity = await dependencies.verifyUser(req)
       const key = ownerKey(identity.userId)
       const current = await readStore<PinRecord>(key)
-      if (req.method === 'GET') return res.json({ ok: true, configured: Boolean(current), lockedUntil: current?.lockedUntil ?? 0 })
+      if (req.method === 'GET') return res.json({ ok: true, configured: Boolean(current), pinLength: current ? current.pinLength ?? 6 : 4, lockedUntil: current?.lockedUntil ?? 0 })
       const action = String(req.body?.action ?? '')
       const now = dependencies.now()
       if (action === 'setup') {
@@ -137,7 +137,7 @@ export function createPocketPaymentSecurityHandler(overrides: Partial<Dependenci
         await writeStore(key, await newPinRecord(nextPin, now, dependencies.random))
         return res.json({ ok: true, configured: true, reset: true })
       }
-      const enteredPin = cleanPin(req.body?.pin ?? req.body?.currentPin)
+      const enteredPin = cleanPin(req.body?.pin ?? req.body?.currentPin, true)
       if (!await verifyPin(current, enteredPin)) {
         const failedAttempts = current.failedAttempts + 1
         const lockedUntil = now + cooldownMs(failedAttempts)

@@ -422,6 +422,7 @@ async function circleWalletApi<T>(
         } : {}),
       },
       body: JSON.stringify(payload),
+      ...(/^(getTransaction|getChallenge)$/.test(action) ? { signal: AbortSignal.timeout(12_000) } : {}),
     })
   } catch (err) {
     throw new Error(`Circle email wallet request could not reach Hash PayLink (${label}). ${readableError(err)}`)
@@ -920,7 +921,16 @@ export async function connectCircleEvmEmailWallet(
   }
 }
 
-async function pollTransactionHash(session: CircleEvmEmailSession, transactionId: string, timeoutMs = 180_000) {
+async function confirmedCircleTransfer(session: CircleEvmEmailSession, transaction: { state?: string; status?: string; [key: string]: unknown }, hash: Hex) {
+  const state = transactionState(transaction)
+  if (state === 'CONFIRMED' || state === 'COMPLETE') return true
+  const { EVM_CLIENTS } = await import('./router')
+  const receipt = await EVM_CLIENTS[session.chain].getTransactionReceipt({ hash }).catch(() => null)
+  if (receipt?.status === 'reverted') throw Object.assign(new Error('Withdrawal transaction reverted on-chain.'), { txHash: hash, terminalFailure: true })
+  return receipt?.status === 'success'
+}
+
+async function pollTransactionHash(session: CircleEvmEmailSession, transactionId: string, timeoutMs = 180_000, confirmedOnly = false) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const data = await circleWalletApi<{
@@ -940,10 +950,10 @@ async function pollTransactionHash(session: CircleEvmEmailSession, transactionId
       chain: session.chain,
     })
     const txHash = findTxHash(data.transaction)
-    if (txHash) return txHash
     const state = transactionState(data.transaction)
-    if (state.includes('CANCEL')) throw new Error('Circle wallet confirmation was cancelled.')
-    if (state.includes('FAILED')) throw new Error(transactionFailureMessage(data.transaction))
+    if (state.includes('CANCEL')) throw Object.assign(new Error('Circle wallet confirmation was cancelled.'), { terminalFailure: true })
+    if (state.includes('FAILED') || state === 'DENIED') throw Object.assign(new Error(transactionFailureMessage(data.transaction)), { txHash, terminalFailure: true })
+    if (txHash && (!confirmedOnly || await confirmedCircleTransfer(session, data.transaction!, txHash))) return txHash
     await new Promise(resolve => setTimeout(resolve, 2_500))
   }
   return null
@@ -1038,6 +1048,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
   amount: string
   idempotencyKey: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
+  onConfirmed?: (hash: Hex) => void
   onAccepted?: (value: { challengeId: string; transactionId: string }) => void
 }) {
   const sdk = authenticatedSdk(params.session)
@@ -1067,11 +1078,27 @@ export async function sendCircleEvmEmailWithdraw(params: {
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a withdraw challenge.')
   params.onChallenge?.({ challengeId: challenge.challengeId, transactionId: findTransactionId(challenge) ?? '' })
-  const result = await executeChallengeWithTimeout(
-    sdk,
-    challenge.challengeId,
-    'Circle withdraw confirmation did not finish. If you approved it, check the destination wallet in a moment.',
-  )
+  let observedTransactionId = findTransactionId(challenge) ?? ''
+  let confirmedHash: Hex | null = null
+  const restoreViewport = capturePocketViewport()
+  const result = await executeRecoverableCircleApproval(sdk, challenge.challengeId, sdkError, undefined, 120_000, async () => {
+    if (!observedTransactionId) {
+      const detail = await circleWalletApi<{ challenge?: Record<string, unknown> }>({ action: 'getChallenge', userToken: params.session.userToken, chain: params.session.chain, challengeId: challenge.challengeId })
+      observedTransactionId = challengeCorrelationId(detail.challenge) ?? ''
+    }
+    if (!observedTransactionId) return false
+    const detail = await circleWalletApi<{ transaction?: Record<string, unknown> }>({ action: 'getTransaction', userToken: params.session.userToken, chain: params.session.chain, transactionId: observedTransactionId })
+    const hash = findTxHash(detail.transaction)
+    if (!hash || !detail.transaction || ['FAILED','DENIED','CANCELLED'].includes(transactionState(detail.transaction))) return false
+    if (!await confirmedCircleTransfer(params.session, detail.transaction, hash)) return false
+    confirmedHash = hash
+    return true
+  }).finally(restoreViewport)
+  if (confirmedHash) {
+    params.onAccepted?.({ challengeId: challenge.challengeId, transactionId: observedTransactionId })
+    params.onConfirmed?.(confirmedHash)
+    return confirmedHash
+  }
   params.onAccepted?.({
     challengeId: challenge.challengeId,
     transactionId: findTransactionId(result) ?? findTransactionId(challenge) ?? '',
@@ -1118,7 +1145,7 @@ export async function reconcileCircleEvmEmailWithdraw(params: {
   )
   if (!transactionId) return { state: 'submitted' as const, txHash: null, transactionId: '' }
   const remaining = Math.max(2_500, timeoutMs - (Date.now() - startedAt))
-  const txHash = await pollTransactionHash(params.session, transactionId, remaining)
+  const txHash = await pollTransactionHash(params.session, transactionId, remaining, true)
   return txHash
     ? { state: 'confirmed' as const, txHash, transactionId }
     : { state: 'submitted' as const, txHash: null, transactionId }

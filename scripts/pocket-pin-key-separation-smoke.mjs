@@ -5,12 +5,12 @@ const handler=createPocketPaymentSecurityHandler({verifyUser:async()=>({userId:'
 async function call(body){let status=200,result;await handler({method:'POST',headers:{},body},{setHeader(){},status(s){status=s;return this},json(v){result=v;return this}});return {status,result}}
 try{
  process.env.NODE_ENV='production';delete process.env.POCKET_PIN_PEPPER;process.env.PRIVY_APP_SECRET='synthetic-old-provider-secret-not-real-123456'
- assert.equal((await call({action:'setup',pin:'123456'})).status,503,'Privy must not substitute for missing production pepper')
+ assert.equal((await call({action:'setup',pin:'1234'})).status,503,'Privy must not substitute for missing production pepper')
  process.env.POCKET_PIN_PEPPER=process.env.PRIVY_APP_SECRET
- assert.equal((await call({action:'setup',pin:'123456'})).status,200)
+ assert.equal((await call({action:'setup',pin:'1234'})).status,200)
  process.env.POCKET_PIN_PEPPER=process.env.PRIVY_APP_SECRET
  process.env.PRIVY_APP_SECRET='synthetic-new-provider-secret-not-real-654321'
- assert.equal((await call({action:'verify',pin:'123456'})).status,200,'Preserved dedicated pepper must verify pre-rotation PIN')
- assert.equal((await call({action:'verify',pin:'654321'})).status,401)
+ assert.equal((await call({action:'verify',pin:'1234'})).status,200,'Preserved dedicated pepper must verify pre-rotation PIN')
+ assert.equal((await call({action:'verify',pin:'6543'})).status,401)
  console.log('PASS PIN key separation: existing PIN survives provider-secret change with preserved dedicated pepper; incorrect PIN rejected.')
 }finally{for(const[k,v]of Object.entries(saved)){if(v===undefined)delete process.env[k];else process.env[k]=v}}

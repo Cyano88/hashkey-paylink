@@ -281,8 +281,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             )}
 
             {!showPayment && !reviewBlocked && (
-              <button type="button" onClick={() => void bills.review()} disabled={!bills.formReady || !baseAddress || bills.processing} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-4 text-sm font-bold text-white shadow-sm transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45 dark:bg-white dark:text-gray-950">
-                {bills.status === 'quoting' ? <span role="status" className="animate-pulse motion-reduce:animate-none">Getting live quote</span> : 'Review payment'}
+              <button type="button" onClick={() => void bills.review()} disabled={!bills.formReady || !baseAddress || bills.processing} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-black px-4 text-sm font-bold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45">
+                {bills.status === 'quoting' ? <span role="status" className="animate-pulse motion-reduce:animate-none">Getting live quote</span> : 'Buy'}
               </button>
             )}
 
@@ -300,7 +300,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                       <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc))} USDC</span></div>
                     </div>
                     {bills.error && <p role="alert" className="mb-3 text-center text-xs text-red-500">{bills.error}</p>}
-                    <PocketSlideAction onApprovalBusyChange={setApprovalBusy}
+                    <PocketSlideAction plain onApprovalBusyChange={setApprovalBusy}
                       status={slideStatus}
                       disabled={bills.status !== 'ready' || paymentRouteBusy || paymentRouteInsufficient}
                       onPrepare={onPreparePayment}
@@ -313,7 +313,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                             : paymentRouting?.status === 'checking'
                               ? 'Checking balances'
                               : 'Review payment',
-                        idle: bills.environment === 'sandbox' ? 'Confirm test payment' : 'Confirm payment',
+                        idle: 'Buy',
                         pending: paymentRouting?.status === 'moving' ? 'Moving USDC' : 'Preparing payment',
                         submitted: paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling' ? 'USDC move confirming' : bills.environment === 'sandbox' ? `Running ${billName} test` : `Delivering ${billName}`,
                         successful: bills.environment === 'sandbox' ? 'Test complete' : `${billName} sent`,
@@ -326,7 +326,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
               </PocketBottomSheet>
             )}
 
-            {bills.notice && <p className={cn('text-center text-xs font-semibold', bills.status === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bills.notice}</p>}
+            {bills.notice && !showPayment && !showResult && <p className={cn('text-center text-xs font-semibold', bills.status === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bills.notice}</p>}
             {bills.error && (() => {
               const ErrorIcon = errorPresentation.icon
               return (

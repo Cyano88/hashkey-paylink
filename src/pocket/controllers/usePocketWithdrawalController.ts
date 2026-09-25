@@ -98,6 +98,13 @@ export default function usePocketWithdrawalController({
     if (BigInt(Math.floor(balance * 1e6)) < BigInt(q.totalUnits)) throw new Error('Insufficient USDC to cover the amount and fees. Try a lower amount.')
     return feeQuote!.token
   }
+  const handleRecoveryError = (reason: unknown) => {
+    const failure = reason as { terminalFailure?: boolean; txHash?: string; message?: string }
+    if (!failure?.terminalFailure) return
+    clearEvmOperation()
+    if (failure.txHash) setTxHash(failure.txHash)
+    setStatus('idle'); setNotice(''); setError(failure.message || 'Transfer failed.')
+  }
   const recoverEvmOperation = useCallback(async (operation: EvmSendOperation) => {
     const accessToken = await getAccessToken()
     if (!accessToken) throw new Error('Sign in again to check this transfer.')
@@ -340,7 +347,7 @@ export default function usePocketWithdrawalController({
             setStatus('successful')
             setNotice(`${formatPocketDisplayAmount(operation.amount)} USDC sent on ${networkLabel}`)
             void refreshBalances().catch(() => undefined)
-          }).catch(() => undefined)
+          }).catch(handleRecoveryError)
           return operation.state === 'accepted'
         }
         const session = await getEvmSession(network, selectedWallet.address)
@@ -356,6 +363,7 @@ export default function usePocketWithdrawalController({
           onChallenge: identifiers => { setSubmissionReference(identifiers.challengeId); writeEvmOperation({ ...operation, ...identifiers, state: 'submitted', updatedAt: Date.now() }) },
           onAccepted: identifiers => {
             circleAccepted = true
+            setStatus(current => current === 'successful' ? current : 'submitted')
             writeEvmOperation({ ...operation, ...identifiers, state: 'accepted', updatedAt: Date.now() })
           },
           confirm: true,
@@ -381,7 +389,7 @@ export default function usePocketWithdrawalController({
               setNotice(`${formatPocketDisplayAmount(operation.amount)} USDC sent on ${networkLabel}`)
               void refreshBalances().catch(() => undefined)
               if (!circleAccepted) onActivity(`Withdrew ${operation.amount} USDC on ${networkLabel}`)
-            }).catch(() => undefined)
+            }).catch(handleRecoveryError)
           }
         }
       }
@@ -406,7 +414,7 @@ export default function usePocketWithdrawalController({
       const message = reason instanceof Error && reason.message ? reason.message : typeof reason === 'string' && reason ? reason : 'Withdraw failed.'
       const failedHash = (reason as {txHash?:unknown})?.txHash
       if (typeof failedHash === 'string' && /^0x[a-fA-F0-9]{64}$/.test(failedHash)) setTxHash(failedHash)
-      const reverted = message === 'Withdrawal transaction reverted on-chain.'
+      const reverted = (reason as {terminalFailure?:boolean})?.terminalFailure === true || message === 'Withdrawal transaction reverted on-chain.'
       setStatus(submitted && !reverted ? 'submitted' : 'idle')
       if (/quote|fees changed/i.test(message)) setFeeQuote(null)
       if (reverted || (!submitted && /cancelled|failed|denied/i.test(message))) {

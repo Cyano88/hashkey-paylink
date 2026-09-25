@@ -213,3 +213,10 @@ assert.equal(serverReverted.statusCode, 400)
 assert.match(serverReverted.body.error, /did not succeed/)
 
 console.log('Circle Pocket EVM transfer client smoke tests passed.')
+
+const confirmedHash = '0x'+'c'.repeat(64)
+const fastResult = await executePocketEvmTransfer({session,linkedWalletAddress:walletAddress,recipient,amount:'1',executor:async input=>{input.onConfirmed(confirmedHash);return confirmedHash},confirmer:async()=>{throw Error('Confirmed receipt must not wait twice')}})
+assert.equal(fastResult.status,'confirmed')
+const mismatchResult = await executePocketEvmTransfer({session,linkedWalletAddress:walletAddress,recipient,amount:'1',executor:async input=>{input.onConfirmed(confirmedHash);return '0x'+'d'.repeat(64)},confirmer:async()=> 'submitted'})
+assert.equal(mismatchResult.status,'submitted')
+console.log('PASS verified confirmation avoids a second wait only for the same transaction hash.')

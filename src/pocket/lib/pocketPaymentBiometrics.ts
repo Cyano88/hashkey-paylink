@@ -13,12 +13,12 @@ export async function pocketPaymentBiometricsAvailable() {
   return Boolean(value?.isAvailable && value.strongBiometryIsAvailable)
 }
 export async function enablePocketPaymentBiometrics(email: string, pin: string) {
-  if (!/^\d{6}$/.test(pin)) throw new Error('Enter your six-digit Pocket PIN first.')
+  if (!/^(?:\d{4}|\d{6})$/.test(pin)) throw new Error('Enter your Pocket PIN first.')
   if (!await pocketPaymentBiometricsAvailable()) throw new Error('Fingerprint or face approval is not available on this phone.')
   await NativeBiometric.setCredentials({
     server: server(email), username: email.trim().toLowerCase(), password: PIN_PREFIX + pin,
     accessControl: AccessControl.BIOMETRY_CURRENT_SET,
-    title: 'Turn on payment approval', subtitle: 'Hash PayLink Pocket', negativeButtonText: 'Not now',
+    title: 'Turn on payment approval', negativeButtonText: 'Not now',
   })
   localStorage.setItem(ENABLED_KEY, 'true')
 }
@@ -34,6 +34,6 @@ export async function readPocketPinWithBiometrics(email: string) {
   })
   if (credentials.username !== email.trim().toLowerCase() || !credentials.password.startsWith(PIN_PREFIX)) throw new Error('Payment approval needs to be set up again.')
   const pin = credentials.password.slice(PIN_PREFIX.length)
-  if (!/^\d{6}$/.test(pin)) throw new Error('Payment approval needs to be set up again.')
+  if (!/^(?:\d{4}|\d{6})$/.test(pin)) throw new Error('Payment approval needs to be set up again.')
   return pin
 }
