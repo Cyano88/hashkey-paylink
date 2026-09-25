@@ -1,0 +1,27 @@
+﻿import assert from 'node:assert/strict'
+import {build} from 'esbuild'
+const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright')
+const stubs={
+ usePocketIdentity:`export default()=>({authenticated:true,email:'fixture@test',getAccessToken:async()=> 'fixture'});`,
+ usePocketWallets:`export default()=>({resolved:true,rows:[{key:'base',balance:10}],wallets:{base:{address:'0x111'}},setWallets:()=>{},refreshBalances:async()=>{},setError:()=>{}});`,
+ usePocketActivity:`export default()=>({refresh:async()=>{}});`,
+ usePocketWalletController:`export default()=>({});`,
+ usePocketPaymentLiquidityController:`export default()=>({});`,
+ usePocketWithdrawalController:`import{useState}from'react';export default()=>{const [amount,setAmount]=useState('1'),[address,setAddress]=useState('0x222'),[status,setStatus]=useState('idle'),[feePreview,setFee]=useState(null),[error,setError]=useState('');return {amount,address,status,feePreview,error,setAmount,setAddress,setMax:()=>{},reference:status==='successful'?'0xhash':'',txHash:status==='successful'?'0xhash':'',prepare:()=>new Promise(resolve=>window.finishPrepare=()=>{setFee({platform:'0.0025',network:'0.001',total:'1.0035'});resolve()}),withdraw:()=>{window.submissions++;setStatus('pending');return new Promise(resolve=>window.finishSend=state=>{setStatus(state);if(state==='idle')setError('Transfer rejected');resolve(state==='successful')})},reset:()=>setStatus('idle')}};`,
+ pocketRequestsClient:`export const completePocketRequest=async()=>{},readPocketRequestRoute=async()=>{},reconcilePocketRequest=async()=>{},readPocketRequests=async()=>[],resolvePocketRecipient=async()=>{},startPocketRequestRoute=async()=>{},updatePocketRequestRoute=async()=>{};`,
+ pocketPaymentApproval:`export const POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT='cancel';export const preparePocketPaymentApproval=async()=>{};export const requestPocketPaymentApproval=()=>new Promise(resolve=>window.finishPin=resolve);`,
+ PocketRouteShell:`import React from'react';export default({children})=><main>{children}</main>;`,
+ PocketFlowHeader:`import React from'react';export default({title})=><h1>{title}</h1>;`,
+ PocketSelect:`import React from'react';export default()=>null;`,
+ PocketTransactionSheet:`import React from'react';export default({title,state,detail})=><div role="dialog" aria-label="Outcome">{title}:{state}{detail}</div>;`,
+ pocketReceipt:`export const pocketActivityReceipt=()=>null;`,
+}
+const bundle=await build({stdin:{contents:`import React from'react';import{createRoot}from'react-dom/client';import{MemoryRouter}from'react-router-dom';import Send from'./src/pocket/pages/PocketSendPage';window.submissions=0;createRoot(document.getElementById('app')).render(<MemoryRouter initialEntries={['/send?mode=address']}><Send/></MemoryRouter>)`,loader:'tsx',resolveDir:process.cwd()},bundle:true,write:false,format:'iife',define:{'process.env.NODE_ENV':'"test"','import.meta.env':'{}'},plugins:[{name:'fixtures',setup(b){b.onResolve({filter:/.*/},a=>{const k=a.path.split('/').at(-1);if(stubs[k])return{path:k,namespace:'stub'}});b.onLoad({filter:/.*/,namespace:'stub'},a=>({contents:stubs[a.path],loader:'tsx',resolveDir:process.cwd()}))}}]})
+const browser=await chromium.launch({headless:true,channel:'chrome'})
+try{for(const outcome of ['successful','submitted','idle']){
+ const page=await browser.newPage();await page.route('https://pocket.test/**',r=>r.fulfill({contentType:'text/html',body:'<div id="app"></div>'}));await page.goto('https://pocket.test');await page.addScriptTag({content:bundle.outputFiles[0].text});const main=page.getByRole('button',{name:'Review send',exact:true});await main.click();const review=page.getByRole('dialog',{name:'Review send',exact:true});await review.waitFor();
+ assert.equal(await main.textContent(),'Review send');assert.equal(await main.locator('.animate-spin').count(),0);assert.equal(await main.isDisabled(),true);await review.getByRole('button',{name:'Checking fees'}).waitFor();assert.equal(await page.getByRole('dialog',{name:'Outcome'}).count(),0);
+ await page.evaluate(()=>window.finishPrepare());await review.getByText('1.0035 USDC',{exact:true}).waitFor();assert.equal(await review.locator('dl.border-blue-100').count(),1);await review.getByRole('button',{name:'Confirm send',exact:true}).click();await page.waitForFunction(()=>window.finishPin);assert.equal(await page.evaluate(()=>window.submissions),0);assert.equal(await page.getByRole('dialog',{name:'Outcome'}).count(),0);assert.equal(await main.textContent(),'Review send');
+ await page.evaluate(()=>window.finishPin());await page.waitForFunction(()=>window.submissions===1);await review.getByRole('button',{name:'Confirming send'}).waitFor();assert.equal(await main.textContent(),'Review send');assert.equal(await page.getByRole('dialog',{name:'Outcome'}).count(),0);
+ await page.evaluate(s=>window.finishSend(s),outcome);const result=page.getByRole('dialog',{name:'Outcome'});await result.waitFor();assert.ok((await result.textContent()).includes('Outgoing:'+(outcome==='idle'?'failed':outcome==='submitted'?'pending':'successful')));assert.equal(await main.textContent(),'Review send');assert.equal(await page.locator('main [role="alert"]').count(),0);await page.close();
+}console.log('PASS USDC main Review send remains static during quote, PIN, Circle confirmation and outcomes; bank details layout reused; no premature outcome; errors confined to sheet. Synthetic only.')}finally{await browser.close()}
