@@ -4,7 +4,7 @@ import {createXStocksAgreementHandlers} from '../api/xstocks-agreement/http.ts';
 import {cliRequestScope} from '../api/developer-cli-grants.ts';
 const stock=JSON.parse(readFileSync('src/lib/xstocksAgreement/xStocksCatalog.json','utf8')).assets[0];
 const buyer='0x'+'11'.repeat(20),seller='0x'+'22'.repeat(20),store=new Map();
-let who='did:privy:customer',project='project-one',enabled=true,projectEnabled=true,capability=true,failWrite=false,walletOverride,state=1,block='10',lastPlan;
+let who='did:privy:customer',project='project-one',enabled=true,projectEnabled=true,capability=true,failWrite=false,walletOverride,state=1,block='10',lastPlan,planBlocks=[],planCalls=0;
 const handlers=createXStocksAgreementHandlers({
  env:()=>({PRIVY_APP_ID:'fixture-app-id',PRIVY_APP_SECRET:'fixture-only',HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED:enabled?'true':'false',HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:18}])}),
  assets:async()=>({enabled,assets:enabled?[stock]:[]}),
@@ -15,7 +15,7 @@ const handlers=createXStocksAgreementHandlers({
  wallet:async()=>({address:walletOverride||(who==='did:privy:customer'?buyer:seller),chainId:196}),
  read:async key=>structuredClone(store.get(key)),
  mutate:async(key,update)=>{if(failWrite)throw Error('Storage unavailable');const next=update(structuredClone(store.get(key)));store.set(key,structuredClone(next));return next;},
- plan:async input=>{lastPlan=input;return {enabled:true,observedBlock:block,state,escrow:'0x'+'44'.repeat(20),actions:['refund'],...(input.action?{transaction:{account:input.account,to:'0x'+'44'.repeat(20),data:'0x1234',chainId:196,value:'0'}}:{})};},
+ plan:async input=>{lastPlan=input;planCalls++;return {enabled:true,observedBlock:planBlocks.length?planBlocks.shift():block,state,escrow:'0x'+'44'.repeat(20),actions:['refund'],...(input.action?{transaction:{account:input.account,to:'0x'+'44'.repeat(20),data:'0x1234',chainId:196,value:'0'}}:{})};},
 });
 async function call(handler,body={},method='POST',headers={},query={}){const res={statusCode:200,setHeader(){},status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;}};await handler({method,headers,query,body},res);return res;}
 const draft={title:'Design work',description:'Deliver the agreed design and source files.',amount:'0.125',durationSeconds:86400,paymentToken:stock.address,reviewHours:48,customerUserId:'did:privy:customer',providerUserId:'did:privy:provider'};
@@ -46,6 +46,14 @@ assert.equal(result.statusCode,200);assert.ok(result.body.status.transaction);as
 assert.equal((await participant('prepare',{operation:'dispatch',evidence:'https://example.com/work'})).body.agreement.evidence.length,1);
 failWrite=true;assert.equal((await participant('prepare',{operation:'dispatch',evidence:'Different delivery evidence'})).statusCode,500);failWrite=false;
 block='10';state=1;assert.equal((await participant('prepare')).statusCode,409);assert.equal((await participant('read')).body.agreement.observed.state,3);
+// A slower overlapping read must re-plan without rolling back or returning stale signing data.
+state=3;block='20';planBlocks=['19','20'];const beforeRetry=planCalls;
+result=await participant('prepare',{operation:'refund',evidence:'Refund after checking the agreed return'});
+assert.equal(result.statusCode,200);assert.equal(planCalls-beforeRetry,2);assert.equal(result.body.status.observedBlock,'20');
+assert.equal(result.body.agreement.observed.observedBlock,'20');assert.ok(result.body.status.transaction);
+planBlocks=['19','18','17'];const beforeBound=planCalls;
+result=await participant('prepare',{operation:'refund',evidence:'Refund after checking the agreed return'});
+assert.equal(result.statusCode,409);assert.equal(planCalls-beforeBound,3);assert.equal(result.body.status,undefined);
 block='21';state=undefined;assert.equal((await participant('prepare',{operation:'create'})).statusCode,409,'Cannot recreate a previously observed escrow');
 block='21';state=3;enabled=false;
 assert.equal((await create()).statusCode,409);assert.equal((await participant('prepare',{operation:'fund'})).statusCode,409);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import "./confirmation.css";
 
 type Confirmation = { title: string; description: string; action: string };
 
@@ -98,7 +99,7 @@ function StreamConfirmSheet({
   }, [close]);
   return createPortal(
     <div
-      className="fixed inset-0 z-[180] flex items-end justify-center bg-black/70 backdrop-blur-sm"
+      className="stream-confirm-backdrop fixed inset-0 z-[180] flex items-end justify-center bg-black/45 backdrop-blur-sm sm:items-center sm:p-6"
       onClick={(event) => {
         if (event.target === event.currentTarget) close(false);
       }}
@@ -109,18 +110,21 @@ function StreamConfirmSheet({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="relative z-10 max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[28px] border border-zinc-200 bg-[#f6f6f3] px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 text-zinc-950 shadow-2xl outline-none dark:border-white/10 dark:bg-[#111111] dark:text-white"
+        className="stream-confirm-panel relative z-10 max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[28px] sm:rounded-[24px] border border-zinc-200 bg-[#f6f6f3] px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 sm:p-6 text-zinc-950 shadow-2xl outline-none dark:border-white/10 dark:bg-[#111111] dark:text-white"
       >
+        <button type="button" aria-label="Close confirmation" onClick={() => close(false)} className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-zinc-500 hover:bg-black/5 dark:hover:bg-white/10">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 6 12 12M18 6 6 18" /></svg>
+        </button>
         <span
           aria-hidden="true"
-          className="mx-auto block h-1 w-10 rounded-full bg-zinc-300 dark:bg-white/20"
+          className="mx-auto block sm:hidden h-1 w-10 rounded-full bg-zinc-300 dark:bg-white/20"
         />
-        <h2 id={titleId} className="mt-5 text-lg font-black">
+        <h2 id={titleId} className="mt-5 pr-10 text-lg font-bold sm:mt-0">
           {options.title}
         </h2>
         <p
           id={descriptionId}
-          className="mt-2 text-xs leading-5 text-zinc-500 dark:text-white/50"
+          className="mt-2 text-sm leading-6 text-zinc-600 dark:text-white/70"
         >
           {options.description}
         </p>

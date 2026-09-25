@@ -177,34 +177,44 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       if (operation && startActions.has(operation) && !workXLayerEnabled(env)) fail(409, 'New xStocks payments are paused.')
       const wallet = await d.wallet(userId, record!.accepted[role]!.address, env)
       if (getAddress(wallet.address) !== record!.accepted[role]!.address) fail(403, 'The accepted wallet does not match.')
-      const status = await d.plan({ env, binding: record!.binding!, account: wallet.address, action: operation, evidence: req.body?.evidence })
-      // Persist evidence and monotonic confirmed state before returning any signing data.
-      record = await d.mutate(key(agreementId), current => {
-        if (!current || current.digest !== record!.digest || current.binding?.termsHash !== record!.binding?.termsHash) fail(409, 'Agreement changed. Refresh.')
-        roleFor(current!, userId)
-        const at = d.now().toISOString()
-        if (!status.pending && current!.observed?.state !== undefined && status.state === undefined) {
-          fail(409, 'The known escrow is missing from the confirmed chain view. Refresh.')
+      // Re-plan if another participant advances the saved block while RPC is
+      // reading. Never return signing data from a rejected chain observation.
+      let status: Awaited<ReturnType<Deps['plan']>>
+      for (let attempt = 0; ; attempt++) {
+        status = await d.plan({ env, binding: record!.binding!, account: wallet.address, action: operation, evidence: req.body?.evidence })
+        try {
+          // Persist evidence and monotonic confirmed state before returning any signing data.
+          record = await d.mutate(key(agreementId), current => {
+            if (!current || current.digest !== record!.digest || current.binding?.termsHash !== record!.binding?.termsHash) fail(409, 'Agreement changed. Refresh.')
+            roleFor(current!, userId)
+            const at = d.now().toISOString()
+            if (!status.pending && current!.observed?.state !== undefined && status.state === undefined) {
+              fail(409, 'The known escrow is missing from the confirmed chain view. Refresh.')
+            }
+            if (operation && ['dispatch', 'refund', 'dispute'].includes(operation)) {
+              const body = field(req.body?.evidence, 'evidence', 2000)
+              if (body.length < 10) fail(400, 'Add evidence of at least 10 characters.')
+              const digest = keccak256(stringToHex(body))
+              if (!current!.evidence.some(note => note.hash === digest && note.role === role)) {
+                if (current!.evidence.length >= 128) fail(409, 'Evidence limit reached. Contact support.')
+                current!.evidence.push({ hash: digest, body, role, at })
+              }
+            }
+            if (!status.pending && status.observedBlock && status.state !== undefined) {
+              const previous = current!.observed
+              if (!previous?.observedBlock || BigInt(status.observedBlock) > BigInt(previous.observedBlock)) {
+                current!.stockReceipt = status.stockReceipt
+                current!.observed = { observedBlock: status.observedBlock, state: status.state, escrow: status.escrow }
+                if (previous?.state !== status.state) current!.events.push({ type: 'chain_state', state: status.state, block: status.observedBlock, at })
+              } else if (BigInt(status.observedBlock) < BigInt(previous.observedBlock) || status.state !== previous.state) throw Object.assign(new Error('Payment details are updating. Please try again.'), {status:409, code:'STALE_CHAIN_OBSERVATION'})
+            }
+            return current!
+          })
+          break
+        } catch (error) {
+          if ((error as {code?:string}).code !== 'STALE_CHAIN_OBSERVATION' || attempt >= 2) throw error
         }
-        if (operation && ['dispatch', 'refund', 'dispute'].includes(operation)) {
-          const body = field(req.body?.evidence, 'evidence', 2000)
-          if (body.length < 10) fail(400, 'Add evidence of at least 10 characters.')
-          const digest = keccak256(stringToHex(body))
-          if (!current!.evidence.some(note => note.hash === digest && note.role === role)) {
-            if (current!.evidence.length >= 128) fail(409, 'Evidence limit reached. Contact support.')
-            current!.evidence.push({ hash: digest, body, role, at })
-          }
-        }
-        if (!status.pending && status.observedBlock && status.state !== undefined) {
-          const previous = current!.observed
-          if (!previous?.observedBlock || BigInt(status.observedBlock) > BigInt(previous.observedBlock)) {
-            current!.stockReceipt = status.stockReceipt
-            current!.observed = { observedBlock: status.observedBlock, state: status.state, escrow: status.escrow }
-            if (previous?.state !== status.state) current!.events.push({ type: 'chain_state', state: status.state, block: status.observedBlock, at })
-          } else if (BigInt(status.observedBlock) < BigInt(previous.observedBlock) || status.state !== previous.state) fail(409, 'A newer payment state is available. Refresh.')
-        }
-        return current!
-      })
+      }
       return res.json({ ok: true, role, fundingEnabled, agreement: view(record), status })
     } catch (error) { return responseError(res, error) }
   }
