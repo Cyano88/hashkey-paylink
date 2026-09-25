@@ -23,7 +23,7 @@ const POCKET_DEFAULT_LABELS: NonNullable<PocketSlideActionProps['labels']> = {
   error: 'Withdrawal failed',
 }
 
-export default function PocketSlideAction({ labels, status, disabled, onConfirm, approvalRequired = true, onPrepare, onApprovalBusyChange, plain = false }: PocketSlideActionProps) {
+export default function PocketSlideAction({ labels, status, disabled, onConfirm, approvalRequired = true, onPrepare, onApprovalBusyChange, plain = true }: PocketSlideActionProps) {
   const activationLocked = useRef(false)
   const unlockTimer = useRef<number | null>(null)
   const [optimisticPending, setOptimisticPending] = useState(false)
@@ -114,13 +114,13 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
         visualStatus === 'error' && 'bg-red-600 text-white dark:bg-red-500 dark:text-white',
       )}
     >
-      {!plain && (visualStatus === 'pending' || visualStatus === 'submitted'
+      {(visualStatus === 'pending' || visualStatus === 'submitted'
         ? <Loader2 className="h-4 w-4 animate-spin" />
         : visualStatus === 'successful'
           ? <CheckCircle2 className="h-4 w-4" />
           : visualStatus === 'error'
             ? <AlertCircle className="h-4 w-4" />
-            : <ActionIcon className="h-4 w-4" />)}
+            : !plain ? <ActionIcon className="h-4 w-4" /> : null)}
       <span>{label}</span>
     </button>
   )

@@ -5,7 +5,7 @@ import { reconcileCircleEvmEmailWithdraw } from '../../lib/circleEvmEmailWallet'
 import { executePocketEvmTransfer } from '../api/pocketEvmTransferClient'
 import { authorizePocketBankWithdraw, confirmPocketBankWithdraw, preparePocketBankWithdraw, readPocketBankWithdrawStatus, registerPocketBankWithdrawTransfer, type PocketBankWithdrawData } from '../api/pocketBankWithdrawClient'
 import type { CirclePocketWallet } from '../models/pocketWallet'
-import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutAcceptance, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout, saveActivePocketBankPayoutAcceptance } from '../lib/pocketBankPayoutState'
+import { detachActivePocketBankPayout, clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutAcceptance, readActivePocketBankPayoutTransfer, saveActivePocketBankPayout, saveActivePocketBankPayoutAcceptance } from '../lib/pocketBankPayoutState'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
 import { pocketRuntimeOrigin } from '../lib/pocketRoutes'
 
@@ -99,7 +99,7 @@ export default function usePocketBankWithdrawController({
   const [error, setError] = useState('')
   const [result, setResult] = useState<PocketBankWithdrawData | null>(null)
   const idempotencyKey = useRef('')
-  const activeIntentId = useRef(readActivePocketBankPayout())
+  const activeIntentId = useRef('')
   const cancelled = useRef(false)
   const polling = useRef(false)
   const reconciling = useRef(false)
@@ -139,15 +139,16 @@ export default function usePocketBankWithdrawController({
   }, [status, result?.intentId, result?.state, getAccessToken])
 
   const resetResult = useCallback(() => {
-    if (status === 'idle' || status === 'pending' || status === 'sent') {
+    if (status === 'idle' || status === 'processing' || status === 'pending' || status === 'sent') {
       const intentId = activeIntentId.current
       if (intentId && (status === 'pending' || status === 'sent' || !readActivePocketBankPayoutTransfer(intentId))) {
         // Pending and handed-off payouts are durable server records now. Done
         // releases the form completely; Activity owns every later provider or
         // refund transition and the old payout must not reopen on relaunch.
-        clearActivePocketBankPayout(intentId)
+        detachActivePocketBankPayout(intentId)
       }
       setStatus('idle')
+      setAmountState('')
       setError('')
       setResult(null)
       idempotencyKey.current = ''
@@ -500,7 +501,7 @@ export default function usePocketBankWithdrawController({
           if (activeIntentId.current !== prepared.intentId || cancelled.current) return
           acceptedTransfer = identifiers
           transactionSubmitted = true
-          saveActivePocketBankPayoutAcceptance(prepared.intentId, identifiers)
+          saveActivePocketBankPayoutAcceptance(prepared.intentId, identifiers, email, selectedWallet.address)
           setStatus(submittedPayoutStatus(payable))
         },
         confirm: false,
@@ -518,7 +519,7 @@ export default function usePocketBankWithdrawController({
           timeoutMs: 180_000,
         }).then(async reconciled => {
           if (!reconciled.txHash || activeIntentId.current !== prepared.intentId) return
-          saveActivePocketBankPayout(prepared.intentId, reconciled.txHash)
+          saveActivePocketBankPayout(prepared.intentId, reconciled.txHash, email, selectedWallet.address)
           const submitted = await registerPocketBankWithdrawTransfer({
             accessToken,
             request: { intent_id: prepared.intentId, tx_hash: reconciled.txHash },
@@ -550,7 +551,7 @@ export default function usePocketBankWithdrawController({
         return
       }
       setResult({ ...payable, txHash: transfer.txHash })
-      saveActivePocketBankPayout(prepared.intentId, transfer.txHash)
+      saveActivePocketBankPayout(prepared.intentId, transfer.txHash, email, selectedWallet.address)
       transactionSubmitted = true
       const submitted = await registerPocketBankWithdrawTransfer({
         accessToken,

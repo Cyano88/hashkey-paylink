@@ -1,3 +1,6 @@
+import {activePocketEvmSession} from './controllers/usePocketWalletController'
+import {reconcileCircleEvmEmailWithdraw} from '../lib/circleEvmEmailWallet'
+import usePocketSendRecovery from './hooks/usePocketSendRecovery'
 import usePocketEmbeddedWallet from './hooks/usePocketEmbeddedWallet'
 ﻿import { PocketReceiptReportProvider } from './components/PocketReceiptReport'
 import PocketTransferMenuPage from './pages/PocketTransferMenuPage'
@@ -16,8 +19,8 @@ import usePocketPushNotifications from './hooks/usePocketPushNotifications'
 import { balanceOwner, readCachedPocketBalance } from './lib/pocketBalanceCache'
 import { prefetchPocketWalletSnapshot } from './hooks/usePocketWallets'
 import { prefetchPocketActivity } from './hooks/usePocketActivity'
-import { readPocketBankWithdrawStatus } from './api/pocketBankWithdrawClient'
-import { clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutAcceptance, readActivePocketBankPayoutTransfer } from './lib/pocketBankPayoutState'
+import { readPocketBankWithdrawStatus, registerPocketBankWithdrawTransfer, confirmPocketBankWithdraw } from './api/pocketBankWithdrawClient'
+import { readPendingBankPayouts, saveActivePocketBankPayout, detachActivePocketBankPayout, clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutAcceptance, readActivePocketBankPayoutTransfer } from './lib/pocketBankPayoutState'
 import { registerPocketRefreshHandler } from './lib/pocketRefresh'
 import { POCKET_NATIVE_BACK_EVENT } from './lib/pocketNativeBack'
 import { preparePocketWalletsAfterSignIn, reconnectPocketBaseWallet, restorePocketWalletSession } from './controllers/usePocketWalletController'
@@ -95,6 +98,7 @@ export default function CirclePocketApp() {
   const route = useMemo(() => landing ? null : resolvePocketRoute(relativePath), [landing, relativePath])
   const stocks = route?.section === 'xstocks'
   const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
+  usePocketSendRecovery({authenticated,email,getAccessToken})
   const activeIdentity = useRef('')
   activeIdentity.current = authenticated ? email : ''
   usePocketPushNotifications({ ready, authenticated, getAccessToken, navigate })
@@ -249,26 +253,36 @@ export default function CirclePocketApp() {
     if (!ready || !authenticated) return
     let checking = false
     const reconcile = async () => {
-      const intentId = readActivePocketBankPayout()
-      if (!intentId || checking || document.visibilityState !== 'visible') return
-      if (!readActivePocketBankPayoutTransfer(intentId) && !readActivePocketBankPayoutAcceptance(intentId)) {
-        clearActivePocketBankPayout(intentId)
-        return
-      }
-      checking = true
-      try {
-        const accessToken = await getAccessToken()
-        if (!accessToken) return
-        const payout = await readPocketBankWithdrawStatus({ accessToken, intentId })
-        // Keep a completed payout available for the bank page to render its
-        // success card and receipt. The page clears it after consuming it.
-        if (payout.state === 'refunded' || payout.state === 'failed' || payout.state === 'expired') clearActivePocketBankPayout(intentId)
-      } catch {
-        // Keep the active payout for the next quiet reconciliation attempt.
-      } finally {
-        checking = false
-      }
+      if(checking||document.visibilityState!=='visible')return
+      checking=true
+      const owner=email
+      try{
+        const accessToken=await getAccessToken();if(!accessToken||activeIdentity.current!==owner)return
+        for(const record of readPendingBankPayouts(owner)){
+          if(activeIdentity.current!==owner)return
+          const intentId=record.intentId
+          try{
+            let payout=await readPocketBankWithdrawStatus({accessToken,intentId})
+            if(activeIdentity.current!==owner)return
+            if(['refunded','failed','sent'].includes(payout.state)||payout.handoffVerified){clearActivePocketBankPayout(intentId);continue}
+            if(record.txHash&&record.walletAddress){
+              payout=await registerPocketBankWithdrawTransfer({accessToken,request:{intent_id:intentId,tx_hash:record.txHash}})
+              if(activeIdentity.current!==owner)return
+              await confirmPocketBankWithdraw({accessToken,request:{intent_id:intentId,order_id:payout.orderId,tx_hash:record.txHash,wallet_address:record.walletAddress}})
+            }
+            if(!record.txHash&&record.challengeId){
+              const session=activePocketEvmSession(owner,'base',record.walletAddress)
+              if(session){const result=await reconcileCircleEvmEmailWithdraw({session,challengeId:record.challengeId,transactionId:record.transactionId,timeoutMs:2500});if(activeIdentity.current!==owner)return;if(result.state==='confirmed'&&result.txHash){
+                saveActivePocketBankPayout(intentId,result.txHash,owner,session.wallet.address);detachActivePocketBankPayout(intentId)
+                payout=await registerPocketBankWithdrawTransfer({accessToken,request:{intent_id:intentId,tx_hash:result.txHash}})
+                await confirmPocketBankWithdraw({accessToken,request:{intent_id:intentId,order_id:payout.orderId,tx_hash:result.txHash,wallet_address:session.wallet.address}})
+              }}
+            }
+          }catch{/* Keep unresolved provider state and retry quietly. */}
+        }
+      }catch{/* Session or provider unavailable; retain pending records. */}finally{checking=false}
     }
+
     void reconcile()
     const interval = window.setInterval(reconcile, 15_000)
     const refreshVisible = () => { if (document.visibilityState === 'visible') void reconcile() }
@@ -279,7 +293,7 @@ export default function CirclePocketApp() {
       window.removeEventListener('focus', refreshVisible)
       document.removeEventListener('visibilitychange', refreshVisible)
     }
-  }, [authenticated, getAccessToken, ready])
+  }, [authenticated, email, getAccessToken, ready])
 
   useEffect(() => {
     if (landing || route) return

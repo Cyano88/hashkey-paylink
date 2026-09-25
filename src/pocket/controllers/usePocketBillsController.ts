@@ -64,15 +64,19 @@ function finalState(intent: PocketBillIntent) {
   return ['delivered', 'failed', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)
 }
 
-function persistActive(key: string, intentId: string, txHash = '', idempotencyKey = '') {
-  window.localStorage.setItem(key, JSON.stringify({ intentId, txHash, idempotencyKey }))
+function persistActive(key: string, intentId: string, txHash = '', idempotencyKey = '', identifiers?:{challengeId:string;transactionId:string}) {
+  const previous=readActive(key+':attempt:'+intentId)
+  const value=JSON.stringify({...previous,intentId,txHash:txHash||previous?.txHash||'',idempotencyKey,...identifiers})
+  const current=readActive(key)
+  if(!previous||!current||current.intentId===intentId)window.localStorage.setItem(key,value)
+  window.localStorage.setItem(key+':attempt:'+intentId,value)
 }
 
-function readActive(key: string): { intentId: string; txHash: string; idempotencyKey: string } | null {
+function readActive(key: string): { intentId: string; txHash: string; idempotencyKey: string; challengeId?:string; transactionId?:string } | null {
   try {
     const value = JSON.parse(window.localStorage.getItem(key) || '{}')
     return typeof value.intentId === 'string' && value.intentId
-      ? { intentId: value.intentId, txHash: typeof value.txHash === 'string' ? value.txHash : '', idempotencyKey: typeof value.idempotencyKey === 'string' ? value.idempotencyKey : '' }
+      ? { challengeId:value.challengeId,transactionId:value.transactionId,intentId: value.intentId, txHash: typeof value.txHash === 'string' ? value.txHash : '', idempotencyKey: typeof value.idempotencyKey === 'string' ? value.idempotencyKey : '' }
       : null
   } catch {
     return null
@@ -80,6 +84,7 @@ function readActive(key: string): { intentId: string; txHash: string; idempotenc
 }
 
 export default function usePocketBillsController({
+  owner,
   view,
   authenticated,
   baseWallet,
@@ -88,6 +93,7 @@ export default function usePocketBillsController({
   getEvmSession,
   refreshBalances,
 }: {
+  owner: string
   view: 'airtime' | 'data' | 'tv' | 'electricity'
   authenticated: boolean
   baseWallet?: CirclePocketWallet
@@ -97,7 +103,7 @@ export default function usePocketBillsController({
   refreshBalances: () => Promise<void>
 }) {
   const category = view
-  const activeBillKey = `pocket:bills:active:${category}`
+  const activeBillKey = `pocket:bills:owned:${encodeURIComponent(owner.trim().toLowerCase())}:${category}`
   const savedAvailability = cachedPocketBillsAvailability()
   const [availability, setAvailability] = useState<'loading' | 'enabled' | 'disabled'>(savedAvailability ? savedAvailability.enabled ? 'enabled' : 'disabled' : 'loading')
   const [environment, setEnvironment] = useState<'sandbox' | 'live'>(savedAvailability?.environment ?? 'sandbox')
@@ -178,6 +184,11 @@ export default function usePocketBillsController({
     return () => { cancelled = true; clearTimeout(timer); unregister(); document.removeEventListener('visibilitychange', visible); window.removeEventListener('online', visible) }
   }, [view])
 
+  const displayedAttempt=useRef('')
+  const billPayInFlight=useRef(false)
+  const billScope=useRef(activeBillKey);billScope.current=activeBillKey
+  const dismiss=useCallback(()=>{displayedAttempt.current='';setIntent(null);setStatus('idle');setError('');setErrorCode('');setNotice('');setAmountNgnState('')},[])
+  useEffect(() => { dismiss() }, [owner, dismiss])
   const resetResult = useCallback(() => {
     if (['paying', 'confirming', 'processing'].includes(status)) return
     setIntent(null)
@@ -269,6 +280,7 @@ export default function usePocketBillsController({
   }, [activeBillKey, category, environment, refreshBalances])
 
   const reconcile = useCallback(async (intentId: string, txHash: string, accessToken: string, restoring = false) => {
+    const visible=()=>mounted.current&&!restoring&&displayedAttempt.current===intentId
     let next: PocketBillIntent | null = null
     if (txHash) {
       for (let attempt = 0; attempt < 16; attempt += 1) {
@@ -277,7 +289,7 @@ export default function usePocketBillsController({
           break
         } catch (reason) {
           if (!(reason instanceof PocketBillsApiError) || reason.code !== 'CONFIRMATION_REQUIRED' || attempt === 15) throw reason
-          if (mounted.current) setStatus('confirming')
+          if (visible()) setStatus('confirming')
           await sleep(confirmationPollDelay(attempt))
         }
       }
@@ -285,28 +297,21 @@ export default function usePocketBillsController({
       next = await refreshPocketAirtime({ accessToken, intentId, refresh: true })
     }
     if (!next) throw new Error('Payment confirmation is temporarily unavailable.')
-    setIntent(next)
+    if(visible())setIntent(next)
     for (let attempt = 0; !finalState(next) && attempt < 12; attempt += 1) {
-      if (mounted.current) {
+      if (visible()) {
         setStatus('processing')
         setNotice(`Payment received. ${billLabel(category)} delivery is processing.`)
       }
       await sleep(deliveryPollDelay(attempt))
       next = await refreshPocketAirtime({ accessToken, intentId, refresh: true })
-      if (mounted.current) setIntent(next)
+      if (visible()) setIntent(next)
     }
-    if (restoring && (next.state === 'delivered' || next.state === 'refunded' || next.state === 'failed')) {
-      window.localStorage.removeItem(activeBillKey)
-      if (mounted.current) {
-        setIntent(null)
-        setStatus('idle')
-        setError('')
-        setErrorCode('')
-        setNotice('')
-      }
-      return next
+    if(['delivered','refunded','failed'].includes(next.state)){
+      window.localStorage.removeItem(activeBillKey+':attempt:'+intentId)
+      if(readActive(activeBillKey)?.intentId===intentId)window.localStorage.removeItem(activeBillKey)
     }
-    settleResult(next)
+    if(visible())settleResult(next)
     return next
   }, [activeBillKey, category, settleResult])
 
@@ -317,17 +322,18 @@ export default function usePocketBillsController({
     const resume = () => {
       if (cancelled || restoring || document.visibilityState === 'hidden') return
       const active = readActive(activeBillKey)
-      if (!active) return
+      if (!active && !Object.keys(localStorage).some(key=>key.startsWith(activeBillKey+':attempt:'))) return
       restoring = true
-      setStatus(active.txHash ? 'confirming' : 'processing')
-      setError('')
-      setErrorCode('')
+      // Resume financial reconciliation quietly; never restore an old form.
       void token()
-        .then(accessToken => reconcile(active.intentId, active.txHash, accessToken, true))
+        .then(async accessToken=>{
+          const records=new Map<string,{intentId:string;txHash:string;idempotencyKey:string}>(active?[[active.intentId,active]]:[])
+          for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key?.startsWith(activeBillKey+':attempt:')){const saved=readActive(key);if(saved)records.set(saved.intentId,saved)}}
+          for(const saved of records.values()){if(cancelled)return;await reconcile(saved.intentId,saved.txHash,accessToken,true).catch(()=>undefined)}
+        })
         .catch(reason => {
           if (!mounted.current || cancelled) return
-          setStatus('error')
-          setError(reason instanceof Error ? reason.message : `Could not restore the ${billLabel(category)} payment.`)
+          // A recovery transport error does not establish financial failure.
         })
         .finally(() => { restoring = false })
     }
@@ -429,6 +435,7 @@ export default function usePocketBillsController({
 
   const review = useCallback(async () => {
     if (availability !== 'enabled' || !authenticated || status === 'quoting') return
+    const reviewScope=billScope.current
     setStatus('quoting')
     setError('')
     setErrorCode('')
@@ -441,10 +448,12 @@ export default function usePocketBillsController({
         : category === 'tv' ? await quotePocketTv({ accessToken, serviceId, variationCode, smartcard: phone, contactPhone: tvRequiresCustomerVerification(serviceId) ? contactPhone : phone, payerWallet: wallet.address })
           : category === 'electricity' ? await quotePocketElectricity({ accessToken, serviceId, meterType: variationCode as 'prepaid' | 'postpaid', meterNumber: phone, contactPhone, amountNgn, payerWallet: wallet.address })
             : await quotePocketAirtime({ accessToken, serviceId, phone, amountNgn, payerWallet: wallet.address })
+      if(!mounted.current||billScope.current!==reviewScope)return
       if (result.intent.quoteExpiresAt <= Date.now()) throw new PocketBillsApiError(`The ${billLabel(category)} quote expired. Review it again.`, { code: 'BILLS_QUOTE_EXPIRED', status: 409 })
       setIntent(result.intent)
       setStatus('ready')
     } catch (reason) {
+      if(!mounted.current||billScope.current!==reviewScope)return
       setStatus('error')
       setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
       setError(reason instanceof Error ? reason.message : `Could not prepare the ${billLabel(category)} payment.`)
@@ -452,7 +461,10 @@ export default function usePocketBillsController({
   }, [amountNgn, authenticated, availability, baseWallet, category, contactPhone, ensureBaseWallet, phone, serviceId, status, token, variationCode])
 
   const pay = useCallback(async () => {
-    if (!intent || status !== 'ready') return
+    if (!intent || status !== 'ready' || billPayInFlight.current) return
+    billPayInFlight.current=true
+    const stillCurrent=()=>{if(!mounted.current||billScope.current!==activeBillKey||displayedAttempt.current!==intent.id)throw Error('Your Pocket account or bill changed.')}
+    displayedAttempt.current=intent.id
     setStatus('paying')
     setError('')
     setErrorCode('')
@@ -460,31 +472,38 @@ export default function usePocketBillsController({
     try {
       const wallet = baseWallet ?? await ensureBaseWallet()
       if (!wallet) throw new Error('Base wallet setup was cancelled.')
+      stillCurrent()
       const accessToken = await token()
+      stillCurrent()
       const prepared = await preparePocketAirtime({ accessToken, intentId: intent.id })
+      stillCurrent()
       setIntent(prepared)
       const saved = readActive(activeBillKey)
       const idempotencyKey = saved?.intentId === prepared.id && saved.idempotencyKey ? saved.idempotencyKey : crypto.randomUUID()
       persistActive(activeBillKey, prepared.id, '', idempotencyKey)
       const session = await getEvmSession(wallet.address)
+      stillCurrent()
       const transfer = await executePocketEvmTransfer({
         session,
         linkedWalletAddress: wallet.address,
         recipient: prepared.treasuryAddress as `0x${string}`,
         amount: prepared.amountUsdc,
         idempotencyKey,
+        onChallenge:ids=>persistActive(activeBillKey,prepared.id,'',idempotencyKey,ids),
+        onAccepted:ids=>persistActive(activeBillKey,prepared.id,'',idempotencyKey,ids),
         confirm: false,
       })
       if (!transfer.txHash) throw new Error('Circle did not return a Base transaction hash. Check Activity before retrying.')
       persistActive(activeBillKey, prepared.id, transfer.txHash, idempotencyKey)
-      setStatus('confirming')
+      if(mounted.current&&billScope.current===activeBillKey&&displayedAttempt.current===intent.id)setStatus('confirming')
       await reconcile(prepared.id, transfer.txHash, accessToken)
     } catch (reason) {
-      if (!mounted.current) return
-      setStatus('error')
+      if (!mounted.current || displayedAttempt.current!==intent.id) return
+      const active=readActive(activeBillKey)
+      setStatus(active?.intentId===intent.id&&(active.txHash||active.challengeId)?'processing':'error')
       setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
-      setError(reason instanceof Error ? reason.message : `${billLabel(category)} payment did not complete.`)
-    }
+      setError(active?.txHash||active?.challengeId?'':reason instanceof Error?reason.message:'Could not submit payment.')
+    } finally { billPayInFlight.current=false }
   }, [activeBillKey, baseWallet, category, ensureBaseWallet, getEvmSession, intent, reconcile, status, token])
 
   const preparePaymentApproval = useCallback(async () => {
@@ -524,6 +543,7 @@ export default function usePocketBillsController({
       : ((category !== 'tv' && category !== 'electricity') || (Boolean(verification) && /^0\d{10}$/.test(contactPhone))))
 
   return {
+    dismiss,
     availability,
     environment,
     airtimeEnabled,

@@ -14,7 +14,7 @@ import PocketStockWalletActions from './PocketStockWalletActions'
 
 const card = 'rounded-[24px] border border-gray-100 bg-white p-5 dark:border-[#262626] dark:bg-[#121212]'
 const field = 'mt-2 min-h-12 w-full rounded-xl bg-gray-100 px-3 text-xs outline-none dark:bg-white/10'
-const button = 'min-h-12 w-full rounded-full bg-gray-950 px-4 text-xs font-bold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950'
+const button = 'min-h-12 w-full rounded-xl bg-black px-4 text-xs font-bold text-white disabled:opacity-40 dark:bg-black dark:text-white'
 export default function PocketStockTrade({ wallet, initialAsset, initialMode = 'buy' }: { wallet: ReturnType<typeof usePocketStockWallet>; initialAsset?: string; initialMode?: 'buy' | 'sell' | 'swap' }) {
   const { getAccessToken } = usePocketIdentity()
   const [mode, setMode] = useState(initialMode)
@@ -39,10 +39,11 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
   const validAmount = /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(amount.trim()) && Number(amount) > 0 && amount.length <= 80
   useEffect(() => { if (!busy && !reconnectWallet) setError('') }, [requestKey])
   useEffect(() => {
-    if (wallet.pending?.kind === 'trade' && wallet.pending.status === 'pending') watchingTrade.current = true
     if (watchingTrade.current && wallet.pending?.kind === 'trade' && wallet.pending.status === 'confirmed') {
+      watchingTrade.current = false
       setProgress({stage:'completed',prepared:true,submitted:true});setReview(null);setAmount('');setError('')
     } else if (watchingTrade.current && wallet.pending?.kind === 'trade' && wallet.pending.status === 'failed') {
+      watchingTrade.current = false
       setProgress(previous=>({...previous,stage:'failed'}));setError('The transaction reverted. Your trade did not complete.')
     }
   }, [wallet.pending?.hash,wallet.pending?.status])
@@ -80,7 +81,7 @@ export default function PocketStockTrade({ wallet, initialAsset, initialMode = '
   }
   if (!wallet.address) return <PocketStockWalletActions wallet={wallet} view="receive" />
   return <section className={card}>
-    <div className="mb-5 grid grid-cols-3 gap-2">{(['buy', 'sell', 'swap'] as const).map(value => <button key={value} type="button" disabled={busy || wallet.pending?.status==='pending'} aria-pressed={mode === value} onClick={() => setMode(value)} className={'min-h-10 rounded-full text-xs font-bold ' + (mode === value ? 'bg-gray-950 text-white dark:bg-white dark:text-gray-950' : 'text-gray-400')}>{value === 'buy' ? 'Buy' : value === 'sell' ? 'Sell' : 'Swap'}</button>)}</div>
+    <div className="mb-5 grid grid-cols-3 gap-2">{(['buy', 'sell', 'swap'] as const).map(value => <button key={value} type="button" disabled={busy || wallet.pending?.status==='pending'} aria-pressed={mode === value} onClick={() => setMode(value)} className={'min-h-10 rounded-full text-xs font-bold ' + (mode === value ? 'bg-gray-950 text-white dark:bg-black dark:text-white' : 'text-gray-400')}>{value === 'buy' ? 'Buy' : value === 'sell' ? 'Sell' : 'Swap'}</button>)}</div>
       {mode !== 'swap' ? <div className="mb-4"><p className="mb-2 text-xs text-gray-500">Stock</p>{picker('Select stock', chosen.address, '', true, t => setStock(t.symbol))}</div> : <div className="mb-4 grid grid-cols-2 gap-3">
         <div><p className="mb-2 text-xs text-gray-500">From</p>{picker('From asset', from, to, false, t => setFrom(t.address))}</div>
         <div><p className="mb-2 text-xs text-gray-500">To</p>{picker('To asset', to, from, false, t => setTo(t.address))}</div>

@@ -8,16 +8,17 @@ export async function readSolanaPaymentQuote(from: string, to: string, amount: s
   if (!response.ok || !data.ok || !data.quote || !data.token) throw new Error(data.error || 'Solana fee quote is unavailable.')
   return data
 }
-export async function readSolanaRelayStatus(txHash: string, accessToken: string, lastValidBlockHeight?: number) {
-  const response = await fetch(POCKET_API.solanaRpc, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getSignatureStatuses', params: [[txHash], { searchTransactionHistory: true }] }) })
+export async function readSolanaRelayStatus(txHash: string, accessToken: string, lastValidBlockHeight?: number, walletAddress?: string) {
+  if(!lastValidBlockHeight&&walletAddress){const saved=JSON.parse(localStorage.getItem(`pocket:solana-relay:pending:${walletAddress}`)||'null');if(saved?.txHash===txHash&&Number.isSafeInteger(saved.lastValidBlockHeight))lastValidBlockHeight=saved.lastValidBlockHeight}
+  const response = await fetch(POCKET_API.solanaRpc, { signal: AbortSignal.timeout(12_000), method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getSignatureStatuses', params: [[txHash], { searchTransactionHistory: true }] }) })
   const data = await response.json()
   if (!response.ok || data.error) throw new Error('Solana confirmation is temporarily unavailable.')
   const status = data.result?.value?.[0]
-  if (status?.err) throw new Error('Solana payment failed on-chain.')
+  if (status?.err) throw Object.assign(new Error('Solana payment failed on-chain.'),{terminalFailure:true})
   if (status === null && Number.isSafeInteger(lastValidBlockHeight)) {
-    const heightResponse = await fetch(POCKET_API.solanaRpc, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + accessToken }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'getBlockHeight', params: [{ commitment: 'finalized' }] }) })
+    const heightResponse = await fetch(POCKET_API.solanaRpc, { signal: AbortSignal.timeout(12_000), method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + accessToken }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'getBlockHeight', params: [{ commitment: 'finalized' }] }) })
     const height = await heightResponse.json()
-    if (heightResponse.ok && !height.error && Number.isSafeInteger(height.result) && height.result > lastValidBlockHeight!) throw new Error('Solana payment expired without confirmation. No new payment was sent. Review and try again.')
+    if (heightResponse.ok && !height.error && Number.isSafeInteger(height.result) && height.result > lastValidBlockHeight!) throw Object.assign(new Error('Solana payment expired without confirmation. No new payment was sent. Review and try again.'), {terminalFailure:true})
   }
   return status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized'
 }
@@ -66,9 +67,11 @@ export async function sendQuotedSolanaPayment(input: {
   }
   // A timeout can happen after broadcast: retain the original signed bytes.
   await fetch('/api/solana-relay', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tx: pending.tx, lastValidBlockHeight: pending.lastValidBlockHeight }) }).catch(() => null)
-  const confirmed = await check(pending)
+  let confirmed=await check(pending)
+  const deadline=Date.now()+20_000
+  while(!confirmed&&Date.now()<deadline){await new Promise(resolve=>setTimeout(resolve,2000));confirmed=await check(pending)}
   if (confirmed) localStorage.removeItem(key)
-  return { ...identifiers, state: confirmed ? 'confirmed' as const : 'submitted' as const, txHash: confirmed ? pending.txHash : '' }
+  return { ...identifiers, state: confirmed ? 'confirmed' as const : 'submitted' as const, txHash: pending.txHash }
 }
 export function clearConfirmedSolanaRelay(walletAddress: string, txHash: string) {
   const key = `pocket:solana-relay:pending:${walletAddress}`

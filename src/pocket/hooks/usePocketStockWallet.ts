@@ -4,7 +4,7 @@ import { useSendTransaction, useWallets } from '@privy-io/react-auth'
 import { getAddress, encodeFunctionData, parseAbi, parseUnits, type Address, type Hex } from 'viem'
 import { stockSwapRequest } from '../api/pocketStockSwapClient'
 import { validateStockSwap, type StockSwapQuote } from '../lib/pocketXStocksSwap'
-import { hasStockSubmission, readStockLast, readStockPending, runStockSubmission, settleStockPending, type StockPending, type StockTradeStage } from '../lib/pocketStockSubmission'
+import { hasStockSubmission, readStockAttempts, STOCK_ATTEMPTS_UPDATED, readStockLast, readStockPending, runStockSubmission, settleStockPending, type StockPending, type StockTradeStage } from '../lib/pocketStockSubmission'
 import { ensurePocketXLayerWallet } from '../lib/pocketStockWalletNetwork'
 import { registerStockNotifications } from '../api/pocketStockNotificationsClient'
 import usePocketStockBalances from './usePocketStockBalances'
@@ -33,6 +33,8 @@ export default function usePocketStockWallet() {
   const [uncertain, setUncertain] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [attempts,setAttempts]=useState<StockPending[]>([])
+  useEffect(()=>{const reload=()=>setAttempts(readStockAttempts(ownerKey));reload();window.addEventListener(STOCK_ATTEMPTS_UPDATED,reload);return()=>window.removeEventListener(STOCK_ATTEMPTS_UPDATED,reload)},[ownerKey])
   const [pending, setPending] = useState<StockPending | null>(null)
   const inFlight = useRef(false)
   const mounted = useRef(true)
@@ -43,21 +45,21 @@ export default function usePocketStockWallet() {
     setPending(readStockPending(ownerKey) || readStockLast(ownerKey))
   }, [ownerKey])
   useEffect(() => {
-    if (!pending || pending.key !== ownerKey || pending.status !== 'pending') return
-    let cancelled = false
+    const outstanding=readStockAttempts(ownerKey).filter(r=>r.status==='pending'&&r.hash)
+    if(pending?.status==='pending'&&!outstanding.some(r=>r.hash===pending.hash))outstanding.push(pending)
+    if(!outstanding.length)return
+    let cancelled = false, checking = false
     const check = async () => {
-      if (inFlight.current) return
+      if (inFlight.current || checking || document.visibilityState === 'hidden') return
+      checking = true
       try {
-        const receipt = await stockClient.getTransactionReceipt({ hash: pending.hash })
-        if (cancelled) return
-        setPending(settleStockPending(pending, receipt.status === 'success'))
-        refresh()
-      } catch { /* Missing receipt is pending, never success. */ }
+        for(const record of outstanding){try{const receipt=await stockClient.getTransactionReceipt({hash:record.hash});if(cancelled)return;const settled=settleStockPending(record,receipt.status==='success');setPending(current=>current?.hash===record.hash?settled:current);void refresh().catch(() => undefined)}catch{/* Retain unknown outcome. */}}
+      } catch { /* Missing receipt is pending, never success. */ } finally { checking = false }
     }
     void check()
-    const timer = window.setInterval(check, 5000)
+    const timer = window.setInterval(check, 15000)
     return () => { cancelled = true; window.clearInterval(timer) }
-  }, [pending?.hash, pending?.status, ownerKey, refresh])
+  }, [pending?.hash, pending?.status, ownerKey, refresh,attempts])
   const connect = async () => {
     if(!authenticated||busy||setup.busy)return
     if(embedded.length>1){setError('Multiple embedded wallets found. Wallet selection needs review.');return}
@@ -65,7 +67,7 @@ export default function usePocketStockWallet() {
   }
   const send = async (review: StockTransfer, hooks?: {beforeSubmit?:()=>Promise<void>;onSubmitted?:(hash:Hex)=>void}) => {
     if(!wallet)throw Error('Your XStocks wallet is reconnecting. Try again in a moment.')
-    if (!address || inFlight.current || hasStockSubmission(ownerKey) || pending?.status === 'pending') throw Error('Wait for your current transaction to finish.')
+    if (!address || inFlight.current || !!localStorage.getItem('pocket.xstocks.signing:'+ownerKey)) throw Error('A wallet submission is still being checked in Activity.')
     const key = ownerKey
     if (review.owner !== address || review.expiresAt <= Date.now()) throw Error('This review expired. Review the transfer again.')
     inFlight.current = true; setBusy(true); setError('')
@@ -78,8 +80,11 @@ export default function usePocketStockWallet() {
       if (fresh.fee > review.fee * 120n / 100n) throw Error('Network fee changed. Review this transfer again.')
       await ensurePocketXLayerWallet(() => walletRef.current, address, () => { if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.') })
       await hooks?.beforeSubmit?.()
+      if (!mounted.current || scope.current !== key) throw Error('Your Pocket account changed.')
       // Pocket owns review and approval. Privy provides signing without a second transaction modal.
       return await runStockSubmission({key, kind:'send',
+        details:{recipient:review.recipient,amount:review.amount,symbol:review.asset.symbol,at:Date.now()},
+        wait:hash=>stockClient.waitForTransactionReceipt({hash,timeout:30_000}),
         send: () => sendTransaction({chainId:196,from:address,to:fresh.to,data:fresh.data,value:fresh.value},{address,uiOptions:{showWalletUIs:false}}),
         onPending: next => { if(scope.current===key) {setPending(next);hooks?.onSubmitted?.(next.hash)} },
         onUncertain: value => { if(scope.current===key) setUncertain(value) },
@@ -141,12 +146,12 @@ export default function usePocketStockWallet() {
       const hash = await submit(fresh.quote.tx.to, fresh.quote.tx.data, BigInt(fresh.quote.tx.value), fresh.quote)
       stillCurrent()
       onProgress('completed')
-      await refresh()
+      void refresh().catch(() => undefined)
       return hash
     } catch (reason) {
       onProgress((reason as {transactionPending?:boolean})?.transactionPending ? 'confirming' : 'failed')
       throw reason
     } finally { inFlight.current = false; setBusy(false) }
   }
-  return { address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
+  return { attempts:attempts.filter(r=>r.key===ownerKey), address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
 }

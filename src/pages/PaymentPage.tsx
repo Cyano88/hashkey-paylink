@@ -1,3 +1,4 @@
+import usePocketSlowConfirmation from '../pocket/hooks/usePocketSlowConfirmation'
 import PocketTransactionSheet from '../pocket/components/PocketTransactionSheet'
 import { readCirclePaymentFeeQuote, type CirclePaymentFeeQuote } from '../lib/circleEvmEmailWallet'
 import { isRetiredAssistantCheckout } from '../lib/retiredAssistantCheckout'
@@ -37,7 +38,7 @@ const BASE_PAYMASTER_URL = import.meta.env.VITE_BASE_PAYMASTER_URL as string | u
 import {
   ArrowRight as PaymentArrowRight,
   Wallet as PaymentWallet,
-} from 'lucide-react'
+} from '../pocket/components/PocketIcons'
 import {
   ArrowLeft, CheckCircle2, ExternalLink, AlertCircle, Loader2, ArrowLeftRight,
   Copy, CheckCheck, ChevronDown,
@@ -362,7 +363,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const { onPayChainChange, onPayWalletStateChange, onPaySuccessVisibleChange } = useOutletContext<LayoutOutletContext>()
 
   const evmParam    = getPaylinkParam(searchParams, 'evm', 'e') || searchParams.get('to') || ''
-  const hostedEvmRecipients: Partial<Record<Extract<ChainKey, 'base' | 'arbitrum' | 'arc'>, string>> = {
+  const hostedEvmRecipients: Partial<Record<Exclude<ChainKey, 'solana'>, string>> = {
     base: (searchParams.get('e_base') ?? '').trim(),
     arbitrum: (searchParams.get('e_arbitrum') ?? '').trim(),
     arc: (searchParams.get('e_arc') ?? '').trim(),
@@ -562,7 +563,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const isHelperAccess   = getPaylinkParam(initParams, 'src', 'src') === 'telegram-helper' && !!agentUrl
   const agentFundingSlug = getPaylinkParam(initParams, 'agentSlug', 'agent')
   const isAgentFunding   = getPaylinkParam(initParams, 'src', 'src') === 'agent' && !!agentFundingSlug
-  const isWalletManagerFunding = getPaylinkParam(initParams, 'src', 'src') === 'agent' && getPaylinkParam(initParams, 'walletManager') === 'service' && !agentFundingSlug
+  const isWalletManagerFunding = getPaylinkParam(initParams, 'src', 'src') === 'agent' && getPaylinkParam(initParams, 'walletManager', 'walletManager') === 'service' && !agentFundingSlug
   const isAgentOrWalletFunding = isAgentFunding || isWalletManagerFunding
   const agentFundingBackUrl = (() => {
     const raw = getPaylinkParam(initParams, 'return', 'g').trim()
@@ -2117,6 +2118,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
 
   useEffect(() => {
     if (!isBankSendPayment || !paycrestOrder?.intent_id) return
+    const activeBankOrder=paycrestOrder
     let cancelled = false
     let attempts = 0
 
@@ -2137,8 +2139,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'offrampStatus',
-            intent_id: paycrestOrder.intent_id,
-            order_id: paycrestOrder.paycrest_order_id,
+            intent_id: activeBankOrder.intent_id,
+            order_id: activeBankOrder.paycrest_order_id,
             refresh: true,
           }),
         })
@@ -2502,7 +2504,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
               encryptionKey: credentials.encryptionKey,
               wallet: { id: sourceWallet.walletId, address: sourceWallet.address as `0x${string}`, blockchain: sourceWallet.blockchain },
               chain: route.source,
-              ...('appId' in credentials && credentials.appId ? { appId: credentials.appId } : {}),
+              ...('appId' in credentials && typeof credentials.appId==='string' ? { appId: credentials.appId } : {}),
             },
             destination: route.destination,
             destinationAddress,
@@ -2909,7 +2911,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
             try {
               const token = await getAccessToken()
               if (token) {
-                const productionWallets = session.productionEvmTopology?.wallets
+                const linkedSession=session
+                const productionWallets = linkedSession.productionEvmTopology?.wallets
                 const linkTargets = chain !== 'arc' && productionWallets?.base && productionWallets.arbitrum
                   ? ([
                       ['base', productionWallets.base],
@@ -2919,7 +2922,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                 await Promise.all(linkTargets.map(([network, wallet]) => linkPocketWallet({
                   accessToken: token,
                   network,
-                  circleUserToken: session.userToken,
+                  circleUserToken: linkedSession.userToken,
                   wallet,
                 })))
                 setPrivyCircleLinkError(null)
@@ -3340,12 +3343,14 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const isConfirmed = isAgentOrWalletFunding ? fundingProofConfirmed : paymentConfirmed
   const isWalletPending = chain === 'solana' ? (isSolanaPending || circleSolanaPending)   : chain === 'arbitrum' ? (circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending) : isEvmWalletPending || circlePaymasterPending || circlePasskeyPending || circleEvmPaymentProcessing || isSignPending || isBasePaymasterPending
   const isConfirming    = chain === 'solana' ? isSolanaConfirming : chain === 'arbitrum' ? (isCirclePaymasterConfirming) : (isEvmConfirming || isBasePaymasterConfirming || isCirclePaymasterConfirming)
+  const pocketSlowConfirmation=usePocketSlowConfirmation(Boolean(pocketScan&&(isConfirming||txHash||circleEvmAcceptedPending)),String(txHash||eventId||'scan'))
   const isSendError     = chain === 'solana' ? !!solanaError : chain === 'arbitrum' ? (!!circlePaymasterError) : (isEvmSendError || isEvmReverted || isBasePaymasterStatusError || isBasePaymasterFailed || !!basePaymasterError || !!circlePaymasterError)
   const pocketRouteInsufficient = pocketCheckoutRoute?.kind === 'insufficient'
   const pocketMovePayExpected = privyAuthenticated && smartCheckoutOwnsWalletCta && chain !== 'arc' && circleRequiredUnits > 0n
   const pocketMovePayReady = pocketMovePayExpected && Boolean(pocketCheckoutRoute)
   const pocketMovePayWaiting = pocketMovePayExpected && !pocketCheckoutRoute
-  const checkoutSlideStatus: SlideActionStatus = isConfirmed
+  const pocketScanDelivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || paycrestOrder?.status === 'settled')
+  const checkoutSlideStatus: SlideActionStatus = (pocketScan ? pocketScanDelivered : isConfirmed)
     ? 'successful'
     : isSendError
       ? 'error'
@@ -3910,17 +3915,17 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   // ────────────────────────────────────────────────────────────────────────────
   //  SUCCESS STATE
   // ────────────────────────────────────────────────────────────────────────────
-  if (pocketScan && (isConfirmed || isConfirming || Boolean(txHash) || circleEvmAcceptedPending || isSendError)) {
+  if (pocketScan && (pocketScanDelivered || pocketSlowConfirmation || isSendError)) {
     const delivered = isConfirmed && (!isHostedCheckout || hostedConfirmationStatus === 'verified') && (!isNgPosPaycrestOfframp || paycrestOrder?.status === 'settled')
     const state = delivered ? 'successful' : isEvmReverted || isBasePaymasterFailed || (isSendError && !txHash) ? 'failed' : 'pending'
     const status = state === 'successful' ? 'confirmed' : state === 'failed' ? 'failed' : 'processing'
-    const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash ? {
-      type:'app_purchase',receiptId:paymentReceiptId || txHash,receiptHash:txHash,title:'Payment',status,eventId:eventId || txHash,txHash,chain,payer:circleEvmEmailSession?.wallet.address || '',recipient:activeRecipient || '',memo: memo || 'Payment',amount:String(payableAmt),asset:meta.asset,createdAt:Date.now(),source:'purchase',settlementType:'hosted_checkout',brandName:'Pocket',brandKind:'pocket'
+    const receipt: PaylinkReceipt | null = paymentReceipt ? {...paymentReceipt, title:'Merchant payment',status,brandName:'Pocket',brandKind:'pocket'} : txHash ? {
+      type:'app_purchase',receiptId:paymentReceiptId || txHash,receiptHash:txHash,title:'Merchant payment',status,eventId:eventId || txHash,txHash,chain,payer:circleEvmEmailSession?.wallet.address || '',recipient:activeRecipient || '',memo: memo || 'Payment',amount:String(payableAmt),asset:meta.asset,createdAt:Date.now(),source:'purchase',settlementType:'hosted_checkout',brandName:'Pocket',brandKind:'pocket'
     } : null
-    return <PocketTransactionSheet title="Payment" state={state} amount={String(payableAmt)+' '+meta.asset} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/>
+    return <PocketTransactionSheet title="Merchant payment" state={state} amount={String(payableAmt)+' '+meta.asset} receipt={receipt} onDone={pocketScan.onBack} detail={state==='pending'?'Waiting for confirmation. You can check Activity for updates.':state==='failed'?'The payment could not be completed.':undefined}/>
   }
 
-  if (isConfirmed && !isWalletManagerFunding) {
+  if (!pocketScan && isConfirmed && !isWalletManagerFunding) {
     const explorerTxUrl    = txHash      ? `${meta.explorerUrl}/tx/${txHash}`      : null
     void explorerTxUrl
 
@@ -4370,7 +4375,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                 <span className="absolute inset-0 rounded-full border-[3px] border-gray-200/80 dark:border-white/10" />
                 <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-transparent border-t-blue-500 border-r-blue-500" />
                 <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/80 shadow-sm dark:bg-white/[0.06]">
-                  <Loader2 className="h-7 w-7 animate-spin text-blue-500" strokeWidth={1.8} />
+                  <Loader2 className="h-7 w-7 animate-spin text-blue-500" />
                 </span>
               </div>
               <p className="mt-5 text-xl font-black tracking-tight text-gray-950 dark:text-white">Confirming</p>

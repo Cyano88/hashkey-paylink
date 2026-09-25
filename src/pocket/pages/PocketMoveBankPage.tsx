@@ -1,3 +1,4 @@
+import usePocketSlowConfirmation from '../hooks/usePocketSlowConfirmation'
 import { readCachedPocketBalance, balanceOwner } from '../lib/pocketBalanceCache'
 import PocketTransactionSheet from '../components/PocketTransactionSheet'
 import PocketBottomSheet from '../components/PocketBottomSheet'
@@ -167,7 +168,9 @@ export default function PocketMoveBankPage() {
         ? 'pending'
         : 'idle'
   const directLocked = direct.status === 'preparing' || direct.status === 'routing' || direct.status === 'route-review' || direct.status === 'authorizing' || direct.status === 'processing' || direct.status === 'pending'
-  const bankReceipt = useMemo(() => (['sent','pending','processing'].includes(direct.status)) && direct.result ? pocketActivityReceipt({
+  const slowConfirmation=usePocketSlowConfirmation(['pending','processing'].includes(direct.status),direct.result?.intentId||'')
+  const bankTerminal=direct.status==='sent'||['failed','refunded','sent'].includes(direct.result?.state||'')
+  const bankReceipt = useMemo(() => (reviewOpen && (bankTerminal || slowConfirmation)) && direct.result ? pocketActivityReceipt({
     eventId: `bank-withdraw:${direct.result.intentId}`,
     txHash: direct.result.txHash,
     chain: 'base',
@@ -190,7 +193,7 @@ export default function PocketMoveBankPage() {
     bankLast4: direct.result.bankLast4,
     accountName: direct.result.accountName,
     providerReference: direct.result.orderId,
-  }, { allowPending: true }) : null, [direct.result, direct.status, email, wallets.wallets.base?.address])
+  }, { allowPending: true }) : null, [direct.result, direct.status, email, wallets.wallets.base?.address, reviewOpen, bankTerminal, slowConfirmation])
 
   useEffect(() => {
     if (selectedNet !== 'base') onNetworkSelect('base')
@@ -419,7 +422,7 @@ export default function PocketMoveBankPage() {
         onCopy={bank.copy}
         onClose={bank.closeShare}
       />
-      {mode === 'withdraw' && reviewOpen && !bankReceipt && !direct.error && <PocketBottomSheet title="Review bank transfer" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !['preparing', 'routing', 'authorizing'].includes(direct.status)} onClose={() => setReviewOpen(false)}>
+      {mode === 'withdraw' && reviewOpen && !bankReceipt && !direct.error && <PocketBottomSheet title="Review bank transfer" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
         <h2 className="mb-6 text-center text-2xl font-bold">NGN {formatNgnAmount(direct.amount)}</h2>
         <dl className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs dark:border-[#262626] dark:bg-[#171717]">
           {[['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', 'NGN ' + formatNgnAmount(direct.amount)], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo]] : [])].map(([label,value]) => <div key={label} className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="max-w-[65%] break-words text-right font-semibold">{value}</dd></div>)}
@@ -432,7 +435,7 @@ export default function PocketMoveBankPage() {
                   labels={{
                     idle: 'Confirm payout',
                     disabled: 'Complete payout details',
-                    pending: direct.status === 'authorizing' ? 'Confirm payout in Circle' : direct.status === 'routing' && bankLiquidity.status === 'moving' ? 'Moving USDC' : direct.status === 'routing' ? 'Checking balances' : 'Preparing payout',
+                    pending: direct.status === 'authorizing' ? 'Confirming bank transfer' : direct.status === 'routing' && bankLiquidity.status === 'moving' ? 'Moving USDC' : direct.status === 'routing' ? 'Checking balances' : 'Preparing payout',
                     submitted: direct.status === 'route-review' ? 'USDC move confirming' : direct.status === 'routing' ? 'USDC moving to Base' : 'Payment processing',
                     successful: 'Sent',
                   }}

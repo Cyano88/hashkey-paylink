@@ -21,13 +21,13 @@ const base = {
 const incoming = { ...base, source: 'wallet-deposit', settlementType: 'wallet_transfer', paycrestStatus: 'confirmed', direction: 'in', recipient: 'Circle Pocket' }
 assert.equal(pocketReceiptKind(incoming), 'money_in')
 assert.equal(pocketReceiptAvailability(incoming), 'ready')
-assert.equal(pocketActivityReceipt(incoming)?.title, 'Received')
+assert.equal(pocketActivityReceipt(incoming)?.title, 'Receiving')
 assert.deepEqual(paymentReceiptBrand(pocketActivityReceipt(incoming)), { kind: 'pocket', name: 'Pocket', imageUrl: '' })
 assert.match(paymentReceiptFileName(pocketActivityReceipt(incoming)), /^pocket-/)
 
 const outgoing = { ...base, eventId: 'evt_2', source: 'wallet-withdrawal', settlementType: 'wallet_transfer', paycrestStatus: 'confirmed', direction: 'out', recipient: `0x${'3'.repeat(40)}` }
 assert.equal(pocketReceiptKind(outgoing), 'money_out')
-assert.equal(pocketActivityReceipt(outgoing)?.title, 'Sent')
+assert.equal(pocketActivityReceipt(outgoing)?.title, 'Sending')
 
 const incompleteOutgoing = { ...outgoing, eventId: 'evt_incomplete', recipient: undefined }
 assert.equal(pocketReceiptAvailability(incompleteOutgoing), 'none')
@@ -102,7 +102,7 @@ assert.deepEqual(paymentReceiptView(electricityReceipt).rows.at(-1), { label: 'M
 
 const appPurchase = { ...base, eventId: 'evt_6', source: 'app-pay', settlementType: 'app_pay', paycrestStatus: 'completed', recipient: 'Research service' }
 assert.equal(pocketReceiptKind(appPurchase), 'app_purchase')
-assert.equal(pocketActivityReceipt(appPurchase)?.title, 'Payment')
+assert.equal(pocketActivityReceipt(appPurchase)?.title, 'Merchant payment')
 
 const partnerReceipt = {
   ...pocketActivityReceipt(appPurchase),
@@ -147,18 +147,18 @@ assert.equal(paymentReceiptOutcome({status:'needs review'}).label,'Processing')
 for (const status of ['submitted','processing','failed','confirmed']) {
  const stock={...incoming,eventId:'stock-'+status,chain:'xlayer',assetSymbol:'NVDAx',amount:'0.01',paycrestStatus:status}
  const receipt=pocketActivityReceipt(stock,{allowPending:true})
- assert.equal(receipt.asset,'NVDAx');assert.equal(receipt.amount,'0.01');assert.equal(receipt.title,'Received')
+ assert.equal(receipt.asset,'NVDAx');assert.equal(receipt.amount,'0.01');assert.equal(receipt.title,'Receiving')
  assert.equal(paymentReceiptOutcome(receipt).state,status==='confirmed'?'successful':status==='failed'?'failed':'pending')
 }
 const incomingXPay={...incoming,source:'xpay',chain:'xlayer',assetSymbol:'NVDAx'}
 assert.equal(pocketReceiptKind(incomingXPay),'money_in')
-assert.equal(pocketActivityReceipt(incomingXPay).title,'Received')
+assert.equal(pocketActivityReceipt(incomingXPay).title,'Receiving')
 assert.equal(pocketActivityReceipt({...outgoing,source:'request',paycrestStatus:'submitted'},{allowPending:true}).title,'Request payment')
 assert.equal(paymentReceiptOutcome(pocketActivityReceipt({...outgoing,source:'request',paycrestStatus:'submitted'},{allowPending:true})).state,'pending')
 console.log('PASS: XStocks incoming assets, XPay direction, request submission and all receipt status mappings')
 for (const [chain,label] of [['base','Base'],['ethereum','Ethereum'],['polygon','Polygon'],['xlayer','X Layer']]) {
  const view=paymentReceiptView(pocketActivityReceipt({...incoming,chain,assetSymbol:'NVDAx'}))
  assert.equal(view.rows.find(r=>r.label==='Network').value,label)
- assert.equal(view.rows.find(r=>r.label==='Type').value,'Received')
+ assert.equal(view.rows.find(r=>r.label==='Type').value,'Receiving')
 }
 console.log('PASS: Base, Ethereum, Polygon and X Layer receipts preserve network and movement type')

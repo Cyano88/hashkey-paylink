@@ -107,6 +107,7 @@ async function circleSolanaApi<T>(payload: Record<string, unknown>, privyAccessT
   const approval = pocketClient && action !== 'signOwnWalletBridge' ? takePocketPaymentApproval() : null
   const res = await fetch(circleRuntimeUrl('/api/circle-solana-email'), {
     method: 'POST',
+    ...(action === 'getChallenge' || action === 'getTransaction' ? { signal: AbortSignal.timeout(12_000) } : {}),
     headers: { 'Content-Type': 'application/json', ...(privyAccessToken ? { Authorization: 'Bearer ' + privyAccessToken } : {}), ...(pocketClient ? { 'X-Pocket-Client': '1', ...(approval ? { 'X-Pocket-Payment-Approval': approval.token, Authorization: approval.authorization } : {}) } : {}) },
     body: JSON.stringify(payload),
   })
@@ -378,7 +379,7 @@ function solanaTransactionHash(value: unknown) {
   return candidate && /^[1-9A-HJ-NP-Za-km-z]{64,100}$/.test(candidate) ? candidate : null
 }
 
-function circleTransactionId(value: unknown) {
+function circleTransactionId(value: unknown): string | null {
   const candidate = findCircleString(value, ['transactionId', 'transactionID'])
   if (candidate && candidate.length <= 256) return candidate
   if (!value || typeof value !== 'object') return null
@@ -405,12 +406,12 @@ async function pollCircleSolanaTransaction(userToken: string, transactionId: str
       chain: 'solana',
     })
     const txHash = solanaTransactionHash(data.transaction)
-    if (txHash) return txHash
     const state = String(data.transaction?.state ?? data.transaction?.status ?? '').toUpperCase()
-    if (state.includes('CANCEL')) throw new Error('Circle wallet confirmation was cancelled.')
+    if (state.includes('CANCEL')) throw Object.assign(new Error('Circle wallet confirmation was cancelled.'),{terminalFailure:true})
     if (state.includes('FAIL') || state.includes('DENIED')) {
-      throw new Error('Circle Solana transfer failed. Check Activity before trying again.')
+      throw Object.assign(new Error('Circle Solana transfer failed.'),{terminalFailure:true})
     }
+    if(txHash&&['CONFIRMED','COMPLETE','COMPLETED'].includes(state))return txHash
     await new Promise(resolve => window.setTimeout(resolve, 2_500))
   }
   return null
@@ -427,6 +428,8 @@ async function pollCircleSolanaChallenge(userToken: string, challengeId: string,
     })
     const transactionId = circleTransactionId(data.challenge)
     if (transactionId) return transactionId
+    const state = String(data.challenge?.status ?? data.challenge?.state ?? '').toUpperCase()
+    if (/FAIL|DENIED|CANCEL|EXPIRED/.test(state)) throw Object.assign(new Error('Circle Solana approval did not complete.'), { terminalFailure: true })
     await new Promise(resolve => window.setTimeout(resolve, 1_500))
   }
   return null
@@ -445,7 +448,7 @@ export async function reconcileCircleSolanaTransfer(params: {
     const { readSolanaRelayStatus, clearConfirmedSolanaRelay } = await import('./solanaPaymentFees')
     const deadline = Date.now() + (params.timeoutMs ?? 180_000)
     do {
-      if (await readSolanaRelayStatus(txHash, params.accessToken)) {
+      if (await readSolanaRelayStatus(txHash, params.accessToken, undefined, params.session.wallet.address)) {
         clearConfirmedSolanaRelay(params.session.wallet.address, txHash)
         return { state: 'confirmed' as const, txHash, transactionId: params.challengeId }
       }
@@ -505,8 +508,8 @@ export async function sendCircleSolanaTransfer(params: {
     result = await withTimeout(executeChallenge(sdk, challenge.challengeId), 120_000, 'Payment confirmation is taking longer than usual.')
   } catch (reason) {
     if (reason instanceof Error && /\bcancel(?:led|ed)\b/i.test(reason.message)) throw reason
-    const transactionId = await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId, 8_000).catch(() => null)
-    const txHash = transactionId ? await pollCircleSolanaTransaction(params.session.userToken, transactionId, 8_000).catch(() => null) : null
+    const transactionId = await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId, 8_000).catch(reason => { if (reason?.terminalFailure) throw reason; return null })
+    const txHash = transactionId ? await pollCircleSolanaTransaction(params.session.userToken, transactionId, 8_000).catch(reason => { if (reason?.terminalFailure) throw reason; return null }) : null
     if (transactionId || txHash) {
       params.onAccepted?.({ challengeId: challenge.challengeId, transactionId: transactionId ?? '' })
     }
@@ -514,13 +517,14 @@ export async function sendCircleSolanaTransfer(params: {
   }
   params.onAccepted?.({ challengeId: challenge.challengeId, transactionId: circleTransactionId(result) ?? circleTransactionId(challenge) ?? '' })
   const directHash = solanaTransactionHash(result)
-  if (directHash) return { state: 'confirmed', txHash: directHash, challengeId: challenge.challengeId, transactionId: circleTransactionId(result) ?? circleTransactionId(challenge) ?? '' }
+  // A signature alone is submission evidence, never settlement proof.
   let transactionId = circleTransactionId(result) ?? circleTransactionId(challenge)
   if (!transactionId) {
     try {
       transactionId = await pollCircleSolanaChallenge(params.session.userToken, challenge.challengeId, 5_000)
     } catch (reason) {
-      return { state: 'submitted', txHash: '', challengeId: challenge.challengeId, transactionId: '' }
+      if ((reason as {terminalFailure?: boolean})?.terminalFailure) throw reason
+      return { state: 'submitted', txHash: directHash ?? '', challengeId: challenge.challengeId, transactionId: '' }
     }
   }
   if (transactionId) {
@@ -528,12 +532,13 @@ export async function sendCircleSolanaTransfer(params: {
       const txHash = await pollCircleSolanaTransaction(params.session.userToken, transactionId, 5_000)
       if (txHash) return { state: 'confirmed', txHash, challengeId: challenge.challengeId, transactionId }
     } catch (reason) {
+      if((reason as {terminalFailure?:boolean})?.terminalFailure)throw reason
       // Circle already accepted the signed challenge. A status lookup outage
       // cannot turn that accepted transfer into a safe-to-retry failure.
-      return { state: 'submitted', txHash: '', challengeId: challenge.challengeId, transactionId }
+      return { state: 'submitted', txHash: directHash ?? '', challengeId: challenge.challengeId, transactionId }
     }
   }
-  return { state: 'submitted', txHash: '', challengeId: challenge.challengeId, transactionId: transactionId ?? '' }
+  return { state: 'submitted', txHash: directHash ?? '', challengeId: challenge.challengeId, transactionId: transactionId ?? '' }
 }
 
 export async function signCircleSolanaTransaction(params: {

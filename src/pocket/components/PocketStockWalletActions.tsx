@@ -15,7 +15,7 @@ import type usePocketStockWallet from '../hooks/usePocketStockWallet'
 
 type Wallet = ReturnType<typeof usePocketStockWallet>
 const panel = 'rounded-[24px] border border-gray-100 bg-white p-5 dark:border-[#262626] dark:bg-[#121212]'
-const button = 'min-h-12 w-full rounded-full bg-gray-950 px-5 text-xs font-bold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950'
+const button = 'min-h-12 w-full rounded-xl bg-black px-5 text-xs font-bold text-white disabled:opacity-40 dark:bg-black dark:text-white'
 const field = 'min-h-12 w-full rounded-xl bg-gray-100 px-3 text-xs outline-none dark:bg-white/10'
 export default function PocketStockWalletActions({ wallet, view }: { wallet: Wallet; view: 'send' | 'receive' | 'request' }) {
   const [params] = useSearchParams()
@@ -36,7 +36,7 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
   useEffect(() => { setReview(null); setError('') }, [symbol, recipient, amount, wallet.address, view])
   const tokens = stockPickerTokens(wallet.displaySnapshot || wallet.snapshot)
   const assetPicker = <PocketArcTokenPicker label="Asset to send" value={asset.address} excluded="" tokens={tokens} disabled={busy || wallet.busy} networkLabel="X Layer" clean initialLimit={100} balancesLoading={!wallet.displaySnapshot && !wallet.snapshot && !wallet.error} onChange={t => {setSymbol(t.symbol);setRequestSent(false)}} discover={async () => {throw Error('This contract is not in the supported XStocks list.')}} />
-  const pending = wallet.uncertain || wallet.pending?.status === 'pending'
+  const pending = wallet.uncertain
   const prepare = async () => {
     if (!wallet.address || busy) return
     setBusy(true); setError('')
@@ -48,8 +48,8 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
     if (!review || busy) return
     setBusy(true); setError('')
     setResult({amount:review.amount,symbol:review.asset.symbol,recipient:review.recipient,hash:'',at:Date.now(),failed:false}); setResultOpen(false)
-    try { const hash = await wallet.send(review, {beforeSubmit:async()=>{setResultOpen(true)},onSubmitted:hash=>setResult(previous=>previous?{...previous,hash}:previous)}); setResult(previous=>previous?{...previous,hash}:previous); setReview(null); setAmount('') }
-    catch (e) { setResult(previous=>previous?{...previous,failed:true}:previous); setResultOpen(true); setReconnectWallet(!!(e as {reconnectWallet?:boolean})?.reconnectWallet);setError(e instanceof Error ? e.message : 'Could not send. Check Activity before retrying.') }
+    try { const hash = await wallet.send(review, {onSubmitted:hash=>setResult(previous=>previous?{...previous,hash}:previous)}); setResult(previous=>previous?{...previous,hash}:previous); setReview(null); setAmount(''); setResultOpen(true) }
+    catch (e) { setResult(previous=>previous?{...previous,failed:!(e as {transactionPending?:boolean})?.transactionPending}:previous); setResultOpen(true); setReconnectWallet(!!(e as {reconnectWallet?:boolean})?.reconnectWallet);setError(e instanceof Error ? e.message : 'Could not send. Check Activity before retrying.') }
     finally { setBusy(false) }
   }
   if (!wallet.address) return <section className={panel}><h2 className="text-sm font-bold">Your XStocks wallet</h2><p className="my-4 text-xs leading-5 text-gray-400">Open your Pocket wallet on X Layer to deposit or send assets.</p><button type="button" className={button} disabled={!wallet.ready || wallet.busy} onClick={wallet.connect}>{wallet.busy ? 'Opening…' : 'Open wallet'}</button>{wallet.error && <p role="alert" className="mt-3 text-xs text-red-500">{wallet.error}</p>}</section>
@@ -61,10 +61,10 @@ export default function PocketStockWalletActions({ wallet, view }: { wallet: Wal
     finally { setBusy(false) }
   }
   const matchingPending = result?.hash && wallet.pending?.hash === result.hash ? wallet.pending : null
-  const resultState = matchingPending?.status === 'confirmed' ? 'successful' : matchingPending?.status === 'failed' ? 'failed' : result?.hash || wallet.uncertain || busy ? 'pending' : result?.failed ? 'failed' : 'pending'
+  const resultState = matchingPending?.status === 'confirmed' ? 'successful' : matchingPending?.status === 'failed' ? 'failed' : result?.failed ? 'failed' : result?.hash || wallet.uncertain || busy ? 'pending' : 'pending'
   const resultReceipt = result?.hash ? pocketActivityReceipt({eventId:result.hash,txHash:result.hash,chain:'xlayer',payer:wallet.address,recipient:result.recipient,amount:result.amount,assetSymbol:result.symbol,memo:'Sent',ts:result.at,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:resultState === 'successful' ? 'confirmed' : resultState === 'failed' ? 'failed' : 'submitted'}, {allowPending:true}) : null
   return <section className={panel}>
-    {resultOpen && result && <PocketTransactionSheet title="Sent" state={resultState} amount={formatStockQuantity(result.amount)+' '+result.symbol} receipt={resultReceipt} detail={resultState==='failed'?error:resultState==='pending'?'Waiting for confirmation. You can check Activity for updates.':undefined} onDone={()=>setResultOpen(false)}/>}
+    {resultOpen && result && <PocketTransactionSheet title="Sending" state={resultState} amount={formatStockQuantity(result.amount)+' '+result.symbol} receipt={resultReceipt} detail={resultState==='failed'?error:resultState==='pending'?'Waiting for confirmation. You can check Activity for updates.':undefined} onDone={()=>{setResultOpen(false);setReview(null);setAmount('');setRecipient('');setError('')}}/>}
     {view === 'request' ? <><h2 className="text-sm font-bold">Request assets</h2><label className="mt-5 block text-xs text-gray-400">Pocket ID<input aria-label="Request from Pocket ID" className={field + ' mt-2 w-full'} inputMode="numeric" value={recipient} onChange={e => {setRecipient(e.target.value.replace(/\D/g, '').slice(0,12)); setRequestSent(false)}} /></label><div className="mt-4"><p className="mb-2 text-xs text-gray-400">Asset</p>{assetPicker}</div><label className="mt-4 block text-xs text-gray-400">Amount<input className={field + ' mt-2 w-full'} inputMode="decimal" value={amount} onChange={e => {setAmount(e.target.value);setRequestSent(false)}} /></label><button className={button + ' mt-5'} disabled={busy || requestSent || !recipient || !amount} onClick={() => void createRequest()}>{requestSent ? 'Request sent' : busy ? 'Sending request…' : 'Send request'}</button></> : view !== 'send' ? <>
       <h2 className="text-sm font-bold">Deposit on X Layer</h2>
       <p className="mt-3 text-xs leading-5 text-gray-400">Send native USDC, supported stock tokens or OKB to your Pocket address using X Layer only.</p>

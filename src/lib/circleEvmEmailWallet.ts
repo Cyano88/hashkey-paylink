@@ -1164,7 +1164,7 @@ async function pollChallengeTransactionId(session: CircleEvmEmailSession, challe
     if (transactionId) return transactionId
     const state = transactionState(data.challenge)
     if (state.includes('FAILED') || state.includes('EXPIRED') || state.includes('CANCEL')) {
-      throw new Error('Circle confirmation did not produce a transaction.')
+      throw Object.assign(new Error('Circle confirmation did not produce a transaction.'), { terminalFailure: true })
     }
     await new Promise(resolve => setTimeout(resolve, 1_500))
   }

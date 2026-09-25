@@ -1,3 +1,5 @@
+import usePocketSlowConfirmation from '../../hooks/usePocketSlowConfirmation'
+import { pocketBillTitle } from '../../lib/pocketReceipt'
 import { useEffect, useState } from 'react'
 import PocketBottomSheet from '../../components/PocketBottomSheet'
 import { PocketBillsSkeleton, PocketLoadingField } from '../../components/PocketContentSkeletons'
@@ -83,7 +85,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
   const meta = billMeta[view]
   const BillIcon = meta.icon
   const locked = bills.processing || bills.status === 'ready'
-  const showPayment = Boolean(bills.intent) && ['ready', 'paying', 'confirming', 'processing', 'successful'].includes(bills.status)
+  const slowConfirmation=usePocketSlowConfirmation(['confirming','processing'].includes(bills.status),bills.intent?.id||'')
+  const showPayment = Boolean(bills.intent) && ['ready','paying','confirming','processing','successful'].includes(bills.status)
   const reviewBlocked = Boolean(bills.intent && ['provider_failed_unverified', 'refund_pending', 'refund_eligible', 'needs_review'].includes(bills.intent.state))
   const slideStatus = bills.status === 'successful'
     ? 'successful'
@@ -99,7 +102,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     type: bills.intent.category,
     receiptId: bills.intent.requestId,
     receiptHash: bills.intent.txHash || bills.intent.requestId,
-    title: 'Payment',
+    title: pocketBillTitle(bills.intent.category),
     status: bills.intent.state === 'delivered' ? 'confirmed' : bills.intent.state === 'refunded' ? 'reversed' : ['failed','refund_eligible'].includes(bills.intent.state) ? 'failed' : 'processing',
     eventId: bills.intent.id,
     txHash: bills.intent.txHash || '',
@@ -121,7 +124,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
     brandName: 'Pocket',
     brandKind: 'pocket',
   } : null
-  const showResult = Boolean(bills.intent && (bills.status === 'successful' || ['confirming','processing'].includes(bills.status) || ['failed','refunded','refund_eligible','refund_pending','refund_submitted','refunding','needs_review'].includes(bills.intent.state)))
+  const showResult = Boolean(bills.intent && (bills.status === 'successful' || slowConfirmation || ['failed','refunded','refund_eligible','refund_pending','refund_submitted','refunding','needs_review'].includes(bills.intent.state)))
   const billName = view === 'tv' ? 'TV' : view === 'electricity' ? 'Electricity' : isData ? 'Data' : 'Airtime'
   const paymentRouteBusy = paymentRouting?.status === 'checking' || paymentRouting?.status === 'moving' || paymentRouting?.status === 'waiting' || paymentRouting?.status === 'reconciling'
   const paymentRouteInsufficient = paymentRouting?.insufficient
@@ -346,7 +349,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
         </>
       )}
       {showResult && !resultDismissed && billReceipt && (
-        <PocketPaymentSuccess receipt={billReceipt} title="Payment" onDone={() => {setResultDismissed(true); if (bills.status === 'successful') bills.edit()}} />
+        <PocketPaymentSuccess receipt={billReceipt} onDone={() => {setResultDismissed(true); bills.dismiss()}} />
       )}
     </div>
   )

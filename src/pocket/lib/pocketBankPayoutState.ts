@@ -1,62 +1,15 @@
-const ACTIVE_BANK_PAYOUT_KEY = 'pocket:bank-withdraw:active'
-const ACTIVE_BANK_PAYOUT_TTL_MS = 24 * 60 * 60_000
-
-type ActiveBankPayout = { intentId: string; txHash: string; challengeId: string; transactionId: string; accepted: boolean; savedAt: number }
-
-function readActiveState(): ActiveBankPayout | null {
-  try {
-    const value = JSON.parse(window.localStorage.getItem(ACTIVE_BANK_PAYOUT_KEY) || 'null') as { intentId?: string; txHash?: string; challengeId?: string; transactionId?: string; accepted?: boolean; savedAt?: number } | null
-    if (!value?.intentId || !value.savedAt || Date.now() - value.savedAt >= ACTIVE_BANK_PAYOUT_TTL_MS) {
-      window.localStorage.removeItem(ACTIVE_BANK_PAYOUT_KEY)
-      return null
-    }
-    return { intentId: value.intentId, txHash: value.txHash || '', challengeId: value.challengeId || '', transactionId: value.transactionId || '', accepted: value.accepted === true, savedAt: value.savedAt }
-  } catch {
-    window.localStorage.removeItem(ACTIVE_BANK_PAYOUT_KEY)
-    return null
-  }
+const ACTIVE_BANK_PAYOUT_KEY='pocket:bank-withdraw:active'
+const PREFIX='pocket:bank-withdraw:attempt:'
+export type ActiveBankPayout={intentId:string;txHash:string;challengeId:string;transactionId:string;accepted:boolean;savedAt:number;owner?:string;walletAddress?:string}
+function readActiveState(intentId?:string):ActiveBankPayout|null{
+ try{const raw=intentId?window.localStorage.getItem(PREFIX+intentId):window.localStorage.getItem(ACTIVE_BANK_PAYOUT_KEY);const value=JSON.parse(raw||'null');if(!value?.intentId)return null;return{...value,txHash:value.txHash||'',challengeId:value.challengeId||'',transactionId:value.transactionId||'',accepted:value.accepted===true}}catch{return null}
 }
-
-export function readActivePocketBankPayout() {
-  return readActiveState()?.intentId || ''
-}
-
-export function readActivePocketBankPayoutTransfer(intentId: string) {
-  const state = readActiveState()
-  return state?.intentId === intentId ? state.txHash : ''
-}
-
-export function readActivePocketBankPayoutAcceptance(intentId: string) {
-  const state = readActiveState()
-  return state?.intentId === intentId && state.accepted && state.challengeId
-    ? { challengeId: state.challengeId, transactionId: state.transactionId }
-    : null
-}
-
-export function saveActivePocketBankPayout(intentId: string, txHash = '') {
-  const current = readActiveState()
-  window.localStorage.setItem(ACTIVE_BANK_PAYOUT_KEY, JSON.stringify({
-    intentId,
-    txHash: txHash || (current?.intentId === intentId ? current.txHash : ''),
-    challengeId: current?.intentId === intentId ? current.challengeId : '',
-    transactionId: current?.intentId === intentId ? current.transactionId : '',
-    accepted: current?.intentId === intentId ? current.accepted : false,
-    savedAt: Date.now(),
-  }))
-}
-
-export function saveActivePocketBankPayoutAcceptance(intentId: string, value: { challengeId: string; transactionId: string }) {
-  const current = readActiveState()
-  window.localStorage.setItem(ACTIVE_BANK_PAYOUT_KEY, JSON.stringify({
-    intentId,
-    txHash: current?.intentId === intentId ? current.txHash : '',
-    challengeId: value.challengeId,
-    transactionId: value.transactionId,
-    accepted: true,
-    savedAt: Date.now(),
-  }))
-}
-
-export function clearActivePocketBankPayout(intentId?: string) {
-  if (!intentId || readActivePocketBankPayout() === intentId) window.localStorage.removeItem(ACTIVE_BANK_PAYOUT_KEY)
-}
+function write(value:ActiveBankPayout){const current=readActiveState();const isNew=!readActiveState(value.intentId);window.localStorage.setItem(PREFIX+value.intentId,JSON.stringify(value));if(isNew||!current||current.intentId===value.intentId)window.localStorage.setItem(ACTIVE_BANK_PAYOUT_KEY,JSON.stringify(value))}
+export function readActivePocketBankPayout(){return readActiveState()?.intentId||''}
+export function readActivePocketBankPayoutTransfer(intentId:string){const r=readActiveState(intentId)||readActiveState();return r?.intentId===intentId?r.txHash:''}
+export function readActivePocketBankPayoutAcceptance(intentId:string){const r=readActiveState(intentId)||readActiveState();return r?.intentId===intentId&&r.accepted&&r.challengeId?{challengeId:r.challengeId,transactionId:r.transactionId}:null}
+export function saveActivePocketBankPayout(intentId:string,txHash='',owner?:string,walletAddress?:string){const r=readActiveState(intentId)||readActiveState();const same=r?.intentId===intentId?r:null;write({intentId,txHash:txHash||same?.txHash||'',challengeId:same?.challengeId||'',transactionId:same?.transactionId||'',accepted:same?.accepted||false,savedAt:Date.now(),owner:owner?.trim().toLowerCase()||same?.owner,walletAddress:walletAddress||same?.walletAddress})}
+export function saveActivePocketBankPayoutAcceptance(intentId:string,value:{challengeId:string;transactionId:string},owner?:string,walletAddress?:string){saveActivePocketBankPayout(intentId,'',owner,walletAddress);const r=readActiveState(intentId)!;write({...r,...value,accepted:true})}
+export function detachActivePocketBankPayout(intentId:string){if(readActivePocketBankPayout()===intentId)window.localStorage.removeItem(ACTIVE_BANK_PAYOUT_KEY)}
+export function clearActivePocketBankPayout(intentId?:string){const id=intentId||readActivePocketBankPayout();if(id)window.localStorage.removeItem(PREFIX+id);if(!intentId||readActivePocketBankPayout()===intentId)window.localStorage.removeItem(ACTIVE_BANK_PAYOUT_KEY)}
+export function readPendingBankPayouts(owner:string){const rows=new Map<string,ActiveBankPayout>();const legacy=readActiveState();if(legacy&&(!legacy.owner||legacy.owner===owner.trim().toLowerCase()))rows.set(legacy.intentId,legacy);for(let i=0;i<window.localStorage.length;i++){const k=window.localStorage.key(i);if(k?.startsWith(PREFIX)){const r=readActiveState(k.slice(PREFIX.length));if(r&&(!r.owner||r.owner===owner.trim().toLowerCase()))rows.set(r.intentId,r)}}return [...rows.values()]}

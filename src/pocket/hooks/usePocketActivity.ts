@@ -1,3 +1,4 @@
+import {readSendAttempts,mergeSendActivity,POCKET_SENDS_UPDATED} from '../lib/pocketSendAttempts'
 import { pocketActivityArchiveKey } from '../lib/pocketActivityArchive'
 import { isIncomingPosPayment } from '../lib/pocketPurchaseKind'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -58,15 +59,19 @@ export default function usePocketActivity({ authenticated, email, enabled, recen
     return () => window.clearInterval(timer)
   }, [scope, enabled, refresh, snapshot?.refreshing])
 
+  useEffect(()=>{const update=()=>render(value=>value+1);window.addEventListener(POCKET_SENDS_UPDATED,update);return()=>window.removeEventListener(POCKET_SENDS_UPDATED,update)},[])
+  let localError=''
+  let rows=snapshot?.payments??[]
+  if(authenticated)try{rows=mergeSendActivity(rows,readSendAttempts(email))}catch{localError='Some saved transfers could not be loaded.'}
   const scoped = state.scope === scope ? state : { busy: false, error: '', attempted: false }
-  const hasContent = Boolean(snapshot && (snapshot.payments.length || snapshot.merchants.length || snapshot.collections.length))
+  const hasContent = Boolean(rows.length || snapshot?.merchants.length || snapshot?.collections.length)
   return {
-    rows: recent ? snapshot?.payments.filter(row => !isIncomingPosPayment(row) && !snapshot.archivedKeys?.includes(pocketActivityArchiveKey(row))).slice(0, 4) ?? [] : snapshot?.payments ?? [],
+    rows: recent ? rows.filter(row=>!isIncomingPosPayment(row)&&!snapshot?.archivedKeys?.includes(pocketActivityArchiveKey(row))).slice(0,4):rows,
     archivedKeys: snapshot?.archivedKeys ?? [],
     merchants: snapshot?.merchants ?? [], collections: snapshot?.collections ?? [],
     busy: scoped.busy && !hasContent,
     resolved: !authenticated || hasContent || Boolean(snapshot?.complete) || scoped.attempted,
-    error: scoped.error || (snapshot?.partial ? snapshot.refreshing ? 'Activity is updating.' : 'Some activity is still updating. Your saved history is retained.' : ''),
+    error: localError || scoped.error || (snapshot?.partial ? snapshot.refreshing ? 'Activity is updating.' : 'Some activity is still updating. Your saved history is retained.' : ''),
     refresh,
   }
 }

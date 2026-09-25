@@ -86,13 +86,18 @@ export function pocketReceiptAvailability(row: PocketActivityRow): PocketReceipt
   return 'none'
 }
 
+export function pocketBillTitle(category?: string): string {
+  return category === 'data' ? 'Data purchase' : category === 'airtime' ? 'Airtime purchase' : category === 'tv' ? 'TV subscription' : category === 'electricity' ? 'Electricity purchase' : 'Bill purchase'
+}
+
 export function pocketMovementTitle(row: PocketActivityRow): string {
   const kind = pocketReceiptKind(row)
-  if (normalizedSource(row) === 'xpay' && row.direction === 'in') return 'Received'
+  if (normalizedSource(row) === 'xpay' && row.direction === 'in') return 'Receiving'
   if (normalizedSource(row) === 'request' || normalizedSource(row) === 'collection') return 'Request payment'
   if (normalizedSource(row).startsWith('bank-')) return 'Bank transfer'
-  if (kind === 'bill_purchase' || kind === 'app_purchase' || isOutgoingPosPurchase(row) || ['pos', 'ngpos'].includes(normalizedSource(row))) return 'Payment'
-  return row.direction === 'in' || kind === 'money_in' ? 'Received' : 'Sent'
+  if (kind === 'bill_purchase') return pocketBillTitle(row.billCategory)
+  if (kind === 'app_purchase' || isOutgoingPosPurchase(row) || ['pos', 'ngpos'].includes(normalizedSource(row))) return 'Merchant payment'
+  return row.direction === 'in' || kind === 'money_in' ? 'Receiving' : 'Sending'
 }
 
 export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPending?: boolean } = {}): PaylinkReceipt | null {

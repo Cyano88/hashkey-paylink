@@ -74,6 +74,10 @@ export async function restorePocketWalletSession(email: string) {
   return request
 }
 
+export function activePocketSolanaSession(email:string,address:string) {
+  return sharedSolanaSessions.get(solanaSessionKey(email,address)) ?? null
+}
+
 export function activePocketEvmSession(
   email: string,
   network: Exclude<PocketNetwork, 'solana'>,

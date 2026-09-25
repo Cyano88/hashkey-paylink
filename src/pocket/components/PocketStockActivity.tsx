@@ -41,6 +41,9 @@ export default function PocketStockActivity({wallet,payments:provided,historyOnl
   }
   void refresh();const timer=window.setInterval(refresh,15000),unregister=registerPocketRefreshHandler(refresh);window.addEventListener('focus',refresh);return()=>{cancelled=true;clearInterval(timer);unregister();window.removeEventListener('focus',refresh)}
  },[scope,historyOnly,authenticated])
- const rows=stockActivityRows(historyOnly?null:inbox,provided||payments,wallet.address||'')
+ const observed=stockActivityRows(historyOnly?null:inbox,provided||payments,wallet.address||'')
+ const hashes=new Set(observed.filter(r=>r.txHash).map(r=>r.txHash.toLowerCase()))
+ const pendingRows:PocketActivityRow[]=historyOnly?[]:(wallet.attempts||[]).filter(r=>r.details&&(!r.hash||!hashes.has(r.hash.toLowerCase()))).map(r=>({eventId:'stock-send:'+r.id,txHash:r.hash,chain:'xlayer',payer:wallet.address||'',recipient:r.details!.recipient,amount:r.details!.amount,memo:r.details!.symbol+' sent',assetSymbol:r.details!.symbol,ts:r.details!.at,source:'wallet-withdrawal',settlementType:'wallet_transfer',direction:'out',paycrestStatus:r.status==='confirmed'?'confirmed':r.status==='failed'?'failed':'pending'}))
+ const rows=[...observed,...pendingRows]
  return <PocketActivityPanel rail="xstocks" hideHeading={historyOnly} view="all" rows={rows} authenticated={authenticated} busy={busy} error={error} onRefund={async()=>{throw Error('Not a bank payment.')}}/>
 }
