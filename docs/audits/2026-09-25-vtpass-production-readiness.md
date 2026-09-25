@@ -26,3 +26,10 @@ Passed: vtpass-config-smoke, vtpass-client-smoke, pocket-bills-handler-smoke, po
 References:
 https://vtpass.com/documentation/authentication/
 https://vtpass.com/documentation/
+
+## Production preparation update
+- Live VTpass authentication and the MTN NGN 100 delivery test passed from Render. Provider IP-whitelist restrictions were disabled by the account owner following VTpass advice for shared hosting.
+- Owner reports enabling all electricity and TV products, plus MTN/Airtel/Glo/9mobile airtime and data. Read-only live catalog checks returned 4 airtime networks, 186 plans for the four data networks, 76 TV plans and 12 electricity providers. Catalog access alone is not a delivery test for each provider.
+- Added shared 25-basis-point platform fee to new server-generated bills quotes and confirmation details. Provider value remains unchanged; principal plus fee is collected into the Circle bills treasury. Historical intents retain their original amounts; payment retries do not reapply the fee. Refunds follow the verified collected amount.
+- Identified and verified the existing developer-controlled Circle bills treasury; owner withdrew its balance. Collection configuration remains unchanged. No pending paid bill/refund obligations were found in current and historical namespaces at withdrawal time.
+- Updated preflight to cover all four approved categories. Regression suites and browser settlement/navigation checks are required before release. Public activation is not proof that every provider has passed an end-to-end payment.
