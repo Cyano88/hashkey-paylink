@@ -112,3 +112,38 @@ Circle consolidation uses HPL's existing hosted Arc Agreement payer checkout
 (Arc mainnet) rather than copying HPS's direct Arc-testnet wallet adapter. Wallet
 onboarding/identity linking and HPS routing still need integration. This commit
 does not migrate Circle wallet balances, pending payments or native app accounts.
+
+## Share-based Trade custody (prepared rollout)
+
+New Trade drafts must explicitly include `stockCustody: "xstocks-shares-v2"`.
+The server freezes that policy and the selected factory into the consent digest.
+Old records retain their original factory and can be read/recovered; they are
+never rewritten into a new escrow. New creation remains disabled until
+`HASHPAYLINK_XSTOCKS_SHARE_ENABLED=true` and
+`HASHPAYLINK_XSTOCKS_SHARE_FACTORY` names the verified deployment. Runtime hash,
+chain 196 and arbiter checks are mandatory. Pausing new funding preserves release,
+refund and dispute routes. Trade asset discovery uses this new factory only.
+
+Stock quantity is converted to issuer token shares at funding. Custody and payouts
+track those shares. Issuer rebases can change displayed quantities. Split payouts
+floor the buyer share allocation and allocate the remainder to the seller. Both
+participants accept this notice before escrow creation.
+
+`status.stockReceipt` and the developer record's last-observed `stockReceipt` have
+exact integer strings: fundedShares, currentUnderlyingUnits, buyerSettledShares,
+sellerSettledShares, buyerUnderlyingAtSettlement, sellerUnderlyingAtSettlement,
+and observedBlock. Settlement equivalents are frozen on-chain at payout;
+currentUnderlyingUnits is the latest equivalent of the originally funded shares,
+not a post-settlement wallet balance. ShareSettlementAllocation records original
+allocation weights, never actual rebased token receipts. Retain the observation
+block when exporting evidence.
+
+The typed server SDK entry is `@hashpaylink/sdk/xstocks`:
+`createXStocksAgreementClient({apiKey})`, `.create(draft, idempotencyKey)`, `.get(id)`,
+`.assets()`, and `xStocksCheckoutUrl(agreement)`. Keep the key on your server.
+Builders may arrange these values in their own UI; payment authorization remains
+in the participant's hosted wallet checkout. The packaged candidate preserves
+Hash PayStream's existing Circle wallet code and styles byte-for-byte.
+
+Activation requires deployed runtime verification and both participants accepting
+a fresh agreement. An old token allowance cannot authorize the new escrow.

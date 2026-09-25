@@ -4,9 +4,9 @@ import {createXStocksAgreementHandlers} from '../api/xstocks-agreement/http.ts'
 import {parseTradeCheckout,prepareTradeCheckoutBinding} from '../api/xstocks-agreement/trade.ts'
 import {prepareWorkBinding} from '../api/xstocks-agreement/work.ts'
 const stock=JSON.parse(readFileSync('src/lib/xstocksAgreement/xStocksCatalog.json','utf8')).assets[0]
-const env={PRIVY_APP_ID:'fixture-app-id',PRIVY_APP_SECRET:'fixture-only',HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED:'true',HASHPAYLINK_TRADE_XSTOCKS_ENABLED:'true',HASHPAYLINK_TRADE_XSTOCKS_PROJECTS:'project-a',HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:18}])}
+const env={HASHPAYLINK_XSTOCKS_SHARE_ENABLED:'true',HASHPAYLINK_XSTOCKS_SHARE_FACTORY:'0x'+'55'.repeat(20),PRIVY_APP_ID:'fixture-app-id',PRIVY_APP_SECRET:'fixture-only',HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED:'true',HASHPAYLINK_TRADE_XSTOCKS_ENABLED:'true',HASHPAYLINK_TRADE_XSTOCKS_PROJECTS:'project-a',HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:18}])}
 const trade={offerId:'11111111-1111-4111-8111-111111111111',listingRevision:1,snapshotHash:'a'.repeat(64),price:'1.00',deliveryFee:'0.25',handover:'Delivery',location:'Lagos',carrier:'Agreed courier',returns:'Return if materially different from listing.',dispatchDays:3,deliveryDays:12,inspectionHours:48}
-const body={kind:'trade',title:'Synthetic item',description:'Preserved item description',amount:'1.25',paymentToken:stock.address,customerUserId:'did:privy:buyer',providerUserId:'did:privy:seller',trade}
+const body={kind:'trade',stockCustody:'xstocks-shares-v2',title:'Synthetic item',description:'Preserved item description',amount:'1.25',paymentToken:stock.address,customerUserId:'did:privy:buyer',providerUserId:'did:privy:seller',trade}
 const terms=parseTradeCheckout(body,env),buyer='0x'+'11'.repeat(20),seller='0x'+'22'.repeat(20)
 const binding=prepareTradeCheckoutBinding('fixture',terms,buyer,seller,100)
 assert.equal(binding.contractTerms.deliveryWindow,12*86400)

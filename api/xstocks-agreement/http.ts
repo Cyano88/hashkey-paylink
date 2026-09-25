@@ -17,6 +17,7 @@ export type XStocksAgreementRecord = {
   id: string; partnerId: string; walletAppId: string; digest: string; terms: WorkTermsForBinding
   participants: Record<Role, string>; accepted: Partial<Record<Role, Acceptance>>
   binding?: ReturnType<typeof prepareWorkBinding>
+  stockReceipt?: TradeXLayerStatus['stockReceipt']
   observed?: Pick<TradeXLayerStatus, 'observedBlock' | 'state' | 'escrow'>
   evidence: Array<{ hash: string; body: string; role: Role; at: string }>
   events: Array<{ type: string; at: string; role?: Role; state?: number; block?: string }>
@@ -64,7 +65,7 @@ function roleFor(record: XStocksAgreementRecord, userId: string): Role {
 }
 function view(record: XStocksAgreementRecord) {
   return { id: record.id, projectId: record.partnerId, walletAppId: record.walletAppId, checkoutPath: `/agreements/xstocks/${record.id}`, terms: record.terms, consentHash: record.digest,
-    accepted: record.accepted, binding: record.binding, observed: record.observed,
+    accepted: record.accepted, binding: record.binding, observed: record.observed, stockReceipt:record.stockReceipt,
     evidence: record.evidence, events: record.events, createdAt: record.createdAt }
 }
 function responseError(res: Response, error: unknown) {
@@ -121,6 +122,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
           if (current.partnerId !== policy.partnerId || current.digest !== digest) fail(409, 'Idempotency key already used with different terms.')
           return current
         }
+        if(terms.kind==='trade'&&!terms.stockCustody)fail(400,'New Trade drafts require explicit xstocks-shares-v2 custody.')
         return { id: agreementId, partnerId: policy.partnerId, walletAppId: authority.appId, digest, terms, participants, accepted: {},
           evidence: [], events: [{ type: 'draft_created', at }], createdAt: at }
       })
@@ -144,7 +146,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       if (!['read', 'accept_terms', 'prepare'].includes(action)) fail(400, 'Choose a supported participant action.')
       const env: NodeJS.ProcessEnv = record!.terms.kind === 'trade' ? tradeCheckoutEnvironment(authority.env, record!.partnerId) : { ...authority.env }
       if (!await d.projectEnabled(record!.partnerId)) env.HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED = 'false'
-      const fundingEnabled = workXLayerEnabled(env)
+      const fundingEnabled = workXLayerEnabled(env)&&(!record!.terms.stockCustody||env.HASHPAYLINK_XSTOCKS_SHARE_ENABLED==='true')
       if (action === 'read') return res.json({ ok: true, role, fundingEnabled, agreement: view(record!) })
       if (action === 'accept_terms') {
         if (!workXLayerEnabled(env)) fail(409, 'New xStocks Agreements are paused.')
@@ -196,6 +198,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
         if (!status.pending && status.observedBlock && status.state !== undefined) {
           const previous = current!.observed
           if (!previous?.observedBlock || BigInt(status.observedBlock) > BigInt(previous.observedBlock)) {
+            current!.stockReceipt = status.stockReceipt
             current!.observed = { observedBlock: status.observedBlock, state: status.state, escrow: status.escrow }
             if (previous?.state !== status.state) current!.events.push({ type: 'chain_state', state: status.state, block: status.observedBlock, at })
           } else if (BigInt(status.observedBlock) < BigInt(previous.observedBlock) || status.state !== previous.state) fail(409, 'A newer payment state is available. Refresh.')

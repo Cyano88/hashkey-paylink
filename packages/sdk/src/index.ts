@@ -26,3 +26,5 @@ export {
 } from './url'
 export type { ChainKey } from './chains'
 export type { PayLinkButtonProps, PayLinkUrlOptions, PaymentSuccessParams, UsePayLinkReturn } from './types'
+export {createXStocksAgreementClient,xStocksCheckoutUrl} from './xstocks'
+export type {XStocksShareReceipt,XStocksTradeDraft,XStocksAgreement} from './xstocks'
