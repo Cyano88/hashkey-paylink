@@ -10,7 +10,7 @@ import PocketSelect from '../pocket/components/PocketSelect'
 import { cn, copyToClipboard } from '../lib/utils'
 
 type Network = 'base' | 'arbitrum' | 'arc'
-type Capability = 'hosted_checkout' | 'polymarket_funding' | 'arc_agreements'
+type Capability = 'hosted_checkout' | 'polymarket_funding' | 'arc_agreements' | 'xstocks_agreements'
 type CheckoutMode = 'human' | 'agentic'
 type CreateProjectForm = { name: string; website: string; useCase: string; checkoutMode: CheckoutMode | ''; capabilities: Capability[] }
 type Project = {
@@ -370,10 +370,11 @@ function CapabilityPicker({ checkoutMode, value, onChange }: { checkoutMode: Che
     { key: 'polymarket_funding', title: 'Polymarket funding', copy: 'Create verified bridge-backed checkouts for a customer Polymarket wallet.' },
     { key: 'arc_agreements', title: 'Arc Agreements · Private pilot', copy: 'Create fixed, progressive, or milestone USDC agreements on Arc Mainnet. Drafts are available; mainnet activation awaits deployment review.' },
   ]
-  const options = allOptions.filter(option => checkoutMode === 'human' || option.key !== 'polymarket_funding')
+  allOptions.push({ key: 'xstocks_agreements', title: 'xStocks', copy: 'Add X Layer stock payments and swaps to your configured project. Separate keys and project activation are required; selecting this does not enable funding.' })
+  const options = allOptions.filter(option => checkoutMode === 'human' || !['polymarket_funding', 'xstocks_agreements'].includes(option.key))
   function toggle(key: Capability) {
     const next = value.includes(key) ? value.filter(item => item !== key) : [...value, key]
-    if (next.length) onChange(next)
+    if (next.length && next.some(product => product !== 'xstocks_agreements')) onChange(next)
   }
   return <div className="mt-6">
     <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">API products</p>

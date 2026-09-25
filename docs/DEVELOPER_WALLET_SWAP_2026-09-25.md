@@ -23,3 +23,11 @@ This release covers same-chain swaps. It does not add an X Layer/xStocks bridge 
 Validation: scoped-session tests; authenticated Hash PayStream proxy and UI tests; existing Arc route/quote/receipt and xStocks execution suites; scope isolation and CLI handoff tests. The Arc regression fixture was updated to provide the chain ID and finalized block already required by production verification. Full platform TypeScript still has unrelated existing errors; no modified swap module appeared in the diagnostics. Deployment and funded two-account transaction results are recorded separately.
 
 Read-only production provider probes returned executable quotes for Arc (chain 5042) and X Layer (chain 196). These checks used a synthetic public address and performed no signing, approvals, swaps or bridge transfers. They establish quote availability, not successful funded execution.
+
+## Release verification
+
+Swap code deployed to Hash PayLink at 90a2db50dfaf6e248cd7ef5b84c6aca5419d5cda (Render dep-dar4jl3acf2s73a4uk60), and Hash PayStream at 482fd1d79f369752a018f82d26ea54cea95d8270. Live participant requests without authentication return JSON 401; missing developer credentials return JSON 403. The owner approved the dedicated scopes. The wallet:swap key was created and its Render handoff verified without displaying the secret; expiry is 2026-10-25.
+
+Activation uncovered a missing xstocks_agreements project capability. The portal now exposes the existing capability as a human-project add-on, preserving the existing settlement routing. The Trade key creation correctly returns 409 until the project owner saves this capability. No capability or financial gate was bypassed. Swap and hosted account configuration have been saved, pending activation deployment. Trade remains disabled until its separate key and project configuration are complete.
+
+Android versionCode 46 / 1.0.45-candidate built successfully; APK SHA-256 299BADD653FB7FF9D1AD8524E82A6DC268A3D8DE61B6F866C3980D77DD654256. Packaged HTML matches the mainnet build. Installation is pending because Pixel 5A160DLCH006VM disconnected before adb install. No live payment was executed.
