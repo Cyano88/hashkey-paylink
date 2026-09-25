@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createVtpassBillsWebhookHandler } from '../api/pocket/bills-webhook.ts'
+import { createVtpassBillsWebhookHandler, vtpassWebhookReconciliationEnabled } from '../api/pocket/bills-webhook.ts'
 import { createPocketBillsStore } from '../api/pocket/bills-store.ts'
 import { readVtpassPhase0Config } from '../api/vtpass-config.ts'
 
@@ -49,6 +49,9 @@ async function request(handler, body, method = 'POST') {
 let now = Date.parse('2026-07-20T12:00:00Z')
 let counter = 0
 const config = readVtpassPhase0Config(env)
+assert.equal(vtpassWebhookReconciliationEnabled(config), true)
+assert.equal(vtpassWebhookReconciliationEnabled(readVtpassPhase0Config({ ...env, POCKET_BILLS_ENABLED: 'false', VTPASS_SANDBOX_VENDING_ENABLED: 'false' })), true, 'Pausing new purchases must not stop reconciliation')
+assert.equal(vtpassWebhookReconciliationEnabled(readVtpassPhase0Config({ ...env, VTPASS_SECRET_KEY: '' })), false)
 const store = createPocketBillsStore({
   config,
   storage: memoryStorage(),

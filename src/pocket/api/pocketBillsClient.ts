@@ -32,6 +32,8 @@ export type PocketBillIntent = {
   customerAddress: string
   amountNgn: string
   amountUsdc: string
+  billAmountUsdc?: string
+  platformFeeUsdc?: string
   fxRateNgnPerUsdc: string
   network: 'base'
   treasuryAddress: string
@@ -109,6 +111,8 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
     customerAddress: text(intent.customerAddress),
     amountNgn: text(intent.amountNgn),
     amountUsdc: text(intent.amountUsdc),
+    billAmountUsdc: text(intent.billAmountUsdc || intent.amountUsdc),
+    platformFeeUsdc: text(intent.platformFeeUsdc || '0'),
     fxRateNgnPerUsdc: text(intent.fxRateNgnPerUsdc),
     network: 'base',
     treasuryAddress: text(intent.treasuryAddress),
