@@ -46,3 +46,14 @@ assert.deepEqual(tradeLifecycleActions(2,true,2000n,deadlines),['missedDispatch'
 assert.ok(!tradeLifecycleActions(4,true,2000n,deadlines).includes('dispute'));
 for(const state of [6,7,8,9])assert.deepEqual(tradeLifecycleActions(state,true,1000n,deadlines),[]);
 console.log('Pinned factory runtime, roles, exact approvals, delisting recovery, lifecycle deadlines, disabled gate and confirmation checks passed.');
+// Known stock assets must not be offered nominal-balance custody on the legacy factory.
+const originalToken=binding.contractTerms.token;
+binding.contractTerms.token='0xc845b2894dbddd03858fd2d643b4ef725fe0849d';
+const guarded=await prepareTradeXLayerAction(input,client());
+assert.match(guarded.fundingIssue,/replacement agreement/);
+assert.deepEqual(guarded.actions,['cancel']);
+for(const action of ['approve','fund'])await assert.rejects(()=>prepareTradeXLayerAction({...input,action},client()),e=>e.status===422);
+assert.ok((await prepareTradeXLayerAction({...input,action:'cancel'},client())).transaction);
+assert.ok((await prepareTradeXLayerAction({...input,action:'release'},client({state:3}))).transaction);
+binding.contractTerms.token=originalToken;
+console.log('Legacy stock custody guard blocks approvals/funding and preserves cancellation and funded recovery.');
