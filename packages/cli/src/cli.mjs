@@ -19,7 +19,7 @@ Commands:
   keys create --name <name> --idempotency-key <stable-key> [--scopes project:read,checkout:read] [--expires-in-days 30]
   keys list
   keys revoke --key-id <id>
-  hosting plan --provider <render|railway> [--product checkout|agreement|agreement-funding|wallet-connection] --service <id> --key-id <id> --backend
+  hosting plan --provider <render|railway> [--product checkout|agreement|agreement-funding|wallet-connection|arc-wallet] --service <id> --key-id <id> --backend
     [--project <railway-id> --environment <railway-id>] [--replace]
   hosting apply --plan <reviewed-plan-id>
   agent-prompt

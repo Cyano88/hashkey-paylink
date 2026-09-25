@@ -135,7 +135,8 @@ test('Render Agreement adapter updates only the isolated allowlisted variable',a
 test('Funding and account connection handoffs require separate exact scopes',async()=>{
  for(const [product,scopes,variable] of [
  ['agreement-funding',['agreement:recipient','agreement:fund'],'HASHPAYSTREAM_ARC_MAINNET_FUNDING_API_KEY'],
- ['wallet-connection',['wallet:connect'],'HASHPAYSTREAM_WALLET_CONNECTION_API_KEY']]) {
+ ['wallet-connection',['wallet:connect'],'HASHPAYSTREAM_WALLET_CONNECTION_API_KEY'],
+ ['arc-wallet',['wallet:arc'],'HASHPAYSTREAM_ARC_WALLET_API_KEY']]) {
   const f=setup();
   await assert.rejects(hostingCommand('hosting plan',{...options,product},f.deps));
   f.deps.fetcher=async()=>Response.json({ok:true,projectId,keys:[{...metadata,scopes}]});

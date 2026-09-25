@@ -142,3 +142,12 @@ for(const action of ['link-wallet','review','status','prepare','challenge','reco
 for(const action of ['lifecycle-challenge','lifecycle-record','lifecycle-recover','delivery-decision','recover-access','unknown']) assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements/project-payer',body:{action}}),null)
 assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/agreements/project-payer?override=true',body:{action:'challenge'}}),null)
 console.log('Funding scopes require a new owner grant; old keys stay draft-only; lifecycle and participant routes remain excluded.')
+
+grant={...original,scopes:['wallet:arc','keys:manage']}
+const walletSpec={...spec,operationId:'fixture_arc_wallet_001',apiKey:'hpl_app_'+'8'.repeat(64),scopes:['wallet:arc'],expiresInDays:7}
+assert.equal((await call(walletSpec)).statusCode,201)
+assert.equal(cliRequestScope({method:'POST',originalUrl:'/api/v2/wallets/arc',body:{}}),'wallet:arc')
+assert.equal(developerPolicyFromStore(store,walletSpec.apiKey,secret,'wallet:arc',now)?.partnerId,id)
+for(const scope of ['agreement:fund','agreement:recipient','agreement:create','checkout:create',null])assert.equal(developerPolicyFromStore(store,walletSpec.apiKey,secret,scope,now),null)
+for(const old of [agreementSpec,fundingSpec,connectionSpec])assert.equal(developerPolicyFromStore(store,old.apiKey,secret,'wallet:arc',now),null)
+console.log('Arc wallet scope is independent from drafting, funding, checkout and account linking.')

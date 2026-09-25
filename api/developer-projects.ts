@@ -43,7 +43,7 @@ type DeveloperKey = {
   createdAt: string
   lastUsedAt?: string
   revokedAt?: string
-  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create' | 'agreement:recipient' | 'agreement:fund' | 'xstocks-agreement:read' | 'wallet:connect' | 'xstocks-agreement:create'>
+  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create' | 'agreement:recipient' | 'agreement:fund' | 'xstocks-agreement:read' | 'wallet:connect' | 'wallet:arc' | 'xstocks-agreement:create'>
   expiresAt?: string
   createdByGrant?: string
   operationId?: string
@@ -1178,8 +1178,8 @@ export function createScopedDeveloperKeysHandler(
       if (action === 'create') {
         if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId) || !/^hpl_app_[a-f0-9]{64}$/.test(rawKey)
           || !name || !Number.isInteger(days) || days < 1 || days > 30
-          || !Array.isArray(scopes) || !scopes.length || scopes.length > 10 || new Set(scopes).size !== scopes.length
-          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'xstocks-agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
+          || !Array.isArray(scopes) || !scopes.length || scopes.length > 11 || new Set(scopes).size !== scopes.length
+          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'xstocks-agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
           return res.status(400).json({ ok: false, error: 'Use a unique operation id, a scoped key, 1-30 days, and permissions included in the approved grant.' })
         }
         requestDigest = keyDigest(dependencies.portalSecret(), JSON.stringify([rawKey, name, [...scopes].sort(), days]))
@@ -1193,7 +1193,7 @@ export function createScopedDeveloperKeysHandler(
           if (projectCheckoutMode(latest) !== 'human' || !policyForDeveloperProject(latest, 'live', dependencies.portalSecret())) {
             throw Object.assign(new Error('An active, ready human checkout project is required.'), { status: 409 })
           }
-          if (scopes.some((scope: string) => scope.startsWith('agreement:'))
+          if (scopes.some((scope: string) => (scope.startsWith('agreement:') || scope === 'wallet:arc'))
             && (!latest.capabilities?.includes('arc_agreements') || latest.settlementMode !== 'usdc'
               || latest.arcMainnetChainId !== 5042 || !latest.networks.includes('arc') || !latest.recipients.arc
               || !latest.webhookUrl || !latest.webhookSecretCipher)) {

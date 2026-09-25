@@ -148,7 +148,8 @@
     "test:developer-activity:postgres": "node --import tsx scripts/developer-activity-postgres-smoke.mjs",
     "check:developer-activity": "node --import tsx scripts/developer-activity-preflight.mjs",
     "test:xstocks-agreement": "node --import tsx scripts/xstocks-agreement-work-smoke.mjs && node --import tsx scripts/xstocks-agreement-planner-smoke.mjs && node --import tsx scripts/xstocks-agreement-assets-smoke.mjs && node --import tsx scripts/xstocks-agreement-wallet-smoke.mjs && node --import tsx scripts/xstocks-agreement-http-smoke.mjs && node --import tsx scripts/xstocks-agreement-hosted-smoke.mjs && node --import tsx scripts/xstocks-agreement-ui-smoke.mjs",
-    "test:wallet-connections": "node --import tsx scripts/wallet-connections-smoke.mjs"
+    "test:wallet-connections": "node --import tsx scripts/wallet-connections-smoke.mjs",
+    "test:arc-wallet": "node --import tsx scripts/arc-wallet-smoke.mjs"
   },
   "dependencies": {
     "@0gfoundation/0g-ts-sdk": "^1.2.8",
