@@ -1,0 +1,43 @@
+{
+  "args": [
+    "req_migration_fixture",
+    {
+      "version": 3,
+      "title": "Fixture design",
+      "description": "Synthetic migration fixture",
+      "amount": "0.125",
+      "durationSeconds": 86400,
+      "xlayerPayment": {
+        "policy": "work-xlayer-v1",
+        "chainId": 196,
+        "token": "0x707c6bc22b6cf83b930b0a68c3bb20a94836de71",
+        "decimals": 18,
+        "amountUnits": "125000000000000000",
+        "reviewHours": 48,
+        "responseDays": 7
+      }
+    },
+    "0x1111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222",
+    1790164800
+  ],
+  "expected": {
+    "chainId": 196,
+    "factory": "0x9f41a14Af230AaaF7fEfdB69ad5962828ca68dd7",
+    "termsHash": "0x2759737836baeb2b8c209e2b26d0acafe1e9756d206db24945c848742bb59851",
+    "contractTerms": {
+      "offerId": "0x0c51ee32a4d9d6c01c6b1f1fb76911ffe030202575936760798148a893a72a1c",
+      "termsHash": "0x2759737836baeb2b8c209e2b26d0acafe1e9756d206db24945c848742bb59851",
+      "buyer": "0x1111111111111111111111111111111111111111",
+      "seller": "0x2222222222222222222222222222222222222222",
+      "arbiter": "0xf80E88df7D4570FC8eb6eAaC7AED0b93a413bBbA",
+      "token": "0x707C6Bc22b6Cf83B930b0A68c3Bb20A94836dE71",
+      "amount": "125000000000000000",
+      "decimals": 18,
+      "fundBy": 1790251200,
+      "dispatchWindow": 86400,
+      "deliveryWindow": 604800,
+      "inspectionWindow": 172800
+    }
+  }
+}

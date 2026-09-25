@@ -18,7 +18,7 @@ type DeveloperNetwork = typeof NETWORKS[number]
 type SettlementMode = 'usdc' | 'ngn'
 type DeveloperEnvironment = 'test' | 'live'
 export type DeveloperCheckoutMode = 'human' | 'agentic'
-export type DeveloperCapability = 'hosted_checkout' | 'polymarket_funding' | 'arc_agreements'
+export type DeveloperCapability = 'hosted_checkout' | 'polymarket_funding' | 'arc_agreements' | 'xstocks_agreements'
 export type ArcAgreementPilotPolicy = {
   status: 'draft_only' | 'approved' | 'disabled'
   maxAgreementUsdc: string
@@ -43,7 +43,7 @@ type DeveloperKey = {
   createdAt: string
   lastUsedAt?: string
   revokedAt?: string
-  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create'>
+  scopes?: Array<'project:read' | 'checkout:read' | 'checkout:create' | 'agreement:read' | 'agreement:create' | 'agreement:recipient' | 'agreement:fund' | 'xstocks-agreement:read' | 'wallet:connect' | 'wallet:arc' | 'wallet:stocks:read' | 'xstocks-agreement:create'>
   expiresAt?: string
   createdByGrant?: string
   operationId?: string
@@ -450,10 +450,10 @@ function requestedCapabilities(value: unknown, checkoutMode: DeveloperCheckoutMo
   const allowed = new Set<DeveloperCapability>(
     checkoutMode === 'agentic'
       ? ['hosted_checkout', 'arc_agreements']
-      : ['hosted_checkout', 'polymarket_funding', 'arc_agreements'],
+      : ['hosted_checkout', 'polymarket_funding', 'arc_agreements', 'xstocks_agreements'],
   )
   const capabilities = value.map(item => clean(item, 40).toLowerCase()).filter((item): item is DeveloperCapability => allowed.has(item as DeveloperCapability))
-  return Array.from(new Set(capabilities)).slice(0, 3)
+  return Array.from(new Set(capabilities)).slice(0, 4)
 }
 
 function statusCode(error: unknown) {
@@ -1178,8 +1178,8 @@ export function createScopedDeveloperKeysHandler(
       if (action === 'create') {
         if (!/^[a-zA-Z0-9:_-]{16,128}$/.test(operationId) || !/^hpl_app_[a-f0-9]{64}$/.test(rawKey)
           || !name || !Number.isInteger(days) || days < 1 || days > 30
-          || !Array.isArray(scopes) || !scopes.length || scopes.length > 5 || new Set(scopes).size !== scopes.length
-          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
+          || !Array.isArray(scopes) || !scopes.length || scopes.length > 11 || new Set(scopes).size !== scopes.length
+          || scopes.some(scope => !['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'xstocks-agreement:create'].includes(scope) || !grant.scopes.includes(scope))) {
           return res.status(400).json({ ok: false, error: 'Use a unique operation id, a scoped key, 1-30 days, and permissions included in the approved grant.' })
         }
         requestDigest = keyDigest(dependencies.portalSecret(), JSON.stringify([rawKey, name, [...scopes].sort(), days]))
@@ -1193,11 +1193,15 @@ export function createScopedDeveloperKeysHandler(
           if (projectCheckoutMode(latest) !== 'human' || !policyForDeveloperProject(latest, 'live', dependencies.portalSecret())) {
             throw Object.assign(new Error('An active, ready human checkout project is required.'), { status: 409 })
           }
-          if (scopes.some((scope: string) => scope.startsWith('agreement:'))
+          if (scopes.some((scope: string) => (scope.startsWith('agreement:') || scope === 'wallet:arc'))
             && (!latest.capabilities?.includes('arc_agreements') || latest.settlementMode !== 'usdc'
               || latest.arcMainnetChainId !== 5042 || !latest.networks.includes('arc') || !latest.recipients.arc
               || !latest.webhookUrl || !latest.webhookSecretCipher)) {
             throw Object.assign(new Error('Agreement keys require Arc Mainnet USDC routing, the Agreements product and a signed webhook.'), { status: 409 })
+          }
+          if (scopes.some((scope: string) => scope.startsWith('xstocks-agreement:'))
+            && !latest.capabilities?.includes('xstocks_agreements')) {
+            throw Object.assign(new Error('xStocks Agreement keys require the separate xStocks Agreements capability.'), { status: 409 })
           }
           const previous = latest.keys.find(key => key.operationId === operationId)
           if (previous) {
@@ -1233,4 +1237,14 @@ export function createScopedDeveloperKeysHandler(
       return res.status(status).json({ ok: false, error: status < 500 ? (error as Error).message : 'Scoped keys are temporarily unavailable.' })
     }
   }
+}
+
+// Participant recovery does not depend on retaining a general developer key.
+// This check gates new escrow creation/funding only; recovery remains available.
+export async function resolveXStocksAgreementProjectEnabled(projectId: string): Promise<boolean> {
+  if (!defaults.hasStore()) return false
+  const project = (await defaults.read(STORE_KEY))?.projects[projectId]
+  return Boolean(project && projectCheckoutMode(project) === 'human'
+    && project.operationalStatus !== 'suspended' && project.settlementStatus === 'ready'
+    && project.capabilities?.includes('xstocks_agreements'))
 }

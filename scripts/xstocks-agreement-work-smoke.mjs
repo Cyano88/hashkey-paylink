@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {parseUnits,getAddress} from 'viem';
+
+import {parseWorkPayment,prepareWorkBinding,prepareWorkAction} from '../api/xstocks-agreement/work.ts';
+import {WORK_USDC} from '../src/lib/xstocksAgreement/workXLayer.ts';
+const stock=JSON.parse(readFileSync('src/lib/xstocksAgreement/xStocksCatalog.json','utf8')).assets[0];
+let enabled=true;
+const env=()=>({HASHPAYSTREAM_APP_OWNERSHIP_SECRET:'t'.repeat(48),HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED:enabled?'true':'false',HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:18}])});
+const body={paymentRail:'xlayer',paymentToken:stock.address,reviewHours:48};
+const amount='0.000001234567890123';
+const payment=parseWorkPayment(body,amount,86400,env());assert.equal(payment.amountUnits,parseUnits(amount,18).toString());
+assert.throws(()=>parseWorkPayment(body,'0.0000000000000000001',86400,env()),/precision/);
+assert.throws(()=>parseWorkPayment(body,'1',3600,env()),/1 and 30/);
+assert.throws(()=>parseWorkPayment({...body,reviewHours:96},'1',86400,env()),/review period/);
+assert.throws(()=>parseWorkPayment({...body,paymentToken:'0x'+'44'.repeat(20)},'1',86400,env()),/not approved/);
+assert.throws(()=>parseWorkPayment({...body,template:'milestone'},'1',86400,env()),/one release/);
+assert.throws(()=>parseWorkPayment({...body,paymentRail:'arc'},'1',86400,env(),payment),/new request/);
+const buyer=getAddress('0x'+'11'.repeat(20)),seller=getAddress('0x'+'22'.repeat(20));
+const terms={version:1,title:'Design work',description:'Deliver a finished design with source files.',amount,durationSeconds:86400,xlayerPayment:payment};
+const binding=prepareWorkBinding('req_work',terms,buyer,seller,1000);
+const fixture=JSON.parse(readFileSync(new URL('./fixtures/xstocks-agreement-binding.json',import.meta.url),'utf8'));
+assert.deepEqual(prepareWorkBinding(...fixture.args),fixture.expected,'accepted hashes and escrow IDs survive extraction');
+assert.equal(binding.contractTerms.amount,payment.amountUnits);assert.equal(binding.contractTerms.deliveryWindow,7*86400);
+assert.notEqual(binding.termsHash,prepareWorkBinding('req_work',{...terms,description:'Different accepted work'},buyer,seller,1000).termsHash);
+assert.notEqual(binding.contractTerms.offerId,prepareWorkBinding('req_work',{...terms,version:2},buyer,seller,1000).contractTerms.offerId);
+assert.throws(()=>prepareWorkBinding('req_work',terms,buyer,buyer,1000),/distinct/);
+const planner=async()=>({enabled:true,actions:['fund','refund','dispute']});
+assert.deepEqual((await prepareWorkAction({env:{},binding,account:buyer},planner)).actions,['refund','dispute']);
+await assert.rejects(()=>prepareWorkAction({env:{},binding,account:buyer,action:'fund'},planner),/paused/);
+await assert.rejects(()=>prepareWorkAction({env:{HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED:'true'},binding,account:buyer,action:'fund'},planner),/no longer approved/);
+assert.deepEqual((await prepareWorkAction({env:{HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:'broken'},binding,account:buyer,action:'refund'},planner)).actions,['refund','dispute']);
+
+assert.throws(()=>parseWorkPayment({...body,paymentToken:WORK_USDC},'1',86400,env()),/not approved/);
+assert.throws(()=>parseWorkPayment(body,'1',86400,{HASHPAYSTREAM_WORK_XLAYER_ENABLED:'true'}),/not available/);
+console.log('Agreement-only stock terms, precision, immutable bindings and paused recovery passed.');

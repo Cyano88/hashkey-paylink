@@ -3,7 +3,7 @@ import type { Request, Response } from 'express'
 import { hasRenderDurableStore, readDurableJson, mutateDurableJson } from './render-durable-store.js'
 
 const STORE = 'hashpaylink:cli-grants:v1'
-export const CLI_SCOPES = ['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'keys:manage'] as const
+export const CLI_SCOPES = ['project:read', 'checkout:read', 'checkout:create', 'agreement:read', 'agreement:create', 'agreement:recipient', 'agreement:fund', 'xstocks-agreement:read', 'wallet:connect', 'wallet:arc', 'wallet:stocks:read', 'xstocks-agreement:create', 'keys:manage'] as const
 export type CliScope = typeof CLI_SCOPES[number]
 type Grant = {
   id: string; projectId: string; challenge: string; codeHash: string; scopes: CliScope[];
@@ -43,6 +43,21 @@ export function cliRequestScope(req: Partial<Pick<Request, 'method' | 'originalU
   try { url = new URL(req.originalUrl ?? '', 'https://developer.hashpaylink.com') } catch { return null }
   if (req.method === 'GET' && url.pathname === '/api/v2/project' && !url.search) return 'project:read'
   if (req.method === 'POST' && url.pathname === '/api/v2/cli/keys' && !url.search) return 'keys:manage'
+  if (req.method === 'POST' && url.pathname === '/api/v2/wallet-connections' && !url.search
+    && ['create', 'redeem'].includes(req.body?.action)) return 'wallet:connect'
+  if (req.method === 'POST' && !url.search) {
+    if (url.pathname === '/api/v2/agreements/verified-recipient') return 'agreement:recipient'
+    // Funding only. Lifecycle release, cancellation, refund and link rotation remain excluded.
+    if (url.pathname === '/api/v2/agreements/project-payer'
+      && ['brand', 'link-wallet', 'review', 'status', 'prepare', 'challenge', 'recover', 'record'].includes(req.body?.action)) return 'agreement:fund'
+  }
+  if (req.method === 'POST' && url.pathname === '/api/v2/wallets/arc' && !url.search) return 'wallet:arc'
+  if (req.method === 'POST' && url.pathname === '/api/v2/wallets/stocks/balances' && !url.search) return 'wallet:stocks:read'
+  if (url.pathname === '/api/v2/xstocks-agreements') {
+    if (req.method === 'GET') return 'xstocks-agreement:read'
+    if (req.method === 'POST' && !url.search && req.body?.action === undefined) return 'xstocks-agreement:create'
+    return null
+  }
   if (url.pathname === '/api/v2/agreements') {
     if (req.method === 'GET') return 'agreement:read'
     // Draft creation only. Payer links, release requests and all nested signing routes stay excluded.

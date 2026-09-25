@@ -5,14 +5,26 @@ import { existsSync } from 'node:fs'
 import { join, delimiter, isAbsolute } from 'node:path'
 import { activeManager, keysApi } from './key-management.mjs'
 const VARIABLE = 'HASHPAYLINK_API_KEY'
+const STOCK_VARIABLE = 'HASHPAYSTREAM_STOCK_BALANCE_API_KEY'
+const WALLET_VARIABLE = 'HASHPAYSTREAM_ARC_WALLET_API_KEY'
+const FUNDING_VARIABLE = 'HASHPAYSTREAM_ARC_MAINNET_FUNDING_API_KEY'
+const CONNECTION_VARIABLE = 'HASHPAYSTREAM_WALLET_CONNECTION_API_KEY'
 const AGREEMENT_VARIABLE = 'HASHPAYSTREAM_ARC_MAINNET_API_KEY'
 function targetVariable(target) {
   const variable = target.variable ?? VARIABLE
-  if (![VARIABLE, AGREEMENT_VARIABLE].includes(variable)) throw safeError('Unsupported backend variable.')
+  if (![VARIABLE, AGREEMENT_VARIABLE, FUNDING_VARIABLE, CONNECTION_VARIABLE, WALLET_VARIABLE, STOCK_VARIABLE].includes(variable)) throw safeError('Unsupported backend variable.')
   return variable
 }
 function requireAgreementKey(target, key) {
-  if (targetVariable(target) !== AGREEMENT_VARIABLE) return
+  const variable = targetVariable(target)
+  if (variable === FUNDING_VARIABLE || variable === CONNECTION_VARIABLE || variable === WALLET_VARIABLE || variable === STOCK_VARIABLE) {
+    const required = variable === STOCK_VARIABLE ? ['wallet:stocks:read'] : variable === FUNDING_VARIABLE ? ['agreement:recipient', 'agreement:fund'] : variable === WALLET_VARIABLE ? ['wallet:arc'] : ['wallet:connect']
+    if (required.some(scope => !key.scopes?.includes(scope)) || key.scopes.some(scope => !required.includes(scope))) {
+      throw safeError('Select a key limited to the requested funding or wallet connection permissions.')
+    }
+    return
+  }
+  if (variable !== AGREEMENT_VARIABLE) return
   if (!key.scopes?.includes('agreement:read') || !key.scopes.includes('agreement:create')
     || key.scopes.some(scope => !['project:read','agreement:read','agreement:create'].includes(scope))) {
     throw safeError('Agreement hosting requires a key limited to Agreement read/create and optional project read.')
@@ -81,10 +93,10 @@ export function providerAdapter({ env, fetcher, railway = railwayRun }) {
 }
 function validateTarget(options) {
   const target = { provider: options.provider, service: options.service }
-  if (options.product !== undefined && !['checkout', 'agreement'].includes(options.product)) throw safeError('Choose checkout or agreement.')
-  if (options.product === 'agreement') {
+  if (options.product !== undefined && !['checkout', 'agreement', 'agreement-funding', 'wallet-connection', 'arc-wallet', 'stock-balances'].includes(options.product)) throw safeError('Choose checkout, agreement, agreement-funding, wallet-connection or arc-wallet.')
+  if (['agreement', 'agreement-funding', 'wallet-connection', 'arc-wallet', 'stock-balances'].includes(options.product)) {
     if (options.provider !== 'render') throw safeError('Agreement handoff currently supports Render only.')
-    target.variable = AGREEMENT_VARIABLE
+    target.variable = options.product === 'stock-balances' ? STOCK_VARIABLE : options.product === 'arc-wallet' ? WALLET_VARIABLE : options.product === 'agreement-funding' ? FUNDING_VARIABLE : options.product === 'wallet-connection' ? CONNECTION_VARIABLE : AGREEMENT_VARIABLE
   }
   if (target.provider === 'render') {
     if (!/^srv-[a-z0-9]{8,40}$/.test(target.service ?? '') || options.project || options.environment) throw safeError('Render requires an explicit service ID only.')

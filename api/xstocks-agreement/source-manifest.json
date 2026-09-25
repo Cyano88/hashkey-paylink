@@ -1,0 +1,51 @@
+{
+  "sourceCheckout": "hashpaystream-production-20260907",
+  "sourceHead": "f4d61ca",
+  "includesUncommittedSource": true,
+  "files": [
+    {
+      "file": "src/lib/tradeXLayerProtocol.ts",
+      "sha256": "21da15471d825ef0147fc1a9dcca9edb1c0fe0c873c7092ad639d5abef9d7a50"
+    },
+    {
+      "file": "src/lib/xStocksAssets.ts",
+      "sha256": "c20c8c7db79e5a4fb54c67adcb10831f5edefea013043dbf3c650f70b5705e5d"
+    },
+    {
+      "file": "src/lib/xStocksCatalog.json",
+      "sha256": "f816edeacc7995f6f4b8ab5fb518aac018aac7f59e9cab1b77d13a6981d3e1de"
+    },
+    {
+      "file": "src/lib/xStocksRanking.json",
+      "sha256": "47d277fcdfa197c948d258c06c4c18ca7a78ea5eb8ca93a474595496fd10f99f"
+    },
+    {
+      "file": "src/lib/workXLayer.ts",
+      "sha256": "e88b0359e90f79ac4a643035d889d506507f94bad54157f0e279a11de0053d0b"
+    },
+    {
+      "file": "api/trade-xlayer-checkout.ts",
+      "sha256": "04fed22012db1bbeb2cc5a9c00b0fbfbed49faf7a6593da288cdca711f9e777a"
+    },
+    {
+      "file": "api/trade-escrow-binding.ts",
+      "sha256": "13461586e3d875ef7ca994e9a83b12ca95a706da5a87c56114eb3e43c939f274"
+    },
+    {
+      "file": "api/trade-xlayer-assets.ts",
+      "sha256": "150cc9ee93b993fe35abad52d00f128a75a63b0baf9ee797e3dd5d475d726269"
+    },
+    {
+      "file": "api/work-xlayer.ts",
+      "sha256": "19feacce27afd512fe8dd4af22f2bce2ee3bc660892a0243a53a743eda9a4924"
+    },
+    {
+      "file": "src/components/WorkXLayerCheckout.tsx",
+      "sha256": "30f6dedd3814d02e00227398542b750c94c02322d8226708a22d057c4f1c10ac"
+    },
+    {
+      "file": "src/components/ui/StreamConfirmSheet.tsx",
+      "sha256": "68889f289f106023492e773be79e31f64ca18282403dbebc51b5076e6ba13ca9"
+    }
+  ]
+}

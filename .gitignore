@@ -18,3 +18,9 @@ contracts/typechain-types/
 !/contracts/package-lock.json
 !tsconfig.json
 !tsconfig.node.json
+
+!/api/xstocks-agreement/source-manifest.json
+!/src/lib/xstocksAgreement/xStocksCatalog.json
+!/src/lib/xstocksAgreement/xStocksRanking.json
+!/scripts/fixtures/xstocks-agreement-binding.json
+!/scripts/fixtures/xstocks-agreement-factory-runtime.json

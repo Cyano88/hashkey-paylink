@@ -131,3 +131,19 @@ test('Render Agreement adapter updates only the isolated allowlisted variable',a
  await assert.rejects(provider.write({...target,variable:'VITE_SECRET'},key));
  assert.ok(calls.every(url=>!url.includes(key)));
 })
+
+test('Funding and account connection handoffs require separate exact scopes',async()=>{
+ for(const [product,scopes,variable] of [
+ ['agreement-funding',['agreement:recipient','agreement:fund'],'HASHPAYSTREAM_ARC_MAINNET_FUNDING_API_KEY'],
+ ['wallet-connection',['wallet:connect'],'HASHPAYSTREAM_WALLET_CONNECTION_API_KEY'],
+ ['arc-wallet',['wallet:arc'],'HASHPAYSTREAM_ARC_WALLET_API_KEY']]) {
+  const f=setup();
+  await assert.rejects(hostingCommand('hosting plan',{...options,product},f.deps));
+  f.deps.fetcher=async()=>Response.json({ok:true,projectId,keys:[{...metadata,scopes}]});
+  const planned=await hostingCommand('hosting plan',{...options,product},f.deps);
+  assert.equal(planned.plan.variable,variable);assert.equal(f.writes(),0);
+  assert.equal((await hostingCommand('hosting apply',{plan:planned.plan.id},f.deps)).verified,true);
+  f.deps.fetcher=async()=>Response.json({ok:true,projectId,keys:[{...metadata,scopes:[...scopes,'checkout:create']}]});
+  await assert.rejects(hostingCommand('hosting apply',{plan:planned.plan.id},f.deps));
+ }
+})

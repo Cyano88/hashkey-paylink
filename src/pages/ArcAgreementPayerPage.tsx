@@ -12,7 +12,7 @@ import { PocketPillMark } from '../pocket/components/CPurseIcon'
 import { linkPocketWallet } from '../pocket/api/pocketWalletLinkClient'
 import UnifiedReceipt from '../components/UnifiedReceipt'
 import CheckoutSteps from '../components/CheckoutSteps'
-import { CheckoutTrustLine } from '../components/CheckoutChrome'
+import { CheckoutTrustLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 import type { PaylinkReceipt } from '../lib/paymentReceiptPdf'
 
 type AgreementTemplate = 'fixed_unlock' | 'progressive_release' | 'milestone'
@@ -676,19 +676,16 @@ export default function ArcAgreementPayerPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-xl pb-8">
-      <div className="mb-5 flex items-center justify-center gap-2 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
-        {brand.brandImageUrl ? (
-          <img src={brand.brandImageUrl} alt="" className="h-7 w-7 rounded-lg object-contain" />
-        ) : (
-          <span aria-hidden="true" className="grid h-7 w-7 place-items-center rounded-lg bg-gray-950 text-[10px] font-bold text-white dark:bg-white dark:text-gray-950">
-            {brand.merchantName.slice(0, 1).toUpperCase()}
-          </span>
-        )}
-        <span>{brand.merchantName} checkout</span>
-      </div>
-
-      <section className="overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#141416] dark:shadow-none">
+    <div className="mx-auto w-full max-w-md pb-8">
+      <HashPayLinkCheckoutBrand />
+      <section aria-label="Agreement checkout" className="overflow-hidden rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] dark:border-white/10 dark:bg-[#101114]">
+        <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-6 py-4 dark:border-white/10">
+          <div className="flex min-w-0 items-center gap-2">
+            {brand.brandImageUrl && <img src={brand.brandImageUrl} alt="" className="h-6 w-6 rounded-md object-contain" />}
+            <span className="truncate text-xs font-medium text-gray-600 dark:text-gray-300">{brand.merchantName}</span>
+          </div>
+          <span className="shrink-0 text-[11px] font-medium text-gray-400">Agreement</span>
+        </div>
         {!ready || loading ? (
           <div className="space-y-4 p-6 sm:p-8" aria-label="Loading agreement">
             <div className="h-3 w-24 animate-pulse rounded-full bg-gray-100 dark:bg-white/8" />
@@ -728,7 +725,7 @@ export default function ArcAgreementPayerPage() {
               </p>
 
               <div className="rounded-2xl bg-[#F6F7F9] p-5 dark:bg-white/[0.055]">
-                <p className="text-[11px] font-medium text-gray-400">Total protected amount</p>
+                <p className="text-[11px] font-medium text-gray-400">Agreement amount</p>
                 <p className="mt-1 text-[30px] font-semibold tracking-[-0.04em] text-gray-950 dark:text-white">
                   {agreement.amount} <span className="text-base tracking-normal text-gray-400">USDC</span>
                 </p>
@@ -886,7 +883,7 @@ export default function ArcAgreementPayerPage() {
       </section>
 
       {agreement && <CheckoutSteps steps={['Review terms', 'Fund Arc wallet', 'Start protection']} className="mt-7" />}
-      {(agreement || hashPayStreamCheckout) && <CheckoutTrustLine provider={hashPayStreamCheckout ? 'hashpaylink' : 'circle'} />}
+      <CheckoutTrustLine provider="hashpaylink" />
     </div>
   )
 }
@@ -1242,7 +1239,7 @@ function Detail({ label, value, mono = false }: { label: string; value: string; 
   return (
     <div className="min-w-0">
       <p className="text-[10px] font-medium text-gray-400">{label}</p>
-      <p className={`mt-1 truncate text-xs font-semibold text-gray-800 dark:text-gray-100 ${mono ? 'font-mono' : ''}`}>
+      <p className={`mt-1 break-words text-xs font-semibold leading-5 text-gray-800 dark:text-gray-100 ${mono ? 'font-mono' : ''}`}>
         {value}
       </p>
     </div>
