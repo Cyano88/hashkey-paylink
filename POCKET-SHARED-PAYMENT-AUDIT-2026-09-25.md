@@ -39,3 +39,9 @@ Added regression coverage for late failure after confirmation, editing before ol
 - Active bounded confirmation checks no longer yield to the generic Processing timer. Accepted EVM challenges without hashes receive an active status check before Activity handoff. Request completion remains dependent on backend settlement.
 - Synthetic regressions cover definite rejection, lost responses, known challenges/hashes, terminal-state monotonicity, bank/bill checks and accepted EVM recovery. No live payment authorized or performed.
 - Provider policy configuration remains a separate live requirement; this patch cannot make an unconfigured Circle entity sponsor Polygon gas.
+## Incoming/Outgoing and sheet-only send actions (2026-09-25)
+- Ordinary transfers and incoming XPay receipts now use Incoming/Outgoing. Bank, bill, merchant and request titles retain their own type.
+- Bank, USDC and XStocks sends share PocketConfirmationDetails: centered amount, bank-style details card and existing plain confirmation CTA.
+- Main Review send buttons are fixed labels. Quote preparation opens inside the sheet; approval/progress/results do not relabel or animate the underlying form CTA. Duplicate error messages behind active sheets are suppressed.
+- Audit covered the common EVM sender (Base/Arbitrum/Arc/Ethereum/Polygon), Solana confirmation, bank handoff, bill fulfillment, request settlement, XStocks transfer and XPay gates. Scan-to-Pay had a remaining timer gap; it now suppresses background status while wallet approval or routed payment is active. Stock trade keeps its existing inline stage flow.
+- Browser regression asserts USDC quote/PIN/confirmation/success/failure/pending stages and stable main CTA; stock test asserts same fixed CTA and shared details layout. Receipt policies, slow-confirmation, bills, bank handoff and Solana proof tests pass using synthetic data. No real payment was sent.

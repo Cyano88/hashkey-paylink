@@ -18,6 +18,7 @@ try{
  await page.getByRole('textbox').nth(0).fill('0xrecipient');await page.getByRole('textbox').nth(1).fill('1');await page.getByRole('button',{name:'Review send',exact:true}).click();
  await page.getByRole('button',{name:'Confirm send',exact:true}).click();await page.waitForFunction(()=>window.calls===1);
  assert.equal(await page.getByRole('dialog',{name:'Transaction status'}).count(),0,'Approval must not open Processing');
+ assert.equal(await page.getByRole('button',{name:'Review send',exact:true}).textContent(),'Review send');assert.equal(await page.getByRole('button',{name:'Review send',exact:true}).locator('.animate-spin').count(),0);assert.equal(await page.getByRole('dialog',{name:'Review send',exact:true}).locator('dl.border-blue-100').count(),1);
  assert.equal(await page.getByRole('button',{name:'Confirm send',exact:true}).isDisabled(),true);
  await page.evaluate(()=>window.release());await page.getByRole('dialog',{name:'Transaction status'}).waitFor();assert.equal(await page.evaluate(()=>window.calls),1);
  console.log('PASS: shared stock Send review, duplicate lock, no premature Processing during approval, result after the wallet confirmation operation, no historical success banner. No wallet or network calls.');

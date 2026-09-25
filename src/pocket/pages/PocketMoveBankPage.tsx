@@ -1,3 +1,4 @@
+import PocketConfirmationDetails from '../components/PocketConfirmationDetails'
 import usePocketSlowConfirmation from '../hooks/usePocketSlowConfirmation'
 import { readCachedPocketBalance, balanceOwner } from '../lib/pocketBalanceCache'
 import PocketTransactionSheet from '../components/PocketTransactionSheet'
@@ -382,9 +383,9 @@ export default function PocketMoveBankPage() {
                     Your previous payout is updating in Activity.
                   </p>
                 ) : <button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="min-h-12 w-full rounded-xl bg-gray-950 text-sm font-bold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">Review transfer</button>}
-                {!recoveredPayout && direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
-                {!recoveredPayout && direct.status === 'routing' && directAmountValid && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
-                {!recoveredPayout && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
+                {!reviewOpen && !recoveredPayout && direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
+                {!reviewOpen && !recoveredPayout && direct.status === 'routing' && directAmountValid && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
+                {!reviewOpen && !recoveredPayout && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
                 {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Enter a verified beneficiary account and a Naira amount.</p>}
               </div>
             </>}
@@ -423,10 +424,9 @@ export default function PocketMoveBankPage() {
         onClose={bank.closeShare}
       />
       {mode === 'withdraw' && reviewOpen && !bankReceipt && !direct.error && <PocketBottomSheet title="Review bank transfer" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
-        <h2 className="mb-6 text-center text-2xl font-bold">NGN {formatNgnAmount(direct.amount)}</h2>
-        <dl className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-xs dark:border-[#262626] dark:bg-[#171717]">
-          {[['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', 'NGN ' + formatNgnAmount(direct.amount)], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo]] : [])].map(([label,value]) => <div key={label} className="flex justify-between gap-4"><dt className="text-gray-500 dark:text-gray-400">{label}</dt><dd className="max-w-[65%] break-words text-right font-semibold">{value}</dd></div>)}
-        </dl>
+        <PocketConfirmationDetails amount={'NGN ' + formatNgnAmount(direct.amount)} rows={[
+          ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', 'NGN ' + formatNgnAmount(direct.amount)], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
+        ]} />
 <PocketSlideAction onApprovalBusyChange={setApprovalBusy}
                   status={directSlideStatus}
                   disabled={!direct.canSubmit}

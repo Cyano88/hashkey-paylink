@@ -1,3 +1,4 @@
+import { paymentBalanceError } from './payment-balance-error.js'
 import { readEvmRpc } from './evm-read.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote, type PaymentFeeBinding } from './payment-fee-quotes.js'
 import { readNativeUsdcRate, nativeFeeToUsdcUnits } from './payment-network-fees.js'
@@ -689,11 +690,10 @@ export default async function handler(req: Request, res: Response) {
       const rawBalance = await readEvmRpc(network, 'eth_call', [{ to: EVM_CHAINS[network].tokenAddress, data: '0x70a08231' + wallet.address.slice(2).padStart(64, '0') }, 'latest'])
       if (typeof rawBalance !== 'string' || !/^0x[0-9a-f]{64}$/i.test(rawBalance)) throw new Error('Balance could not be verified. Try again.')
       const available = BigInt(rawBalance)
-      const checkBalance = (recovery: bigint) => {
-        if (available < paymentFeeBreakdown(BigInt(totalUnits), recovery, mode, exempt).total) throw Object.assign(new Error('Insufficient USDC to cover the amount and fees. Try a lower amount.'), { status: 400 })
-      }
+      const checkBalance = (recovery: bigint) => paymentBalanceError(available, BigInt(totalUnits), recovery, mode, exempt)
       let recovery = 0n
-      checkBalance(recovery)
+      const initialBalanceError = checkBalance(recovery)
+      if (initialBalanceError) return res.status(400).json(initialBalanceError)
       if (!exempt) {
         const rate = network === 'arc' ? 100_000_000n : await readNativeUsdcRate(network === 'polygon' ? 'polygon' : 'ethereum')
         // Estimate both transfers, then include the quoted recovery transfer amount.
@@ -707,7 +707,8 @@ export default async function handler(req: Request, res: Response) {
           if (!native) throw Object.assign(new Error('Network fee quote is unavailable. Try again.'), { status: 503 })
           const next = nativeFeeToUsdcUnits(native, rate)
           recovery = next > recovery ? next : recovery
-          checkBalance(recovery)
+          const balanceError = checkBalance(recovery)
+          if (balanceError) return res.status(400).json(balanceError)
         }
       }
       const binding: PaymentFeeBinding = { chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }
