@@ -407,6 +407,7 @@ export async function confirmPocketBillPayment(dependencies: BillsDependencies, 
     try {
       const verification = await dependencies.verifyTransfer({
         chain: 'base',
+        confirmation: 'base-included',
         txHash,
         payer: current.payerWallet,
         recipient: current.treasuryAddress,

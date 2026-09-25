@@ -202,6 +202,7 @@ const dependencies = {
     verificationCalls += 1
     lastVerificationInput = input
     assert.equal(input.chain, 'base')
+    assert.equal(input.confirmation, 'base-included')
     assert.equal(input.recipient, config.treasuryAddress)
     assert.equal(input.payer, '0x2222222222222222222222222222222222222222')
     assert.ok(/^\d+(?:\.\d{1,6})?$/.test(input.minAmount))
