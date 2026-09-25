@@ -13,7 +13,7 @@
     "build": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
     "build:frontend": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
     "build:source": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
-    "build:pocket-mobile": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build --mode pocket-native",
+    "build:pocket-mobile": "node scripts/build-pocket-mobile.mjs",
     "mobile:android:add": "node scripts/pocket-mobile.mjs add",
     "mobile:android:sync": "node scripts/pocket-mobile.mjs sync",
     "mobile:android:bundle": "node scripts/pocket-mobile.mjs bundle",
