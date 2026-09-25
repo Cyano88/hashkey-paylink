@@ -123,7 +123,7 @@ async function assertProviderReserve(dependencies: BillsDependencies, amountNgn:
 
 function paymentVerificationError(error: unknown) {
   const message = error instanceof Error ? error.message : 'On-chain payment could not be verified.'
-  if (/not found yet|confirmation block|confirmation time|RPC HTTP 429|RPC HTTP 5\d\d/i.test(message)) {
+  if (/not found yet|not finalized yet|RPC returned no result for eth_getTransactionReceipt|confirmation block|confirmation time|RPC HTTP 429|RPC HTTP 5\d\d/i.test(message)) {
     return new PocketBillsStoreError('BILLS_PAYMENT_PENDING', 'Payment confirmation is still pending. Try again shortly.', 409)
   }
   if (/PRIVATE_RPC_URL|RPC /i.test(message)) {
@@ -198,7 +198,7 @@ export async function syncBillExecution(dependencies: BillsDependencies, intent:
     }
   }
 
-  const reference = { providerReference: intent.requestId, transactionHash: intent.txHash }
+  const reference = { providerReference: intent.requestId, transactionHash: intent.txHash || intent.submittedTxHash || '' }
   const afterAuthorization = intent.state !== 'quoted'
   const afterPayment = ['payment_confirmed', 'vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted', 'refunded', 'needs_review'].includes(intent.state)
   const processing = ['vending', 'pending', 'provider_failed_unverified', 'refund_pending', 'refund_eligible', 'refunding', 'refund_submitted'].includes(intent.state)
@@ -206,7 +206,7 @@ export async function syncBillExecution(dependencies: BillsDependencies, intent:
   if (afterAuthorization && execution.state === 'prepared') {
     execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'authorized', expectedState: execution.state, ...reference })
   }
-  if (afterPayment && execution.state === 'authorized') {
+  if ((afterPayment || intent.submittedTxHash) && execution.state === 'authorized') {
     execution = await dependencies.executions.update({ ownerId: intent.ownerId, intentId: execution.id, state: 'submitted', expectedState: execution.state, ...reference })
   }
   if (processing && (execution.state === 'submitted' || execution.state === 'needs_review')) {
@@ -396,6 +396,89 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
   }
 }
 
+export async function confirmPocketBillPayment(dependencies: BillsDependencies, ownerId: string, intentId: string, txHash: string) {
+  const current = await dependencies.store.getOwnedIntent(ownerId, intentId)
+  if (!current.txHash) {
+    await dependencies.store.recordSubmittedPayment(ownerId, intentId, txHash)
+  }
+  let confirmedAt: string | undefined
+  let paymentAmountUsdc: string | undefined
+  if (!current.txHash) {
+    try {
+      const verification = await dependencies.verifyTransfer({
+        chain: 'base',
+        confirmation: 'base-included',
+        txHash,
+        payer: current.payerWallet,
+        recipient: current.treasuryAddress,
+        minAmount: current.amountUsdc,
+        notBefore: new Date(current.createdAt).toISOString(),
+        notAfter: new Date(current.quoteExpiresAt + POCKET_BILLS_CONFIRMATION_GRACE_MS).toISOString(),
+      })
+      confirmedAt = verification.confirmedAt
+      paymentAmountUsdc = verification.amount
+    } catch (error) {
+      const failure = paymentVerificationError(error)
+      if (failure.code === 'BILLS_PAYMENT_PENDING' || failure.code === 'BILLS_PAYMENT_VERIFIER_UNAVAILABLE') {
+        await syncBillExecution(dependencies, await dependencies.store.getOwnedIntent(ownerId, intentId))
+      }
+      throw failure
+    }
+  }
+  const paid = await dependencies.store.recordVerifiedPayment({ ownerId: ownerId, intentId, txHash, paymentAmountUsdc, confirmedAt })
+  if (paid.state !== 'payment_confirmed') return paid
+  if (!dependencies.config.canVend) {
+    const review = await dependencies.store.markNeedsReview(ownerId, intentId, 'Provider vending was disabled after on-chain payment confirmation.')
+    return review
+  }
+
+  try {
+    await assertProviderReserve(dependencies, paid.amountNgn)
+  } catch (error) {
+    const review = await dependencies.store.markNeedsReview(ownerId, intentId, error instanceof Error ? error.message : 'Provider reserve could not be verified.')
+    return review
+  }
+
+  const claim = await dependencies.store.claimVending(ownerId, intentId)
+  if (!claim.claimed) return claim.intent
+  try {
+    const result = claim.intent.category === 'data' ? await dependencies.provider.purchaseData({
+          serviceId: claim.intent.serviceId,
+          variationCode: claim.intent.variationCode,
+          phone: claim.intent.phone,
+          amountNgn: claim.intent.amountNgn,
+          requestId: claim.intent.requestId,
+        })
+      : claim.intent.category === 'tv' ? await dependencies.provider.purchaseTv({
+          serviceId: claim.intent.serviceId, variationCode: claim.intent.variationCode, smartcard: claim.intent.phone,
+          contactPhone: claim.intent.contactPhone, amountNgn: claim.intent.amountNgn, requestId: claim.intent.requestId,
+        })
+      : claim.intent.category === 'electricity' ? await dependencies.provider.purchaseElectricity({
+          serviceId: claim.intent.serviceId, meterType: claim.intent.variationCode, meterNumber: claim.intent.phone,
+          contactPhone: claim.intent.contactPhone, amountNgn: claim.intent.amountNgn, requestId: claim.intent.requestId,
+        })
+      : await dependencies.provider.purchaseAirtime({
+          serviceId: claim.intent.serviceId,
+          phone: claim.intent.phone,
+          amountNgn: claim.intent.amountNgn,
+          requestId: claim.intent.requestId,
+        })
+    const settled = await dependencies.store.recordProviderResult(ownerId, intentId, result)
+    return settled
+  } catch (error) {
+    if (error instanceof VtpassClientError && error.outcomeUnknown) {
+      const pending = await dependencies.store.recordProviderResult(ownerId, intentId, syntheticPending(claim.intent, error.message))
+      return pending
+    }
+    if (error instanceof VtpassClientError && error.code === 'VTPASS_ACCESS_DENIED') {
+      const failed = await dependencies.store.recordProviderResult(ownerId, intentId, syntheticFailed(claim.intent, error))
+      return failed
+    }
+    const review = await dependencies.store.markNeedsReview(ownerId, intentId, error instanceof Error ? error.message : 'Provider purchase needs reconciliation.')
+    return review
+  }
+}
+
 export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
   return async function pocketBillsPayHandler(req: Request, res: Response) {
     res.setHeader('Cache-Control', 'no-store')
@@ -433,79 +516,8 @@ export function createPocketBillsPayHandler(dependencies: BillsDependencies) {
       }
 
       if (action === 'confirm') {
-        const current = await dependencies.store.getOwnedIntent(identity.userId, intentId)
-        const txHash = cleanText(req.body?.tx_hash, 80).toLowerCase()
-        let confirmedAt: string | undefined
-        let paymentAmountUsdc: string | undefined
-        if (!current.txHash) {
-          try {
-            const verification = await dependencies.verifyTransfer({
-              chain: 'base',
-              txHash,
-              payer: current.payerWallet,
-              recipient: current.treasuryAddress,
-              minAmount: current.amountUsdc,
-              notBefore: new Date(current.createdAt).toISOString(),
-              notAfter: new Date(current.quoteExpiresAt + POCKET_BILLS_CONFIRMATION_GRACE_MS).toISOString(),
-            })
-            confirmedAt = verification.confirmedAt
-            paymentAmountUsdc = verification.amount
-          } catch (error) {
-            throw paymentVerificationError(error)
-          }
-        }
-        const paid = await dependencies.store.recordVerifiedPayment({ ownerId: identity.userId, intentId, txHash, paymentAmountUsdc, confirmedAt })
-        if (paid.state !== 'payment_confirmed') return sendIntent(paid, paid.state === 'delivered' ? 'completed' : 'processing')
-        if (!dependencies.config.canVend) {
-          const review = await dependencies.store.markNeedsReview(identity.userId, intentId, 'Provider vending was disabled after on-chain payment confirmation.')
-          return sendIntent(review)
-        }
-
-        try {
-          await assertProviderReserve(dependencies, paid.amountNgn)
-        } catch (error) {
-          const review = await dependencies.store.markNeedsReview(identity.userId, intentId, error instanceof Error ? error.message : 'Provider reserve could not be verified.')
-          return sendIntent(review)
-        }
-
-        const claim = await dependencies.store.claimVending(identity.userId, intentId)
-        if (!claim.claimed) return sendIntent(claim.intent, claim.intent.state === 'delivered' ? 'completed' : 'processing')
-        try {
-          const result = claim.intent.category === 'data' ? await dependencies.provider.purchaseData({
-                serviceId: claim.intent.serviceId,
-                variationCode: claim.intent.variationCode,
-                phone: claim.intent.phone,
-                amountNgn: claim.intent.amountNgn,
-                requestId: claim.intent.requestId,
-              })
-            : claim.intent.category === 'tv' ? await dependencies.provider.purchaseTv({
-                serviceId: claim.intent.serviceId, variationCode: claim.intent.variationCode, smartcard: claim.intent.phone,
-                contactPhone: claim.intent.contactPhone, amountNgn: claim.intent.amountNgn, requestId: claim.intent.requestId,
-              })
-            : claim.intent.category === 'electricity' ? await dependencies.provider.purchaseElectricity({
-                serviceId: claim.intent.serviceId, meterType: claim.intent.variationCode, meterNumber: claim.intent.phone,
-                contactPhone: claim.intent.contactPhone, amountNgn: claim.intent.amountNgn, requestId: claim.intent.requestId,
-              })
-            : await dependencies.provider.purchaseAirtime({
-                serviceId: claim.intent.serviceId,
-                phone: claim.intent.phone,
-                amountNgn: claim.intent.amountNgn,
-                requestId: claim.intent.requestId,
-              })
-          const settled = await dependencies.store.recordProviderResult(identity.userId, intentId, result)
-          return sendIntent(settled, settled.state === 'delivered' ? 'completed' : 'processing')
-        } catch (error) {
-          if (error instanceof VtpassClientError && error.outcomeUnknown) {
-            const pending = await dependencies.store.recordProviderResult(identity.userId, intentId, syntheticPending(claim.intent, error.message))
-            return sendIntent(pending)
-          }
-          if (error instanceof VtpassClientError && error.code === 'VTPASS_ACCESS_DENIED') {
-            const failed = await dependencies.store.recordProviderResult(identity.userId, intentId, syntheticFailed(claim.intent, error))
-            return sendIntent(failed)
-          }
-          const review = await dependencies.store.markNeedsReview(identity.userId, intentId, error instanceof Error ? error.message : 'Provider purchase needs reconciliation.')
-          return sendIntent(review)
-        }
+        const intent = await confirmPocketBillPayment(dependencies, identity.userId, intentId, cleanText(req.body?.tx_hash, 80).toLowerCase())
+        return sendIntent(intent, intent.state === 'delivered' ? 'completed' : 'processing')
       }
 
       if (action === 'status') {
@@ -644,6 +656,9 @@ export async function readPocketBillsLimitUsage(ownerId: string) {
 export async function reconcilePocketBillExecutionByResource(intentId: string) {
   const dependencies = getDefaultHandlers().dependencies
   let intent = await dependencies.store.getIntentById(intentId)
+  if (!intent.txHash && intent.submittedTxHash) {
+    intent = await confirmPocketBillPayment(dependencies, intent.ownerId, intent.id, intent.submittedTxHash)
+  }
   const canRequery = Boolean(intent.providerAttemptedAt)
     && ['vending', 'pending', 'delivered', 'provider_failed_unverified', 'refund_eligible', 'needs_review'].includes(intent.state)
   if (canRequery) {

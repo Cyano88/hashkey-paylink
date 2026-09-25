@@ -53,6 +53,7 @@ export type PocketBillsIntent = {
   payerWallet: string
   quoteExpiresAt: number
   txHash: string
+  submittedTxHash?: string
   paymentAmountUsdc: string
   providerCode: string
   providerStatus: string
@@ -626,6 +627,18 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     })
   }
 
+  // An owner-reported hash is a recovery candidate, never proof of payment.
+  async function recordSubmittedPayment(ownerId: string, intentId: string, hash: string) {
+    const txHash = cleanText(hash, 80).toLowerCase()
+    if (!EVM_TX_PATTERN.test(txHash)) throw new PocketBillsStoreError('BILLS_INVALID_TX_HASH', 'A valid Base transaction hash is required.')
+    return updateOwned(ownerId, intentId, intent => {
+      if (intent.txHash) return
+      assertState(intent, ['awaiting_payment'], 'Payment submission')
+      if (intent.submittedTxHash && intent.submittedTxHash !== txHash) throw new PocketBillsStoreError('BILLS_TX_HASH_MISMATCH', 'This bill already has a submitted payment.', 409)
+      intent.submittedTxHash = txHash
+    })
+  }
+
   async function recordVerifiedPayment(input: { ownerId: string; intentId: string; txHash: string; paymentAmountUsdc?: string; confirmedAt?: string | number }) {
     const txHash = cleanText(input.txHash, 80).toLowerCase()
     if (!EVM_TX_PATTERN.test(txHash)) throw new PocketBillsStoreError('BILLS_INVALID_TX_HASH', 'A valid Base transaction hash is required.')
@@ -932,6 +945,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     readLimitUsage,
     getIntentById,
     markAwaitingPayment,
+    recordSubmittedPayment,
     recordVerifiedPayment,
     backfillVerifiedPaymentAmount,
     claimVending,

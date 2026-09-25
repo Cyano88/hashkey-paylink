@@ -23,12 +23,13 @@ type TxReceiptLog = {
 }
 
 type TxReceipt = {
+  blockHash?: string
   status?: `0x${string}`
   blockNumber?: `0x${string}`
   logs?: TxReceiptLog[]
 }
 
-type RpcBlock = { timestamp?: `0x${string}`; number?: `0x${string}` }
+type RpcBlock = { hash?: string; timestamp?: `0x${string}`; number?: `0x${string}` }
 
 type TransferLog = {
   transactionHash?: `0x${string}`
@@ -279,10 +280,12 @@ export async function verifyEvmUsdcTransfer(input: {
   minAmount: string
   notBefore?: string
   notAfter?: string
+  confirmation?: 'finalized' | 'base-included'
 }) {
   if (!/^0x[a-fA-F0-9]{64}$/.test(input.txHash)) throw new Error('Invalid transaction hash.')
   if (!isAddress(input.recipient)) throw new Error('Invalid USDC recipient.')
   if (input.payer && !isAddress(input.payer)) throw new Error('Invalid USDC payer.')
+  if (input.confirmation === 'base-included' && input.chain !== 'base') throw new Error('Base inclusion confirmation is only supported for Base.')
   const rpcUrl = rpcFor(input.chain)
   if (!rpcUrl) throw new Error(`PRIVATE_RPC_URL is not configured for ${input.chain}.`)
 
@@ -295,10 +298,29 @@ export async function verifyEvmUsdcTransfer(input: {
   if (!receipt) throw new Error('Transaction receipt was not found yet.')
   if (receipt.status !== '0x1') throw new Error('Transaction did not succeed.')
   if (!receipt.blockNumber || !/^0x[0-9a-f]+$/i.test(receipt.blockNumber)) throw new Error('Transaction confirmation block was not available.')
-  // Never treat a sequencer/latest receipt as finalized payment proof.
-  const finalized = await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', ['finalized', false])
-  if (!finalized.number || !/^0x[0-9a-f]+$/i.test(finalized.number) || BigInt(receipt.blockNumber) > BigInt(finalized.number)) {
-    throw new Error('Transaction is not finalized yet.')
+  let inclusionBlock: RpcBlock | undefined
+  if (input.confirmation === 'base-included') {
+    // Pocket bills deliberately accept two sealed L2 blocks, not L1 finality.
+    // A submitted hash or Flashblock preconfirmation is insufficient evidence.
+    const [head, block] = await Promise.all([
+      rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', ['latest', false]),
+      rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', [receipt.blockNumber, false]),
+    ])
+    if (!head.number || !/^0x[0-9a-f]+$/i.test(head.number) || BigInt(head.number) < BigInt(receipt.blockNumber) + 1n) {
+      throw new Error('Transaction confirmation block needs another Base block.')
+    }
+    if (!receipt.blockHash || !/^0x[0-9a-f]{64}$/i.test(receipt.blockHash)
+      || !block.hash || block.hash.toLowerCase() !== receipt.blockHash.toLowerCase()
+      || !block.number || !/^0x[0-9a-f]+$/i.test(block.number) || BigInt(block.number) !== BigInt(receipt.blockNumber)) {
+      throw new Error('Transaction confirmation block is not canonical yet.')
+    }
+    inclusionBlock = block
+  } else {
+    // All other callers retain the existing finalized payment-proof policy.
+    const finalized = await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', ['finalized', false])
+    if (!finalized.number || !/^0x[0-9a-f]+$/i.test(finalized.number) || BigInt(receipt.blockNumber) > BigInt(finalized.number)) {
+      throw new Error('Transaction is not finalized yet.')
+    }
   }
 
   let confirmedAt: string | undefined
@@ -308,7 +330,7 @@ export async function verifyEvmUsdcTransfer(input: {
     if (!Number.isFinite(earliest) && input.notBefore) throw new Error('Invalid checkout creation time.')
     if (!Number.isFinite(deadline) && input.notAfter) throw new Error('Invalid checkout expiry.')
     if (!receipt.blockNumber) throw new Error('Transaction confirmation block was not available.')
-    const block = await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', [receipt.blockNumber, false])
+    const block = inclusionBlock ?? await rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', [receipt.blockNumber, false])
     if (!block.timestamp) throw new Error('Transaction confirmation time was not available.')
     const confirmedAtMs = Number(BigInt(block.timestamp) * 1_000n)
     if (!Number.isSafeInteger(confirmedAtMs)) throw new Error('Transaction confirmation time was invalid.')

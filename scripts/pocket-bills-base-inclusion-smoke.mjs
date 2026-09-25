@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import {pad,parseUnits} from 'viem';
+import {verifyEvmUsdcTransfer} from '../api/usdc-transfer-verify.ts';
+const oldFetch=globalThis.fetch,oldRpc=process.env.PRIVATE_RPC_URL;
+process.env.PRIVATE_RPC_URL='https://base-fixture.invalid';
+const payer='0x'+'1'.repeat(40),recipient='0x'+'2'.repeat(40),txHash='0x'+'3'.repeat(64),hash='0x'+'4'.repeat(64);
+const input={chain:'base',txHash,payer,recipient,minAmount:'1',notBefore:'2026-09-25T12:00:00Z',notAfter:'2026-09-25T12:05:00Z',confirmation:'base-included'};
+const original={status:'0x1',blockNumber:'0x10',blockHash:hash,logs:[{address:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',topics:['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',pad(payer,{size:32}),pad(recipient,{size:32})],data:'0x'+parseUnits('1',6).toString(16)}]};
+let receipt=structuredClone(original),head='0x11',canonical=hash,chain='0x2105',calls=[];
+globalThis.fetch=async(_url,init)=>{const r=JSON.parse(init.body);calls.push(r);let result;
+ if(r.method==='eth_chainId')result=chain;
+ else if(r.method==='eth_getTransactionReceipt')result=receipt;
+ else if(r.method==='eth_getBlockByNumber')result={number:r.params[0]==='latest'?head:r.params[0]==='finalized'?'0xf':'0x10',hash:canonical,timestamp:'0x'+BigInt(Date.parse('2026-09-25T12:01:00Z')/1000).toString(16)};
+ else throw Error('Unexpected RPC '+r.method);
+ return {ok:true,status:200,text:async()=>JSON.stringify({result})};};
+try{
+ assert.equal((await verifyEvmUsdcTransfer(input)).amount,'1');
+ assert(!calls.some(r=>r.params[0]==='finalized'),'Bills must not request L1 finality');
+ await assert.rejects(()=>verifyEvmUsdcTransfer({...input,confirmation:undefined}),/not finalized/);
+ head='0x10';await assert.rejects(()=>verifyEvmUsdcTransfer(input),/another Base block/);head='0x11';
+ canonical='0x'+'5'.repeat(64);await assert.rejects(()=>verifyEvmUsdcTransfer(input),/not canonical/);canonical=hash;
+ receipt={...original,blockHash:undefined};await assert.rejects(()=>verifyEvmUsdcTransfer(input),/not canonical/);
+ receipt={...original,status:'0x0'};await assert.rejects(()=>verifyEvmUsdcTransfer(input),/did not succeed/);
+ receipt=null;await assert.rejects(()=>verifyEvmUsdcTransfer(input),/no result/);
+ receipt=structuredClone(original);receipt.logs[0].address='0x'+'6'.repeat(40);await assert.rejects(()=>verifyEvmUsdcTransfer(input),/No matching USDC/);
+ receipt=structuredClone(original);receipt.logs[0].data='0x1';await assert.rejects(()=>verifyEvmUsdcTransfer(input),/No matching USDC/);
+ receipt=structuredClone(original);await assert.rejects(()=>verifyEvmUsdcTransfer({...input,payer:'0x'+'7'.repeat(40)}),/No matching USDC/);
+ await assert.rejects(()=>verifyEvmUsdcTransfer({...input,recipient:'0x'+'7'.repeat(40)}),/No matching USDC/);
+ await assert.rejects(()=>verifyEvmUsdcTransfer({...input,notAfter:'2026-09-25T12:00:30Z'}),/after the checkout expired/);
+ chain='0x1';await assert.rejects(()=>verifyEvmUsdcTransfer(input),/chain does not match/);
+ await assert.rejects(()=>verifyEvmUsdcTransfer({...input,chain:'ethereum'}),/only supported for Base/);
+ console.log('PASS: Base bills accept canonical two-block inclusion without L1 finality; default finality, chain, canonical hash, receipt success, token, payer, recipient, amount and time checks remain enforced.');
+}finally{globalThis.fetch=oldFetch;if(oldRpc===undefined)delete process.env.PRIVATE_RPC_URL;else process.env.PRIVATE_RPC_URL=oldRpc}
