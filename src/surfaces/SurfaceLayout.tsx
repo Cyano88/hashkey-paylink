@@ -14,7 +14,7 @@ export default function SurfaceLayout() {
     onPayWalletStateChange: setWallet,
     onPaySuccessVisibleChange: setSuccess,
   }), [selectedNet])
-  return <div className="min-h-screen bg-white font-inter text-gray-950 dark:bg-gray-950 dark:text-white">
+  return <div className="min-h-screen bg-white font-sans text-gray-950 dark:bg-gray-950 dark:text-white">
     {wallet.connected && wallet.disconnect && !success && <div className="mx-auto flex max-w-5xl justify-end px-4 pt-4">
       <button type="button" onClick={wallet.disconnect} className="text-sm font-semibold text-gray-500">Disconnect</button>
     </div>}
