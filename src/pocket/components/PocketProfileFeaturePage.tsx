@@ -117,13 +117,13 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
   useEffect(() => { void pocketPaymentBiometricsAvailable().then(setBiometricsAvailable) }, [])
   const clean = (value: string) => value.replace(/\D/g, '').slice(0, 6)
   const changePin = async () => {
-    if (!/^\d{6}$/.test(currentPin) || !/^\d{6}$/.test(newPin)) return setError('Enter your current and new six-digit PINs.')
+    if (!/^(?:\d{4}|\d{6})$/.test(currentPin) || !/^\d{4}$/.test(newPin)) return setError('Enter your current PIN and a new four-digit PIN.')
     if (newPin !== confirmPin) return setError('The new PINs do not match.')
     setBusy(true); setError(''); setNotice('')
     try {
       await updatePocketPaymentSecurity(getAccessToken, { action: 'change', currentPin, newPin })
       if (biometrics) await enablePocketPaymentBiometrics(email, newPin)
-      setCurrentPin(''); setNewPin(''); setConfirmPin(''); setNotice('Pocket PIN changed.')
+      setCurrentPin(''); setNewPin(''); setConfirmPin(''); setNotice('Pocket PIN changed.'); window.dispatchEvent(new Event('pocket:pin-changed'))
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Pocket PIN was not changed.') }
     finally { setBusy(false) }
   }
@@ -133,7 +133,7 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
       if (biometrics) {
         await disablePocketPaymentBiometrics(email); setBiometrics(false); setNotice('Payments will use your Pocket PIN.')
       } else {
-        if (!/^\d{6}$/.test(biometricPin)) throw new Error('Enter your current Pocket PIN to enable fingerprint or face.')
+        if (!/^(?:\d{4}|\d{6})$/.test(biometricPin)) throw new Error('Enter your current Pocket PIN to enable fingerprint or face.')
         await verifyPocketPaymentPin(getAccessToken, biometricPin)
         await enablePocketPaymentBiometrics(email, biometricPin)
         setBiometrics(true); setBiometricPin(''); setNotice('Fingerprint or face enabled for payments.')
@@ -165,9 +165,9 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
     <article className='rounded-[26px] bg-white p-5 shadow-sm dark:bg-[#121212] dark:shadow-none'>
       <strong className='text-sm'>Change PIN</strong>
       <input value={currentPin} onChange={event => setCurrentPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='Current PIN' aria-label='Current Pocket PIN' className={inputClass} />
-      <input value={newPin} onChange={event => setNewPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='New PIN' aria-label='New Pocket PIN' className={inputClass} />
-      <input value={confirmPin} onChange={event => setConfirmPin(clean(event.target.value))} inputMode='numeric' type='password' placeholder='Confirm new PIN' aria-label='Confirm new Pocket PIN' className={inputClass} />
-      <button type='button' onClick={() => void changePin()} disabled={busy || currentPin.length !== 6 || newPin.length !== 6 || confirmPin.length !== 6} className='mt-4 min-h-12 w-full rounded-full bg-gray-950 text-xs font-black text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>Change PIN</button>
+      <input value={newPin} onChange={event => setNewPin(clean(event.target.value).slice(0, 4))} inputMode='numeric' type='password' placeholder='New four-digit PIN' aria-label='New Pocket PIN' className={inputClass} />
+      <input value={confirmPin} onChange={event => setConfirmPin(clean(event.target.value).slice(0, 4))} inputMode='numeric' type='password' placeholder='Confirm new PIN' aria-label='Confirm new Pocket PIN' className={inputClass} />
+      <button type='button' onClick={() => void changePin()} disabled={busy || ![4,6].includes(currentPin.length) || newPin.length !== 4 || confirmPin.length !== 4} className='mt-4 min-h-12 w-full rounded-full bg-gray-950 text-xs font-black text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>Change PIN</button>
     </article>
     {!stocks && <button type='button' onClick={() => void reconnectWallet()} disabled={busy} className='min-h-12 w-full rounded-full border border-gray-200 text-xs font-black text-gray-700 disabled:opacity-50 dark:border-[#262626] dark:text-gray-200'>{busy ? 'Please wait...' : 'Reconnect Circle wallet'}</button>}
     {error && <p className='px-2 text-xs font-semibold text-red-500'>{error}</p>}{notice && <p className='px-2 text-xs font-semibold text-emerald-600'>{notice}</p>}

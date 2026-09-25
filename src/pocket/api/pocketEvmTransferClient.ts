@@ -9,6 +9,7 @@ type PocketEvmTransferExecutor = (input: {
   feeQuoteToken?: string
   idempotencyKey?: string
   onChallenge?: (value: { challengeId: string; transactionId: string }) => void
+  onConfirmed?: (hash: `0x${string}`) => void
   onAccepted?: (value: { challengeId: string; transactionId: string }) => void
 }) => Promise<`0x${string}` | null>
 
@@ -79,7 +80,9 @@ export async function executePocketEvmTransfer({
     throw new Error('Enter a valid USDC withdrawal amount.')
   }
   if (amountUnits <= 0n) throw new Error('Enter a USDC withdrawal amount greater than zero.')
-  const txHash = await executor({ session, recipient, amount, feeQuoteToken, idempotencyKey: idempotencyKey ?? crypto.randomUUID(), onChallenge, onAccepted })
+  let verifiedHash: `0x${string}` | null = null
+  const txHash = await executor({ session, recipient, amount, feeQuoteToken, idempotencyKey: idempotencyKey ?? crypto.randomUUID(), onChallenge, onAccepted, onConfirmed: hash => { verifiedHash = hash } })
+  if (txHash && verifiedHash === txHash) return { txHash, status: 'confirmed' as const }
   if (!txHash) return { txHash, status: 'submitted' as const }
   if (!confirm) return { txHash, status: 'submitted' as const }
   try {

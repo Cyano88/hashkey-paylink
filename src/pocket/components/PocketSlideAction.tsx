@@ -9,6 +9,7 @@ export type PocketSlideActionStatus = SlideActionStatus
 
 type PocketSlideActionProps = ComponentProps<typeof SlideAction> & {
   onApprovalBusyChange?: (busy: boolean) => void
+  plain?: boolean
   approvalRequired?: boolean
   onPrepare?: () => Promise<void>
 }
@@ -22,7 +23,7 @@ const POCKET_DEFAULT_LABELS: NonNullable<PocketSlideActionProps['labels']> = {
   error: 'Withdrawal failed',
 }
 
-export default function PocketSlideAction({ labels, status, disabled, onConfirm, approvalRequired = true, onPrepare, onApprovalBusyChange }: PocketSlideActionProps) {
+export default function PocketSlideAction({ labels, status, disabled, onConfirm, approvalRequired = true, onPrepare, onApprovalBusyChange, plain = false }: PocketSlideActionProps) {
   const activationLocked = useRef(false)
   const unlockTimer = useRef<number | null>(null)
   const [optimisticPending, setOptimisticPending] = useState(false)
@@ -39,9 +40,9 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
           ? Wallet
           : Check
   const awaitingApproval = status === 'idle' && optimisticPending
-  const visualStatus = awaitingApproval ? 'pending' : status
+  const visualStatus = status
   const label = awaitingApproval
-    ? (approvalRequired ? 'Awaiting approval' : mergedLabels.pending)
+    ? mergedLabels.idle
     : visualStatus === 'error'
     ? mergedLabels.error
     : visualStatus === 'pending'
@@ -100,11 +101,12 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
     <button
       type="button"
       onClick={() => void confirmOnce()}
-      disabled={disabled || visualStatus !== 'idle'}
+      disabled={disabled || optimisticPending || visualStatus !== 'idle'}
       aria-label={label}
       aria-live={'polite'}
       className={cn(
         'flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-bold text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] transition active:scale-[0.99] disabled:cursor-not-allowed dark:bg-white dark:text-gray-950',
+        plain && '!min-h-12 !rounded-xl !bg-black !text-white !shadow-none',
         disabled && status === 'idle' && 'opacity-45',
         visualStatus === 'pending' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
         visualStatus === 'submitted' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
@@ -112,13 +114,13 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
         visualStatus === 'error' && 'bg-red-600 text-white dark:bg-red-500 dark:text-white',
       )}
     >
-      {visualStatus === 'pending' || visualStatus === 'submitted'
+      {!plain && (visualStatus === 'pending' || visualStatus === 'submitted'
         ? <Loader2 className="h-4 w-4 animate-spin" />
         : visualStatus === 'successful'
           ? <CheckCircle2 className="h-4 w-4" />
           : visualStatus === 'error'
             ? <AlertCircle className="h-4 w-4" />
-            : <ActionIcon className="h-4 w-4" />}
+            : <ActionIcon className="h-4 w-4" />)}
       <span>{label}</span>
     </button>
   )

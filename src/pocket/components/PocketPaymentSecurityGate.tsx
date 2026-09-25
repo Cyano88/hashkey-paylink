@@ -1,3 +1,12 @@
+import { useNavigate } from 'react-router-dom'
+import usePocketIdentity from '../hooks/usePocketIdentity'
+import { beginPocketPaymentPinReset } from '../api/pocketPaymentSecurityClient'
+import { resetPocketSessionSplash } from '../hooks/usePocketSessionSplash'
+import { unregisterPocketPushDevice } from '../lib/pocketPushPreference'
+import { disablePocketQuickApproval } from '../lib/pocketQuickApproval'
+import { deletePocketSecureWalletSession } from '../lib/pocketSecureWalletSession'
+import { clearPocketAccountOperationState } from '../lib/pocketAccountState'
+import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Lock, Loader2 } from './PocketIcons'
 import { readPocketPaymentSecurity, updatePocketPaymentSecurity, verifyPocketPaymentPin } from '../api/pocketPaymentSecurityClient'
@@ -33,26 +42,29 @@ function pendingResetToken() {
 }
 
 function PinFields({ pin, confirm, onPin, onConfirm, disabled }: { pin: string; confirm: string; onPin(value: string): void; onConfirm(value: string): void; disabled: boolean }) {
-  const field = 'min-h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-[#262626] dark:bg-[#171717]'
+  const field = 'min-h-12 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-lg font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-[#262626] dark:bg-[#171717]'
   return <div className='mt-6 space-y-3'>
-    <input value={pin} onChange={event => onPin(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode='numeric' type='password' autoComplete='new-password' placeholder='Six-digit PIN' aria-label='New Pocket PIN' disabled={disabled} className={field} />
-    <input value={confirm} onChange={event => onConfirm(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode='numeric' type='password' autoComplete='new-password' placeholder='Confirm PIN' aria-label='Confirm Pocket PIN' disabled={disabled} className={field} />
+    <input value={pin} onChange={event => onPin(event.target.value.replace(/\D/g, '').slice(0, 4))} inputMode='numeric' type='password' autoComplete='new-password' placeholder='Four-digit PIN' aria-label='New Pocket PIN' disabled={disabled} className={field} />
+    <input value={confirm} onChange={event => onConfirm(event.target.value.replace(/\D/g, '').slice(0, 4))} inputMode='numeric' type='password' autoComplete='new-password' placeholder='Confirm PIN' aria-label='Confirm Pocket PIN' disabled={disabled} className={field} />
   </div>
 }
 
-function PaymentPinSlots({ value, focused }: { value: string; focused: boolean }) {
-  return <div className='grid grid-cols-6 gap-2' aria-hidden='true'>
-    {Array.from({ length: 6 }, (_, index) => {
+function PaymentPinSlots({ value, focused, length }: { value: string; focused: boolean; length: number }) {
+  return <div className='flex justify-center gap-2' aria-hidden='true'>
+    {Array.from({ length }, (_, index) => {
       const filled = index < value.length
       const active = focused && index === value.length
-      return <span key={index} className={`flex aspect-square items-center justify-center rounded-2xl border-2 transition-[background-color,border-color,box-shadow] ${filled ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : active ? 'border-blue-600 bg-gray-50 ring-4 ring-blue-500/15 dark:bg-[#171717]' : 'border-gray-200 bg-gray-50 dark:border-[#262626] dark:bg-[#171717]'}`}>
-        {filled && <span className='h-2.5 w-2.5 rounded-full bg-current' />}
+      return <span key={index} className={`flex h-11 w-11 items-center justify-center rounded-xl border transition-[background-color,border-color,box-shadow] ${filled ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : active ? 'border-blue-600 bg-gray-50 ring-2 ring-blue-500/15 dark:bg-[#171717]' : 'border-gray-200 bg-gray-50 dark:border-[#262626] dark:bg-[#171717]'}`}>
+        {filled && <span className='h-2 w-2 rounded-full bg-current' />}
       </span>
     })}
   </div>
 }
 
 export default function PocketPaymentSecurityGate({ email, getAccessToken, onInitialStateResolved, children }: { email: string; getAccessToken(): Promise<string | null>; onInitialStateResolved?(): void; children: ReactNode }) {
+  const navigate = useNavigate()
+  const { logout } = usePocketIdentity()
+  const [pinLength, setPinLength] = useState(()=>Number(localStorage.getItem(configuredKey(email)+':length')) === 4 ? 4 : 6)
   const [state, setState] = useState<'loading' | 'error' | 'setup' | 'offer' | 'ready'>(() => initialSecurityState(email))
   const [loadAttempt, setLoadAttempt] = useState(0)
   const [resetting, setResetting] = useState(false)
@@ -74,6 +86,8 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     void Promise.all([readPocketPaymentSecurity(getAccessToken), pocketPaymentBiometricsAvailable()])
       .then(([security, available]) => {
         if (!active) return
+        setPinLength(security.pinLength)
+        localStorage.setItem(configuredKey(email)+':length', String(security.pinLength))
         const reset = Boolean(pendingResetToken())
         if (security.configured) localStorage.setItem(configuredKey(email), 'true')
         else localStorage.removeItem(configuredKey(email))
@@ -128,8 +142,10 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     return () => window.removeEventListener(POCKET_PAYMENT_APPROVAL_EVENT, request)
   }, [email, getAccessToken])
 
+  useEffect(()=>{const changed=()=>setLoadAttempt(value=>value+1);window.addEventListener('pocket:pin-changed',changed);return ()=>window.removeEventListener('pocket:pin-changed',changed)},[])
+
   const savePin = async () => {
-    if (!/^\d{6}$/.test(pin)) return setError('Create a six-digit Pocket PIN.')
+    if (!/^\d{4}$/.test(pin)) return setError('Create a four-digit Pocket PIN.')
     if (pin !== confirm) return setError('The PINs do not match.')
     setBusy(true); setError('')
     try {
@@ -137,6 +153,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
       await updatePocketPaymentSecurity(getAccessToken, resetting ? { action: 'reset', pin, resetToken } : { action: 'setup', pin })
       localStorage.setItem(configuredKey(email), 'true')
       localStorage.removeItem(POCKET_PIN_RESET_KEY)
+      setPinLength(4); localStorage.setItem(configuredKey(email)+':length','4')
       setSetupPin(pin); setPin(''); setConfirm('')
       setState(biometricsAvailable ? 'offer' : 'ready')
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Pocket PIN was not saved.') }
@@ -145,7 +162,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
 
   const approveWithPin = async () => {
     const value = approvalPin.trim()
-    if (!/^\d{6}$/.test(value)) return setError('Enter your six-digit Pocket PIN.')
+    if (!/^(?:\d{4}|\d{6})$/.test(value)) return setError('Enter your Pocket PIN.')
     setBusy(true); setError('')
     try {
       const result = await verifyPocketPaymentPin(getAccessToken, value)
@@ -157,7 +174,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
 
   const turnOnBiometrics = async () => {
     const value = setupPin || existingPin.trim()
-    if (!/^\d{6}$/.test(value)) return setError('Enter your six-digit Pocket PIN.')
+    if (!/^(?:\d{4}|\d{6})$/.test(value)) return setError('Enter your Pocket PIN.')
     setBusy(true); setError('')
     try {
       if (!setupPin) await verifyPocketPaymentPin(getAccessToken, value)
@@ -175,6 +192,33 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     window.dispatchEvent(new Event(POCKET_PAYMENT_APPROVAL_CANCELLED_EVENT))
   }
 
+  const retryBiometric = async () => {
+    if (busy || !pending.current) return
+    setApprovalOpen(false); setBusy(true); setError('')
+    try {
+      const value = await readPocketPinWithBiometrics(email)
+      if (!value) throw new Error('Use your Pocket PIN.')
+      const result = await verifyPocketPaymentPin(getAccessToken, value)
+      setPocketPaymentApproval(result.approvalToken, result.expiresAt, result.authorization)
+      pending.current?.resolve(); pending.current = null; setApprovalPin('')
+    } catch { setApprovalOpen(true) }
+    finally { setBusy(false) }
+  }
+  const forgotPin = async () => {
+    if (busy) return
+    setBusy(true); setError('')
+    try {
+      const reset = await beginPocketPaymentPinReset(getAccessToken)
+      localStorage.setItem(POCKET_PIN_RESET_KEY, reset.resetToken)
+      resetPocketSessionSplash()
+      await unregisterPocketPushDevice(getAccessToken).catch(()=>false)
+      await Promise.all([disablePocketPaymentBiometrics(email), disablePocketQuickApproval(email), deletePocketSecureWalletSession(email)])
+      cancelApproval(); clearPocketAccountOperationState()
+      await logout(); navigate(POCKET_BASE_PATH || POCKET_ROUTES.root)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'PIN reset could not start.') }
+    finally { setBusy(false) }
+  }
+
   if (state === 'loading') return <PocketSecuritySurface><Loader2 className='h-6 w-6 animate-spin text-blue-600' /></PocketSecuritySurface>
   if (state === 'error') return <PocketSecuritySurface>
     <section className='w-full py-3 text-center'>
@@ -187,32 +231,34 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     <section className='w-full py-3 text-center'>
       <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10'><Lock className='h-6 w-6' /></span>
       <h1 className='mt-5 text-xl font-black'>{resetting ? 'Reset Pocket PIN' : 'Create your Pocket PIN'}</h1>
-      <p className='mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400'>{resetting ? 'Your sign-in was verified. Choose a new PIN for payments.' : 'Use this six-digit PIN whenever fingerprint or face approval is unavailable.'}</p>
+      <p className='mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400'>{resetting ? 'Your sign-in was verified. Choose a new PIN for payments.' : 'Use this four-digit PIN whenever fingerprint or face approval is unavailable.'}</p>
       <PinFields pin={pin} confirm={confirm} onPin={setPin} onConfirm={setConfirm} disabled={busy} />
       {error && <p className='mt-3 text-xs font-semibold text-red-500'>{error}</p>}
-      <button type='button' onClick={() => void savePin()} disabled={busy || pin.length !== 6 || confirm.length !== 6} className='mt-5 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Saving PIN…' : 'Continue'}</button>
+      <button type='button' onClick={() => void savePin()} disabled={busy || pin.length !== 4 || confirm.length !== 4} className='mt-5 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Saving PIN…' : 'Continue'}</button>
     </section>
   </PocketSecuritySurface>
   if (state === 'offer') return <PocketSecuritySurface scroll>
     <section className='w-full py-3 text-center'>
       <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-400/10'><Lock className='h-6 w-6' /></span>
       <h1 className='mt-5 text-xl font-black'>Faster payment approval</h1><p className='mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400'>{setupPin ? 'Use fingerprint or face first. Your Pocket PIN remains available as fallback.' : 'Confirm your Pocket PIN once, then use fingerprint or face for payments on this phone.'}</p>
-      {!setupPin && <input autoFocus value={existingPin} onChange={event => setExistingPin(event.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={event => { if (event.key === 'Enter') void turnOnBiometrics() }} inputMode='numeric' type='password' autoComplete='current-password' placeholder='Six-digit Pocket PIN' aria-label='Pocket PIN' disabled={busy} className='mt-6 min-h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-[#262626] dark:bg-[#171717]' />}
+      {!setupPin && <input autoFocus value={existingPin} onChange={event => setExistingPin(event.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={event => { if (event.key === 'Enter') void turnOnBiometrics() }} inputMode='numeric' type='password' autoComplete='current-password' placeholder='Pocket PIN' aria-label='Pocket PIN' disabled={busy} className='mt-6 min-h-14 w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 text-center text-xl font-black tracking-[0.35em] outline-none focus:border-blue-500 dark:border-[#262626] dark:bg-[#171717]' />}
       {error && <p className='mt-3 text-xs font-semibold text-red-500'>{error}</p>}
-      <button type='button' disabled={busy || (!setupPin && existingPin.length !== 6)} onClick={() => void turnOnBiometrics()} className='mt-6 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Turning on…' : setupPin ? 'Use fingerprint or face' : 'Verify PIN and enable'}</button>
+      <button type='button' disabled={busy || (!setupPin && existingPin.length !== pinLength)} onClick={() => void turnOnBiometrics()} className='mt-6 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Turning on…' : setupPin ? 'Use fingerprint or face' : 'Verify PIN and enable'}</button>
       <button type='button' disabled={busy} onClick={() => { setBusy(true); setError(''); void disablePocketPaymentBiometrics(email).then(() => setState('ready')).catch(() => setError('Pocket could not save this choice. Try again.')).finally(() => setBusy(false)) }} className='mt-2 min-h-12 w-full text-sm font-bold text-gray-500'>Use PIN only</button>
     </section>
   </PocketSecuritySurface>
 
   return <>{children}{pending.current && approvalOpen && <PocketBottomSheet title="Enter Pocket PIN" onClose={cancelApproval} dismissible={!busy} dismissOnBackdrop={false} layer={90}>
     <section className='pb-1 pt-2 text-center'>
-      <h2 className='text-lg font-black'>Enter Pocket PIN</h2><p className='mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400'>Use your shared Pocket PIN to approve this action.</p>
-      <div className='relative mt-5' onClick={() => document.getElementById('pocket-payment-pin')?.focus()}>
-        <PaymentPinSlots value={approvalPin} focused={approvalFocused} />
-        <input id='pocket-payment-pin' autoFocus value={approvalPin} onFocus={() => setApprovalFocused(true)} onBlur={() => setApprovalFocused(false)} onChange={event => setApprovalPin(event.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={event => { if (event.key === 'Enter') void approveWithPin() }} inputMode='numeric' type='password' autoComplete='current-password' aria-label='Six-digit Pocket PIN' disabled={busy} className='absolute inset-0 h-full w-full cursor-text opacity-[0.01]' />
+      <p className='text-xs text-gray-500'>Enter your PIN to approve.</p>
+      <div className='relative mx-auto mt-4 w-fit' onClick={() => document.getElementById('pocket-payment-pin')?.focus()}>
+        <PaymentPinSlots value={approvalPin} focused={approvalFocused} length={pinLength} />
+        <input id='pocket-payment-pin' autoFocus value={approvalPin} onFocus={() => setApprovalFocused(true)} onBlur={() => setApprovalFocused(false)} onChange={event => setApprovalPin(event.target.value.replace(/\D/g, '').slice(0, pinLength))} onKeyDown={event => { if (event.key === 'Enter') void approveWithPin() }} inputMode='numeric' type='password' autoComplete='current-password' aria-label={pinLength+'-digit Pocket PIN'} disabled={busy} className='absolute inset-0 h-full w-full cursor-text opacity-[0.01]' />
       </div>
+      <button type='button' disabled={busy} onClick={()=>void forgotPin()} className='mt-3 block min-h-9 w-full text-xs text-gray-500'>Forgot PIN?</button>
+      {pocketPaymentBiometricsEnabled() && <button type='button' disabled={busy} onClick={()=>void retryBiometric()} className='block min-h-9 w-full text-xs font-semibold'>Use biometric</button>}
       {error && <p className='mt-3 text-xs font-semibold text-red-500'>{error}</p>}
-      <button type='button' onClick={() => void approveWithPin()} disabled={busy || approvalPin.trim().length !== 6} className='mt-5 min-h-14 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Confirming…' : 'Confirm'}</button>
+      <button type='button' onClick={() => void approveWithPin()} disabled={busy || approvalPin.trim().length !== pinLength} className='mt-4 min-h-12 w-full rounded-full bg-gray-950 text-sm font-bold text-white disabled:opacity-50 dark:bg-white dark:text-gray-950'>{busy ? 'Confirming…' : 'Confirm'}</button>
     </section>
   </PocketBottomSheet>}</>
 }
