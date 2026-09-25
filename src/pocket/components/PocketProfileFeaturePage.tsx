@@ -122,8 +122,15 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
     setBusy(true); setError(''); setNotice('')
     try {
       await updatePocketPaymentSecurity(getAccessToken, { action: 'change', currentPin, newPin })
-      if (biometrics) await enablePocketPaymentBiometrics(email, newPin)
       setCurrentPin(''); setNewPin(''); setConfirmPin(''); setNotice('Pocket PIN changed.'); window.dispatchEvent(new Event('pocket:pin-changed'))
+      if (biometrics) {
+        try { await enablePocketPaymentBiometrics(email, newPin) }
+        catch {
+          await disablePocketPaymentBiometrics(email)
+          setBiometrics(false)
+          setNotice('PIN changed. Enable fingerprint or face again when ready.')
+        }
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Pocket PIN was not changed.') }
     finally { setBusy(false) }
   }
