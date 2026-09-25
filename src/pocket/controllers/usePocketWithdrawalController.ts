@@ -13,6 +13,12 @@ import type { PocketSolanaEmailSession } from './usePocketWalletController'
 import { reconcileCircleEvmEmailWithdraw, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { validatePocketWithdrawal } from './pocketWithdrawalValidation'
 
+function sendError(reason: unknown) {
+  const message = reason instanceof Error ? reason.message : 'Could not prepare this transfer.'
+  return /transfer amount exceeds balance|insufficient.*funds|insufficient usdc/i.test(message)
+    ? 'Insufficient USDC to cover the amount and fees. Try a lower amount.' : message
+}
+
 const SOLANA_SEND_OPERATION_KEY = 'pocket:solana-send:operation:v2'
 const EVM_SEND_OPERATION_KEY = 'pocket:evm-send:operation:v1'
 type SolanaSendOperation = { context?: string; fingerprint: string; idempotencyKey: string; challengeId: string; transactionId: string; state: 'preparing' | 'submitted' | 'accepted' | 'confirmed'; updatedAt: number; sourceAddress?: string; recipient?: string; amount?: string }
@@ -216,7 +222,7 @@ export default function usePocketWithdrawalController({
         acceptedFeeToken()
       }
     } catch (reason) {
-      setError(reason instanceof Error && reason.message === 'FEE_REVIEW_REQUIRED' ? '' : reason instanceof Error && reason.message ? reason.message : 'Pocket could not prepare this wallet.')
+      setError(reason instanceof Error && reason.message === 'FEE_REVIEW_REQUIRED' ? '' : sendError(reason))
       throw reason
     }
   }, [address, amount, balance, chargeFees, feeQuote, clearExternalError, ensureWallet, getEvmSession, getSolanaSession, network, wallet])
@@ -281,6 +287,7 @@ export default function usePocketWithdrawalController({
           onChallenge: identifiers => { setSubmissionReference(identifiers.challengeId); writeSolanaOperation({ ...operation, ...identifiers, state: 'submitted', updatedAt: Date.now() }) },
           onAccepted: identifiers => {
             circleAccepted = true
+            setStatus('submitted')
             writeSolanaOperation({ ...operation, ...identifiers, state: 'accepted', updatedAt: Date.now() })
           },
         })
