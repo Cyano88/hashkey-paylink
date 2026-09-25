@@ -1,3 +1,4 @@
+import {getAddress,isAddress,type Address} from 'viem';
 import { configuredXLayerAssets } from './registry.js';
 import { tradeXLayerClient, tradeXLayerEnabled, verifyFactory } from './planner.js';
 import { TRADE_FACTORY_ABI, TRADE_TOKEN_ABI, TRADE_XLAYER_FACTORY } from '../../src/lib/xstocksAgreement/protocol.js';
@@ -6,12 +7,15 @@ import { rankXStockAssets, xStockMetadata, type XStockPaymentAsset } from '../..
 // Pocket metadata is intersected with the server registry and pinned factory.
 export async function tradeXLayerAssets(env:NodeJS.ProcessEnv, client = tradeXLayerClient(env)) {
   if (!tradeXLayerEnabled(env)) return {enabled:false, assets:[] as XStockPaymentAsset[]};
+  const shares=env.HASHPAYLINK_XSTOCKS_SHARE_ASSETS==='true';
+  if(shares&&(env.HASHPAYLINK_XSTOCKS_SHARE_ENABLED!=='true'||!isAddress(env.HASHPAYLINK_XSTOCKS_SHARE_FACTORY||'')))return {enabled:false,assets:[] as XStockPaymentAsset[]};
+  const factory:Address=shares?getAddress(env.HASHPAYLINK_XSTOCKS_SHARE_FACTORY!):TRADE_XLAYER_FACTORY;
   const candidates = [...configuredXLayerAssets(env).values()].filter(asset => xStockMetadata(asset.address));
   const block = await client.getBlock({blockTag:'latest'});
   if (!block.hash || Math.abs(Date.now()/1000 - Number(block.timestamp)) > 60) throw Error('Asset approvals are unavailable.');
-  await verifyFactory(client, block.number);
+  await verifyFactory(client, block.number,{factory,shares});
   const reads = candidates.length ? await client.multicall({blockNumber:block.number, batchSize:16_384, contracts:candidates.flatMap(asset => [
-    {address:TRADE_XLAYER_FACTORY, abi:TRADE_FACTORY_ABI, functionName:'approvedTokens' as const, args:[asset.address] as const},
+    {address:factory, abi:TRADE_FACTORY_ABI, functionName:'approvedTokens' as const, args:[asset.address] as const},
     {address:asset.address, abi:TRADE_TOKEN_ABI, functionName:'decimals' as const},
   ])}) : [];
   const assets:XStockPaymentAsset[] = [];

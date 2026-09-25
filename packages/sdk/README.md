@@ -42,3 +42,14 @@ Useful exports:
 - `isValidEvmAddress`
 - `isLikelySolanaAddress`
 - `isValidUsdcAmount`
+
+### xStocks share-based Trade checkout
+
+Import `createXStocksAgreementClient` and `xStocksCheckoutUrl` from
+`@hashpaylink/sdk/xstocks` in your server code. Create drafts with
+`kind: 'trade'` and `stockCustody: 'xstocks-shares-v2'`, plus exact quantity strings,
+accepted Trade details, participant IDs and a stable idempotency key. Return only
+the hosted URL and public receipt data to your UI; never expose the developer key.
+The feature is unavailable until the share-based factory is activated. Existing
+agreements retain their original custody version. Receipt integer strings must
+not be converted through JavaScript Number.

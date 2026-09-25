@@ -1,17 +1,18 @@
 import { xStockMetadata } from '../../src/lib/xstocksAgreement/xStocksAssets.js';
 import { xLayer } from 'viem/chains';
-import { createPublicClient, http, encodeAbiParameters, encodeFunctionData, getAddress, keccak256, stringToHex, zeroAddress, type Address, type Hex } from 'viem';
-import { TRADE_FACTORY_ABI as factoryAbi, TRADE_ESCROW_ABI as escrowAbi, TRADE_TOKEN_ABI as tokenAbi, TRADE_XLAYER_FACTORY as factory, TRADE_XLAYER_ARBITER as arbiter, type TradeXLayerAction, type TradeXLayerStatus } from '../../src/lib/xstocksAgreement/protocol.js';
+import { createPublicClient, http, encodeAbiParameters, encodeFunctionData, getAddress, keccak256, stringToHex, zeroAddress, parseAbi, type Address, type Hex } from 'viem';
+import { TRADE_FACTORY_ABI as factoryAbi, TRADE_ESCROW_ABI as escrowAbi, TRADE_TOKEN_ABI as tokenAbi, TRADE_XLAYER_FACTORY as legacyFactory, SHARE_CUSTODY_POLICY, SHARE_FACTORY_RUNTIME_HASH, TRADE_XLAYER_ARBITER as arbiter, type TradeXLayerAction, type TradeXLayerStatus } from '../../src/lib/xstocksAgreement/protocol.js';
 
 const runtimeHash = '0xcc80a2e8e46179070a0a664636e29fa5a83f62eed9d97139aacca5d95c14ec26';
 export function tradeXLayerClient(env: NodeJS.ProcessEnv) {
   return createPublicClient({ chain: xLayer, transport: http(env.XLAYER_MAINNET_RPC_URL || 'https://rpc.xlayer.tech', { timeout: 15000, retryCount: 1 }) });
 }
 export function tradeXLayerEnabled(env: NodeJS.ProcessEnv) { return env.HASHPAYLINK_XSTOCKS_AGREEMENT_PLANNER_ENABLED === 'true'; }
-export async function verifyFactory(client: ReturnType<typeof tradeXLayerClient>, blockNumber?: bigint) {
+export async function verifyFactory(client: ReturnType<typeof tradeXLayerClient>, blockNumber?: bigint, deployment={factory:legacyFactory as Address,shares:false}) {
+  const factory=deployment.factory;
   if (await client.getChainId() !== 196) throw Error('Trade network mismatch.');
   const code = await client.getCode({ address: factory, blockNumber });
-  if (!code || keccak256(code) !== runtimeHash) throw Error('Trade factory does not match the verified deployment.');
+  if (!code || keccak256(code) !== (deployment.shares?SHARE_FACTORY_RUNTIME_HASH:runtimeHash)) throw Error('Trade factory does not match the verified deployment.');
   if (getAddress(await client.readContract({ address: factory, abi: factoryAbi, functionName:'arbiter', blockNumber })) !== arbiter) throw Error('Trade authority mismatch.');
 }
 export function tradeLifecycleActions(state: number, buyer: boolean, now: bigint, deadlines: { fundBy: bigint; dispatchBy: bigint; deliveryBy: bigint; inspectUntil: bigint }): TradeXLayerAction[] {
@@ -25,13 +26,16 @@ export function tradeLifecycleActions(state: number, buyer: boolean, now: bigint
 export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; binding: any; account: Address; action?: TradeXLayerAction; evidence?: unknown }, client = tradeXLayerClient(input.env)): Promise<TradeXLayerStatus> {
   if (!tradeXLayerEnabled(input.env)) return { enabled:false, actions:[] };
   const b = input.binding, t = b.contractTerms;
+  const shares=b.custody===SHARE_CUSTODY_POLICY;
+  if(b.custody!==undefined&&!shares)throw Error('Unknown escrow custody version.');
+  const factory=shares?getAddress(b.factory):legacyFactory;
   if (b.chainId !== 196 || getAddress(b.factory) !== factory || getAddress(t.arbiter) !== arbiter || b.termsHash !== t.termsHash) throw Error('Trade deployment mismatch.');
   const buyer = getAddress(t.buyer) === getAddress(input.account);
   if (!buyer && getAddress(t.seller) !== getAddress(input.account)) throw Error('This wallet is not a participant.');
-  const head = await client.getBlockNumber();
+  const head = await client.getBlockNumber({cacheTime:0});
   if (head < 2n) throw Error('Confirmed Trade state is unavailable.');
   const blockNumber = head - 2n, block = await client.getBlock({ blockNumber });
-  await verifyFactory(client, blockNumber);
+  await verifyFactory(client, blockNumber,{factory,shares});
   const key = keccak256(encodeAbiParameters([{type:'address'},{type:'address'},{type:'bytes32'}], [t.seller,t.buyer,t.offerId]));
   const escrow = await client.readContract({ address:factory, abi:factoryAbi, functionName:'escrows', args:[key], blockNumber });
   const current = await client.readContract({ address:factory, abi:factoryAbi, functionName:'escrows', args:[key] });
@@ -50,8 +54,9 @@ export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; 
   } else {
     // The pinned immutable factory is the only writer of this registry. Verify every bound term as well.
     const names = ['offerId','termsHash','buyer','seller','arbiter','token','amount','fundBy','dispatchWindow','deliveryWindow','inspectionWindow'] as const;
-    for (const name of names) {
-      const actual = await client.readContract({ address:escrow, abi:escrowAbi, functionName:name, blockNumber });
+    const immutableValues=await Promise.all(names.map(functionName=>client.readContract({address:escrow,abi:escrowAbi,functionName,blockNumber})));
+    for (const [index,name] of names.entries()) {
+      const actual = immutableValues[index];
       if (String(actual).toLowerCase() !== String(t[name]).toLowerCase()) throw Error('Escrow terms mismatch: '+name);
     }
     const state = Number(await client.readContract({ address:escrow, abi:escrowAbi, functionName:'state', blockNumber }));
@@ -85,11 +90,20 @@ export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; 
   }
   // This pinned factory uses nominal ERC20 accounting, incompatible with stock shares/rebases.
   // Preserve cancellation and already-funded recovery while a versioned share escrow is reviewed.
-  if (xStockMetadata(t.token) && (result.state === undefined || result.state <= 1)) {
+  if (!shares && xStockMetadata(t.token) && (result.state === undefined || result.state <= 1)) {
     result.fundingIssue = 'This agreement uses an escrow that cannot safely accept xStocks. No stock payment has been taken. A replacement agreement is required.';
     result.actions = result.actions.filter(action => !['create','accept','approve','fund'].includes(action));
     if (input.action && ['create','accept','approve','fund'].includes(input.action)) throw Object.assign(new Error(result.fundingIssue), {status:422});
   }
+  if (shares && result.state !== undefined) {
+    const fields=['fundedShares','buyerSettledShares','sellerSettledShares','buyerUnderlyingAtSettlement','sellerUnderlyingAtSettlement'] as const;
+    const values=await Promise.all(fields.map(functionName=>client.readContract({address:escrow,abi:escrowAbi,functionName,blockNumber})));
+    const stockAbi=parseAbi(['function getUnderlyingAmountByShares(uint256) view returns(uint256)','function getSharesByUnderlyingAmount(uint256) view returns(uint256)']);
+    const currentUnderlying=await client.readContract({address:t.token,abi:stockAbi,functionName:'getUnderlyingAmountByShares',args:[values[0]],blockNumber});
+    result.stockReceipt={policy:SHARE_CUSTODY_POLICY,fundedShares:String(values[0]),buyerSettledShares:String(values[1]),sellerSettledShares:String(values[2]),buyerUnderlyingAtSettlement:String(values[3]),sellerUnderlyingAtSettlement:String(values[4]),currentUnderlyingUnits:String(currentUnderlying),observedBlock:blockNumber.toString()};
+    if(result.state<=1&&await client.readContract({address:t.token,abi:stockAbi,functionName:'getSharesByUnderlyingAmount',args:[BigInt(t.amount)],blockNumber})===0n){result.fundingIssue='The amount is too small to transfer one stock share unit.';result.actions=result.actions.filter(a=>!['approve','fund'].includes(a));}
+  }
+  if(shares && input.env.HASHPAYLINK_XSTOCKS_SHARE_ENABLED!=='true')result.actions=result.actions.filter(a=>!['create','accept','approve','fund'].includes(a));
   if (input.action) {
     if (!result.actions.includes(input.action) || !data) throw Error('This action is no longer available. Refresh the trade.');
     await client.call({ account:input.account, to, data, value:0n });
