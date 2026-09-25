@@ -1,0 +1,7 @@
+@keyframes stream-sheet-enter { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes stream-modal-enter { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes stream-backdrop-enter { from { opacity: 0; } to { opacity: 1; } }
+.stream-confirm-backdrop { animation: stream-backdrop-enter 160ms ease-out; }
+.stream-confirm-panel { animation: stream-sheet-enter 240ms cubic-bezier(.22,1,.36,1); }
+@media (min-width: 640px) { .stream-confirm-panel { animation: stream-modal-enter 180ms ease-out; } }
+@media (prefers-reduced-motion: reduce) { .stream-confirm-panel, .stream-confirm-backdrop { animation: none; } }

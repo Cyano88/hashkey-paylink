@@ -12,18 +12,23 @@ const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null
 await build({entryPoints:['src/components/xstocksAgreement/HostedWorkCheckout.tsx'],bundle:true,platform:'node',format:'esm',packages:'external',jsx:'automatic',outfile:output.pathname.replace(/^\/([A-Za-z]:)/,'$1'),plugins:[{name:'wallet-fixtures',setup(b){b.onResolve({filter:/^react(\/jsx-runtime)?$/},a=>({path:pathToFileURL(require.resolve(a.path)).href,external:true}));b.onResolve({filter:/(@privy-io\/react-auth|\/hostedWallet|\.\/ConfirmSheet)$/},a=>({path:a.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path.includes('react-auth')?`export const usePrivy=()=>({authenticated:true,user:{id:'fixture'}}),useWallets=()=>({wallets:[]}),useSendTransaction=()=>({sendTransaction:()=>{throw Error('Unexpected signing')}});`:a.path.includes('hostedWallet')?`export const selectHostedWallet=()=>globalThis.__checkout.wallet;`:`export const useStreamConfirm=()=>({confirm:(...a)=>globalThis.__checkout.confirm(...a),confirmation:null});` }));}}]});
 try{
  const {default:Checkout}=await import(output.href);
- let fail=false,state=1,resolveConfirmation;
- const request=async()=>{if(fail)throw Error('upstream HTML');return {enabled:true,state,actions:state===1?['approve','cancel']:[],wallet:{address},customerReady:true,providerReady:true}};
+ let fail=false,state=1,resolveConfirmation,receipt;
+ const request=async()=>{if(fail)throw Error('upstream HTML');return {enabled:true,state,stockReceipt:receipt,actions:state===1?['approve','cancel']:[],wallet:{address},customerReady:true,providerReady:true}};
  const item={id:'fixture',activeVersion:1,role:'customer',terms:[{kind:'trade',version:1,amount:'0.00222',durationSeconds:86400,xlayerPayment:{token:'0xc845b2894dbddd03858fd2d643b4ef725fe0849d',decimals:18,amountUnits:'2220000000000000',reviewHours:48}}]};
  let tree;await act(async()=>{tree=TestRenderer.create(React.createElement(Checkout,{item,request,onUpdated(){}}))});
  const buttons=()=>tree.root.findAllByType('button');const find=t=>buttons().find(b=>b.children.join('')===t);const text=()=>JSON.stringify(tree.toJSON());
- assert.ok(find('Pay into escrow'));assert.equal(find('Approve payment'),undefined);
+ assert.ok(find('Pay securely'));assert.equal(find('Approve payment'),undefined);
  fail=true;await act(async()=>{await find('Refresh agreement').props.onClick()});
- assert.equal(find('Pay into escrow'),undefined);assert.equal(find('Cancel unpaid escrow'),undefined);assert.match(text(),/Payment status unavailable/);
- fail=false;await act(async()=>{await find('Refresh agreement').props.onClick()});assert.ok(find('Pay into escrow'));assert.doesNotMatch(text(),/Payment status unavailable/);
+ assert.equal(find('Pay securely'),undefined);assert.equal(find('Cancel payment'),undefined);assert.match(text(),/Payment status unavailable/);
+ fail=false;await act(async()=>{await find('Refresh agreement').props.onClick()});assert.ok(find('Pay securely'));assert.doesNotMatch(text(),/Payment status unavailable/);
  globalThis.__checkout.confirm=()=>new Promise(r=>resolveConfirmation=r);
- await act(async()=>{find('Pay into escrow').props.onClick()});assert.equal(find('Pay into escrow'),undefined);assert.equal(find('Cancel unpaid escrow'),undefined);
- await act(async()=>{resolveConfirmation(false)});assert.ok(find('Pay into escrow'));
- state=2;await act(async()=>{await find('Refresh agreement').props.onClick()});assert.match(text(),/Payment held in escrow/);assert.equal(find('Pay into escrow'),undefined);assert.equal(find('Cancel unpaid escrow'),undefined);
+ await act(async()=>{find('Pay securely').props.onClick()});assert.equal(find('Pay securely'),undefined);assert.equal(find('Cancel payment'),undefined);
+ await act(async()=>{resolveConfirmation(false)});assert.ok(find('Pay securely'));
+ state=2;await act(async()=>{await find('Refresh agreement').props.onClick()});assert.match(text(),/Payment held securely/);assert.equal(find('Pay securely'),undefined);assert.equal(find('Cancel payment'),undefined);
+ receipt={fundedShares:'2216229757026900',currentUnderlyingUnits:'0',buyerUnderlyingAtSettlement:'0',sellerUnderlyingAtSettlement:'2219999999999999',buyerSettledShares:'0',sellerSettledShares:'2216229757026900',observedBlock:'100'};
+ state=6;await act(async()=>{await find('Refresh agreement').props.onClick()});
+ assert.match(text(),/Paid to seller/);assert.match(text(),/0.00222/);assert.doesNotMatch(text(),/Refunded to you/);
+ const details=tree.root.findAllByType('details').find(d=>JSON.stringify(d.toJSON?.()||d.findAllByType('summary').map(n=>n.children)).includes('Transaction details'));
+ assert.ok(details);assert.equal(details.props.open,undefined,'Exact records are collapsed by default');
  await act(async()=>tree.unmount());console.log('Hosted checkout UI passed: stale status blocks actions, refresh recovers, processing hides CTAs, funded state removes unpaid actions.');
 }finally{await unlink(output)}

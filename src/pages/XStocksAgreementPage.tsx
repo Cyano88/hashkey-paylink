@@ -6,6 +6,7 @@ import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import { CheckoutTrustLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
 import HostedWorkCheckout from '../components/xstocksAgreement/HostedWorkCheckout'
 import { createHostedWorkRequest, type HostedReply } from '../lib/xstocksAgreement/hostedClient'
+import { workPaymentLabel } from '../lib/xstocksAgreement/workXLayer'
 import { PRIVY_APP_ID } from '../lib/authMode'
 
 const button='min-h-11 w-full rounded-full bg-gray-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950'
@@ -75,13 +76,13 @@ function ConnectedAgreement({agreementId}:{agreementId:string}){
       {ready&&!embedded.length&&!hasLinkedWallet&&!agreement.accepted[session.reply.role]&&session.reply.fundingEnabled&&
         <button className={button+' mt-4'} disabled={creating} onClick={()=>void setupWallet()}>{creating?'Setting up wallet…':'Set up payment wallet'}</button>}
       {hasLinkedWallet&&ready&&!embedded.length&&<p className='mt-3 text-sm'>Restoring your existing payment wallet. Sign in again if it does not load.</p>}
-      {embedded.length>1&&<p className='mt-3 text-sm' role='alert'>More than one embedded wallet is linked. Contact support to continue.</p>}
+      {embedded.length>1&&<p className='mt-3 text-sm' role='alert'>More than one payment wallet is linked. Contact support to continue.</p>}
       {agreement.terms.kind==='trade'&&agreement.terms.trade&&<dl className='mt-4 space-y-2 text-xs text-gray-500'>
-        <div><dt>Item quantity</dt><dd>{agreement.terms.trade.price}</dd></div>
-        <div><dt>Delivery fee</dt><dd>{agreement.terms.trade.deliveryFee}</dd></div>
+        <div className="flex justify-between gap-4"><dt>Item price</dt><dd>{agreement.terms.trade.price} {workPaymentLabel(agreement.terms.xlayerPayment)}</dd></div>
+        <div className="flex justify-between gap-4"><dt>Delivery</dt><dd>{Number(agreement.terms.trade.deliveryFee)===0?'No charge':agreement.terms.trade.deliveryFee+' '+workPaymentLabel(agreement.terms.xlayerPayment)}</dd></div>
         <div><dt>Handover</dt><dd>{agreement.terms.trade.handover} - {agreement.terms.trade.location}</dd></div>
         {agreement.terms.trade.carrier&&<div><dt>Carrier</dt><dd>{agreement.terms.trade.carrier}</dd></div>}
-        <div><dt>Return terms</dt><dd className='whitespace-pre-wrap break-words'>{agreement.terms.trade.returns}</dd></div>
+        <div><dt className="sr-only">Returns</dt><dd><details><summary className="min-h-8 cursor-pointer">Return terms</summary><p className="whitespace-pre-wrap break-words leading-5">{agreement.terms.trade.returns}</p></details></dd></div>
       </dl>}
       <HostedWorkCheckout item={{id:agreement.id,activeVersion:agreement.terms.version,role:session.reply.role,terms:[agreement.terms]}}
         request={session.request} onUpdated={()=>{}}/>
