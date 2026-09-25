@@ -1,4 +1,5 @@
-﻿import { createHash } from 'node:crypto'
+﻿import { walletReceiveDetails } from './wallet-receive-details.js'
+import { createHash } from 'node:crypto'
 import type { Request, Response } from 'express'
 import { decodeFunctionData, encodeFunctionData, getAddress, isAddress, parseAbi, zeroAddress, type Hex, type Address } from 'viem'
 import { resolveDeveloperApiKeyPolicy } from './developer-projects.js'
@@ -56,6 +57,8 @@ export function createArcWalletHandler(overrides: Partial<typeof defaults> = {})
    } else if(method==='POST'&&['/v1/w3s/user/initialize','/v1/w3s/user/wallets'].includes(path)) {
     if(!token||payload.accountType!=='SCA'||JSON.stringify(payload.blockchains)!=='["ARC"]')fail(400,'Only Arc mainnet smart wallets are supported.')
     result=await d.provider(path,token,{idempotencyKey:scopedId(payload.idempotencyKey),accountType:'SCA',blockchains:['ARC'],...(path.endsWith('/wallets')?{metadata:[{name:policy!.merchantName+' Arc'}]}:{})})
+   } else if(method==='GET'&&path==='/receive') {
+    result={wallets:(await wallets()).map(wallet=>({walletId:wallet.id,...walletReceiveDetails('arc',wallet.address)}))}
    } else if(method==='GET'&&path==='/v1/w3s/wallets?pageSize=50') {
     result={wallets:await wallets()}
    } else if(method==='POST'&&path==='/v1/w3s/user/transactions/contractExecution') {

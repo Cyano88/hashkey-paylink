@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { walletReceiveDetails } from './wallet-receive-details.js'
 import { formatUnits, getAddress, isAddress, zeroAddress } from 'viem'
 import { resolveDeveloperApiKeyPolicy } from './developer-projects.js'
 import { assertLiveDeveloperRequest } from './developer-environment.js'
@@ -19,6 +20,7 @@ export function createStockWalletBalancesHandler(overrides: Partial<typeof defau
       if (!policy || policy.environment !== 'live' || policy.checkoutMode !== 'human') fail(403, 'A live stock balance read key is required.')
       const wallet = req.body?.wallet
       if (typeof wallet !== 'string' || !isAddress(wallet) || getAddress(wallet) === zeroAddress) fail(400, 'Provide a valid X Layer wallet.')
+      if (req.originalUrl?.split('?')[0] === '/api/v2/wallets/stocks/receive') return res.json({ ok: true, wallet: getAddress(wallet), chainId: 196, receive: walletReceiveDetails('xlayer', getAddress(wallet)) })
       const snapshot = await d.balances('developer:' + policy.partnerId, getAddress(wallet))
       const stale = d.now() - snapshot.observedAt >= 60000
       let prices: Awaited<ReturnType<typeof readStockMarketPrices>> = {}
@@ -30,7 +32,7 @@ export function createStockWalletBalancesHandler(overrides: Partial<typeof defau
       })
       const pricingComplete = holdings.every(h => h.estimatedValueUsd !== null)
       const sum = holdings.reduce((total, h) => total + (h.estimatedValueUsd ?? 0), 0)
-      return res.json({ ok: true, wallet: getAddress(wallet), chainId: 196, holdings, complete: snapshot.complete, stale, observedAt: snapshot.observedAt, blockNumber: snapshot.blockNumber.toString(), pricingComplete, estimatedValueUsd: snapshot.complete && !stale && pricingComplete && Number.isFinite(sum) ? sum : null })
+      return res.json({ ok: true, wallet: getAddress(wallet), chainId: 196, receive: walletReceiveDetails('xlayer', getAddress(wallet)), gas: { symbol: 'OKB', decimals: 18, units: snapshot.gas.toString(), balance: formatUnits(snapshot.gas, 18), observedAt: snapshot.observedAt, stale }, holdings, complete: snapshot.complete, stale, observedAt: snapshot.observedAt, blockNumber: snapshot.blockNumber.toString(), pricingComplete, estimatedValueUsd: snapshot.complete && !stale && pricingComplete && Number.isFinite(sum) ? sum : null })
     } catch (reason) {
       const error = reason as Error & { status?: number }
       return res.status(error.status || 503).json({ ok: false, error: error.status ? error.message : 'Stock balances are unavailable. Try again.' })
