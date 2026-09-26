@@ -1,7 +1,8 @@
+import { pocketActivityIcon } from '../../components/pocketActivityIcon'
 import { pocketActivityAmount, currentPocketActivityRow } from '../../lib/pocketActivityPresentation'
 import { pocketActivityArchiveKey } from '../../lib/pocketActivityArchive'
 import { useEffect, useState } from 'react'
-import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Receipt, Landmark, Store, Filter, Deposit, RequestMoney, CreditCard } from '../../components/PocketIcons'
+import { Filter, Deposit } from '../../components/PocketIcons'
 import type { PocketActivityRow } from '../../models/pocketActivity'
 import { isIncomingPosPayment, isOutgoingPosPurchase, pocketBankRecipientLabel } from '../../lib/pocketPurchaseKind'
 import { pocketActivityStatus } from '../../lib/pocketReceipt'
@@ -99,8 +100,8 @@ export default function PocketActivityPanel({rail='stablecoins',hideHeading=fals
     {busy&&!transactions.length?<PocketRecentActivitySkeleton/>:!visible.length?<p className="py-12 text-center text-xs text-gray-500">{error&&!transactions.length?error:'No transactions to show.'}</p>:<div aria-label="Transactions">
       {groups.map(group=><section key={group.key} data-pocket-activity-day className="mb-5"><h2 className="mb-2 px-1 text-xs font-semibold text-gray-500">{group.label}</h2><div className="rounded-2xl bg-gray-50 px-3 dark:bg-[#141414]">{group.rows.map(row=>{
         const status=pocketActivityStatus(row),outcome=paymentReceiptOutcome({status})
-        const kind=pocketTransactionCategory(row),incoming=row.direction==='in'||['refunded','reversed'].includes(pocketActivityStatus(row))
-        const Icon=kind==='bank'?Landmark:kind==='bills'?Receipt:kind==='pos'?Store:kind==='requests'?RequestMoney:kind==='purchases'?CreditCard:row.source==='wallet-swap'||row.source==='wallet-bridge'?ArrowLeftRight:incoming?ArrowDownToLine:ArrowUpFromLine
+        const incoming=row.direction==='in'||['refunded','reversed'].includes(pocketActivityStatus(row))
+        const Icon=pocketActivityIcon(row)
         const title=pocketBankRecipientLabel(row)||row.activityLabel||row.memo||(incoming?'USDC received':'Payment')
         const detail=pocketBankRecipientLabel(row)?[row.bankName,'Bank transfer'].filter(Boolean).join(' / '):new Date(row.ts).toLocaleDateString(undefined,{day:'numeric',month:'short'})
         return <button key={row.eventId+':'+row.txHash} type="button" onClick={()=>{setSelected(row)}} className="flex w-full items-center gap-3 py-4 text-left" data-pocket-transaction-row>

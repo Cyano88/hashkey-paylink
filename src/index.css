@@ -1077,3 +1077,8 @@ html.dark .polydesk-powered-footer strong {
 
 :root[data-pocket-runtime='native'][data-pocket-support-surface='chat']:not([data-pocket-light-surface='true']) body::before { background: #f5f5f5; }
 :root[data-pocket-runtime='native'][data-pocket-support-surface='chat'].dark:not([data-pocket-light-surface='true']) body::before { background: #171719; }
+
+/* Continue the Pocket sheet backdrop through the protected native status area. */
+html[data-pocket-runtime='native'] body:has([data-pocket-sheet])::before {
+  box-shadow: inset 0 0 0 100vmax rgb(0 0 0 / 40%);
+}
