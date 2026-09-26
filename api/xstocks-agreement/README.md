@@ -147,3 +147,13 @@ Hash PayStream's existing Circle wallet code and styles byte-for-byte.
 
 Activation requires deployed runtime verification and both participants accepting
 a fresh agreement. An old token allowance cannot authorize the new escrow.
+## Web Trade follow-up - 26 September 2026 (local implementation)
+
+- GET /api/v2/xstocks-agreements?id=xag_...&reconcile=true (or idempotencyKey plus reconcile=true) performs a read-only Trade chain refresh after project isolation. It uses the already accepted customer wallet and immutable binding; callers cannot choose an operation or signing account. It returns agreement plus observation.pending/checkedAt, never transaction instructions. Concurrent reads of one record coalesce. Pending, missing or older observations cannot overwrite confirmed state. Paused funding still permits observation.
+- Deploy this provider extension before the HPS consumer. The HPS adapter now explicitly rejects GET replies without the observation envelope rather than silently treating an older provider's stored snapshot as fresh.
+- Hosted session/fetch/JSON loading has a 30-second shared deadline and abort-on-unmount. Background status reads coalesce, skip hidden tabs and refresh on focus/visibility. Manual retry is shown only after failure; financial CTAs remain hidden when status cannot be verified.
+- Disclosure arrows point down when closed and up when open. Native details keyboard semantics remain; source changes apply to the shared hosted component, with no new signing or work-agreement capability.
+- Verified locally: focused API TypeScript; HPS TypeScript; hosted UI/status/concurrency, timeout, hosted Trade boundary, existing API isolation and HPS proxy/interaction suites. Full provider UI typecheck result is recorded in the HPS audit update after completion.
+- No new production transaction, deployment or authenticated browser E2E is claimed by these changes.
+
+Hosted Trade checkout also accepts a narrowly validated first-party returnTo navigation hint for the matching Hash PayStream conversation. It is never payment evidence; generic project-configured return destinations are not implemented by this patch. Focused API and UI TypeScript checks and the production source build passed. Full-repository UI TypeScript did not complete and remains separate from those focused checks.

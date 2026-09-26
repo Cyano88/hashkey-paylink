@@ -1,6 +1,9 @@
+import '../components/xstocksAgreement/disclosures.css'
+import { boundedCheckoutRequest } from '../lib/xstocksAgreement/boundedRequest'
 import { pocketEmbeddedAddresses, retryPocketEmbeddedWallet } from '../pocket/lib/pocketEmbeddedWallet'
 import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { tradeReturnUrl } from '../lib/xstocksAgreement/tradeReturn'
 import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth'
 import PocketEmailLogin from '../pocket/components/PocketEmailLogin'
 import { CheckoutTrustLine, HashPayLinkCheckoutBrand } from '../components/CheckoutChrome'
@@ -17,9 +20,11 @@ async function responseJson(response:Response){
 }
 export default function XStocksAgreementPage(){
   const {agreementId=''}=useParams()
+  const [params]=useSearchParams()
+  const returnTo=tradeReturnUrl(params.get('returnTo'))
   const {ready,authenticated,user,logout}=usePrivy()
   if(!/^xag_[a-f0-9]{64}$/.test(agreementId))return <p role='alert' className='text-center text-sm'>This Agreement link is invalid.</p>
-  return <section className='mx-auto w-full max-w-md'>
+  return <section className='hpl-stock-checkout mx-auto w-full max-w-md'>
     <HashPayLinkCheckoutBrand/>
     <div className='rounded-[1.35rem] border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#111216] sm:p-6'>
       <p className='text-xs font-semibold text-gray-500'>Agreement checkout</p>
@@ -27,13 +32,13 @@ export default function XStocksAgreementPage(){
         <h1 className='mt-2 text-xl font-bold'>Pay with xStocks</h1>
         <p className='mb-5 mt-2 text-sm text-gray-500'>Sign in to Hash PayLink to review your Agreement.</p>
         <PocketEmailLogin context='agreement'/>
-      </>:<ConnectedAgreement key={user?.id+':'+agreementId} agreementId={agreementId}/>}
+      </>:<ConnectedAgreement key={user?.id+':'+agreementId} agreementId={agreementId} returnTo={returnTo}/>}
     </div>
     <CheckoutTrustLine provider='hashpaylink'/>
     {authenticated&&<button type='button' className='mx-auto mt-3 block min-h-11 text-xs text-gray-500 underline' onClick={()=>void logout()}>Switch account</button>}
   </section>
 }
-function ConnectedAgreement({agreementId}:{agreementId:string}){
+function ConnectedAgreement({agreementId,returnTo}:{agreementId:string;returnTo?:string}){
   const {user,getAccessToken,ready,authenticated}=usePrivy(),{wallets}=useWallets(),{createWallet}=useCreateWallet()
   const [session,setSession]=useState<{reply:HostedReply;request:ReturnType<typeof createHostedWorkRequest>}>()
   const [error,setError]=useState(''),[retry,setRetry]=useState(0),[creating,setCreating]=useState(false)
@@ -43,12 +48,14 @@ function ConnectedAgreement({agreementId}:{agreementId:string}){
     const controller=new AbortController();let active=true
     setSession(undefined);setError('')
     const post=async(payload:Record<string,unknown>):Promise<HostedReply>=>{
-      const token=await getAccessToken()
-      if(!active||!token)throw Error('Sign in again to continue.')
-      const reply=await responseJson(await fetch('/api/v2/xstocks-agreements/participant',{
-        method:'POST',signal:controller.signal,headers:{'content-type':'application/json',authorization:'Bearer '+token},
-        body:JSON.stringify(payload),
-      })) as HostedReply
+      const reply=await boundedCheckoutRequest(controller.signal,async signal=>{
+        const token=await getAccessToken()
+        if(signal.aborted||!active||!token)throw Error('Sign in again to continue.')
+        return await responseJson(await fetch('/api/v2/xstocks-agreements/participant',{
+          method:'POST',signal,headers:{'content-type':'application/json',authorization:'Bearer '+token},
+          body:JSON.stringify(payload),
+        })) as HostedReply
+      })
       if(!active)throw Error('Your account changed. Reopen the Agreement.')
       if(reply.agreement.id!==agreementId||!['customer','provider'].includes(reply.role))throw Error('The checkout does not match this Agreement link.')
       if(reply.agreement.walletAppId!==PRIVY_APP_ID)throw Error('The checkout wallet configuration does not match this Agreement. Contact support.')
@@ -86,6 +93,7 @@ function ConnectedAgreement({agreementId}:{agreementId:string}){
       </dl>}
       <HostedWorkCheckout item={{id:agreement.id,activeVersion:agreement.terms.version,role:session.reply.role,terms:[agreement.terms]}}
         request={session.request} onUpdated={()=>{}}/>
+      {agreement.terms.kind==='trade'&&returnTo&&<a className="mt-4 flex min-h-11 items-center justify-center rounded-full border border-gray-200 px-4 text-sm font-semibold dark:border-white/15" href={returnTo}>Return to trade</a>}
     </>:!error&&<p className='mt-4 text-sm' role='status'>Loading Agreement…</p>}
     {error&&<div className='mt-4'><p className='text-sm text-red-600' role='alert'>{error}</p><button className='mt-2 min-h-11 text-sm underline' onClick={()=>setRetry(value=>value+1)}>Try again</button></div>}
   </>

@@ -1,0 +1,8 @@
+
+/* Disclosure controls: down chevron, rotated up when expanded. */
+.hpl-stock-checkout summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.hpl-stock-checkout summary::-webkit-details-marker { display: none; }
+.hpl-stock-checkout summary::marker { content: ''; }
+.hpl-stock-checkout summary::after { content: ''; width: 8px; height: 8px; flex: 0 0 8px; margin: 0 4px 4px 0; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: rotate(45deg); transition: transform 160ms ease; }
+.hpl-stock-checkout details[open] > summary::after { transform: rotate(225deg); margin-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .hpl-stock-checkout summary::after { transition: none; } }
