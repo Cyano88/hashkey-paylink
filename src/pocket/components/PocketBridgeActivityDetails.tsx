@@ -25,16 +25,16 @@ export default function PocketBridgeActivityDetails({ bridge, checking, message,
           </li>
         })}
       </ol>
-      <p className="leading-5 text-gray-500">{completed ? 'USDC arrived in your destination wallet.' : attention ? 'This transfer needs attention. Check its status or contact support before repeating it.' : sent ? 'Your USDC has left the source wallet and is arriving at its destination.' : 'Submitted. Waiting for source confirmation.'}</p>
+      <p className="leading-5 text-gray-500 dark:text-gray-400">{completed ? 'USDC arrived in your destination wallet.' : attention ? 'This transfer needs attention. Check its status or contact support before repeating it.' : sent ? 'Your USDC has left the source wallet and is arriving at its destination.' : 'Submitted. Waiting for source confirmation.'}</p>
     </>}
-    {message && <p role="status" className="leading-5 text-gray-500">{message}</p>}
+    {message && <p role="status" className="leading-5 text-gray-500 dark:text-gray-400">{message}</p>}
     <div className="flex items-center justify-between gap-3">
-      <span className="text-[11px] capitalize text-gray-400">{bridge.source} to {bridge.destination}</span>
+      <span className="text-[11px] capitalize text-gray-500 dark:text-gray-400">{bridge.source} to {bridge.destination}</span>
       {!completed && !failed && <button type="button" disabled={checking} onClick={onCheck} className="min-h-11 font-semibold text-blue-600 disabled:opacity-50">{checking ? 'Checking' : 'Check status'}</button>}
       {failed && onNewBridge && <button type="button" onClick={onNewBridge} className="min-h-11 font-semibold text-blue-600">New bridge</button>}
       {completed && <span className="font-semibold text-emerald-600">{bridgeProgressLabel(progress)}</span>}
     </div>
-    <p className="break-all font-mono text-[10px] text-gray-400">Reference: {bridge.txHash || bridge.challengeId || bridge.id}</p>
-    {bridge.destinationTxHash && <p className="break-all font-mono text-[10px] text-gray-400">Destination: {bridge.destinationTxHash}</p>}
+    <p className="break-all font-mono text-[10px] text-gray-500 dark:text-gray-400">Reference: {bridge.txHash || bridge.challengeId || bridge.id}</p>
+    {bridge.destinationTxHash && <p className="break-all font-mono text-[10px] text-gray-500 dark:text-gray-400">Destination: {bridge.destinationTxHash}</p>}
   </div>
 }

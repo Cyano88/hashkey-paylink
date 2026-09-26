@@ -30,7 +30,7 @@ export default function PocketBottomNav({ active, disabled = false, keyboardOpen
       aria-label="Pocket navigation"
       style={{ display: keyboardOpen ? 'none' : undefined }}
       className={cn(
-        'pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 pb-[max(0.35rem,var(--pocket-safe-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] dark:border-[#262626] dark:bg-[#0b0b0b] dark:shadow-[0_-10px_30px_rgba(0,0,0,0.24)]',
+        'pointer-events-none fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white px-4 pb-[max(0.35rem,var(--pocket-safe-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] dark:border-[#262626] dark:bg-[#0A0A0A] dark:shadow-[0_-10px_30px_rgba(0,0,0,0.24)]',
         keyboardOpen && 'translate-y-full',
       )}
     >

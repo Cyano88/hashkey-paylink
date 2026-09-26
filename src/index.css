@@ -316,222 +316,222 @@ html.dark body::-webkit-scrollbar-thumb:hover {
 }
 
 /* ── Surfaces — 3-level hierarchy: page / card / input ─────────────────────── */
-html.dark .bg-white           { background-color: #1e1e1e; }
-html.dark .bg-gray-50         { background-color: #252525; }
-html.dark .bg-gray-100        { background-color: #2a2a2a; }
-html.dark .bg-gray-200        { background-color: #383838; }
-html.dark .bg-gray-300        { background-color: #555555; }  /* inactive toggle tracks */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-white           { background-color: #1e1e1e; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-gray-50         { background-color: #252525; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-gray-100        { background-color: #2a2a2a; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-gray-200        { background-color: #383838; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-gray-300        { background-color: #555555; }  /* inactive toggle tracks */
 
 /* Opacity variants — Tailwind treats e.g. bg-gray-50/60 as a separate class */
-html.dark .bg-gray-50\/60     { background-color: #252525; }
-html.dark .bg-gray-50\/80     { background-color: #252525; }
-html.dark .bg-blue-50\/60     { background-color: rgba(0, 113, 227, 0.10); }
-html.dark .bg-violet-50\/60   { background-color: rgba(124, 58, 237, 0.10); }
-html.dark .bg-violet-50\/40   { background-color: rgba(124, 58, 237, 0.10); }  /* Flexible Amount banner */
-html.dark .bg-emerald-50\/60  { background-color: rgba(16, 185, 129, 0.10); }  /* Monitoring USDC tag */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-gray-50\/60     { background-color: #252525; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-gray-50\/80     { background-color: #252525; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-blue-50\/60     { background-color: rgba(0, 113, 227, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-violet-50\/60   { background-color: rgba(124, 58, 237, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-violet-50\/40   { background-color: rgba(124, 58, 237, 0.10); }  /* Flexible Amount banner */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-emerald-50\/60  { background-color: rgba(16, 185, 129, 0.10); }  /* Monitoring USDC tag */
 
 /* Header / footer translucent backgrounds */
-html.dark .bg-white\/80       { background-color: rgba(18, 18, 18, 0.92); }
-html.dark .bg-white\/50       { background-color: rgba(18, 18, 18, 0.50); }
-html.dark .bg-gray-100\/80    { background-color: rgba(42, 42, 42, 0.80); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-white\/80       { background-color: rgba(18, 18, 18, 0.92); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-white\/50       { background-color: rgba(18, 18, 18, 0.50); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-gray-100\/80    { background-color: rgba(42, 42, 42, 0.80); }
 
 /* ── Payment card headerBg gradients — all 5 chain tints + success card ─────
    Each chain uses a light pastel gradient (from-blue-50 to-sky-50 etc).
    Override to a dark, subtly-tinted version so text stays readable.
 ──────────────────────────────────────────────────────────────────────────────── */
 /* Base (blue) */
-html.dark .from-blue-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .from-blue-50 {
   --tw-gradient-from: #0a1525;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(10,21,37,0));
 }
-html.dark .to-sky-50   { --tw-gradient-to: #0a1a28; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .to-sky-50   { --tw-gradient-to: #0a1a28; }
 
 /* HashKey (amber/gold) */
-html.dark .from-amber-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .from-amber-50 {
   --tw-gradient-from: #1a1505;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(26,21,5,0));
 }
-html.dark .to-yellow-50 { --tw-gradient-to: #1a1605; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .to-yellow-50 { --tw-gradient-to: #1a1605; }
 
 /* Arc (teal) */
-html.dark .from-teal-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .from-teal-50 {
   --tw-gradient-from: #001818;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(0,24,24,0));
 }
-html.dark .to-cyan-50  { --tw-gradient-to: #001a1c; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .to-cyan-50  { --tw-gradient-to: #001a1c; }
 
 /* Solana (green) */
-html.dark .from-green-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .from-green-50 {
   --tw-gradient-from: #021a0e;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(2,26,14,0));
 }
-html.dark .to-emerald-50 { --tw-gradient-to: #021a0e; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .to-emerald-50 { --tw-gradient-to: #021a0e; }
 
 /* Success card (emerald → green) */
-html.dark .from-emerald-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .from-emerald-50 {
   --tw-gradient-from: #021a0e;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(2,26,14,0));
 }
-html.dark .to-green-50 { --tw-gradient-to: #021a0e; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .to-green-50 { --tw-gradient-to: #021a0e; }
 
 /* Underpayment card header (from-red-50 to-orange-50) */
-html.dark .from-red-50 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .from-red-50 {
   --tw-gradient-from: #200a0a;
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(32,10,10,0));
 }
-html.dark .to-orange-50 { --tw-gradient-to: #201008; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .to-orange-50 { --tw-gradient-to: #201008; }
 
 /* "Link Ready" panel (gray-50/80 → white) */
-html.dark .from-gray-50\/80 {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .from-gray-50\/80 {
   --tw-gradient-from: rgba(37, 37, 37, 0.8);
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(37, 37, 37, 0));
 }
-html.dark .to-white { --tw-gradient-to: #1e1e1e; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .to-white { --tw-gradient-to: #1e1e1e; }
 
 /* ── Borders ────────────────────────────────────────────────────────────────── */
-html.dark .border-gray-100    { border-color: #333333; }
-html.dark .border-gray-200    { border-color: #333333; }
-html.dark .border-gray-300    { border-color: #444444; }
-html.dark .border-white\/60   { border-color: rgba(255, 255, 255, 0.06); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-gray-100    { border-color: #333333; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-gray-200    { border-color: #333333; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-gray-300    { border-color: #444444; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-white\/60   { border-color: rgba(255, 255, 255, 0.06); }
 
 /* ── Dividers ───────────────────────────────────────────────────────────────── */
-html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #333333; }
-html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #333333; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #333333; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #333333; }
 
 /* ── Text — near-white hierarchy ───────────────────────────────────────────── */
-html.dark .text-gray-900      { color: #eeeeee; }
-html.dark .text-gray-800      { color: #e0e0e0; }
-html.dark .text-gray-700      { color: #cccccc; }
-html.dark .text-gray-600      { color: #aaaaaa; }
-html.dark .text-gray-500      { color: #888888; }
-html.dark .text-gray-400      { color: #666666; }
-html.dark .text-gray-300      { color: #555555; }  /* unavailable chain pills */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-gray-900      { color: #eeeeee; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-gray-800      { color: #e0e0e0; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-gray-700      { color: #cccccc; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-gray-600      { color: #aaaaaa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-gray-500      { color: #888888; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-gray-400      { color: #666666; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-gray-300      { color: #555555; }  /* unavailable chain pills */
 
 /* Slate (used in platform fee row) */
-html.dark .text-slate-400     { color: #666666; }
-html.dark .text-slate-500     { color: #555555; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-slate-400     { color: #666666; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-slate-500     { color: #555555; }
 
 /* Hover / focus text */
-html.dark .hover\:text-gray-600:hover  { color: #cccccc; }
-html.dark .hover\:text-gray-700:hover  { color: #cccccc; }
-html.dark .hover\:text-gray-800:hover  { color: #e0e0e0; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .hover\:text-gray-600:hover  { color: #cccccc; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .hover\:text-gray-700:hover  { color: #cccccc; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .hover\:text-gray-800:hover  { color: #e0e0e0; }
 
 /* ── Hover surfaces ─────────────────────────────────────────────────────────── */
-html.dark .hover\:bg-gray-50:hover      { background-color: rgba(255, 255, 255, 0.05); }
-html.dark .hover\:bg-gray-100:hover     { background-color: rgba(255, 255, 255, 0.07); }
-html.dark .hover\:border-gray-300:hover { border-color: #555555; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .hover\:bg-gray-50:hover      { background-color: rgba(255, 255, 255, 0.05); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .hover\:bg-gray-100:hover     { background-color: rgba(255, 255, 255, 0.07); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .hover\:border-gray-300:hover { border-color: #555555; }
 
 /* ── Inputs & textareas ─────────────────────────────────────────────────────── */
 /* bg-transparent inputs (flex amount fields inside gradient header) stay transparent */
-html.dark input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']):not(.bg-transparent),
-html.dark textarea:not(.bg-transparent),
-html.dark select {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']):not(.bg-transparent),
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) textarea:not(.bg-transparent),
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) select {
   background-color: #252525;
   color: #eeeeee;
   border-color: #333333;
 }
 
 /* Transparent inputs: keep bg clear but ensure text is readable */
-html.dark input.bg-transparent,
-html.dark textarea.bg-transparent {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) input.bg-transparent,
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) textarea.bg-transparent {
   background-color: transparent !important;
   color: #eeeeee;
 }
 
-html.dark input:focus:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']):not(.bg-transparent),
-html.dark textarea:focus:not(.bg-transparent) {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) input:focus:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='submit']):not([type='button']):not(.bg-transparent),
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) textarea:focus:not(.bg-transparent) {
   background-color: #2a2a2a;
 }
 
 /* Focus border overrides for flex inputs */
-html.dark .focus\:border-gray-500:focus { border-color: #555555; }
-html.dark .focus\:border-gray-400:focus { border-color: #444444; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .focus\:border-gray-500:focus { border-color: #555555; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .focus\:border-gray-400:focus { border-color: #444444; }
 
-html.dark input::placeholder,
-html.dark textarea::placeholder { color: #555555; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) input::placeholder,
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) textarea::placeholder { color: #555555; }
 
 /* ── Shadows ────────────────────────────────────────────────────────────────── */
-html.dark .shadow-card { box-shadow: 0 0 0 1px #333333, 0 4px 24px rgba(0,0,0,0.5); }
-html.dark .shadow-sm   { box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
-html.dark .shadow-md   { box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .shadow-card { box-shadow: 0 0 0 1px #333333, 0 4px 24px rgba(0,0,0,0.5); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .shadow-sm   { box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .shadow-md   { box-shadow: 0 4px 16px rgba(0,0,0,0.6); }
 
 /* ── Coloured badge tints ───────────────────────────────────────────────────── */
 
 /* Blue */
-html.dark .bg-blue-50         { background-color: rgba(0, 113, 227, 0.12); }
-html.dark .bg-blue-100        { background-color: rgba(0, 113, 227, 0.15); }
-html.dark .border-blue-100    { border-color: rgba(0, 113, 227, 0.25);     }
-html.dark .border-blue-200    { border-color: rgba(0, 113, 227, 0.30);     }
-html.dark .text-blue-800      { color: #93c5fd; }
-html.dark .text-blue-700      { color: #60a5fa; }
-html.dark .text-blue-600      { color: #60a5fa; }
-html.dark .text-blue-500      { color: #60a5fa; }
-html.dark .text-blue-400      { color: #93c5fd; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-blue-50         { background-color: rgba(0, 113, 227, 0.12); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-blue-100        { background-color: rgba(0, 113, 227, 0.15); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-blue-100    { border-color: rgba(0, 113, 227, 0.25);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-blue-200    { border-color: rgba(0, 113, 227, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-blue-800      { color: #93c5fd; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-blue-700      { color: #60a5fa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-blue-600      { color: #60a5fa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-blue-500      { color: #60a5fa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-blue-400      { color: #93c5fd; }
 
 /* Purple */
-html.dark .bg-purple-50       { background-color: rgba(139, 92, 246, 0.12); }
-html.dark .border-purple-100  { border-color: rgba(139, 92, 246, 0.25);     }
-html.dark .border-purple-200  { border-color: rgba(139, 92, 246, 0.30);     }
-html.dark .text-purple-700    { color: #a78bfa; }
-html.dark .text-purple-600    { color: #a78bfa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-purple-50       { background-color: rgba(139, 92, 246, 0.12); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-purple-100  { border-color: rgba(139, 92, 246, 0.25);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-purple-200  { border-color: rgba(139, 92, 246, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-purple-700    { color: #a78bfa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-purple-600    { color: #a78bfa; }
 
 /* Violet */
-html.dark .bg-violet-50       { background-color: rgba(124, 58, 237, 0.12); }
-html.dark .bg-violet-100      { background-color: rgba(124, 58, 237, 0.15); }
-html.dark .border-violet-100  { border-color: rgba(124, 58, 237, 0.25);     }
-html.dark .border-violet-200  { border-color: rgba(124, 58, 237, 0.30);     }
-html.dark .border-violet-400  { border-color: rgba(139, 92, 246, 0.60);     }
-html.dark .text-violet-700    { color: #a78bfa; }
-html.dark .text-violet-600    { color: #a78bfa; }
-html.dark .text-violet-400    { color: #c4b5fd; }  /* Flexible Amount secondary text */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-violet-50       { background-color: rgba(124, 58, 237, 0.12); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-violet-100      { background-color: rgba(124, 58, 237, 0.15); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-violet-100  { border-color: rgba(124, 58, 237, 0.25);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-violet-200  { border-color: rgba(124, 58, 237, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-violet-400  { border-color: rgba(139, 92, 246, 0.60);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-violet-700    { color: #a78bfa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-violet-600    { color: #a78bfa; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-violet-400    { color: #c4b5fd; }  /* Flexible Amount secondary text */
 
 /* Teal */
-html.dark .bg-teal-50         { background-color: rgba(0, 128, 128, 0.12); }
-html.dark .border-teal-100    { border-color: rgba(0, 128, 128, 0.25);     }
-html.dark .border-teal-200    { border-color: rgba(0, 128, 128, 0.30);     }
-html.dark .text-teal-700      { color: #2dd4bf; }
-html.dark .text-teal-600      { color: #2dd4bf; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-teal-50         { background-color: rgba(0, 128, 128, 0.12); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-teal-100    { border-color: rgba(0, 128, 128, 0.25);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-teal-200    { border-color: rgba(0, 128, 128, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-teal-700      { color: #2dd4bf; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-teal-600      { color: #2dd4bf; }
 
 /* Emerald */
-html.dark .bg-emerald-50      { background-color: rgba(16, 185, 129, 0.10); }
-html.dark .border-emerald-100 { border-color: rgba(16, 185, 129, 0.22);     }
-html.dark .border-emerald-200 { border-color: rgba(16, 185, 129, 0.30);     }
-html.dark .border-emerald-300 { border-color: rgba(16, 185, 129, 0.45);     }
-html.dark .text-emerald-700   { color: #34d399; }
-html.dark .text-emerald-600   { color: #34d399; }
-html.dark .text-emerald-500   { color: #6ee7b7; }
-html.dark .text-emerald-400   { color: #6ee7b7; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-emerald-50      { background-color: rgba(16, 185, 129, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-emerald-100 { border-color: rgba(16, 185, 129, 0.22);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.30);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-emerald-300 { border-color: rgba(16, 185, 129, 0.45);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-emerald-700   { color: #34d399; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-emerald-600   { color: #34d399; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-emerald-500   { color: #6ee7b7; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-emerald-400   { color: #6ee7b7; }
 
 /* Green */
-html.dark .bg-green-50        { background-color: rgba(20, 241, 149, 0.08); }
-html.dark .border-green-100   { border-color: rgba(20, 241, 149, 0.15);     }
-html.dark .border-green-200   { border-color: rgba(20, 241, 149, 0.22);     }
-html.dark .text-green-700     { color: #4ade80; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-green-50        { background-color: rgba(20, 241, 149, 0.08); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-green-100   { border-color: rgba(20, 241, 149, 0.15);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-green-200   { border-color: rgba(20, 241, 149, 0.22);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-green-700     { color: #4ade80; }
 
 /* Amber */
-html.dark .bg-amber-50        { background-color: rgba(245, 158, 11, 0.10); }
-html.dark .bg-amber-100       { background-color: rgba(245, 158, 11, 0.15); }  /* overpayment badge */
-html.dark .border-amber-100   { border-color: rgba(245, 158, 11, 0.22);     }
-html.dark .border-amber-200   { border-color: rgba(245, 158, 11, 0.28);     }
-html.dark .text-amber-800     { color: #fde68a; }
-html.dark .text-amber-700     { color: #fcd34d; }
-html.dark .text-amber-600     { color: #fcd34d; }
-html.dark .text-amber-500     { color: #fbbf24; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-amber-50        { background-color: rgba(245, 158, 11, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-amber-100       { background-color: rgba(245, 158, 11, 0.15); }  /* overpayment badge */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-amber-100   { border-color: rgba(245, 158, 11, 0.22);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-amber-200   { border-color: rgba(245, 158, 11, 0.28);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-amber-800     { color: #fde68a; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-amber-700     { color: #fcd34d; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-amber-600     { color: #fcd34d; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-amber-500     { color: #fbbf24; }
 
 /* Red */
-html.dark .bg-red-50          { background-color: rgba(239, 68, 68, 0.10); }
-html.dark .bg-red-100         { background-color: rgba(239, 68, 68, 0.16); }
-html.dark .border-red-100     { border-color: rgba(239, 68, 68, 0.22);     }  /* error state banner */
-html.dark .border-red-200     { border-color: rgba(239, 68, 68, 0.28);     }
-html.dark .border-red-300     { border-color: rgba(239, 68, 68, 0.45);     }
-html.dark .text-red-800       { color: #fca5a5; }
-html.dark .text-red-700       { color: #f87171; }
-html.dark .text-red-600       { color: #f87171; }
-html.dark .text-red-500       { color: #f87171; }
-html.dark .text-red-400       { color: #fca5a5; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-red-50          { background-color: rgba(239, 68, 68, 0.10); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .bg-red-100         { background-color: rgba(239, 68, 68, 0.16); }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-red-100     { border-color: rgba(239, 68, 68, 0.22);     }  /* error state banner */
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-red-200     { border-color: rgba(239, 68, 68, 0.28);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .border-red-300     { border-color: rgba(239, 68, 68, 0.45);     }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-red-800       { color: #fca5a5; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-red-700       { color: #f87171; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-red-600       { color: #f87171; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-red-500       { color: #f87171; }
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .text-red-400       { color: #fca5a5; }
 
 /* ── Gradient border — swap white fill for dark card surface ────────────────── */
-html.dark .gradient-border {
+html.dark:not(:has([data-pocket-colour-scope='stablecoins'])) .gradient-border {
   background: linear-gradient(#1e1e1e, #1e1e1e) padding-box,
     linear-gradient(135deg, #0071e3, #34aadc) border-box;
 }
@@ -1082,3 +1082,49 @@ html.dark .polydesk-powered-footer strong {
 html[data-pocket-runtime='native'] body:has([data-pocket-sheet])::before {
   box-shadow: inset 0 0 0 100vmax rgb(0 0 0 / 40%);
 }
+
+/* Pocket controls: one primary action treatment in both themes. */
+:root {
+  --pocket-action-bg: #111111;
+  --pocket-action-text: #ffffff;
+  --pocket-action-hover: #262626;
+  --pocket-control-border: #d1d5db;
+  --pocket-focus: #6b7280;
+}
+:root.dark {
+  --pocket-action-bg: #ffffff;
+  --pocket-action-text: #111111;
+  --pocket-action-hover: #e5e7eb;
+  --pocket-control-border: #404040;
+  --pocket-focus: #d1d5db;
+}
+@layer components {
+.pocket-cta-primary, .pocket-cta-secondary {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+  box-shadow: none;
+  transition: opacity 150ms;
+}
+.pocket-cta-primary { background: var(--pocket-action-bg); color: var(--pocket-action-text); }
+.pocket-cta-secondary { background: transparent; color: var(--pocket-action-bg); border: 1px solid var(--pocket-control-border); }
+.pocket-cta-primary:enabled:hover { background: var(--pocket-action-hover); }
+.pocket-cta-primary:disabled, .pocket-cta-secondary:disabled { opacity: .45; cursor: not-allowed; }
+.pocket-cta-primary:focus-visible, .pocket-cta-secondary:focus-visible { outline: 2px solid var(--pocket-focus); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .pocket-cta-primary, .pocket-cta-secondary { transition: none; } }
+
+}
+
+/* Stablecoins uses a black canvas; preserve Support's explicit branded surface. */
+html.dark [data-pocket-colour-scope='stablecoins'],
+html.dark [data-pocket-colour-scope='stablecoins'] [data-hashpaylink-top-nav],
+html.dark [data-pocket-colour-scope='stablecoins'] nav[aria-label='Pocket navigation'] { background-color: #000; }
+html.dark[data-pocket-runtime='native']:has([data-pocket-colour-scope='stablecoins']):not([data-pocket-support-surface]):not([data-pocket-light-surface='true']) body::before { background-color: #000; }

@@ -1,11 +1,13 @@
+import PocketBankRecipients from '../components/PocketBankRecipients'
+import usePocketBankRecipients, { type PocketBankRecipient } from '../hooks/usePocketBankRecipients'
 import PocketConfirmationDetails from '../components/PocketConfirmationDetails'
 import usePocketSlowConfirmation from '../hooks/usePocketSlowConfirmation'
 import { readCachedPocketBalance, balanceOwner } from '../lib/pocketBalanceCache'
 import PocketTransactionSheet from '../components/PocketTransactionSheet'
 import PocketBottomSheet from '../components/PocketBottomSheet'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
-import { ArrowRight, ChevronDown, Mail, Send } from '../components/PocketIcons'
+import { useLocation, useNavigate, useOutletContext } from 'react-router-dom'
+import { ArrowRight, Mail } from '../components/PocketIcons'
 import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
@@ -38,26 +40,22 @@ import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRou
 
 export default function PocketMoveBankPage() {
   const navigate = useNavigate()
+  const { search, state: locationState } = useLocation()
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const routeMode = (() => {
-    const value = new URLSearchParams(window.location.search).get('mode')
-    return value === 'request' || value === 'withdraw' ? value : ''
-  })()
-  const [mode, setModeState] = useState<'idle' | 'request' | 'withdraw'>(() => {
-    if (routeMode) return routeMode
-    const saved = window.sessionStorage.getItem('pocket:bank:mode')
-    return saved === 'withdraw' ? saved : 'idle'
-  })
+  const routeMode = new URLSearchParams(search).get('mode') === 'request' ? 'request' : 'withdraw'
+  const mode = routeMode
+  const [recipientStep,setRecipientStep] = useState(false)
+  const [recipientTab,setRecipientTab] = useState<'recent'|'favourites'>('recent')
+  const directory = new URLSearchParams(search).get('recipients')
+  const recipients = usePocketBankRecipients({email,enabled:authenticated && mode==='withdraw',getAccessToken})
+  const closeDirectory = () => locationState?.bankRecipientDirectory ? navigate(-1) : navigate(POCKET_BASE_PATH + POCKET_ROUTES.bank + '?mode=withdraw', {replace:true})
   const [reviewOpen, setReviewOpen] = useState(false)
   const [approvalBusy, setApprovalBusy] = useState(false)
   const [payoutToast, setPayoutToast] = useState('')
-  const setMode = useCallback((next: 'idle' | 'request' | 'withdraw') => {
-    window.sessionStorage.setItem('pocket:bank:mode', next)
-    setModeState(next)
-  }, [])
+
   const bank = usePocketBankReceiveController({
     authenticated,
     email,
@@ -66,6 +64,14 @@ export default function PocketMoveBankPage() {
     profileDraft: profile.draft,
     allowThirdPartyAccount: mode === 'withdraw',
   })
+  const pickRecipient = (recipient: PocketBankRecipient) => {
+    setRecipientStep(false)
+    bank.setInstitution(recipient.bankCode,recipient.bankName,false)
+    bank.setAccount(recipient.accountNumber)
+    if (directory) closeDirectory()
+  }
+  useEffect(()=>{setRecipientStep(false)},[bank.accountNumber,bank.bankCode,mode])
+  const recipientList = (expanded=false) => <PocketBankRecipients rows={recipients.rows} busy={recipients.busy} error={recipients.error} tab={expanded ? (directory==='favourites'?'favourites':'recent') : recipientTab} onTab={setRecipientTab} onSelect={pickRecipient} onToggle={row=>void recipients.toggle(row)} onRetry={()=>void recipients.refresh()} expanded={expanded} onViewAll={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.bank+'?mode=withdraw&recipients='+recipientTab,{state:{bankRecipientDirectory:true}})} />
   const onWalletReady = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon', wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
     wallets.setWallets(current => ({ ...current, [network]: wallet }))
   }, [wallets.setWallets])
@@ -176,7 +182,7 @@ export default function PocketMoveBankPage() {
     txHash: direct.result.txHash,
     chain: 'base',
     payer: wallets.wallets.base?.address || email || 'Pocket',
-    memo: 'Direct bank payout',
+    memo: 'Bank transfer',
     amount: direct.result.amountUsdc,
     amountNgn: direct.result.amountNgn,
     ts: Date.now(),
@@ -215,66 +221,45 @@ export default function PocketMoveBankPage() {
     return <PocketLoadingState active="home" />
   }
 
+  if (mode==='withdraw' && directory) return <PocketRouteShell active="home" onSelect={selectNav}><PocketFlowHeader centered title={directory==='favourites'?'Favourites':'Recent transfers'} onBack={closeDirectory}/>{recipientList(true)}</PocketRouteShell>
+
   return (
     <PocketRouteShell active="home" onSelect={selectNav}>
       {payoutToast && (
-        <div role="status" aria-live="polite" className="fixed left-1/2 top-[max(1rem,var(--pocket-safe-top))] z-[100] w-[min(calc(100%-2rem),26rem)] -translate-x-1/2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm font-semibold text-gray-600 shadow-xl dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">
+        <div role="status" aria-live="polite" className="fixed left-1/2 top-[max(1rem,var(--pocket-safe-top))] z-[100] w-[min(calc(100%-2rem),26rem)] -translate-x-1/2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm font-semibold text-gray-600 shadow-xl dark:border-[#262626] dark:bg-[#121212] dark:text-gray-300">
           {payoutToast}
         </div>
       )}
-      <PocketFlowHeader centered title={routeMode === 'request' ? 'Request' : 'Bank transfer'} onBack={() => navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
+      <PocketFlowHeader centered title={routeMode === 'request' ? 'Request' : 'Bank transfer'} onBack={() => recipientStep ? setRecipientStep(false) : navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
       <div className="space-y-3.5">
         {routeMode === 'request' && <>
           <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
             <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc)} className="min-h-10 rounded-full px-3 text-xs font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Request</button>
             <button type="button" className="min-h-10 rounded-full bg-gray-950 px-3 text-xs font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">Collection</button>
           </div>
-          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-100 p-1 dark:bg-[#121212] dark:shadow-none">
+          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-100 p-1 dark:bg-[#0D0D0D] dark:shadow-none">
             <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc + '?flow=collection')} className="min-h-10 rounded-xl text-xs font-bold text-gray-500 dark:text-gray-400">USDC</button>
             <button type="button" className="min-h-10 rounded-xl bg-white text-xs font-bold text-gray-950 shadow-sm dark:bg-white/[0.1] dark:text-white">Local currency</button>
           </div>
-          <section className="space-y-2 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none">
+          <section className="space-y-2 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
             <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Collection country</p>
             <div className="flex min-h-14 items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 dark:border-blue-400/20 dark:bg-blue-400/10"><span><span className="block text-sm font-bold">Nigeria</span><span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">Collect in NGN</span></span><span className="rounded-full bg-blue-600 px-2.5 py-1 text-[9px] font-black uppercase text-white">Selected</span></div>
-            {([['Ghana', 'GHS'], ['Kenya', 'KES']] as const).map(([country, currency]) => <div key={country} className="flex min-h-14 items-center justify-between rounded-2xl border border-gray-200 px-4 opacity-55 dark:border-[#262626]"><span><span className="block text-sm font-bold">{country}</span><span className="mt-0.5 block text-[11px] text-gray-400">Collect in {currency}</span></span><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[9px] font-black uppercase text-gray-500 dark:bg-white/[0.08]">Soon</span></div>)}
+            {([['Ghana', 'GHS'], ['Kenya', 'KES']] as const).map(([country, currency]) => <div key={country} className="flex min-h-14 items-center justify-between rounded-2xl border border-gray-200 px-4 opacity-55 dark:border-[#262626]"><span><span className="block text-sm font-bold">{country}</span><span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">Collect in {currency}</span></span><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[9px] font-black uppercase text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">Soon</span></div>)}
             <p className="px-2 pt-1 text-center text-[11px] leading-5 text-gray-400 dark:text-gray-500">Nigeria is available now. Ghana and Kenya will unlock when their local payment rails are ready.</p>
           </section>
         </>}
-        {!routeMode && <div className="grid grid-cols-1 gap-2">
-          {([
-            { key: 'withdraw', label: 'Direct Bank Payout', icon: Send, body: 'Withdraw Circle wallet USDC to your bank.' },
-          ] as const).filter(option => mode === 'idle' || mode === option.key).map(option => {
-            const Icon = option.icon
-            const active = mode === option.key
-            return (
-              <button
-                key={option.key}
-                type="button"
-                onClick={() => setMode(active ? 'idle' : option.key)}
-                className={`min-h-[62px] rounded-full border px-4 py-2.5 text-left shadow-sm transition-all active:scale-[0.98] ${active ? 'border-gray-950 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50/70 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200 dark:hover:border-blue-400/40 dark:hover:bg-blue-400/10'}`}
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="flex min-w-0 items-center gap-3">
-                    <Icon className="h-4 w-4 shrink-0 text-blue-500" />
-                    <span className="min-w-0"><span className="block text-sm font-bold">{option.label}</span><span className={`mt-0.5 block text-[10px] ${active ? 'text-white/60 dark:text-gray-500' : 'text-gray-400'}`}>{option.body}</span></span>
-                  </span>
-                  <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${active ? 'rotate-180' : ''}`} />
-                </span>
-              </button>
-            )
-          })}
-        </div>}
 
-        {mode !== 'idle' && <div className="space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">{mode === 'request' ? 'Local-currency collection' : 'Direct bank payout'}</p>
+
+        <div className="space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+          {mode === 'request' && <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Local-currency collection</p>}
 
           {!authenticated && (
-            <div className="overflow-hidden rounded-[22px] bg-[#F5F5F7]/95 p-2 dark:bg-[#151518]/95">
+            <div className="overflow-hidden rounded-[22px] bg-[#F5F5F7]/95 p-2 dark:bg-[#121212]/95">
               <PrivyConnectButton
                 debugLabel="create-receive-bank"
                 loginOptions={{ loginMethods: ['email'] }}
                 logoutOnAuthenticated={false}
-                className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white/[0.12] dark:text-white dark:hover:bg-white/[0.16]"
+                className="pocket-cta-primary group relative flex w-full items-center justify-center px-16 py-1.5 text-center transition-all"
               >
                 <Mail className="absolute left-5 h-4 w-4" />
                 <span>Sign in to Pocket</span>
@@ -291,9 +276,10 @@ export default function PocketMoveBankPage() {
           {authenticated && !bank.profileVerified && <PocketVerifiedNameGate />}
 
           {authenticated && bank.profileVerified && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className="space-y-3.5">
-            <PocketVerifiedNameBadge name={profile.profile?.resolvedName ?? ''} />
+            {mode === 'request' && <PocketVerifiedNameBadge name={profile.profile?.resolvedName ?? ''} />}
 
-            <PocketVerifiedBankFields
+            <div hidden={mode === 'withdraw' && recipientStep}><PocketVerifiedBankFields
+              recipientEntry={mode === 'withdraw'}
               country={bank.country}
               institutions={bank.institutions}
               institutionsBusy={bank.institutionsBusy}
@@ -308,7 +294,9 @@ export default function PocketMoveBankPage() {
               onInstitutionChange={bank.setInstitution}
               onAccountChange={bank.setAccount}
               embedded
-            />
+            /></div>
+            {mode==='withdraw' && !recipientStep && <button type="button" disabled={!bank.verified || bank.verifying || directLocked} onClick={()=>setRecipientStep(true)} className="pocket-cta-primary w-full">Continue</button>}
+            {mode==='withdraw' && recipientStep && <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">{bank.accountName}</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{bank.bankName} / {bank.accountNumber}</p></div><button type="button" disabled={directLocked} onClick={()=>setRecipientStep(false)} className="min-h-11 text-xs font-semibold">Change</button></div>}
 
             {mode === 'request' && <>
               <PocketPaymentAmountField
@@ -352,7 +340,7 @@ export default function PocketMoveBankPage() {
               />
             </>}
 
-            {mode === 'withdraw' && <>
+            {mode === 'withdraw' && recipientStep && <>
               <PocketPaymentAmountField
                 lane="bank"
                 flexible={false}
@@ -379,10 +367,10 @@ export default function PocketMoveBankPage() {
 
               <div className="space-y-2 pt-1">
                 {recoveredPayout ? (
-                  <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#171717] dark:text-gray-300">
+                  <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#121212] dark:text-gray-300">
                     Your previous payout is updating in Activity.
                   </p>
-                ) : <button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="min-h-12 w-full rounded-xl bg-gray-950 text-sm font-bold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">Review transfer</button>}
+                ) : <button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="pocket-cta-primary w-full">Review transfer</button>}
                 {!reviewOpen && !recoveredPayout && direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
                 {!reviewOpen && !recoveredPayout && direct.status === 'routing' && directAmountValid && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
                 {!reviewOpen && !recoveredPayout && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
@@ -392,7 +380,8 @@ export default function PocketMoveBankPage() {
 
           </fieldset>}
 
-        </div>}
+        </div>
+        {mode==='withdraw' && !recipientStep && authenticated && recipientList()}
       </div>
 
       {mode === 'request' && bank.generatedLink && (
@@ -442,7 +431,7 @@ export default function PocketMoveBankPage() {
                 />
 
         {direct.error && <p role="alert" className="mt-3 text-center text-xs text-red-500">{direct.error}</p>}
-        {bankLiquidity.notice && directLocked && <p className="mt-3 text-center text-xs text-gray-500">{bankLiquidity.notice}</p>}
+        {bankLiquidity.notice && directLocked && <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
       </PocketBottomSheet>}
       {mode === 'withdraw' && reviewOpen && !bankReceipt && direct.error && !directLocked && <PocketTransactionSheet title="Bank transfer" state="failed" detail={direct.error} onDone={()=>setReviewOpen(false)}/>}
       {mode === 'withdraw' && bankReceipt && (

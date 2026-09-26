@@ -42,7 +42,7 @@ export function PocketRecipientAddressFields({
             <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
               {bankSend ? 'Recipient wallet address' : multiChain ? 'EVM wallet address' : 'Wallet address'}
             </span>
-            <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">
+            <span className="hidden text-[11px] font-medium text-gray-500 dark:text-gray-400 sm:inline">
               {multiChain ? 'Base · Arbitrum' : 'Starts with 0x'}
             </span>
           </label>
@@ -56,7 +56,7 @@ export function PocketRecipientAddressFields({
               autoComplete="off"
               className={cn(
                 'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
-                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
+                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                 evm.dirty && !evm.valid
                   ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
                   : evm.valid
@@ -88,7 +88,7 @@ export function PocketRecipientAddressFields({
         <fieldset className="space-y-1.5">
           <label className="flex items-center justify-between">
             <span className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">Solana wallet address</span>
-            <span className="hidden text-[11px] font-medium text-gray-400 sm:inline">No 0x · usually 32-44 chars</span>
+            <span className="hidden text-[11px] font-medium text-gray-500 dark:text-gray-400 sm:inline">No 0x · usually 32-44 chars</span>
           </label>
           <div className="relative">
             <input
@@ -100,7 +100,7 @@ export function PocketRecipientAddressFields({
               autoComplete="off"
               className={cn(
                 'w-full rounded-xl border bg-gray-50/60 px-3.5 py-2.5 font-mono text-sm',
-                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
+                'placeholder:text-gray-400 transition-all focus:bg-white focus:outline-none focus:ring-2 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-100 dark:placeholder:text-gray-600 dark:focus:bg-white/[0.06]',
                 solana.dirty && !solana.valid
                   ? 'border-red-300 pr-10 text-red-600 focus:ring-red-100 dark:border-red-400/40 dark:text-red-300 dark:focus:ring-red-400/10'
                   : solana.valid

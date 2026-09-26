@@ -24,6 +24,10 @@ export default function usePocketBankReceiveController({
   profileDraft: LocalCurrencyProfile
   allowThirdPartyAccount?: boolean
 }) {
+  const verificationSequence = useRef(0)
+  const verificationOwner = useRef(email)
+  verificationOwner.current = authenticated ? email : ''
+  useEffect(()=>()=>{verificationSequence.current++},[])
   const [country, setCountryState] = useState('NG')
   const cachedInstitutions = useRef(readCachedPocketBankInstitutions())
   const [institutions, setInstitutions] = useState<Array<{ code: string; name: string }>>(() => cachedInstitutions.current?.institutions ?? [])
@@ -86,12 +90,16 @@ export default function usePocketBankReceiveController({
   }, [])
 
   const setCountry = useCallback((value: string) => {
+    verificationSequence.current++
+    setVerifying(false)
     idempotencyKey.current = ''
     setCountryState(value)
     invalidateResult()
   }, [invalidateResult])
 
   const setInstitution = useCallback((code: string, name: string, resetAccount: boolean) => {
+    verificationSequence.current++
+    setVerifying(false)
     idempotencyKey.current = ''
     lastVerificationKey.current = ''
     setBankCode(code)
@@ -104,6 +112,8 @@ export default function usePocketBankReceiveController({
   }, [invalidateResult])
 
   const setAccount = useCallback((value: string) => {
+    verificationSequence.current++
+    setVerifying(false)
     idempotencyKey.current = ''
     lastVerificationKey.current = ''
     setAccountNumber(value.replace(/\D/g, '').slice(0, 10))
@@ -114,6 +124,8 @@ export default function usePocketBankReceiveController({
   }, [invalidateResult])
 
   const verify = useCallback(async () => {
+    const sequence = ++verificationSequence.current
+    const valid = () => sequence === verificationSequence.current && verificationOwner.current === email
     setVerifying(true)
     setError('')
     setVerified(false)
@@ -129,6 +141,7 @@ export default function usePocketBankReceiveController({
           account_number: accountNumber,
         },
       })
+      if (!valid()) return
       if (data.bank_code) setBankCode(String(data.bank_code).trim())
       const resolved = String(data.account_name ?? '').trim()
       setAccountName(resolved)
@@ -138,18 +151,17 @@ export default function usePocketBankReceiveController({
       }
       setVerified(true)
     } catch (reason) {
-      setError(readablePocketBankPayoutError(reason, 'Account verification failed'))
+      if (valid()) setError(readablePocketBankPayoutError(reason, 'Account verification failed'))
     } finally {
-      setVerifying(false)
+      if (valid()) setVerifying(false)
     }
-  }, [accountNumber, allowThirdPartyAccount, bankCode, bankName, getAccessToken, profile?.resolvedName, profileVerified])
+  }, [email, accountNumber, allowThirdPartyAccount, bankCode, bankName, getAccessToken, profile?.resolvedName, profileVerified])
 
   useEffect(() => {
     if (!authenticated || !bankCode || accountNumber.length !== 10 || verifying || verified) return
     const verificationKey = `${bankCode}:${accountNumber}`
     if (lastVerificationKey.current === verificationKey) return
-    lastVerificationKey.current = verificationKey
-    const timer = window.setTimeout(() => { void verify() }, 250)
+    const timer = window.setTimeout(() => { lastVerificationKey.current = verificationKey; void verify() }, 250)
     return () => window.clearTimeout(timer)
   }, [accountNumber, authenticated, bankCode, verified, verify, verifying])
 

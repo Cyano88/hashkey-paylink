@@ -45,21 +45,21 @@ export default function PocketAccountMenu() {
           <PocketAvatar avatarId={current?.avatarId} className="h-12 w-12" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-black text-gray-950 dark:text-white">{current?.resolvedName || 'Pocket profile'}</span>
-            <button type="button" onClick={() => void copyId()} className="mt-0.5 flex max-w-full items-center gap-1.5 text-[11px] font-semibold tabular-nums text-gray-400" aria-label="Copy Pocket ID">
+            <button type="button" onClick={() => void copyId()} className="mt-0.5 flex max-w-full items-center gap-1.5 text-[11px] font-semibold tabular-nums text-gray-500 dark:text-gray-400" aria-label="Copy Pocket ID">
               <span className="truncate">ID: {current?.pocketId}</span><Copy className="h-3 w-3 shrink-0" />
               {copied && <span className="text-emerald-500">Copied</span>}
             </button>
           </span>
         </div>
-        <div className="space-y-1 rounded-[18px] bg-gray-50 p-1 dark:bg-[#171717]">
+        <div className="space-y-1 rounded-[18px] bg-gray-50 p-1 dark:bg-[#121212]">
           <button type="button" onClick={() => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.profile}`)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-xs font-bold text-gray-700 hover:bg-white dark:text-gray-300 dark:hover:bg-white/[0.07]">
-            <UserRound className="h-4 w-4" /><span className="flex-1">View profile</span><ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+            <UserRound className="h-4 w-4" /><span className="flex-1">View profile</span><ChevronRight className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
           </button>
           <button type="button" onClick={() => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.profile}?edit=id`)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-xs font-bold text-gray-700 hover:bg-white dark:text-gray-300 dark:hover:bg-white/[0.07]">
-            <Pencil className="h-4 w-4" /><span className="flex-1">Edit Pocket ID</span><ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+            <Pencil className="h-4 w-4" /><span className="flex-1">Edit Pocket ID</span><ChevronRight className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
-        <div className="mt-2 flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-2.5 dark:bg-[#171717]">
+        <div className="mt-2 flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-2.5 dark:bg-[#121212]">
           <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Appearance</span><PocketThemeToggle className="border-0 bg-transparent shadow-none dark:bg-transparent" />
         </div>
       </div>}

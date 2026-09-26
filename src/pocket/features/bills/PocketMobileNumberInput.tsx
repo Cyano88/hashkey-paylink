@@ -135,13 +135,13 @@ export default function PocketMobileNumberInput({
         className={cn(
           'flex min-h-[52px] items-center overflow-hidden rounded-2xl border bg-white shadow-sm transition',
           'border-gray-200 focus-within:border-gray-400 focus-within:ring-4 focus-within:ring-blue-500/10',
-          'dark:border-[#262626] dark:bg-[#17181d] dark:focus-within:border-gray-400/50',
+          'dark:border-[#262626] dark:bg-[#121212] dark:focus-within:border-gray-400/50',
           invalidNumber && 'border-red-300 focus-within:border-red-400 focus-within:ring-red-500/10 dark:border-red-400/40',
         )}
       >
         <button type="button" aria-label={`Select ${category} network`} aria-haspopup="dialog" disabled={disabled || loading || options.length === 0} onClick={() => setNetworkOpen(true)} className="relative flex h-[50px] w-[72px] shrink-0 items-center gap-2 border-r border-gray-200 px-2.5 disabled:opacity-50 dark:border-[#262626]">
           <NetworkMark network={selectedNetwork} />
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-gray-500 dark:text-gray-400" />
         </button>
 
         <label className="min-w-0 flex-1 px-3">
@@ -176,7 +176,7 @@ export default function PocketMobileNumberInput({
       {invalidNumber && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">Enter a valid 11-digit Nigerian number.</p>}
       {!invalidNumber && contactError && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{contactError}</p>}
       {!invalidNumber && !contactError && detectedNetworkFromPhone(phoneNumber) && (
-        <p className="mt-1.5 px-1 text-[10px] font-medium text-gray-400">Network detected. You can change it for a ported number.</p>
+        <p className="mt-1.5 px-1 text-[10px] font-medium text-gray-500 dark:text-gray-400">Network detected. You can change it for a ported number.</p>
       )}
     </div>
   )

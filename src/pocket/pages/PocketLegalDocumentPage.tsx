@@ -26,7 +26,7 @@ export default function PocketLegalDocumentPage({ document }: { document: 'terms
           <CPurseIcon size={34} title="" className="h-[34px] w-[34px] shrink-0" />
           <div className="min-w-0">
             <p className="truncate text-sm font-black tracking-[-0.02em]">Hash PayLink</p>
-            <p className="truncate text-[11px] font-semibold text-gray-500">{title}</p>
+            <p className="truncate text-[11px] font-semibold text-gray-500 dark:text-gray-400">{title}</p>
           </div>
         </div>
       </header>

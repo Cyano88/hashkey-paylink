@@ -19,9 +19,9 @@ export default function PocketTransferMenuPage({ kind }: { kind: 'send' | 'recei
     <PocketFlowHeader centered title={kind === 'send' ? 'Send' : 'Receive'} onBack={() => open(POCKET_ROUTES.home)} />
     <section aria-label={kind === 'send' ? 'Send options' : 'Receive options'} className="divide-y divide-gray-100 dark:divide-[#262626]">
       {actions.map(({title,detail,Icon,path}) => <button key={title} type="button" onClick={() => open(path)} className="flex min-h-20 w-full items-center gap-4 py-4 text-left">
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-[#171717]"><Icon className="h-5 w-5" /></span>
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-[#121212]"><Icon className="h-5 w-5" /></span>
         <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">{detail}</span></span>
-        <ChevronRight className="h-4 w-4 text-gray-400" />
+        <ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" />
       </button>)}
     </section>
   </PocketRouteShell>

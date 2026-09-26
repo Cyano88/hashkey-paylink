@@ -98,22 +98,22 @@ export default function PocketHomeOverview({
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-white via-white to-blue-50/70 p-4 shadow-sm dark:border-[#262626] dark:from-[#111216] dark:via-[#111216] dark:to-blue-500/[0.08]">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">Total available</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">Total available</p>
             <p className="mt-1 text-2xl font-semibold tabular-nums tracking-[-0.025em] text-gray-950 dark:text-white">
               {balanceCurrency === 'USDC'
-                ? <>{formatPocketDisplayAmount(globalBalance)} <span className="text-sm font-semibold tracking-normal text-gray-400">USDC</span></>
+                ? <>{formatPocketDisplayAmount(globalBalance)} <span className="text-sm font-semibold tracking-normal text-gray-500 dark:text-gray-400">USDC</span></>
                 : nairaBalance === null
                   ? '₦—'
                   : formatNaira(nairaBalance)}
             </p>
             {balanceCurrency === 'NGN' ? (
-              <p className="mt-1 text-[11px] font-semibold text-gray-400">
+              <p className="mt-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
                 {nairaBalance === null
                   ? `${formatPocketDisplayAmount(globalBalance)} USDC · ${fxBusy ? 'Loading live rate' : fxError || 'Live rate unavailable'}`
                   : `≈ ${formatPocketDisplayAmount(globalBalance)} USDC`}
               </p>
             ) : null}
-            <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-white/75 p-0.5 text-[10px] font-black text-gray-600 shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:text-gray-300">
+            <div className="mt-2 inline-flex items-center rounded-full border border-gray-200 bg-white/75 p-0.5 text-[10px] font-black text-gray-600 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:text-gray-300">
               <button
                 type="button"
                 onClick={() => moveBalanceCurrency(-1)}
@@ -142,7 +142,7 @@ export default function PocketHomeOverview({
         <div className="border-b border-gray-100 px-4 py-3 dark:border-[#262626]">
           <div>
             <p className="text-sm font-black text-gray-950 dark:text-white">Wallet networks</p>
-            <p className="mt-0.5 text-[11px] text-gray-400">Your USDC across supported networks</p>
+            <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Your USDC across supported networks</p>
           </div>
         </div>
         <div className="space-y-1 p-2">
@@ -166,7 +166,7 @@ export default function PocketHomeOverview({
                 )}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-[#171717]">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 dark:bg-[#121212]">
                     <img
                       src={network.logo}
                       alt=""
@@ -181,19 +181,19 @@ export default function PocketHomeOverview({
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-bold text-gray-950 dark:text-white">{network.label}</p>
                       {network.comingSoon ? (
-                        <span className="rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-gray-500 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-400">
+                        <span className="rounded-full border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-gray-500 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-400">
                           Soon
                         </span>
                       ) : null}
                     </div>
-                    {wallet?.address ? <p className="mt-0.5 truncate text-[11px] text-gray-400">{truncateAddress(wallet.address)}</p> : null}
+                    {wallet?.address ? <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">{truncateAddress(wallet.address)}</p> : null}
                   </div>
                 </div>
                 <div className="text-right">
                   {network.comingSoon ? (
-                    <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">Coming soon</p>
+                    <p className="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Coming soon</p>
                   ) : (
-                    <p className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(row?.balance ?? 0)} <span className="text-[10px] font-semibold tracking-normal text-gray-400">USDC</span></p>
+                    <p className="text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(row?.balance ?? 0)} <span className="text-[10px] font-semibold tracking-normal text-gray-500 dark:text-gray-400">USDC</span></p>
                   )}
                   {showStatus ? (
                     <p className={cn('mt-0.5 text-[9px] font-black uppercase tracking-wider', row?.status === 'error' && wallet?.address ? 'text-amber-500' : 'text-blue-500')}>

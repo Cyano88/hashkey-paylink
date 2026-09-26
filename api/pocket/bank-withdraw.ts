@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { createHash } from 'node:crypto'
 import { parseUnits } from 'viem'
-import ngPosHandler, { createNgPosBankReceive, listNgPosHistoryForOwner } from '../ng-pos.js'
+import ngPosHandler, { createNgPosBankReceive, listNgPosHistoryForOwner, listPocketBankRecipients } from '../ng-pos.js'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
 import { isPocketIdempotencyKey } from '../../src/pocket/lib/pocketSchemas.js'
 import { claimCirclePocketAction, listCirclePocketActions, recordCirclePocketAction, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
@@ -14,6 +14,7 @@ type LegacyResult = { status: number; body: any }
 type BankWithdrawDependencies = {
   verifyUser: typeof verifiedPrivyUser
   createBankReceive: typeof createNgPosBankReceive
+  listRecipients: typeof listPocketBankRecipients
   listHistory: typeof listNgPosHistoryForOwner
   invokeLegacy: typeof invokeNgPos
   claimAction: typeof claimCirclePocketAction
@@ -233,6 +234,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     verifyUser: verifiedPrivyUser,
     createBankReceive: createNgPosBankReceive,
     listHistory: listNgPosHistoryForOwner,
+    listRecipients: listPocketBankRecipients,
     invokeLegacy: invokeNgPos,
     claimAction: claimCirclePocketAction,
     listActions: listCirclePocketActions,
@@ -248,6 +250,20 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     try {
       const identity = await dependencies.verifyUser(req)
       const action = text(req.body?.action, 30)
+      if (action === 'recipients' || action === 'favouriteRecipient') {
+        res.setHeader('Cache-Control', 'no-store')
+        const recipients = await dependencies.listRecipients(identity.userId)
+        if (action === 'favouriteRecipient') {
+          const recipient = recipients.find(item => item.id === text(req.body?.recipientId))
+          if (!recipient) return res.status(404).json({ ok: false, error: 'Recipient not found.' })
+          if (typeof req.body?.favourite !== 'boolean') return res.status(400).json({ ok: false, error: 'Choose whether to save this recipient.' })
+          const fingerprint = beneficiaryFingerprint(recipient.bankCode, recipient.accountNumber)
+          await dependencies.recordAction({ ownerId: identity.userId, idempotencyKey: 'bank-favourite:' + fingerprint, action: 'bank-recipient.preference', status: 'completed', resourceId: fingerprint, metadata: { favourite: String(req.body.favourite) } })
+        }
+        const preferences = await dependencies.listActions(identity.userId, 500, 'bank-recipient.preference')
+        const favourites = new Set(preferences.filter(item => item.metadata?.favourite === 'true').map(item => item.resourceId))
+        return res.json({ ok: true, data: recipients.map(item => ({ ...item, favourite: favourites.has(beneficiaryFingerprint(item.bankCode, item.accountNumber)) })) })
+      }
       if (action === 'recover') {
         const unresolved = await dependencies.executions.listOwned(
           identity.userId,

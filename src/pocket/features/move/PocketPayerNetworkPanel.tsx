@@ -39,11 +39,11 @@ export function PocketPayerNetworkPanel({
         'space-y-2.5',
         embedded
           ? 'border-y border-gray-100 py-3 dark:border-[#262626]'
-          : 'rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm dark:border-[#262626] dark:bg-[#171717]',
+          : 'rounded-xl border border-gray-100 bg-white p-2.5 shadow-sm dark:border-[#262626] dark:bg-[#121212]',
       )}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">Payer network</p>
+            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Payer network</p>
             <p className="mt-0.5 text-xs font-medium text-gray-700 dark:text-gray-200">
               {multiChain ? 'Payer chooses at checkout' : selectedNetworkLabel}
             </p>
@@ -63,7 +63,7 @@ export function PocketPayerNetworkPanel({
           type="button"
           onClick={onMultiChainToggle}
           disabled={emailReceive}
-          className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-all hover:border-gray-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70 dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:hover:border-white/20"
+          className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-all hover:border-gray-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70 dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:hover:border-white/20"
         >
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer choose network</span>
@@ -88,7 +88,7 @@ export function PocketPayerNetworkPanel({
       </div>}
 
       {multiChain && !managedNetworkRouting && (
-        <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-[#262626] dark:bg-[#171717]">
+        <div className="rounded-xl border border-gray-100 bg-gray-50/70 px-3.5 py-3 dark:border-[#262626] dark:bg-[#121212]">
           <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Add receiving addresses</p>
           <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">Enter one address for each network payers can choose.</p>
         </div>

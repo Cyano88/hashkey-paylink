@@ -15,7 +15,7 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
   const Icon = label.toLowerCase().startsWith('refund') ? Undo2 : state === 'failed' ? X : state === 'reversed' ? Undo2 : Clock3
   if (viewReceipt && receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={() => setViewReceipt(false)} />
   const content = <>
-    <p className="text-right text-xs font-semibold text-gray-500">{title}</p>
+    <p className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{title}</p>
     <div className="pb-6 pt-3 text-center" role="status" aria-live="polite">
       {state === 'successful' ? <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" strokeWidth={2.5} className="h-8 w-8" /></span> : <span className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${state === 'failed' ? 'bg-red-50 text-red-500 dark:bg-red-400/10' : 'bg-blue-50 text-blue-500 dark:bg-blue-400/10'}`}><Icon aria-hidden="true" className="h-9 w-9" /></span>}
       <h1 className="mt-4 text-xl font-bold tracking-tight">{label}</h1>
@@ -24,8 +24,8 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
     </div>
     {children}
     <div className={`mt-4 grid gap-3 ${canViewReceipt && !inline ? 'grid-cols-2' : 'grid-cols-1'}`}>
-      {canViewReceipt && <button type="button" onClick={() => setViewReceipt(true)} className="min-h-12 rounded-xl border border-gray-200 text-xs font-bold dark:border-[#262626]">View receipt</button>}
-      {!inline && <button type="button" onClick={onDone} className="min-h-12 rounded-xl bg-gray-950 text-xs font-bold text-white dark:bg-white dark:text-gray-950">Done</button>}
+      {canViewReceipt && <button type="button" onClick={() => setViewReceipt(true)} className="pocket-cta-secondary">View receipt</button>}
+      {!inline && <button type="button" onClick={onDone} className="pocket-cta-primary ">Done</button>}
     </div>
     {inline && state === 'successful' && <PocketGetApp />}
   </>

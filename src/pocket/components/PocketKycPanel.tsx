@@ -125,10 +125,10 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   return <section className="mt-6 space-y-5">
     {!state && !error && <div role="status" aria-label="Loading verification" className="h-44 animate-pulse rounded-3xl bg-gray-200/70 dark:bg-white/10" />}
     {state && <>
-      {state.environment === 'sandbox' && <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600 dark:bg-[#171717] dark:text-gray-300">Sandbox test. Real BVN/NIN records are not checked here. Use Smile ID test details and a matching test photo. This does not verify your real identity.</p>}
+      {state.environment === 'sandbox' && <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600 dark:bg-[#121212] dark:text-gray-300">Sandbox test. Real BVN/NIN records are not checked here. Use Smile ID test details and a matching test photo. This does not verify your real identity.</p>}
       <div className="space-y-4">
 
-        {!state.workflow && <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-5 dark:border-white/10 dark:bg-[#121212]">
+        {!state.workflow && <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-5 dark:border-white/10 dark:bg-[#0D0D0D]">
           <span className="text-sm font-medium">{stepLabel}</span>
           {state.status === 'passed' ? <Check aria-label={state.verified ? 'Verified' : 'Sandbox completed'} className="h-5 w-5 text-green-600" /> : ['pending', 'review'].includes(state.status) ? <Clock3 aria-label="In progress" className="h-5 w-5 text-blue-500" /> : null}
         </div>}
@@ -146,21 +146,21 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         <legend className="mb-2 text-sm font-medium">Choose how to verify</legend>
         {([{ value: 'nin', title: 'NIN', description: 'Verify your National Identification Number and take a selfie.' }, { value: 'government_id', title: 'Government ID', description: 'Use an available government-issued ID and take a selfie.' }] as const).map(option => <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4 dark:border-white/10">
           <input type="radio" name="identity-method" value={option.value} checked={additionalMethod === option.value} onChange={() => { setAdditionalMethod(option.value); setConsent(false) }} className="mt-1 h-4 w-4" />
-          <span><span className="block text-sm font-medium">{option.title}</span><span className="mt-1 block text-xs leading-5 text-gray-500">{option.description}</span></span>
+          <span><span className="block text-sm font-medium">{option.title}</span><span className="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">{option.description}</span></span>
         </label>)}
       </fieldset>}
       {retryable && <>
         <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />I agree to share my identity details and selfie with Smile ID for verification.</label>
-        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className="w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{busy ? 'Opening verification...' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Start verification'}</button>
+        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className="pocket-cta-primary w-full px-4 py-3.5">{busy ? 'Opening verification...' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Start verification'}</button>
       </>}
       {(failed || state.status === 'review' && !state.canResume) && <a href={POCKET_BASE_PATH + POCKET_ROUTES.assistant} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
     </>}
     {submittedSheet && <PocketBottomSheet title={resultTitle} onClose={() => setSubmittedSheet(false)}>
       <div className="pb-2 pt-3 text-center">
-        {passed ? <Check aria-hidden="true" className="mx-auto h-14 w-14 text-green-600" /> : failed ? <Info aria-hidden="true" className="mx-auto h-14 w-14 text-red-500" /> : <Clock3 aria-hidden="true" className="mx-auto h-14 w-14 text-gray-500" />}
+        {passed ? <Check aria-hidden="true" className="mx-auto h-14 w-14 text-green-600" /> : failed ? <Info aria-hidden="true" className="mx-auto h-14 w-14 text-red-500" /> : <Clock3 aria-hidden="true" className="mx-auto h-14 w-14 text-gray-500 dark:text-gray-400" />}
         <h2 className="mt-6 text-2xl font-semibold">{resultTitle}</h2>
         <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400">{resultText}</p>
-        <button type="button" onClick={() => setSubmittedSheet(false)} className="mt-7 w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white dark:bg-white dark:text-gray-950">{needsAdditional ? 'Choose NIN or government ID' : 'Continue'}</button>
+        <button type="button" onClick={() => setSubmittedSheet(false)} className="pocket-cta-primary mt-7 w-full px-4 py-3.5">{needsAdditional ? 'Choose NIN or government ID' : 'Continue'}</button>
       </div>
     </PocketBottomSheet>}
     {error && <div role="alert" className="text-sm text-red-600 dark:text-red-400"><p>{error}</p>{autoRetry && !retryAt && <button type="button" onClick={() => void refresh()} className="mt-3 block min-h-10 font-semibold underline">Try again</button>}</div>}
