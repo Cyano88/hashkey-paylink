@@ -11,11 +11,13 @@ export default function PocketRouteShell({
   children,
   onSelect,
   navigationDisabled = false,
+  fixedPage = false,
 }: {
   active: PocketNavTab
   children: ReactNode
   onSelect: (tab: PocketNavTab) => void
   navigationDisabled?: boolean
+  fixedPage?: boolean
 }) {
   const { pathname, state, key: locationKey } = useLocation()
   const [keyboardOpen, setKeyboardOpen] = useState(false)
@@ -48,13 +50,14 @@ export default function PocketRouteShell({
   useEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
+    if (fixedPage) { scroller.scrollTop = 0; return }
     const saved = Number(window.sessionStorage.getItem(`pocket:scroll:${pathname}`) || 0)
     scroller.scrollTop = Number.isFinite(saved) && saved > 0 ? saved : 0
     return () => {
       if (scrollFrame.current !== null) window.cancelAnimationFrame(scrollFrame.current)
       window.sessionStorage.setItem(`pocket:scroll:${pathname}`, String(scroller.scrollTop))
     }
-  }, [pathname])
+  }, [pathname, fixedPage])
 
   const rememberScroll = (event: UIEvent<HTMLDivElement>) => {
     const top = event.currentTarget.scrollTop
@@ -66,7 +69,7 @@ export default function PocketRouteShell({
   }
 
   const startPull = (event: TouchEvent<HTMLDivElement>) => {
-    if (navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
+    if (fixedPage || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
     pullDistanceRef.current = 0
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
@@ -166,6 +169,8 @@ export default function PocketRouteShell({
       <div className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-[#F5F5F7] dark:bg-black">
           <div
             data-pocket-scroller
+            data-pocket-fixed-page={fixedPage || undefined}
+            data-pocket-keyboard={keyboardOpen || inputFocused || undefined}
             ref={scrollerRef}
             onScroll={rememberScroll}
             onTouchStart={startPull}
@@ -174,6 +179,7 @@ export default function PocketRouteShell({
             onTouchCancel={() => { pullStartY.current = null; if (!refreshing) { pullDistanceRef.current = 0; setPullDistance(0) } }}
             className="absolute inset-x-0 bottom-0 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-color:rgba(148,163,184,0.35)_transparent] [scrollbar-width:thin]"
             style={{
+              overflowY: fixedPage ? 'hidden' : undefined,
               top: headerHeight > 0 ? headerHeight : 'var(--pocket-safe-top)',
               scrollPaddingTop: 16,
               scrollPaddingBottom: 'calc(7.5rem + var(--pocket-safe-bottom))',
@@ -186,7 +192,12 @@ export default function PocketRouteShell({
               key={locationKey}
               className={`mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] ${state?.pocketRailTransition ? 'pocket-mode-content' : ''}`}
               style={{
-                minHeight: `calc(100dvh - ${headerHeight}px)`,
+                minHeight: fixedPage ? 0 : `calc(100dvh - ${headerHeight}px)`,
+                height: fixedPage ? '100%' : undefined,
+                display: fixedPage ? 'flex' : undefined,
+                flexDirection: fixedPage ? 'column' : undefined,
+                gap: fixedPage ? 12 : undefined,
+                paddingBottom: fixedPage ? (keyboardOpen || inputFocused ? 12 : 'calc(5rem + var(--pocket-safe-bottom))') : undefined,
                 paddingTop: 16,
               }}
             >

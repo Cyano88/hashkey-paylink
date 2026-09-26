@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useRef, useState } from 'react'
 import { downloadPocketQr } from '../../lib/pocketQrDownload'
-import { Store as PaymentStore } from 'lucide-react'
 import { ArrowRight, Copy, LayoutDashboard, Loader2, Mail } from '../../components/PocketIcons'
 import { QRCodeCanvas } from 'qrcode.react'
 import { cn } from '../../../lib/utils'
@@ -12,8 +11,7 @@ import type {
   PocketPosActions,
   PocketPosDraft,
 } from '../../controllers/usePocketMoveControllers'
-import PocketSelect from '../../components/PocketSelect'
-import PocketResolvedNameRow from '../../components/PocketResolvedNameRow'
+import { PocketVerifiedBankFields } from './PocketVerifiedBankFields'
 
 export type PocketPosNetworkOption = {
   key: string
@@ -138,7 +136,6 @@ type PocketPosSetupPanelProps = {
 
 export function PocketPosSetupPanel({
   controller,
-  networkOptions,
   instantBankPayout,
   bankInstitutions,
   bankInstitutionsBusy,
@@ -150,128 +147,23 @@ export function PocketPosSetupPanel({
   error,
 }: PocketPosSetupPanelProps) {
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-gray-100">Set up your POS</h2>
-        <p className="mt-1 text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-          Choose where to receive your payments.
-        </p>
-      </div>
-
-      <div className="grid gap-3">
+    <fieldset disabled={controller.submitting} className="min-w-0">
+      <div className="flex flex-col gap-5" style={{minHeight:'calc(100dvh - 15rem)'}}>
         <label className="block">
-          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Merchant name</span>
-          <input
-            value={controller.draft.merchantName}
-            onChange={event => controller.actions.setMerchantName(event.target.value)}
-            placeholder="Shy Stores"
-            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
-          />
+          <span className="text-xs text-gray-500 dark:text-gray-400">Terminal name</span>
+          <input aria-label="Terminal name" value={controller.draft.merchantName} onChange={event=>controller.actions.setMerchantName(event.target.value)} placeholder="Store name" className="mt-2 min-h-14 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#0D0D0D] dark:placeholder:text-gray-600" />
         </label>
-
-        <div>
-          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Network</span>
-          <div className="mt-1.5 grid gap-2">
-            {networkOptions.map(network => {
-              const active = controller.draft.networks.includes(network.key)
-              return (
-                <button
-                  key={network.key}
-                  type="button"
-                  onClick={() => controller.actions.toggleNetwork(network.key)}
-                  className={cn(
-                    'flex min-h-[42px] items-center justify-between rounded-xl border px-3 py-2 text-left text-sm font-semibold transition-all',
-                    active
-                      ? 'border-gray-900 bg-gray-900 text-white shadow-sm dark:border-white dark:bg-white dark:text-gray-950'
-                      : 'border-gray-200 bg-gray-50 text-gray-500 hover:border-gray-300 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-400 dark:hover:border-white/20',
-                  )}
-                >
-                  <span>{network.label}</span>
-                  {network.badge && (
-                    <span className={cn('text-[10px] font-bold uppercase tracking-wide', active ? 'text-white/70 dark:text-gray-500' : 'text-gray-400')}>
-                      {network.badge}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+        {instantBankPayout && <section aria-label="Payout account">
+          <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">Receive payments in your bank account.</p>
+          <PocketVerifiedBankFields country="NG" institutions={bankInstitutions} institutionsBusy={bankInstitutionsBusy} bankCode={bankCode} bankName={controller.draft.bankName} accountNumber={bankAccount} accountName={bankAccountName} verified={bankVerified} verifying={bankVerifyBusy} error={error} onCountryChange={()=>{}} onInstitutionChange={(code,name)=>controller.actions.setBankInstitution(code,name)} onAccountChange={controller.actions.setBankAccount} onRetry={controller.actions.verifyBankAccount} embedded recipientEntry />
+        </section>}
+        {!instantBankPayout && error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        <div className="mt-auto space-y-3 pt-6">
+          <p className="text-center text-xs text-gray-500 dark:text-gray-400">Customers scan your QR and enter the amount.</p>
+          <button type="button" onClick={controller.submit} disabled={!controller.canSubmit || controller.submitting} className="pocket-cta-primary w-full">{controller.submitting && <Loader2 className="h-4 w-4 animate-spin" />}Continue</button>
         </div>
-
-        {instantBankPayout && (
-          <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3 dark:border-[#262626] dark:bg-[#121212]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Nigerian bank account</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Use a bank account in your name.
-                </p>
-              </div>
-            </div>
-            <div className="mt-3 grid gap-3">
-              <label className="block">
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Bank</span>
-                {bankInstitutions.length ? (
-                  <PocketSelect
-                    value={bankCode}
-                    options={bankInstitutions.map(institution => ({
-                      value: institution.code,
-                      label: institution.name,
-                    }))}
-                    onChange={value => {
-                      const selected = bankInstitutions.find(institution => institution.code === value)
-                      controller.actions.setBankInstitution(value, selected?.name ?? '')
-                    }}
-                    placeholder={bankInstitutionsBusy ? 'Loading banks...' : 'Select bank'}
-                    ariaLabel="POS payout bank"
-                    searchable
-                    searchPlaceholder="Search banks"
-                    className="mt-1"
-                  />
-                ) : (
-                  <input
-                    value={bankCode}
-                    onChange={event => controller.actions.setManualBankCode(event.target.value)}
-                    placeholder={bankInstitutionsBusy ? 'Loading banks...' : 'Bank code'}
-                    className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
-                  />
-                )}
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Account number</span>
-                <input
-                  value={bankAccount}
-                  onChange={event => controller.actions.setBankAccount(event.target.value)}
-                  inputMode="numeric"
-                  placeholder="0123456789"
-                  className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
-                />
-              </label>
-
-              {bankVerifyBusy && <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-xs font-medium text-gray-500 dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:text-gray-400"><Loader2 className="h-4 w-4 animate-spin" />Resolving account name</div>}
-              {bankVerified && bankAccountName && <PocketResolvedNameRow name={bankAccountName} />}
-            </div>
-          </div>
-        )}
       </div>
-
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">
-          {error}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={controller.submit}
-        disabled={!controller.canSubmit || controller.submitting}
-        className="pocket-cta-primary flex w-full items-center justify-center gap-2 px-5 py-3 transition-all disabled:cursor-not-allowed"
-      >
-        {controller.submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <PaymentStore className="h-4 w-4" />}
-        Create POS
-      </button>
-    </div>
+    </fieldset>
   )
 }
 

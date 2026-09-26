@@ -6,7 +6,7 @@ type Props = {
   onChangeRecipient: () => void; onAmountChange: (value: string) => void; onMemoChange: (value: string) => void
 }
 export default function PocketBankAmountFields({accountName,bankName,accountNumber,amount,memo,disabled,onChangeRecipient,onAmountChange,onMemoChange}: Props) {
-  return <div className="space-y-5">
+  return <div className="pocket-bank-amount-fields space-y-5">
     <section aria-label="Recipient">
       <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">Transfer to</p>
       <button type="button" disabled={disabled} onClick={onChangeRecipient} aria-label="Change recipient" className="flex min-h-20 w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left dark:border-[#262626] dark:bg-[#0D0D0D]">

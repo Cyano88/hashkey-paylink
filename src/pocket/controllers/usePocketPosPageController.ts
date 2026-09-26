@@ -30,6 +30,10 @@ export default function usePocketPosPageController({
   routeStep: PocketPosRouteStep
   onStepChange: (step: PocketPosRouteStep) => void
 }) {
+  const verificationSequence = useRef(0)
+  const verificationOwner = useRef(email)
+  verificationOwner.current = authenticated ? email : ''
+  useEffect(()=>()=>{verificationSequence.current++},[])
   const [country, setCountry] = useState<string | null>(null)
   const [merchantName, setMerchantName] = useState('')
   const [institutions, setInstitutions] = useState<Array<{ code: string; name: string }>>([])
@@ -51,6 +55,7 @@ export default function usePocketPosPageController({
   const identityMatches = profileVerified && bankVerified && normalizeName(bankAccountName) === normalizeName(verifiedIdentityName)
 
   const resetBank = useCallback(() => {
+    verificationSequence.current++
     creationIdempotencyKey.current = ''
     lastVerificationKey.current = ''
     setBankName('')
@@ -97,6 +102,8 @@ export default function usePocketPosPageController({
   }, [authenticated, country, profileVerified])
 
   const verifyBankAccount = useCallback(async () => {
+    const sequence = ++verificationSequence.current
+    const valid = () => sequence === verificationSequence.current && verificationOwner.current === email
     setBankVerifyBusy(true)
     setError('')
     setBankVerified(false)
@@ -112,6 +119,7 @@ export default function usePocketPosPageController({
           account_number: bankAccount,
         },
       })
+      if (!valid()) return
       if (data.bank_code) setBankCode(String(data.bank_code).trim())
       const resolved = String(data.account_name ?? '').trim()
       setBankAccountName(resolved)
@@ -121,18 +129,17 @@ export default function usePocketPosPageController({
       }
       setBankVerified(true)
     } catch (reason) {
-      setError(readablePocketBankPayoutError(reason, 'Account verification failed'))
+      if (valid()) setError(readablePocketBankPayoutError(reason, 'Account verification failed'))
     } finally {
-      setBankVerifyBusy(false)
+      if (valid()) setBankVerifyBusy(false)
     }
-  }, [bankAccount, bankCode, bankName, getAccessToken, verifiedIdentityName, profileVerified])
+  }, [email, bankAccount, bankCode, bankName, getAccessToken, verifiedIdentityName, profileVerified])
 
   useEffect(() => {
     if (!authenticated || !bankCode || bankAccount.length !== 10 || bankVerifyBusy || bankVerified) return
     const verificationKey = `${bankCode}:${bankAccount}`
     if (lastVerificationKey.current === verificationKey) return
-    lastVerificationKey.current = verificationKey
-    const timer = window.setTimeout(() => { void verifyBankAccount() }, 250)
+    const timer = window.setTimeout(() => { lastVerificationKey.current = verificationKey; void verifyBankAccount() }, 250)
     return () => window.clearTimeout(timer)
   }, [authenticated, bankAccount, bankCode, bankVerified, bankVerifyBusy, verifyBankAccount])
 
@@ -219,6 +226,8 @@ export default function usePocketPosPageController({
         setError('')
       },
       setBankInstitution: (code, name) => {
+        verificationSequence.current++
+        setBankVerifyBusy(false)
         creationIdempotencyKey.current = ''
         lastVerificationKey.current = ''
         setBankCode(code)
@@ -228,6 +237,8 @@ export default function usePocketPosPageController({
         setError('')
       },
       setManualBankCode: code => {
+        verificationSequence.current++
+        setBankVerifyBusy(false)
         creationIdempotencyKey.current = ''
         lastVerificationKey.current = ''
         setBankCode(code.toUpperCase().trim())
@@ -237,6 +248,8 @@ export default function usePocketPosPageController({
         setError('')
       },
       setBankAccount: accountNumber => {
+        verificationSequence.current++
+        setBankVerifyBusy(false)
         creationIdempotencyKey.current = ''
         lastVerificationKey.current = ''
         setBankAccount(accountNumber.replace(/\D/g, '').slice(0, 10))

@@ -224,14 +224,14 @@ export default function PocketMoveBankPage() {
   if (mode==='withdraw' && directory) return <PocketRouteShell active="home" onSelect={selectNav}><PocketFlowHeader centered title={directory==='favourites'?'Favourites':'Recent transfers'} onBack={closeDirectory}/>{recipientList(true)}</PocketRouteShell>
 
   return (
-    <PocketRouteShell active="home" onSelect={selectNav}>
+    <PocketRouteShell active="home" onSelect={selectNav} fixedPage={mode === "withdraw" && recipientStep}>
       {payoutToast && (
         <div role="status" aria-live="polite" className="fixed left-1/2 top-[max(1rem,var(--pocket-safe-top))] z-[100] w-[min(calc(100%-2rem),26rem)] -translate-x-1/2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm font-semibold text-gray-600 shadow-xl dark:border-[#262626] dark:bg-[#121212] dark:text-gray-300">
           {payoutToast}
         </div>
       )}
       <PocketFlowHeader centered title={routeMode === 'request' ? 'Request' : recipientStep ? 'Enter amount' : 'Bank transfer'} onBack={() => recipientStep ? setRecipientStep(false) : navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
-      <div className="space-y-3.5">
+      <div className={mode === "withdraw" && recipientStep ? "flex min-h-0 flex-1 flex-col" : "space-y-3.5"}>
         {routeMode === 'request' && <>
           <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
             <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc)} className="min-h-10 rounded-full px-3 text-xs font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Request</button>
@@ -250,7 +250,7 @@ export default function PocketMoveBankPage() {
         </>}
 
 
-        <div className={mode === "withdraw" && recipientStep ? "space-y-5" : "space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none"}>
+        <div className={mode === "withdraw" && recipientStep ? "flex min-h-0 flex-1 flex-col" : "space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none"}>
           {mode === 'request' && <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Local-currency collection</p>}
 
           {!authenticated && (
@@ -275,7 +275,7 @@ export default function PocketMoveBankPage() {
 
           {authenticated && !bank.profileVerified && <PocketVerifiedNameGate />}
 
-          {authenticated && bank.profileVerified && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className="space-y-3.5">
+          {authenticated && bank.profileVerified && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className={mode === "withdraw" && recipientStep ? "flex min-h-0 flex-1 flex-col" : "space-y-3.5"}>
             {mode === 'request' && <PocketVerifiedNameBadge name={profile.profile?.resolvedName ?? ''} />}
 
             <div hidden={mode === 'withdraw' && recipientStep}><PocketVerifiedBankFields
@@ -340,7 +340,7 @@ export default function PocketMoveBankPage() {
               />
             </>}
 
-            {mode === 'withdraw' && recipientStep && <div className="flex flex-col gap-5" style={{minHeight:'calc(100dvh - 15rem)'}}>
+            {mode === 'withdraw' && recipientStep && <div className="pocket-bank-amount-page flex min-h-0 flex-1 flex-col gap-5">
               <PocketBankAmountFields accountName={bank.accountName} bankName={bank.bankName} accountNumber={bank.accountNumber} amount={direct.amount} memo={direct.memo} disabled={directLocked} onChangeRecipient={()=>setRecipientStep(false)} onAmountChange={direct.setAmount} onMemoChange={direct.setMemo} />
 
               <div className="mt-auto space-y-2 pt-6">

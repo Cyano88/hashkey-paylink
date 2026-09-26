@@ -1128,3 +1128,14 @@ html.dark [data-pocket-colour-scope='stablecoins'],
 html.dark [data-pocket-colour-scope='stablecoins'] [data-hashpaylink-top-nav],
 html.dark [data-pocket-colour-scope='stablecoins'] nav[aria-label='Pocket navigation'] { background-color: #000; }
 html.dark[data-pocket-runtime='native']:has([data-pocket-colour-scope='stablecoins']):not([data-pocket-support-surface]):not([data-pocket-light-surface='true']) body::before { background-color: #000; }
+
+/* Amount entry stays within the viewport; the confirmation opens separately. */
+[data-pocket-fixed-page] > div:last-child > * { margin-top: 0; }
+[data-pocket-fixed-page] > div:last-child > header { flex-shrink: 0; }
+[data-pocket-fixed-page][data-pocket-keyboard] .pocket-bank-amount-fields > * + * { margin-top: 10px; }
+[data-pocket-fixed-page][data-pocket-keyboard] .pocket-bank-amount-fields [aria-label="Suggested amounts"] { display: none; }
+[data-pocket-fixed-page][data-pocket-keyboard] .pocket-bank-amount-fields [aria-label="Change recipient"] { min-height: 56px; padding-top: 6px; padding-bottom: 6px; }
+[data-pocket-fixed-page][data-pocket-keyboard] .pocket-bank-amount-fields > label { min-height: 48px; }
+[data-pocket-fixed-page][data-pocket-keyboard] .pocket-bank-amount-fields input { padding-top: 10px; padding-bottom: 10px; min-height: 44px; }
+[data-pocket-fixed-page][data-pocket-keyboard] .pocket-bank-amount-page { gap: 8px; }
+[data-pocket-fixed-page][data-pocket-keyboard] .pocket-bank-amount-page > .mt-auto { padding-top: 8px; }
