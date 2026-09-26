@@ -110,7 +110,7 @@ export default async function handler(req:Request,res:Response){
     if(Object.values(s.payments).some(p=>p.owner===owner&&p.status==='submitted'))fail('Your previous XPay payment needs confirmation. Open XPay to check it.',409)
     if(Object.values(s.payments).filter(p=>p.owner===owner&&p.createdAt>now-86400000).length>=100)fail('Daily payment limit reached.',429)
     const current=s.merchants[id];if(!current||current.deletedAt||current.updatedAt!==m.updatedAt)fail('Merchant settings changed. Review again.',409)
-    payment={id:randomUUID(),key,owner,merchantOwner:m.owner,merchantId:id,merchantName:m.name,pocketId:m.pocketId,payer,recipient:m.wallet,token,symbol:asset.symbol,amount:formatUnits(units,asset.decimals),units:String(units),usd,status:'ready',createdAt:now,updatedAt:now,expiresAt:now+90000}
+    payment={id:randomUUID(),key,owner,merchantOwner:m.owner,merchantId:id,merchantName:m.name,pocketId:m.pocketId,payer,recipient:m.wallet,token,symbol:asset.symbol,amount:formatUnits(units,asset.decimals),units:String(units),usd,status:'ready',createdAt:now,updatedAt:now,expiresAt:now+5*60_000}
     s.payments[payment.id]=payment
    })
    return res.json({ok:true,payment:publicPayment(payment!)})

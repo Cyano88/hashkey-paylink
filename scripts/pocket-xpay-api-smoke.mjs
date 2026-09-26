@@ -47,3 +47,24 @@ await call({action:'authorize',id:readyAfterDelete.id},409);const finalHash='0x'
 
 const readPublic=async(id,expected)=>{let status=200,result;await handler({method:'GET',query:{id}},{setHeader(){},status(s){status=s;return this},json(data){result=data;return this},sendStatus(s){status=s}});assert.equal(status,expected);return result};
 const publicLink=await readPublic(third.id,200);assert.deepEqual(Object.keys(publicLink.merchant).sort(),['id','name','pocketId','tokens']);await readPublic(merchant.id,404);await readPublic('../mine',400);console.log('PASS public merchant read exposes no wallet, owner, or payment records; deleted links rejected');
+
+// PIN entry may take longer than the old 90-second quote lifetime. The fixed
+// reviewed amount remains bounded, and expiry must never authorize a transfer.
+fixture.owner='payer';
+const realNow=Date.now;
+try {
+ const start=realNow();Date.now=()=>start;
+ const slow=(await call({...body,id:third.id,key:'fixture-slow-pin-0001'})).payment;
+ const expired=(await call({...body,id:third.id,key:'fixture-expired-pin-0002'})).payment;
+ assert.equal(slow.expiresAt-start,300000);
+ Date.now=()=>start+300000;
+ await call({action:'authorize',id:expired.id},409);
+ assert.equal((await call({action:'status',id:expired.id})).payment.status,'ready');
+ Date.now=()=>start+120000;
+ const authorized=(await call({action:'authorize',id:slow.id})).payment;
+ assert.equal(authorized.status,'submitted');
+ assert.equal(authorized.amount,slow.amount);
+ assert.equal(authorized.recipient,slow.recipient);
+ await call({action:'authorize',id:slow.id},409);
+ console.log('PASS slow PIN approval preserves reviewed amount; exact five-minute expiry rejects; duplicate authorization rejected');
+} finally {Date.now=realNow}
