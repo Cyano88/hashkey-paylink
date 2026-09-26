@@ -76,6 +76,45 @@ const startActions = new Set(['create', 'accept', 'approve', 'fund'])
 
 export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
   const d = { ...defaults, ...overrides }
+  // Coalesce concurrent read-only chain checks for one project-owned record.
+  const observations = new Map<string, Promise<{record:XStocksAgreementRecord;pending:boolean}>>()
+  async function observeTrade(record:XStocksAgreementRecord) {
+    const existing = observations.get(record.id)
+    if (existing) return existing
+    const task = (async () => {
+      if (record.terms.kind !== 'trade') fail(400, 'Live refresh is available for Trade checkout only.')
+      if (!record.binding || !record.accepted.customer || !record.accepted.provider) return {record,pending:false}
+      const authority = agreementPrivyAuthority(d.env())
+      if (record.walletAppId !== authority.appId) fail(409, 'The Agreement wallet app changed. Contact support.')
+      const env = tradeCheckoutEnvironment(authority.env, record.partnerId)
+      if (!await d.projectEnabled(record.partnerId)) env.HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED = 'false'
+      for (let attempt=0; ; attempt++) {
+        // No caller-selected account, operation or evidence; no transaction data is returned.
+        const status = await d.plan({env,binding:record.binding,account:record.accepted.customer.address})
+        try {
+          const next = await d.mutate(key(record.id), current => {
+            if (!current || current.partnerId!==record.partnerId || current.digest!==record.digest || current.binding?.termsHash!==record.binding?.termsHash) fail(409,'Agreement changed. Refresh.')
+            if (status.pending) return current
+            if (current.observed?.state!==undefined && status.state===undefined) fail(409,'The known escrow is missing from the confirmed chain view. Refresh.')
+            if (status.state!==undefined) {
+              if (!status.observedBlock) fail(502,'A confirmed payment block is unavailable.')
+              const previous=current.observed
+              if (previous?.observedBlock && (BigInt(status.observedBlock)<BigInt(previous.observedBlock) || (status.observedBlock===previous.observedBlock && status.state!==previous.state))) throw Object.assign(Error('Payment details are updating. Please try again.'),{status:409,code:'STALE_CHAIN_OBSERVATION'})
+              if (!previous?.observedBlock || BigInt(status.observedBlock)>BigInt(previous.observedBlock)) {
+                current.stockReceipt=status.stockReceipt
+                current.observed={state:status.state,observedBlock:status.observedBlock,escrow:status.escrow}
+                if (previous?.state!==status.state) current.events.push({type:'chain_state',state:status.state,block:status.observedBlock,at:d.now().toISOString()})
+              }
+            }
+            return current
+          })
+          return {record:next,pending:!!status.pending}
+        } catch(error) { if ((error as {code?:string}).code!=='STALE_CHAIN_OBSERVATION'||attempt>=2) throw error }
+      }
+    })()
+    observations.set(record.id,task)
+    try { return await task } finally { if(observations.get(record.id)===task)observations.delete(record.id) }
+  }
   const developer = async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store')
     try {
@@ -93,6 +132,11 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
         if (lookup !== undefined && (typeof lookup !== 'string' || !/^[a-zA-Z0-9:_-]{16,128}$/.test(lookup))) fail(400, 'Invalid idempotency key.')
         const record = await d.read(key(id(lookup ? 'xag_' + hash(JSON.stringify([policy.partnerId, lookup])) : req.query.id)))
         if (!record || record.partnerId !== policy.partnerId) fail(404, 'Agreement not found.')
+        if (req.query.reconcile !== undefined && req.query.reconcile !== 'true') fail(400,'Choose a valid refresh option.')
+        if (req.query.reconcile === 'true') {
+          const next = await observeTrade(record!)
+          return res.json({ok:true,agreement:view(next.record),observation:{pending:next.pending,checkedAt:d.now().toISOString()}})
+        }
         return res.json({ ok: true, agreement: view(record!) })
       }
       if (req.body?.action !== undefined) fail(400, 'Developer keys may create drafts only.')

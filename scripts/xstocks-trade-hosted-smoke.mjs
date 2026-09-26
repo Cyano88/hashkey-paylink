@@ -21,8 +21,9 @@ assert.equal(parseTradeCheckout({...small,amount:'0.01000',trade:{...trade,price
 assert.throws(()=>parseTradeCheckout({...small,amount:'0.00224'},env))
 assert.throws(()=>parseTradeCheckout({...small,amount:'0.0000000000000000001',trade:{...small.trade,price:'0.0000000000000000001'}},env))
 assert.throws(()=>parseTradeCheckout({...small,amount:'0.0000001',trade:{...small.trade,price:'0.0000001'}},{...env,HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:6}])}))
+let planDelay,planCalls=0,lastPlan,planStatus={enabled:true,actions:['refund'],state:2,observedBlock:'100'};
 const store=new Map();let who='did:privy:buyer',project='project-a'
-const h=createXStocksAgreementHandlers({env:()=>env,hasStore:()=>true,now:()=>new Date('2026-09-25T12:00:00Z'),policy:async()=>({partnerId:project,environment:'live',checkoutMode:'human',capabilities:['xstocks_agreements']}),projectEnabled:async()=>true,identity:async()=>who,wallet:async()=>({address:who.endsWith('buyer')?buyer:seller,chainId:196}),read:async key=>structuredClone(store.get(key)),mutate:async(key,fn)=>{const r=fn(structuredClone(store.get(key)));store.set(key,structuredClone(r));return r},plan:async()=>({enabled:true,actions:['refund'],state:2,observedBlock:'100'})})
+const h=createXStocksAgreementHandlers({env:()=>env,hasStore:()=>true,now:()=>new Date('2026-09-25T12:00:00Z'),policy:async()=>({partnerId:project,environment:'live',checkoutMode:'human',capabilities:['xstocks_agreements']}),projectEnabled:async()=>true,identity:async()=>who,wallet:async()=>({address:who.endsWith('buyer')?buyer:seller,chainId:196}),read:async key=>structuredClone(store.get(key)),mutate:async(key,fn)=>{const r=fn(structuredClone(store.get(key)));store.set(key,structuredClone(r));return r},plan:async input=>{planCalls++;lastPlan=input;await planDelay;return structuredClone(planStatus)}})
 async function call(handler,body={},method='POST',query={}){const res={statusCode:200,setHeader(){},status(c){this.statusCode=c;return this},json(b){this.body=b;return this}};await handler({method,headers:{'idempotency-key':'trade_fixture_00001'},body,query},res);return res}
 let created=await call(h.developer,body);assert.equal(created.statusCode,201)
 const a=created.body.agreement
@@ -37,3 +38,28 @@ assert.equal((await call(h.participant,{agreementId:a.id,action:'prepare',operat
 assert.equal((await call(h.participant,{agreementId:a.id,action:'prepare',operation:'refund',evidence:'Return the item payment'})).statusCode,200)
 assert.equal((await call(h.developer,{},'GET',{idempotencyKey:'trade_fixture_00001'})).statusCode,200)
 console.log('Hosted Trade passed: exact totals, separate binding, delivery deadlines, project isolation, idempotent lookup, exact participant consent and paused recovery.')
+
+const refreshQuery={id:a.id,reconcile:'true'};
+planStatus={enabled:true,actions:['release'],state:6,observedBlock:'101',transaction:{unexpected:true}};
+let fresh=await call(h.developer,{},'GET',refreshQuery);
+assert.equal(fresh.statusCode,200);assert.equal(fresh.body.agreement.observed.state,6);
+assert.equal(lastPlan.action,undefined);assert.equal(lastPlan.account,buyer);
+assert.equal(fresh.body.status,undefined);assert.equal(fresh.body.transaction,undefined);
+assert.equal(fresh.body.observation.pending,false);
+const beforeCalls=planCalls;project='project-b';assert.equal((await call(h.developer,{},'GET',refreshQuery)).statusCode,404);assert.equal(planCalls,beforeCalls);project='project-a';
+planStatus={enabled:true,actions:[],state:2,observedBlock:'100'};
+assert.equal((await call(h.developer,{},'GET',refreshQuery)).statusCode,409);
+assert.equal((await call(h.developer,{},'GET',{id:a.id})).body.agreement.observed.state,6);
+planStatus={enabled:true,actions:[],pending:true,state:2,observedBlock:'102'};
+fresh=await call(h.developer,{},'GET',refreshQuery);assert.equal(fresh.body.observation.pending,true);assert.equal(fresh.body.agreement.observed.state,6);
+planStatus={enabled:true,actions:[],observedBlock:'103'};
+assert.equal((await call(h.developer,{},'GET',refreshQuery)).statusCode,409);
+assert.equal((await call(h.developer,{},'GET',{id:a.id,reconcile:'yes'})).statusCode,400);
+console.log('Read-only Trade reconciliation passed: live state, paused recovery, project isolation, no signing data, monotonic blocks and pending/missing escrow protection.');
+
+planStatus={enabled:true,actions:[],state:6,observedBlock:'104'};
+let finishPlan;planDelay=new Promise(resolve=>finishPlan=resolve);
+const callsBefore=planCalls;const one=call(h.developer,{},'GET',refreshQuery),two=call(h.developer,{},'GET',refreshQuery);
+await new Promise(resolve=>setTimeout(resolve,0));assert.equal(planCalls,callsBefore+1,'Concurrent reads coalesce');finishPlan();
+const replies=await Promise.all([one,two]);assert.ok(replies.every(r=>r.statusCode===200));planDelay=undefined;
+console.log('Concurrent project reads use one chain observation.');

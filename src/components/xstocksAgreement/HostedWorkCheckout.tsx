@@ -23,7 +23,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
   const identity=[user?.id,item.id,item.activeVersion,wallet?.address.toLowerCase()].join(':');
   const current=useRef({identity,epoch:0});if(current.current.identity!==identity)current.current={identity,epoch:current.current.epoch+1};const epoch=current.current.epoch;
   const mounted=useRef(true),lock=useRef(false),requestRef=useRef(request),updatedRef=useRef(onUpdated);requestRef.current=request;updatedRef.current=onUpdated;
-  const refreshVersion=useRef(0);
+  const refreshVersion=useRef(0),background=useRef<Promise<unknown>|null>(null);
   const [loadError,setLoadError]=useState('');
   const [status,setStatus]=useState<WorkStatus>(),[busy,setBusy]=useState(''),[error,setError]=useState(''),[evidence,setEvidence]=useState(''),[pending,setPending]=useState(false);
   const {confirm,confirmation}=useStreamConfirm();
@@ -31,7 +31,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
   function assertCurrent(){if(!mounted.current||(current.current.identity!==identity||current.current.epoch!==epoch))throw Error('Your account or agreement changed. Please reopen it.');}
   async function api(extra:Record<string,unknown>={}){assertCurrent();const result=await requestRef.current({action:'work_xlayer_status',requestId:item.id,version:item.activeVersion,...extra}) as WorkStatus;assertCurrent();return result;}
   async function refresh(clearActionError=false){const version=++refreshVersion.current;try{const next=await api();if(version===refreshVersion.current){setStatus(next);setLoadError('');if(clearActionError)setError('');setPending(Boolean(localStorage.getItem(storageKey)));}return next;}catch(e){if(version===refreshVersion.current&&mounted.current&&current.current.identity===identity&&current.current.epoch===epoch)setLoadError('Payment status could not be verified. Refresh before continuing.');throw e;}}
-  useEffect(()=>{mounted.current=true;lock.current=false;++refreshVersion.current;setStatus(undefined);setBusy('');setError('');setLoadError('');setEvidence('');try{setPending(Boolean(localStorage.getItem(storageKey)))}catch{setPending(true);setError('Allow browser storage to keep payment recovery available.')}const update=()=>{if(!lock.current)void refresh().catch(()=>{});};update();const timer=setInterval(update,15000);return()=>{mounted.current=false;clearInterval(timer);};},[identity]);
+  useEffect(()=>{mounted.current=true;lock.current=false;++refreshVersion.current;setStatus(undefined);setBusy('');setError('');setLoadError('');setEvidence('');try{setPending(Boolean(localStorage.getItem(storageKey)))}catch{setPending(true);setError('Allow browser storage to keep payment recovery available.')}const update=()=>{if(lock.current||background.current||(typeof document!=='undefined'&&document.visibilityState==='hidden'))return;const read=refresh().catch(()=>{});background.current=read;void read.finally(()=>{if(background.current===read)background.current=null;});};background.current=null;update();const timer=setInterval(update,15000);window.addEventListener('focus',update);document.addEventListener('visibilitychange',update);return()=>{mounted.current=false;++refreshVersion.current;clearInterval(timer);window.removeEventListener('focus',update);document.removeEventListener('visibilitychange',update);};},[identity]);
   async function reconcile(record:Pending){
     if(!record.hash)throw Error('Submission is uncertain. Check wallet activity before retrying; another payment will not be sent.');
     setBusy('Confirming transaction');
@@ -85,6 +85,6 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     {!busy&&!pending&&!loadError&&!status?.pending&&status?.actions.map(action=><button key={action} className={action==='cancel'?'block min-h-11 w-full text-xs text-gray-500 underline disabled:opacity-40':button} disabled={!!busy||!wallet||status.wallet?.address.toLowerCase()!==wallet.address.toLowerCase()} onClick={()=>void run(action)}>{action==='approve'||action==='fund'?'Pay securely':labels[action]}</button>)}
     {pending&&!busy&&<button className={button} disabled={!!busy} onClick={()=>void run('recover')}>Check pending transaction</button>}
     {loadError&&<p role='alert' className='text-xs text-red-600'>{loadError}</p>}{error&&<p role='alert' className='text-xs text-red-600'>{error}</p>}
-    <button className='block min-h-11 w-full text-center text-xs font-bold underline' disabled={!!busy} onClick={()=>void refresh(true).then(()=>updatedRef.current()).catch(()=>{})}>Refresh agreement</button>
+    {(loadError||error)&&<button className='block min-h-11 w-full text-center text-xs font-bold underline' disabled={!!busy} onClick={()=>void refresh(true).then(()=>updatedRef.current()).catch(()=>{})}>Try again</button>}
   </section>;
 }
