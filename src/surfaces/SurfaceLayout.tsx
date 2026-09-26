@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import '../pages/stock-wallet.css'
+import { useEffect, useMemo, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import type { LayoutOutletContext } from '../Layout'
 import type { ChainKey } from '../lib/chains'
 
 export default function SurfaceLayout() {
+  useEffect(() => { document.body.setAttribute('data-hosted-stock-wallet','true'); return () => document.body.removeAttribute('data-hosted-stock-wallet') }, [])
   const [selectedNet, setSelectedNet] = useState<ChainKey>('base')
   const [wallet, setWallet] = useState<{ connected: boolean; disconnect?: () => void }>({ connected: false })
   const [success, setSuccess] = useState(false)

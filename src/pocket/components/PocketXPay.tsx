@@ -32,6 +32,9 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[open,setOpen]=useState(!!merchantId),[receipt,setReceipt]=useState<PaylinkReceipt|null>(null)
  const slowConfirmation=usePocketSlowConfirmation(payment?.status==='submitted'&&Boolean(payment.hash),payment?.id||'',60_000,busy)
  const guard=useRef(false),mounted=useRef(true)
+ const [now,setNow]=useState(Date.now)
+ const quoteExpired=payment?.status==='ready'&&payment.expiresAt<=now
+ useEffect(()=>{if(payment?.status!=='ready')return;setNow(Date.now());const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer)},[payment?.id,payment?.status])
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
  const saveActive=(id:string,hash?:string)=>localStorage.setItem(storageKey,JSON.stringify({id,hash}))
  const adopt=(p:XPayPayment)=>{setPayment(previous=>previous?.id===p.id&&['paid','failed'].includes(previous.status)&&p.status==='submitted'?previous:p);if(['paid','failed'].includes(p.status)){localStorage.removeItem(storageKey);void wallet.refresh().catch(()=>undefined)}}
@@ -78,8 +81,19 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
  const pay=()=>run(async()=>{
   if(!payment||!review||payment.status!=='ready')return
   const p=payment,currentScope=scope
-  const hash=await wallet.send(review,{
-   beforeSubmit:async()=>{if(scopeRef.current!==currentScope||p.expiresAt<=Date.now())throw Error('Review a fresh payment quote.');saveActive(p.id);const data=await xpayRequest(getAccessToken,{action:'authorize',id:p.id});if(scopeRef.current!==currentScope)throw Error('Your Pocket account changed.');setPayment(data.payment)},
+  if(p.expiresAt<=Date.now()){setNow(Date.now());throw Error('This amount has expired. Update it and review before paying.')}
+  // Refresh only the same transfer when its gas estimate has expired.
+  // A materially higher fee needs a separate confirmation before PIN approval.
+  let transfer=review
+  if(review.expiresAt<=Date.now()){
+   transfer=await prepareStockTransfer(review.owner,review.asset,review.recipient,review.amount)
+   if(scopeRef.current!==currentScope)throw Error('Your Pocket account changed.')
+   setReview(transfer)
+   if(transfer.fee>review.fee*120n/100n)throw Error('Network fee changed. Review the updated fee before paying.')
+  }
+  if(p.expiresAt<=Date.now()){setNow(Date.now());throw Error('This amount has expired. Update it and review before paying.')}
+  const hash=await wallet.send(transfer,{
+   beforeSubmit:async()=>{if(scopeRef.current!==currentScope)throw Error('Your Pocket account changed.');if(p.expiresAt<=Date.now()){setNow(Date.now());throw Error('This amount expired while you approved. Update it and review before paying.')}saveActive(p.id);const data=await xpayRequest(getAccessToken,{action:'authorize',id:p.id});if(scopeRef.current!==currentScope)throw Error('Your Pocket account changed.');setPayment(data.payment)},
    onSubmitted:hash=>{saveActive(p.id,hash);if(scopeRef.current===currentScope)setPayment(previous=>previous?.id===p.id&&!['paid','failed'].includes(previous.status)?{...previous,hash,status:'submitted'}:previous)}
   })
   if(scopeRef.current!==currentScope)return
@@ -96,7 +110,7 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
   {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&slowConfirmation))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface title="XPay" onClose={close} showCloseButton dismissible={!busy} dismissOnBackdrop={false}>
    <h2 className="mb-5 text-lg font-bold">{payment?.merchantName||merchant?.name||'XPay'}</h2>
    {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center"><Clock3 className="mx-auto h-12 w-12 text-blue-500"/><p className="mt-4 text-sm font-bold">{payment.status==='failed'?'Payment failed':'Confirming payment'}</p><p className="mt-2 text-xs text-gray-400">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>
-    <p className="text-2xl font-bold">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-2 text-sm text-gray-500">${payment.usd} USD</p><p className="mb-6 mt-3 text-xs text-gray-400">Network fee · ≈ {formatStockQuantity(stockQuantity(review.fee,18))} OKB</p><button className={cta} disabled={busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onClick={pay}>{busy?<><span aria-hidden="true" className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"/>Confirming payment</>:'Pay '+payment.merchantName}</button><button className="min-h-11 w-full text-xs text-gray-400" disabled={busy} onClick={()=>{setPayment(null);setReview(null)}}>Edit amount</button>
+    <p className="text-2xl font-bold">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-2 text-sm text-gray-500">${payment.usd} USD</p><p className="mb-6 mt-3 text-xs text-gray-400">Network fee · ≈ {formatStockQuantity(stockQuantity(review.fee,18))} OKB</p><button className={cta} disabled={busy||wallet.busy||wallet.uncertain||wallet.pending?.status==='pending'} onClick={quoteExpired?prepare:pay}>{busy?<><span aria-hidden="true" className="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"/>Confirming payment</>:quoteExpired?'Update payment amount':'Pay '+payment.merchantName}</button>{quoteExpired&&!busy&&<p role="status" className="mt-3 text-xs text-gray-500">This amount has expired. Update it, then review the new amount before paying.</p>}<button className="min-h-11 w-full text-xs text-gray-400" disabled={busy} onClick={()=>{setPayment(null);setReview(null)}}>Edit amount</button>
    </>:loading?<div aria-label="Loading merchant" className="h-40 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/10"/>:merchant?<>
     <p className="mb-4 text-xs text-gray-400">ID:{merchant.pocketId}</p><PocketArcTokenPicker label="Pay with" value={selected?.address||''} excluded="" tokens={assetTokens} disabled={busy} networkLabel="X Layer" clean initialLimit={100} onChange={t=>setToken(t.address.toLowerCase())} discover={async()=>{throw Error('Choose a stock accepted by this merchant.')}}/><label className="mt-4 block text-xs text-gray-400">Amount in USD<input aria-label="Amount in USD" className={input+' mt-2'} inputMode="decimal" value={usd} onChange={e=>setUsd(e.target.value)}/></label><button className={cta+' mt-5'} disabled={busy||!usd||!token||!wallet.address} onClick={prepare}>{busy?'Preparing…':'Continue'}</button>{!wallet.address&&<button className={cta+' mt-3'} onClick={wallet.connect} disabled={!wallet.ready||wallet.busy}>Open wallet</button>}
    </>:null}
