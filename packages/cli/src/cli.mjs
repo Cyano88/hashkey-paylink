@@ -131,7 +131,7 @@ export async function run(argv, { env = process.env, fetcher = globalThis.fetch,
     if (Object.keys(options).some(name => !['json', 'no-interactive'].includes(name) && !allowed[command].includes(name))) invalid('An option is not supported for this command.')
     if (command === 'capabilities') {
       const data = await request('/api/v2/capabilities', { fetcher, publicRequest: true })
-      if (data.version !== 1 || !Array.isArray(data.products) || typeof data.sandboxPaymentsEnabled !== 'boolean') throw new CliError('INVALID_RESPONSE', 'Capability response is incomplete.')
+      if (![1, 2].includes(data.version) || !Array.isArray(data.products) || typeof data.sandboxPaymentsEnabled !== 'boolean') throw new CliError('INVALID_RESPONSE', 'Capability response is incomplete.')
       emit(data); return 0
     }
     if (command.startsWith('auth ')) {

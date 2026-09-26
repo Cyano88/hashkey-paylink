@@ -153,3 +153,10 @@ test('capabilities rejects incomplete or unsuccessful metadata',async()=>{
  assert.equal((await invoke(['capabilities'],()=>Response.json({ok:true}))).code,1)
  assert.equal((await invoke(['capabilities'],()=>Response.json({ok:false},{status:503}))).code,1)
 })
+
+test('capabilities accepts current v2 X Layer product metadata without changing it', async () => {
+ const metadata={ok:true,version:2,sandboxPaymentsEnabled:false,sandboxKeysEnabled:false,products:[{id:'xstocks_agreements',live:{networks:['xlayer'],status:'project_activation_required'}},{id:'swap_xlayer',live:{networks:['xlayer'],status:'project_activation_required'}}]}
+ const result=await invoke(['capabilities'],()=>Response.json(metadata),{})
+ assert.equal(result.code,0);assert.deepEqual(result.data,metadata)
+ for(const version of [0,3,'2',null]) assert.equal((await invoke(['capabilities'],()=>Response.json({...metadata,version}))).code,1)
+})
