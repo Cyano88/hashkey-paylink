@@ -1,7 +1,7 @@
 import { Home, Receipt, History, CreditCard, UserRound, TrendingUp, Wallet } from './PocketIcons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isXStocksPath, xStockNavPath } from '../lib/pocketRail'
-import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
+
 import { cn } from '../../lib/utils'
 
 export type PocketNavTab = 'home' | 'bills' | 'cards' | 'activity' | 'profile'
@@ -41,16 +41,16 @@ export default function PocketBottomNav({ active, disabled = false, keyboardOpen
             <button
               key={key}
               type="button"
-              disabled={disabled}
-              aria-disabled={disabled || undefined}
+              disabled={disabled || key === 'cards'}
+              aria-disabled={disabled || key === 'cards' || undefined}
               aria-current={selected ? 'page' : undefined}
               aria-label={key === 'cards' ? 'Cards coming soon' : undefined}
-              onClick={() => stocks ? navigate(xStockNavPath(key)) : key === 'cards' ? navigate(POCKET_BASE_PATH + POCKET_ROUTES.cards) : onSelect(key)}
+              onClick={() => { if (key === 'cards') return; if (stocks) navigate(xStockNavPath(key)); else onSelect(key) }}
               className={cn(
                 'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 enabled:active:scale-[0.97] disabled:cursor-default',
                 selected
                   ? 'text-zinc-950 dark:text-white'
-                  : 'text-zinc-400 hover:text-zinc-950 dark:text-zinc-600 dark:hover:text-white',
+                  : 'text-zinc-400 enabled:hover:text-zinc-950 dark:text-zinc-600 dark:enabled:hover:text-white',
               )}
             >
               <span className="relative inline-flex">
