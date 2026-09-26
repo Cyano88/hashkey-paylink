@@ -1,3 +1,4 @@
+import { normalizePayoutAccount, pocketFiatCurrency } from '../lib/pocketFiatCorridors'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
 import type { CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
@@ -63,6 +64,7 @@ function clearStoredOperation() {
 }
 
 export default function usePocketBankWithdrawController({
+  country = 'NG',
   authenticated,
   email,
   firstName,
@@ -78,6 +80,7 @@ export default function usePocketBankWithdrawController({
   getAccessToken,
   onSent,
 }: {
+  country?: string
   authenticated: boolean
   email: string
   firstName: string
@@ -171,7 +174,7 @@ export default function usePocketBankWithdrawController({
 
   const canSubmit = authenticated
     && bankVerified
-    && Boolean(bankCode && accountName && accountNumber.length === 10 && firstName && lastName)
+    && Boolean(bankCode && accountName && normalizePayoutAccount(accountNumber, pocketFiatCurrency(country)) && firstName && lastName)
     && /^\d+(?:\.\d{1,2})?$/.test(amount)
     && Number(amount) > 0
     && status === 'idle'
@@ -405,7 +408,7 @@ export default function usePocketBankWithdrawController({
         ? approvedSession.current.session
         : await getEvmSession(selectedWallet.address)
       approvedSession.current = { walletAddress: selectedWallet.address, session }
-      const fingerprint = await operationFingerprint([email.toLowerCase(), bankCode, bankName, accountNumber, accountName, amount, memo.trim()].join('|'))
+      const fingerprint = await operationFingerprint([country, email.toLowerCase(), bankCode, bankName, accountNumber, accountName, amount, memo.trim()].join('|'))
       const key = idempotencyKey.current || storedOperation(fingerprint) || window.crypto.randomUUID()
       idempotencyKey.current = key
       window.sessionStorage.setItem(BANK_PAYOUT_OPERATION_KEY, JSON.stringify({ fingerprint, idempotencyKey: key }))
@@ -413,6 +416,8 @@ export default function usePocketBankWithdrawController({
         accessToken,
         idempotencyKey: key,
         request: {
+          country,
+          currency: pocketFiatCurrency(country),
           owner_email: email,
           owner_first_name: firstName,
           owner_last_name: lastName,
@@ -449,7 +454,7 @@ export default function usePocketBankWithdrawController({
       setStatus('idle')
       setError(message)
     }
-  }, [accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, getEvmSession, lastName, memo, wallet])
+  }, [country, accountName, accountNumber, amount, bankCode, bankName, canSubmit, email, ensureWallet, firstName, getAccessToken, getEvmSession, lastName, memo, wallet])
 
   const prepareApproval = useCallback(async () => {
     setError('')

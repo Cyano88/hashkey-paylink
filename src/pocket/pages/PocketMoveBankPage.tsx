@@ -1,3 +1,5 @@
+import PocketPayoutCountry from '../components/PocketPayoutCountry'
+import { pocketFiatCurrency } from '../lib/pocketFiatCorridors'
 import PocketBankAmountFields from '../components/PocketBankAmountFields'
 import PocketBankRecipients from '../components/PocketBankRecipients'
 import usePocketBankRecipients, { type PocketBankRecipient } from '../hooks/usePocketBankRecipients'
@@ -66,13 +68,14 @@ export default function PocketMoveBankPage() {
     allowThirdPartyAccount: mode === 'withdraw',
   })
   const pickRecipient = (recipient: PocketBankRecipient) => {
+    if ((recipient.country || 'NG') !== bank.country) return
     setRecipientStep(false)
     bank.setInstitution(recipient.bankCode,recipient.bankName,false)
     bank.setAccount(recipient.accountNumber)
     if (directory) closeDirectory()
   }
   useEffect(()=>{setRecipientStep(false)},[bank.accountNumber,bank.bankCode,mode])
-  const recipientList = (expanded=false) => <PocketBankRecipients rows={recipients.rows} busy={recipients.busy} error={recipients.error} tab={expanded ? (directory==='favourites'?'favourites':'recent') : recipientTab} onTab={setRecipientTab} onSelect={pickRecipient} onToggle={row=>void recipients.toggle(row)} onRetry={()=>void recipients.refresh()} expanded={expanded} onViewAll={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.bank+'?mode=withdraw&recipients='+recipientTab,{state:{bankRecipientDirectory:true}})} />
+  const recipientList = (expanded=false) => <PocketBankRecipients rows={recipients.rows.filter(row=>(row.country || 'NG') === bank.country)} busy={recipients.busy} error={recipients.error} tab={expanded ? (directory==='favourites'?'favourites':'recent') : recipientTab} onTab={setRecipientTab} onSelect={pickRecipient} onToggle={row=>void recipients.toggle(row)} onRetry={()=>void recipients.refresh()} expanded={expanded} onViewAll={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.bank+'?mode=withdraw&recipients='+recipientTab,{state:{bankRecipientDirectory:true}})} />
   const onWalletReady = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon', wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => {
     wallets.setWallets(current => ({ ...current, [network]: wallet }))
   }, [wallets.setWallets])
@@ -83,6 +86,7 @@ export default function PocketMoveBankPage() {
   const getLiquidityEvmSession = useCallback((network: 'base' | 'arbitrum' | 'arc' | 'ethereum' | 'polygon', walletAddress: string) => walletController.getEvmSession(network, walletAddress), [walletController.getEvmSession])
   const getLiquiditySolanaSession = useCallback((walletAddress: string) => walletController.getSolanaSession(walletAddress), [walletController.getSolanaSession])
   const direct = usePocketBankWithdrawController({
+    country: bank.country,
     authenticated,
     email,
     firstName: profile.profile?.firstName || profile.draft.firstName,
@@ -185,6 +189,7 @@ export default function PocketMoveBankPage() {
     memo: 'Bank transfer',
     amount: direct.result.amountUsdc,
     amountNgn: direct.result.amountNgn,
+    fiatCurrency: direct.result.fiatCurrency,
     ts: Date.now(),
     source: 'bank-withdraw',
     merchantId: direct.result.merchantId,
@@ -278,7 +283,7 @@ export default function PocketMoveBankPage() {
           {authenticated && bank.profileVerified && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className={mode === "withdraw" && recipientStep ? "flex min-h-0 flex-1 flex-col" : "space-y-3.5"}>
             {mode === 'request' && <PocketVerifiedNameBadge name={profile.profile?.resolvedName ?? ''} />}
 
-            <div hidden={mode === 'withdraw' && recipientStep}><PocketVerifiedBankFields
+            <div hidden={mode === 'withdraw' && recipientStep} className="space-y-3">{mode === 'withdraw' && <PocketPayoutCountry value={bank.country} onChange={value=>{bank.setCountry(value);direct.setAmount('');setReviewOpen(false)}} />}<PocketVerifiedBankFields
               recipientEntry={mode === 'withdraw'}
               country={bank.country}
               institutions={bank.institutions}
@@ -341,7 +346,7 @@ export default function PocketMoveBankPage() {
             </>}
 
             {mode === 'withdraw' && recipientStep && <div className="pocket-bank-amount-page flex min-h-0 flex-1 flex-col gap-5">
-              <PocketBankAmountFields accountName={bank.accountName} bankName={bank.bankName} accountNumber={bank.accountNumber} amount={direct.amount} memo={direct.memo} disabled={directLocked} onChangeRecipient={()=>setRecipientStep(false)} onAmountChange={direct.setAmount} onMemoChange={direct.setMemo} />
+              <PocketBankAmountFields currency={pocketFiatCurrency(bank.country)} accountName={bank.accountName} bankName={bank.bankName} accountNumber={bank.accountNumber} amount={direct.amount} memo={direct.memo} disabled={directLocked} onChangeRecipient={()=>setRecipientStep(false)} onAmountChange={direct.setAmount} onMemoChange={direct.setMemo} />
 
               <div className="mt-auto space-y-2 pt-6">
                 {recoveredPayout ? (
@@ -390,8 +395,8 @@ export default function PocketMoveBankPage() {
         onClose={bank.closeShare}
       />
       {mode === 'withdraw' && reviewOpen && !bankReceipt && !direct.error && <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
-        <PocketConfirmationDetails amount={'NGN ' + formatNgnAmount(direct.amount)} rows={[
-          ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', 'NGN ' + formatNgnAmount(direct.amount)], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
+        <PocketConfirmationDetails amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
+          ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
         ]} />
 <PocketSlideAction onApprovalBusyChange={setApprovalBusy}
                   status={directSlideStatus}

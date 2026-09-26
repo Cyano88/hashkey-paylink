@@ -4,6 +4,7 @@ export type PocketBankWithdrawData = {
   intentId: string
   orderId: string
   merchantId: string
+  fiatCurrency?: 'NGN' | 'UGX'
   amountNgn: string
   amountUsdc: string
   receiveAddress: string

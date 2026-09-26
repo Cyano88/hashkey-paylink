@@ -834,6 +834,9 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
 }
 
 export async function createNgPosBankReceive(req: Request, body: Record<string, unknown> = req.body ?? {}) {
+  if (body.country !== undefined && !['NG','UG'].includes(String(body.country))) throw ngPosRequestError(400, 'Unsupported payout country.')
+  const country = body.country === 'UG' ? 'UG' : 'NG'
+  const currency = pocketFiatCurrency(country)
   const session = await verifiedPrivyUser(req)
   const ownerId = session.userId
   const idempotencyKey = creationIdempotencyKey(req, body)
@@ -846,6 +849,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   ))
   const flexibleAmount = body.flexible_amount === true || body.flexible_amount === 'true'
   const amount = cleanAmount(body.amount)
+  if (existingMerchant && existingMerchant.country !== country) throw ngPosRequestError(409, 'This payment retry belongs to another payout country.')
   if (existingMerchant?.creation_response) {
     const replayLink = (existingMerchant.creation_response as any)?.link
     const replayIntentId = cleanText(replayLink?.intent_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
@@ -862,6 +866,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
         intent_id: replayIntentId,
         merchant_id: existingMerchant.merchant_id,
         amount_ngn: amountNgnText,
+      fiat_currency: currency,
         estimated_amount_usdc: '',
         fx_rate_ngn_per_usdc: '',
         source: merchantSource,
@@ -888,7 +893,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   const useSavedBank = body.use_saved_bank === true || body.use_saved_bank === 'true'
   const savedBankMerchant = useSavedBank
     ? Object.values(store.merchants ?? {})
-        .filter(item => item.owner_id === ownerId && Boolean(item.encrypted_bank_details))
+        .filter(item => item.owner_id === ownerId && item.country === country && Boolean(item.encrypted_bank_details))
         .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]
     : undefined
   if (useSavedBank && !savedBankMerchant?.encrypted_bank_details) {
@@ -899,14 +904,14 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
     : undefined
   const bankName = savedBankMerchant?.bank_name || cleanText(body.bank_name, 'Nigerian bank')
   const bankCode = savedBank?.bank_code
-    || await resolvePaycrestInstitutionCode({ bankCode: cleanText(body.bank_code, ''), bankName })
+    || await resolvePaycrestInstitutionCode({ bankCode: cleanText(body.bank_code, ''), bankName, currency })
   const accountNumber = savedBank?.account_number
-    || cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
+    || normalizePayoutAccount(body.account_number, currency)
   const accountName = savedBank?.account_name || cleanText(body.account_name, '')
   if (!ownerEmail) throw ngPosRequestError(401, 'Sign in to create bank receive links.')
-  if (!flexibleAmount && !amount) throw ngPosRequestError(400, 'Enter a valid Naira amount.')
-  if (!bankCode || accountNumber.length !== 10 || !accountName) {
-    throw ngPosRequestError(400, 'Verify a Nigerian bank account first.')
+  if (!flexibleAmount && !amount) throw ngPosRequestError(400, 'Enter a valid payout amount.')
+  if (!bankCode || !normalizePayoutAccount(accountNumber, currency) || !accountName) {
+    throw ngPosRequestError(400, 'Verify the payout account first.')
   }
   if (!isPaycrestConfigured()) throw ngPosRequestError(400, 'Paycrest is not configured for bank receive yet.')
 
@@ -918,7 +923,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
     owner_first_name: ownerFirstName || undefined,
     owner_last_name: ownerLastName || undefined,
     display_name: displayName,
-    country: 'NG',
+    country,
     payout_preference: 'INSTANT_FIAT',
     encrypted_bank_details: encryptBankDetails({ bank_code: bankCode, account_number: accountNumber, account_name: accountName }),
     bank_name: bankName,
@@ -944,7 +949,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
     const amountNgn = amount as number
     amountNgnText = amountNgn.toFixed(2)
     if (!directPayout) {
-      const payoutQuote = await resolveNgnPayoutQuote(amountNgn, 'NGN')
+      const payoutQuote = await resolveNgnPayoutQuote(amountNgn, currency, currency)
       const { rate, amountUsdc } = payoutQuote
       source = payoutQuote.source
       amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
@@ -956,6 +961,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
       intent_id: intentId,
       merchant_id: merchant.merchant_id,
       amount_ngn: amountNgnText,
+        fiat_currency: currency,
       estimated_amount_usdc: amountUsdcText,
       fx_rate_ngn_per_usdc: rateText,
       source: merchantSource,
@@ -1448,16 +1454,16 @@ export async function listPocketBankRecipients(ownerId: string) {
     const timestamp = paycrestActivityTimestamp(order)
     lastUsed.set(order.merchant_id, Math.max(lastUsed.get(order.merchant_id) || 0, timestamp))
   }
-  const recipients = new Map<string, { id: string; bankCode: string; bankName: string; accountNumber: string; accountName: string; lastUsedAt: number }>()
+  const recipients = new Map<string, { id: string; country: 'NG' | 'UG'; bankCode: string; bankName: string; accountNumber: string; accountName: string; lastUsedAt: number }>()
   for (const merchant of merchants) {
     const lastUsedAt = lastUsed.get(merchant.merchant_id)
     if (!lastUsedAt) continue
     const bank = decryptBankDetails(merchant.encrypted_bank_details!)
-    if (!bank.bank_code || !/^\d{10}$/.test(bank.account_number)) continue
+    if (!bank.bank_code || !normalizePayoutAccount(bank.account_number, pocketFiatCurrency(merchant.country))) continue
     const id = merchant.merchant_id
     const key = bank.bank_code + ':' + bank.account_number
     if ((recipients.get(key)?.lastUsedAt || 0) >= lastUsedAt) continue
-    recipients.set(key, { id, bankCode: bank.bank_code, bankName: merchant.bank_name || bank.bank_code, accountNumber: bank.account_number, accountName: bank.account_name, lastUsedAt })
+    recipients.set(key, { id, country: merchant.country === 'UG' ? 'UG' : 'NG', bankCode: bank.bank_code, bankName: merchant.bank_name || bank.bank_code, accountNumber: bank.account_number, accountName: bank.account_name, lastUsedAt })
   }
   return [...recipients.values()].sort((a,b) => b.lastUsedAt - a.lastUsedAt).slice(0,500)
 }

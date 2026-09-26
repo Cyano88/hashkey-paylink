@@ -1,4 +1,4 @@
-import PocketSelect from '../../components/PocketSelect'
+import PocketPayoutCountry from '../../components/PocketPayoutCountry'
 import { Link } from 'react-router-dom'
 import { useRef, useState } from 'react'
 import { downloadPocketQr } from '../../lib/pocketQrDownload'
@@ -152,11 +152,11 @@ export function PocketPosSetupPanel({
   return (
     <fieldset disabled={controller.submitting} className="pocket-pos-setup flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col gap-5">
-        <div className="pocket-pos-country"><PocketSelect ariaLabel="Payout country" value={controller.draft.country || 'NG'} options={[{value:'NG',label:'Nigeria \u00b7 NGN'},{value:'UG',label:'Uganda \u00b7 UGX'}]} onChange={controller.actions.selectCountry} /></div>
+        <div className="pocket-pos-identity grid gap-5"><PocketPayoutCountry value={controller.draft.country || 'NG'} onChange={controller.actions.selectCountry} />
         <label className="block">
           <span className="text-xs text-gray-500 dark:text-gray-400">Terminal name</span>
           <input aria-label="Terminal name" value={controller.draft.merchantName} onChange={event=>controller.actions.setMerchantName(event.target.value)} placeholder="Store name" className="mt-2 min-h-14 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#0D0D0D] dark:placeholder:text-gray-600" />
-        </label>
+        </label></div>
         {instantBankPayout && <section aria-label="Payout account">
           <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{controller.draft.country === 'UG' ? 'Receive payments in your mobile money account.' : 'Receive payments in your bank account.'}</p>
           <PocketVerifiedBankFields country={controller.draft.country || 'NG'} institutions={bankInstitutions} institutionsBusy={bankInstitutionsBusy} bankCode={bankCode} bankName={controller.draft.bankName} accountNumber={bankAccount} accountName={bankAccountName} verified={bankVerified} verifying={bankVerifyBusy} error={error} onCountryChange={()=>{}} onInstitutionChange={(code,name)=>controller.actions.setBankInstitution(code,name)} onAccountChange={controller.actions.setBankAccount} onRetry={controller.actions.verifyBankAccount} embedded recipientEntry />

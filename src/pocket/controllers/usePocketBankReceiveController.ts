@@ -1,3 +1,4 @@
+import { normalizePayoutAccount, pocketFiatCurrency } from '../lib/pocketFiatCorridors'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { copyToClipboard, formatAmount } from '../../lib/utils'
 import { readCachedPocketBankInstitutions, readPocketBankInstitutions, verifyPocketBankAccount } from '../api/pocketBankClient'
@@ -71,14 +72,16 @@ export default function usePocketBankReceiveController({
 
   useEffect(() => {
     let current = true
-    setInstitutionsBusy(!cachedInstitutions.current)
-    readPocketBankInstitutions()
+    const cached = readCachedPocketBankInstitutions(pocketFiatCurrency(country))
+    setInstitutions(cached?.institutions ?? [])
+    setInstitutionsBusy(!cached)
+    readPocketBankInstitutions(fetch, pocketFiatCurrency(country))
       .then(data => {
         if (current) setInstitutions(data.institutions)
       })
       .catch(reason => {
         if (!current) return
-        if (!cachedInstitutions.current) {
+        if (!cached) {
           setInstitutions([])
           setError(readablePocketBankPayoutError(reason, 'Could not load banks.'))
         }
@@ -87,15 +90,17 @@ export default function usePocketBankReceiveController({
         if (current) setInstitutionsBusy(false)
       })
     return () => { current = false }
-  }, [])
+  }, [country])
 
   const setCountry = useCallback((value: string) => {
+    if (value === country || !['NG','UG'].includes(value) || (!allowThirdPartyAccount && value !== 'NG')) return
+    setBankCode('');setBankName('');setAccountNumber('');setAccountName('');setVerified(false);setError('');setInstitutions([]);setInstitutionsBusy(true);lastVerificationKey.current=''
     verificationSequence.current++
     setVerifying(false)
     idempotencyKey.current = ''
     setCountryState(value)
     invalidateResult()
-  }, [invalidateResult])
+  }, [country, allowThirdPartyAccount, invalidateResult])
 
   const setInstitution = useCallback((code: string, name: string, resetAccount: boolean) => {
     verificationSequence.current++
@@ -116,12 +121,12 @@ export default function usePocketBankReceiveController({
     setVerifying(false)
     idempotencyKey.current = ''
     lastVerificationKey.current = ''
-    setAccountNumber(value.replace(/\D/g, '').slice(0, 10))
+    setAccountNumber(value.replace(/\D/g, '').slice(0, country === 'UG' ? 12 : 10))
     setVerified(false)
     setAccountName('')
     setError('')
     invalidateResult()
-  }, [invalidateResult])
+  }, [country, invalidateResult])
 
   const verify = useCallback(async () => {
     const sequence = ++verificationSequence.current
@@ -136,6 +141,7 @@ export default function usePocketBankReceiveController({
       const data = await verifyPocketBankAccount({
         accessToken,
         request: {
+          currency: pocketFiatCurrency(country),
           bank_code: bankCode,
           bank_name: bankName,
           account_number: accountNumber,
@@ -155,10 +161,10 @@ export default function usePocketBankReceiveController({
     } finally {
       if (valid()) setVerifying(false)
     }
-  }, [email, accountNumber, allowThirdPartyAccount, bankCode, bankName, getAccessToken, profile?.resolvedName, profileVerified])
+  }, [country, email, accountNumber, allowThirdPartyAccount, bankCode, bankName, getAccessToken, profile?.resolvedName, profileVerified])
 
   useEffect(() => {
-    if (!authenticated || !bankCode || accountNumber.length !== 10 || verifying || verified) return
+    if (!authenticated || !bankCode || !normalizePayoutAccount(accountNumber, pocketFiatCurrency(country)) || verifying || verified) return
     const verificationKey = `${bankCode}:${accountNumber}`
     if (lastVerificationKey.current === verificationKey) return
     const timer = window.setTimeout(() => { lastVerificationKey.current = verificationKey; void verify() }, 250)

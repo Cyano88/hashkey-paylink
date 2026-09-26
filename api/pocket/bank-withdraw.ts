@@ -1,3 +1,4 @@
+import { normalizePayoutAccount, pocketFiatCurrency } from '../../src/pocket/lib/pocketFiatCorridors.js'
 import type { Request, Response } from 'express'
 import { createHash } from 'node:crypto'
 import { parseUnits } from 'viem'
@@ -100,6 +101,7 @@ export function publicOrder(order: any, execution?: PaymentExecutionIntent, rout
     orderId: text(order?.paycrest_order_id),
     merchantId: text(order?.merchant_id),
     amountNgn: text(order?.amount_ngn),
+    fiatCurrency: order?.fiat_currency === 'UGX' ? 'UGX' : 'NGN',
     amountUsdc: text(order?.amount_usdc),
     receiveAddress: text(order?.receive_address),
     txHash: text(order?.tx_hash) || execution?.transactionHash || '',
@@ -285,16 +287,20 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         if (!isPocketIdempotencyKey(idempotencyKey)) return res.status(400).json({ ok: false, error: 'A valid idempotency key is required.' })
         const amount = text(req.body?.amount_ngn, 30)
         const walletAddress = text(req.body?.wallet_address, 80)
-        const accountNumber = text(req.body?.account_number, 20).replace(/\D/g, '').slice(0, 10)
-        if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) return res.status(400).json({ ok: false, error: 'Enter a valid Naira payout amount.' })
+        if (req.body?.country !== undefined && !['NG','UG'].includes(req.body.country)) return res.status(400).json({ok:false,error:'Unsupported payout country.'})
+        const country = req.body?.country === 'UG' ? 'UG' : 'NG'
+        const currency = pocketFiatCurrency(country)
+        if (req.body?.currency && req.body.currency !== currency) return res.status(400).json({ok:false,error:'Payout currency does not match country.'})
+        const accountNumber = normalizePayoutAccount(req.body?.account_number, currency)
+        if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0) return res.status(400).json({ ok: false, error: 'Enter a valid payout amount.' })
         if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) return res.status(400).json({ ok: false, error: 'Open your Base Circle wallet before withdrawing.' })
-        if (accountNumber.length !== 10 || !text(req.body?.account_name) || !text(req.body?.bank_code)) return res.status(400).json({ ok: false, error: 'Enter a valid destination bank account.' })
-        await dependencies.authorizeBankAccount(req, req.body)
+        if (!accountNumber || !text(req.body?.account_name) || !text(req.body?.bank_code)) return res.status(400).json({ ok: false, error: 'Enter a valid destination bank account.' })
+        await dependencies.authorizeBankAccount(req, {...req.body, currency, account_number: accountNumber})
 
         const replay = await dependencies.executions.findByIdempotency(identity.userId, 'bank_payout', idempotencyKey)
         if (replay) {
           const requestedBeneficiary = beneficiaryFingerprint(text(req.body?.bank_code, 20), accountNumber)
-          const sameRequest = Number(replay.metadata.amountNgn) === Number(amount)
+          const sameRequest = (replay.metadata.fiatCurrency || 'NGN') === currency && Number(replay.metadata.amountNgn) === Number(amount)
             && replay.metadata.bankCode === text(req.body?.bank_code, 20)
             && replay.metadata.bankName === text(req.body?.bank_name, 160)
             && replay.metadata.bankLast4 === accountNumber.slice(-4)
@@ -319,6 +325,9 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           body: {
             ...req.body,
             amount,
+            country,
+            currency,
+            account_number: accountNumber,
             flexible_amount: false,
             direct_payout: true,
             display_name: text(req.body?.memo) || 'Direct bank payout',
@@ -348,6 +357,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
             beneficiaryFingerprint: beneficiaryFingerprint(text(req.body?.bank_code, 20), accountNumber),
             accountName: text(req.body?.account_name, 200),
             amountNgn: amount,
+            fiatCurrency: currency,
             memo: text(req.body?.memo, 180) || 'Direct bank payout',
           },
         })
@@ -525,7 +535,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     } catch (reason) {
       const error = reason as Error & { status?: number }
       const message = /no provider available|provider.*amount|conversion with amount/i.test(error.message || '')
-        ? 'This Naira amount is unavailable right now. Try another amount.'
+        ? (req.body?.country === 'UG' ? 'This Uganda shilling amount is unavailable right now. Try another amount.' : 'This Naira amount is unavailable right now. Try another amount.')
         : error.message || 'Bank payout failed.'
       return res.status(error.status ?? 500).json({ ok: false, error: message })
     }

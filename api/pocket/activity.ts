@@ -123,6 +123,7 @@ function closedBankPayoutActivityRow(intent: PaymentExecutionIntent): PocketActi
     contextLabel: `${bank}${last4}`,
     settlementType: 'instant_fiat',
     amountNgn: intent.metadata.amountNgn,
+    fiatCurrency: intent.metadata.fiatCurrency === 'UGX' ? 'UGX' : 'NGN',
     paycrestStatus: reverted ? 'reversed' : 'pending',
     activityLabel: reverted ? 'Reversed payment' : 'Payment pending',
     direction: 'out',

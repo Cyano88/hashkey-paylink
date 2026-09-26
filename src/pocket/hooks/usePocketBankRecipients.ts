@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { POCKET_API } from '../lib/pocketSchemas'
-export type PocketBankRecipient = { id: string; bankCode: string; bankName: string; accountNumber: string; accountName: string; lastUsedAt: number; favourite: boolean }
+export type PocketBankRecipient = { id: string; country?: 'NG' | 'UG'; bankCode: string; bankName: string; accountNumber: string; accountName: string; lastUsedAt: number; favourite: boolean }
 export default function usePocketBankRecipients({ email, enabled, getAccessToken }: { email: string; enabled: boolean; getAccessToken: () => Promise<string | null> }) {
   const [snapshot,setSnapshot] = useState<{scope:string;rows:PocketBankRecipient[]}>({scope:'',rows:[]}), [busy,setBusy] = useState(false), [error,setError] = useState('')
   const scope = enabled ? email.toLowerCase() : ''
