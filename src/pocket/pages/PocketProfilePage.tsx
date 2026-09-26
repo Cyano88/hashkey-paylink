@@ -176,9 +176,9 @@ export default function PocketProfilePage() {
             <span className={cn('relative h-7 w-12 rounded-full transition-colors', quickApprovalEnabled ? 'bg-blue-600' : 'bg-gray-200 dark:bg-white/15')}><span className={cn('absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform', quickApprovalEnabled ? 'translate-x-6' : 'translate-x-1')} /></span>
           </button>}
           {quickApprovalError && <p className="-mt-1 px-2 text-xs font-medium text-red-500" role="status">{quickApprovalError}</p>}
-          <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.assistant)} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#121212] dark:shadow-none">
+          <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.assistant, {state:{supportReturnPath:location.pathname}})} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#121212] dark:shadow-none">
             <MessageCircle className="h-5 w-5 text-gray-500 dark:text-gray-300" />
-            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-400">Support</span><span className="mt-1 block text-sm font-bold">Chat with Agent Hash</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-sm font-bold">Support</span><span className="mt-1 block text-xs text-gray-400">Talk to us</span></span>
             <ChevronRight className="h-4 w-4 text-gray-400" />
           </button>
           <button type="button" onClick={() => { setDeleteConfirmation(''); setDeleteError(''); setDeleteOpen(true) }} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#121212] dark:shadow-none">

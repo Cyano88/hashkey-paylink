@@ -1,3 +1,4 @@
+import { submitSupportConversation } from './support-conversation.js'
 import { pocketActivityStore } from './activity-store.js'
 import { activityFeedKey } from './activity-feed.js'
 import { reportTransaction, transactionReportKey, transactionReportDetails, validateTransactionReport, upsertTransactionReport } from './transaction-report.js'
@@ -23,6 +24,7 @@ type SupportCase = {
   reportReason?: string
   reference?: string
   assignedTo?: string
+  humanSupport?: boolean
   customer?: { fullName: string; email: string; pocketId: string }
   messages: SupportMessage[]
   proof?: { rootHash: string; ogTxHash: string; ogExplorer: string }
@@ -33,7 +35,7 @@ type SupportCase = {
   resolvedAt?: number
   customerReadAt?: number
 }
-type SupportStore = { cases: Record<string, SupportCase> }
+type SupportStore = { cases: Record<string, SupportCase>; staffNames?: Record<string, string> }
 
 const STORE_KEY = (process.env.POCKET_SUPPORT_STORE_KEY || 'hashpaylink:pocket-support:v1').trim()
 
@@ -55,7 +57,7 @@ async function verifiedStaff(req: Request) {
   const claims = await client.verifyAuthToken(token)
   const email = linkedEmail(await client.getUserById(claims.userId))
   if (!allowedUserIds.has(claims.userId) && (!email || !allowed.has(email))) throw Object.assign(new Error('This account is not allowed to manage support.'), { status: 403 })
-  return { email: email || claims.userId }
+  return { email: email || claims.userId, userId: claims.userId }
 }
 async function store() { return (await readDurableJson<SupportStore>(STORE_KEY)) || { cases: {} } }
 async function currentStore() {
@@ -68,13 +70,13 @@ async function currentStore() {
   })
 }
 function publicCase(item: SupportCase) {
-  const { profileId: _profileId, ...safe } = item
+  const { profileId: _profileId, assignedTo: _assignedTo, customer: _customer, ...safe } = item
   const lastReadAt = item.customerReadAt || 0
   const unreadCount = item.messages.filter(message => (
     (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution')
     && message.createdAt > lastReadAt
   )).length
-  return { ...safe, unreadCount }
+  return { ...safe, humanSupport: Boolean(item.humanSupport || item.assignedTo || item.messages.some(m => m.author === 'staff')), unreadCount }
 }
 
 export async function redactPocketSupportCases(profileId: string) {
@@ -105,9 +107,16 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
     const action = clean(req.body?.action || req.query.action, 40) || (req.method === 'GET' ? 'list-mine' : 'create')
     if (action.startsWith('staff-')) {
       const staff = await verifiedStaff(req)
+      if (action === 'staff-profile') {
+        const displayName = clean(req.body?.displayName, 60)
+        if (!displayName) return res.status(400).json({ok:false,error:'Enter your support display name.'})
+        await mutateDurableJson<SupportStore>(STORE_KEY, current => ({...current, cases:current?.cases || {}, staffNames:{...current?.staffNames,[staff.userId]:displayName}}))
+        return res.json({ok:true,displayName})
+      }
+      if (!['staff-list','staff-reply','staff-assign','staff-resolve'].includes(action)) return res.status(400).json({ok:false,error:'Unknown support action.'})
       if (action === 'staff-list') {
         const rows = Object.values((await currentStore()).cases).sort((a, b) => b.updatedAt - a.updatedAt)
-        return res.json({ ok: true, cases: rows })
+        return res.json({ ok: true, cases: rows, displayName: (await store()).staffNames?.[staff.userId] || '' })
       }
       const caseId = clean(req.body?.caseId, 80)
       let saved: SupportCase | undefined
@@ -119,7 +128,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         if (action === 'staff-reply') {
           const text = clean(req.body?.message, 1500)
           if (!text) throw Object.assign(new Error('Reply is required.'), { status: 400 })
-          item.messages = [...item.messages, { id: crypto.randomUUID(), author: 'staff', text, createdAt: now }].slice(-80)
+          item.messages = [...item.messages, { id: crypto.randomUUID(), author: 'staff', displayName: next.staffNames?.[staff.userId] || 'Pocket Support', text, createdAt: now }]
           item.status = req.body?.resolve === true ? 'resolved' : 'waiting_user'
           item.waitingSince = req.body?.resolve === true ? undefined : now
           item.reminderSentAt = undefined
@@ -149,6 +158,18 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
       const rows = Object.values((await currentStore()).cases).filter(item => item.profileId === profileId).sort((a, b) => b.updatedAt - a.updatedAt)
       return res.json({ ok: true, cases: rows.map(publicCase) })
     }
+    if (action === 'chat') {
+      if (identity.kind !== 'privy') return res.status(401).json({ok:false,error:'Sign in to Pocket to contact Support.'})
+      let saved: SupportCase | undefined
+      const customer = await privateCustomerIdentity(identity)
+      await mutateDurableJson<SupportStore>(STORE_KEY, current => {
+        const next = current || {cases:{}}
+        saved = submitSupportConversation(next.cases, {profileId,caseId:clean(req.body?.caseId,80)||undefined,message:String(req.body?.message||'').trim(),requestId:clean(req.body?.requestId,80)}, Date.now(), () => crypto.randomUUID())
+        saved.customer ||= customer
+        return next
+      })
+      return res.json({ok:true,case:saved && publicCase(saved)})
+    }
     if (action === 'transaction-report' || action === 'transaction-report-status') {
       if(identity.kind!=='privy') return res.status(401).json({ok:false,error:'Sign in to Pocket to report this transaction.'})
       const feed=await pocketActivityStore.read(activityFeedKey(identity.subject))
@@ -160,7 +181,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
       }
       const report=validateTransactionReport(req.body?.reason,req.body?.description)
       const now=Date.now(),transaction=transactionReportDetails(row,now),customer=await privateCustomerIdentity(identity)
-      const item:SupportCase={id:'pcs_'+crypto.randomUUID().replace(/-/g,'').slice(0,16),profileId,status:'open',priority:'high',
+      const item:SupportCase={id:'pcs_'+crypto.randomUUID().replace(/-/g,'').slice(0,16),profileId,status:'open',humanSupport:true,priority:'high',
         category:row.source?.startsWith('bank-')?'bank_payment':'stuck_transaction',summary:report.label,reference:row.bankOrderId||row.providerReference||row.billReference||row.txHash||row.eventId,
         transactionKey,transaction,reportReason:report.reason,customer,createdAt:now,updatedAt:now,
         messages:[{id:crypto.randomUUID(),author:'user',text:report.label+' - '+report.description,createdAt:now},
@@ -179,7 +200,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         const item = next.cases[caseId]
         if (!item || item.profileId !== profileId) throw Object.assign(new Error('Support case not found.'), { status: 404 })
         const now = Date.now()
-        item.messages = [...item.messages, { id: crypto.randomUUID(), author: 'user', text, createdAt: now }].slice(-80)
+        item.messages = [...item.messages, { id: crypto.randomUUID(), author: 'user', text, createdAt: now }]
         item.status = item.assignedTo ? 'assigned' : 'open'
         item.waitingSince = undefined
         item.reminderSentAt = undefined
@@ -240,7 +261,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
       messages: Array.isArray(req.body?.messages) ? req.body.messages.slice(-16).map((row: any) => ({ id: crypto.randomUUID(), author: row.author === 'user' ? 'user' : 'agent', text: clean(row.text, 1200), createdAt: now })) : [],
       createdAt: now, updatedAt: now,
     }
-    await mutateDurableJson<SupportStore>(STORE_KEY, current => ({ cases: { ...(current?.cases || {}), [item.id]: item } }))
+    await mutateDurableJson<SupportStore>(STORE_KEY, current => ({ ...current, cases: { ...(current?.cases || {}), [item.id]: item } }))
     const commitmentSecret = (process.env.OG_MEMORY_COMMITMENT_SECRET || process.env.DEVELOPER_PORTAL_SECRET || '').trim()
     if (commitmentSecret) {
       const supportCommitment = crypto.createHmac('sha256', commitmentSecret).update(item.id).update(summary).digest('hex')

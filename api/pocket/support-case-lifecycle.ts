@@ -5,6 +5,8 @@ export type PocketSupportLifecycleMessage = {
   id: string
   author: 'user' | 'agent' | 'staff'
   kind?: 'automatic_reminder' | 'automatic_resolution' | 'transaction_report'
+  displayName?: string
+  requestId?: string
   text: string
   createdAt: number
 }
@@ -41,9 +43,9 @@ export function advancePocketSupportLifecycle<T extends PocketSupportLifecycleCa
         id: uuid(),
         author: 'agent',
         kind: 'automatic_resolution',
-        text: 'Pocket Support closed this conversation after 72 hours without a reply. Tap Chat with a human to reopen it whenever you still need help.',
+        text: 'Pocket Support closed this conversation after 72 hours without a reply. You can read it in Messages and send a new message if you still need help.',
         createdAt: now,
-      }].slice(-80)
+      }]
       changed = true
       continue
     }
@@ -56,7 +58,7 @@ export function advancePocketSupportLifecycle<T extends PocketSupportLifecycleCa
         kind: 'automatic_reminder',
         text: 'Pocket Support is waiting for your reply. This conversation will close after 72 hours without a response, and you can reopen it anytime.',
         createdAt: now,
-      }].slice(-80)
+      }]
       changed = true
     }
   }

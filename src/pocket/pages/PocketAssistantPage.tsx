@@ -1,54 +1,25 @@
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft } from '../components/PocketIcons'
+import { useCallback } from 'react'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import usePocketProfile from '../hooks/usePocketProfile'
-import { TelegramHelperPanel as PocketAgentHashPanel } from '../../components/AgentHashPanel'
-
-const WELCOME_TEXT = 'Pocket Support is ready. Ask me about balances, sending or receiving USDC, requests, bank payouts, POS, bills, activity, receipts, or account support.'
+import PocketSupportView from '../components/PocketSupportView'
+import { xStockPath } from '../lib/pocketRail'
+import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 
 export default function PocketAssistantPage() {
   const navigate = useNavigate()
-  const [params]=useSearchParams()
-  const reportCaseId=/^pcs_[a-f0-9]{16}$/.test(params.get('case')||'')?params.get('case')||'':''
-  const { authenticated, email, getAccessToken } = usePocketIdentity()
-  const profile = usePocketProfile({ authenticated, email, getAccessToken })
-  const displayName = profile.profile?.resolvedName || 'there'
-  const ownerKey = email || profile.profile?.pocketId || 'circle-pocket-web'
-
-  return (
-    <div className='fixed inset-0 z-[55] h-[100dvh] overflow-hidden bg-white text-gray-950 dark:bg-black dark:text-white'>
-      <main className='mx-auto flex h-[100dvh] w-full max-w-[480px] flex-col overflow-hidden' style={{ paddingTop: 'calc(var(--pocket-safe-top) + 1rem)', paddingBottom: 'var(--pocket-safe-bottom)' }}>
-        <header className='sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between border-b border-gray-100 bg-white px-5 dark:border-[#262626] dark:bg-black'>
-          <button type='button' onClick={() => navigate(-1)} className='flex h-10 w-10 items-center justify-center rounded-full bg-[#F5F5F7] dark:bg-white/[0.07]' aria-label='Back'>
-            <ArrowLeft className='h-4 w-4' />
-          </button>
-          <div className='text-center'>
-            <p className='text-sm font-black'>Agent Hash</p>
-            <p className='text-[10px] font-medium text-gray-400'>Pocket Support</p>
-          </div>
-          <span className='h-10 w-10' />
-        </header>
-        <section className='flex min-h-0 flex-1 flex-col overflow-hidden pt-2'>
-          <PocketAgentHashPanel
-            telegramName={displayName}
-            ownerKey={ownerKey}
-            telegramId=''
-            fallbackOwner={ownerKey}
-            initialEventId=''
-            initialPayer={displayName === 'there' ? '' : displayName}
-            initialHelperMode='circle-pocket'
-            lockedHelperMode='circle-pocket'
-            initialSupportCaseId={reportCaseId}
-            initialNotice=''
-            welcomeText={WELCOME_TEXT}
-            inputPlaceholder='Ask Agent Hash...'
-            hideTopDivider
-            fillAvailableHeight
-            onRecoverTelegramName={() => undefined}
-            onBack={() => navigate(-1)}
-          />
-        </section>
-      </main>
-    </div>
-  )
+  const location = useLocation()
+  const requestedReturn = location.state?.supportReturnPath
+  const returnPath = [POCKET_BASE_PATH + POCKET_ROUTES.profile, xStockPath('portfolio')].includes(requestedReturn) ? requestedReturn : POCKET_BASE_PATH + POCKET_ROUTES.profile
+  const [params] = useSearchParams()
+  const { getAccessToken } = usePocketIdentity()
+  const call = useCallback(async (body: Record<string, unknown>) => {
+    const token = await getAccessToken()
+    if (!token) throw new Error('Sign in again to contact Support.')
+    const response = await fetch('/api/pocket/support/cases', {method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)})
+    if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Support is reconnecting. Your saved messages are safe; try again shortly.')
+    const data = await response.json()
+    if (!response.ok || !data.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Support could not load. Please try again.')
+    return data
+  }, [getAccessToken])
+  return <PocketSupportView call={call} initialCaseId={params.get('case') || ''} onClose={() => navigate(returnPath, {replace:true})} />
 }

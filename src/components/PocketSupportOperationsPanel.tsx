@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 import { Check, Loader2, RefreshCw, Send } from 'lucide-react'
 
-type SupportMessage = { id: string; author: 'user' | 'agent' | 'staff'; kind?: 'automatic_reminder' | 'automatic_resolution' | 'transaction_report'; text: string; createdAt: number }
+type SupportMessage = { id: string; author: 'user' | 'agent' | 'staff'; displayName?: string; kind?: 'automatic_reminder' | 'automatic_resolution' | 'transaction_report'; text: string; createdAt: number }
 type SupportCase = {
   id: string
   status: 'open' | 'assigned' | 'waiting_user' | 'resolved'
@@ -30,7 +30,7 @@ async function readSupportResponse(response: Response) {
       : 'Pocket Support returned an unexpected response. Please refresh and try again.')
   }
   try {
-    return await response.json() as { ok?: boolean; cases?: SupportCase[]; case?: SupportCase; error?: string }
+    return await response.json() as { ok?: boolean; cases?: SupportCase[]; case?: SupportCase; displayName?: string; error?: string }
   } catch {
     throw new Error('Pocket Support returned an incomplete response. Please try again.')
   }
@@ -41,6 +41,8 @@ export default function PocketSupportOperationsPanel() {
   const [cases, setCases] = useState<SupportCase[]>([])
   const [activeId, setActiveId] = useState('')
   const [reply, setReply] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [nameSaved, setNameSaved] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -64,6 +66,7 @@ export default function PocketSupportOperationsPanel() {
     try {
       const data = await call({ action: 'staff-list' })
       const next = data.cases || []
+      if (!quiet) { setDisplayName(data.displayName || ''); setNameSaved(Boolean(data.displayName)) }
       setCases(next)
       setActiveId(current => current && next.some(item => item.id === current) ? current : next[0]?.id || '')
       setError('')
@@ -90,12 +93,19 @@ export default function PocketSupportOperationsPanel() {
     finally { setBusy(false) }
   }
 
+  async function saveName() {
+    setBusy(true); setError('')
+    try { await call({action:'staff-profile',displayName}); setNameSaved(true) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : 'Name could not be saved.') }
+    finally { setBusy(false) }
+  }
   if (loading) return <div className="mt-7 flex min-h-48 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
   return <section className="mt-7">
     <div className="mb-4 flex items-center justify-between">
       <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">Customer operations</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">Pocket Support inbox</h1><p className="mt-1 text-xs text-gray-500">Only Agent Hash handoffs and human replies appear here.</p></div>
       <button type="button" onClick={() => void load()} className="inline-flex h-9 items-center gap-2 rounded-full border border-gray-200 bg-white px-3 text-xs font-semibold dark:border-white/10 dark:bg-[#111216]"><RefreshCw className="h-3.5 w-3.5" />Refresh</button>
     </div>
+    <div className="mb-4 flex flex-wrap items-center gap-2"><label className="text-xs">Support display name<input aria-label="Support display name" maxLength={60} value={displayName} onChange={event=>{setDisplayName(event.target.value);setNameSaved(false)}} className="ml-2 rounded-lg border border-gray-200 bg-transparent px-3 py-2 dark:border-white/10"/></label><button disabled={busy||!displayName.trim()||nameSaved} onClick={()=>void saveName()} className="rounded-full border px-3 py-2 text-xs disabled:opacity-40">{nameSaved?'Saved':'Save name'}</button></div>
     {error && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
     {!cases.length ? <div className="rounded-3xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 dark:border-white/10 dark:bg-[#111216]">No support cases yet.</div> :
       <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
@@ -107,7 +117,7 @@ export default function PocketSupportOperationsPanel() {
           <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-sm font-semibold">{active.summary}</p><p className="mt-1 text-[11px] text-gray-500">{active.category.replace('_', ' ')} · {active.priority} · {when(active.createdAt)}</p></div><div className="flex gap-2"><button disabled={busy} onClick={() => void operate('staff-assign')} className="rounded-full border border-gray-200 px-3 py-2 text-xs font-semibold dark:border-white/10">Assign to me</button><button disabled={busy || active.status === 'resolved'} onClick={() => void operate('staff-resolve')} className="inline-flex items-center gap-1 rounded-full border border-gray-200 px-3 py-2 text-xs font-semibold dark:border-white/10"><Check className="h-3.5 w-3.5" />Resolve</button></div></div>
           {active.transaction&&<div className="mt-4 rounded-2xl bg-gray-50 p-3 dark:bg-white/[0.04]"><p className="mb-3 text-xs font-semibold">Reported transaction</p><dl className="space-y-2">{Object.entries(active.transaction).filter(([,value])=>value!==undefined&&value!=='').map(([key,value])=><div key={key} className="grid grid-cols-[8rem_1fr] gap-3 text-xs"><dt className="text-gray-500">{key.replace(/([A-Z])/g,' $1')}</dt><dd className="break-all">{key.endsWith('At')?when(Number(value)):String(value)}</dd></div>)}</dl></div>}
           {active.customer && <div className="mt-4 grid gap-2 rounded-2xl bg-gray-50 p-3 text-xs dark:bg-white/[0.04] sm:grid-cols-3"><div><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Full name</p><p className="mt-1 font-semibold">{active.customer.fullName || 'Not verified'}</p></div><div><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Email</p><p className="mt-1 truncate font-semibold">{active.customer.email || 'Unavailable'}</p></div><div><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Pocket ID</p><p className="mt-1 font-semibold tabular-nums">{active.customer.pocketId || 'Unavailable'}</p></div></div>}
-          <div className="my-5 max-h-[24rem] space-y-3 overflow-y-auto">{active.messages.map(message => <div key={message.id} className={`max-w-[86%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${message.author === 'staff' ? 'ml-auto bg-gray-950 text-white dark:bg-white dark:text-gray-950' : 'bg-gray-100 dark:bg-white/[0.06]'}`}><p>{message.text}</p><p className="mt-1 text-[9px] opacity-50">{message.author} · {when(message.createdAt)}</p></div>)}</div>
+          <div className="my-5 max-h-[24rem] space-y-3 overflow-y-auto">{active.messages.map(message => <div key={message.id} className={`max-w-[86%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${message.author === 'staff' ? 'ml-auto bg-gray-950 text-white dark:bg-white dark:text-gray-950' : 'bg-gray-100 dark:bg-white/[0.06]'}`}><p>{message.text}</p><p className="mt-1 text-[9px] opacity-50">{message.author === 'staff' ? message.displayName || 'Pocket Support' : message.author} · {when(message.createdAt)}</p></div>)}</div>
           <div className="flex gap-2"><textarea value={reply} onChange={event => setReply(event.target.value)} placeholder="Reply as Pocket Support" className="min-h-12 flex-1 resize-none rounded-2xl border border-gray-200 bg-transparent px-3 py-2 text-sm outline-none focus:border-gray-500 dark:border-white/10" /><button disabled={busy || !reply.trim()} onClick={() => void operate('staff-reply')} className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gray-950 text-white disabled:opacity-40 dark:bg-white dark:text-gray-950">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</button></div>
         </div>}
       </div>}
