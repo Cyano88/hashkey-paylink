@@ -1,9 +1,10 @@
-import { Home, Receipt, History, UserRound, TrendingUp, Wallet } from './PocketIcons'
+import { Home, Receipt, History, CreditCard, UserRound, TrendingUp, Wallet } from './PocketIcons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isXStocksPath, xStockNavPath } from '../lib/pocketRail'
+import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { cn } from '../../lib/utils'
 
-export type PocketNavTab = 'home' | 'bills' | 'activity' | 'profile'
+export type PocketNavTab = 'home' | 'bills' | 'cards' | 'activity' | 'profile'
 
 type PocketBottomNavProps = {
   active: PocketNavTab
@@ -15,7 +16,7 @@ type PocketBottomNavProps = {
 const items = [
   { key: 'home', label: 'Home', icon: Home },
   { key: 'bills', label: 'Bills', icon: Receipt },
-  { key: 'activity', label: 'Activity', icon: History },
+  { key: 'cards', label: 'Cards', icon: CreditCard },
   { key: 'profile', label: 'Profile', icon: UserRound },
 ] as const
 
@@ -23,7 +24,7 @@ export default function PocketBottomNav({ active, disabled = false, keyboardOpen
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const stocks = isXStocksPath(pathname)
-  const visibleItems = stocks ? [items[0], { key: 'bills' as const, label: 'XStocks', icon: TrendingUp }, items[2], { key: 'profile' as const, label: 'Portfolio', icon: Wallet }] : items
+  const visibleItems = stocks ? [items[0], { key: 'bills' as const, label: 'XStocks', icon: TrendingUp }, { key: 'activity' as const, label: 'Activity', icon: History }, { key: 'profile' as const, label: 'Portfolio', icon: Wallet }] : items
   return (
     <nav
       aria-label="Pocket navigation"
@@ -43,7 +44,8 @@ export default function PocketBottomNav({ active, disabled = false, keyboardOpen
               disabled={disabled}
               aria-disabled={disabled || undefined}
               aria-current={selected ? 'page' : undefined}
-              onClick={() => stocks ? navigate(xStockNavPath(key)) : onSelect(key)}
+              aria-label={key === 'cards' ? 'Cards coming soon' : undefined}
+              onClick={() => stocks ? navigate(xStockNavPath(key)) : key === 'cards' ? navigate(POCKET_BASE_PATH + POCKET_ROUTES.cards) : onSelect(key)}
               className={cn(
                 'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 enabled:active:scale-[0.97] disabled:cursor-default',
                 selected
@@ -51,6 +53,7 @@ export default function PocketBottomNav({ active, disabled = false, keyboardOpen
                   : 'text-zinc-400 hover:text-zinc-950 dark:text-zinc-600 dark:hover:text-white',
               )}
             >
+              <span className="relative inline-flex">
               <Icon
                 aria-hidden="true"
                 className={cn(
@@ -58,6 +61,8 @@ export default function PocketBottomNav({ active, disabled = false, keyboardOpen
                   selected ? 'stroke-[2.5]' : 'stroke-[1.8]',
                 )}
               />
+              {key === 'cards' && <span aria-hidden="true" className="absolute -right-6 -top-1 rounded-full bg-gray-100 px-1 py-0.5 text-[7px] font-medium leading-none text-gray-500 dark:bg-white/10 dark:text-gray-400">Soon</span>}
+              </span>
               <span>{label}</span>
             </button>
           )

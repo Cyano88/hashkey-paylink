@@ -52,6 +52,7 @@ export type PocketRouteState =
   | { section: 'notifications'; view: 'inbox' }
   | { section: 'move'; view: PocketMoveView }
   | { section: 'bills'; view: PocketBillView | 'overview' }
+  | { section: 'cards'; view: 'overview' }
   | { section: 'activity'; view: PocketActivityView }
   | { section: 'assistant'; view: 'circle-pocket' }
 
@@ -72,6 +73,7 @@ export const POCKET_ROUTES = {
   pos: '/move/pos',
   posManage: '/move/pos/manage',
   bills: '/bills',
+  cards: '/cards',
   airtime: '/bills/airtime',
   data: '/bills/data',
   tv: '/bills/tv',
@@ -110,6 +112,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   if (path === POCKET_ROUTES.bank) return { section: 'move', view: 'bank' }
   if (path === POCKET_ROUTES.posManage) return { section: 'home', view: 'pos-manage' }
   if (path === POCKET_ROUTES.pos) return { section: 'move', view: 'pos' }
+  if (path === POCKET_ROUTES.cards) return { section: 'cards', view: 'overview' }
   if (path === POCKET_ROUTES.bills) return { section: 'bills', view: 'overview' }
   if (path === POCKET_ROUTES.airtime) return { section: 'bills', view: 'airtime' }
   if (path === POCKET_ROUTES.data) return { section: 'bills', view: 'data' }
@@ -131,6 +134,7 @@ export function pocketPathFor(state: PocketRouteState) {
   if (state.section === 'notifications') return POCKET_ROUTES.notifications
   if (state.section === 'move') return POCKET_ROUTES[state.view]
   if (state.section === 'bills') return state.view === 'overview' ? POCKET_ROUTES.bills : POCKET_ROUTES[state.view]
+  if (state.section === 'cards') return POCKET_ROUTES.cards
   if (state.section === 'assistant') return POCKET_ROUTES.assistant
   if (state.view === 'all') return POCKET_ROUTES.activity
   return state.view === 'bank'
@@ -154,6 +158,7 @@ export function pocketLegacyEntryUrl(state: PocketRouteState) {
   if (state.section === 'notifications') params.set('pocket', 'notifications')
   if (state.section === 'move') params.set('pocket', `move:${state.view}`)
   if (state.section === 'bills') params.set('pocket', `bills:${state.view}`)
+  if (state.section === 'cards') params.set('pocket', 'cards')
   if (state.section === 'activity') params.set('pocket', `activity:${state.view}`)
   if (state.section === 'assistant') params.set('agent', 'hash')
   return `/?${params.toString()}`

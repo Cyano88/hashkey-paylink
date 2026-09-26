@@ -1,3 +1,4 @@
+import PocketCardsPage from './pages/PocketCardsPage'
 import {activePocketEvmSession} from './controllers/usePocketWalletController'
 import {reconcileCircleEvmEmailWithdraw} from '../lib/circleEvmEmailWallet'
 import usePocketSendRecovery from './hooks/usePocketSendRecovery'
@@ -306,6 +307,7 @@ export default function CirclePocketApp() {
       ? 'profile'
       : route?.section === 'bills'
         ? 'bills'
+        : route?.section === 'cards' ? 'cards'
         : route?.section === 'activity'
           ? 'activity'
           : 'home'
@@ -331,6 +333,7 @@ export default function CirclePocketApp() {
   else if (route?.section === 'profile') content = <PocketPageBoundary active="profile"><PocketProfilePage /></PocketPageBoundary>
   else if (route?.section === 'notifications') content = <PocketPageBoundary active="home"><PocketNotificationsPage /></PocketPageBoundary>
   else if (route?.section === 'bills') content = <PocketPageBoundary active="bills"><PocketBillsPage view={route.view} /></PocketPageBoundary>
+  else if (route?.section === 'cards') content = <PocketPageBoundary active="cards"><PocketCardsPage /></PocketPageBoundary>
   else if (route?.section === 'activity') content = <PocketPageBoundary active="activity"><PocketActivityPage view={route.view} /></PocketPageBoundary>
   else if (route?.section === 'assistant') content = <PocketPageBoundary active="home"><PocketAssistantPage /></PocketPageBoundary>
   else if (route?.section === 'move' && route.view === 'usdc') content = <PocketPageBoundary active="home"><PocketMoveUsdcPage /></PocketPageBoundary>
