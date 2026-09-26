@@ -38,7 +38,7 @@ type SupportCase = {
   resolvedAt?: number
   customerReadAt?: number
 }
-type SupportStore = { cases: Record<string, SupportCase>; staffNames?: Record<string, string> }
+type SupportStore = { cases: Record<string, SupportCase>; staffNames?: Record<string, string>; staffImages?: Record<string,string> }
 
 const STORE_KEY = (process.env.POCKET_SUPPORT_STORE_KEY || 'hashpaylink:pocket-support:v1').trim()
 
@@ -113,13 +113,15 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
       if (action === 'staff-profile') {
         const displayName = clean(req.body?.displayName, 60)
         if (!displayName) return res.status(400).json({ok:false,error:'Enter your support display name.'})
-        await mutateDurableJson<SupportStore>(STORE_KEY, current => ({...current, cases:current?.cases || {}, staffNames:{...current?.staffNames,[staff.userId]:displayName}}))
+        const image=String(req.body?.avatarDataUrl || '')
+        if(image && (image.length>16000 || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(image))) return res.status(400).json({ok:false,error:'Choose a small PNG, JPEG or WebP profile image.'})
+        await mutateDurableJson<SupportStore>(STORE_KEY, current => ({...current, cases:current?.cases || {}, staffNames:{...current?.staffNames,[staff.userId]:displayName},staffImages:{...current?.staffImages,[staff.userId]:image}}))
         return res.json({ok:true,displayName})
       }
       if (!['staff-list','staff-reply','staff-assign','staff-resolve'].includes(action)) return res.status(400).json({ok:false,error:'Unknown support action.'})
       if (action === 'staff-list') {
         const rows = Object.values((await currentStore()).cases).sort((a, b) => b.updatedAt - a.updatedAt)
-        return res.json({ ok: true, cases: rows, displayName: (await store()).staffNames?.[staff.userId] || '' })
+        return res.json({ ok: true, cases: rows, displayName: (await store()).staffNames?.[staff.userId] || '', avatarDataUrl:(await store()).staffImages?.[staff.userId] || '' })
       }
       const caseId = clean(req.body?.caseId, 80)
       let saved: SupportCase | undefined
@@ -133,7 +135,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         if (action === 'staff-reply') {
           const text = clean(req.body?.message, 1500)
           if (!text) throw Object.assign(new Error('Reply is required.'), { status: 400 })
-          item.messages = [...item.messages, { id: crypto.randomUUID(), author: 'staff', displayName: next.staffNames?.[staff.userId] || 'Pocket Support', text, createdAt: now }]
+          item.messages = [...item.messages, { id: crypto.randomUUID(), author: 'staff', displayName: next.staffNames?.[staff.userId] || 'Pocket Support', avatarDataUrl:next.staffImages?.[staff.userId] || undefined, text, createdAt: now }]
           item.resolutionRequestedAt = undefined; item.resolutionPromptId = undefined
           item.status = 'waiting_user'
           item.waitingSince = req.body?.resolve === true ? undefined : now

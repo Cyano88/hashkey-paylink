@@ -1074,3 +1074,6 @@ html.dark .polydesk-powered-footer strong {
     box-shadow: 0 8px 20px rgba(17, 24, 39, 0.08), 0 0 0 3px rgba(124, 58, 237, 0.08);
   }
 }
+
+:root[data-pocket-runtime='native'][data-pocket-support-surface='chat']:not([data-pocket-light-surface='true']) body::before { background: #f5f5f5; }
+:root[data-pocket-runtime='native'][data-pocket-support-surface='chat'].dark:not([data-pocket-light-surface='true']) body::before { background: #171719; }

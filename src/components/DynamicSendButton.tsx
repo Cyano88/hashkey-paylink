@@ -4,6 +4,7 @@ import { cn } from '../lib/utils'
 type DynamicSendButtonProps = {
   inputText: string
   isLoading: boolean
+  canStop?: boolean
   onSend: () => void
   onStop: () => void
   onAddAttachment?: () => void
@@ -14,6 +15,7 @@ type DynamicSendButtonProps = {
 export default function DynamicSendButton({
   inputText,
   isLoading,
+  canStop = true,
   onSend,
   onStop,
   onAddAttachment,
@@ -41,8 +43,8 @@ export default function DynamicSendButton({
       type="button"
       onPointerDown={event => event.preventDefault()}
       onClick={handleClick}
-      disabled={disabled}
-      aria-label={isLoading ? 'Stop response' : hasInput ? 'Send message' : 'Add attachment'}
+      disabled={disabled || (isLoading && !canStop)}
+      aria-label={isLoading ? (canStop ? 'Stop response' : 'Sending message') : hasInput ? 'Send message' : 'Add attachment'}
       className={cn(
         'group relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border transition-all duration-200 ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2 active:scale-[0.94] dark:focus-visible:ring-neutral-500 dark:focus-visible:ring-offset-[#111114]',
@@ -81,7 +83,7 @@ export default function DynamicSendButton({
           state === 'loading' ? 'scale-100 opacity-100' : 'scale-50 opacity-0',
         )}
       >
-        <Square className="h-4 w-4 fill-black stroke-black" />
+        {canStop ? <Square className="h-4 w-4 fill-black stroke-black" /> : <ArrowUp className="h-6 w-6 stroke-[2.6]" />}
       </span>
     </button>
   )

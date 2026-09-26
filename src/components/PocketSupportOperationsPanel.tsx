@@ -32,7 +32,7 @@ async function readSupportResponse(response: Response) {
       : 'Pocket Support returned an unexpected response. Please refresh and try again.')
   }
   try {
-    return await response.json() as { ok?: boolean; cases?: SupportCase[]; case?: SupportCase; displayName?: string; error?: string }
+    return await response.json() as { ok?: boolean; cases?: SupportCase[]; case?: SupportCase; displayName?: string; avatarDataUrl?:string; error?: string }
   } catch {
     throw new Error('Pocket Support returned an incomplete response. Please try again.')
   }
@@ -44,6 +44,7 @@ export default function PocketSupportOperationsPanel() {
   const [activeId, setActiveId] = useState('')
   const [reply, setReply] = useState('')
   const [displayName, setDisplayName] = useState('')
+  const [avatarDataUrl,setAvatarDataUrl]=useState('')
   const [nameSaved, setNameSaved] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -68,7 +69,7 @@ export default function PocketSupportOperationsPanel() {
     try {
       const data = await call({ action: 'staff-list' })
       const next = data.cases || []
-      if (!quiet) { setDisplayName(data.displayName || ''); setNameSaved(Boolean(data.displayName)) }
+      if (!quiet) { setDisplayName(data.displayName || ''); setAvatarDataUrl(data.avatarDataUrl || ''); setNameSaved(Boolean(data.displayName)) }
       setCases(next)
       setActiveId(current => current && next.some(item => item.id === current) ? current : next[0]?.id || '')
       setError('')
@@ -95,9 +96,14 @@ export default function PocketSupportOperationsPanel() {
     finally { setBusy(false) }
   }
 
+  async function choosePhoto(file?:File) {
+    if(!file)return
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5_000_000){setError('Choose a JPEG, PNG or WebP image under 5 MB.');return}
+    try {const image=await createImageBitmap(file);const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;const context=canvas.getContext('2d');if(!context)throw Error('Image processing unavailable.');const size=Math.min(image.width,image.height);context.drawImage(image,(image.width-size)/2,(image.height-size)/2,size,size,0,0,64,64);image.close();setAvatarDataUrl(canvas.toDataURL('image/jpeg',0.8));setNameSaved(false)}catch{setError('This image could not be opened.')}
+  }
   async function saveName() {
     setBusy(true); setError('')
-    try { await call({action:'staff-profile',displayName}); setNameSaved(true) }
+    try { await call({action:'staff-profile',displayName,avatarDataUrl}); setNameSaved(true) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Name could not be saved.') }
     finally { setBusy(false) }
   }
@@ -107,7 +113,7 @@ export default function PocketSupportOperationsPanel() {
       <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">Customer operations</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-gray-950 dark:text-white">Pocket Support inbox</h1><p className="mt-1 text-xs text-gray-500">Only Agent Hash handoffs and human replies appear here.</p></div>
       <button type="button" onClick={() => void load()} className="inline-flex h-9 items-center gap-2 rounded-full border border-gray-200 bg-white px-3 text-xs font-semibold dark:border-white/10 dark:bg-[#111216]"><RefreshCw className="h-3.5 w-3.5" />Refresh</button>
     </div>
-    <div className="mb-4 flex flex-wrap items-center gap-2"><label className="text-xs">Support display name<input aria-label="Support display name" maxLength={60} value={displayName} onChange={event=>{setDisplayName(event.target.value);setNameSaved(false)}} className="ml-2 rounded-lg border border-gray-200 bg-transparent px-3 py-2 dark:border-white/10"/></label><button disabled={busy||!displayName.trim()||nameSaved} onClick={()=>void saveName()} className="rounded-full border px-3 py-2 text-xs disabled:opacity-40">{nameSaved?'Saved':'Save name'}</button></div>
+    <div className="mb-4 flex flex-wrap items-center gap-2"><label className="text-xs">Profile photo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={event=>void choosePhoto(event.target.files?.[0])} className="ml-2 max-w-48 text-xs"/></label>{avatarDataUrl&&<img src={avatarDataUrl} alt="Your support profile" className="h-8 w-8 rounded-full object-cover"/>}<label className="text-xs">Support display name<input aria-label="Support display name" maxLength={60} value={displayName} onChange={event=>{setDisplayName(event.target.value);setNameSaved(false)}} className="ml-2 rounded-lg border border-gray-200 bg-transparent px-3 py-2 dark:border-white/10"/></label><button disabled={busy||!displayName.trim()||nameSaved} onClick={()=>void saveName()} className="rounded-full border px-3 py-2 text-xs disabled:opacity-40">{nameSaved?'Saved':'Save name'}</button></div>
     {error && <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
     {!cases.length ? <div className="rounded-3xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 dark:border-white/10 dark:bg-[#111216]">No support cases yet.</div> :
       <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
