@@ -29,9 +29,9 @@ export default function PocketBillsPage({ view }: { view: PocketBillView | 'over
     <h1 className="py-3 text-center text-base font-black tracking-tight text-gray-950 dark:text-white">Bills</h1>
     <section aria-label="Bill services" className="divide-y divide-gray-100 dark:divide-[#262626]">
       {BILL_ACTIONS.map(({ view, label, Icon }) => <button key={view} type="button" onClick={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'bills', view }))} className="flex min-h-20 w-full items-center gap-4 px-1 py-4 text-left transition active:scale-[0.99]">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-700 dark:bg-[#171717] dark:text-gray-200"><Icon className="h-5 w-5" /></span>
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-700 dark:bg-[#121212] dark:text-gray-200"><Icon className="h-5 w-5" /></span>
         <span className="flex-1 text-sm font-bold text-gray-950 dark:text-white">{label}</span>
-        <ChevronRight className="h-4 w-4 text-gray-400" />
+        <ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" />
       </button>)}
     </section>
   </PocketRouteShell>
@@ -123,7 +123,7 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
 
   if (authenticated && !wallets.resolved) return <PocketRouteShell active="bills" onSelect={selectNav}>{flowHeader}<PocketBillsSkeleton /></PocketRouteShell>
 
-  if (authenticated && wallets.error && !wallets.wallets.base?.address) return <PocketRouteShell active="bills" onSelect={selectNav}>{flowHeader}<div role="alert" className="mt-6 space-y-3 text-sm text-gray-500"><p>Bills could not load. Please try again.</p><button type="button" onClick={() => void wallets.refreshBalances()} className="font-semibold underline">Try again</button></div></PocketRouteShell>
+  if (authenticated && wallets.error && !wallets.wallets.base?.address) return <PocketRouteShell active="bills" onSelect={selectNav}>{flowHeader}<div role="alert" className="mt-6 space-y-3 text-sm text-gray-500 dark:text-gray-400"><p>Bills could not load. Please try again.</p><button type="button" onClick={() => void wallets.refreshBalances()} className="font-semibold underline">Try again</button></div></PocketRouteShell>
 
   const baseBalance = wallets.rows.find(row => row.key === 'base')?.balance ?? 0
   return (

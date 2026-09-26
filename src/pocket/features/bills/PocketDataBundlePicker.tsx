@@ -88,13 +88,13 @@ export default function PocketDataBundlePicker({
                 'relative min-h-[104px] rounded-xl border p-3 text-center transition-all duration-200',
                 selected
                   ? 'border-blue-500 bg-blue-50/80 shadow-[0_8px_22px_rgba(59,130,246,0.12)] dark:border-blue-400/50 dark:bg-blue-400/10'
-                  : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none dark:hover:border-blue-400/40',
+                  : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:hover:border-blue-400/40',
                 (disabled || !bundle.available) && 'cursor-not-allowed opacity-40 hover:translate-y-0 hover:border-gray-200 hover:shadow-none dark:hover:border-white/10',
               )}
             >
               {selected && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white"><Check className="h-2.5 w-2.5 stroke-[3]" /></span>}
               <span className="block text-[13px] font-black leading-tight tracking-[-0.03em] text-gray-950 dark:text-white">{bundle.dataAmount}</span>
-              <span className="mt-0.5 block truncate text-[9px] font-semibold text-gray-400">{bundle.validity}</span>
+              <span className="mt-0.5 block truncate text-[9px] font-semibold text-gray-500 dark:text-gray-400">{bundle.validity}</span>
               <span className="mt-2 block text-[10px] font-black tabular-nums text-gray-800 dark:text-gray-100">{formatNaira(bundle.price)}</span>
             </button>
           )

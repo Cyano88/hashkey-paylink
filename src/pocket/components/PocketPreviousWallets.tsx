@@ -24,8 +24,8 @@ export default function PocketPreviousWallets({email,getAccessToken,onBack}:{ema
  }
  return <div className='space-y-4'>
   <h2 className='text-lg font-black'>{complete?'Balance recovered':'Previous wallets'}</h2>
-  {complete?<p className='text-sm text-gray-500'>Your USDC transfer to your updated wallet is confirmed.</p>:session?<PocketMigrationExecution recovery additionalNetwork={additionalNetwork} session={session} getAccessToken={getAccessToken} onComplete={()=>setComplete(true)}/>:<>
-   <p className='text-sm leading-6 text-gray-500'>Check for USDC sent to a previous wallet after your update.</p>
+  {complete?<p className='text-sm text-gray-500 dark:text-gray-400'>Your USDC transfer to your updated wallet is confirmed.</p>:session?<PocketMigrationExecution recovery additionalNetwork={additionalNetwork} session={session} getAccessToken={getAccessToken} onComplete={()=>setComplete(true)}/>:<>
+   <p className='text-sm leading-6 text-gray-500 dark:text-gray-400'>Check for USDC sent to a previous wallet after your update.</p>
    {(['base','arbitrum','arc','ethereum','polygon'] as const).map(network=><button key={network} type='button' disabled={busy} onClick={()=>void review(network)} className='min-h-12 w-full rounded-full bg-gray-100 px-4 text-sm font-bold capitalize disabled:opacity-50 dark:bg-white/10'>{{base:'Base',arbitrum:'Arbitrum',arc:'Arc',ethereum:'Ethereum',polygon:'Polygon'}[network]}</button>)}
   </>}
   {message&&<p role='status' className='text-sm'>{message}</p>}{error&&<p role='alert' className='text-sm text-red-500'>{error}</p>}

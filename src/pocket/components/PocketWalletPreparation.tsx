@@ -88,13 +88,13 @@ export default function PocketWalletPreparation({ email, getAccessToken }: {
   if(additional.length && !previous)return <PocketAdditionalWalletUpdate email={email} getAccessToken={getAccessToken} networks={additional} onComplete={()=>{setAdditional([]);completed.current=true;goHome()}}/>
   if(previous)return <section className='pt-6'><PocketPreviousWallets key={email} email={email} getAccessToken={getAccessToken} onBack={goHome}/></section>
   return <section className='w-full space-y-4 pt-6'>
-    <article className='w-full rounded-[26px] bg-white p-5 shadow-sm dark:bg-[#121212] dark:shadow-none'>
+    <article className='w-full rounded-[26px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
       <h2 className='text-lg font-black'>{stage==='completed'?'Migration complete':stage==='review'?'Review your balance':stage==='verified'?'Wallets verified':'Update your Pocket wallet'}</h2>
-      {stage==='completed' ? <><p className='mt-3 text-sm leading-6 text-gray-500'>Your balance migration and updated wallets are confirmed.</p><button type='button' onClick={goHome} className={cta}>Proceed to Pocket</button><button type='button' onClick={()=>setPrevious(true)} className='mt-3 min-h-12 w-full text-sm font-bold'>Previous wallets</button></> : <>
-        <p className='mt-3 text-sm leading-6 text-gray-500'>{stage==='verified'?'Your Base, Arbitrum and Arc replacement addresses match. Review your balance next.':'Your current wallets remain active until transfers and activation are confirmed.'}</p>
+      {stage==='completed' ? <><p className='mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400'>Your balance migration and updated wallets are confirmed.</p><button type='button' onClick={goHome} className={cta}>Proceed to Pocket</button><button type='button' onClick={()=>setPrevious(true)} className='mt-3 min-h-12 w-full text-sm font-bold'>Previous wallets</button></> : <>
+        <p className='mt-3 text-sm leading-6 text-gray-500 dark:text-gray-400'>{stage==='verified'?'Your Base, Arbitrum and Arc replacement addresses match. Review your balance next.':'Your current wallets remain active until transfers and activation are confirmed.'}</p>
         {executionReady && operation.current ? <PocketMigrationExecution key={email} session={operation.current.session} getAccessToken={getAccessToken} onComplete={()=>{completed.current=true;setStage('completed')}} /> : stage==='review' && review && <>
           <dl className='mt-5 space-y-3'>{review.rows.map(row=><div key={row.network} className='flex justify-between gap-3 text-sm'><dt className='capitalize'>{row.network}</dt><dd>{row.status==='ok' && row.balance!==null?`${row.balance.toLocaleString(undefined,{maximumFractionDigits:6})} USDC`:'Unavailable'}</dd></div>)}</dl>
-          <p role='status' className='mt-5 text-sm leading-6 text-gray-500'>Some balances are unavailable. Refresh to review all three networks before continuing.</p>
+          <p role='status' className='mt-5 text-sm leading-6 text-gray-500 dark:text-gray-400'>Some balances are unavailable. Refresh to review all three networks before continuing.</p>
         </>}
         {!executionReady && <button type='button' onClick={()=>void run()} disabled={busy} className={cta}>{busy?'Checking...':stage==='verified'?'Review balance migration':stage==='review'?'Refresh balances':'Verify updated wallets'}</button>}
         {stage!=='prepare' && <button type='button' onClick={goHome} disabled={busy} className='mt-3 min-h-12 w-full text-sm font-bold'>Back to Pocket</button>}

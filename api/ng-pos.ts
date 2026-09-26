@@ -1412,3 +1412,28 @@ export default async function handler(req: Request, res: Response) {
     return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220) })
   }
 }
+
+// Private recipient directory: only funded outgoing orders owned by this session.
+export async function listPocketBankRecipients(ownerId: string) {
+  const store = await readStore()
+  const merchants = Object.values(store.merchants ?? {}).filter(m => m.owner_id === ownerId && m.source === 'bank-withdraw' && m.encrypted_bank_details)
+  const orders = await listPaycrestPosOrdersForMerchants(merchants.map(m => m.merchant_id))
+  const lastUsed = new Map<string, number>()
+  for (const order of orders) {
+    if (!order.tx_hash) continue
+    const timestamp = paycrestActivityTimestamp(order)
+    lastUsed.set(order.merchant_id, Math.max(lastUsed.get(order.merchant_id) || 0, timestamp))
+  }
+  const recipients = new Map<string, { id: string; bankCode: string; bankName: string; accountNumber: string; accountName: string; lastUsedAt: number }>()
+  for (const merchant of merchants) {
+    const lastUsedAt = lastUsed.get(merchant.merchant_id)
+    if (!lastUsedAt) continue
+    const bank = decryptBankDetails(merchant.encrypted_bank_details!)
+    if (!bank.bank_code || !/^\d{10}$/.test(bank.account_number)) continue
+    const id = merchant.merchant_id
+    const key = bank.bank_code + ':' + bank.account_number
+    if ((recipients.get(key)?.lastUsedAt || 0) >= lastUsedAt) continue
+    recipients.set(key, { id, bankCode: bank.bank_code, bankName: merchant.bank_name || bank.bank_code, accountNumber: bank.account_number, accountName: bank.account_name, lastUsedAt })
+  }
+  return [...recipients.values()].sort((a,b) => b.lastUsedAt - a.lastUsedAt).slice(0,500)
+}

@@ -105,13 +105,13 @@ export default function PocketSlideAction({ labels, status, disabled, onConfirm,
       aria-label={label}
       aria-live={'polite'}
       className={cn(
-        'flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-bold text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] transition active:scale-[0.99] disabled:cursor-not-allowed dark:bg-white dark:text-gray-950',
-        plain && '!min-h-12 !rounded-xl !bg-black !text-white !shadow-none',
+        !plain && 'flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gray-950 px-5 text-sm font-bold text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] transition active:scale-[0.99] disabled:cursor-not-allowed dark:bg-white dark:text-gray-950',
+        plain && 'pocket-cta-primary w-full',
         disabled && status === 'idle' && 'opacity-45',
-        visualStatus === 'pending' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
-        visualStatus === 'submitted' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
-        visualStatus === 'successful' && 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-white',
-        visualStatus === 'error' && 'bg-red-600 text-white dark:bg-red-500 dark:text-white',
+        !plain && visualStatus === 'pending' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
+        !plain && visualStatus === 'submitted' && 'bg-blue-600 text-white dark:bg-blue-500 dark:text-white',
+        !plain && visualStatus === 'successful' && 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-white',
+        !plain && visualStatus === 'error' && 'bg-red-600 text-white dark:bg-red-500 dark:text-white',
       )}
     >
       {(visualStatus === 'pending' || visualStatus === 'submitted'

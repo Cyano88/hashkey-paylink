@@ -61,6 +61,7 @@ export {
   Squares2X2Icon as Activity,
   BuildingStorefrontIcon as Store,
   SunIcon as Sun,
+  StarIcon as Star,
   TagIcon as Tag,
   TrashIcon as Trash,
   UserCircleIcon as UserRound,

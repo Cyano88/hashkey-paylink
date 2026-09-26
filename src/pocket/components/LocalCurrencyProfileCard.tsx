@@ -7,9 +7,9 @@ export type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 
 export function LocalCurrencySignInGate({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#171717]">
+    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#121212]">
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-200">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">
           <Mail className="h-4 w-4" />
         </span>
         <div className="min-w-0">
@@ -20,7 +20,7 @@ export function LocalCurrencySignInGate({ title, body }: { title: string; body: 
       <PrivyConnectButton
         loginOptions={{ loginMethods: ['email'] }}
         logoutOnAuthenticated={false}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all hover:bg-black active:scale-[0.98] disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+        className="pocket-cta-primary mt-4 flex w-full items-center justify-center gap-2 px-4 py-3 transition-all"
       >
         <Mail className="h-4 w-4" />
         Sign in to continue
@@ -107,7 +107,7 @@ export function LocalCurrencyProfileCard({
           </span>
           <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-500 dark:text-gray-400">{profile?.email}</span>
         </span>
-        <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold text-gray-400 transition-colors group-hover:text-gray-700 dark:group-hover:text-gray-200">
+        <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold text-gray-500 dark:text-gray-400 transition-colors group-hover:text-gray-700 dark:group-hover:text-gray-200">
           Edit
           <ChevronDown className="h-3.5 w-3.5 -rotate-90 transition-transform group-hover:translate-x-0.5" />
         </span>
@@ -119,8 +119,8 @@ export function LocalCurrencyProfileCard({
     <div className={cn(
       'rounded-2xl p-4',
       embedded
-        ? 'bg-gray-50/80 dark:bg-[#171717]'
-        : 'border border-gray-100 bg-white shadow-sm dark:border-[#262626] dark:bg-[#171717]',
+        ? 'bg-gray-50/80 dark:bg-[#121212]'
+        : 'border border-gray-100 bg-white shadow-sm dark:border-[#262626] dark:bg-[#121212]',
     )}>
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -131,7 +131,7 @@ export function LocalCurrencyProfileCard({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-600 transition-all hover:bg-gray-100 active:scale-[0.98] dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300 dark:hover:bg-white/[0.1]"
+            className="rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-600 transition-all hover:bg-gray-100 active:scale-[0.98] dark:border-[#262626] dark:bg-[#121212] dark:text-gray-300 dark:hover:bg-white/[0.1]"
           >
             Cancel
           </button>
@@ -157,7 +157,7 @@ export function LocalCurrencyProfileCard({
             value={draft.firstName}
             onChange={event => onDraftChange({ ...draft, firstName: event.target.value })}
             placeholder="First name"
-            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#171717] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
           />
         </label>
         <label className="block">
@@ -166,7 +166,7 @@ export function LocalCurrencyProfileCard({
             value={draft.lastName}
             onChange={event => onDraftChange({ ...draft, lastName: event.target.value })}
             placeholder="Last name"
-            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#171717] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
+            className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600 dark:focus:border-white/25"
           />
         </label>
       </div>
@@ -177,12 +177,12 @@ export function LocalCurrencyProfileCard({
           value={identityEmail}
           readOnly
           placeholder="Signed-in email"
-          className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-500 outline-none dark:border-[#262626] dark:bg-[#171717] dark:text-gray-400"
+          className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-500 outline-none dark:border-[#262626] dark:bg-[#121212] dark:text-gray-400"
         />
       </label>
 
       {bankMismatch && (
-        <p className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium leading-relaxed text-gray-600 dark:border-[#262626] dark:bg-[#171717] dark:text-gray-300">
+        <p className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-medium leading-relaxed text-gray-600 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-300">
           Bank account name is {bankAccountName}. Make sure this payout account belongs to you or your business.
         </p>
       )}
@@ -198,7 +198,7 @@ export function LocalCurrencyProfileCard({
           type="button"
           onClick={onSave}
           disabled={busy || !draft.firstName.trim() || !draft.lastName.trim() || !(email || draft.email)}
-          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-gray-950 px-4 py-3 text-sm font-bold text-white transition-all hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+          className="pocket-cta-primary mt-3 flex w-full items-center justify-center gap-2 px-4 py-3 transition-all disabled:cursor-not-allowed"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
           {dirty ? 'Save changes' : saveLabel}

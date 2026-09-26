@@ -55,11 +55,11 @@ function PocketPageBoundary({ active, children }: { active: PocketNavTab; childr
 
 function PocketWalletUnlockScreen({ error, onRetry }: { error: string; onRetry: () => void }) {
   return <main className='fixed inset-0 z-[60] flex items-center justify-center bg-[#F5F5F7] px-6 overflow-y-auto pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-[max(1.5rem,var(--pocket-safe-top))] text-gray-950 dark:bg-black dark:text-white'>
-    <section className='w-full max-w-[390px] rounded-[28px] border border-gray-200 bg-white p-6 text-center shadow-xl dark:border-[#262626] dark:bg-[#171717]'>
+    <section className='w-full max-w-[390px] rounded-[28px] border border-gray-200 bg-white p-6 text-center shadow-xl dark:border-[#262626] dark:bg-[#121212]'>
       <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-xl dark:bg-blue-400/10'>â—Ž</span>
       <h1 className='mt-4 text-xl font-black tracking-tight'>{error ? 'Unlock your Pocket wallets' : 'Opening your Pocket wallets'}</h1>
       <p className='mt-2 text-sm leading-6 text-gray-500 dark:text-gray-400'>{error || 'Complete the Circle wallet check once, then Pocket can prepare requests, deposits, and payments without interrupting you later.'}</p>
-      {error ? <button type='button' onClick={onRetry} className='mt-5 min-h-14 w-full rounded-full bg-gray-950 px-5 text-sm font-bold text-white dark:bg-white dark:text-gray-950'>Try wallet unlock again</button> : <span className='mx-auto mt-5 block h-3 w-3 animate-pulse rounded-full bg-blue-600' aria-label='Unlocking Circle wallet' />}
+      {error ? <button type='button' onClick={onRetry} className='pocket-cta-primary mt-5 w-full px-5'>Try wallet unlock again</button> : <span className='mx-auto mt-5 block h-3 w-3 animate-pulse rounded-full bg-blue-600' aria-label='Unlocking Circle wallet' />}
     </section>
   </main>
 }

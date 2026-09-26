@@ -60,23 +60,23 @@ export default function PocketArcTokenPicker({ label, value, tokens, excluded, d
   }, [open, normalized, filtered.length, excluded])
   function select(token: ArcPickerToken) { onChange(token); setOpen(false) }
   return <>
-    <button ref={trigger} type="button" aria-label={label} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => { setQuery(''); setSearching(false); setOpen(true) }} className="flex min-h-12 w-full items-center justify-between gap-2 rounded-2xl border border-gray-200 px-3 py-3 text-sm font-bold disabled:opacity-40 dark:border-[#262626]">
-      {selected && <TokenImage token={selected} small />}<span className="min-w-0 flex-1 truncate text-left">{selected?.symbol || 'Select token'}</span><ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+    <button ref={trigger} type="button" aria-label={label} aria-haspopup="dialog" aria-expanded={open} disabled={disabled} onClick={() => { setQuery(''); setSearching(false); setOpen(true) }} className="pocket-cta-secondary flex w-full items-center justify-between gap-2 px-3 py-3">
+      {selected && <TokenImage token={selected} small />}<span className="min-w-0 flex-1 truncate text-left">{selected?.symbol || 'Select token'}</span><ChevronDown className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
     </button>
     {open && createPortal(<div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/40 pt-[var(--pocket-safe-top)] sm:items-center" onClick={event => { if (event.target === event.currentTarget) setOpen(false) }}>
       <div ref={root} style={{ maxHeight: 'min(85dvh, calc(100dvh - var(--pocket-safe-top) - 1rem))' }} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} className="flex max-h-[85dvh] w-full max-w-md flex-col rounded-t-[28px] bg-white p-5 pb-[max(1.25rem,var(--pocket-safe-bottom))] text-gray-950 shadow-xl outline-none dark:bg-gray-950 dark:text-white sm:rounded-[28px]">
         <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-bold">Select token</h2><button type="button" aria-label="Close token picker" onClick={() => setOpen(false)} className="rounded-full p-2"><X className="h-5 w-5" /></button></div>
-        {searching ? <label className="mb-3 flex items-center gap-2 rounded-2xl bg-gray-50 px-3 dark:bg-white/5"><Search className="h-4 w-4 shrink-0 text-gray-400" /><input autoFocus aria-label={`Search ${networkLabel} tokens or paste contract`} placeholder="Search name or paste contract" value={query} onChange={event => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none" /></label> : <button type="button" onClick={() => setSearching(true)} className="mb-3 flex items-center gap-2 rounded-2xl bg-gray-50 px-3 py-3 text-left text-sm text-gray-500 dark:bg-white/5"><Search className="h-4 w-4" />Search or paste contract</button>}
-        {!clean && <p className="mb-2 text-xs text-gray-400">{normalized ? 'Search results on ' + networkLabel : 'Available on ' + networkLabel + ' · your tokens first'}</p>}
+        {searching ? <label className="mb-3 flex items-center gap-2 rounded-2xl bg-gray-50 px-3 dark:bg-white/5"><Search className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" /><input autoFocus aria-label={`Search ${networkLabel} tokens or paste contract`} placeholder="Search name or paste contract" value={query} onChange={event => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none" /></label> : <button type="button" onClick={() => setSearching(true)} className="mb-3 flex items-center gap-2 rounded-2xl bg-gray-50 px-3 py-3 text-left text-sm text-gray-500 dark:bg-white/5 dark:text-gray-400"><Search className="h-4 w-4" />Search or paste contract</button>}
+        {!clean && <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{normalized ? 'Search results on ' + networkLabel : 'Available on ' + networkLabel + ' · your tokens first'}</p>}
         <div className="min-h-0 overflow-y-auto overscroll-contain">
           {[...listed, ...(found ? [found] : [])].map(token => <button type="button" key={token.address} onClick={() => select(token)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-3 text-left hover:bg-gray-50 dark:hover:bg-white/5">
             <TokenImage token={token} />
-            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{token.symbol}</span><span className="block truncate text-xs text-gray-400">{token.name}</span>{normalized.startsWith('0x') && <span className="block break-all text-[10px] text-gray-400">{token.address}</span>}</span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{token.symbol}</span><span className="block truncate text-xs text-gray-500 dark:text-gray-400">{token.name}</span>{normalized.startsWith('0x') && <span className="block break-all text-[10px] text-gray-500 dark:text-gray-400">{token.address}</span>}</span>
             {balancesLoading ? <PocketSkeletonBar className="h-3 w-14" /> : <span className="max-w-24 truncate text-xs tabular-nums">{token.balance ?? '—'}</span>}{token.address.toLowerCase() === value.toLowerCase() && <Check className="h-4 w-4 shrink-0" />}
           </button>)}
-          {loading && <p role="status" className="py-6 text-center text-xs text-gray-400">Looking up token…</p>}
+          {loading && <p role="status" className="py-6 text-center text-xs text-gray-500 dark:text-gray-400">Looking up token…</p>}
           {error && <p role="alert" className="py-4 text-xs text-red-600">{error}</p>}
-          {!listed.length && !found && !loading && !error && <p className="py-6 text-center text-xs text-gray-400">No matching token. Search by name or contract.</p>}
+          {!listed.length && !found && !loading && !error && <p className="py-6 text-center text-xs text-gray-500 dark:text-gray-400">No matching token. Search by name or contract.</p>}
         </div>
       </div>
     </div>, document.body)}
