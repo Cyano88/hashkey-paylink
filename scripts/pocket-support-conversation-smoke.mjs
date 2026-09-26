@@ -36,4 +36,19 @@ advancePocketSupportLifecycle({long},80*3600000,uuid)
 assert.equal(long.messages.length,93)
 console.log('Support ownership, retries, handoff, closed cases, rate limits and durable history passed.')
 
-
+const legacy={...next,id:'legacy',profileId:'legacy',category:'bank_payment',assignedTo:undefined,humanSupport:undefined,messages:[{id:'report',author:'agent',kind:'transaction_report',text:'Recorded status: successful',createdAt:1}]}
+submitSupportConversation({legacy},{profileId:'legacy',message:'Hi',requestId:uuid()},100000,uuid)
+assert.equal(legacy.humanSupport,true)
+assert.match(legacy.messages.at(-1).text,/already in the Pocket Support queue/)
+assert.ok(!legacy.messages.some(m=>/How can I help/.test(m.text)))
+submitSupportConversation({legacy},{profileId:'legacy',message:'I need to speak to a customer representative',requestId:uuid()},100001,uuid)
+assert.match(legacy.messages.at(-1).text,/representative has not joined yet/)
+legacy.assignedTo='staff'
+const count=legacy.messages.length
+submitSupportConversation({legacy},{profileId:'legacy',message:'I need to speak to a customer representative',requestId:uuid()},100002,uuid)
+assert.equal(legacy.messages.length,count+1,'No automatic replies when a staff member owns the case')
+const fresh={}
+const representative=submitSupportConversation(fresh,{profileId:'new',message:'I need to speak to a customer representative',requestId:uuid()},100000,uuid)
+assert.equal(representative.humanSupport,true)
+assert.match(representative.messages.at(-1).text,/Support queue/)
+console.log('Legacy report handoff and explicit customer representative requests passed.')

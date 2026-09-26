@@ -1,4 +1,4 @@
-import { pocketSupportAnswer } from '../../src/pocket/lib/pocketSupportContent.js'
+import { pocketSupportAnswer, requestsPocketHuman } from '../../src/pocket/lib/pocketSupportContent.js'
 import type { PocketSupportLifecycleMessage } from './support-case-lifecycle.js'
 export type Conversation = {
   id: string; profileId: string; status: 'open' | 'assigned' | 'waiting_user' | 'resolved';
@@ -23,8 +23,14 @@ export function submitSupportConversation<T extends Omit<Conversation, 'category
     item = {id:'pcs_'+uuid().replace(/-/g,'').slice(0,16),profileId:input.profileId,status:'open',category:'other',priority:'normal',summary:input.message.slice(0,100),messages:[],createdAt:now,updatedAt:now} as unknown as T
     cases[item.id] = item
   }
+  // Reports and legacy cases were already handed to staff before humanSupport existed.
+  const hasStaff = Boolean(item.assignedTo || item.messages.some(m => m.author === 'staff'))
+  const legacyHandoff = item.humanSupport === undefined && (item.category !== 'other' || item.messages.some(m => m.kind === 'transaction_report'))
+  if (hasStaff || legacyHandoff) item.humanSupport = true
   item.messages.push({id:uuid(),author:'user',text:input.message,createdAt:now,requestId:input.requestId})
-  if (!item.assignedTo && !item.humanSupport && !item.messages.some(m => m.author === 'staff')) {
+  if (!hasStaff && item.humanSupport && (legacyHandoff || requestsPocketHuman(input.message))) {
+    item.messages.push({id:uuid(),author:'agent',text:'Your case is already in the Pocket Support queue. A representative has not joined yet. Your additional messages are saved here for the team.',createdAt:now})
+  } else if (!hasStaff && !item.humanSupport) {
     const answer = pocketSupportAnswer(input.message)
     item.messages.push({id:uuid(),author:'agent',text:answer.text,createdAt:now})
     item.humanSupport = answer.handoff

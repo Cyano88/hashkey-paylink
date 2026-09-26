@@ -12,8 +12,12 @@ export const pocketSupportFaqs = [
   { question: 'Why did my payment fail?', answer: 'The reason depends on the transaction. Open its Activity details and use Report an issue so Support receives the recorded transaction reference and status. We will not guess the cause or ask you to repeat a payment whose outcome is uncertain.' },
 ] as const
 export const pocketSupportTopics = ['Deposit', 'Transfer', 'Bills', 'XStocks', 'Account', 'Talk to support'] as const
+export function requestsPocketHuman(message: string) {
+  return /\b(human|customer\s+(?:service|support|representative)|representative|real\s+(?:person|agent)|(?:talk|speak|chat|connect|transfer|escalate).{0,35}(?:support|person|agent|team))\b/i.test(message)
+}
 export function pocketSupportAnswer(message: string): { text: string; handoff: boolean } {
   const q = message.trim().toLowerCase()
+  if (requestsPocketHuman(q)) return {text:'Your request is in the Pocket Support queue. A representative has not joined yet. You can add details here; the team will see this conversation.',handoff:true}
   const exact = pocketSupportFaqs.find(item => item.question.toLowerCase() === q)
   if (exact) return { text: exact.answer, handoff: false }
   const topic = ({deposit: 1, transfer: 2, bills: 4, xstocks: 7, account: 9} as Record<string, number>)[q]

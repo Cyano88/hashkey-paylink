@@ -76,7 +76,7 @@ function publicCase(item: SupportCase) {
     (message.author === 'staff' || message.kind === 'automatic_reminder' || message.kind === 'automatic_resolution')
     && message.createdAt > lastReadAt
   )).length
-  return { ...safe, humanSupport: Boolean(item.humanSupport || item.assignedTo || item.messages.some(m => m.author === 'staff')), unreadCount }
+  return { ...safe, humanSupport: Boolean(item.humanSupport || item.assignedTo || item.category !== 'other' || item.messages.some(m => m.author === 'staff' || m.kind === 'transaction_report')), unreadCount }
 }
 
 export async function redactPocketSupportCases(profileId: string) {
