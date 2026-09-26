@@ -216,7 +216,7 @@ assert.equal(
 )
 assert.equal(
   readablePocketBankPayoutError(new Error('request failed.'), 'fallback'),
-  'Wrong bank details. Recheck the selected bank and account number.',
+  'Account lookup could not be completed. Try again.',
 )
 
 assert.equal(buildPocketPayLink({
