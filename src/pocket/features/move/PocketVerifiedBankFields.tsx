@@ -45,6 +45,23 @@ export function PocketVerifiedBankFields({
   embedded = false,
   recipientEntry = false,
 }: PocketVerifiedBankFieldsProps) {
+  const accountField = (<label className="block">
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Account number</span>
+            <div className="relative mt-1">
+              <input
+                value={accountNumber}
+                onChange={event => onAccountChange(event.target.value.replace(/\D/g, '').slice(0, 10))}
+                inputMode="numeric"
+                placeholder="0123456789"
+                className="min-h-12 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 pr-10 text-sm font-medium tabular-nums text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600"
+              />
+              {verifying && <span className="absolute right-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-gray-500 dark:text-gray-400"><Loader2 className="h-4 w-4" /></span>}
+            </div>
+          </label>)
+  const bankField = (<label className="block">
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Bank</span>
+            <div className="mt-1">{institutionsBusy && !institutions.length ? <PocketLoadingField label="Loading banks" /> : <PocketBankPicker value={bankCode} options={institutions} onChange={(code,name)=>onInstitutionChange(code,name,!recipientEntry)} />}</div>
+          </label>)
   return (
     <div className={cn(
       'space-y-2.5',
@@ -70,23 +87,8 @@ export function PocketVerifiedBankFields({
 
       {country === 'NG' && (
         <div className={recipientEntry ? "flex flex-col gap-3" : "space-y-2.5 border-t border-gray-100 pt-2.5 dark:border-[#262626]"}>
-          <label className="block">
-            <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Bank</span>
-            <div className="mt-1">{institutionsBusy && !institutions.length ? <PocketLoadingField label="Loading banks" /> : <PocketBankPicker value={bankCode} options={institutions} onChange={(code,name)=>onInstitutionChange(code,name,!recipientEntry)} />}</div>
-          </label>
-          <label className={recipientEntry ? "order-first block" : "block"}>
-            <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Account number</span>
-            <div className="relative mt-1">
-              <input
-                value={accountNumber}
-                onChange={event => onAccountChange(event.target.value.replace(/\D/g, '').slice(0, 10))}
-                inputMode="numeric"
-                placeholder="0123456789"
-                className="min-h-12 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 pr-10 text-sm font-medium tabular-nums text-gray-950 outline-none placeholder:text-gray-300 focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-white dark:placeholder:text-gray-600"
-              />
-              {verifying && <span className="absolute right-3 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-gray-500 dark:text-gray-400"><Loader2 className="h-4 w-4" /></span>}
-            </div>
-          </label>
+          {recipientEntry ? <>{accountField}{bankField}</> : <>{bankField}{accountField}</>}
+          
           {verified && accountName && <PocketResolvedNameRow name={accountName} />}
           {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">{error}</div>}
         </div>
