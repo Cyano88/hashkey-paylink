@@ -22,7 +22,7 @@ function nativePocketDestination(rawUrl: string) {
 type PocketNativeInsets = { top: number; bottom: number; topPx?: number; bottomPx?: number; density?: number }
 const PocketInsets = registerPlugin<{
   getInsets(): Promise<PocketNativeInsets>
-  setSystemBarAppearance(options: { darkIcons: boolean }): Promise<void>
+  setSystemBarAppearance(options: { darkIcons: boolean; navigationDarkIcons?: boolean }): Promise<void>
 }>('PocketInsets')
 
 function nativeInsetCssPixels(value: number | undefined, pixels: number | undefined, density: number | undefined) {
@@ -57,14 +57,15 @@ export default function PocketNativeBridge() {
     window.addEventListener('orientationchange', syncInsets)
     const syncStatusBar = () => {
       const lightSurface = document.documentElement.dataset.pocketLightSurface === 'true'
-      const darkIcons = lightSurface || !document.documentElement.classList.contains('dark')
+      const navigationDarkIcons = lightSurface || !document.documentElement.classList.contains('dark')
+      const darkIcons = lightSurface || (document.documentElement.dataset.pocketSupportSurface === 'home' ? false : navigationDarkIcons)
       const style = darkIcons ? Style.Light : Style.Dark
       void StatusBar.setStyle({ style }).catch(() => undefined)
-      void PocketInsets.setSystemBarAppearance({ darkIcons }).catch(() => undefined)
+      void PocketInsets.setSystemBarAppearance({ darkIcons, navigationDarkIcons }).catch(() => undefined)
     }
     syncStatusBar()
     const themeObserver = new MutationObserver(syncStatusBar)
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-pocket-light-surface'] })
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-pocket-light-surface', 'data-pocket-support-surface'] })
     void Network.getStatus().then(status => {
       if (active) setOnline(status.connected)
     }).catch(() => undefined)

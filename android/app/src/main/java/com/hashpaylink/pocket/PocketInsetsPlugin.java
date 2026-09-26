@@ -16,13 +16,14 @@ public class PocketInsetsPlugin extends Plugin {
     @PluginMethod
     public void setSystemBarAppearance(PluginCall call) {
         boolean darkIcons = Boolean.TRUE.equals(call.getBoolean(\u0022darkIcons\u0022, true));
+        boolean navigationDarkIcons = Boolean.TRUE.equals(call.getBoolean("navigationDarkIcons", darkIcons));
         getActivity().runOnUiThread(() -> {
             WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
                 getActivity().getWindow(),
                 getActivity().getWindow().getDecorView()
             );
             controller.setAppearanceLightStatusBars(darkIcons);
-            controller.setAppearanceLightNavigationBars(darkIcons);
+            controller.setAppearanceLightNavigationBars(navigationDarkIcons);
             call.resolve();
         });
     }

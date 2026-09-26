@@ -119,7 +119,7 @@ import pocketX402ConnectHandler from './api/pocket/x402-connect.js'
 import pocketX402ActivateHandler from './api/pocket/x402-activate.js'
 import pocketMarketplaceHandler from './api/pocket/marketplace.js'
 import pocketAgentAskHandler from './api/pocket/agent-ask.js'
-import pocketSupportCasesHandler from './api/pocket/support-cases.js'
+import pocketSupportCasesHandler, { startPocketSupportLifecycle } from './api/pocket/support-cases.js'
 import { readPocketOperationsHealth } from './api/pocket/operations-health.js'
 import { drainPocketReconciliation, pocketReconciliationHandler } from './api/pocket/reconciliation-worker.js'
 import { drainPocketMoneyPushWorker } from './api/pocket/money-push-worker.js'
@@ -423,6 +423,7 @@ app.all('/api/pocket/x402/activate',     strictLimiter, pocketX402ActivateHandle
 app.all('/api/pocket/marketplace',       strictLimiter, pocketMarketplaceHandler)
 app.all('/api/pocket/agent/ask',         strictLimiter, pocketAgentAskHandler)
 app.all('/api/pocket/support/cases',      strictLimiter, pocketSupportCasesHandler)
+startPocketSupportLifecycle()
 app.all('/api/pocket/wallets/link',      strictLimiter, pocketWalletLinkHandler)
 app.post('/api/stream-recipient-invite', strictLimiter, streamRecipientInviteHandler)
 app.get('/api/stream-history',         readLimiter, streamHistoryHandler)

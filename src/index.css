@@ -24,6 +24,16 @@ html[data-pocket-runtime='native'].dark:not([data-pocket-light-surface='true']) 
   background: #0A0A0A;
 }
 
+:root[data-pocket-runtime='native'][data-pocket-support-surface='home']:not([data-pocket-light-surface='true']) body::before {
+  background: #086bb1;
+}
+:root[data-pocket-runtime='native'][data-pocket-support-surface='neutral']:not([data-pocket-light-surface='true']) body::before {
+  background: #fff;
+}
+:root[data-pocket-runtime='native'][data-pocket-support-surface='neutral'].dark:not([data-pocket-light-surface='true']) body::before {
+  background: #101113;
+}
+
 html[data-pocket-runtime='native'],
 html[data-pocket-runtime='native'] body,
 html[data-pocket-runtime='native'] #root {

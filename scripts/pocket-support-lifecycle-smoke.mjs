@@ -40,7 +40,7 @@ assert.equal(highPriority.case1.messages.length, 1)
 assert.equal(highPriority.case1.messages[0].kind, 'automatic_reminder')
 
 const assigned = { case1: waitingCase({ status: 'assigned' }) }
-assert.equal(advancePocketSupportLifecycle(assigned, 1_000 + SUPPORT_AUTO_RESOLVE_AFTER_MS * 2, uuid), false)
+assert.equal(advancePocketSupportLifecycle(assigned, 1_000 + SUPPORT_AUTO_RESOLVE_AFTER_MS * 2, uuid), true)
 assert.equal(assigned.case1.status, 'assigned')
 
 console.log('Pocket Support lifecycle smoke checks passed.')
