@@ -142,7 +142,7 @@ export default function usePocketBankWithdrawController({
     return () => { stopped = true; clearInterval(timer); window.removeEventListener('focus', observe) }
   }, [status, result?.intentId, result?.state, getAccessToken])
 
-  const resetResult = useCallback(() => {
+  const resetResult = useCallback((clearDraft = true) => {
     if (status === 'idle' || status === 'processing' || status === 'pending' || status === 'sent') {
       const intentId = activeIntentId.current
       if (intentId && (status === 'pending' || status === 'sent' || !readActivePocketBankPayoutTransfer(intentId))) {
@@ -152,7 +152,7 @@ export default function usePocketBankWithdrawController({
         detachActivePocketBankPayout(intentId)
       }
       setStatus('idle')
-      setAmountState('')
+      if (clearDraft) { setAmountState(''); setMemoState('') }
       setError('')
       setResult(null)
       idempotencyKey.current = ''
@@ -164,12 +164,12 @@ export default function usePocketBankWithdrawController({
 
   const setAmount = useCallback((value: string) => {
     setAmountState(normalizePocketAmountInput(value))
-    resetResult()
+    resetResult(false)
   }, [resetResult])
 
   const setMemo = useCallback((value: string) => {
     setMemoState(value)
-    resetResult()
+    resetResult(false)
   }, [resetResult])
 
   const canSubmit = authenticated
