@@ -68,9 +68,9 @@ export default function PocketMovePosPage() {
   }
 
   return (
-    <PocketRouteShell active="home" onSelect={selectNav}>
+    <PocketRouteShell active="home" onSelect={selectNav} fixedPage={authenticated && identityVerified && Boolean(pos.country) && !pos.merchant}>
       <PocketFlowHeader centered rightAction={<button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.posManage)} className="min-h-10 px-1 text-xs font-bold">Manage</button>} title={pos.country && !pos.merchant ? "Create POS" : "POS"} onBack={() => pos.country && !pos.merchant ? changeStep("country") : navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
-      <PocketPosShell standalone>
+      <PocketPosShell standalone fixedPage={authenticated && identityVerified && Boolean(pos.country) && !pos.merchant}>
         {authenticated && !identityVerified && (
           <PocketVerifiedNameGate />
         )}

@@ -75,24 +75,31 @@ export async function verifyPocketBankAccount({
   request: PocketBankVerifyRequest
   fetcher?: typeof fetch
 }): Promise<PocketBankVerifyData> {
-  const response = await fetcher(POCKET_API.bankVerify, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(request),
-    signal: AbortSignal.timeout(20_000),
-  }).catch(reason => {
-    if (reason?.name === 'TimeoutError' || reason?.name === 'AbortError') throw new Error('Account lookup took too long. Try again.')
-    throw reason
-  })
-  const data = await response.json().catch(() => undefined)
-  if (!response.ok) {
-    const fallback = response.status === 429
-      ? 'Too many account lookups. Wait a moment and try again.'
-      : 'Account lookup is temporarily unavailable. Try again.'
-    throw new Error(bankErrorMessage(data, fallback))
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let response: Response
+    try {
+      response = await fetcher(POCKET_API.bankVerify, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(20_000),
+      })
+    } catch (reason) {
+      const name = reason instanceof Error ? reason.name : ''
+      if (name === 'TimeoutError' || name === 'AbortError') throw new Error('Account lookup took too long. Try again.')
+      if (attempt === 0 && reason instanceof TypeError) continue
+      throw new Error('Account lookup could not connect. Try again.')
+    }
+    const data = await response.json().catch(() => undefined)
+    const temporary = response.status >= 500 || (response.ok && !data)
+    if (temporary && attempt === 0) continue
+    if (!response.ok || !data) {
+      const fallback = response.status === 429
+        ? 'Too many account lookups. Wait a moment and try again.'
+        : 'Account lookup is temporarily unavailable. Try again.'
+      throw new Error(bankErrorMessage(data, fallback))
+    }
+    return parsePocketBankVerification(data)
   }
-  return parsePocketBankVerification(data)
+  throw new Error('Account lookup is temporarily unavailable. Try again.')
 }

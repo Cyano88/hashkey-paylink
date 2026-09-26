@@ -34,17 +34,19 @@ export type PocketPosCountryOption = {
 
 export function PocketPosShell({
   standalone,
+  fixedPage = false,
   backButton,
   children,
 }: {
   standalone: boolean
+  fixedPage?: boolean
   backButton?: ReactNode
   children: ReactNode
 }) {
   return (
     <div className={cn(
-      'space-y-5',
-      standalone
+      fixedPage ? 'flex min-h-0 flex-1 flex-col' : 'space-y-5',
+      fixedPage ? '' : standalone
         ? 'pb-5'
         : 'min-h-[590px] p-4 sm:min-h-[640px] sm:p-5',
     )}>
@@ -147,8 +149,8 @@ export function PocketPosSetupPanel({
   error,
 }: PocketPosSetupPanelProps) {
   return (
-    <fieldset disabled={controller.submitting} className="min-w-0">
-      <div className="flex flex-col gap-5" style={{minHeight:'calc(100dvh - 15rem)'}}>
+    <fieldset disabled={controller.submitting} className="pocket-pos-setup flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-5">
         <label className="block">
           <span className="text-xs text-gray-500 dark:text-gray-400">Terminal name</span>
           <input aria-label="Terminal name" value={controller.draft.merchantName} onChange={event=>controller.actions.setMerchantName(event.target.value)} placeholder="Store name" className="mt-2 min-h-14 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#0D0D0D] dark:placeholder:text-gray-600" />

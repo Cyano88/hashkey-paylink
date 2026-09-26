@@ -165,3 +165,9 @@ await assert.rejects(verifyPocketBankAccount({accessToken:'fixture',request:bank
 await assert.rejects(verifyPocketBankAccount({accessToken:'fixture',request:bankRequest,fetcher:async()=>({ok:false,status:429,json:async()=>{throw new SyntaxError('empty')}})}), /Wait a moment/);
 await assert.rejects(verifyPocketBankAccount({accessToken:'fixture',request:bankRequest,fetcher:async()=>{throw Object.assign(new Error('timeout'),{name:'TimeoutError'})}}), /took too long/);
 console.log('PASS bank lookup handles proxy failures, throttling, and timeouts accurately.');
+
+let transientCalls = 0;
+const recoveredLookup = await verifyPocketBankAccount({accessToken:'fixture',request:bankRequest,fetcher:async()=>{transientCalls++;return transientCalls===1?{ok:false,status:502,json:async()=>{throw new SyntaxError('proxy')}}:{ok:true,status:200,json:async()=>verified.body}}});
+assert.equal(transientCalls,2);assert.equal(recoveredLookup.account_name,'ADA LOVELACE');
+let invalidCalls=0;await assert.rejects(verifyPocketBankAccount({accessToken:'fixture',request:bankRequest,fetcher:async()=>{invalidCalls++;return{ok:false,status:400,json:async()=>({error:{message:'Invalid account'}})}}}),/Invalid account/);assert.equal(invalidCalls,1);
+console.log('PASS temporary lookup retries once; invalid accounts do not retry.');
