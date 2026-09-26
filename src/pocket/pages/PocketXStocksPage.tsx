@@ -1,3 +1,4 @@
+import PocketHomeAction from '../components/PocketHomeAction'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowLeftRight, ChevronRight, Deposit, Eye, EyeOff, History, RequestMoney, Search, Send, UserRound, Wallet } from '../components/PocketIcons'
@@ -95,7 +96,7 @@ export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 
         <section className={card}><h2 className="text-sm font-bold">Asset details</h2><p className="mt-4 text-[10px] text-gray-400">X Layer contract</p><p className="mt-1 break-all font-mono text-[11px]">{selected.address}</p><a href={'https://www.oklink.com/x-layer/evm/token/' + selected.address} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 items-center text-xs font-bold text-gray-500">View on explorer<ChevronRight className="ml-1 h-3.5 w-3.5" /></a></section>
       </> : view === 'home' ? <>
         {balance}
-        <section className="grid grid-cols-4 gap-2">{([{ label: 'Send', icon: Send, view: 'send' }, { label: 'Receive', icon: Deposit, view: 'receive' }, { label: 'Trade', icon: ArrowLeftRight, view: 'trade' }, { label: 'XPay', icon: RequestMoney, view: 'xpay' }] as const).map(action => <button key={action.view} type="button" onClick={() => navigate(xStockPath(action.view))} className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-2xl border border-gray-100 bg-white px-1 text-[10px] font-bold shadow-sm dark:border-[#262626] dark:bg-[#121212] dark:shadow-none"><action.icon className="h-5 w-5" />{action.label}</button>)}</section>
+        <section className="grid grid-cols-4 gap-2">{([{ label: 'Send', icon: Send, view: 'send' }, { label: 'Receive', icon: Deposit, view: 'receive' }, { label: 'Trade', icon: ArrowLeftRight, view: 'trade' }, { label: 'XPay', icon: RequestMoney, view: 'xpay' }] as const).map(action => <PocketHomeAction key={action.view} label={action.label} icon={<action.icon className="h-5 w-5" />} onClick={() => navigate(xStockPath(action.view))} />)}</section>
         {market}
       </> : view === 'xpay' ? <PocketXPay wallet={wallet} /> : view === 'trade' ? <><PocketFlowHeader title="Trade" onBack={()=>navigate(xStockPath('home'))}/><PocketStockTrade key={params.toString()} wallet={wallet} initialAsset={params.get('buy') || params.get('sell') || undefined} initialMode={params.has('sell') ? 'sell' : 'buy'} /></> : view === 'market' ? <>
         {market}
