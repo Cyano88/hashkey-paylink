@@ -1,3 +1,4 @@
+import PocketBankAmountFields from '../components/PocketBankAmountFields'
 import PocketBankRecipients from '../components/PocketBankRecipients'
 import usePocketBankRecipients, { type PocketBankRecipient } from '../hooks/usePocketBankRecipients'
 import PocketConfirmationDetails from '../components/PocketConfirmationDetails'
@@ -164,7 +165,6 @@ export default function PocketMoveBankPage() {
     void reconcile()
     return () => { cancelled = true }
   }, [bankLiquidity.ensureLiquidity, direct.continueAfterRouting, direct.failRouting, direct.result?.intentId, direct.status])
-  const directAmountDirty = direct.amount.length > 0
   const directAmountValid = /^\d+(?:\.\d{1,2})?$/.test(direct.amount) && Number(direct.amount) > 0
   const recoveredPayout = !directAmountValid && Boolean(direct.result?.intentId) && direct.status !== 'idle' && direct.status !== 'sent'
   const directSlideStatus = direct.status === 'sent'
@@ -230,7 +230,7 @@ export default function PocketMoveBankPage() {
           {payoutToast}
         </div>
       )}
-      <PocketFlowHeader centered title={routeMode === 'request' ? 'Request' : 'Bank transfer'} onBack={() => recipientStep ? setRecipientStep(false) : navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
+      <PocketFlowHeader centered title={routeMode === 'request' ? 'Request' : recipientStep ? 'Enter amount' : 'Bank transfer'} onBack={() => recipientStep ? setRecipientStep(false) : navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
       <div className="space-y-3.5">
         {routeMode === 'request' && <>
           <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
@@ -250,7 +250,7 @@ export default function PocketMoveBankPage() {
         </>}
 
 
-        <div className="space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:shadow-[0_16px_40px_rgba(0,0,0,0.22)]">
+        <div className={mode === "withdraw" && recipientStep ? "space-y-5" : "space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none"}>
           {mode === 'request' && <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Local-currency collection</p>}
 
           {!authenticated && (
@@ -297,7 +297,6 @@ export default function PocketMoveBankPage() {
               embedded
             /></div>
             {mode==='withdraw' && !recipientStep && <button type="button" disabled={!bank.verified || bank.verifying || directLocked} onClick={()=>setRecipientStep(true)} className="pocket-cta-primary w-full">Continue</button>}
-            {mode==='withdraw' && recipientStep && <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold">{bank.accountName}</p><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{bank.bankName} / {bank.accountNumber}</p></div><button type="button" disabled={directLocked} onClick={()=>setRecipientStep(false)} className="min-h-11 text-xs font-semibold">Change</button></div>}
 
             {mode === 'request' && <>
               <PocketPaymentAmountField
@@ -341,43 +340,20 @@ export default function PocketMoveBankPage() {
               />
             </>}
 
-            {mode === 'withdraw' && recipientStep && <>
-              <PocketPaymentAmountField
-                lane="bank"
-                flexible={false}
-                amount={direct.amount}
-                dirty={directAmountDirty}
-                valid={directAmountValid}
-                helperText="Enter the Naira amount to send to this bank account."
-                onAmountChange={direct.setAmount}
-              />
+            {mode === 'withdraw' && recipientStep && <div className="flex flex-col gap-5" style={{minHeight:'calc(100dvh - 15rem)'}}>
+              <PocketBankAmountFields accountName={bank.accountName} bankName={bank.bankName} accountNumber={bank.accountNumber} amount={direct.amount} memo={direct.memo} disabled={directLocked} onChangeRecipient={()=>setRecipientStep(false)} onAmountChange={direct.setAmount} onMemoChange={direct.setMemo} />
 
-              <div className="border-y border-gray-100 py-3 dark:border-[#262626]">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Withdrawal network</p>
-                    <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Bank payouts settle from Base. Pocket can move USDC from another supported balance when needed.</p>
-                  </div>
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-900 bg-gray-950 px-3 py-2 text-xs font-bold text-white dark:border-white dark:bg-white dark:text-gray-950">
-                    Base
-                  </span>
-                </div>
-              </div>
-
-              <PocketPaymentNoteField value={direct.memo} onChange={direct.setMemo} />
-
-              <div className="space-y-2 pt-1">
+              <div className="mt-auto space-y-2 pt-6">
                 {recoveredPayout ? (
                   <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#121212] dark:text-gray-300">
                     Your previous payout is updating in Activity.
                   </p>
-                ) : <button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="pocket-cta-primary w-full">Review transfer</button>}
+                ) : <button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="pocket-cta-primary w-full">Continue</button>}
                 {!reviewOpen && !recoveredPayout && direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
                 {!reviewOpen && !recoveredPayout && direct.status === 'routing' && directAmountValid && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
                 {!reviewOpen && !recoveredPayout && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
-                {!direct.canSubmit && direct.status === 'idle' && !direct.error && <p className="px-2 text-center text-xs text-gray-400 dark:text-gray-500">Enter a verified beneficiary account and a Naira amount.</p>}
               </div>
-            </>}
+            </div>}
 
           </fieldset>}
 
@@ -413,7 +389,7 @@ export default function PocketMoveBankPage() {
         onCopy={bank.copy}
         onClose={bank.closeShare}
       />
-      {mode === 'withdraw' && reviewOpen && !bankReceipt && !direct.error && <PocketBottomSheet title="Review bank transfer" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
+      {mode === 'withdraw' && reviewOpen && !bankReceipt && !direct.error && <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
         <PocketConfirmationDetails amount={'NGN ' + formatNgnAmount(direct.amount)} rows={[
           ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', 'NGN ' + formatNgnAmount(direct.amount)], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
         ]} />
