@@ -16,6 +16,7 @@ export type PaycrestOrderRecord = {
   paycrest_order_id: string
   merchant_id: string
   amount_ngn: string
+  fiat_currency?: 'NGN' | 'UGX'
   amount_usdc: string
   receive_address: string
   refund_address: string
@@ -205,13 +206,13 @@ async function writeStore(store: PaycrestStore) {
   }
 }
 
-export async function verifyPaycrestAccount(input: { institution: string; accountIdentifier: string }) {
+export async function verifyPaycrestAccount(input: { institution: string; accountIdentifier: string; currency?: 'NGN' | 'UGX' }) {
   const data = await paycrestFetch<any>('/v2/verify-account', {
     method: 'POST',
     body: JSON.stringify({
       institution: input.institution,
       accountIdentifier: input.accountIdentifier,
-      currency: 'NGN',
+      currency: input.currency ?? 'NGN',
     }),
   })
   return firstText(data?.accountName, data?.account_name, data?.name, data)
@@ -344,6 +345,7 @@ export async function createPaycrestOfframpOrder(input: {
   merchantId: string
   amountNgn: string
   estimatedAmountUsdc: string
+  fiatCurrency?: 'NGN' | 'UGX'
   bankCode: string
   accountNumber: string
   accountName: string
@@ -371,7 +373,7 @@ export async function createPaycrestOfframpOrder(input: {
     },
     destination: {
       type: 'fiat',
-      currency: 'NGN',
+      currency: input.fiatCurrency ?? 'NGN',
       recipient: {
         institution: input.bankCode,
         accountIdentifier: input.accountNumber,
@@ -402,6 +404,7 @@ export async function createPaycrestOfframpOrder(input: {
     paycrest_order_id: firstText(data?.id, data?.orderId, data?.order_id),
     merchant_id: input.merchantId,
     amount_ngn: input.amountNgn,
+    fiat_currency: input.fiatCurrency ?? 'NGN',
     amount_usdc: amountUsdc,
     receive_address: receiveAddress,
     refund_address: input.refundAddress,

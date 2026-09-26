@@ -1146,3 +1146,5 @@ html.dark[data-pocket-runtime='native']:has([data-pocket-colour-scope='stablecoi
 [data-pocket-fixed-page][data-pocket-keyboard] .pocket-pos-setup section > p { display: none; }
 [data-pocket-fixed-page][data-pocket-keyboard] .pocket-pos-setup .mt-auto { padding-top: 8px; }
 [data-pocket-fixed-page][data-pocket-keyboard] .pocket-pos-setup .mt-auto > p { display: none; }
+
+[data-pocket-fixed-page][data-pocket-keyboard] .pocket-pos-country { display: none; }

@@ -1,3 +1,4 @@
+import { normalizePayoutAccount, pocketFiatCurrency, validPayoutCurrency } from '../src/pocket/lib/pocketFiatCorridors.js'
 import { pocketBankStatus } from '../src/pocket/lib/pocketBankStatus.js'
 import { resolvePocketPosCheckout } from './pocket/scan-checkout.js'
 import type { Request, Response } from 'express'
@@ -22,6 +23,7 @@ import {
   refreshPaycrestOrderStatus,
   resolvePaycrestOfframpAvailability,
   verifyPaycrestAccount,
+  getPaycrestOfframpRate,
 } from './paycrest-pos.js'
 import { reconcilePaycrestOrderPayment, registerPaycrestBankSendReceipt, schedulePaycrestOrderReconciliation } from './paycrest-reconcile.js'
 import { verifyEvmUsdcTransfer } from './usdc-transfer-verify.js'
@@ -57,7 +59,7 @@ type MerchantProfile = {
   owner_first_name?: string
   owner_last_name?: string
   display_name: string
-  country: 'NG'
+  country: 'NG' | 'UG'
   payout_preference: PayoutPreference
   encrypted_bank_details?: EncryptedBankDetails
   bank_name?: string
@@ -83,6 +85,7 @@ type Store = {
 }
 
 type OfframpIntent = {
+  fiat_currency?: 'NGN' | 'UGX'
   intent_id: string
   merchant_id: string
   amount_ngn: string
@@ -296,11 +299,13 @@ async function writeStore(store: Store) {
 }
 
 async function publicMerchant(merchant: MerchantProfile) {
-  const { rate, source } = await getNgnRate()
+  const fiatCurrency = pocketFiatCurrency(merchant.country)
+  const { rate, source } = await getPosFiatRate(fiatCurrency)
   return {
     merchant_id: merchant.merchant_id,
     display_name: merchant.display_name,
     country: merchant.country,
+    fiat_currency: fiatCurrency,
     payout_preference: merchant.payout_preference,
     settlement_enabled: merchant.settlement_enabled,
     kyc_status: merchant.kyc_status,
@@ -326,21 +331,26 @@ async function getNgnRate() {
   }
 }
 
-async function resolveNgnPayoutQuote(amount: number, amountCurrency: 'NGN' | 'USDC') {
-  let amountUsdc = amountCurrency === 'USDC' ? amount : amount / (await getNgnRate()).rate
+async function getPosFiatRate(currency: 'NGN' | 'UGX') {
+  if (currency === 'NGN') return getNgnRate()
+  return { rate: await getPaycrestOfframpRate({ network: 'base', token: 'USDC', fiat: currency }), source: 'paycrest' }
+}
+
+async function resolveNgnPayoutQuote(amount: number, amountCurrency: 'NGN' | 'UGX' | 'USDC', fiatCurrency: 'NGN' | 'UGX' = 'NGN') {
+  let amountUsdc = amountCurrency === 'USDC' ? amount : amount / (await getPosFiatRate(fiatCurrency)).rate
   let rate = 0
-  for (let attempt = 0; attempt < (amountCurrency === 'NGN' ? 2 : 1); attempt += 1) {
+  for (let attempt = 0; attempt < (amountCurrency === fiatCurrency ? 2 : 1); attempt += 1) {
     const requested = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
     let availability: Awaited<ReturnType<typeof resolvePaycrestOfframpAvailability>>
     try {
-      availability = await resolvePaycrestOfframpAvailability({ amount: requested, network: 'base', token: 'USDC', fiat: 'NGN' })
+      availability = await resolvePaycrestOfframpAvailability({ amount: requested, network: 'base', token: 'USDC', fiat: fiatCurrency })
     } catch (reason) {
       if (isPaycrestAmountUnavailable(reason)) throw ngPosRequestError(503, 'Bank payout is temporarily unavailable. Your money has not moved.')
       throw reason
     }
     if (!availability.exact) {
       const availableNgn = Math.floor(Number(availability.availableUsdc) * availability.rate * 100) / 100
-      throw ngPosRequestError(409, `Up to NGN ${availableNgn.toLocaleString('en-NG', { maximumFractionDigits: 2 })} is available now. Enter this amount or less.`)
+      throw ngPosRequestError(409, `Up to ${fiatCurrency} ${availableNgn.toLocaleString('en-NG', { maximumFractionDigits: 2 })} is available now. Enter this amount or less.`)
     }
     rate = availability.rate
     amountUsdc = amountCurrency === 'USDC' ? amount : amount / rate
@@ -351,7 +361,7 @@ async function resolveNgnPayoutQuote(amount: number, amountCurrency: 'NGN' | 'US
   return {
     rate,
     source: 'paycrest',
-    amountNgn: amountCurrency === 'NGN' ? amount : amount * rate,
+    amountNgn: amountCurrency === fiatCurrency ? amount : amount * rate,
     amountUsdc,
   }
 }
@@ -436,14 +446,15 @@ function buildPayUrl(req: Request, merchant: MerchantProfile, network: PosNetwor
     params.set('e', merchant.circle_smart_wallet_address)
   }
   params.set('m', merchant.display_name)
+  params.set('fiat_currency', pocketFiatCurrency(merchant.country))
   params.set('src', source === 'bank-receive' ? 'bank-receive' : 'ngpos')
   params.set('merchant', merchant.merchant_id)
   params.set('settlement', settlementType.toLowerCase())
-  if (amountNgn) params.set('ngn', amountNgn)
+  if (amountNgn) params.set('ngn', amountNgn) // Legacy amount parameter; fiat_currency supplies its unit.
   if (settlementType === 'INSTANT_FIAT') {
     params.set('offramp', 'paycrest')
     if (!amountUsdc) {
-      params.set('fx', 'NGN')
+      params.set('fx', pocketFiatCurrency(merchant.country))
       params.set('fs', '1')
     }
     if (intentId) params.set('intent', intentId)
@@ -633,6 +644,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
             : isBankWithdrawOrder ? 'Direct bank payout' : isBankReceiveOrder ? 'Bank receive' : 'Retail POS',
         settlementType: isBankSendOrder ? 'PAYCREST_ONRAMP' : 'INSTANT_FIAT',
         amountNgn: order.provider_amount_to_transfer || order.amount_ngn,
+        fiatCurrency: order.fiat_currency || 'NGN',
         handoffVerified: isBankWithdrawOrder && /^0x[a-f0-9]{64}$/i.test(order.tx_hash || ''),
         bankSettlementStatus: isBankWithdrawOrder ? order.status : undefined,
         paycrestStatus: isBankWithdrawOrder ? bankWithdrawActivityStatus(order) : order.status,
@@ -689,24 +701,31 @@ export async function listNgPosInstitutions(currency: unknown = 'NGN') {
 }
 
 export async function verifyNgPosBankAccount(body: Record<string, unknown>) {
+  const currency = body.currency ?? 'NGN'
+  if (!validPayoutCurrency(currency)) throw ngPosRequestError(400, 'Unsupported payout currency.')
   const bankCode = cleanText(body.bank_code, '')
   const bankName = cleanText(body.bank_name, '')
-  const accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
-  if (!bankCode || accountNumber.length !== 10) {
-    throw ngPosRequestError(400, 'Enter a valid bank and 10-digit account number.')
+  const accountNumber = normalizePayoutAccount(body.account_number, currency)
+  if (!bankCode || !accountNumber) {
+    throw ngPosRequestError(400, currency === 'UGX' ? 'Enter a valid Uganda mobile money number and provider.' : 'Enter a valid bank and 10-digit account number.')
   }
   if (!isPaycrestConfigured()) {
     throw ngPosRequestError(400, 'Paycrest is not configured. Add PAYCREST_API_KEY before verifying bank accounts.')
   }
-  const resolvedBankCode = await resolvePaycrestInstitutionCode({ bankCode, bankName })
-  const accountName = await verifyPaycrestAccount({ institution: resolvedBankCode, accountIdentifier: accountNumber })
+  const resolvedBankCode = await resolvePaycrestInstitutionCode({ bankCode, bankName, currency })
+  if (currency === 'UGX' && !['MOMOUGPC', 'AIRTUGPC'].includes(resolvedBankCode)) throw ngPosRequestError(400, 'Select a supported Uganda mobile money provider.')
+  if (currency === 'NGN' && ['MOMOUGPC', 'AIRTUGPC'].includes(resolvedBankCode)) throw ngPosRequestError(400, 'Select the matching payout country.')
+  const accountName = await verifyPaycrestAccount({ institution: resolvedBankCode, accountIdentifier: accountNumber, currency })
   if (!accountName || accountName === 'OK') {
-    throw ngPosRequestError(400, 'Could not resolve this bank account name.')
+    throw ngPosRequestError(503, 'The provider could not return the account holder name. Ownership cannot be verified yet. Try again later.')
   }
   return { account_name: accountName, bank_code: resolvedBankCode }
 }
 
 export async function createNgPosMerchant(req: Request, body: Record<string, unknown> = req.body ?? {}) {
+  if (body.country !== undefined && body.country !== 'NG' && body.country !== 'UG') throw ngPosRequestError(400, 'Unsupported payout country.')
+  const country = body.country === 'UG' ? 'UG' : 'NG'
+  const currency = pocketFiatCurrency(country)
   const preference = body.payout_preference === 'INSTANT_FIAT' ? 'INSTANT_FIAT' : 'KEEP_CRYPTO'
   const session = await verifiedPrivyUser(req)
   const ownerId = session.userId
@@ -740,11 +759,11 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
 
   let bankName = cleanText(body.bank_name, 'Nigerian bank')
   let rawBankCode = cleanText(body.bank_code, '')
-  let accountNumber = cleanText(body.account_number, '').replace(/\D/g, '').slice(0, 10)
+  let accountNumber = normalizePayoutAccount(body.account_number, currency)
   let accountName = cleanText(body.account_name, '')
   if (preference === 'INSTANT_FIAT' && body.use_saved_bank === true) {
     const savedBankMerchant = Object.values(store.merchants)
-      .filter(item => item.owner_id === ownerId && Boolean(item.encrypted_bank_details))
+      .filter(item => item.owner_id === ownerId && item.country === country && Boolean(item.encrypted_bank_details))
       .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]
     if (!savedBankMerchant?.encrypted_bank_details) {
       throw ngPosRequestError(400, 'No verified bank account is saved yet.')
@@ -757,12 +776,12 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
   }
   if (preference === 'INSTANT_FIAT') {
     const { assertBankAccountMatchesPocketName } = await import('./pocket/verified-bank-name.js')
-    const { verification } = await assertBankAccountMatchesPocketName(req, { bank_code: rawBankCode, bank_name: bankName, account_number: accountNumber })
+    const { verification } = await assertBankAccountMatchesPocketName(req, { currency, bank_code: rawBankCode, bank_name: bankName, account_number: accountNumber })
     accountName = verification.account_name
     rawBankCode = verification.bank_code || rawBankCode
   }
-  const bankCode = rawBankCode ? await resolvePaycrestInstitutionCode({ bankCode: rawBankCode, bankName }) : ''
-  const hasBank = Boolean(bankCode && accountNumber.length === 10 && accountName)
+  const bankCode = rawBankCode ? await resolvePaycrestInstitutionCode({ bankCode: rawBankCode, bankName, currency }) : ''
+  const hasBank = Boolean(bankCode && Boolean(normalizePayoutAccount(accountNumber, currency)) && accountName)
   if (preference === 'INSTANT_FIAT' && !hasBank) {
     throw ngPosRequestError(400, 'Verify a bank account before creating a bank-settled POS terminal.')
   }
@@ -774,7 +793,7 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
     owner_first_name: ownerFirstName || undefined,
     owner_last_name: ownerLastName || undefined,
     display_name: displayName,
-    country: 'NG',
+    country,
     payout_preference: preference,
     circle_smart_wallet_address: wallet,
     solana_wallet_address: needsSolanaWallet ? solanaWallet : undefined,
@@ -1126,13 +1145,15 @@ export default async function handler(req: Request, res: Response) {
     if (action === 'quote') {
       const merchantId = cleanText(body.merchant_id, '').replace(/[^a-zA-Z0-9_-]/g, '')
       const requestedSettlementType = parseSettlementType(body.settlement_type)
-      const amountCurrency = body.amount_currency === 'USDC' ? 'USDC' : 'NGN'
+      const amountCurrency = body.amount_currency === 'USDC' ? 'USDC' : body.amount_currency === 'UGX' ? 'UGX' : 'NGN'
       const amount = cleanAmount(body.amount)
       if (!merchantId || !amount) return res.status(400).json({ ok: false, error: 'Missing merchant or amount.' })
 
       const store = await readStore()
       const merchant = store.merchants[merchantId]
       if (!merchant || !merchant.settlement_enabled) return res.status(404).json({ ok: false, error: 'Merchant is not available.' })
+      const fiatCurrency = pocketFiatCurrency(merchant.country)
+      if (amountCurrency !== 'USDC' && amountCurrency !== fiatCurrency) return res.status(400).json({ ok: false, error: 'Amount currency does not match this terminal.' })
       if (requestedSettlementType !== merchant.payout_preference) {
         return res.status(400).json({ ok: false, error: 'Settlement selection does not match this terminal configuration.' })
       }
@@ -1142,7 +1163,7 @@ export default async function handler(req: Request, res: Response) {
       }
       const network = requestedNetwork(body.network, merchant)
       if (settlementType === 'INSTANT_FIAT' && network !== 'base') {
-        return res.status(400).json({ ok: false, error: 'Naira payout currently supports Base USDC only.' })
+        return res.status(400).json({ ok: false, error: 'Local payout currently supports Base USDC only.' })
       }
       if (network === 'solana' && !merchant.solana_wallet_address) {
         return res.status(400).json({ ok: false, error: 'Solana is not configured for this merchant.' })
@@ -1152,10 +1173,10 @@ export default async function handler(req: Request, res: Response) {
       }
 
       const payoutQuote = settlementType === 'INSTANT_FIAT'
-        ? await resolveNgnPayoutQuote(amount, amountCurrency)
-        : { ...(await getNgnRate()), amountNgn: amountCurrency === 'NGN' ? amount : 0, amountUsdc: amountCurrency === 'USDC' ? amount : 0 }
+        ? await resolveNgnPayoutQuote(amount, amountCurrency, fiatCurrency)
+        : { ...(await getPosFiatRate(fiatCurrency)), amountNgn: amountCurrency === fiatCurrency ? amount : 0, amountUsdc: amountCurrency === 'USDC' ? amount : 0 }
       const { rate, source } = payoutQuote
-      const amountNgn = amountCurrency === 'NGN' ? amount : amount * rate
+      const amountNgn = amountCurrency === fiatCurrency ? amount : amount * rate
       const amountUsdc = amountCurrency === 'USDC' ? amount : amount / rate
       const amountUsdcText = amountUsdc.toFixed(6).replace(/\.?0+$/, '')
       const quoteId = randomBytes(10).toString('base64url')
@@ -1164,11 +1185,12 @@ export default async function handler(req: Request, res: Response) {
       let fiatExecutionReady = true
       let paymentExecutionId = ''
       if (settlementType === 'INSTANT_FIAT') {
-        if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for naira settlement yet.' })
+        if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for local settlement yet.' })
         store.intents ??= {}
         store.intents[intentId] = {
           intent_id: intentId,
           merchant_id: merchant.merchant_id,
+          fiat_currency: fiatCurrency,
           amount_ngn: amountNgn.toFixed(2),
           estimated_amount_usdc: amountUsdcText,
           fx_rate_ngn_per_usdc: rate.toFixed(2),
@@ -1197,6 +1219,7 @@ export default async function handler(req: Request, res: Response) {
           network,
           supported_networks: merchantNetworks(merchant),
           settlement_type: settlementType,
+          fiat_currency: fiatCurrency,
           amount_ngn: amountNgn.toFixed(2),
           amount_usdc: amountUsdcText,
           fx_rate_ngn_per_usdc: rate.toFixed(2),
@@ -1288,11 +1311,12 @@ export default async function handler(req: Request, res: Response) {
       const merchant = store.merchants[intent.merchant_id]
       if (!merchant?.encrypted_bank_details) return res.status(404).json({ ok: false, error: 'Merchant bank payout is not available.' })
       const bank = decryptBankDetails(merchant.encrypted_bank_details)
-      const bankCode = await resolvePaycrestInstitutionCode({ bankCode: bank.bank_code, bankName: merchant.bank_name })
+      const bankCode = await resolvePaycrestInstitutionCode({ bankCode: bank.bank_code, bankName: merchant.bank_name, currency: pocketFiatCurrency(merchant.country) })
       const order = await createPaycrestOfframpOrder({
         intentId,
         merchantId: merchant.merchant_id,
         amountNgn: intent.amount_ngn,
+        fiatCurrency: pocketFiatCurrency(merchant.country),
         estimatedAmountUsdc: intent.estimated_amount_usdc,
         bankCode,
         accountNumber: bank.account_number,

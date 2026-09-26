@@ -21,9 +21,9 @@ function supportedMerchantNetworks(value: unknown): PosNetwork[] {
   return selected.length ? Array.from(new Set(selected)) : ['base']
 }
 
-function formatNgn(value: number) {
-  if (!Number.isFinite(value)) return 'NGN 0'
-  return `NGN ${value.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+function formatNgn(value: number, currency = 'NGN') {
+  if (!Number.isFinite(value)) return currency + ' 0'
+  return `${currency} ${value.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
 }
 
 function formatUsdc(value: number) {
@@ -42,7 +42,8 @@ export function publicPosCheckoutUrl(merchant: PublicMerchant, origin = window.l
   url.searchParams.set('settlement', merchant.payout_preference.toLowerCase())
   if (merchant.payout_preference === 'INSTANT_FIAT') {
     url.searchParams.set('offramp', 'paycrest')
-    url.searchParams.set('fx', 'NGN')
+    url.searchParams.set('fx', merchant.country === 'UG' ? 'UGX' : 'NGN')
+    url.searchParams.set('fiat_currency', merchant.country === 'UG' ? 'UGX' : 'NGN')
     url.searchParams.set('fs', '1')
     if (merchant.bank_name) url.searchParams.set('bank', merchant.bank_name)
     if (merchant.bank_last4) url.searchParams.set('acct', `****${merchant.bank_last4}`)
@@ -58,7 +59,8 @@ export function publicPosCheckoutUrl(merchant: PublicMerchant, origin = window.l
 type PublicMerchant = {
   merchant_id: string
   display_name: string
-  country: 'NG'
+  country: 'NG' | 'UG'
+  fiat_currency?: 'NGN' | 'UGX'
   payout_preference: SettlementType
   settlement_enabled: boolean
   kyc_status: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'RESTRICTED'
@@ -120,7 +122,7 @@ export default function NigerianPos() {
   const [settlementStep, setSettlementStep] = useState<'select' | 'amount'>('select')
   const [selectedSettlement, setSelectedSettlement] = useState<SettlementType>('KEEP_CRYPTO')
   const [selectedNetwork, setSelectedNetwork] = useState<PosNetwork>('base')
-  const [amountCurrency, setAmountCurrency] = useState<'NGN' | 'USDC'>('NGN')
+  const [amountCurrency, setAmountCurrency] = useState<'NGN' | 'UGX' | 'USDC'>('NGN')
   const [amount, setAmount] = useState('')
   const [quote, setQuote] = useState<Quote | null>(null)
   const [quoteBusy, setQuoteBusy] = useState(false)
@@ -176,7 +178,7 @@ export default function NigerianPos() {
           setSelectedNetwork(supportedMerchantNetworks(data.merchant.supported_networks)[0])
           const bankConfigured = Boolean(data.merchant.bank_configured)
           setSelectedSettlement(bankConfigured ? 'INSTANT_FIAT' : data.merchant.payout_preference ?? 'KEEP_CRYPTO')
-          setAmountCurrency(bankConfigured ? 'NGN' : 'USDC')
+          setAmountCurrency(bankConfigured ? (data.merchant.country === 'UG' ? 'UGX' : 'NGN') : 'USDC')
           setSettlementStep(bankConfigured ? 'amount' : 'select')
         }
       })
@@ -421,7 +423,7 @@ export default function NigerianPos() {
       <PosShell
         eyebrow="Nigerian Retail Mode"
         title={merchant.display_name}
-        body="This POS terminal needs a verified merchant bank account before it can accept Naira payments."
+        body="This POS terminal needs a verified payout account before it can accept payments."
       >
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
           Ask the merchant to recreate this POS QR with bank payout enabled.
@@ -434,7 +436,7 @@ export default function NigerianPos() {
     <PosShell
       eyebrow="Nigerian Retail Mode"
       title={merchant.display_name}
-      body={merchant.bank_configured ? 'Enter the Naira amount. Checkout collects Base USDC and pays out to the merchant bank account.' : 'This POS terminal needs a verified merchant bank account.'}
+      body={merchant.bank_configured ? 'Enter the local amount. Checkout collects Base USDC and pays the merchant.' : 'This POS terminal needs a verified merchant bank account.'}
       beforeHeader={settlementStep === 'amount' && !merchant.bank_configured ? (
         <button
           type="button"
@@ -484,7 +486,7 @@ export default function NigerianPos() {
         <div className="rounded-xl border border-gray-200 bg-white p-3 dark:border-white/10 dark:bg-white/[0.05]">
           {selectedSettlement !== 'INSTANT_FIAT' && (
             <div className="mb-3 grid grid-cols-2 rounded-lg bg-gray-100 p-1 dark:bg-white/[0.06]">
-              {(['NGN', 'USDC'] as const).map((currency) => (
+              {([merchant?.country === 'UG' ? 'UGX' : 'NGN', 'USDC'] as const).map((currency) => (
                 <button
                   key={currency}
                   type="button"
@@ -505,10 +507,10 @@ export default function NigerianPos() {
             </div>
           )}
           <label className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-            {selectedSettlement === 'INSTANT_FIAT' ? 'Amount in naira' : 'Amount'}
+            {selectedSettlement === 'INSTANT_FIAT' ? 'Local amount' : 'Amount'}
           </label>
           <div className="mt-1 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
-            <span className="text-sm font-semibold text-gray-400">{amountCurrency === 'NGN' ? 'NGN' : '$'}</span>
+            <span className="text-sm font-semibold text-gray-400">{amountCurrency !== 'USDC' ? (merchant?.country === 'UG' ? 'UGX' : 'NGN') : '$'}</span>
             <input
               value={amount}
               onChange={(event) => {
@@ -516,18 +518,18 @@ export default function NigerianPos() {
                 setQuote(null)
               }}
               inputMode="decimal"
-              placeholder={amountCurrency === 'NGN' ? '5000' : '5'}
+              placeholder={amountCurrency !== 'USDC' ? '5000' : '5'}
               className="w-full bg-transparent text-lg font-semibold text-gray-950 outline-none placeholder:text-gray-300 dark:text-white dark:placeholder:text-gray-600"
             />
           </div>
           <div className="mt-2 flex items-center justify-between gap-3 text-[11px] font-medium text-gray-400 dark:text-gray-500">
             {convertedNgn !== null && convertedUsdc !== null ? (
               <>
-                <span>{amountCurrency === 'USDC' ? `Approx ${formatNgn(convertedNgn)}` : `You will pay approx ${formatUsdc(convertedUsdc)}`}</span>
-                <span>1 USDC = {formatNgn(posRate)}</span>
+                <span>{amountCurrency === 'USDC' ? `Approx ${formatNgn(convertedNgn, merchant?.country === 'UG' ? 'UGX' : 'NGN')}` : `You will pay approx ${formatUsdc(convertedUsdc)}`}</span>
+                <span>1 USDC = {formatNgn(posRate, merchant?.country === 'UG' ? 'UGX' : 'NGN')}</span>
               </>
             ) : (
-              <span>NGN conversion appears as you type.</span>
+              <span>Local currency conversion appears as you type.</span>
             )}
           </div>
         </div>
@@ -538,16 +540,16 @@ export default function NigerianPos() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-                  {quote!.settlement_type === 'INSTANT_FIAT' ? 'Naira payment ready' : 'Payment ready'}
+                  {quote!.settlement_type === 'INSTANT_FIAT' ? 'Payment ready' : 'Payment ready'}
                 </p>
                 <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
-                  NGN {quote!.amount_ngn} · {quote!.amount_usdc} USDC
+                  {merchant?.country === 'UG' ? 'UGX' : 'NGN'} {quote!.amount_ngn} · {quote!.amount_usdc} USDC
                 </p>
                 {quote!.settlement_type === 'INSTANT_FIAT' && (
                   <div className="mt-3 rounded-xl border border-emerald-200/80 bg-white/70 p-3 text-[11px] text-emerald-900 dark:border-emerald-300/20 dark:bg-white/[0.06] dark:text-emerald-100">
                     <p className="font-semibold">{quote.bank_account_name ?? merchant.bank_account_name}</p>
                     <p className="mt-0.5">{quote.bank_name ?? merchant.bank_name} ****{quote.bank_last4 ?? merchant.bank_last4}</p>
-                    <p className="mt-2 text-emerald-700 dark:text-emerald-200">Base USDC is converted to Naira for this bank account.</p>
+                    <p className="mt-2 text-emerald-700 dark:text-emerald-200">Base USDC is converted to the selected local currency.</p>
                   </div>
                 )}
               </div>

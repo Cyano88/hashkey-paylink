@@ -52,11 +52,13 @@ globalThis.fetch = async (url, init = {}) => {
   const target = String(url)
   if (target === process.env.PRIVATE_RPC_URL) {
     const request = JSON.parse(String(init.body))
+    if (request.method === 'eth_chainId') return Response.json({jsonrpc:'2.0',id:1,result:'0x2105'})
+    if (request.method === 'eth_getBlockByNumber') return Response.json({jsonrpc:'2.0',id:1,result:{number:request.params[0]==='0x10'?'0x10':'0x11',hash:'0x'+'b'.repeat(64),timestamp:'0x'+Math.floor(Date.now()/1000).toString(16)}})
     if (request.method === 'eth_blockNumber') return Response.json({ jsonrpc: '2.0', id: 1, result: '0x10' })
     if (request.method === 'eth_getLogs') return Response.json({ jsonrpc: '2.0', id: 1, result: [] })
     assert.equal(request.method, 'eth_getTransactionReceipt')
     return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: {
-      status: '0x1', blockNumber: '0x10', logs: [{ address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', topics: [transferTopic, `0x${'0'.repeat(64)}`, pad(receiveAddress, { size: 32 })], data: '0x0f4240' }],
+      status: '0x1', blockNumber: '0x10', blockHash:'0x'+'b'.repeat(64), logs: [{ address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', topics: [transferTopic, `0x${'0'.repeat(64)}`, pad(receiveAddress, { size: 32 })], data: '0x0f4240' }],
     } }), { status: 200, headers: { 'content-type': 'application/json' } })
   }
   if (target.includes('/v2/rates/')) return Response.json({ status: 'success', data: { sell: { rate: '1600' } } })

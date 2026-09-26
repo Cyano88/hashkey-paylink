@@ -1,3 +1,4 @@
+import { normalizePayoutAccount, pocketFiatCurrency } from '../lib/pocketFiatCorridors'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { copyToClipboard } from '../../lib/utils'
 import { readPocketBankInstitutions, verifyPocketBankAccount } from '../api/pocketBankClient'
@@ -34,7 +35,7 @@ export default function usePocketPosPageController({
   const verificationOwner = useRef(email)
   verificationOwner.current = authenticated ? email : ''
   useEffect(()=>()=>{verificationSequence.current++},[])
-  const [country, setCountry] = useState<string | null>(null)
+  const [country, setCountry] = useState<string | null>('NG')
   const [merchantName, setMerchantName] = useState('')
   const [institutions, setInstitutions] = useState<Array<{ code: string; name: string }>>([])
   const [institutionsBusy, setInstitutionsBusy] = useState(false)
@@ -68,7 +69,7 @@ export default function usePocketPosPageController({
 
   useEffect(() => {
     if (routeStep === 'setup' || routeStep === 'ready') {
-      setCountry('NG')
+      setCountry(current => current || 'NG')
       if (routeStep === 'setup') {
         setMerchant(null)
         setCopied(false)
@@ -86,7 +87,7 @@ export default function usePocketPosPageController({
     if (!country || !authenticated || !profileVerified) return
     let current = true
     setInstitutionsBusy(true)
-    readPocketBankInstitutions()
+    readPocketBankInstitutions(fetch, pocketFiatCurrency(country))
       .then(data => {
         if (current) setInstitutions(data.institutions)
       })
@@ -114,6 +115,7 @@ export default function usePocketPosPageController({
       const data = await verifyPocketBankAccount({
         accessToken,
         request: {
+          currency: pocketFiatCurrency(country),
           bank_code: bankCode,
           bank_name: bankName,
           account_number: bankAccount,
@@ -133,15 +135,15 @@ export default function usePocketPosPageController({
     } finally {
       if (valid()) setBankVerifyBusy(false)
     }
-  }, [email, bankAccount, bankCode, bankName, getAccessToken, verifiedIdentityName, profileVerified])
+  }, [email, country, bankAccount, bankCode, bankName, getAccessToken, verifiedIdentityName, profileVerified])
 
   useEffect(() => {
-    if (!authenticated || !bankCode || bankAccount.length !== 10 || bankVerifyBusy || bankVerified) return
+    if (!authenticated || !bankCode || !normalizePayoutAccount(bankAccount, pocketFiatCurrency(country)) || bankVerifyBusy || bankVerified) return
     const verificationKey = `${bankCode}:${bankAccount}`
     if (lastVerificationKey.current === verificationKey) return
     const timer = window.setTimeout(() => { lastVerificationKey.current = verificationKey; void verifyBankAccount() }, 250)
     return () => window.clearTimeout(timer)
-  }, [authenticated, bankAccount, bankCode, bankVerified, bankVerifyBusy, verifyBankAccount])
+  }, [authenticated, country, bankAccount, bankCode, bankVerified, bankVerifyBusy, verifyBankAccount])
 
   const canSubmit = Boolean(
     authenticated &&
@@ -170,6 +172,7 @@ export default function usePocketPosPageController({
         accessToken,
         idempotencyKey,
         request: {
+          country: country === 'UG' ? 'UG' : 'NG',
           owner_email: email,
           owner_first_name: verifiedIdentityName.split(' ')[0],
           owner_last_name: verifiedIdentityName.split(' ').slice(1).join(' '),
@@ -192,7 +195,7 @@ export default function usePocketPosPageController({
     } finally {
       setBusy(false)
     }
-  }, [authenticated, bankAccount, bankAccountName, bankCode, bankName, canSubmit, email, getAccessToken, merchantName, onStepChange, verifiedIdentityName])
+  }, [authenticated, country, bankAccount, bankAccountName, bankCode, bankName, canSubmit, email, getAccessToken, merchantName, onStepChange, verifiedIdentityName])
 
   const controller = usePocketPosController({
     draft: {
@@ -213,6 +216,10 @@ export default function usePocketPosPageController({
           setError('Sign in and save your payout profile before creating POS.')
           return
         }
+        if (selectedCountry === country || (selectedCountry !== 'NG' && selectedCountry !== 'UG')) return
+        resetBank()
+        setInstitutions([])
+        setInstitutionsBusy(true)
         setCountry(selectedCountry)
         setError('')
         onStepChange('setup')
@@ -252,7 +259,7 @@ export default function usePocketPosPageController({
         setBankVerifyBusy(false)
         creationIdempotencyKey.current = ''
         lastVerificationKey.current = ''
-        setBankAccount(accountNumber.replace(/\D/g, '').slice(0, 10))
+        setBankAccount(accountNumber.replace(/\D/g, '').slice(0, country === 'UG' ? 12 : 10))
         setBankVerified(false)
         setBankAccountName('')
         setError('')

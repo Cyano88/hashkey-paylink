@@ -58,6 +58,7 @@ export default async function handler(req: Request, res: Response) {
         merchantId: receipt.merchantId,
         settlementType: receipt.settlementType,
         amountNgn: receipt.amountNgn,
+        fiatCurrency: receipt.fiatCurrency,
         brandName: receipt.brandName,
         brandImageUrl: receipt.brandImageUrl,
         brandKind: receipt.brandName ? 'partner' : 'hashpaylink',

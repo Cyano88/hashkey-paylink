@@ -217,6 +217,7 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     ...(value.merchantId !== undefined ? { merchantId: value.merchantId } : {}),
     ...(value.contextLabel !== undefined ? { contextLabel: value.contextLabel } : {}),
     ...(value.settlementType !== undefined ? { settlementType: value.settlementType } : {}),
+    ...(value.fiatCurrency === 'UGX' || value.fiatCurrency === 'NGN' ? { fiatCurrency: value.fiatCurrency } : {}),
     ...(value.amountNgn !== undefined ? { amountNgn: value.amountNgn } : {}),
     ...(value.paycrestStatus !== undefined ? { paycrestStatus: value.paycrestStatus } : {}),
     ...(value.handoffVerified !== undefined ? { handoffVerified:value.handoffVerified } : {}),

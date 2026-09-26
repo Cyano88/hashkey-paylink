@@ -3,9 +3,9 @@ import { formatPocketDisplayAmount } from './pocketMoney'
 import { formatStockQuantity } from './pocketStockDisplay'
 
 /** The same bill face value in Recent, Activity, and the status sheet. */
-export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'amount' | 'assetSymbol'>): string {
+export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol'>): string {
   if (row.source === 'wallet-swap') return 'Swap'
-  if (row.amountNgn && Number.isFinite(Number(row.amountNgn))) return 'NGN ' + Number(row.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })
+  if (row.amountNgn && Number.isFinite(Number(row.amountNgn))) return (row.fiatCurrency === 'UGX' ? 'UGX ' : 'NGN ') + Number(row.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })
   return (row.assetSymbol ? formatStockQuantity(row.amount) : formatPocketDisplayAmount(Number(row.amount))) + ' ' + (row.assetSymbol || 'USDC')
 }
 

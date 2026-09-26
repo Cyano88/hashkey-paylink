@@ -96,6 +96,7 @@ type CircleEvmEmailSession = Awaited<ReturnType<typeof connectCircleEvmEmailWall
 type PaycrestCheckoutOrder = {
   intent_id: string
   paycrest_order_id: string
+  fiat_currency?: 'NGN' | 'UGX'
   amount_ngn: string
   amount_usdc: string
   receive_address: string
@@ -731,9 +732,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     try {
       if (isNgPosPaycrestOfframp && ngPosMerchantId) {
         const response = await fetch(`/api/ng-pos?merchant_id=${encodeURIComponent(ngPosMerchantId)}`)
-        const value = await response.json().catch(() => ({})) as { ok?: boolean; merchant?: { fx_rate_ngn_per_usdc?: string } }
+        const value = await response.json().catch(() => ({})) as { ok?: boolean; merchant?: { fx_rate_ngn_per_usdc?: string; fiat_currency?: string } }
         const rate = Number(value.merchant?.fx_rate_ngn_per_usdc)
         if (!response.ok || !value.ok || !Number.isFinite(rate) || rate <= 0) throw new Error('POS quote is not ready.')
+        if ((value.merchant?.fiat_currency || 'NGN') !== fxCurrency) throw new Error('Checkout currency does not match this terminal.')
         setFxRate(rate)
         setFxStale(false)
         return
@@ -756,7 +758,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const payableAmt = isNgPosPaycrestOfframp && paycrestOrder?.amount_usdc ? paycrestOrder.amount_usdc : effectiveAmt
   const paycrestNeedsPreparation = isNgPosPaycrestOfframp && !paycrestOrder
   const effectiveAmtNumber = parseFloat(effectiveAmt || '0') || 0
-  const flexLocalCurrencyLabel = isNgPosPaycrestOfframp ? 'NGN' : (getFxMeta(fxCurrency)?.symbol ?? fxCurrency)
+  const posFiatCurrency = (paycrestOrder?.fiat_currency || initParams.get('fiat_currency') || fxCurrency) === 'UGX' ? 'UGX' : 'NGN'
+  const flexLocalCurrencyLabel = isNgPosPaycrestOfframp ? posFiatCurrency : (getFxMeta(fxCurrency)?.symbol ?? fxCurrency)
 
   // flexPayDisabled: accounts for USDC and local-currency input modes
   const flexPayDisabled = isFlex && (
@@ -2735,12 +2738,12 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     if (!pocketScan && paycrestOrder?.receive_address && paycrestOrder.amount_usdc) return paycrestOrder
     let settlementIntentId = paycrestOrder?.intent_id || ngPosPaycrestIntentId
     setPaycrestPreparing(true)
-    setPaycrestStatusText('Preparing Naira payout...')
+    setPaycrestStatusText('Preparing payout...')
     try {
       if (!settlementIntentId) {
         const amountNgn = localAmt.trim()
         if (!isFlex || !ngPosMerchantId || !amountNgn || Number.parseFloat(amountNgn) <= 0) {
-          throw new Error('Enter the Naira amount before preparing payout.')
+          throw new Error('Enter the local amount before preparing payout.')
         }
         const quoteResponse = await fetch('/api/ng-pos', {
           method: 'POST',
@@ -2749,7 +2752,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
             action: 'quote',
             merchant_id: ngPosMerchantId,
             settlement_type: 'INSTANT_FIAT',
-            amount_currency: 'NGN',
+            amount_currency: posFiatCurrency,
             amount: amountNgn,
             network: 'base',
             client_origin: window.location.origin,
@@ -2761,7 +2764,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
           error?: string
         }
         if (!quoteResponse.ok || !quoteData.ok || !quoteData.quote?.intent_id) {
-          throw new Error(quoteData.error || 'Could not prepare Naira quote.')
+          throw new Error(quoteData.error || 'Could not prepare payout quote.')
         }
         settlementIntentId = quoteData.quote.intent_id
       }
@@ -2779,11 +2782,11 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         }),
       })
       const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string }
-      if (!response.ok || !data.ok || !data.order) throw new Error(data.error || 'Could not prepare Naira payout.')
+      if (!response.ok || !data.ok || !data.order) throw new Error(data.error || 'Could not prepare payout.')
       if (pocketScan) assertPocketScanPayoutPayable(data.order)
       const needsReview = !!pocketScan && pocketScanPayoutNeedsReview(paycrestOrder, data.order)
       setPaycrestOrder(data.order)
-      setPaycrestStatusText('Naira payout ready. Review the bank account, then pay.')
+      setPaycrestStatusText('Payout ready. Confirm the recipient, then pay.')
       await refetchCircleWalletBalance()
       return needsReview ? null : data.order
     } catch (err) {
@@ -2961,7 +2964,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         lastCirclePaymentUnitsRef.current = paymentUnits
 
         if (!paymentRecipient || !isAddress(paymentRecipient) || !paymentAmount || parseFloat(paymentAmount) <= 0) {
-          setCirclePasskeyError('Naira payout is not ready yet. Prepare the payout, then try again.')
+          setCirclePasskeyError('Payout is not ready yet. Prepare it, then try again.')
           return
         }
 
@@ -3553,6 +3556,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
       contextLabel: memo || (isBankReceivePayment ? 'Bank receive' : ngPosMerchantId),
       settlementType: ngPosSettlement,
       amountNgn: paycrestOrder?.amount_ngn || ngPosAmountNgn || localAmt,
+      fiatCurrency: posFiatCurrency,
       requestedAmount: expectedSettlementAmt,
       intentId: paycrestOrder?.intent_id ?? ngPosPaycrestIntentId,
     }
@@ -3574,7 +3578,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         const markData = await markResponse.json().catch(() => undefined) as { ok?: boolean; order?: PaycrestCheckoutOrder } | undefined
         if (markData?.order) {
           setPaycrestOrder(markData.order)
-          setPaycrestStatusText('Payment detected. Paycrest is confirming the Naira payout.')
+          setPaycrestStatusText('Payment detected. Paycrest is confirming the payout.')
         }
       }
       if (isHostedCheckout) {
@@ -3864,7 +3868,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   }, [autoAccessRedirect, isEventMode, agentUrl, eventRegStatus, eventId, attendeeName, isAgentOrWalletFunding, isWalletManagerFunding, memo])
 
   const compactCheckoutSteps: readonly [string, string, string] = isNgPosPaycrestOfframp
-    ? ['Enter amount', 'Pay with Pocket', 'Naira delivered']
+    ? ['Enter amount', 'Pay with Pocket', 'Payout delivered']
     : isHelperAccess
     ? ['Open request', 'Slide to pay', 'Open access']
     : isPolymarketFunding
@@ -3960,8 +3964,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     const receiptReady = Boolean(paymentReceipt)
     const payoutAmountNgn = Number.parseFloat(paycrestOrder?.amount_ngn || ngPosAmountNgn || '0')
     const payoutLabel = Number.isFinite(payoutAmountNgn) && payoutAmountNgn > 0
-      ? `NGN ${payoutAmountNgn.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
-      : 'Naira payout'
+      ? `${posFiatCurrency} ${payoutAmountNgn.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`
+      : 'Local payout'
     const payoutBankLabel = [
       paycrestOrder?.bank_name || ngPosBankName,
       paycrestOrder?.bank_last4 ? `****${paycrestOrder.bank_last4}` : '',
@@ -4024,7 +4028,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                   {!isPolymarketFunding && (
                     <>
                       {' '}
-                      {isUnder ? 'received - ' : isNgPosPaycrestOfframp ? 'sent for Naira payout' : 'received by recipient'}
+                      {isUnder ? 'received - ' : isNgPosPaycrestOfframp ? 'sent for payout' : 'received by recipient'}
                     </>
                   )}
                   {isUnder && (
@@ -4705,7 +4709,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
                   <Banknote className="h-4 w-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">Naira payout</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">Local payout</p>
                   <p className="mt-0.5 truncate text-xs font-semibold text-gray-800 dark:text-gray-100">
                     {paycrestOrder?.bank_account_name || ngPosBankAccountName || 'Verified merchant bank'}
                   </p>

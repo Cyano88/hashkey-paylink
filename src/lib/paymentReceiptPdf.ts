@@ -20,6 +20,7 @@ export type PaylinkReceipt = {
   merchantId?: string
   bankSettlementStatus?: string
   settlementType?: string
+  fiatCurrency?: 'NGN' | 'UGX'
   amountNgn?: string
   variant?: 'general' | 'bills'
   providerName?: string
@@ -255,7 +256,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const variant = receipt.variant === 'bills' || receipt.source === 'bills' || String(receipt.settlementType || '').startsWith('bill_payment') ? 'bills' : 'general'
   const networkKey = receiptChainKey(receipt.chain)
   const network = networkKey === 'xlayer' ? 'X Layer' : networkKey ? CHAIN_META[networkKey].label : titleCase(receipt.chain || 'Network unavailable')
-  const localAmount = formatNgn(receipt.amountNgn)
+  const localAmount = receipt.fiatCurrency === 'UGX' && receipt.amountNgn && Number.isFinite(Number(receipt.amountNgn)) ? 'UGX ' + Number(receipt.amountNgn).toLocaleString('en-UG', { maximumFractionDigits: 2 }) : formatNgn(receipt.amountNgn)
   const amount = localAmount || `${compactReceiptAmount(receipt.amount)} ${receipt.asset}`
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)

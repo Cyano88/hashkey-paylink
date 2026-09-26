@@ -1,3 +1,4 @@
+import { normalizePayoutAccount, validPayoutCurrency } from './pocketFiatCorridors'
 import { pocketApiUrl } from './pocketRoutes'
 
 export const POCKET_NETWORKS = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'] as const
@@ -174,6 +175,7 @@ export type PocketActivityRow = {
   merchantId?: string
   contextLabel?: string
   settlementType?: string
+  fiatCurrency?: 'NGN' | 'UGX'
   amountNgn?: string
   handoffVerified?: boolean
   bankSettlementStatus?: string
@@ -229,6 +231,7 @@ export type PocketCollectionResource = {
 }
 
 export type PocketPosCreateRequest = {
+  country?: 'NG' | 'UG'
   payout_preference: 'INSTANT_FIAT' | 'KEEP_CRYPTO'
   owner_email?: string
   owner_first_name?: string
@@ -247,7 +250,8 @@ export type PocketPosCreateRequest = {
 export type PocketPosMerchant = {
   merchant_id: string
   display_name: string
-  country: 'NG'
+  country: 'NG' | 'UG'
+  fiat_currency?: 'NGN' | 'UGX'
   payout_preference: 'INSTANT_FIAT' | 'KEEP_CRYPTO'
   settlement_enabled: boolean
   kyc_status: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'RESTRICTED'
@@ -309,6 +313,7 @@ export type PocketBankInstitutionsData = {
 }
 
 export type PocketBankVerifyRequest = {
+  currency?: 'NGN' | 'UGX'
   bank_code: string
   bank_name: string
   account_number: string
@@ -639,6 +644,7 @@ export function isPocketActivityReadData(value: unknown): value is PocketActivit
 
 export function isPocketPosCreateRequest(value: unknown): value is PocketPosCreateRequest {
   if (!isRecord(value)) return false
+  if (value.country !== undefined && value.country !== 'NG' && value.country !== 'UG') return false
   if (value.payout_preference !== 'INSTANT_FIAT' && value.payout_preference !== 'KEEP_CRYPTO') return false
   if (!isNonEmptyString(value.display_name, 90)) return false
   if (!Array.isArray(value.supported_networks) || value.supported_networks.length < 1) return false
@@ -656,7 +662,7 @@ export function isPocketPosCreateRequest(value: unknown): value is PocketPosCrea
 export function isPocketPosMerchant(value: unknown): value is PocketPosMerchant {
   if (!isRecord(value)) return false
   if (!isNonEmptyString(value.merchant_id, 256) || !isNonEmptyString(value.display_name, 90)) return false
-  if (value.country !== 'NG') return false
+  if (value.country !== 'NG' && value.country !== 'UG') return false
   if (value.payout_preference !== 'INSTANT_FIAT' && value.payout_preference !== 'KEEP_CRYPTO') return false
   if (typeof value.settlement_enabled !== 'boolean' || typeof value.bank_configured !== 'boolean') return false
   if (!['UNVERIFIED', 'PENDING', 'VERIFIED', 'RESTRICTED'].includes(String(value.kyc_status))) return false
@@ -719,7 +725,8 @@ export function isPocketBankVerifyRequest(value: unknown): value is PocketBankVe
     && typeof value.bank_name === 'string'
     && value.bank_name.length <= 160
     && typeof value.account_number === 'string'
-    && /^\d{10}$/.test(value.account_number.replace(/\D/g, '').slice(0, 10))
+    && (value.currency === undefined || validPayoutCurrency(value.currency))
+    && Boolean(normalizePayoutAccount(value.account_number, value.currency === 'UGX' ? 'UGX' : 'NGN'))
     && (value.confirm_profile_name === undefined || typeof value.confirm_profile_name === 'boolean')
 }
 

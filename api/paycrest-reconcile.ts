@@ -80,9 +80,10 @@ async function registerOrderReceipt(order: PaycrestOrderRecord, txHash: string) 
     requestedAmount: order.amount_usdc,
     source,
     merchantId: order.merchant_id,
-    contextLabel: order.bank_name ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim() : 'Naira payout',
+    contextLabel: order.bank_name ? `${order.bank_name} ****${order.bank_last4 || ''}`.trim() : 'Local payout',
     settlementType: 'INSTANT_FIAT',
     amountNgn: order.amount_ngn,
+    fiatCurrency: order.fiat_currency || 'NGN',
     intentId: order.intent_id,
   })
 }

@@ -207,7 +207,7 @@ export default async function pocketSupportCasesHandler(req: Request, res: Respo
         category:row.source?.startsWith('bank-')?'bank_payment':'stuck_transaction',summary:report.label,reference:row.bankOrderId||row.providerReference||row.billReference||row.txHash||row.eventId,
         transactionKey,transaction,reportReason:report.reason,customer,createdAt:now,updatedAt:now,
         messages:[{id:crypto.randomUUID(),author:'user',text:report.label+' - '+report.description,createdAt:now},
-          {id:crypto.randomUUID(),author:'agent',text:'Transaction report received for manual review. Reference: '+(transaction.providerReference||transaction.transactionHash||transaction.eventId)+'. Recorded status: '+transaction.status+'. '+transaction.amountUsdc+' USDC'+(transaction.amountNgn?' / NGN '+transaction.amountNgn:'')+'. Network: '+transaction.network+'.',createdAt:now,kind:'transaction_report'}]}
+          {id:crypto.randomUUID(),author:'agent',text:'Transaction report received for manual review. Reference: '+(transaction.providerReference||transaction.transactionHash||transaction.eventId)+'. Recorded status: '+transaction.status+'. '+transaction.amountUsdc+' USDC'+(transaction.amountNgn?' / '+(row.fiatCurrency==='UGX'?'UGX':'NGN')+' '+transaction.amountNgn:'')+'. Network: '+transaction.network+'.',createdAt:now,kind:'transaction_report'}]}
       let saved=item,reused=false
       await mutateDurableJson<SupportStore>(STORE_KEY,current=>{const next=current||{cases:{}};const result=upsertTransactionReport(next.cases,item);saved=result.item;reused=result.reused;return next})
       return res.status(reused?200:201).json({ok:true,case:publicCase(saved),reused})

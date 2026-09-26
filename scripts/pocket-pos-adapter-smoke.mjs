@@ -59,7 +59,7 @@ const missingKey = await request(handler, 'POST', posRequest)
 assert.equal(missingKey.statusCode, 400)
 assert.equal(missingKey.body.error.field, 'idempotencyKey')
 
-const invalidBody = await request(handler, 'POST', { ...posRequest, supported_networks: ['ethereum'] }, { 'idempotency-key': idempotencyKey })
+const invalidBody = await request(handler, 'POST', { ...posRequest, supported_networks: ['bitcoin'] }, { 'idempotency-key': idempotencyKey })
 assert.equal(invalidBody.statusCode, 400)
 assert.equal(invalidBody.body.error.field, 'pos')
 

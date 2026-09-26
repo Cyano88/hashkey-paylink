@@ -127,6 +127,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     memo: row.memo,
     amount: row.amount,
     amountNgn: row.amountNgn,
+    fiatCurrency: row.fiatCurrency,
     asset: row.assetSymbol || 'USDC',
     createdAt: row.ts,
     source,

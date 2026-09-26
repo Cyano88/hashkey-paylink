@@ -24,6 +24,7 @@ type PaymentEntry = {
   merchantId?: string
   contextLabel?: string
   settlementType?: string
+  fiatCurrency?: 'NGN' | 'UGX'
   amountNgn?:  string
   brandName?: string
   brandImageUrl?: string
@@ -49,6 +50,7 @@ export type RegisterPaymentInput = {
   merchantId?: unknown
   contextLabel?: unknown
   settlementType?: unknown
+  fiatCurrency?: unknown
   amountNgn?: unknown
   intentId?: unknown
   intent_id?: unknown
@@ -296,6 +298,7 @@ function archiveMetadata(entry: PaymentEntry, customerWallet: string) {
     type: entry.source === 'bank-send' ? 'nigerian_bank_send_onramp' : entry.source === 'bank-receive' ? 'nigerian_bank_receive_payment' : 'nigerian_retail_pos_payment',
     merchantId: entry.merchantId,
     amountNgn: entry.amountNgn,
+    fiatCurrency: entry.fiatCurrency,
     amountUsdc: entry.amount,
     settlementType: entry.settlementType,
     customerWallet,
@@ -317,6 +320,7 @@ function archiveRecordFor(entry: PaymentEntry, payerWallet: string): PaymentEntr
     merchantId: entry.merchantId,
     settlementType: entry.settlementType,
     amountNgn: entry.amountNgn,
+    fiatCurrency: entry.fiatCurrency,
     ogRootHash: entry.ogRootHash,
     ogTxHash: entry.ogTxHash,
   }
@@ -348,6 +352,7 @@ function scheduleArchivePayment(entry: PaymentEntry, payerWallet = entry.payer) 
         contextLabel: archiveEntry.contextLabel,
         settlementType: archiveEntry.settlementType,
         amountNgn: archiveEntry.amountNgn,
+        fiatCurrency: archiveEntry.fiatCurrency,
         metadata: archiveMetadata(current, payerWallet),
       })
 
@@ -565,6 +570,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
         contextLabel: contextLabel || entries[manualIndex].contextLabel,
         settlementType: settlementType || entries[manualIndex].settlementType,
         amountNgn: amountNgn || entries[manualIndex].amountNgn,
+        fiatCurrency: input?.fiatCurrency === 'UGX' ? 'UGX' : entries[manualIndex].fiatCurrency || 'NGN',
         brandName: brandName || entries[manualIndex].brandName,
         brandImageUrl: brandImageUrl || entries[manualIndex].brandImageUrl,
       }
@@ -606,7 +612,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
   if (merchantId) entry.merchantId = merchantId
   if (contextLabel) entry.contextLabel = contextLabel
   if (settlementType) entry.settlementType = settlementType
-  if (amountNgn) entry.amountNgn = amountNgn
+  if (amountNgn) { entry.amountNgn = amountNgn; entry.fiatCurrency = input?.fiatCurrency === 'UGX' ? 'UGX' : 'NGN' }
   if (brandName) entry.brandName = brandName
   if (brandImageUrl) entry.brandImageUrl = brandImageUrl
   entries.push(entry)

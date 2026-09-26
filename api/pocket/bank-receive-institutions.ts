@@ -18,7 +18,9 @@ export function createPocketBankInstitutionsHandler(dependencies: PocketBankInst
     if (req.method !== 'GET') return fail(405, 'VALIDATION_FAILED', 'Method not allowed.', false)
 
     try {
-      const data = { institutions: await dependencies.listInstitutions('NGN') }
+      const currency = req.query?.currency || 'NGN'
+      if (currency !== 'NGN' && currency !== 'UGX') return fail(400, 'VALIDATION_FAILED', 'Unsupported payout currency.', false)
+      const data = { institutions: await dependencies.listInstitutions(currency) }
       if (!isPocketBankInstitutionsData(data)) {
         throw Object.assign(new Error('Bank provider returned an invalid institution list.'), { status: 502 })
       }

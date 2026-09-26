@@ -22,3 +22,8 @@ assert.throws(()=>resolvePocketPosCheckout(fiat,url+'&intent=quote',{...intent,e
 assert.throws(()=>resolvePocketPosCheckout(fiat,url+'&intent=quote',{...intent,merchant_id:'another'}))
 assert.throws(()=>resolvePocketPosCheckout(fiat,url+'&ngn=1000'))
 console.log('PASS: allowlisted QR parsing, canonical merchant/recipient/settlement, fixed/open amounts, quote ownership/expiry, unsupported chains and hostile URLs.')
+
+const ug=resolvePocketPosCheckout({...fiat,country:'UG'},url+'&fx=NGN&fiat_currency=NGN');
+const ugParams=new URL(ug.paymentUrl,'https://app.hashpaylink.com').searchParams;
+assert.equal(ug.settlement,'UGX');assert.equal(ugParams.get('fx'),'UGX');assert.equal(ugParams.get('fiat_currency'),'UGX');
+console.log('PASS: Uganda QR currency comes from the stored merchant, not QR parameters.');

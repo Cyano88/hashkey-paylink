@@ -7,7 +7,6 @@ import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketLoadingState from '../components/PocketLoadingState'
 import usePocketPosPageController, { type PocketPosRouteStep } from '../controllers/usePocketPosPageController'
 import {
-  PocketPosCountryPanel,
   PocketPosReadyPanel,
   PocketPosSetupPanel,
   PocketPosShell,
@@ -16,12 +15,6 @@ import {
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
-
-const POS_COUNTRIES = [
-  { key: 'NG', name: 'Nigeria', label: 'Live', status: 'live' as const, copy: 'Receive Naira in your bank account.' },
-  { key: 'KE', name: 'Kenya', label: 'Coming soon', status: 'soon' as const, copy: '' },
-  { key: 'GH', name: 'Ghana', label: 'Coming soon', status: 'soon' as const, copy: '' },
-]
 
 export default function PocketMovePosPage() {
   const navigate = useNavigate()
@@ -32,7 +25,7 @@ export default function PocketMovePosPage() {
   const identityVerified = Boolean(verifiedIdentityName)
   const profileReady = Boolean(verifiedIdentityName && email)
   const stepParam = searchParams.get('posStep')
-  const routeStep: PocketPosRouteStep = stepParam === 'setup' || stepParam === 'ready' ? stepParam : 'country'
+  const routeStep: PocketPosRouteStep = stepParam === 'setup' || stepParam === 'ready' ? stepParam : 'setup'
 
   const changeStep = useCallback((step: PocketPosRouteStep) => {
     const params = new URLSearchParams()
@@ -69,19 +62,13 @@ export default function PocketMovePosPage() {
 
   return (
     <PocketRouteShell active="home" onSelect={selectNav} fixedPage={authenticated && identityVerified && Boolean(pos.country) && !pos.merchant}>
-      <PocketFlowHeader centered rightAction={<button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.posManage)} className="min-h-10 px-1 text-xs font-bold">Manage</button>} title={pos.country && !pos.merchant ? "Create POS" : "POS"} onBack={() => pos.country && !pos.merchant ? changeStep("country") : navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
+      <PocketFlowHeader centered rightAction={<button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.posManage)} className="min-h-10 px-1 text-xs font-bold">Manage</button>} title={pos.country && !pos.merchant ? "Create POS" : "POS"} onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <PocketPosShell standalone fixedPage={authenticated && identityVerified && Boolean(pos.country) && !pos.merchant}>
         {authenticated && !identityVerified && (
           <PocketVerifiedNameGate />
         )}
 
-        {authenticated && identityVerified && (!pos.country ? (
-          <PocketPosCountryPanel
-            controller={pos.controller}
-            countries={POS_COUNTRIES}
-            profileReady={Boolean(authenticated && profileReady)}
-          />
-        ) : !pos.merchant ? (
+        {authenticated && identityVerified && (!pos.merchant ? (
           <PocketPosSetupPanel
             controller={pos.controller}
             networkOptions={[{ key: 'base', label: 'Base' }]}

@@ -10,9 +10,9 @@ import {
 const BANK_INSTITUTIONS_CACHE_KEY = 'pocket:bank-institutions:v1'
 const BANK_INSTITUTIONS_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
-export function readCachedPocketBankInstitutions(): PocketBankInstitutionsData | null {
+export function readCachedPocketBankInstitutions(currency: 'NGN' | 'UGX' = 'NGN'): PocketBankInstitutionsData | null {
   try {
-    const cached = JSON.parse(localStorage.getItem(BANK_INSTITUTIONS_CACHE_KEY) || 'null') as { savedAt?: number; institutions?: unknown }
+    const cached = JSON.parse(localStorage.getItem(currency === 'NGN' ? BANK_INSTITUTIONS_CACHE_KEY : BANK_INSTITUTIONS_CACHE_KEY + ':' + currency) || 'null') as { savedAt?: number; institutions?: unknown }
     if (!cached?.savedAt || Date.now() - cached.savedAt >= BANK_INSTITUTIONS_CACHE_TTL_MS) return null
     const value = { ok: true, institutions: cached.institutions }
     return isPocketBankInstitutionsData(value) ? { institutions: value.institutions } : null
@@ -21,8 +21,8 @@ export function readCachedPocketBankInstitutions(): PocketBankInstitutionsData |
   }
 }
 
-function cachePocketBankInstitutions(data: PocketBankInstitutionsData) {
-  try { localStorage.setItem(BANK_INSTITUTIONS_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), institutions: data.institutions })) } catch { /* cache is optional */ }
+function cachePocketBankInstitutions(data: PocketBankInstitutionsData, currency: 'NGN' | 'UGX' = 'NGN') {
+  try { localStorage.setItem(currency === 'NGN' ? BANK_INSTITUTIONS_CACHE_KEY : BANK_INSTITUTIONS_CACHE_KEY + ':' + currency, JSON.stringify({ savedAt: Date.now(), institutions: data.institutions })) } catch { /* cache is optional */ }
 }
 
 function bankErrorMessage(value: unknown, fallback: string) {
@@ -51,14 +51,14 @@ export function parsePocketBankVerification(value: unknown): PocketBankVerifyDat
   return { account_name: value.account_name, bank_code: value.bank_code }
 }
 
-export async function readPocketBankInstitutions(fetcher: typeof fetch = fetch): Promise<PocketBankInstitutionsData> {
-  const cached = readCachedPocketBankInstitutions()
+export async function readPocketBankInstitutions(fetcher: typeof fetch = fetch, currency: 'NGN' | 'UGX' = 'NGN'): Promise<PocketBankInstitutionsData> {
+  const cached = readCachedPocketBankInstitutions(currency)
   try {
-    const response = await fetcher(POCKET_API.bankInstitutions, { method: 'GET' })
+    const response = await fetcher(POCKET_API.bankInstitutions + (currency === 'NGN' ? '' : '?currency=' + currency), { method: 'GET' })
     const data = await response.json().catch(() => undefined)
     if (!response.ok) throw new Error(bankErrorMessage(data, 'Could not load banks.'))
     const parsed = parsePocketBankInstitutions(data)
-    cachePocketBankInstitutions(parsed)
+    cachePocketBankInstitutions(parsed, currency)
     return parsed
   } catch (reason) {
     if (cached) return cached
