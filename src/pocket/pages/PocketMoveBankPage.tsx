@@ -293,6 +293,7 @@ export default function PocketMoveBankPage() {
               onCountryChange={bank.setCountry}
               onInstitutionChange={bank.setInstitution}
               onAccountChange={bank.setAccount}
+              onRetry={() => { void bank.verify() }}
               embedded
             /></div>
             {mode==='withdraw' && !recipientStep && <button type="button" disabled={!bank.verified || bank.verifying || directLocked} onClick={()=>setRecipientStep(true)} className="pocket-cta-primary w-full">Continue</button>}

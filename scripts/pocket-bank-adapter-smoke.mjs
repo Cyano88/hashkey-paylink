@@ -160,3 +160,8 @@ assert.equal(clientCalls[0].init.headers.authorization, 'Bearer client-privy-tok
 assert.deepEqual(JSON.parse(clientCalls[0].init.body), bankRequest)
 
 console.log('Circle Pocket bank metadata and verification adapter smoke tests passed.')
+
+await assert.rejects(verifyPocketBankAccount({accessToken:'fixture',request:bankRequest,fetcher:async()=>({ok:false,status:502,json:async()=>{throw new SyntaxError('HTML response')}})}), /temporarily unavailable/);
+await assert.rejects(verifyPocketBankAccount({accessToken:'fixture',request:bankRequest,fetcher:async()=>({ok:false,status:429,json:async()=>{throw new SyntaxError('empty')}})}), /Wait a moment/);
+await assert.rejects(verifyPocketBankAccount({accessToken:'fixture',request:bankRequest,fetcher:async()=>{throw Object.assign(new Error('timeout'),{name:'TimeoutError'})}}), /took too long/);
+console.log('PASS bank lookup handles proxy failures, throttling, and timeouts accurately.');

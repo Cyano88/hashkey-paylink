@@ -82,8 +82,17 @@ export async function verifyPocketBankAccount({
       authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify(request),
+    signal: AbortSignal.timeout(20_000),
+  }).catch(reason => {
+    if (reason?.name === 'TimeoutError' || reason?.name === 'AbortError') throw new Error('Account lookup took too long. Try again.')
+    throw reason
   })
   const data = await response.json().catch(() => undefined)
-  if (!response.ok) throw new Error(bankErrorMessage(data, 'Account verification failed.'))
+  if (!response.ok) {
+    const fallback = response.status === 429
+      ? 'Too many account lookups. Wait a moment and try again.'
+      : 'Account lookup is temporarily unavailable. Try again.'
+    throw new Error(bankErrorMessage(data, fallback))
+  }
   return parsePocketBankVerification(data)
 }
