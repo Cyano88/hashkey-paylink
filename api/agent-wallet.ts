@@ -1,3 +1,4 @@
+import { withCircleSession, readCircleSessionFiles } from './circle-cli-durable-session.js'
 import { migratedJsonStore } from './migrated-json-store.js'
 import { hasRenderDurableStore } from './render-durable-store.js'
 import type { Request, Response } from 'express'
@@ -128,9 +129,12 @@ async function readRecentCirclePaymentDebug(params: {
   startedAt: number
 }): Promise<CirclePaymentDebug | undefined> {
   const paymentsPath = resolve(circleSessionHome(params.serviceKey), '.circle-cli', 'payments')
+  const durableFiles = hasRenderDurableStore() ? await readCircleSessionFiles(safeSessionKey(params.serviceKey)) : undefined
   let names: string[]
   try {
-    names = (await readdir(paymentsPath))
+    names = (hasRenderDurableStore()
+      ? Object.keys(durableFiles ?? {}).filter(path => path.startsWith('.circle-cli/payments/')).map(path => path.slice('.circle-cli/payments/'.length))
+      : await readdir(paymentsPath))
       .filter(name => /^payment-.*\.json$/i.test(name))
       .sort()
       .reverse()
@@ -140,7 +144,10 @@ async function readRecentCirclePaymentDebug(params: {
   }
   for (const name of names) {
     try {
-      const parsed = JSON.parse(await readFile(resolve(paymentsPath, name), 'utf8')) as Record<string, unknown>
+      const raw = hasRenderDurableStore()
+        ? Buffer.from(durableFiles?.[`.circle-cli/payments/${name}`] ?? '', 'base64').toString('utf8')
+        : await readFile(resolve(paymentsPath, name), 'utf8')
+      const parsed = JSON.parse(raw) as Record<string, unknown>
       const timestamp = Date.parse(String(parsed.timestamp ?? ''))
       if (!Number.isFinite(timestamp) || timestamp < params.startedAt - 5_000) continue
       const payload = parsed.paymentPayload as Record<string, unknown> | undefined
@@ -989,21 +996,21 @@ async function walletChoicesWithBalances(wallets: string[], key: string, chain: 
 }
 
 async function runCircle(args: string[], key: string, timeoutMs = 60_000, maxBuffer = 128 * 1024) {
+  const invocation = circleCliInvocation(args)
+  const execute = async (sessionHome: string) => {
+    const { stdout, stderr } = await execFileAsync(invocation.executable, invocation.args, {
+      timeout: timeoutMs, maxBuffer, shell: false,
+      env: { ...process.env, HOME: sessionHome, USERPROFILE: sessionHome, CIRCLE_CLI_HOME: resolve(sessionHome, '.circle-cli'), CIRCLE_ACCEPT_TERMS: '1' },
+    })
+    return [stdout, stderr].filter(Boolean).join('\n').trim()
+  }
+  if (hasRenderDurableStore()) {
+    return withCircleSession({ key: safeSessionKey(key), source: circleSessionHome(key), args }, execute)
+  }
+  if (process.env.RENDER || process.env.RENDER_SERVICE_ID) throw new Error('Durable wallet session storage is required.')
   const sessionHome = circleSessionHome(key)
   await mkdir(sessionHome, { recursive: true })
-  const invocation = circleCliInvocation(args)
-  const { stdout, stderr } = await execFileAsync(invocation.executable, invocation.args, {
-    timeout: timeoutMs,
-    maxBuffer,
-    shell: false,
-    env: {
-      ...process.env,
-      HOME: sessionHome,
-      USERPROFILE: sessionHome,
-      CIRCLE_ACCEPT_TERMS: '1',
-    },
-  })
-  return [stdout, stderr].filter(Boolean).join('\n').trim()
+  return execute(sessionHome)
 }
 
 export function parseCircleGatewayBalanceResponse(value: unknown, address: string) {
