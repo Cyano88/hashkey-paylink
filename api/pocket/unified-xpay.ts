@@ -1,15 +1,12 @@
+import {UNIFIED_XPAY_KEY as KEY,readUnifiedXPayStore as read,type UnifiedXPayRecord as Record,type UnifiedXPayStore as Store} from './unified-xpay-store.js'
 import type {Request,Response} from 'express'
 import {randomUUID} from 'node:crypto'
 import {verifiedPrivyUser} from '../privy-circle-link.js'
-import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
-import {listPocketXPayPosDestinations} from '../ng-pos.js'
-import {listPocketXPayStockDestinations} from './xpay.js'
+import {mutateDurableJson} from '../render-durable-store.js'
+import {listPocketXPayPosDestinations,listPocketUnifiedXPayPosPayments} from '../ng-pos.js'
+import {listPocketXPayStockDestinations,listPocketUnifiedXPayStockPayments} from './xpay.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {validateXPayDestinations,type XPayCheckout,type XPayDestination} from '../../src/pocket/lib/pocketUnifiedXPay.js'
-const KEY='pocket:unified-xpay:v1'
-type Record = Omit<XPayCheckout,'destinations'>&{owner:string;destinationIds:string[];revisions:string[];key:string}
-type Store={checkouts:Record[]}
-const read=async()=>await readDurableJson<Store>(KEY)||{checkouts:[]}
 const available=async(owner:string):Promise<XPayDestination[]> => (await Promise.all([listPocketXPayPosDestinations(owner),listPocketXPayStockDestinations(owner)])).flat()
 async function publicCheckout(c:Record):Promise<XPayCheckout>{
  const current=await available(c.owner)
@@ -34,6 +31,12 @@ export default async function handler(req:Request,res:Response){
    const destinations=await available(owner)
    const checkouts=(await read()).checkouts.filter(c=>c.owner===owner&&!c.deletedAt).map(c=>({id:c.id,name:c.name,createdAt:c.createdAt,destinations:c.destinationIds.flatMap(id=>destinations.filter(d=>d.id===id))}))
    return res.json({ok:true,destinations,checkouts})
+  }
+  if(b.action==='history'){
+   const c=(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner)
+   if(!c)return res.status(404).json({ok:false,error:'QR not found.'})
+   const payments=(await Promise.all([listPocketUnifiedXPayPosPayments(owner,c.id),listPocketUnifiedXPayStockPayments(owner,c.id)])).flat().sort((a,b)=>b.createdAt-a.createdAt)
+   return res.json({ok:true,payments:payments.slice(0,200)})
   }
   if(b.action==='create'){
    const name=String(b.name||'').trim(),key=String(b.key||'')

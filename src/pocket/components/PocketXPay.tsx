@@ -72,7 +72,7 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
  const prepare=()=>run(async()=>{
   if(!wallet.address||!merchant)throw Error('Open your XStocks wallet first.')
   const currentScope=scope
-  const data=await xpayRequest(getAccessToken,{action:'prepare',id:merchant.id,wallet:wallet.address,token,usd,key:crypto.randomUUID()})
+  const data=await xpayRequest(getAccessToken,{action:'prepare',id:merchant.id,wallet:wallet.address,token,usd,key:crypto.randomUUID(),checkoutId:new URLSearchParams(location.search).get('xpay_checkout_id')||undefined})
   if(scopeRef.current!==currentScope)return
   const asset=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===data.payment.token)!
   const transfer=await prepareStockTransfer(wallet.address,asset,data.payment.recipient,data.payment.amount)

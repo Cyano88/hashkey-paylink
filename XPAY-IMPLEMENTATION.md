@@ -1,29 +1,45 @@
-# Unified XPay implementation checkpoint
+﻿# Unified XPay implementation checkpoint
 
-This feature checkout contains the initial shared XPay QR registry and UI. It is not a production-complete rollout.
+Updated 2026-09-27. Feature branch: feature/unified-xpay-20260927.
+Not deployed and not production-complete. Pixel retains its existing stable build.
 
-Implemented and tested with synthetic fixtures:
-- Owned destination discovery from existing active POS and XStocks merchant records.
-- One reusable QR selecting bank/mobile-money or wallet payment destinations.
-- Up to three distinct accepted assets, counting USDC once across receiving options.
-- USDC added to the XStocks merchant asset picker; new/edited merchant configurations capped at three assets. Historical QRs are preserved.
-- Authenticated creation with replay protection, destination revision binding, public reads without owner/credentials, PIN-protected deletion.
-- Both home entry points and the scanner resolve the shared QR. Existing payment executors, receipts and QR paths remain intact.
+## Confirmed scope
 
-Required before production rollout:
-- Inline destination setup in the single creation flow (current draft reuses separate setup screens).
-- Bind the unified QR ID to underlying payment attempts and aggregate per-QR merchant payment history; current draft still links the existing histories.
-- Fixed-amount checkout support; draft currently supports reusable payer-entered amount.
-- Stock-funded bank payouts: quote stock conversion, execute through the payer's Privy wallet, bridge native USDC to Base, prove arrival, then pay the merchant payout order. Persist each step, do not debit twice, handle expiry/recovery/refund, and present one fee-inclusive approval and truthful receipt.
-- Full wallet/payment end-to-end checks before enabling the combined checkout for customers.
+The user explicitly chose BOTH direct Base USDC bank payments and stock-funded bank payments, alongside direct merchant wallet payments. Stock-funded bank payments must convert through the payer's Privy wallet, bridge native USDC to Base, and then fund the existing bank payout rail. Circle and Privy ownership/signing remain separate.
 
-Verified provider documentation on 2026-09-27:
-- Circle lists X Layer domain 37 with standard and fast CCTP support, but no source upfront fees or destination forwarding support: https://developers.circle.com/cctp/concepts/supported-chains-and-domains
-- TokenMessengerV2 on X Layer: 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d, per https://developers.circle.com/cctp/references/contract-addresses
-- Pocket already uses the native X Layer USDC contract listed by OKX. Pocket's current CCTP integration only implements its six Circle-wallet networks and relies on upfront forwarding fees. Do not simply add X Layer to that enum: it needs a Privy-owned source execution and a supported attestation/mint/fee path.
+## Implemented in this draft
 
-Tests:
-- scripts/pocket-unified-xpay-smoke.mjs
-- scripts/pocket-unified-xpay-browser-smoke.mjs
-- Existing pocket-xpay-api-smoke and scan compatibility tests passed before isolation.
-- Full repository type check has existing errors; it is not a clean passing baseline.
+- Shared reusable QR and destination discovery from existing POS and XStocks merchants; existing QR paths remain compatible.
+- Up to three unique accepted assets, counting USDC once across destinations.
+- Inline bank/mobile-money setup using the existing Pocket POS form and bank-name gate; inline wallet asset search using the canonical stock catalog.
+- Idempotent merchant creation and safe retry when destination refresh fails after creation.
+- Public destination selection, canonical asset images, downloadable QR, PIN-protected deletion.
+- Shared QR ID propagated through native scans and web checkout to bank intents, stock payment attempts and verified stablecoin receipts.
+- Merchant-only, per-QR history, grouped by date, with existing Pocket receipt/status presentation and quiet refresh.
+- Revision/deletion checks on new bank orders and stock authorization. Submitted payment settlement and history survive QR deletion.
+- Merchant bank history reports success on bank settlement, not merely a source transfer hash.
+
+## Verified
+
+- Shared QR API tests: ownership, replay, asset limit, public privacy, changed destinations, protected deletion, per-QR history isolation.
+- Stock payment API tests: setup replay, checkout binding, revision/deletion guards, verified settlement and submitted-payment recovery.
+- Browser tests: inline setup, failed parent refresh retry, shared USDC counting, fourth-asset rejection, QR creation/history, public selection and actual stock-image loading.
+- Receipt TypeScript regression corrected. Full repository type check has pre-existing errors; do not claim a clean baseline.
+- Pocket mobile build passed earlier in this session; edits since that build require a fresh final build.
+
+## Required before rollout
+
+- Implement stock-funded bank execution: server-bound fee-inclusive quote, Privy swap, X Layer burn, attestation, Base mint/arrival proof, then existing Paycrest funding. Preserve source funds and allow recovery after quote expiry or interruption; never repeat a swap/burn on an ambiguous result.
+- Persist and reconcile every conversion/bridge/payout step with one coherent activity record and truthful receipts.
+- Audit stablecoin wallet attribution replay (an existing untagged receipt is not automatically reassigned to a QR) and archive metadata coverage.
+- Validate the complete new payment paths end to end and visually on device in both themes, then rebuild and update Pixel in place.
+- Current reusable QR uses payer-entered amounts. Fixed-amount creation is not implemented.
+
+## Provider constraint verified 2026-09-27
+
+https://developers.circle.com/cctp/concepts/supported-chains-and-domains
+X Layer is domain 37 and supports standard/fast CCTP, but lacks source upfront fees and destination forwarding. Base supports forwarding; source upfront-fee availability must not be conflated with destination forwarding. Existing Pocket bridge assumes Circle-owned wallets and upfront forwarding fees, so simply adding X Layer to its enum is insufficient.
+
+https://developers.circle.com/cctp/references/contract-addresses
+X Layer TokenMessengerV2: 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d.
+Pocket's stockUsdc is native X Layer USDC. No real swap, bridge or new payment was sent for this draft.

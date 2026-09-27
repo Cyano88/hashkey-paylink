@@ -12,3 +12,5 @@ export function validateXPayDestinations(ids:unknown, available:XPayDestination[
 export function xpayDestinationDetail(d:XPayDestination) {
  return d.kind==='bank' ? 'Merchant receives '+d.currency+'. Pay with USDC on Base.' : 'Merchant receives '+d.assets.join(', ')+'.'
 }
+
+export type XPayHistoryEntry={id:string;rail:'stablecoins'|'xstocks';amount:string;asset:string;state:'pending'|'successful'|'failed'|'refunded'|'refunding';createdAt:number;hash?:string;network:string;bankDelivery?:string}

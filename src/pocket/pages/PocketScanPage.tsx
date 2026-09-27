@@ -26,6 +26,7 @@ export default function PocketScanPage() {
    const params=new URLSearchParams(data.paymentUrl.slice(5))
    if(code.kind==='pos'&&(params.get('merchant')!==code.id||params.get('src')!=='ngpos'))throw Error('Merchant verification did not match.')
    if(code.kind==='checkout'&&params.get('checkout')!==code.id)throw Error('Checkout verification did not match.')
+   if(code.kind==='pos'){const unified=new URL(code.url).searchParams.get('xpay_checkout_id');if(unified)params.set('xpay_checkout_id',unified)}
    if(!controller.signal.aborted)setCheckout({params:params.toString(),merchant:data.merchantName||data.checkout?.merchantName||'Merchant checkout',settlement:data.settlement||data.checkout?.settlementMode||'USDC'})
   }catch(reason){if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:'Checkout could not be opened.')}
   finally{if(!controller.signal.aborted){pending.current=false;setBusy(false)}}
