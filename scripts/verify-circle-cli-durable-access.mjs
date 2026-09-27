@@ -12,7 +12,7 @@ const root=process.env.AGENT_WALLET_CIRCLE_SESSION_PATH || `${process.env.DATA_P
 try {
  const store=await readDurableJson((process.env.AGENT_WALLET_PROVISION_STORE_KEY ?? 'hashpaylink:agent-wallet-provisioning').trim())
  if(!store?.agents) throw Error('Migrate provisioning first.')
- let checked=0,confirmedOwnership=0,requiresReauthentication=0,otherFailure=0
+ let checked=0,confirmedOwnership=0,requiresReauthentication=0,upgradeRequired=0,otherFailure=0
  for(const [slug,record] of Object.entries(store.agents)) {
   if(!['BASE','ARC'].includes(record.chain)||!record.sessionId)continue
   const key=`${slug}_${record.sessionId}`.replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,80)
@@ -27,10 +27,11 @@ try {
    while(queue.length){const value=queue.shift();if(typeof value==='string'&&value.toLowerCase()===String(record.walletAddress).toLowerCase())match=true;else if(value&&typeof value==='object')queue.push(...Object.values(value))}
    if(match)confirmedOwnership++;else otherFailure++
   } catch(error) {
-   const detail=String(error?.stderr||error?.message||'')
-   if(/expired|not logged in|not authenticated|login required|log in|no.*session|sign in/i.test(detail))requiresReauthentication++;else otherFailure++
+   const detail=[error?.stdout,error?.stderr,error?.message].filter(Boolean).join('\n')
+   if(/no longer supported for wallet operations|required:[\s\S]*update:/i.test(detail))upgradeRequired++;
+   else if(/AUTH_REQUIRED|AUTH_EXPIRED|expired|not logged in|not authenticated|login required|log in|no.*session|sign in/i.test(detail))requiresReauthentication++;else otherFailure++
   }
  }
- console.log(JSON.stringify({checked,confirmedOwnership,requiresReauthentication,otherFailure,readOnly:true}))
- process.exit(otherFailure?1:0)
+ console.log(JSON.stringify({checked,confirmedOwnership,requiresReauthentication,upgradeRequired,otherFailure,readOnly:true}))
+ process.exit(otherFailure||upgradeRequired?1:0)
 } catch { console.error('Read-only verification stopped; no payment was attempted.');process.exit(1) }
