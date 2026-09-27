@@ -575,6 +575,13 @@ export async function listNgPosResourcesForOwner(privyUserId: string) {
   }))
 }
 
+// Authorization must read ownership only, never refresh or repair payment history.
+export async function ownsNgPosMerchant(ownerId: string, merchantId: string) {
+  if (!ownerId || !merchantId) return false
+  const store = await readStore()
+  return store.merchants[merchantId]?.owner_id === ownerId
+}
+
 export async function listNgPosHistoryForOwner(privyUserId: string, options: { repair?: boolean } = {}) {
   const store = await readStore()
   const merchants = Object.values(store.merchants ?? {})
