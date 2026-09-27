@@ -9,7 +9,7 @@ import PocketArcTokenPicker from './PocketArcTokenPicker'
 import PocketPaymentSuccess from './PocketPaymentSuccess'
 import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
 import { stockPickerTokens } from '../lib/pocketStockPickerTokens'
-import { stockAssets, prepareStockTransfer, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
+import { stockAssets, stockUsdc, prepareStockTransfer, stockQuantity, type StockTransfer } from '../lib/pocketXStocksWallet'
 import { formatStockQuantity } from '../lib/pocketStockDisplay'
 import { xpayRequest } from '../api/pocketXPayClient'
 import type { XPayMerchant, XPayPayment } from '../lib/pocketXPay'
@@ -74,7 +74,7 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
   const currentScope=scope
   const data=await xpayRequest(getAccessToken,{action:'prepare',id:merchant.id,wallet:wallet.address,token,usd,key:crypto.randomUUID()})
   if(scopeRef.current!==currentScope)return
-  const asset=stockAssets.find(a=>a.address.toLowerCase()===data.payment.token)!
+  const asset=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===data.payment.token)!
   const transfer=await prepareStockTransfer(wallet.address,asset,data.payment.recipient,data.payment.amount)
   setPayment(data.payment);setReview(transfer)
  })
@@ -102,7 +102,7 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
  const Surface=checkout?CheckoutSurface:PocketBottomSheet
  const close=()=>{if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xStockPath('home'),{replace:true})}
  const assetTokens=stockPickerTokens(wallet.displaySnapshot||wallet.snapshot).filter(t=>merchant?.tokens.includes(t.address.toLowerCase()))
- const selected=stockAssets.find(a=>a.address.toLowerCase()===token)
+ const selected=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===token)
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>

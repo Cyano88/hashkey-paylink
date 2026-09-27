@@ -99,6 +99,7 @@ import pocketPaylinksHandler from './api/pocket/paylinks.js'
 import pocketRequestsHandler from './api/pocket/requests.js'
 import pocketPushDevicesHandler from './api/pocket/push-devices.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
+import pocketUnifiedXPayHandler from './api/pocket/unified-xpay.js'
 import pocketXPayHandler, { drainXPayPayments } from './api/pocket/xpay.js'
 import pocketStockNotificationsHandler from './api/pocket/xstocks-notifications.js'
 import { drainStockNotifications } from './api/pocket/xstocks-notifications-store.js'
@@ -410,6 +411,7 @@ app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
 app.get('/api/pocket/checkout-config', readLimiter, pocketCheckoutConfig)
+app.all('/api/pocket/xpay', (req,res,next)=>(req.method==='GET'||req.body?.action==='mine'?readLimiter:strictLimiter)(req,res,next), pocketUnifiedXPayHandler)
 app.all('/api/pocket/xstocks/xpay', (req,res,next) => (req.method === 'POST' && ['mine','merchant','status'].includes(req.body?.action) ? readLimiter : strictLimiter)(req,res,next), pocketXPayHandler)
 app.all('/api/pocket/xstocks/notifications', (req,res,next) => (req.method === 'GET' ? readLimiter : strictLimiter)(req,res,next), pocketStockNotificationsHandler)
 app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)

@@ -6,6 +6,7 @@ import { SolanaProvider } from '../lib/SolanaContext'
 import CirclePocketApp from './CirclePocketApp'
 import PocketNativeBridge from './components/PocketNativeBridge'
 
+const UnifiedXPayCheckout = lazy(() => import('./pages/PocketUnifiedXPayPage'))
 const XPayCheckout = lazy(() => import('./pages/PocketXPayCheckoutPage'))
 const PocketReceiptPage = lazy(() => import('../pages/X402Receipt'))
 const PocketLegalDocumentPage = lazy(() => import('./pages/PocketLegalDocumentPage'))
@@ -16,6 +17,7 @@ export default function PocketHostApp() {
       <BrowserRouter>
         <PocketNativeBridge />
         <Routes>
+          {!isPocketNativeRuntime() && <Route path="xpay/checkout/:checkoutId" element={<Suspense fallback={null}><UnifiedXPayCheckout publicCheckout /></Suspense>} />}
           {!isPocketNativeRuntime() && <Route path="xpay/:merchantId" element={<Suspense fallback={null}><XPayCheckout /></Suspense>} />}
           <Route path="docs/terms" element={<Suspense fallback={null}><PocketLegalDocumentPage document="terms" /></Suspense>} />
           <Route path="docs/privacy" element={<Suspense fallback={null}><PocketLegalDocumentPage document="privacy" /></Suspense>} />

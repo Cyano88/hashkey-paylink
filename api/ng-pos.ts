@@ -1476,3 +1476,12 @@ export async function listPocketBankRecipients(ownerId: string) {
   }
   return [...recipients.values()].sort((a,b) => b.lastUsedAt - a.lastUsedAt).slice(0,500)
 }
+
+/** Owned, active POS destinations only; never return bank details or arbitrary redirects. */
+export async function listPocketXPayPosDestinations(owner:string) {
+ const store=await readStore()
+ return Object.values(store.merchants).filter(m=>m.owner_id===owner&&m.source==='pos'&&m.settlement_enabled&&m.kyc_status!=='RESTRICTED').flatMap(m=>{
+  try { resolvePocketPosCheckout(m,'https://app.hashpaylink.com/pos/ng?merchant_id='+encodeURIComponent(m.merchant_id)) } catch { return [] }
+  return [{id:m.merchant_id,name:m.display_name,kind:m.payout_preference==='INSTANT_FIAT'?'bank' as const:'stablecoins' as const,currency:m.payout_preference==='INSTANT_FIAT'?(m.country==='UG'?'UGX':'NGN'):'USDC',assets:['USDC'],revision:m.updated_at}]
+ })
+}

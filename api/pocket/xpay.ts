@@ -6,7 +6,7 @@ import { verifiedPrivyUser, localCurrencyProfileRepository } from '../local-curr
 import { mutateDurableJson, readDurableJson } from '../render-durable-store.js'
 import { verifyStockWalletOwner } from './xstocks-wallet-owner.js'
 import { stockNoticeClient, stockNoticeAsset, mutateStockNotices, putStockNotice } from './xstocks-notifications-store.js'
-import { stockAssets, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
+import { stockAssets, stockUsdc, stockTokenAbi } from '../../src/pocket/lib/pocketXStocksWallet.js'
 import { parseAbiItem } from 'viem'
 import { readStockMarketPrices } from './xstocks-prices.js'
 import type { XPayMerchant, XPayPayment } from '../../src/pocket/lib/pocketXPay.js'
@@ -18,7 +18,7 @@ const normalize=(s?:Store):Store=>({merchants:s?.merchants||{},payments:s?.payme
 const read=async()=>normalize(await readDurableJson<Store>(KEY))
 const mutate=(fn:(s:Store)=>void)=>mutateDurableJson<Store>(KEY,current=>{const s=normalize(current);fn(s);return s})
 const fail=(message:string,status=400)=>{throw Object.assign(Error(message),{status})}
-const supported=new Set(stockAssets.map(a=>a.address.toLowerCase()))
+const supported=new Set([stockUsdc,...stockAssets].map(a=>a.address.toLowerCase()))
 const publicMerchant=({owner,...m}:Merchant)=>m
 const publicPayment=({owner,merchantOwner,units,authorizedAt,authorizedBlock,scanBlock,blockHash,blockNumber,...p}:Payment)=>p
 const event=parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)')
@@ -74,7 +74,7 @@ export default async function handler(req:Request,res:Response){
   if(action==='merchant-save'){
    const wallet=String(b.wallet||'');await verifyStockWalletOwner(owner,wallet)
    const tokens=Array.isArray(b.tokens)?[...new Set<string>(b.tokens.map((t:unknown)=>String(t).toLowerCase()))]:[]
-   if(!tokens.length||tokens.length>100||tokens.some(t=>!supported.has(t)))fail('Select up to 100 supported stocks.')
+   if(!tokens.length||tokens.length>3||tokens.some(t=>!supported.has(t)))fail('Select up to 3 supported assets.')
    const name=String(b.name||'').trim();if(!name||name.length>60||/[\u0000-\u001f<>]/.test(name))fail('Enter a merchant name, up to 60 characters.')
    const profile=await localCurrencyProfileRepository.ensure(identity)
    let savedId=''
@@ -136,3 +136,8 @@ export default async function handler(req:Request,res:Response){
 
 let draining=false,drainOffset=0
 export async function drainXPayPayments(){if(draining)return;draining=true;try{const s=await read();const pending=Object.values(s.payments).filter(p=>p.status==='submitted');if(pending.length){drainOffset%=pending.length;const batch=[...pending.slice(drainOffset),...pending.slice(0,drainOffset)].slice(0,20);drainOffset+=batch.length;for(const p of batch)await observe(p).catch(()=>undefined)}}finally{draining=false}}
+
+export async function listPocketXPayStockDestinations(owner:string) {
+ const s=await read()
+ return Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).map(m=>({id:m.id,name:m.name,kind:'xstocks' as const,currency:'USD',revision:String(m.updatedAt),assets:m.tokens.map(t=>[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===t)?.symbol||t)}))
+}
