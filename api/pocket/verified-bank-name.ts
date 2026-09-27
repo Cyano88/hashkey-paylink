@@ -41,7 +41,11 @@ export async function verifyBankPayoutBeneficiary(
   body: Record<string, unknown>,
   dependencies: VerifiedBankNameDependencies = defaultDependencies,
 ) {
-  return verifyPocketBankAccount(req, body, dependencies)
+  const result = await verifyPocketBankAccount(req, body, dependencies)
+  if (result.verification.name_required && (body.currency !== 'UGX' || typeof body.account_name !== 'string' || body.account_name.trim().length < 2 || body.account_name.trim().length > 160 || body.account_name.trim().toUpperCase() === 'OK')) {
+    throw Object.assign(new Error('Enter the recipient name registered with the mobile money provider.'), { status: 400 })
+  }
+  return result
 }
 
 export async function assertBankAccountMatchesPocketName(
@@ -50,6 +54,7 @@ export async function assertBankAccountMatchesPocketName(
   dependencies: VerifiedBankNameDependencies = defaultDependencies,
 ) {
   const { identity, profile, verification } = await verifyPocketBankAccount(req, body, dependencies)
+  if (verification.name_required) throw Object.assign(new Error('This provider does not verify account ownership. Use an account that returns your registered name.'), { status: 403 })
   if (normalizeBankLegalName(verification.account_name) !== normalizeBankLegalName(profile.resolvedName)) {
     throw Object.assign(new Error('This account belongs to a different verified name. Use an account in your verified name.'), { status: 403 })
   }

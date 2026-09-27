@@ -28,7 +28,7 @@ const original=globalThis.fetch;const calls=[]
 try{
  globalThis.fetch=async(url,init)=>{const body=JSON.parse(init?.body||'{}');calls.push({url:String(url),body});return new Response(JSON.stringify({status:'success',data:String(url).endsWith('/verify-account')?'FIXTURE OWNER':{id:'fixture-order',status:'initiated',amountToPay:body.senderFeePercent?'1.0025':'1',amount:'1',senderFee:body.senderFeePercent?'0.0025':'0',senderFeePercent:body.senderFeePercent||'0',senderFeeAddress:body.senderFeeAddress,providerAccount:{receiveAddress:'0x1111111111111111111111111111111111111111'}}}),{status:200,headers:{'content-type':'application/json'}})}
  const {verifyNgPosBankAccount}=await import('../api/ng-pos.ts')
- const verified=await verifyNgPosBankAccount(req);assert.equal(verified.account_name,'FIXTURE OWNER');assert.equal(calls.at(-1).body.accountIdentifier,'256772123456');assert.equal(calls.at(-1).body.currency,'UGX')
+ const verified=await verifyNgPosBankAccount(req);assert.equal(verified.account_name,'FIXTURE OWNER');assert.equal(calls.at(-1).body.accountIdentifier,'256772123456');assert.equal(calls.at(-1).body.currency,undefined)
  await assert.rejects(verifyNgPosBankAccount({...req,bank_code:'OPAYNGPC'}),/supported Uganda/)
  const {createPaycrestOfframpOrder}=await import('../api/paycrest-pos.ts')
  const order=await createPaycrestOfframpOrder({intentId:'fixture',merchantId:'fixture',amountNgn:'3900',fiatCurrency:'UGX',estimatedAmountUsdc:'1',bankCode:'MOMOUGPC',accountNumber:'256772123456',accountName:'FIXTURE OWNER',refundAddress:'0x2222222222222222222222222222222222222222',source:'ngpos'})
@@ -37,6 +37,7 @@ try{
  const xpay=await createPaycrestOfframpOrder({intentId:'xpay-fee',merchantId:'fixture',amountNgn:'3900',fiatCurrency:'UGX',estimatedAmountUsdc:'1',bankCode:'MOMOUGPC',accountNumber:'256772123456',accountName:'FIXTURE OWNER',refundAddress:'0x2222222222222222222222222222222222222222',source:'ngpos',unifiedXPay:true})
  assert.equal(calls.at(-1).body.senderFeePercent,'0.25');assert.equal(calls.at(-1).body.senderFeeAddress.toLowerCase(),'0xce5df9e1115f81a2fc2f65941b20b820d508e753');assert.equal(xpay.amount_usdc,'1.0025')
  globalThis.fetch=async()=>new Response(JSON.stringify({status:'success',data:'OK'}),{status:200,headers:{'content-type':'application/json'}})
- await assert.rejects(verifyNgPosBankAccount(req),/Ownership cannot be verified/)
+ assert.deepEqual(await verifyNgPosBankAccount(req),{account_name:'',bank_code:'MOMOUGPC',name_required:true})
+ await assert.rejects(verifyNgPosBankAccount({...req,currency:'NGN',bank_code:'OPAYNGPC',account_number:'0123456789'}),/Ownership cannot be verified/)
  console.log('PASS Uganda normalization, country boundaries, provider currency, receipt/activity labels and fail-closed name ownership. No live transactions.')
 }finally{globalThis.fetch=original;await rm(dir,{recursive:true,force:true})}

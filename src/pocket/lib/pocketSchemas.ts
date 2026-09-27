@@ -327,6 +327,7 @@ export type PocketBankVerifyRequest = {
 export type PocketBankVerifyData = {
   account_name: string
   bank_code: string
+  name_required?: true
 }
 
 export type PocketBankSendCreateRequest = {
@@ -740,7 +741,9 @@ export function isPocketBankVerifyRequest(value: unknown): value is PocketBankVe
 
 export function isPocketBankVerifyData(value: unknown): value is PocketBankVerifyData {
   return isRecord(value)
-    && isNonEmptyString(value.account_name, 160)
+    && (value.name_required === true
+      ? value.account_name === '' && ['MOMOUGPC', 'AIRTUGPC'].includes(String(value.bank_code))
+      : value.name_required === undefined && isNonEmptyString(value.account_name, 160))
     && isNonEmptyString(value.bank_code, 90)
 }
 

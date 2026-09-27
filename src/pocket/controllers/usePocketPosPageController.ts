@@ -125,6 +125,7 @@ export default function usePocketPosPageController({
       })
       if (!valid()) return
       if (data.bank_code) setBankCode(String(data.bank_code).trim())
+      if (data.name_required) throw new Error('This provider does not verify account ownership. Use an account that returns your registered name.')
       const resolved = String(data.account_name ?? '').trim()
       setBankAccountName(resolved)
       if (profileVerified && normalizeName(resolved) !== normalizeName(verifiedIdentityName)) {

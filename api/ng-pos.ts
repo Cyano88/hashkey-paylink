@@ -733,6 +733,9 @@ export async function verifyNgPosBankAccount(body: Record<string, unknown>) {
   if (currency === 'UGX' && !['MOMOUGPC', 'AIRTUGPC'].includes(resolvedBankCode)) throw ngPosRequestError(400, 'Select a supported Uganda mobile money provider.')
   if (currency === 'NGN' && ['MOMOUGPC', 'AIRTUGPC'].includes(resolvedBankCode)) throw ngPosRequestError(400, 'Select the matching payout country.')
   const accountName = await verifyPaycrestAccount({ institution: resolvedBankCode, accountIdentifier: accountNumber, currency })
+  if (accountName === 'OK' && currency === 'UGX') {
+    return { account_name: '', bank_code: resolvedBankCode, name_required: true as const }
+  }
   if (!accountName || accountName === 'OK') {
     throw ngPosRequestError(503, 'The provider could not return the account holder name. Ownership cannot be verified yet. Try again later.')
   }

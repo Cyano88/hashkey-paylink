@@ -213,7 +213,6 @@ export async function verifyPaycrestAccount(input: { institution: string; accoun
     body: JSON.stringify({
       institution: input.institution,
       accountIdentifier: input.accountIdentifier,
-      currency: input.currency ?? 'NGN',
     }),
   })
   return firstText(data?.accountName, data?.account_name, data?.name, data)

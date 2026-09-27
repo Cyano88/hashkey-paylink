@@ -18,6 +18,8 @@ type PocketVerifiedBankFieldsProps = {
   bankName: string
   accountNumber: string
   accountName: string
+  nameRequired?: boolean
+  onRecipientNameChange?: (name: string) => void
   verified: boolean
   verifying: boolean
   error: string
@@ -37,6 +39,8 @@ export function PocketVerifiedBankFields({
   bankName,
   accountNumber,
   accountName,
+  nameRequired = false,
+  onRecipientNameChange,
   verified,
   verifying,
   error,
@@ -91,8 +95,13 @@ export function PocketVerifiedBankFields({
         <div className={recipientEntry ? "flex flex-col gap-3" : "space-y-2.5 border-t border-gray-100 pt-2.5 dark:border-[#262626]"}>
           {recipientEntry ? <>{accountField}{bankField}</> : <>{bankField}{accountField}</>}
           
-          {verified && accountName && <PocketResolvedNameRow name={accountName} />}
-          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">{error}{onRetry && bankCode && accountNumber.length >= 9 && <button type="button" disabled={verifying} onClick={onRetry} className="ml-2 min-h-8 font-semibold underline underline-offset-2 disabled:opacity-45">Try again</button>}</div>}
+          {nameRequired && recipientEntry && country === 'UG' && <label className="block">
+            <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Recipient name</span>
+            <input value={accountName} onChange={event => onRecipientNameChange?.(event.target.value)} maxLength={160} autoComplete="off" className="mt-1 min-h-12 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-950 outline-none dark:border-[#262626] dark:bg-[#121212] dark:text-white" />
+            <span className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">Enter their registered mobile money name. The provider does not return a name for this number.</span>
+          </label>}
+          {verified && accountName && !nameRequired && <PocketResolvedNameRow name={accountName} />}
+          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-300">{onRetry ? error.replace(/\s*Try again\.?$/i, '') : error}{onRetry && bankCode && accountNumber.length >= 9 && <button type="button" disabled={verifying} onClick={onRetry} className="ml-2 min-h-8 font-semibold underline underline-offset-2 disabled:opacity-45">Try again</button>}</div>}
         </div>
       )}
     </div>
