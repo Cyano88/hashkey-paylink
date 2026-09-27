@@ -1,4 +1,4 @@
-﻿import {createPublicClient,getAddress,http,parseAbi,parseAbiItem,type Hex} from 'viem'
+import {createPublicClient,getAddress,http,parseAbi,parseAbiItem,type Hex} from 'viem'
 import {base} from 'viem/chains'
 import {circleLinkKey,readCircleLink} from '../privy-circle-link.js'
 import {createCircleGasStationEvmChallenge,readCircleEvmChallenge} from '../circle-solana-email.js'
@@ -8,7 +8,7 @@ import {createXPayBridgeJournal} from './xpay-bridge-journal.js'
 import {requestXPayReattestation,quoteXPayBridge,readXPayAttestation,validateXPayAttestation,verifyXPayBurnTransaction,verifyXPayMintReceipt,assertXPayMintWindow,xpayMintBatch,xpayBurnCalls,XPAY_CCTP} from './xpay-cctp-provider.js'
 
 const baseClient=createPublicClient({chain:base,transport:http(process.env.PRIVATE_RPC_URL||'https://mainnet.base.org',{timeout:15000,retryCount:0})})
-const fail=(message:string,status=409):never=>{throw Object.assign(new Error(message),{status})}
+function fail(message:string,status=409):never {throw Object.assign(new Error(message),{status})}
 const messageSent=parseAbiItem('event MessageSent(bytes message)')
 const tokenAbi=parseAbi(['function balanceOf(address) view returns(uint256)','function allowance(address,address) view returns(uint256)'])
 const defaults={journal:createXPayBridgeJournal(),source:stockNoticeClient,destination:baseClient,readLink:readCircleLink,ownsStock:verifyStockWalletOwner,quote:quoteXPayBridge,reattest:requestXPayReattestation,attest:readXPayAttestation,challenge:createCircleGasStationEvmChallenge,challengeStatus:readCircleEvmChallenge}
@@ -26,6 +26,7 @@ export function createXPayBridgeService(overrides:Partial<typeof defaults>={}) {
   return receipt
  }
  return {
+  get:(owner:string,id:string)=>record(owner,id),
   async prepare(owner:string,key:string,checkoutId:string,source:string,receiveUnits:bigint){
    if(!/^[a-zA-Z0-9-]{16,80}$/.test(key)||!/^xp_[0-9a-f-]{36}$/.test(checkoutId))fail('Invalid payment reference.',400)
    await d.ownsStock(owner,source)
@@ -36,8 +37,13 @@ export function createXPayBridgeService(overrides:Partial<typeof defaults>={}) {
    return d.journal.create(owner,key,checkoutId,plan)
   },
   async authorizeBurn(owner:string,id:string){
-   const r=await record(owner,id)
+   let r=await record(owner,id)
    if(r.state!=='quoted')fail('This bridge already started. Check its status.')
+   if(r.plan.expiresAt<=Date.now()+10000){
+    const plan=await d.quote(r.plan.source,r.plan.destination,BigInt(r.plan.minimumReceiveUnits))
+    plan.destinationWalletId=r.plan.destinationWalletId
+    r=await d.journal.refreshQuote(owner,id,plan)
+   }
    await d.ownsStock(owner,r.plan.source)
    if(await d.source.getChainId()!==196)fail('X Layer could not be verified.',503)
    const calls=xpayBurnCalls(r.plan)
@@ -46,9 +52,11 @@ export function createXPayBridgeService(overrides:Partial<typeof defaults>={}) {
     d.source.readContract({address:XPAY_CCTP.sourceToken,abi:tokenAbi,functionName:'allowance',args:[r.plan.source,XPAY_CCTP.messenger]}),
    ])
    if(balance<BigInt(r.plan.burnUnits))fail('Not enough USDC on X Layer for this bridge.')
-   if(allowance<BigInt(r.plan.burnUnits))return {record:r,approval:calls.approval}
-   const [gas,gasPrice,gasBalance]=await Promise.all([d.source.estimateGas({account:r.plan.source,...calls.burn}),d.source.getGasPrice(),d.source.getBalance({address:r.plan.source})])
-   if(gasBalance<gas*gasPrice*120n/100n)throw Object.assign(new Error('Not enough OKB for the network fee. Add OKB in Pocket, then retry.'),{status:409,code:'INSUFFICIENT_OKB'})
+   const approvalRequired=allowance<BigInt(r.plan.burnUnits)
+   const call=approvalRequired?calls.approval:calls.burn
+   const [gas,gasPrice,gasBalance]=await Promise.all([d.source.estimateGas({account:r.plan.source,...call}),d.source.getGasPrice(),d.source.getBalance({address:r.plan.source})])
+   if(gasBalance<(gas*gasPrice*120n+99n)/100n)throw Object.assign(new Error('Not enough OKB for the network fee. Add OKB in Pocket, then retry.'),{status:409,code:'INSUFFICIENT_OKB'})
+   if(approvalRequired)return {record:r,approval:calls.approval,gas,gasPrice}
    // Persist before handing out executable burn data. Lost responses cannot
    // authorize a second burn; recovery must reconcile the original submission.
    return {record:await d.journal.claimBurn(owner,id,String((await d.source.getBlockNumber())+1n)),burn:calls.burn,gas,gasPrice}
@@ -111,15 +119,18 @@ export function createXPayBridgeService(overrides:Partial<typeof defaults>={}) {
     const proof=await d.attest(r.burnHash as Hex,r.plan);if(!proof)fail('Bridge confirmation is not ready.')
     r=await d.journal.recordAttestation(owner,id,{message:proof.message,attestation:proof.attestation,nonce:proof.nonce})
    }
+   // Freeze the message and request key atomically before deriving calldata.
+   // Concurrent attestation refreshes cannot send different payloads for one key.
+   r=await d.journal.claimMint(owner,id)
    const proof=validateXPayAttestation(r.message,r.plan)
    const callData=xpayMintBatch({...proof,attestation:r.attestation as Hex})
-   // Simulation checks Circle signatures and destination caller restriction.
-   // Do not reinterpret simulation/network errors as a reverted transaction.
-   if(r.state!=='mint_requested'){
-    assertXPayMintWindow(proof,await d.destination.getBlockNumber())
-    await d.destination.call({account:r.plan.destination,to:r.plan.destination,data:callData})
+   if(!r.mintValidated){
+    try{
+     assertXPayMintWindow(proof,await d.destination.getBlockNumber())
+     await d.destination.call({account:r.plan.destination,to:r.plan.destination,data:callData})
+     r=await d.journal.validateMint(owner,id,r.mintKey!)
+    }catch(error){await d.journal.releaseUnvalidatedMint(owner,id,r.mintKey!);throw error}
    }
-   r=await d.journal.claimMint(owner,id)
    const challenge=await d.challenge({chain:'base',userToken:circleUserToken,walletId:r.plan.destinationWalletId!,walletAddress:r.plan.destination,callData,idempotencyKey:r.mintKey!,refId:'pocket:xpay:mint:'+r.id})
    if(!challenge.challengeId)fail('Base approval is awaiting confirmation. Retry to recover the same request.',503)
    const saved=await d.journal.recordChallenge(owner,id,r.mintKey!,challenge.challengeId)

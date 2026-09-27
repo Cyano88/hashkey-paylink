@@ -68,3 +68,27 @@ Additional references checked:
 https://developers.circle.com/cctp/references/technical-guide
 https://raw.githubusercontent.com/circlefin/evm-cctp-contracts/master/src/v2/MessageTransmitterV2.sol
 Use the V2 bytes32 nonce event from the contract source; do not use the legacy uint64 MessageReceived event shown elsewhere in the docs.
+
+## Stock-funded bank coordinator checkpoint — 2026-09-27
+
+Implemented locally:
+- Canonical Paycrest payout adapter uses its exact fee-inclusive funding amount and refuses fee configuration drift from the 0.25% platform fee. No second transfer fee is added. This is code validation, not live Render configuration verification.
+- Stock funding estimates use integer arithmetic; executable OKX minimum output must cover the bridge burn. Receipt proof binds the exact approved transaction, native USDC net arrival and maximum stock input.
+- Owner-scoped durable bank coordinator connects approval, stock conversion, CCTP bridge, verified Base arrival and the existing Circle-sponsored bank funding transfer. Pending/unknown submissions cannot start another payment or repeat a completed stage.
+- Authenticated API handler added in api/pocket/xpay-bank.ts, but deliberately NOT registered in server.ts. It filters private journal fields, accepts PIN approval only from the existing approval header, keeps Circle sessions ephemeral and serializes signing amounts safely.
+- Quote refresh before a burn cannot increase the approved fee or amount. Expired Paycrest quotes can be explicitly re-reviewed and PIN-approved without repeating conversion/bridge, provided the replacement funding amount does not exceed the previous quote. More expensive replacement quotes remain blocked with funds retained in the user's wallet.
+- Lost payout responses reuse the same Circle idempotency key. Broadcast hashes are persisted separately from success; approval/challenge creation never activates the Confirming payment progress stage.
+- Fixed a mint concurrency risk: atomically freeze attestation and idempotency key before deriving calldata; persist successful simulation before requesting Circle approval. Pre-request simulation errors release the unvalidated claim for safe recovery. Lost external responses keep the validated request unchanged.
+- OKB preflight now applies to bridge allowance approvals as well as burns.
+
+Validation:
+- Ten focused smoke suites pass: CCTP provider, bridge journal, bridge service, bank journal, bank coordinator, payout adapter, stock funding proof, API privacy/authentication, bank progress and existing progress/retry policy.
+- Focused TypeScript semantic/syntax diagnostics for the new/changed coordinator, adapter, journal, provider, handler and progress files: zero. Full repository compilation is not asserted clean.
+- All execution tests used isolated fixtures. No real swap, bridge, mint or payout was submitted. No deployment or Pixel installation occurred.
+
+Remaining before rollout:
+- Connect existing asset-selector and confirmation sheet to the handler, Privy signing and Circle mint/payment approvals. Register the route with separate read/write request limits only after those recovery paths are tested.
+- Drive compact progress and Retry from authoritative snapshots, including re-attestation and quote re-review. Handle wallet cancellation/unknown submission without replay.
+- One payer activity/receipt record across swap, burn, mint and payout; reconcile later provider settlement/refund into that record. The new bank journal is not yet connected to payer Activity.
+- Review recovery for a more expensive expired payout quote and canonical reverted payout broadcasts; neither may silently restart an earlier stage. Current behavior preserves funds and blocks further spending.
+- Complete mobile/web visual and signed-wallet end-to-end validation, then deploy and update Pixel in place while preserving app data.

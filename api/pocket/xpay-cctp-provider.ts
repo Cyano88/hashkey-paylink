@@ -1,4 +1,4 @@
-﻿import { decodeEventLog, encodeFunctionData, getAddress, parseAbi, parseAbiItem, type Address, type Hex } from 'viem'
+import { decodeEventLog, encodeFunctionData, getAddress, parseAbi, parseAbiItem, type Address, type Hex } from 'viem'
 
 // Dedicated Privy-source bridge; do not add X Layer to the Circle-wallet router.
 export const XPAY_CCTP = {
@@ -17,7 +17,7 @@ const receivedEvent = parseAbiItem('event MessageReceived(address indexed caller
 const transferEvent = parseAbiItem('event Transfer(address indexed from,address indexed to,uint256 value)')
 const same = (a:string,b:string) => a.toLowerCase()===b.toLowerCase()
 const word = (a:string) => ('0x'+getAddress(a).slice(2).toLowerCase().padStart(64,'0')) as Hex
-const fail = (message:string,status=409):never => {throw Object.assign(new Error(message),{status})}
+function fail(message:string,status=409):never  {throw Object.assign(new Error(message),{status})}
 export type XPayBridgePlan = {source:Address;destination:Address;destinationWalletId?:string;burnUnits:string;maxFeeUnits:string;minimumReceiveUnits:string;finality:1000|2000;expiresAt:number}
 export async function quoteXPayBridge(source:string,destination:string,receiveUnits:bigint,fetcher:typeof fetch=fetch):Promise<XPayBridgePlan> {
   if(receiveUnits<=0n||receiveUnits>100_000n*1_000_000n)fail('Enter a supported payment amount.',400)
