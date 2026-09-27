@@ -1,4 +1,5 @@
-﻿import {useCallback,useEffect,useRef,useState} from 'react'
+import PocketXPayAssetList from './PocketXPayAssetList'
+import {useCallback,useEffect,useRef,useState} from 'react'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
 import usePocketStockWallet from '../hooks/usePocketStockWallet'
@@ -6,7 +7,6 @@ import usePocketPosPageController from '../controllers/usePocketPosPageControlle
 import {PocketPosSetupPanel} from '../features/move/PocketPosPanels'
 import PocketVerifiedNameGate from './PocketVerifiedNameGate'
 import PocketRecentActivitySkeleton from './PocketRecentActivitySkeleton'
-import {Search} from './PocketIcons'
 import {stockAssets,stockUsdc} from '../lib/pocketXStocksWallet'
 import {xpayRequest} from '../api/pocketXPayClient'
 
@@ -28,11 +28,11 @@ export function XPayBankSetup({name,onCreated}:Props){
 }
 export function XPayWalletSetup({name,onCreated,reservedAssets=[]}:Props&{reservedAssets?:string[]}){
  const wallet=usePocketStockWallet(),{getAccessToken}=usePocketIdentity()
- const [tokens,setTokens]=useState<string[]>([]),[query,setQuery]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('')
+ const [tokens,setTokens]=useState<string[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('')
  const guard=useRef(false),alive=useRef(true),requestKey=useRef(crypto.randomUUID())
  useEffect(()=>{alive.current=true;return()=>{alive.current=false}},[])
  const assets=[stockUsdc,...stockAssets]
  const fits=(address:string)=>new Set([...reservedAssets,...assets.filter(a=>tokens.includes(a.address.toLowerCase())||a.address.toLowerCase()===address).map(a=>a.symbol)]).size<=3
  const save=async()=>{if(guard.current||!wallet.address)return;guard.current=true;setBusy(true);setError('');try{const data=await xpayRequest(getAccessToken,{action:'merchant-save',create:true,key:requestKey.current,wallet:wallet.address,name,tokens});if(!data.merchant)throw Error('Receiving assets could not be saved.');if(alive.current)await onCreated(data.merchant.id)}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Please try again.')}finally{guard.current=false;if(alive.current)setBusy(false)}}
- return <div className="flex min-h-0 flex-1 flex-col gap-4"><p className="shrink-0 text-xs text-gray-500">Choose up to 3 assets in total for this QR.</p><label className="flex min-h-12 shrink-0 items-center gap-3 rounded-xl bg-white px-3 dark:bg-[#121212]"><Search className="h-4 w-4"/><input aria-label="Search accepted assets" placeholder="Search assets" value={query} onChange={e=>setQuery(e.target.value)} className="min-w-0 flex-1 bg-transparent text-sm outline-none"/></label><div aria-label="Accepted assets" className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain divide-y divide-gray-100 dark:divide-[#262626]">{assets.filter(a=>(a.name+' '+a.symbol+' '+a.address).toLowerCase().includes(query.toLowerCase())).slice(0,100).map(a=>{const address=a.address.toLowerCase(),checked=tokens.includes(address);return <label key={address} className="flex min-h-16 items-center gap-3 py-2"><img src={a.icon||(a.symbol==='USDC'?'/brand/usdc-circle-logo.png':undefined)} alt="" className="h-8 w-8 rounded-full"/><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{a.name}</span><span className="text-xs text-gray-500">{a.symbol}</span></span><input className="shrink-0 accent-black dark:accent-white" aria-label={a.symbol} type="checkbox" checked={checked} disabled={busy||(!checked&&!fits(address))} onChange={e=>setTokens(old=>e.target.checked?[...old,address]:old.filter(t=>t!==address))}/></label>})}</div>{wallet.address?<button className="pocket-cta-primary w-full shrink-0" disabled={busy||!tokens.length} onClick={()=>void save()}>{busy?'Saving…':'Continue'}</button>:<button className="pocket-cta-primary w-full shrink-0" disabled={!wallet.ready||wallet.busy} onClick={wallet.connect}>Open wallet</button>}{(error||wallet.error)&&<p role="alert" className="text-xs text-red-500">{error||wallet.error}</p>}</div>
+ return <div className="flex min-h-0 flex-1 flex-col gap-4"><p className="shrink-0 text-xs text-gray-500">Choose up to 3 assets in total for this QR.</p><PocketXPayAssetList selected={tokens} onChange={setTokens} disabled={busy} fits={fits} snapshot={wallet.displaySnapshot||wallet.snapshot}/>{wallet.address?<button className="pocket-cta-primary w-full shrink-0" disabled={busy||!tokens.length} onClick={()=>void save()}>{busy?'Saving…':'Continue'}</button>:<button className="pocket-cta-primary w-full shrink-0" disabled={!wallet.ready||wallet.busy} onClick={wallet.connect}>Open wallet</button>}{(error||wallet.error)&&<p role="alert" className="text-xs text-red-500">{error||wallet.error}</p>}</div>
 }

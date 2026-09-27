@@ -272,7 +272,7 @@ export default function usePocketPosPageController({
     ? `${hashPayLinkAppOriginForOrigin(window.location.origin)}/pos/ng?merchant_id=${encodeURIComponent(merchant.merchant_id)}`
     : ''
   const dashboardUrl = merchant
-    ? `${POCKET_BASE_PATH}/move/pos/manage?terminal=${encodeURIComponent(merchant.merchant_id)}`
+    ? `${POCKET_BASE_PATH}/move/pos/manage?terminal=${encodeURIComponent(merchant.merchant_id)}&view=payments`
     : ''
 
   const copyCustomerUrl = useCallback(async () => {

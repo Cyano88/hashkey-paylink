@@ -413,7 +413,7 @@ app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler
 app.all('/api/pocket/bridge',            strictLimiter, pocketBridgeHandler)
 app.get('/api/pocket/checkout-config', readLimiter, pocketCheckoutConfig)
 app.post('/api/pocket/xpay/bank', (req,res,next)=>(['list','status'].includes(req.body?.action)?readLimiter:strictLimiter)(req,res,next), pocketXPayBankHandler)
-app.all('/api/pocket/xpay', (req,res,next)=>(req.method==='GET'||req.body?.action==='mine'?readLimiter:strictLimiter)(req,res,next), pocketUnifiedXPayHandler)
+app.all('/api/pocket/xpay', (req,res,next)=>(req.method==='GET'||['mine','history'].includes(req.body?.action)?readLimiter:strictLimiter)(req,res,next), pocketUnifiedXPayHandler)
 app.all('/api/pocket/xstocks/xpay', (req,res,next) => (req.method === 'POST' && ['mine','merchant','status'].includes(req.body?.action) ? readLimiter : strictLimiter)(req,res,next), pocketXPayHandler)
 app.all('/api/pocket/xstocks/notifications', (req,res,next) => (req.method === 'GET' ? readLimiter : strictLimiter)(req,res,next), pocketStockNotificationsHandler)
 app.post('/api/pocket/xstocks/balances', strictLimiter, pocketStockBalancesHandler)

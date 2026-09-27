@@ -24,7 +24,7 @@ const cta='min-h-12 w-full rounded-xl bg-black px-5 text-xs font-bold text-white
 const input='min-h-12 w-full rounded-xl bg-gray-100 px-3 text-sm outline-none dark:bg-white/10'
 export function xpayReceipt(p:XPayPayment):PaylinkReceipt{return {type:'money_out',receiptId:p.id,receiptHash:p.hash||'',title:'Merchant payment',status:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',eventId:p.id,txHash:p.hash||'',chain:'xlayer',payer:p.payer,memo:'XPay payment',amount:p.amount,asset:p.symbol,createdAt:p.createdAt,source:'xpay',recipient:p.merchantName,destination:p.recipient,referenceId:p.id,brandName:'Pocket',brandKind:'pocket'}}
 function CheckoutSurface({children}:ComponentProps<typeof PocketBottomSheet>){return <section className="rounded-3xl border border-gray-100 bg-white p-5 dark:border-white/10 dark:bg-[#121212]">{children}</section>}
-export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
+export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLayoutChange?:(fixed:boolean)=>void;wallet:ReturnType<typeof usePocketStockWallet>;checkout?:boolean}){
  const {user,getAccessToken}=usePocketIdentity(),navigate=useNavigate(),location=useLocation(),[params]=useSearchParams(),merchantId=params.get('merchant')||/^\/xpay\/([0-9a-f-]{36})$/.exec(location.pathname)?.[1]||''
  const scope=(user?.id||'')+':'+(wallet.address||''),storageKey='pocket.xpay.active:'+scope
  const scopeRef=useRef(scope);scopeRef.current=scope
@@ -108,7 +108,7 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''
  if(receipt)return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={()=>setReceipt(null)}/>
  return <>
-  {!merchantId&&<PocketXPayLinks key={scope} wallet={wallet} merchants={merchants} payments={payments} loading={loading} onChange={setMerchants}/>}
+  {!merchantId&&<PocketXPayLinks key={user?.id||'guest'} onLayoutChange={onLayoutChange} wallet={wallet} merchants={merchants} payments={payments} loading={loading} onChange={setMerchants}/>}
   {open&&(payment&&(['paid','failed'].includes(payment.status)||(payment.status==='submitted'&&slowConfirmation))?<PocketPaymentSuccess receipt={xpayReceipt(payment)} onDone={close} inline={checkout}/>:<Surface title="XPay" onClose={close} showCloseButton dismissible={!busy} dismissOnBackdrop={false}>
    <h2 className="mb-5 text-lg font-bold">{payment?.merchantName||merchant?.name||'XPay'}</h2>
    {(payment?.status==='submitted'&&!review)||payment?.status==='failed'?<div className="py-4 text-center">{payment.hash?<PocketXPayProgress progress={{payment:payment.status==='failed'?'failed':'submitted'}}/>:<p className="text-sm font-medium">Checking submission</p>}<p className="mt-2 text-xs text-gray-400">{formatStockQuantity(payment.amount)} {payment.symbol}</p><p className="mt-4 text-xs text-gray-400">{payment.status==='submitted'?'Your payment is being checked. Do not pay again.':'No merchant payment completed.'}</p></div>:payment&&review?<>

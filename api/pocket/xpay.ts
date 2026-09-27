@@ -149,7 +149,7 @@ export async function listPocketXPayStockDestinations(owner:string) {
  return Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).map(m=>({id:m.id,name:m.name,kind:'xstocks' as const,currency:'USD',revision:String(m.updatedAt),assets:m.tokens.map(t=>[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===t)?.symbol||t)}))
 }
 
-export async function listPocketUnifiedXPayStockPayments(owner:string,checkoutId:string):Promise<XPayHistoryEntry[]>{
+export async function listPocketUnifiedXPayStockPayments(owner:string,checkoutId?:string):Promise<XPayHistoryEntry[]>{
  const s=await read()
- return Object.values(s.payments).filter(p=>p.merchantOwner===owner&&p.checkoutId===checkoutId&&p.status!=='ready').map(p=>({id:p.id,rail:'xstocks',amount:p.amount,asset:p.symbol,state:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',createdAt:p.createdAt,hash:p.hash,network:'xlayer'}))
+ return Object.values(s.payments).filter(p=>p.merchantOwner===owner&&(!checkoutId||p.checkoutId===checkoutId)&&p.status!=='ready').map(p=>({id:p.id,rail:'xstocks',amount:p.amount,asset:p.symbol,state:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',createdAt:p.createdAt,hash:p.hash,network:'xlayer'}))
 }

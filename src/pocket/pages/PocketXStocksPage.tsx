@@ -44,6 +44,7 @@ function AssetRow({ asset, quote, busy, quantity, quantityLoading, onOpen, forma
 }
 
 export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 'account' | 'verify-name'> }) {
+  const [xpayFixed,setXpayFixed]=useState(false)
   const navigate = useNavigate()
   const wallet = usePocketStockWallet()
   const [params, setParams] = useSearchParams()
@@ -87,8 +88,8 @@ export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 
     <div className="mt-3 divide-y divide-gray-100 dark:divide-white/[0.05]">{list.map(asset => <AssetRow usdcRate={usdcRate} formatValue={formatValue} key={asset.symbol} asset={asset} quote={displayQuotes[asset.address.toLowerCase()]} busy={quotes.busy} quantity={view === 'home' ? (() => { const h = snapshot?.holdings.find(h => h.asset.address === asset.address); return h ? stockQuantity(h.units, h.decimals) : snapshot?.complete || (wallet.ready && !wallet.address) ? '0' : null })() : undefined} quantityLoading={view === 'home' && ((!wallet.ready && !wallet.error) || (!!wallet.address && !snapshot && !wallet.error))} onOpen={() => openAsset(asset)} />)}</div>
     {!list.length && <p role="status" className="py-10 text-center text-xs text-gray-400">No stocks match your search.</p>}
   </section>
-  return <PocketRouteShell active={active} onSelect={tab => navigate(xStockNavPath(tab))}>
-    <div className="pocket-stock-page space-y-5 text-gray-950 dark:text-white">
+  return <PocketRouteShell fixedPage={view==='xpay'&&xpayFixed} active={active} onSelect={tab => navigate(xStockNavPath(tab))}>
+    <div className={view==='xpay'&&xpayFixed?"pocket-stock-page flex min-h-0 flex-1 flex-col text-gray-950 dark:text-white":"pocket-stock-page space-y-5 text-gray-950 dark:text-white"}>
       {selected ? <>
         <PocketFlowHeader title="Stock" onBack={() => setParams({})} />
         <section className={card}><p className="text-xs text-gray-400">{selected.symbol} · X Layer</p><h1 className="mt-2 text-2xl font-bold">{selected.name}</h1><p className="mt-5 text-3xl font-bold">{displayQuotes[selected.address.toLowerCase()] ? formatValue(displayQuotes[selected.address.toLowerCase()].usd) : quotes.busy ? <PocketSkeletonBar className="h-9 w-32" /> : '—'}</p><p className="mt-2 text-xs text-gray-400">{quotes.busy ? '' : displayQuotes[selected.address.toLowerCase()] ? 'Indicative price · OKX' : 'Price unavailable'}</p>
@@ -98,7 +99,7 @@ export default function PocketXStocksPage({ view }: { view: Exclude<XStockView, 
         {balance}
         <section className="grid grid-cols-4 gap-2">{([{ label: 'Send', icon: Send, view: 'send' }, { label: 'Receive', icon: Deposit, view: 'receive' }, { label: 'Trade', icon: ArrowLeftRight, view: 'trade' }, { label: 'XPay', icon: RequestMoney, view: 'xpay' }] as const).map(action => <PocketHomeAction key={action.view} label={action.label} icon={<action.icon className="h-5 w-5" />} onClick={() => navigate(action.view==='xpay'?'/xpay':xStockPath(action.view),action.view==='xpay'?{state:{xpayOrigin:'xstocks'}}:undefined)} />)}</section>
         {market}
-      </> : view === 'xpay' ? <PocketXPay wallet={wallet} /> : view === 'trade' ? <><PocketFlowHeader title="Trade" onBack={()=>navigate(xStockPath('home'))}/><PocketStockTrade key={params.toString()} wallet={wallet} initialAsset={params.get('buy') || params.get('sell') || undefined} initialMode={params.has('sell') ? 'sell' : 'buy'} /></> : view === 'market' ? <>
+      </> : view === 'xpay' ? <PocketXPay wallet={wallet} onLayoutChange={setXpayFixed} /> : view === 'trade' ? <><PocketFlowHeader title="Trade" onBack={()=>navigate(xStockPath('home'))}/><PocketStockTrade key={params.toString()} wallet={wallet} initialAsset={params.get('buy') || params.get('sell') || undefined} initialMode={params.has('sell') ? 'sell' : 'buy'} /></> : view === 'market' ? <>
         {market}
       </> : view === 'portfolio' ? <>
         <section className={card}>

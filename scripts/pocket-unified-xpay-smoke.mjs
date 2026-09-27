@@ -4,8 +4,8 @@ const bank={id:'bank-1',name:'Fixture',kind:'bank',currency:'NGN',assets:['USDC'
 globalThis.fixture={owner:'merchant',destinations:[bank,stocks],approval:false}
 const mocks={
 '../privy-circle-link.js':`export const verifiedPrivyUser=async()=>{if(!fixture.owner)throw Object.assign(Error('Sign in'),{status:401});return{userId:fixture.owner}}`,
-'../render-durable-store.js':`let store;export const readDurableJson=async()=>structuredClone(store);export const mutateDurableJson=async(k,fn)=>{store=fn(structuredClone(store));return structuredClone(store)}`,
-'../ng-pos.js':`export const listPocketUnifiedXPayPosPayments=async(owner,id)=>fixture.payments?.filter(p=>p.owner===owner&&p.checkoutId===id).map(({owner,checkoutId,...p})=>p)||[];export const listPocketXPayPosDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind==='bank'):[]`,
+'../render-durable-store.js':`const stores=new Map();export const readDurableJson=async(k)=>structuredClone(stores.get(k));export const mutateDurableJson=async(k,fn)=>{const store=fn(structuredClone(stores.get(k)));stores.set(k,store);return structuredClone(store)}`,
+'../ng-pos.js':`export const ownsPocketPosQr=async(owner,id)=>owner==='merchant'&&id==='bank-1';export const listPocketUnifiedXPayPosPayments=async(owner,id)=>fixture.payments?.filter(p=>p.owner===owner&&(!id||p.checkoutId===id)).map(({owner,checkoutId,...p})=>p)||[];export const listPocketXPayPosDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind==='bank'):[]`,
 './xpay.js':`export const listPocketUnifiedXPayStockPayments=async()=>[];export const listPocketXPayStockDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind==='xstocks'):[]`,
 './payment-security.js':`export const consumePocketPaymentApproval=async()=>{const yes=fixture.approval;fixture.approval=false;return yes}`}
 await build({entryPoints:['api/pocket/unified-xpay.ts'],outfile:'.codex-temp/unified-xpay-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixtures',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path]}))}}]})
@@ -24,3 +24,14 @@ fixture.owner='merchant';await call({action:'delete',id:c.id},403);fixture.appro
 assert.equal((await call({action:'mine'})).checkouts.length,0)
 assert.equal((await call({action:'history',id:c.id})).payments.length,1)
 console.log('PASS unified QR: ownership, three assets, replay, public privacy, changed destination, authenticated deletion and legacy destination preservation.')
+
+fixture.owner='intruder';await call({action:'bank-delete',id:'bank-1'},404)
+fixture.owner='merchant';await call({action:'bank-delete',id:'foreign'},404);await call({action:'bank-delete',id:'bank-1'},403)
+fixture.approval=true;const retired=await call({action:'bank-delete',id:'bank-1'});assert.ok(Date.parse(retired.deletedAt))
+fixture.approval=true;assert.equal((await call({action:'bank-delete',id:'bank-1'})).deletedAt,retired.deletedAt)
+assert.equal((await call({action:'history',id:c.id})).payments.length,1)
+console.log('PASS bank QR retirement requires ownership and PIN, is idempotent, and retains payment history.')
+
+fixture.payments.push({id:'foreign-payment',owner:'someone-else',checkoutId:'other',rail:'stablecoins',amount:'999',asset:'NGN',state:'successful',createdAt:3,network:'base'})
+assert.deepEqual((await call({action:'history'})).payments.map(p=>p.id),['other-qr','payment-1'])
+console.log('PASS combined received history includes owned QRs only, including deleted QRs.')

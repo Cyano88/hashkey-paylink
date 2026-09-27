@@ -217,6 +217,7 @@ export type PocketActivityReadData = {
 }
 
 export type PocketPosResource = {
+  deleted_at?: string
   merchant_id: string
   display_name: string
   source?: string
@@ -638,6 +639,7 @@ export function isPocketActivityReadData(value: unknown): value is PocketActivit
       && isOptionalBoundedString(item.source, 40)
       && isOptionalBoundedString(item.bank_name, 90)
       && isOptionalBoundedString(item.bank_last4, 8)
+      && isOptionalBoundedString(item.deleted_at, 64)
       && isOptionalBoundedString(item.created_at, 64))
     && Array.isArray(value.collections)
     && value.collections.every(item => isRecord(item)

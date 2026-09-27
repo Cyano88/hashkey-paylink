@@ -1,9 +1,10 @@
+import {retirePosQr} from './pos-retirement.js'
 import {UNIFIED_XPAY_KEY as KEY,readUnifiedXPayStore as read,type UnifiedXPayRecord as Record,type UnifiedXPayStore as Store} from './unified-xpay-store.js'
 import type {Request,Response} from 'express'
 import {randomUUID} from 'node:crypto'
 import {verifiedPrivyUser} from '../privy-circle-link.js'
 import {mutateDurableJson} from '../render-durable-store.js'
-import {listPocketXPayPosDestinations,listPocketUnifiedXPayPosPayments} from '../ng-pos.js'
+import {ownsPocketPosQr,listPocketXPayPosDestinations,listPocketUnifiedXPayPosPayments} from '../ng-pos.js'
 import {listPocketXPayStockDestinations,listPocketUnifiedXPayStockPayments} from './xpay.js'
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {validateXPayDestinations,type XPayCheckout,type XPayDestination} from '../../src/pocket/lib/pocketUnifiedXPay.js'
@@ -27,15 +28,21 @@ export default async function handler(req:Request,res:Response){
   }
   if(req.method!=='POST')return res.sendStatus(405)
   const identity=await verifiedPrivyUser(req),owner=identity.userId,b=req.body||{}
+  if(b.action==='bank-delete'){
+   const id=typeof b.id==='string'?b.id:''
+   if(!id||!await ownsPocketPosQr(owner,id))return res.status(404).json({ok:false,error:'QR not found.'})
+   if(!await consumePocketPaymentApproval(String(req.headers['x-pocket-payment-approval']||''),owner))return res.status(403).json({ok:false,error:'Confirm with your PIN or fingerprint.'})
+   return res.json({ok:true,deletedAt:await retirePosQr(owner,id)})
+  }
   if(b.action==='mine'){
    const destinations=await available(owner)
    const checkouts=(await read()).checkouts.filter(c=>c.owner===owner&&!c.deletedAt).map(c=>({id:c.id,name:c.name,createdAt:c.createdAt,destinations:c.destinationIds.flatMap(id=>destinations.filter(d=>d.id===id))}))
    return res.json({ok:true,destinations,checkouts})
   }
   if(b.action==='history'){
-   const c=(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner)
-   if(!c)return res.status(404).json({ok:false,error:'QR not found.'})
-   const payments=(await Promise.all([listPocketUnifiedXPayPosPayments(owner,c.id),listPocketUnifiedXPayStockPayments(owner,c.id)])).flat().sort((a,b)=>b.createdAt-a.createdAt)
+   const c=b.id?(await read()).checkouts.find(c=>c.id===b.id&&c.owner===owner):undefined
+   if(b.id&&!c)return res.status(404).json({ok:false,error:'QR not found.'})
+   const payments=(await Promise.all([listPocketUnifiedXPayPosPayments(owner,c?.id),listPocketUnifiedXPayStockPayments(owner,c?.id)])).flat().sort((a,b)=>b.createdAt-a.createdAt)
    return res.json({ok:true,payments:payments.slice(0,200)})
   }
   if(b.action==='create'){

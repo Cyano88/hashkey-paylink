@@ -17,11 +17,11 @@ import PocketRecentActivitySkeleton from '../../components/PocketRecentActivityS
 export type { PocketActivityRow } from '../../models/pocketActivity'
 export type PocketActivityView = 'all' | 'purchases' | 'bank' | 'pos' | 'collections'
 type Category = 'all' | 'bank' | 'bills' | 'pos' | 'requests' | 'purchases' | 'wallet'
-type Props = {rail?:'stablecoins'|'xstocks';hideHeading?:boolean;archivedKeys?:string[];view:PocketActivityView;rows:PocketActivityRow[];authenticated:boolean;busy:boolean;error:string;onRefund:(id:string)=>Promise<string>;onBridgeCheck?:(bridge:PocketPendingBridge)=>Promise<void>;bridgeChecking?:(id:string)=>boolean;bridgeMessages?:Record<string,string>;onNewBridge?:()=>void}
+type Props = {incomingPos?:boolean;rail?:'stablecoins'|'xstocks';hideHeading?:boolean;archivedKeys?:string[];view:PocketActivityView;rows:PocketActivityRow[];authenticated:boolean;busy:boolean;error:string;onRefund:(id:string)=>Promise<string>;onBridgeCheck?:(bridge:PocketPendingBridge)=>Promise<void>;bridgeChecking?:(id:string)=>boolean;bridgeMessages?:Record<string,string>;onNewBridge?:()=>void}
 const categories: Array<[Category,string]> = [['all','All transactions'],['bank','Bank transfers'],['bills','Bills'],['pos','POS purchases'],['requests','Requests and collections'],['purchases','Other purchases'],['wallet','USDC and swaps']]
 export function pocketTransactionCategory(row: PocketActivityRow): Category {
   const source = String(row.source || '').toLowerCase().replace(/_/g,'-')
-  if (isOutgoingPosPurchase(row)) return 'pos'
+  if (isOutgoingPosPurchase(row) || isIncomingPosPayment(row)) return 'pos'
   if (source === 'xpay') return 'purchases'
   if (source === 'bills') return 'bills'
   if (source === 'request' || source === 'collection') return 'requests'
@@ -30,8 +30,8 @@ export function pocketTransactionCategory(row: PocketActivityRow): Category {
   return 'purchases'
 }
 function initialCategory(view:PocketActivityView):Category {return view === 'bank' ? 'bank' : view === 'collections' ? 'requests' : view === 'purchases' ? 'bills' : 'all'}
-export default function PocketActivityPanel({rail='stablecoins',hideHeading=false,archivedKeys=[],view,rows,authenticated,busy,error,onRefund,onBridgeCheck,bridgeChecking,bridgeMessages,onNewBridge}:Props) {
-  const availableCategories = rail==='xstocks' ? ([['all','All transactions'],['wallet','Transfers'],['requests','Requests'],['purchases','XPay']] as Array<[Category,string]>) : categories
+export default function PocketActivityPanel({incomingPos=false,rail='stablecoins',hideHeading=false,archivedKeys=[],view,rows,authenticated,busy,error,onRefund,onBridgeCheck,bridgeChecking,bridgeMessages,onNewBridge}:Props) {
+  const availableCategories = incomingPos ? ([['all','All payments']] as Array<[Category,string]>) : rail==='xstocks' ? ([['all','All transactions'],['wallet','Transfers'],['requests','Requests'],['purchases','XPay']] as Array<[Category,string]>) : categories
   const [category,setCategory] = useState<Category>(()=>initialCategory(view))
   const [period,setPeriod] = useState({from:'',to:''})
   const [status,setStatus] = useState('all')
@@ -42,7 +42,7 @@ export default function PocketActivityPanel({rail='stablecoins',hideHeading=fals
   const [filterOpen,setFilterOpen] = useState(false)
   const [selected,setSelected] = useState<PocketActivityRow|null>(null)
   useEffect(()=>{setCategory(initialCategory(view))},[view])
-  const transactions=rows.filter(row=>!isIncomingPosPayment(row)).slice().sort((a,b)=>b.ts-a.ts)
+  const transactions=rows.filter(row=>incomingPos?isIncomingPosPayment(row):!isIncomingPosPayment(row)).slice().sort((a,b)=>b.ts-a.ts)
   const visible=transactions.filter(row=>{
     const date=new Date(row.ts)
     const day=Number.isFinite(date.getTime())?date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0'):''
@@ -93,14 +93,14 @@ export default function PocketActivityPanel({rail='stablecoins',hideHeading=fals
     {statementOpen&&<PocketBottomSheet title="Download statement" onClose={()=>setStatementOpen(false)} dismissible={!exporting}>
       <h2 className="mb-4 text-center text-base font-bold">Download statement</h2>
       <p className="text-center text-sm text-gray-500 dark:text-gray-400">Export {visible.length} transactions as CSV.</p>
-      <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">{rail==='xstocks'?'Includes currently loaded XStocks activity matching your filters.':'Includes currently loaded activity matching your filters. Incoming POS payments are available in POS terminals.'}</p>
+      <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">{incomingPos?'Includes currently loaded POS payments matching your filters.':rail==='xstocks'?'Includes currently loaded XStocks activity matching your filters.':'Includes currently loaded activity matching your filters. Incoming POS payments are available in POS terminals.'}</p>
       {exportError&&<p role="alert" className="mt-4 text-center text-xs text-red-500">{exportError}</p>}
       <button type="button" disabled={!visible.length||exporting} onClick={()=>void exportStatement()} className="pocket-cta-primary mt-6 w-full">{exporting?'Preparing statement...':'Download CSV'}</button>
     </PocketBottomSheet>}
     {busy&&!transactions.length?<PocketRecentActivitySkeleton/>:!visible.length?<p className="py-12 text-center text-xs text-gray-500 dark:text-gray-400">{error&&!transactions.length?error:'No transactions to show.'}</p>:<div aria-label="Transactions">
       {groups.map(group=><section key={group.key} data-pocket-activity-day className="mb-5"><h2 className="mb-2 px-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{group.label}</h2><div className="rounded-2xl bg-gray-50 px-3 dark:bg-[#141414]">{group.rows.map(row=>{
         const status=pocketActivityStatus(row),outcome=paymentReceiptOutcome({status})
-        const incoming=row.direction==='in'||['refunded','reversed'].includes(pocketActivityStatus(row))
+        const incoming=isIncomingPosPayment(row)||row.direction==='in'||['refunded','reversed'].includes(pocketActivityStatus(row))
         const Icon=pocketActivityIcon(row)
         const title=pocketBankRecipientLabel(row)||row.activityLabel||row.memo||(incoming?'USDC received':'Payment')
         const detail=pocketBankRecipientLabel(row)?[row.bankName,'Bank transfer'].filter(Boolean).join(' / '):new Date(row.ts).toLocaleDateString(undefined,{day:'numeric',month:'short'})

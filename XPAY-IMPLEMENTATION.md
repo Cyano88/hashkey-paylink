@@ -117,3 +117,24 @@ Release state: source not yet deployed or installed. Production currently includ
 - Live POST /api/pocket/xpay/bank list and approve probes without authentication return JSON 401, not HTML or payment execution. These are boundary checks, not provider execution tests.
 - Merchant history now excludes unfunded/expired replacement quotes but retains funded failures and refunds. Provider fee validation accepts precise decimal quotes within one USDC base unit of rounding; missing, excessive or redirected fees fail before funds move.
 - No real swap, bridge, mint or payout was submitted. Supervised signed-wallet end-to-end testing is still required. Remaining conservative recovery limitations from the previous checkpoint still apply.
+
+## Navigation and list audit - 2026-09-27
+
+- Preserve explicit stablecoins/XStocks entry origin through shared XPay, scanning, wallet QR management, bank QR management and payment recovery. Header Back and native Android Back unwind local steps before returning to the entry section. Sheets retain priority and busy operations remain protected.
+- Wallet asset editing returns to the selected QR; linked wallet/bank lists return to shared XPay. Resume returns to its originating activity/home route using an internal-path allowlist.
+- Added optional per-view scroll keys to the existing RouteShell. Store last observed scroll positions before short-content layout clamps them; restore before paint. QR/detail/create/history no longer share one scroll position.
+- Accepted-assets setup uses one flex-sized list scroller. Header/search/Continue remain visible, including keyboard-sized viewports. QR rows and payment choices reuse the established Send-list spacing, circular icon container, chevron and divider treatment.
+- Pull refresh calls XPay's own lists and keeps existing rows visible. It is disabled on setup/payment forms. Existing RouteShell callers retain default refresh behavior.
+- Focused TypeScript diagnostics zero. Navigation browser regression passes both entry rails, light/dark, 390x844 and 390x540, header/native Back, modal priority, edit-to-QR return, long-list scroll restoration and visible CTA. Existing asset selection/retry fixture also passes. Internal target allowlist unit test passes.
+- Native web build and Gradle assembleDebug pass. Pixel 5A160DLCH006VM updated via install -r, lastUpdateTime 2026-09-27 11:51:32; original firstInstallTime retained. Process 13555 alive with zero native fatal exceptions after launch. No financial action taken.
+- APK SHA256 EBC5CC68DE38755C27798C174A35657E65896D0A608FB471F3C463248B693BF3. Release source 9cf4f2b4320c15539498fa65004a085fd54d733f. Render deploy dep-dasf9jjtqb8s739n6f3g was building when this checkpoint was written; verify final status below.
+
+
+## 2026-09-27 QR management and Activity alignment
+- XPay has a centered title, Create (+) and payment-history icons, and a saved-QR list including standalone bank/wallet QRs.
+- Bank QR detail uses Pocket typography, 1024px PNG download, and PIN/biometric-protected retirement. Durable tombstones stop new scans and quotes without deleting merchant ownership, in-flight payments or receipts. Activity cache keeps retirement monotonic.
+- POS history and combined XPay history reuse the Activity component; POS View payments opens history directly. Incoming terminal payments remain separate from outgoing purchases.
+- Wallet Create/Edit link uses a fixed form and CTA, separate full asset selector, no autofocus on opening, and no 100-asset truncation. Wallet address initialization no longer remounts the form.
+- Read-only XPay requests retry one transient gateway failure; owner-scoped list cache retains successful data. History uses read rate limiting. Mutations are never automatically replayed.
+- Verified with synthetic browser fixtures (both origin rails, keyboard-height layout, light/dark, dates, receipts, PNG download, deletion) and backend fixtures (ownership/PIN, idempotency, retired scan/quote rejection, history preservation). No live payment made.
+- Navigation release 9cf4f2b was confirmed live on Render. This follow-up release is awaiting final build, deploy and Pixel installation verification.

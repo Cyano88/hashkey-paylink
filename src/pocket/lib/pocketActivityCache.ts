@@ -80,3 +80,13 @@ export async function refreshPocketActivity(scope: string, getAccessToken: () =>
   pending.set(scope, { promise: work, fresh })
   return work
 }
+
+/** Apply the server-confirmed tombstone immediately, including offline history snapshots. */
+export function retireCachedPocketPos(email:string,id:string,deletedAt:string){
+ const scope=activityScope(email),current=cachedPocketActivity(scope)
+ if(!current)return
+ const snapshot={...current,merchants:current.merchants.map(m=>m.merchant_id===id?{...m,deleted_at:deletedAt}:m)}
+ snapshots.set(scope,snapshot)
+ try{localStorage.setItem(prefix+encodeURIComponent(scope),JSON.stringify(snapshot))}catch{/* Memory remains current. */}
+ listeners.get(scope)?.forEach(notify=>notify())
+}
