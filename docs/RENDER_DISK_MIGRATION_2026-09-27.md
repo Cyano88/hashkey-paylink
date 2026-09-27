@@ -27,3 +27,7 @@ No disk deletion, domain rerouting, extra paid service or claim of zero-downtime
 ## Tests
 
 Archive synthetic tests: byte preservation, corruption rollback, source-change rollback, unchanged originals. Isolated real PostgreSQL tests: concurrent initialization, stale-write rejection, deleted-record non-resurrection and no corrupt-file fallback after initialization. Targeted TypeScript checks pass.
+
+## Live execution evidence
+
+Release bcf3bca882d34345df8416370fca11f0340d889a went live as dep-das774ivcj2c73ak1ta0. The migration command then initialized 3 agent profiles, 5 agent wallets and 1 pending connection. A separate database read verified both complete documents match their corresponding source files using deep equality. The recovery archive remains present with 33 files / 147891 bytes. The provider /api/health returned HTTP 200 afterward. No payment/signing operation or wallet reconnection was invoked. A subsequent concurrently queued provider release b94d707285936e78dcf673ef0a437a0172aa15ac retains this migration by ancestry.
