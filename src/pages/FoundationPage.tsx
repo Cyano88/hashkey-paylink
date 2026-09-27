@@ -1070,7 +1070,7 @@ export default function FoundationPage() {
               <p className="max-w-[18rem] text-[10px] font-semibold uppercase tracking-[0.26em] text-blue-700 sm:max-w-none sm:text-[11px] sm:tracking-[0.36em]">
                 Payments and tokenized assets
               </p>
-              <h1 className="mt-5 max-w-[18rem] text-balance text-[40px] font-semibold leading-[1] tracking-[-0.055em] sm:max-w-none sm:text-7xl sm:leading-[0.94] lg:text-[86px]">
+              <h1 className="mt-5 max-w-[18rem] text-balance text-[40px] font-semibold leading-[1] tracking-[-0.055em] sm:max-w-none sm:text-7xl sm:leading-[0.94] lg:text-[clamp(52px,5.7vw,86px)]">
                 Move money. Put assets to work.
               </h1>
               <p className="mt-6 max-w-[18rem] text-sm leading-7 text-slate-600 sm:max-w-xl sm:text-[15px]">
