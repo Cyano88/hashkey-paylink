@@ -1,3 +1,4 @@
+import {hasXPayBankFunding} from './pocket/xpay-bank-history.js'
 import {assertUnifiedXPayDestination} from './pocket/unified-xpay-store.js'
 import type {XPayHistoryEntry} from '../src/pocket/lib/pocketUnifiedXPay.js'
 import { normalizePayoutAccount, pocketFiatCurrency, validPayoutCurrency } from '../src/pocket/lib/pocketFiatCorridors.js'
@@ -1506,7 +1507,7 @@ export async function listPocketUnifiedXPayPosPayments(owner:string,checkoutId:s
  const ids=new Set(merchants.map(m=>m.merchant_id))
  const intents=new Set(Object.values(store.intents||{}).filter(i=>i.xpay_checkout_id===checkoutId&&ids.has(i.merchant_id)).map(i=>i.intent_id))
  const orders=await listPaycrestPosOrdersForMerchants([...ids])
- const bank:XPayHistoryEntry[]=orders.filter(o=>intents.has(o.intent_id)).map(o=>({id:o.intent_id,rail:'stablecoins',amount:o.amount_ngn,asset:o.fiat_currency||'NGN',state:o.status==='settled'?'successful':o.status==='refunded'?'refunded':o.status==='refunding'?'refunding':['failed','expired','cancelled','canceled'].includes(o.status)?'failed':'pending',createdAt:Date.parse(o.created_at),hash:o.tx_hash||undefined,network:'base',bankDelivery:o.status}))
+ const bank:XPayHistoryEntry[]=orders.filter(o=>intents.has(o.intent_id)&&hasXPayBankFunding(o)).map(o=>({id:o.intent_id,rail:'stablecoins',amount:o.amount_ngn,asset:o.fiat_currency||'NGN',state:o.status==='settled'?'successful':o.status==='refunded'?'refunded':o.status==='refunding'?'refunding':['failed','expired','cancelled','canceled'].includes(o.status)?'failed':'pending',createdAt:Date.parse(o.created_at),hash:o.tx_hash||undefined,network:'base',bankDelivery:o.status}))
  const receipts=await listRegisteredPaymentsForEventIds([...ids].map(id=>'ngpos-'+id))
  const wallet:XPayHistoryEntry[]=receipts.filter(p=>p.xpayCheckoutId===checkoutId&&!bank.some(b=>b.hash?.toLowerCase()===p.txHash.toLowerCase())).map(p=>({id:p.txHash,rail:'stablecoins',amount:p.amount,asset:'USDC',state:'successful',createdAt:p.ts,hash:p.txHash,network:p.chain}))
  return [...bank,...wallet]
