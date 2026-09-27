@@ -1,3 +1,5 @@
+import { migratedJsonStore } from './migrated-json-store.js'
+import { hasRenderDurableStore } from './render-durable-store.js'
 import type { Request, Response } from 'express'
 import { execFile } from 'node:child_process'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
@@ -551,7 +553,11 @@ function buildX402Proof(input: {
   return { ...proof, proofHash }
 }
 
+const migratedProvisioningStore = migratedJsonStore<StoreData>((process.env.AGENT_WALLET_PROVISION_STORE_KEY ?? 'hashpaylink:agent-wallet-provisioning').trim(), STORE_PATH, () => ({ pending: {}, agents: {} }))
+
 async function readStore(): Promise<StoreData> {
+  if (hasRenderDurableStore()) return migratedProvisioningStore.read()
+  if (process.env.RENDER || process.env.RENDER_SERVICE_ID) throw new Error('Durable database storage is required.')
   try {
     return JSON.parse(await readFile(STORE_PATH, 'utf8')) as StoreData
   } catch {
@@ -560,6 +566,8 @@ async function readStore(): Promise<StoreData> {
 }
 
 async function writeStore(data: StoreData) {
+  if (hasRenderDurableStore()) return migratedProvisioningStore.write(data)
+  if (process.env.RENDER || process.env.RENDER_SERVICE_ID) throw new Error('Durable database storage is required.')
   await mkdir(dirname(STORE_PATH), { recursive: true })
   await writeFile(STORE_PATH, JSON.stringify(data, null, 2))
 }
