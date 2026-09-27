@@ -356,7 +356,7 @@ export default function PocketMoveBankPage() {
                   </p>
                 ) : <button type="button" disabled={!direct.canSubmit || approvalBusy} onClick={() => setReviewOpen(true)} className="pocket-cta-primary w-full">Continue</button>}
                 {!reviewOpen && !recoveredPayout && direct.status === 'authorizing' && <p className="px-2 text-center text-xs font-medium text-blue-600 dark:text-blue-400">Approve the Circle confirmation to continue.</p>}
-                {!reviewOpen && !recoveredPayout && direct.status === 'routing' && directAmountValid && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
+                {!reviewOpen && !recoveredPayout && direct.status === 'routing' && directAmountValid && ['moving', 'waiting', 'reconciling'].includes(bankLiquidity.status) && bankLiquidity.notice && <p className="px-2 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
                 {!reviewOpen && !recoveredPayout && direct.error && direct.error !== PAYMENT_TIMEOUT_NOTICE && <p className="px-2 text-center text-xs font-medium text-red-500">{direct.error}</p>}
               </div>
             </div>}
@@ -407,14 +407,14 @@ export default function PocketMoveBankPage() {
                   labels={{
                     idle: 'Confirm payout',
                     disabled: 'Complete payout details',
-                    pending: direct.status === 'authorizing' ? 'Confirming bank transfer' : direct.status === 'routing' && bankLiquidity.status === 'moving' ? 'Moving USDC' : direct.status === 'routing' ? 'Checking balances' : 'Preparing payout',
+                    pending: direct.status === 'routing' && bankLiquidity.status === 'moving' ? 'Moving USDC' : 'Confirming payment',
                     submitted: direct.status === 'route-review' ? 'USDC move confirming' : direct.status === 'routing' ? 'USDC moving to Base' : 'Payment processing',
                     successful: 'Sent',
                   }}
                 />
 
         {direct.error && <p role="alert" className="mt-3 text-center text-xs text-red-500">{direct.error}</p>}
-        {bankLiquidity.notice && directLocked && <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
+        {bankLiquidity.notice && directLocked && ['moving', 'waiting', 'reconciling'].includes(bankLiquidity.status) && <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
       </PocketBottomSheet>}
       {mode === 'withdraw' && reviewOpen && !bankReceipt && direct.error && !directLocked && <PocketTransactionSheet title="Bank transfer" state="failed" detail={direct.error} onDone={()=>setReviewOpen(false)}/>}
       {mode === 'withdraw' && bankReceipt && (
