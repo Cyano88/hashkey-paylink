@@ -19,7 +19,7 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
   const outcome = paymentReceiptOutcome({status: pocketActivityStatus(row), source: row.source})
   const state = outcome.state
   return <PocketTransactionSheet title={pocketMovementTitle(row)} state={state} statusLabel={outcome.label} receipt={receipt} amount={pocketActivityAmount(row)} onDone={onClose}
-    detail={state === 'pending' && !outcome.label.startsWith('Refund') ? 'Waiting for confirmation. You can check Activity for updates.' : undefined}>
+    detail={row.xpayCheckoutId&&outcome.label.startsWith('Refund') ? (pocketActivityStatus(row)==='refunded'?'Bank refund returned as USDC on Base.':'Bank refund returns as USDC on Base.') : state === 'pending' && !outcome.label.startsWith('Refund') ? 'Waiting for confirmation. You can check Activity for updates.' : undefined}>
     <dl className="space-y-3 text-xs text-gray-500 dark:text-gray-400">
       {row.direction === 'in' && row.payer && <div className="flex justify-between gap-4"><dt>From</dt><dd className="max-w-[70%] break-all text-right">{row.payer}</dd></div>}
       {row.direction !== 'in' && row.recipient && <div className="flex justify-between gap-4"><dt>To</dt><dd className="max-w-[70%] break-all text-right">{row.recipient}</dd></div>}
