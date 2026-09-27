@@ -1,4 +1,4 @@
-import {assertUnifiedXPayDestination} from './unified-xpay-store.js'
+import {ownsTerminalSetupKey,legacyXPayTerminal,assertUnifiedXPayDestination} from './unified-xpay-store.js'
 import type {XPayHistoryEntry} from '../../src/pocket/lib/pocketUnifiedXPay.js'
 ﻿import type { Request, Response } from 'express'
 import { consumePocketPaymentApproval } from './payment-security.js'
@@ -69,7 +69,7 @@ export default async function handler(req:Request,res:Response){
   if(req.method==='GET'){
    const id=String(req.query?.id||'');if(!/^[0-9a-f-]{36}$/.test(id))fail('Invalid XPay link.',400)
    const merchant=(await read()).merchants[id];if(!merchant||merchant.deletedAt)fail('This XPay link is unavailable.',404)
-   return res.json({ok:true,merchant:{id:merchant.id,name:merchant.name,pocketId:merchant.pocketId,tokens:merchant.tokens}})
+   return res.json({ok:true,terminalId:await legacyXPayTerminal(id,merchant.createKey),merchant:{id:merchant.id,name:merchant.name,pocketId:merchant.pocketId,tokens:merchant.tokens}})
   }
   if(req.method!=='POST')return res.sendStatus(405)
   const identity=await verifiedPrivyUser(req),owner=identity.userId,b=req.body||{},action=b.action
@@ -81,8 +81,9 @@ export default async function handler(req:Request,res:Response){
    const profile=await localCurrencyProfileRepository.ensure(identity)
    const createKey=b.create&&b.key?String(b.key):undefined
    if(createKey&&!/^[a-zA-Z0-9-]{16,80}$/.test(createKey))fail('Invalid receiving setup reference.')
+   const dedicatedSetup=!!createKey&&await ownsTerminalSetupKey(owner,createKey,'wallet')
    let savedId=''
-   const s=await mutate(s=>{const existing=b.id?s.merchants[String(b.id)]:b.create?(createKey?Object.values(s.merchants).find(m=>m.owner===owner&&m.createKey===createKey):undefined):Object.values(s.merchants).find(m=>m.owner===owner&&!m.deletedAt);if(b.id&&(!existing||existing.owner!==owner||existing.deletedAt))fail('Link not found.',404);if(!existing&&Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).length>=20)fail('You can have up to 20 active links.');if(existing&&createKey){if(existing.deletedAt||existing.wallet!==wallet||existing.name!==name||JSON.stringify(existing.tokens)!==JSON.stringify(tokens))fail('Receiving setup changed. Start again.',409);savedId=existing.id;return}const id=existing?.id||randomUUID();savedId=id;s.merchants[id]={id,owner,createKey,pocketId:profile.profile.pocketId,name,wallet,tokens,updatedAt:Date.now()}})
+   const s=await mutate(s=>{const existing=b.id?s.merchants[String(b.id)]:b.create?(createKey?Object.values(s.merchants).find(m=>m.owner===owner&&m.createKey===createKey):undefined):Object.values(s.merchants).find(m=>m.owner===owner&&!m.deletedAt);if(b.id&&(!existing||existing.owner!==owner||existing.deletedAt))fail('Link not found.',404);if(!existing&&!dedicatedSetup&&Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).length>=20)fail('You can have up to 20 active links.');if(existing&&createKey){if(existing.deletedAt||existing.wallet!==wallet||existing.name!==name||JSON.stringify(existing.tokens)!==JSON.stringify(tokens))fail('Receiving setup changed. Start again.',409);savedId=existing.id;return}const id=existing?.id||randomUUID();savedId=id;s.merchants[id]={id,owner,createKey,pocketId:profile.profile.pocketId,name,wallet,tokens,updatedAt:Date.now()}})
    return res.json({ok:true,merchant:publicMerchant(s.merchants[savedId])})
   }
   if(action==='merchant-delete'){
@@ -95,7 +96,7 @@ export default async function handler(req:Request,res:Response){
   if(action==='merchant'||action==='mine'){
    const s=await read(),merchant=action==='mine'?Object.values(s.merchants).find(m=>m.owner===owner&&!m.deletedAt):s.merchants[String(b.id||'')]
    if((!merchant||merchant.deletedAt)&&action!=='mine')fail('This XPay merchant is unavailable.',404)
-   return res.json({ok:true,merchant:merchant?publicMerchant(merchant):null,merchants:action==='mine'?Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).map(publicMerchant):undefined,payments:action==='mine'?Object.values(s.payments).filter(p=>p.owner===owner||p.merchantOwner===owner).sort((a,b)=>b.createdAt-a.createdAt).slice(0,50).map(publicPayment):undefined})
+   return res.json({ok:true,terminalId:action==='merchant'&&merchant?await legacyXPayTerminal(merchant.id,merchant.createKey):undefined,merchant:merchant?publicMerchant(merchant):null,merchants:action==='mine'?Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).map(publicMerchant):undefined,payments:action==='mine'?Object.values(s.payments).filter(p=>p.owner===owner||p.merchantOwner===owner).sort((a,b)=>b.createdAt-a.createdAt).slice(0,50).map(publicPayment):undefined})
   }
   if(action==='prepare'){
    const payer=String(b.wallet||'');await verifyStockWalletOwner(owner,payer)
@@ -103,6 +104,7 @@ export default async function handler(req:Request,res:Response){
    if(!/^[a-zA-Z0-9-]{16,80}$/.test(key))fail('Invalid payment reference.')
    const s=await read(),m=s.merchants[id];if(!m||m.deletedAt||!m.tokens.includes(token))fail('Choose a stock accepted by this merchant.')
    const checkoutId=b.checkoutId?String(b.checkoutId):undefined
+   if(!checkoutId&&await legacyXPayTerminal(id,m.createKey))fail('Reopen this QR to use the business terminal.',409)
    if(checkoutId)await assertUnifiedXPayDestination(checkoutId,id,String(m.updatedAt))
    if(m.owner===owner||m.wallet.toLowerCase()===payer.toLowerCase())fail('You cannot pay your own XPay QR.')
    await verifyStockWalletOwner(m.owner,m.wallet)
@@ -149,7 +151,14 @@ export async function listPocketXPayStockDestinations(owner:string) {
  return Object.values(s.merchants).filter(m=>m.owner===owner&&!m.deletedAt).map(m=>({id:m.id,name:m.name,kind:'xstocks' as const,currency:'USD',revision:String(m.updatedAt),assets:m.tokens.map(t=>[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===t)?.symbol||t)}))
 }
 
-export async function listPocketUnifiedXPayStockPayments(owner:string,checkoutId?:string):Promise<XPayHistoryEntry[]>{
+export async function listPocketUnifiedXPayStockPayments(owner:string,checkoutId?:string,legacyIds:string[]=[]):Promise<XPayHistoryEntry[]>{
  const s=await read()
- return Object.values(s.payments).filter(p=>p.merchantOwner===owner&&(!checkoutId||p.checkoutId===checkoutId)&&p.status!=='ready').map(p=>({id:p.id,rail:'xstocks',amount:p.amount,asset:p.symbol,state:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',createdAt:p.createdAt,hash:p.hash,network:'xlayer'}))
+ return Object.values(s.payments).filter(p=>p.merchantOwner===owner&&(!checkoutId||p.checkoutId===checkoutId||(!p.checkoutId&&legacyIds.includes(p.merchantId)))&&p.status!=='ready').map(p=>({merchantName:p.merchantName,id:p.id,rail:'xstocks',amount:p.amount,asset:p.symbol,state:p.status==='paid'?'successful':p.status==='failed'?'failed':'pending',createdAt:p.createdAt,hash:p.hash,network:'xlayer'}))
 }
+
+export async function ownedStockSetupKey(owner:string,id:string){
+ const merchant=(await read()).merchants[id]
+ return merchant?.owner===owner?merchant.createKey:undefined
+}
+
+export async function ownedStockSetupKeys(owner:string){return Object.fromEntries(Object.values((await read()).merchants).filter(m=>m.owner===owner).map(m=>[m.id,m.createKey]))}

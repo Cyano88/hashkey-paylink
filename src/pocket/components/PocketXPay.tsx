@@ -44,6 +44,7 @@ export default function PocketXPay({wallet,checkout=false,onLayoutChange}:{onLay
   let cancelled=false;setLoading(true);setError('');setMerchant(null);setPayment(null);setReview(null);setOpen(!!merchantId)
   void xpayRequest(getAccessToken,merchantId?{action:'merchant',id:merchantId}:{action:'mine'}).then(async data=>{
    if(cancelled)return
+   if(data.terminalId&&!params.get('xpay_checkout_id')&&/^xp_[0-9a-f-]{36}$/.test(data.terminalId)){navigate('/xpay/checkout/'+data.terminalId,{replace:true,state:location.state});return}
    setMerchants(data.merchants||(data.merchant?[data.merchant]:[]));setMerchant(data.merchant);setToken(data.merchant?.tokens[0]||'');setPayments(data.payments||[])
    let saved:{id?:string;hash?:string}={};try{saved=JSON.parse(localStorage.getItem(storageKey)||'{}')}catch{}
    const recovered=data.payments?.find(p=>p.payer.toLowerCase()===wallet.address?.toLowerCase()&&p.status==='submitted')

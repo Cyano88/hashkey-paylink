@@ -1,5 +1,5 @@
 import type {XPayCheckout,XPayDestination} from './pocketUnifiedXPay'
-type Mine={checkouts:XPayCheckout[];destinations:XPayDestination[]}
+type Mine={standaloneIds?:string[];checkouts:XPayCheckout[];destinations:XPayDestination[]}
 let cached:{owner:string;data:Mine}|undefined
 export function readXPayMineCache(owner?:string){return owner&&cached?.owner===owner?cached.data:undefined}
 export function cacheXPayMine(owner:string|undefined,data:Mine){if(owner)cached={owner,data}}

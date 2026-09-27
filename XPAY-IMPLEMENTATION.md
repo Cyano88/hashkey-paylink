@@ -138,3 +138,21 @@ Release state: source not yet deployed or installed. Production currently includ
 - Read-only XPay requests retry one transient gateway failure; owner-scoped list cache retains successful data. History uses read rate limiting. Mutations are never automatically replayed.
 - Verified with synthetic browser fixtures (both origin rails, keyboard-height layout, light/dark, dates, receipts, PNG download, deletion) and backend fixtures (ownership/PIN, idempotency, retired scan/quote rejection, history preservation). No live payment made.
 - Navigation release 9cf4f2b was confirmed live on Render. This follow-up release is awaiting final build, deploy and Pixel installation verification.
+
+
+### Follow-up release verified
+- Production commit: 812e7444b480eda517214b88e5e86c7a03037198. Render deploy dep-dasfr2ou01pc73evopf0 is live.
+- Pixel 10 Pro (5A160DLCH006VM) updated with adb install -r, version 1.0.3, lastUpdateTime 2026-09-27 12:32:27. Original firstInstallTime 2026-08-16 04:36:02 retained; app data was not cleared.
+- APK SHA256: BCEDF4A14F599C1E520D03B63B48C9EDBED6FAF9094F9531AE302AE7A9000399.
+- App remained running (PID 16358), zero native fatal exceptions for the new process. Live unauthenticated bank list/approval probes returned JSON 401.
+- Final browser tests used the new APK CSS. Real account QR deletion, PIN entry and paid transactions were not performed; those paths were verified using synthetic fixtures.
+
+
+## Independent business terminals (2026-09-27)
+- Create a named terminal first, then configure fresh bank/mobile-money and wallet asset receiving options inside it. No picker for combining existing business QRs.
+- Server-issued setup references bind new receiving configurations to one terminal. Atomic configuration updates enforce ownership, exclusive destination binding, PIN/biometric approval and optimistic version checks.
+- Existing standalone business QRs are adopted one at a time into their own terminal. Old printed links resolve to that terminal; ambiguous historical shared links fail closed rather than guessing a business.
+- Terminal QR stays unchanged when options are added, replaced or removed. Empty terminals cannot receive new payments. Superseded destination bindings are retained for existing payment reconciliation and receipts.
+- Terminal history is isolated; combined history identifies the business. Existing paid records are not deleted or reassigned.
+- Browser test covers creation, fixed CTA with keyboard, dedicated setup keys, add/remove, stable QR, and single-business adoption in both themes. API fixtures cover cross-business rejection, stale edits, unauthorized changes, original-destination settlement, QR aliases and old-URL bypass rejection. Existing stock payment recovery and bank payout regression suites pass; focused TypeScript diagnostics are zero.
+- Fixed the Create terminal tap being swallowed when input blur moved the bottom CTA. Build/deployment verification follows below.

@@ -1,6 +1,6 @@
 import {readPosRetirements,isPosRetired} from './pocket/pos-retirement.js'
 import {hasXPayBankFunding} from './pocket/xpay-bank-history.js'
-import {assertUnifiedXPayDestination} from './pocket/unified-xpay-store.js'
+import {legacyXPayTerminal,assertUnifiedXPayDestination} from './pocket/unified-xpay-store.js'
 import type {XPayHistoryEntry} from '../src/pocket/lib/pocketUnifiedXPay.js'
 import { normalizePayoutAccount, pocketFiatCurrency, validPayoutCurrency } from '../src/pocket/lib/pocketFiatCorridors.js'
 import { pocketBankStatus } from '../src/pocket/lib/pocketBankStatus.js'
@@ -1105,14 +1105,16 @@ export default async function handler(req: Request, res: Response) {
       const store = await readStore()
       const merchant = store.merchants[merchantId]
       if (!merchant || await isPosRetired(merchantId)) return res.status(404).json({ ok: false, error: 'This QR is no longer available.' })
+      const terminalId=await legacyXPayTerminal(merchantId,merchant.idempotency_key)
       if(req.query.view==='pocket-scan') {
         const raw=typeof req.query.code==='string'?req.query.code:''
         let intentId=''
         try { intentId=new URL(raw).searchParams.get('intent')||'' } catch { return res.status(400).json({ok:false,error:'Invalid checkout link.'}) }
+        if(terminalId&&!intentId&&!new URL(raw).searchParams.get('xpay_checkout_id'))return res.json({ok:true,terminalId})
         try { res.setHeader('Cache-Control','no-store');return res.json({ok:true,...resolvePocketPosCheckout(merchant,raw,intentId?store.intents?.[intentId]:undefined)}) }
         catch(error){return res.status(400).json({ok:false,error:error instanceof Error?error.message:'Checkout unavailable.'})}
       }
-      return res.json({ ok: true, merchant: await publicMerchant(merchant) })
+      return res.json({ ok: true, terminalId, merchant: await publicMerchant(merchant) })
     }
 
     if (req.method !== 'POST') {
@@ -1175,6 +1177,7 @@ export default async function handler(req: Request, res: Response) {
       const store = await readStore()
       const merchant = store.merchants[merchantId]
       if (!merchant || !merchant.settlement_enabled || await isPosRetired(merchant.merchant_id)) return res.status(404).json({ ok: false, error: 'Merchant is not available.' })
+      if(!body.xpay_checkout_id&&await legacyXPayTerminal(merchantId,merchant.idempotency_key))return res.status(409).json({ok:false,error:'Reopen this QR to use the business terminal.'})
       if(body.xpay_checkout_id)await assertUnifiedXPayDestination(body.xpay_checkout_id,merchantId,merchant.updated_at)
       const fiatCurrency = pocketFiatCurrency(merchant.country)
       if (amountCurrency !== 'USDC' && amountCurrency !== fiatCurrency) return res.status(400).json({ ok: false, error: 'Amount currency does not match this terminal.' })
@@ -1313,7 +1316,7 @@ export default async function handler(req: Request, res: Response) {
       const store = await readStore()
       const intent = store.intents?.[intentId]
       const merchant = intent ? store.merchants[intent.merchant_id] : undefined
-      if(intent?.xpay_checkout_id&&!existing?.tx_hash)await assertUnifiedXPayDestination(intent.xpay_checkout_id,intent.merchant_id,merchant?.updated_at || '')
+      if(intent?.xpay_checkout_id&&!existing?.tx_hash)await assertUnifiedXPayDestination(intent.xpay_checkout_id,intent.merchant_id,merchant?.updated_at || '',true)
       if (existing && !ensurePayable) {
         const execution = await syncOwnedPosExecution(existing)
         return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
@@ -1507,14 +1510,21 @@ export async function listPocketXPayPosDestinations(owner:string) {
  })
 }
 
-export async function listPocketUnifiedXPayPosPayments(owner:string,checkoutId?:string):Promise<XPayHistoryEntry[]>{
+export async function listPocketUnifiedXPayPosPayments(owner:string,checkoutId?:string,legacyIds:string[]=[]):Promise<XPayHistoryEntry[]>{
  const store=await readStore()
  const merchants=Object.values(store.merchants).filter(m=>m.owner_id===owner)
  const ids=new Set(merchants.map(m=>m.merchant_id))
- const intents=new Set(Object.values(store.intents||{}).filter(i=>(!checkoutId||i.xpay_checkout_id===checkoutId)&&ids.has(i.merchant_id)).map(i=>i.intent_id))
+ const intents=new Set(Object.values(store.intents||{}).filter(i=>(!checkoutId||i.xpay_checkout_id===checkoutId||(!i.xpay_checkout_id&&legacyIds.includes(i.merchant_id)))&&ids.has(i.merchant_id)).map(i=>i.intent_id))
  const orders=await listPaycrestPosOrdersForMerchants([...ids])
- const bank:XPayHistoryEntry[]=orders.filter(o=>intents.has(o.intent_id)&&hasXPayBankFunding(o)).map(o=>({id:o.intent_id,rail:'stablecoins',amount:o.amount_ngn,asset:o.fiat_currency||'NGN',state:o.status==='settled'?'successful':o.status==='refunded'?'refunded':o.status==='refunding'?'refunding':['failed','expired','cancelled','canceled'].includes(o.status)?'failed':'pending',createdAt:Date.parse(o.created_at),hash:o.tx_hash||undefined,network:'base',bankDelivery:o.status}))
+ const bank:XPayHistoryEntry[]=orders.filter(o=>intents.has(o.intent_id)&&hasXPayBankFunding(o)).map(o=>({merchantName:store.merchants[o.merchant_id]?.display_name,id:o.intent_id,rail:'stablecoins',amount:o.amount_ngn,asset:o.fiat_currency||'NGN',state:o.status==='settled'?'successful':o.status==='refunded'?'refunded':o.status==='refunding'?'refunding':['failed','expired','cancelled','canceled'].includes(o.status)?'failed':'pending',createdAt:Date.parse(o.created_at),hash:o.tx_hash||undefined,network:'base',bankDelivery:o.status}))
  const receipts=await listRegisteredPaymentsForEventIds([...ids].map(id=>'ngpos-'+id))
- const wallet:XPayHistoryEntry[]=receipts.filter(p=>(!checkoutId||p.xpayCheckoutId===checkoutId)&&!bank.some(b=>b.hash?.toLowerCase()===p.txHash.toLowerCase())).map(p=>({id:p.txHash,rail:'stablecoins',amount:p.amount,asset:'USDC',state:'successful',createdAt:p.ts,hash:p.txHash,network:p.chain}))
+ const wallet:XPayHistoryEntry[]=receipts.filter(p=>(!checkoutId||p.xpayCheckoutId===checkoutId||(!p.xpayCheckoutId&&legacyIds.some(id=>p.eventId==='ngpos-'+id)))&&!bank.some(b=>b.hash?.toLowerCase()===p.txHash.toLowerCase())).map(p=>({merchantName:store.merchants[p.eventId.replace(/^ngpos-/,'')]?.display_name,id:p.txHash,rail:'stablecoins',amount:p.amount,asset:'USDC',state:'successful',createdAt:p.ts,hash:p.txHash,network:p.chain}))
  return [...bank,...wallet]
 }
+
+export async function ownedPosSetupKey(owner:string,id:string){
+ const merchant=(await readStore()).merchants[id]
+ return merchant?.owner_id===owner&&merchant.source==='pos'?merchant.idempotency_key:undefined
+}
+
+export async function ownedPosSetupKeys(owner:string){return Object.fromEntries(Object.values((await readStore()).merchants).filter(m=>m.owner_id===owner).map(m=>[m.merchant_id,m.idempotency_key]))}

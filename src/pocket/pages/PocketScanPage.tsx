@@ -23,6 +23,7 @@ export default function PocketScanPage() {
    const path=code.kind==='pos'?'/api/ng-pos?view=pocket-scan&merchant_id='+encodeURIComponent(code.id)+'&code='+encodeURIComponent(code.url):'/api/v2/checkouts?id='+encodeURIComponent(code.id)+'&attempt='+encodeURIComponent(code.attempt)
    const response=await fetch(pocketApiUrl(path),{cache:'no-store',signal:controller.signal})
    const data=await response.json()
+   if(response.ok&&data.ok&&/^xp_[0-9a-f-]{36}$/.test(data.terminalId||'')){navigate('/xpay/checkout/'+data.terminalId,{replace:true,state:scanState});return}
    if(!response.ok||data.ok!==true||typeof data.paymentUrl!=='string'||!data.paymentUrl.startsWith('/pay?'))throw Error(typeof data.error==='string'?data.error:'This checkout is unavailable.')
    if(code.kind==='checkout'&&['paid','failed','expired'].includes(data.checkout?.status))throw Error('This checkout is already closed. Do not pay it again.')
    const params=new URLSearchParams(data.paymentUrl.slice(5))

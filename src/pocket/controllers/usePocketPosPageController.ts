@@ -21,7 +21,9 @@ export default function usePocketPosPageController({
   verifiedIdentityName = '',
   routeStep,
   onStepChange,
+  setupKey,
 }: {
+  setupKey?: string
   authenticated: boolean
   email: string
   getAccessToken: PocketAccessTokenReader
@@ -166,7 +168,7 @@ export default function usePocketPosPageController({
     try {
       const accessToken = await getAccessToken()
       if (!accessToken) throw new Error('Sign in again to create POS.')
-      const idempotencyKey = creationIdempotencyKey.current || window.crypto.randomUUID()
+      const idempotencyKey = setupKey || creationIdempotencyKey.current || window.crypto.randomUUID()
       creationIdempotencyKey.current = idempotencyKey
       const data = await createPocketPos({
         accessToken,
