@@ -384,14 +384,16 @@ export async function createPaycrestOfframpOrder(input: {
     },
     reference,
   }
-  if (input.unifiedXPay) Object.assign(payload, xpaySenderFee())
+  // Pocket payouts use the same explicit treasury fee as XPay, never the provider account default.
+  const pocketSenderFee = input.unifiedXPay || input.source === 'bank-withdraw'
+  if (pocketSenderFee) Object.assign(payload, xpaySenderFee())
   else if (senderFeePercent) payload.senderFeePercent = senderFeePercent
 
   const data = await paycrestFetch<any>('/v2/sender/orders', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
-  if (input.unifiedXPay) assertXPaySenderFee(data)
+  if (pocketSenderFee) assertXPaySenderFee(data)
   const providerAccount = data?.providerAccount ?? data?.provider_account ?? {}
   const receiveAddress = firstText(providerAccount.receiveAddress, providerAccount.receive_address)
   if (!isAddress(receiveAddress)) throw new Error('Paycrest did not return a valid Base receive address.')

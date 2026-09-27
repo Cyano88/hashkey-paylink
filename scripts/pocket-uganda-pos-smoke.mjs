@@ -36,6 +36,11 @@ try{
  assert.equal(calls.at(-1).body.senderFeeAddress,undefined)
  const xpay=await createPaycrestOfframpOrder({intentId:'xpay-fee',merchantId:'fixture',amountNgn:'3900',fiatCurrency:'UGX',estimatedAmountUsdc:'1',bankCode:'MOMOUGPC',accountNumber:'256772123456',accountName:'FIXTURE OWNER',refundAddress:'0x2222222222222222222222222222222222222222',source:'ngpos',unifiedXPay:true})
  assert.equal(calls.at(-1).body.senderFeePercent,'0.25');assert.equal(calls.at(-1).body.senderFeeAddress.toLowerCase(),'0xce5df9e1115f81a2fc2f65941b20b820d508e753');assert.equal(xpay.amount_usdc,'1.0025')
+ process.env.PAYCREST_SENDER_FEE_PERCENT='0.3'
+ const bank=await createPaycrestOfframpOrder({intentId:'bank-fee',merchantId:'fixture',amountNgn:'3900',fiatCurrency:'UGX',estimatedAmountUsdc:'1',bankCode:'MOMOUGPC',accountNumber:'256772123456',accountName:'FIXTURE OWNER',refundAddress:'0x2222222222222222222222222222222222222222',source:'bank-withdraw'})
+ assert.equal(calls.at(-1).body.senderFeePercent,'0.25');assert.equal(calls.at(-1).body.senderFeeAddress.toLowerCase(),'0xce5df9e1115f81a2fc2f65941b20b820d508e753');assert.equal(bank.amount_usdc,'1.0025')
+ globalThis.fetch=async()=>new Response(JSON.stringify({status:'success',data:{senderFeePercent:'0.3',amount:'1',senderFee:'0.003'}}),{status:200,headers:{'content-type':'application/json'}})
+ await assert.rejects(createPaycrestOfframpOrder({intentId:'bank-wrong-fee',merchantId:'fixture',amountNgn:'3900',fiatCurrency:'UGX',estimatedAmountUsdc:'1',bankCode:'MOMOUGPC',accountNumber:'256772123456',accountName:'FIXTURE OWNER',refundAddress:'0x2222222222222222222222222222222222222222',source:'bank-withdraw'}),/fee could not be verified/)
  globalThis.fetch=async()=>new Response(JSON.stringify({status:'success',data:'OK'}),{status:200,headers:{'content-type':'application/json'}})
  assert.deepEqual(await verifyNgPosBankAccount(req),{account_name:'',bank_code:'MOMOUGPC',name_required:true})
  await assert.rejects(verifyNgPosBankAccount({...req,currency:'NGN',bank_code:'OPAYNGPC',account_number:'0123456789'}),/Ownership cannot be verified/)
