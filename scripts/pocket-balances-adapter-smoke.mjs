@@ -136,3 +136,10 @@ assert.equal(unavailable.body.error.code, 'PROVIDER_UNAVAILABLE')
 assert.equal(unavailable.body.error.retryable, true)
 
 console.log('Circle Pocket balances adapter smoke tests passed.')
+
+const isolated=responseRecorder();const before=balanceCalls.length;const beforeKeys=readKeys.length
+await handler({method:'GET',query:{network:'base'},headers:{}},isolated)
+assert.equal(isolated.statusCode,200);assert.equal(isolated.body.network,'base');assert.equal(isolated.body.balance,2.5)
+assert.equal(balanceCalls.length-before,1);assert.equal(readKeys.length-beforeKeys,1);assert.equal(balanceCalls.at(-1).network,'base')
+const invalid=responseRecorder();await handler({method:'GET',query:{network:'xlayer'},headers:{}},invalid);assert.equal(invalid.statusCode,400)
+console.log('PASS destination-only read touches Base alone and rejects unsupported networks.')

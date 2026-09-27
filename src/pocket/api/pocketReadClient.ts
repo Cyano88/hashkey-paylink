@@ -293,3 +293,12 @@ export async function readPocketRecipientBalance({
   const raw = await evmReader({ network, address })
   return Number(raw) / 10 ** CHAIN_META[network].decimals
 }
+
+/** Isolated routing read: never replaces the full home balance snapshot. */
+export async function readPocketDestinationLiquidity(accessToken:string, network:UnifiedBalanceChainKey) {
+ const response=await fetch(POCKET_API.balances+'?network='+encodeURIComponent(network),{headers:{authorization:'Bearer '+accessToken},cache:'no-store',signal:AbortSignal.timeout(12000)})
+ const data=await response.json().catch(()=>null)
+ if(!response.ok||!data?.ok||data.network!==network||typeof data.balance!=='number'||!Number.isFinite(data.balance)||data.balance<0)throw Error('Destination balance unavailable.')
+ if(data.wallet!==null&&(!isRecord(data.wallet)||typeof data.wallet.address!=='string'||typeof data.wallet.walletId!=='string'||typeof data.wallet.blockchain!=='string'))throw Error('Destination wallet unavailable.')
+ return {balance:data.balance as number,wallet:data.wallet as CirclePocketWallets[UnifiedBalanceChainKey]|null}
+}
