@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
-import { Activity, ArrowLeftRight, ArrowRight, Banknote, Download, House, KeyRound, LayoutDashboard, Menu, Radio, ShieldCheck, TrendingUp, Wallet, Webhook, X } from 'lucide-react'
+import { Activity, ArrowLeftRight, ArrowRight, KeyRound, Menu, Radio, ShieldCheck, TrendingUp, Wallet, Webhook, X } from 'lucide-react'
 import Lenis from 'lenis'
 import Snap from 'lenis/snap'
 import 'lenis/dist/lenis.css'
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { Send as PocketSend, Store as PocketStore, Deposit as PocketDeposit, ArrowLeftRight as PocketSwap, Home as PocketHome, Receipt as PocketReceipt, CreditCard as PocketCard, UserRound as PocketProfile, Bell as PocketBell, QrCode as PocketQr, Eye as PocketEye } from '../pocket/components/PocketIcons'
 import { CPurseIcon } from '../pocket/components/CPurseIcon'
 
 const POCKET_URL = 'https://pocket.hashpaylink.com'
@@ -973,6 +974,20 @@ export default function FoundationPage() {
             transform: translate3d(-4px, 8px, 0) rotateY(14deg) rotateX(1.5deg) rotateZ(-1deg);
           }
         }
+        #pocket .phone-stage-single { grid-template-columns: 1fr 1fr; }
+        .phone-stage-single .pocket-app-preview { grid-column: 2; width: 270px; height: 570px; min-height: 570px; }
+        .pocket-preview-content { display: flex; flex-direction: column; height: 100%; padding: 46px 14px 18px; }
+        .pocket-preview-header { display: flex; align-items: center; justify-content: space-between; gap: 5px; }
+        @media (max-width: 1023px) {
+          #pocket .phone-stage-single { grid-template-columns: 1fr; height: auto; min-height: 600px; }
+          .phone-stage-single .pocket-app-preview { grid-column: 1; justify-self: center; }
+        }
+        @media (max-width: 640px) {
+          .phone-stage-single .pocket-app-preview { border-radius: 40px; padding: 10px; }
+          .phone-stage-single .phone-screen { border-radius: 30px; }
+          .phone-stage-single .phone-mockup::before { top: 18px; width: 72px; height: 18px; }
+          .phone-stage-single .phone-mockup::after { inset: 9px; border-radius: 32px; }
+        }
         @media (prefers-reduced-motion: reduce) {
           .hpl-snap-shell {
             scroll-behavior: auto;
@@ -1339,99 +1354,39 @@ export default function FoundationPage() {
             </a>
           </div>
 
-          <div className="phone-stage relative items-center">
-            <div className="phone-mockup phone-secondary section-detail-reveal" style={{ '--section-reveal-delay': '125ms' } as CSSProperties}>
+          <div className="phone-stage phone-stage-single relative items-center">
+            <div className="phone-mockup phone-primary pocket-app-preview section-detail-reveal" style={{ '--section-reveal-delay': '125ms' } as CSSProperties}>
               <span className="phone-hardware" aria-hidden="true" />
               <div className="phone-screen" style={{ background: '#ffffff', color: '#0a0a0a', colorScheme: 'light' }}>
-                <div className="flex h-full flex-col px-4 pb-4 pt-12 text-gray-950 max-sm:px-2.5 max-sm:pb-2.5 max-sm:pt-8">
-                  <div className="section-detail-reveal flex items-center justify-between px-1" style={{ '--section-reveal-delay': '205ms' } as CSSProperties}>
-                    <div className="flex items-center gap-2">
-                      <CPurseIcon size={20} title="" className="text-gray-950 max-sm:h-3.5 max-sm:w-3.5" />
-                      <p className="text-xs font-black max-sm:text-[9px]">Pocket</p>
+                <div className="pocket-preview-content">
+                  <div className="pocket-preview-header">
+                    <span className="text-[8px] font-semibold">ID:12345678</span>
+                    <div className="flex rounded-full bg-gray-100 p-0.5 text-[8px] font-semibold"><span className="rounded-full bg-white px-2 py-1.5 shadow-sm">Stablecoins</span><span className="px-2 py-1.5 text-gray-500">XStocks</span></div>
+                    <PocketBell className="h-4 w-4" />
+                  </div>
+                  <div className="mt-5 rounded-[20px] bg-gray-950 p-4 text-white">
+                    <div className="flex items-start justify-between">
+                      <div><p className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-widest text-white/50">Total USDC <PocketEye className="h-3 w-3" /></p><p className="mt-2 text-[28px] font-bold tracking-tight">0 <span className="text-[10px] font-medium text-white/50">USDC</span></p></div>
+                      <span className="flex flex-col items-center gap-1 text-[7px] text-white/70"><PocketQr className="h-5 w-5" />Scan</span>
                     </div>
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-950 text-[10px] font-bold text-white max-sm:h-5 max-sm:w-5 max-sm:text-[7px]">ID</span>
-                  </div>
-                  <div className="section-detail-reveal mt-4 grid grid-cols-2 gap-1 rounded-full border p-1 text-[10px] font-bold max-sm:mt-2 max-sm:p-0.5 max-sm:text-[7px]" style={{ borderColor: '#dfe3e8', background: '#f2f4f7', '--section-reveal-delay': '260ms' } as CSSProperties}>
-                    <span className="flex items-center justify-center gap-1 rounded-full px-2 py-2 text-center shadow-sm max-sm:py-1" style={{ background: '#ffffff', color: '#101828' }}><Wallet className="h-3 w-3 max-sm:h-2 max-sm:w-2" />Stablecoins</span>
-                    <span className="flex items-center justify-center gap-1 px-2 py-2 text-center max-sm:py-1" style={{ color: '#667085' }}><TrendingUp className="h-3 w-3 max-sm:h-2 max-sm:w-2" />XStocks</span>
-                  </div>
-                  <div className="section-detail-reveal mt-3 rounded-2xl border p-4 shadow-sm max-sm:mt-2 max-sm:rounded-xl max-sm:p-2.5" style={{ borderColor: '#eaecf0', background: 'linear-gradient(135deg,#ffffff 0%,#f1f7ff 100%)', color: '#101828', '--section-reveal-delay': '315ms' } as CSSProperties}>
-                    <p className="text-[8px] font-bold uppercase tracking-[0.18em] max-sm:text-[6px]" style={{ color: '#667085' }}>Total available</p>
-                    <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] max-sm:text-base">0 <span className="text-[10px] max-sm:text-[7px]" style={{ color: '#667085' }}>USDC</span></p>
-                    <span className="mt-2 inline-flex rounded-full border px-2 py-1 text-[8px] font-bold max-sm:mt-1 max-sm:px-1.5 max-sm:py-0.5 max-sm:text-[6px]" style={{ borderColor: '#dfe3e8', background: '#ffffff', color: '#344054' }}>USDC</span>
-                  </div>
-                  <div className="section-detail-reveal mt-3 grid grid-cols-4 gap-1 rounded-xl border p-1 text-center text-[8px] font-bold max-sm:mt-2 max-sm:text-[6px]" style={{ borderColor: '#dfe3e8', background: '#ffffff', '--section-reveal-delay': '370ms' } as CSSProperties}>
-                    {([[ArrowLeftRight, 'Send'], [Download, 'Receive'], [LayoutDashboard, 'XPay'], [Activity, 'Request']] as const).map(([Icon, item], index) => (
-                      <span key={String(item)} className="flex flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 max-sm:gap-0.5 max-sm:py-1" style={{ background: index === 0 ? '#f2f4f7' : 'transparent', color: index === 0 ? '#101828' : '#667085' }}><Icon className="h-3 w-3 max-sm:h-2 max-sm:w-2" />{item}</span>
-                    ))}
-                  </div>
-                  <div className="section-detail-reveal mt-3 rounded-2xl border p-3 shadow-sm max-sm:mt-2 max-sm:rounded-xl max-sm:p-2" style={{ borderColor: '#eaecf0', background: '#ffffff', color: '#101828', '--section-reveal-delay': '425ms' } as CSSProperties}>
-                    <p className="text-[10px] font-black max-sm:text-[7px]">Wallet networks</p>
-                    <p className="mt-0.5 text-[8px] max-sm:text-[6px]" style={{ color: '#667085' }}>Your USDC across supported networks</p>
-                    <div className="mt-2 grid grid-cols-2 gap-1 max-sm:mt-1">
-                      {[
-                        ['/brand/base-logo.jpeg', 'Base', 'light'],
-                        ['/brand/arbitrum-logo.jpeg', 'Arbitrum', 'light'],
-                        ['/brand/arc-logo.jpeg', 'Arc', 'dark'],
-                        ['/brand/solana-logo.jpeg', 'Solana', 'dark'],
-                        ['/brand/ethereum-logo.png', 'Ethereum', 'light'],
-                        ['/brand/polygon-logo.png', 'Polygon', 'light'],
-                      ].map(([logo, network, canvas]) => (
-                        <div key={network} className="flex items-center rounded-lg px-1 py-1.5 max-sm:py-1">
-                          <span className="flex items-center gap-2 text-[9px] font-bold max-sm:gap-1 max-sm:text-[6px]">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden bg-transparent max-sm:h-4 max-sm:w-4">
-                              <img src={logo} alt="" className={`h-6 w-6 object-cover grayscale contrast-200 mix-blend-multiply max-sm:h-3.5 max-sm:w-3.5 ${canvas === 'dark' ? 'invert' : ''}`} />
-                            </span>
-                            <span className="flex items-center gap-1">{network}</span>
-                          </span>
-
-                        </div>
-                      ))}
+                    <div className="mt-4 flex items-center gap-2">
+                      <div className="grid flex-1 grid-cols-4 gap-1">
+                        {[
+                          ['/brand/base-logo.jpeg', 'Base', false],
+                          ['/brand/arbitrum-logo.jpeg', 'Arbitrum', false],
+                          ['/brand/arc-logo.jpeg', 'Arc', true],
+                          ['/brand/solana-logo.jpeg', 'Solana', true],
+                        ].map(([logo, name, invert], index) => <span key={String(name)} className={`flex flex-col items-center gap-1 rounded-lg py-2 text-[7px] font-semibold ${index === 0 ? 'bg-white/10' : 'opacity-55'}`}><img src={String(logo)} alt="" className={`h-5 w-5 rounded object-cover grayscale contrast-200 ${invert ? 'invert' : ''}`} />{name}</span>)}
+                      </div><ArrowRight className="h-3 w-3" />
                     </div>
+                    <p className="mt-3 border-t border-white/10 pt-3 text-center text-sm font-semibold">0 <span className="text-[8px] font-medium text-white/50">USDC</span></p>
                   </div>
-                  <div className="section-detail-reveal mt-2 grid grid-cols-4 gap-1 border-t pt-2 text-center text-[7px] font-bold max-sm:mt-1 max-sm:pt-1 max-sm:text-[5px]" style={{ borderColor: '#eaecf0', color: '#667085', '--section-reveal-delay': '480ms' } as CSSProperties}>
-                    {([[House, 'Home'], [Banknote, 'Bills'], [LayoutDashboard, 'Cards soon'], [Wallet, 'Profile']] as const).map(([Icon, item], index) => (
-                      <span key={String(item)} className={`flex flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 max-sm:py-1 ${index === 0 ? 'bg-gray-950 text-white' : ''}`}><Icon className="h-3 w-3 max-sm:h-2 max-sm:w-2" />{item}</span>
-                    ))}
+                  <div className="mt-4 grid grid-cols-4 gap-2">
+                    {([[PocketSend, 'Send'], [PocketStore, 'XPay'], [PocketSwap, 'Swap'], [PocketDeposit, 'Receive']] as const).map(([Icon, label]) => <span key={label} className="flex flex-col items-center gap-2 text-[8px] font-semibold text-gray-700"><span className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-100 bg-white shadow-sm"><Icon className="h-4 w-4" /></span>{label}</span>)}
                   </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="phone-mockup phone-primary section-detail-reveal" style={{ '--section-reveal-delay': '205ms' } as CSSProperties}>
-              <span className="phone-hardware" aria-hidden="true" />
-              <div className="phone-screen" style={{ background: '#0a0a0b', color: '#ffffff', colorScheme: 'dark' }}>
-                <div className="flex h-full flex-col px-5 pb-5 pt-14 text-white max-sm:px-3 max-sm:pb-3 max-sm:pt-9">
-                  <div className="section-detail-reveal flex items-center justify-between" style={{ '--section-reveal-delay': '285ms' } as CSSProperties}>
-                    <div className="flex items-center gap-2">
-                      <CPurseIcon size={22} title="" className="text-white max-sm:h-4 max-sm:w-4" />
-                      <div>
-                        <p className="text-xs font-black max-sm:text-[9px]">Pocket</p>
-                        <p className="mt-0.5 text-[8px] font-semibold max-sm:text-[6px]" style={{ color: '#c7c9d1' }}>Checkout</p>
-                      </div>
-                    </div>
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[10px] font-bold text-gray-950 max-sm:h-5 max-sm:w-5 max-sm:text-[7px]">ID</span>
-                  </div>
-
-                  <div className="section-detail-reveal mt-4 flex justify-center max-sm:mt-2" style={{ '--section-reveal-delay': '340ms' } as CSSProperties}>
-                    <div className="flex w-full rounded-full border p-1 text-[10px] font-black shadow-[0_10px_30px_rgba(0,0,0,.28)] max-sm:p-0.5 max-sm:text-[7px]" style={{ borderColor: '#4b4b55', background: '#202027' }}>
-                      <span className="flex min-h-9 w-full items-center justify-center rounded-full px-3 text-gray-950 shadow-sm max-sm:min-h-6 max-sm:px-2" style={{ background: '#ffffff', color: '#0a0a0b' }}><Wallet className="mr-1 h-3 w-3 max-sm:h-2 max-sm:w-2" />Circle Smart Wallet</span>
-                    </div>
-                  </div>
-                  <div className="section-detail-reveal mt-4 rounded-[26px] border p-5 text-center shadow-[0_18px_50px_rgba(0,0,0,.24)] max-sm:mt-3 max-sm:rounded-[18px] max-sm:p-3" style={{ borderColor: '#51515d', background: 'linear-gradient(135deg,#202027 0%,#1a2944 100%)', '--section-reveal-delay': '395ms' } as CSSProperties}>
-                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] max-sm:text-[6px]" style={{ color: '#e4e5ea' }}>Payment request</p>
-                    <p className="mt-4 text-4xl font-bold tracking-[-0.07em] max-sm:mt-2 max-sm:text-2xl">10 <span className="text-base max-sm:text-[10px]" style={{ color: '#c7c9d1' }}>USDC</span></p>
-                    <span className="mt-3 inline-flex rounded-full border px-3 py-1.5 text-[9px] font-black shadow-sm max-sm:mt-2 max-sm:px-2 max-sm:py-0.5 max-sm:text-[7px]" style={{ borderColor: '#686875', background: '#303038', color: '#ffffff' }}>Base</span>
-                  </div>
-                  <div className="section-detail-reveal relative mt-4 h-14 overflow-hidden rounded-full border p-1.5 shadow-[0_14px_36px_rgba(0,0,0,.34)] max-sm:mt-3 max-sm:h-10" style={{ borderColor: '#ffffff', background: '#ffffff', color: '#0a0a0b', '--section-reveal-delay': '450ms' } as CSSProperties}>
-                    <span className="absolute inset-0 flex items-center justify-center text-sm font-black max-sm:text-[8px]" style={{ color: '#0a0a0b' }}>Confirm payment</span>
-                    <span className="absolute bottom-1.5 left-1.5 top-1.5 flex aspect-square items-center justify-center rounded-full" style={{ background: '#0a0a0b', color: '#ffffff' }}>
-                      <ArrowRight className="h-4 w-4 max-sm:h-3 max-sm:w-3" />
-                    </span>
-                  </div>
-                  <div className="section-detail-reveal mt-auto rounded-2xl border p-3 max-sm:rounded-xl max-sm:p-2" style={{ borderColor: '#4b4b55', background: '#202027', '--section-reveal-delay': '505ms' } as CSSProperties}>
-                    <div className="flex items-center justify-between text-[9px] max-sm:text-[6px]"><span style={{ color: '#e4e5ea' }}>Payment network</span><span className="font-black text-white">Base</span></div>
-                    <div className="mt-2 flex items-center justify-between border-t pt-2 text-[9px] max-sm:mt-1 max-sm:pt-1 max-sm:text-[6px]" style={{ borderColor: '#36363d' }}><span style={{ color: '#c7c9d1' }}>Pay with</span><span className="font-bold">Pocket Wallet</span></div>
+                  <div className="mt-6"><div className="flex items-center justify-between"><p className="text-[10px] font-bold">Recent activity</p><span className="text-[8px] font-semibold text-gray-500">View all</span></div><p className="px-3 py-8 text-center text-[9px] leading-4 text-gray-500">Your completed payments will appear here.</p></div>
+                  <div className="mt-auto grid grid-cols-4 gap-1 border-t border-gray-200 pt-3">
+                    {([[PocketHome, 'Home'], [PocketReceipt, 'Bills'], [PocketCard, 'Cards'], [PocketProfile, 'Profile']] as const).map(([Icon, label], index) => <span key={label} className={`flex flex-col items-center gap-1.5 text-[8px] font-semibold ${index === 0 ? 'text-gray-950' : 'text-gray-400'}`}><span className="relative"><Icon className={`h-[18px] w-[18px] ${index === 0 ? 'stroke-[2.5]' : ''}`} />{label === 'Cards' && <span className="absolute -right-4 -top-1 rounded-full bg-gray-100 px-1 py-0.5 text-[5px] text-gray-500">Soon</span>}</span>{label}</span>)}
                   </div>
                 </div>
               </div>
