@@ -2,7 +2,7 @@ import { normalizePayoutAccount, pocketFiatCurrency } from '../../src/pocket/lib
 import type { Request, Response } from 'express'
 import { createHash } from 'node:crypto'
 import { parseUnits } from 'viem'
-import ngPosHandler, { createNgPosBankReceive, listNgPosHistoryForOwner, listPocketBankRecipients } from '../ng-pos.js'
+import ngPosHandler, { createNgPosBankReceive, listNgPosHistoryForOwner, ownsNgPosMerchant, listPocketBankRecipients } from '../ng-pos.js'
 import { verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
 import { isPocketIdempotencyKey } from '../../src/pocket/lib/pocketSchemas.js'
 import { claimCirclePocketAction, listCirclePocketActions, recordCirclePocketAction, type CirclePocketActionRecord } from '../circle-pocket-action-journal.js'
@@ -16,6 +16,7 @@ type BankWithdrawDependencies = {
   verifyUser: typeof verifiedPrivyUser
   createBankReceive: typeof createNgPosBankReceive
   listRecipients: typeof listPocketBankRecipients
+  ownsMerchant: typeof ownsNgPosMerchant
   listHistory: typeof listNgPosHistoryForOwner
   invokeLegacy: typeof invokeNgPos
   claimAction: typeof claimCirclePocketAction
@@ -225,9 +226,7 @@ async function syncOwnedRoute(identity: VerifiedLinkUser, intentId: string, depe
 async function assertOwnedOrder(req: Request, identity: VerifiedLinkUser, id: string, dependencies: BankWithdrawDependencies) {
   const current = await dependencies.invokeLegacy(req, { action: 'offrampStatus', intent_id: id, refresh: false })
   if (current.status !== 200 || !current.body?.order) throw Object.assign(new Error(current.body?.error || 'Bank payout was not found.'), { status: current.status })
-  const history = await dependencies.listHistory(identity.userId)
-  const merchantIds = new Set(history.merchants.map(item => item.merchant_id))
-  if (!merchantIds.has(String(current.body.order.merchant_id))) throw Object.assign(new Error('Bank payout does not belong to this Pocket account.'), { status: 403 })
+  if (!await dependencies.ownsMerchant(identity.userId, String(current.body.order.merchant_id))) throw Object.assign(new Error('Bank payout does not belong to this Pocket account.'), { status: 403 })
   return current.body.order
 }
 
@@ -236,6 +235,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     verifyUser: verifiedPrivyUser,
     createBankReceive: createNgPosBankReceive,
     listHistory: listNgPosHistoryForOwner,
+    ownsMerchant: ownsNgPosMerchant,
     listRecipients: listPocketBankRecipients,
     invokeLegacy: invokeNgPos,
     claimAction: claimCirclePocketAction,
