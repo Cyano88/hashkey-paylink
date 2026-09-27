@@ -106,3 +106,14 @@ Implemented locally (supersedes the preceding unregistered-route checkpoint):
 Validation: fixture browser checkout and focused API, client-binding, coordinator, journal, activity, payout and fee suites pass. Source-proof recovery tests protect unrelated attempts; refunded cannot regress to settled. Mobile build passed before the final activity/fee changes; a final release build is still required. Tests use mocked signers/providers, not real funds.
 
 Release state: source not yet deployed or installed. Production currently includes e077de5b7 and Circle CLI 1.1.4 signing changes which must be retained. More expensive replacement quotes and canonically reverted payout broadcasts remain conservative recovery stops; do not claim complete money-moving production validation until a supervised signed-wallet test passes.
+
+## Released checkpoint - 2026-09-27
+
+- Render service srv-d7ilg0osfn5c73eaedf0: final deploy dep-dasepd2bk1rc739hrcm0 is LIVE at e90db1abb97aa21eac2e3872b21a35bec84c3691 on security/production-cleanup-20260924. Production Circle CLI 1.1.4 changes were merged and both patches checked against the exact published package without mutating shared local node_modules.
+- Pixel 5A160DLCH006VM updated with adb install -r. Package com.hashpaylink.pocket, version 1.0.3. Original firstInstallTime remained 2026-08-16 04:36:02; lastUpdateTime 2026-09-27 11:22:11. No uninstall or data clear.
+- Final APK: android/app/build/outputs/apk/debug/app-debug.apk; SHA256 DA1778F90DE3291CE8495569F9B535C36FB8EE63DF2FAC9700A965F1B0527DC4.
+- Initial device check caught missing ignored google-services.json in this isolated checkout. Restored the existing production mobile configuration, rebuilt and reinstalled. Final process 19953 remained alive and had zero AndroidRuntime fatal exceptions. Added native build preflight requiring the correct Firebase package before building. Configuration remains ignored, not committed. This build-preflight change is in the feature branch; it does not require another server deployment.
+- Final native web build succeeded; Gradle final repair build succeeded. Native assets include the final refund wording. Generated dist/Capacitor path diffs were restored after packaging.
+- Live POST /api/pocket/xpay/bank list and approve probes without authentication return JSON 401, not HTML or payment execution. These are boundary checks, not provider execution tests.
+- Merchant history now excludes unfunded/expired replacement quotes but retains funded failures and refunds. Provider fee validation accepts precise decimal quotes within one USDC base unit of rounding; missing, excessive or redirected fees fail before funds move.
+- No real swap, bridge, mint or payout was submitted. Supervised signed-wallet end-to-end testing is still required. Remaining conservative recovery limitations from the previous checkpoint still apply.

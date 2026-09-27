@@ -1,4 +1,12 @@
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+
+// Push registration crashes natively when Firebase configuration was omitted.
+const firebase = JSON.parse(readFileSync(new URL('../android/app/google-services.json', import.meta.url), 'utf8'))
+if (!firebase.client?.some(client => client.client_info?.android_client_info?.package_name === 'com.hashpaylink.pocket')) {
+  throw new Error('Pocket Android Firebase configuration is missing or belongs to another app.')
+}
+console.log('Verified Pocket Android push configuration.')
 
 // Native assets cannot rely on the server-injected config used by hosted web.
 // Read only the same public configuration endpoint the Pocket client uses.
