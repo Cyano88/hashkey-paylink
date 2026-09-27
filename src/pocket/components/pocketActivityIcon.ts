@@ -1,6 +1,6 @@
-import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Receipt, Landmark, Store, RequestMoney, CreditCard, Phone, Wifi, Tv, Lightbulb } from './PocketIcons'
+import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Receipt, Landmark, Store, QrCode, RequestMoney, CreditCard, Phone, Wifi, Tv, Lightbulb } from './PocketIcons'
 import type { PocketActivityRow } from '../models/pocketActivity'
-import { isOutgoingPosPurchase } from '../lib/pocketPurchaseKind'
+import { isOutgoingPosPurchase, isIncomingPosPayment } from '../lib/pocketPurchaseKind'
 import { pocketActivityStatus } from '../lib/pocketReceipt'
 
 export function pocketActivityIcon(row: PocketActivityRow) {
@@ -9,6 +9,8 @@ export function pocketActivityIcon(row: PocketActivityRow) {
   if (source === 'bills') return ({ airtime: Phone, data: Wifi, tv: Tv, electricity: Lightbulb })[row.billCategory!] || Receipt
   if (source === 'request' || source === 'collection') return RequestMoney
   if (source.startsWith('bank-') || row.settlementType?.toLowerCase() === 'instant_fiat') return Landmark
+  if (source === 'xpay' && ['NGN','UGX'].includes(row.fiatCurrency || row.assetSymbol || '')) return Landmark
+  if (isIncomingPosPayment(row) || source === 'xpay') return QrCode
   if (source === 'wallet-swap' || source === 'wallet-bridge') return ArrowLeftRight
   if (source.startsWith('wallet-') || row.settlementType?.startsWith('wallet_')) return row.direction === 'in' || ['refunded', 'reversed'].includes(pocketActivityStatus(row)) ? ArrowDownToLine : ArrowUpFromLine
   return CreditCard

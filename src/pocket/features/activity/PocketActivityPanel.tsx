@@ -1,7 +1,7 @@
 import { pocketActivityIcon } from '../../components/pocketActivityIcon'
 import { pocketActivityAmount, currentPocketActivityRow } from '../../lib/pocketActivityPresentation'
 import { pocketActivityArchiveKey } from '../../lib/pocketActivityArchive'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Filter, Deposit } from '../../components/PocketIcons'
 import type { PocketActivityRow } from '../../models/pocketActivity'
 import { isIncomingPosPayment, isOutgoingPosPurchase, pocketBankRecipientLabel } from '../../lib/pocketPurchaseKind'
@@ -17,7 +17,7 @@ import PocketRecentActivitySkeleton from '../../components/PocketRecentActivityS
 export type { PocketActivityRow } from '../../models/pocketActivity'
 export type PocketActivityView = 'all' | 'purchases' | 'bank' | 'pos' | 'collections'
 type Category = 'all' | 'bank' | 'bills' | 'pos' | 'requests' | 'purchases' | 'wallet'
-type Props = {incomingPos?:boolean;rail?:'stablecoins'|'xstocks';hideHeading?:boolean;archivedKeys?:string[];view:PocketActivityView;rows:PocketActivityRow[];authenticated:boolean;busy:boolean;error:string;onRefund:(id:string)=>Promise<string>;onBridgeCheck?:(bridge:PocketPendingBridge)=>Promise<void>;bridgeChecking?:(id:string)=>boolean;bridgeMessages?:Record<string,string>;onNewBridge?:()=>void}
+type Props = {renderHeader?:(actions:ReactNode)=>ReactNode;incomingPos?:boolean;rail?:'stablecoins'|'xstocks';hideHeading?:boolean;archivedKeys?:string[];view:PocketActivityView;rows:PocketActivityRow[];authenticated:boolean;busy:boolean;error:string;onRefund:(id:string)=>Promise<string>;onBridgeCheck?:(bridge:PocketPendingBridge)=>Promise<void>;bridgeChecking?:(id:string)=>boolean;bridgeMessages?:Record<string,string>;onNewBridge?:()=>void}
 const categories: Array<[Category,string]> = [['all','All transactions'],['bank','Bank transfers'],['bills','Bills'],['pos','POS purchases'],['requests','Requests and collections'],['purchases','Other purchases'],['wallet','USDC and swaps']]
 export function pocketTransactionCategory(row: PocketActivityRow): Category {
   const source = String(row.source || '').toLowerCase().replace(/_/g,'-')
@@ -30,7 +30,7 @@ export function pocketTransactionCategory(row: PocketActivityRow): Category {
   return 'purchases'
 }
 function initialCategory(view:PocketActivityView):Category {return view === 'bank' ? 'bank' : view === 'collections' ? 'requests' : view === 'purchases' ? 'bills' : 'all'}
-export default function PocketActivityPanel({incomingPos=false,rail='stablecoins',hideHeading=false,archivedKeys=[],view,rows,authenticated,busy,error,onRefund,onBridgeCheck,bridgeChecking,bridgeMessages,onNewBridge}:Props) {
+export default function PocketActivityPanel({renderHeader,incomingPos=false,rail='stablecoins',hideHeading=false,archivedKeys=[],view,rows,authenticated,busy,error,onRefund,onBridgeCheck,bridgeChecking,bridgeMessages,onNewBridge}:Props) {
   const availableCategories = incomingPos ? ([['all','All payments']] as Array<[Category,string]>) : rail==='xstocks' ? ([['all','All transactions'],['wallet','Transfers'],['requests','Requests'],['purchases','XPay']] as Array<[Category,string]>) : categories
   const [category,setCategory] = useState<Category>(()=>initialCategory(view))
   const [period,setPeriod] = useState({from:'',to:''})
@@ -70,15 +70,16 @@ export default function PocketActivityPanel({incomingPos=false,rail='stablecoins
     if(last?.key===key)last.rows.push(row);else groups.push({key,label,rows:[row]})
   }
   const selectedRow=currentPocketActivityRow(selected, rows)
-  if(!authenticated)return <p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">Sign in to view your transactions.</p>
+  if(!authenticated)return <>{renderHeader?.(null)}<p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">Sign in to view your transactions.</p></>
+  const actions=<div className="flex items-center">
+    <button type="button" aria-label="Filter transactions" aria-expanded={filterOpen} onClick={openFilters} className="relative flex h-11 w-11 items-center justify-center rounded-full"><Filter className="h-5 w-5"/>{activeFilters&&<span aria-label="Filters active" className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-500"/>}</button>
+    <button type="button" aria-label="Download statement" onClick={()=>{setExportError('');setStatementOpen(true)}} className="flex h-11 w-11 items-center justify-center rounded-full"><Deposit className="h-5 w-5"/></button>
+  </div>
   return <div className="space-y-4">
-    <header className="relative flex min-h-14 items-center justify-center">
-      <h1 className="text-base font-black">{hideHeading ? '' : 'Activity'}</h1>
-      <div className="absolute right-0 flex items-center">
-        <button type="button" aria-label="Filter transactions" aria-expanded={filterOpen} onClick={openFilters} className="relative flex h-11 w-11 items-center justify-center rounded-full"><Filter className="h-5 w-5"/>{activeFilters&&<span aria-label="Filters active" className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-500"/>}</button>
-        <button type="button" aria-label="Download statement" onClick={()=>{setExportError('');setStatementOpen(true)}} className="flex h-11 w-11 items-center justify-center rounded-full"><Deposit className="h-5 w-5"/></button>
-      </div>
-    </header>
+    {renderHeader?renderHeader(actions):<header className="relative flex min-h-14 items-center justify-center">
+      {!hideHeading&&<h1 className="text-base font-black">Activity</h1>}
+      <div className="absolute right-0">{actions}</div>
+    </header>}
     {activeFilters&&<div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400"><span>{visible.length} transactions</span><button type="button" onClick={()=>{setCategory('all');setStatus('all');setPeriod({from:'',to:''})}} className="min-h-10 px-2 font-semibold">Clear filters</button></div>}
     {filterOpen&&<PocketBottomSheet title="Filter transactions" onClose={()=>setFilterOpen(false)}>
       <h2 className="mb-6 text-center text-base font-bold">Filter transactions</h2>
