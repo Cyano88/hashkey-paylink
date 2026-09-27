@@ -402,7 +402,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         const source = text(req.body?.source, 20)
         const destination = text(req.body?.destination, 20)
         const amount = text(req.body?.amount, 30)
-        if ((source !== 'arbitrum' && source !== 'solana' && source !== 'arc' && source !== 'ethereum' && source !== 'polygon') || destination !== 'base') {
+        if ((source !== 'arbitrum' && source !== 'solana' && source !== 'arc' && source !== 'polygon') || destination !== 'base') {
           return res.status(400).json({ ok: false, error: 'Bank payout routing supports Arbitrum or Solana to Base.' })
         }
         const routeAmountUnits = usdcUnits(amount)
