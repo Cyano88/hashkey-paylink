@@ -7,5 +7,6 @@ assert.match(xpaySenderFee().senderFeeAddress,/^0x[0-9a-fA-F]{40}$/)
 const valid={amount:'1',senderFee:'0.0025',senderFeePercent:'0.25'}
 assert.doesNotThrow(()=>assertXPaySenderFee(valid))
 assert.doesNotThrow(()=>assertXPaySenderFee({...valid,amount:'0.736603',senderFee:'0.001842'}))
+assert.doesNotThrow(()=>assertXPaySenderFee({...valid,amount:'0.736603',senderFee:'0.0018415075',senderFeePercent:'0.2500'}))
 for(const change of [{senderFeePercent:'0'},{senderFee:'0'},{senderFee:'0.005'},{amount:'-1'},{senderFee:'NaN'},{senderFeeAddress:'0x'+'1'.repeat(40)}])assert.throws(()=>assertXPaySenderFee({...valid,...change}))
 console.log('PASS XPay 0.25% provider fee: explicit existing treasury, fee echo, rounding, omitted/duplicate/redirected fee rejection.')
