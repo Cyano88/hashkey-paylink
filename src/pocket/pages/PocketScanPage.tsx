@@ -1,3 +1,4 @@
+import {xpayOrigin} from '../lib/pocketXPayNavigation'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from '../components/PocketIcons'
@@ -7,6 +8,7 @@ import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRout
 const PaymentPage=lazy(()=>import('../../pages/PaymentPage'))
 export default function PocketScanPage() {
  const navigate=useNavigate(),location=useLocation()
+ const scanState={xpayOrigin:new URLSearchParams(location.search).get('rail')==='xstocks'?'xstocks':xpayOrigin(location.state),...(location.state?.xpayReturnTo?{xpayReturnTo:location.state.xpayReturnTo}:{})}
  const [checkout,setCheckout]=useState<{params:string;merchant:string;settlement:string}|null>(null)
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[camera,setCamera]=useState(false),[pasted,setPasted]=useState('')
  const video=useRef<HTMLVideoElement>(null),stream=useRef<MediaStream|null>(null),timer=useRef<number|undefined>(undefined),generation=useRef(0),pending=useRef(false),abort=useRef<AbortController|null>(null)
@@ -16,8 +18,8 @@ export default function PocketScanPage() {
   pending.current=true;stop();setBusy(true);setError('');abort.current?.abort();const controller=new AbortController();abort.current=controller
   try {
    const code=parsePocketScanCode(raw)
-   if(code.kind==='unified-xpay'){navigate('/xpay/checkout/'+code.id,{replace:true});return}
-   if(code.kind==='xpay'){navigate(xStockPath('xpay')+'?merchant='+encodeURIComponent(code.id),{replace:true});return}
+   if(code.kind==='unified-xpay'){navigate('/xpay/checkout/'+code.id,{replace:true,state:scanState});return}
+   if(code.kind==='xpay'){navigate(xStockPath('xpay')+'?merchant='+encodeURIComponent(code.id),{replace:true,state:scanState});return}
    const path=code.kind==='pos'?'/api/ng-pos?view=pocket-scan&merchant_id='+encodeURIComponent(code.id)+'&code='+encodeURIComponent(code.url):'/api/v2/checkouts?id='+encodeURIComponent(code.id)+'&attempt='+encodeURIComponent(code.attempt)
    const response=await fetch(pocketApiUrl(path),{cache:'no-store',signal:controller.signal})
    const data=await response.json()

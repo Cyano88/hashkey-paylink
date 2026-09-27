@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type TouchEvent, type UIEvent } from 'react'
+import { useLayoutEffect, useEffect, useRef, useState, type ReactNode, type TouchEvent, type UIEvent } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
 import { useLocation } from 'react-router-dom'
@@ -12,14 +12,21 @@ export default function PocketRouteShell({
   onSelect,
   navigationDisabled = false,
   fixedPage = false,
+  scrollKey,
+  rail,
+  refreshEnabled = true,
 }: {
   active: PocketNavTab
   children: ReactNode
   onSelect: (tab: PocketNavTab) => void
   navigationDisabled?: boolean
   fixedPage?: boolean
+  scrollKey?: string
+  rail?: 'stablecoins' | 'xstocks'
+  refreshEnabled?: boolean
 }) {
   const { pathname, state, key: locationKey } = useLocation()
+  const scrollPath=pathname+(scrollKey?':'+scrollKey:'')
   const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
   const [headerHeight, setHeaderHeight] = useState(120)
@@ -27,6 +34,7 @@ export default function PocketRouteShell({
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMessage, setRefreshMessage] = useState('')
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const lastScroll=useRef<Record<string,number>>({})
   const scrollFrame = useRef<number | null>(null)
   const pullStartY = useRef<number | null>(null)
   const pullStartX = useRef(0)
@@ -48,30 +56,32 @@ export default function PocketRouteShell({
     }
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
     if (fixedPage) { scroller.scrollTop = 0; return }
-    const saved = Number(window.sessionStorage.getItem(`pocket:scroll:${pathname}`) || 0)
+    const saved = lastScroll.current[scrollPath] ?? Number(window.sessionStorage.getItem(`pocket:scroll:${scrollPath}`) || 0)
     scroller.scrollTop = Number.isFinite(saved) && saved > 0 ? saved : 0
     return () => {
       if (scrollFrame.current !== null) window.cancelAnimationFrame(scrollFrame.current)
-      window.sessionStorage.setItem(`pocket:scroll:${pathname}`, String(scroller.scrollTop))
+      scrollFrame.current=null
+      window.sessionStorage.setItem(`pocket:scroll:${scrollPath}`, String(lastScroll.current[scrollPath] ?? saved))
     }
-  }, [pathname, fixedPage])
+  }, [scrollPath, fixedPage])
 
   const rememberScroll = (event: UIEvent<HTMLDivElement>) => {
     const top = event.currentTarget.scrollTop
+    lastScroll.current[scrollPath]=top
     if (scrollFrame.current !== null) return
     scrollFrame.current = window.requestAnimationFrame(() => {
-      window.sessionStorage.setItem(`pocket:scroll:${pathname}`, String(top))
+      window.sessionStorage.setItem(`pocket:scroll:${scrollPath}`, String(top))
       scrollFrame.current = null
     })
   }
 
   const startPull = (event: TouchEvent<HTMLDivElement>) => {
     pullStartY.current = null
-    if (fixedPage || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
+    if (!refreshEnabled || fixedPage || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
     pullDistanceRef.current = 0
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
@@ -212,7 +222,7 @@ export default function PocketRouteShell({
             </div>
           </div>
 
-          <PocketBottomNav active={active} disabled={navigationDisabled} keyboardOpen={keyboardOpen || inputFocused} onSelect={onSelect} />
+          <PocketBottomNav rail={rail} active={active} disabled={navigationDisabled} keyboardOpen={keyboardOpen || inputFocused} onSelect={onSelect} />
       </div>
     </div>
   )

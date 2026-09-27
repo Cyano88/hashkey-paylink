@@ -1,3 +1,4 @@
+import {xpayOrigin,xpayReturnPath} from '../lib/pocketXPayNavigation'
 import PocketXPayProgress from './PocketXPayProgress'
 import usePocketSlowConfirmation from '../hooks/usePocketSlowConfirmation'
 ﻿import { useEffect, useRef, useState, type ComponentProps } from 'react'
@@ -101,7 +102,7 @@ export default function PocketXPay({wallet,checkout=false}:{wallet:ReturnType<ty
   const data=await xpayRequest(getAccessToken,{action:'confirm',id:p.id,hash});adopt(data.payment);setUsd('');setReview(null)
  })
  const Surface=checkout?CheckoutSurface:PocketBottomSheet
- const close=()=>{if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xStockPath('home'),{replace:true})}
+ const close=()=>{if(checkout)return;setOpen(false);setError('');if(merchantId)navigate(xpayReturnPath(location.state,xStockPath('home')),{replace:true,state:{xpayOrigin:xpayOrigin(location.state)}})}
  const assetTokens=stockPickerTokens(wallet.displaySnapshot||wallet.snapshot).filter(t=>merchant?.tokens.includes(t.address.toLowerCase()))
  const selected=[stockUsdc,...stockAssets].find(a=>a.address.toLowerCase()===token)
  const qr=merchant?'https://pocket.hashpaylink.com/xpay/'+merchant.id:''

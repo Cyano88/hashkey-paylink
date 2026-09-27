@@ -1,4 +1,4 @@
-import {useNavigate} from 'react-router-dom'
+import {useLocation,useNavigate} from 'react-router-dom'
 import { pocketActivityAmount } from '../lib/pocketActivityPresentation'
 import { useState, type ReactNode } from 'react'
 import { paymentReceiptOutcome } from '../../lib/paymentReceiptPdf'
@@ -7,12 +7,12 @@ import type { PocketActivityRow } from '../models/pocketActivity'
 import { pocketActivityReceipt, pocketActivityStatus, pocketMovementTitle } from '../lib/pocketReceipt'
 
 export default function PocketActivityReceipt({ row, onClose, onRefund, children }: { row: PocketActivityRow; onClose: () => void; onRefund?: (id: string) => Promise<string>; children?: ReactNode }) {
-  const navigate=useNavigate()
+  const navigate=useNavigate(),location=useLocation()
   const [busy,setBusy] = useState(false)
   const [message,setMessage] = useState('')
   const receipt = pocketActivityReceipt(row, { allowPending: true })
   const refundId = row.source === 'bills' ? row.merchantId : undefined
-  const actions = <>{children}{row.source==='xpay'&&row.xpayCheckoutId&&/^xp_[0-9a-f-]{36}$/.test(row.xpayCheckoutId)&&['pending','failed'].includes(pocketActivityStatus(row))&&<button type="button" className="pocket-cta-primary mt-4 w-full" onClick={()=>{onClose();navigate('/xpay/checkout/'+row.xpayCheckoutId+'?bank='+encodeURIComponent(row.merchantId||'')+'&resume='+encodeURIComponent(row.eventId))}}>Continue payment</button>}{row.refundAction && refundId && onRefund && <div className="py-3 text-center">
+  const actions = <>{children}{row.source==='xpay'&&row.xpayCheckoutId&&/^xp_[0-9a-f-]{36}$/.test(row.xpayCheckoutId)&&['pending','failed'].includes(pocketActivityStatus(row))&&<button type="button" className="pocket-cta-primary mt-4 w-full" onClick={()=>{onClose();navigate('/xpay/checkout/'+row.xpayCheckoutId+'?bank='+encodeURIComponent(row.merchantId||'')+'&resume='+encodeURIComponent(row.eventId),{state:{xpayOrigin:location.pathname.includes('/xstocks/')?'xstocks':'stablecoins',xpayReturnTo:location.pathname}})}}>Continue payment</button>}{row.refundAction && refundId && onRefund && <div className="py-3 text-center">
     <button type="button" disabled={busy} onClick={async () => {setBusy(true);setMessage('');try{await onRefund(refundId)}catch(error){setMessage(error instanceof Error ? error.message : 'Refund status is unavailable.')}finally{setBusy(false)}}} className="pocket-cta-primary px-5">{busy ? 'Checking refund' : row.refundAction === 'claim' ? 'Claim refund' : 'Check refund'}</button>
     {message && <p role="status" className="mt-2 text-xs">{message}</p>}
   </div>}</>

@@ -1,4 +1,6 @@
-﻿import { useNavigate } from 'react-router-dom'
+import usePocketXPayBack from '../hooks/usePocketXPayBack'
+import {xpayOrigin,xpayReturnPath} from '../lib/pocketXPayNavigation'
+﻿import { useLocation, useNavigate } from 'react-router-dom'
 import { xStockPath } from '../lib/pocketRail'
 import PocketFlowHeader from './PocketFlowHeader'
 import { useEffect, useRef, useState } from 'react'
@@ -16,7 +18,7 @@ import PocketStockActivity from './PocketStockActivity'
 const cta='pocket-cta-primary w-full'
 const field='min-h-12 w-full rounded-xl bg-gray-100 px-3 text-sm outline-none dark:bg-white/10'
 export default function PocketXPayLinks({wallet,merchants,payments,loading,onChange}:{wallet:ReturnType<typeof usePocketStockWallet>;merchants:XPayMerchant[];payments:XPayPayment[];loading:boolean;onChange:(links:XPayMerchant[])=>void}){
- const {getAccessToken}=usePocketIdentity(),navigate=useNavigate()
+ const {getAccessToken}=usePocketIdentity(),navigate=useNavigate(),location=useLocation()
  const [view,setView]=useState<'list'|'detail'|'edit'|'history'>('list'),[selected,setSelected]=useState(''),[name,setName]=useState(''),[accepted,setAccepted]=useState<string[]>([]),[query,setQuery]=useState('')
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[confirmDelete,setConfirmDelete]=useState(false),[copied,setCopied]=useState(false)
  const actionLock=useRef(false),mounted=useRef(true)
@@ -25,8 +27,10 @@ export default function PocketXPayLinks({wallet,merchants,payments,loading,onCha
  const edit=(m?:XPayMerchant)=>{setSelected(m?.id||'');setName(m?.name||'');setAccepted(m?.tokens||[]);setQuery('');setError('');setView('edit')}
  const save=async()=>{if(actionLock.current||!wallet.address)return;actionLock.current=true;setBusy(true);setError('');try{const data=await xpayRequest(getAccessToken,{action:'merchant-save',wallet:wallet.address,name,tokens:accepted,...(merchant?{id:merchant.id}:{create:true})});if(!mounted.current)return;if(!data.merchant)throw Error('Link could not be saved.');onChange([...merchants.filter(m=>m.id!==data.merchant!.id),data.merchant]);setSelected('');setView('list')}catch(e){setError(e instanceof Error?e.message:'Link could not be saved.')}finally{actionLock.current=false;if(mounted.current)setBusy(false)}}
  const remove=async()=>{if(actionLock.current||!merchant)return;actionLock.current=true;setBusy(true);setError('');try{await requestPocketPaymentApproval();if(!mounted.current)return;const approval=takePocketPaymentApproval();if(!approval)throw Error('Confirm deletion again.');await xpayRequest(getAccessToken,{action:'merchant-delete',id:merchant.id},approval);if(!mounted.current)return;onChange(merchants.filter(m=>m.id!==merchant.id));setConfirmDelete(false);setSelected('');setView('list')}catch(e){setError(e instanceof Error?e.message:'Link could not be deleted.')}finally{actionLock.current=false;if(mounted.current)setBusy(false)}}
+ const back=()=>{if(busy||confirmDelete)return;setError('');if(view==='list')navigate(xpayReturnPath(location.state,xStockPath('home')),{state:{xpayOrigin:xpayOrigin(location.state)},replace:true});else if((view==='edit'||view==='history')&&merchant)setView('detail');else{setView('list');setSelected('')}}
+ usePocketXPayBack(back)
  return <div className="space-y-4">
-  <PocketFlowHeader title={view==='history'?'Payment history':view==='edit'?(merchant?'Edit link':'Create link'):'XPay'} onBack={()=>{if(busy)return;if(view==='list')navigate(xStockPath('home'));else{setView('list');setSelected('');setError('')}}} rightAction={view!=='history'?<button className="min-h-11 text-xs font-semibold" onClick={()=>{setError('');setView('history')}}>Payment history</button>:undefined}/>
+  <PocketFlowHeader title={view==='history'?'Payment history':view==='edit'?(merchant?'Edit link':'Create link'):'XPay'} onBack={back} rightAction={view!=='history'?<button className="min-h-11 text-xs font-semibold" onClick={()=>{setError('');setView('history')}}>Payment history</button>:undefined}/>
   {view==='history'?<PocketStockActivity wallet={wallet} payments={selected?payments.filter(p=>p.merchantId===selected):payments} historyOnly/>:loading?<PocketRecentActivitySkeleton/>:view==='list'?<>
    {merchants.map(m=><button key={m.id} className="flex min-h-20 w-full items-center gap-4 py-4 text-left" onClick={()=>{setSelected(m.id);setCopied(false);setError('');setView('detail')}}><span className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-[#171717]"><QrCode className="h-5 w-5"/></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{m.name}</span><span className="mt-1 block text-[11px] text-gray-500">{m.tokens.length} accepted assets</span></span><ChevronRight className="h-4 w-4 text-gray-400"/></button>)}
    {!merchants.length&&<p className="py-8 text-center text-xs text-gray-500">No payment links yet.</p>}<button className={cta} onClick={()=>edit()}>Create link</button>

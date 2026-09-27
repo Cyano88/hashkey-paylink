@@ -64,7 +64,7 @@ export default function PocketHomePage() {
   const displayTotal = wallets.displayTotal
   const activityReady = !authenticated || activity.resolved
 
-  const open = (path: string) => navigate(POCKET_BASE_PATH + path)
+  const open = (path: string) => navigate(POCKET_BASE_PATH + path, path===POCKET_ROUTES.xpay?{state:{xpayOrigin:'stablecoins'}}:undefined)
   const selectedRow = wallets.displayRows.find(row => row.key === selected)
   const selectedVisible = !authenticated || selectedRow?.known
   const comingSoon = false
