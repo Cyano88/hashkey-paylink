@@ -53,3 +53,18 @@ Pocket's stockUsdc is native X Layer USDC. No real swap, bridge or new payment w
 - Recovery presentation now includes Retry and mapped, muted failure guidance, including insufficient OKB and expired quotes. Duplicate clicks are locked.
 - Retry policy distinguishes swap, source burn and destination mint. Confirmed burn permits only mint recovery; ambiguous outcomes do not permit resubmission. This policy/component is tested but still requires the stock-to-bank execution controller to supply authoritative state and callbacks.
 - Added pocket-xpay-progress-smoke and pocket-xpay-progress-browser-smoke. Existing XPay expiry/approval browser checks pass with no pre-broadcast confirmation progress.
+## Bridge backend checkpoint
+
+- Dedicated X Layer domain 37 to Base domain 6 CCTP provider added. Live public fee lookup returned fast and standard quotes; fee calculation uses integer arithmetic and reserves the maximum protocol fee above the required Base arrival amount.
+- Strict message validation binds source/destination wallets, native USDC, network domains, TokenMessenger, amount, fee cap, finality and nonce. Base arrival requires the CCTP V2 MessageReceived event plus the matching native-USDC mint.
+- Internal bridge coordinator verifies Privy source ownership and the linked Base destination, checks OKB, records authorization before burn data is released, recovers lost burn hashes using bounded event scans, and verifies canonical source receipts.
+- Durable journal protects owner isolation, concurrent authorization, immutable hashes, source-burn replay and terminal state. Mint requests retain the same Circle idempotency key after a lost response; a confirmed mint failure resumes minting only. Expired attestations can request re-attestation without another burn.
+- Circle challenge reader generalized by EVM chain, preserving the existing Arc wrapper. Base mint uses the existing sponsored Circle contract execution helper and simulates the attested receiveMessage call before a new approval request.
+- New tests: pocket-xpay-cctp-smoke, pocket-xpay-bridge-journal-smoke, pocket-xpay-bridge-service-smoke. All pass. Existing Circle EVM Gas Station and Arc swap smoke tests pass. Bridge service dependency bundle passes.
+
+Still not deployed: bridge service is internal only, with no public route enabled. The full XPay coordinator must bind the shared checkout, approved stock swap, fee-inclusive amount, bridge record and Paycrest funding attempt, expose authenticated operations and connect the progress UI. Signed-wallet/device end-to-end validation is still required. No real swap, burn or mint was submitted in this checkpoint.
+
+Additional references checked:
+https://developers.circle.com/cctp/references/technical-guide
+https://raw.githubusercontent.com/circlefin/evm-cctp-contracts/master/src/v2/MessageTransmitterV2.sol
+Use the V2 bytes32 nonce event from the contract source; do not use the legacy uint64 MessageReceived event shown elsewhere in the docs.

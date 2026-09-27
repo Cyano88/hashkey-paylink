@@ -1206,10 +1206,10 @@ function normalizeSolanaUsdcAmount(value: string | undefined) {
   return fractionText ? `${whole}.${fractionText}` : whole.toString()
 }
 
-export async function readCircleArcSwapChallenge(input: { userToken: string; walletId: string; walletAddress: string; challengeId: string }) {
-  const owned = await readCircleUserWallet(input.userToken, 'arc', input.walletId)
-  requireCircleGasStationEvmWallet({ chain: 'arc', walletId: input.walletId, walletAddress: input.walletAddress, wallets: owned ? [owned] : [] })
-  const response = await circleJson<{ challenge?: Record<string, unknown> }>('/v1/w3s/user/challenges/' + encodeURIComponent(input.challengeId), { method: 'GET', userToken: input.userToken })
+export async function readCircleEvmChallenge(input: { chain: CircleGasStationEvmChain; userToken: string; walletId: string; walletAddress: string; challengeId: string }) {
+  const owned = await readCircleUserWallet(input.userToken, input.chain, input.walletId)
+  requireCircleGasStationEvmWallet({ chain: input.chain, walletId: input.walletId, walletAddress: input.walletAddress, wallets: owned ? [owned] : [] })
+  const response = await circleJson<{ challenge?: Record<string, unknown> }>('/v1/w3s/user/challenges/' + encodeURIComponent(input.challengeId), { method: 'GET', userToken: input.userToken, apiKey: circleApiKey({ chain: input.chain }) })
   const challenge = response.challenge
   if (!challenge) return { status: 'pending' as const }
   const ids = challenge.correlationIds
@@ -1218,11 +1218,15 @@ export async function readCircleArcSwapChallenge(input: { userToken: string; wal
     const state = String(challenge.status ?? challenge.state ?? '').toUpperCase()
     return { status: ['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state) ? 'failed' as const : 'pending' as const }
   }
-  const data = await circleJson<{ transaction?: Record<string, unknown> }>('/v1/w3s/transactions/' + encodeURIComponent(transactionId), { method: 'GET', userToken: input.userToken })
+  const data = await circleJson<{ transaction?: Record<string, unknown> }>('/v1/w3s/transactions/' + encodeURIComponent(transactionId), { method: 'GET', userToken: input.userToken, apiKey: circleApiKey({ chain: input.chain }) })
   const tx = data.transaction
-  if (!tx || tx.walletId !== input.walletId || tx.blockchain !== 'ARC') return { status: 'pending' as const }
+  if (!tx || tx.walletId !== input.walletId || tx.blockchain !== EVM_CHAINS[input.chain].blockchain) return { status: 'pending' as const }
   if (String(tx.state ?? tx.status).toUpperCase() === 'FAILED') return { status: 'failed' as const }
   return { status: 'pending' as const, txHash: typeof tx.txHash === 'string' ? tx.txHash : undefined }
+}
+
+export async function readCircleArcSwapChallenge(input: { userToken: string; walletId: string; walletAddress: string; challengeId: string }) {
+  return readCircleEvmChallenge({ ...input, chain: 'arc' })
 }
 
 // Internal migration transport. HTTP callers cannot supply these paths.
