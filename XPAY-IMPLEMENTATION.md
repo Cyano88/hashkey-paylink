@@ -43,3 +43,13 @@ X Layer is domain 37 and supports standard/fast CCTP, but lacks source upfront f
 https://developers.circle.com/cctp/references/contract-addresses
 X Layer TokenMessengerV2: 0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d.
 Pocket's stockUsdc is native X Layer USDC. No real swap, bridge or new payment was sent for this draft.
+## Progress UI follow-up
+
+- Added compact XPay progress inside the existing confirmation sheet. The CTA retains its Pay label while busy.
+- Current direct stock payments show only Confirming payment after a transaction hash exists, including restored submissions. Authorization alone never activates that stage.
+- Submitted payments cannot be edited or resubmitted from the sheet.
+- Shared progress supports optional Swapping and Bridging stages; these are not exposed as functioning routes until the execution/recovery integration above is complete.
+- Tests cover skipped stages, proof ordering, failure, no premature completion, and approval/submission guards. No Pixel deployment in this checkpoint.
+- Recovery presentation now includes Retry and mapped, muted failure guidance, including insufficient OKB and expired quotes. Duplicate clicks are locked.
+- Retry policy distinguishes swap, source burn and destination mint. Confirmed burn permits only mint recovery; ambiguous outcomes do not permit resubmission. This policy/component is tested but still requires the stock-to-bank execution controller to supply authoritative state and callbacks.
+- Added pocket-xpay-progress-smoke and pocket-xpay-progress-browser-smoke. Existing XPay expiry/approval browser checks pass with no pre-broadcast confirmation progress.
