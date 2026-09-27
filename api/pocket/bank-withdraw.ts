@@ -524,6 +524,20 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
       }
 
       if (action === 'status') {
+        const submitted = await executionForOrder(identity.userId, ownedOrder, dependencies)
+        if (!ownedOrder.tx_hash && submitted?.transactionHash) {
+          // Reuse the durable submitted hash rather than waiting for a broad
+          // transfer scan or a provider webhook to discover the same payment.
+          const proof = await dependencies.invokeLegacy(req, {
+            action: 'markOfframpPaid', intent_id: id, tx_hash: submitted.transactionHash,
+            payer_wallet: ownedOrder.payer_wallet, payer_email: identity.email,
+          })
+          if (proof.status === 200 && proof.body?.order?.tx_hash) {
+            const execution = await syncExecution(identity.userId, proof.body.order, dependencies)
+            const route = routeRecord(await ownedRoute(identity, id, dependencies))
+            return res.json({ ok: true, data: publicOrder(proof.body.order, execution, route) })
+          }
+        }
         const status = await dependencies.invokeLegacy(req, { action: 'offrampStatus', intent_id: id, refresh: true })
         if (status.status !== 200 || !status.body?.order) throw Object.assign(new Error(status.body?.error || 'Could not refresh bank payout.'), { status: status.status })
         const execution = await syncExecution(identity.userId, status.body.order, dependencies)

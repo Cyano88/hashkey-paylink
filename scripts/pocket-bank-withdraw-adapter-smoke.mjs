@@ -59,6 +59,7 @@ const settledOrder = { ...processingOrder, status: 'settled', tx_hash: `0x${'2'.
 const calls = []
 let routeAction
 let bridgeState = 'pending'
+let persistedOrder = processingOrder
 let refreshedOrder = processingOrder
 let handlerNow = 2
 const handler = createPocketBankWithdrawHandler({
@@ -86,8 +87,8 @@ const handler = createPocketBankWithdrawHandler({
   },
   invokeLegacy: async (_req, body) => {
     calls.push({ kind: 'legacy', body })
-    if (body.action === 'offrampStatus') return { status: 200, body: { ok: true, order: body.refresh ? refreshedOrder : processingOrder } }
-    if (body.action === 'markOfframpPaid') return { status: 200, body: { ok: true, order: { ...processingOrder, status: 'deposited', tx_hash: body.tx_hash } } }
+    if (body.action === 'offrampStatus') return { status: 200, body: { ok: true, order: body.refresh ? refreshedOrder : persistedOrder } }
+    if (body.action === 'markOfframpPaid') { persistedOrder = { ...processingOrder, status: 'deposited', tx_hash: body.tx_hash }; return { status: 200, body: { ok: true, order: persistedOrder } } }
     return { status: 200, body: { ok: true, order: processingOrder } }
   },
 })
@@ -226,6 +227,14 @@ const conflictingSubmittedTransfer = await request(handler, {
   tx_hash: `0x${'5'.repeat(64)}`,
 })
 assert.equal(conflictingSubmittedTransfer.statusCode, 409)
+
+const callsBeforeRecovery = calls.length
+const recoveredHandoff = await request(handler, { action: 'status', intent_id: processingOrder.intent_id })
+assert.equal(recoveredHandoff.statusCode, 200)
+assert.equal(recoveredHandoff.body.data.handoffVerified, true)
+assert.equal(recoveredHandoff.body.data.state, 'processing', 'handoff is not bank delivery')
+assert.ok(calls.slice(callsBeforeRecovery).some(call => call.body.action === 'markOfframpPaid'))
+assert.equal(calls.slice(callsBeforeRecovery).some(call => call.body.action === 'offrampStatus' && call.body.refresh), false, 'verified handoff must not wait for provider refresh')
 
 const confirmed = await request(handler, {
   action: 'confirm',

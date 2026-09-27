@@ -1392,6 +1392,11 @@ export default async function handler(req: Request, res: Response) {
           txHash,
           recipient: existing.receive_address,
           minAmount: existing.amount_usdc,
+          ...(existing.source === 'bank-withdraw' ? {
+            confirmation: 'base-included' as const,
+            payer: existing.payer_wallet,
+            notBefore: existing.created_at,
+          } : {}),
         })
       } catch (error) {
         return res.status(409).json({ ok: false, error: error instanceof Error ? error.message : 'Payment could not be verified on-chain.' })
@@ -1425,6 +1430,10 @@ export default async function handler(req: Request, res: Response) {
       let receipt: unknown
       if (body.refresh && order.source === 'bank-send') {
         receipt = await registerPaycrestBankSendReceipt(order).catch(() => null)
+      } else if (body.refresh && order.source === 'bank-withdraw') {
+        // Payment proof is checked directly by the Pocket status route. Receipt
+        // repair must not delay a verified handoff or provider status response.
+        schedulePaycrestOrderReconciliation(id)
       } else if (body.refresh) {
         const reconciled = await reconcilePaycrestOrderPayment(id, { allowTerminalScan: true }).catch(() => null)
         order = reconciled?.order ?? order

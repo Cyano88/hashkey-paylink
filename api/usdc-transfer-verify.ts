@@ -300,7 +300,7 @@ export async function verifyEvmUsdcTransfer(input: {
   if (!receipt.blockNumber || !/^0x[0-9a-f]+$/i.test(receipt.blockNumber)) throw new Error('Transaction confirmation block was not available.')
   let inclusionBlock: RpcBlock | undefined
   if (input.confirmation === 'base-included') {
-    // Pocket bills deliberately accept two sealed L2 blocks, not L1 finality.
+    // Pocket bills and bank handoffs accept two sealed L2 blocks, not L1 finality.
     // A submitted hash or Flashblock preconfirmation is insufficient evidence.
     const [head, block] = await Promise.all([
       rpcCall<RpcBlock>(rpcUrl, 'eth_getBlockByNumber', ['latest', false]),
