@@ -566,6 +566,15 @@ export default function usePocketBankWithdrawController({
       })
       if (activeIntentId.current !== prepared.intentId || cancelled.current) return
       setResult(submitted)
+      if (payoutHandoffSucceeded(submitted)) {
+        clearActivePocketBankPayout(prepared.intentId)
+        activeIntentId.current = ''
+        clearStoredOperation()
+        setStatus('sent')
+        setError('')
+        void refreshAfterSent()
+        return
+      }
       setStatus(submittedPayoutStatus(submitted))
       idempotencyKey.current = ''
       window.sessionStorage.removeItem(BANK_PAYOUT_OPERATION_KEY)
