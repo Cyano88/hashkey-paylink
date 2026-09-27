@@ -9,7 +9,7 @@ import {
   type PocketCheckoutRoute,
 } from '../../lib/pocketCheckoutRouting'
 import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge } from '../api/pocketBridgeClient'
-import { readPocketBalances, readPocketLinkedWallets, readPocketDestinationLiquidity } from '../api/pocketReadClient'
+import { readPocketBalances, readPocketLinkedWallets, readPocketDestinationLiquidity, readPocketBankRoutingLiquidity } from '../api/pocketReadClient'
 import { bridgeCircleSolanaWallet } from '../lib/pocketSolanaBridge'
 import type { CirclePocketWallet, CirclePocketWallets } from '../models/pocketWallet'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
@@ -44,17 +44,20 @@ async function inspectLiquidity(input: {
   accessToken: string
   destination: PocketCheckoutNetwork
   amountUnits: bigint
+  bankPayout?: boolean
 }) {
   // A slow unrelated chain must not hold up a funded destination.
   const destination = await readPocketDestinationLiquidity(input.accessToken,input.destination).catch(()=>null)
   if(destination?.wallet && parseUnits((Math.floor(destination.balance*1_000_000)/1_000_000).toFixed(6),6)>=input.amountUnits) {
     return {route:{kind:'direct',destination:input.destination,amountUnits:input.amountUnits} as PocketCheckoutRoute, wallets:{[input.destination]:destination.wallet} as CirclePocketWallets}
   }
-  const [snapshot, wallets] = await Promise.all([
+  const bank = input.bankPayout ? await readPocketBankRoutingLiquidity(input.accessToken) : null
+  const [snapshot, wallets] = bank ? [bank, bank.wallets] : await Promise.all([
     readPocketBalances({ accessToken: input.accessToken }),
     readPocketLinkedWallets({ accessToken: input.accessToken }),
   ])
-  const balances = NETWORKS.map(network => {
+  const networks = input.bankPayout ? NETWORKS.filter(network => network !== 'ethereum') : NETWORKS
+  const balances = networks.map(network => {
     const row = snapshot.rows.find(candidate => candidate.key === network)
     return {
       network,
@@ -96,6 +99,7 @@ async function inspectLiquidity(input: {
 
 export default function usePocketPaymentLiquidityController(input: {
   enabled: boolean
+  bankPayout?: boolean
   amount: string
   destination: PocketCheckoutNetwork
   getAccessToken(): Promise<string | null>
@@ -124,17 +128,17 @@ export default function usePocketPaymentLiquidityController(input: {
     if (amountUnits <= 0n) throw new Error('Payment amount is unavailable.')
     const accessToken = await input.getAccessToken()
     if (!accessToken) throw new Error('Sign in again to check Pocket balances.')
-    const direct = cachedPocketDirectLiquidity(input.readRoutingSnapshot?.(), input.destination, amountUnits)
+    const direct = cachedPocketDirectLiquidity(input.readRoutingSnapshot?.(), input.destination, amountUnits, Date.now(), input.bankPayout)
     if (direct) return { ...direct, accessToken }
-    const key = accessToken + ':' + input.destination + ':' + amountUnits
+    const key = accessToken + ':' + input.destination + ':' + amountUnits + ':' + Boolean(input.bankPayout)
     let pending = inspection.current?.key === key ? inspection.current.promise : null
     if (!pending) {
-      pending = inspectLiquidity({ accessToken, destination: input.destination, amountUnits })
+      pending = inspectLiquidity({ accessToken, destination: input.destination, amountUnits, bankPayout: input.bankPayout })
       inspection.current = {key, promise:pending}
     }
     try { return { ...await pending, accessToken } }
     finally { if (inspection.current?.promise === pending) inspection.current = null }
-  }, [amountUnits, input.destination, input.getAccessToken, input.readRoutingSnapshot])
+  }, [amountUnits, input.destination, input.getAccessToken, input.readRoutingSnapshot, input.bankPayout])
 
   useEffect(() => {
     const current = ++run.current

@@ -127,6 +127,23 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
 
     try {
       const identity = await dependencies.verifyUser(req)
+      if (req.query?.routing === 'bank') {
+        // Routing-only snapshot: never publish this partial set as a home total.
+        const networks: PocketNetwork[] = ['base', 'arbitrum', 'arc', 'solana', 'polygon']
+        const rows = await Promise.all(networks.map(async network => {
+          try {
+            const link = await dependencies.readLink(circleLinkKey(identity.userId, network, 'payment'))
+            if (!link) return { network, balance: 0, wallet: null }
+            if (link.chain !== network || (link.purpose ?? 'payment') !== 'payment') throw new Error('Wallet network mismatch.')
+            const balance = await dependencies.readBalance(network, link.circleWalletAddress, true)
+            if (!Number.isFinite(balance) || balance < 0) throw new Error('Balance unavailable.')
+            return { network, balance, wallet: { walletId: link.circleWalletId, address: link.circleWalletAddress, blockchain: link.circleBlockchain, updatedAt: link.updatedAt } }
+          } catch {
+            return { network, balance: null, wallet: null }
+          }
+        }))
+        return res.json({ ok: true, routing: 'bank', rows })
+      }
       if (req.query?.network !== undefined) {
         const network = String(req.query.network) as PocketNetwork
         if (!POCKET_NETWORKS.includes(network)) return fail(400, 'VALIDATION_FAILED', 'Choose a supported network.', false)

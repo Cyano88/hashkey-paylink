@@ -290,11 +290,13 @@ export async function verifyEvmUsdcTransfer(input: {
   if (!rpcUrl) throw new Error(`PRIVATE_RPC_URL is not configured for ${input.chain}.`)
 
   const expectedChainId = { base: 8453n, arbitrum: 42161n, arc: 5042n, ethereum: 1n, polygon: 137n }[input.chain]
-  const actualChainId = await rpcCall<string>(rpcUrl, 'eth_chainId', [])
+  const [actualChainId, receipt] = await Promise.all([
+    rpcCall<string>(rpcUrl, 'eth_chainId', []),
+    rpcCall<TxReceipt | null>(rpcUrl, 'eth_getTransactionReceipt', [input.txHash]),
+  ])
   if (!/^0x[0-9a-f]+$/i.test(actualChainId) || BigInt(actualChainId) !== expectedChainId) {
     throw new Error('Payment RPC chain does not match the requested mainnet.')
   }
-  const receipt = await rpcCall<TxReceipt | null>(rpcUrl, 'eth_getTransactionReceipt', [input.txHash])
   if (!receipt) throw new Error('Transaction receipt was not found yet.')
   if (receipt.status !== '0x1') throw new Error('Transaction did not succeed.')
   if (!receipt.blockNumber || !/^0x[0-9a-f]+$/i.test(receipt.blockNumber)) throw new Error('Transaction confirmation block was not available.')

@@ -143,3 +143,13 @@ assert.equal(isolated.statusCode,200);assert.equal(isolated.body.network,'base')
 assert.equal(balanceCalls.length-before,1);assert.equal(readKeys.length-beforeKeys,1);assert.equal(balanceCalls.at(-1).network,'base')
 const invalid=responseRecorder();await handler({method:'GET',query:{network:'xlayer'},headers:{}},invalid);assert.equal(invalid.statusCode,400)
 console.log('PASS destination-only read touches Base alone and rejects unsupported networks.')
+
+const bankRouting=responseRecorder();const bankBefore=readKeys.length
+await handler({method:'GET',query:{routing:'bank'},headers:{}},bankRouting)
+assert.equal(bankRouting.statusCode,200)
+assert.deepEqual(bankRouting.body.rows.map(r=>r.network),['base','arbitrum','arc','solana','polygon'])
+assert.equal(readKeys.slice(bankBefore).some(k=>k.endsWith(':ethereum')),false)
+assert.equal(bankRouting.body.total,undefined)
+assert.equal(bankRouting.body.rows.find(r=>r.network==='arc').balance,null)
+assert.equal(bankRouting.body.rows.find(r=>r.network==='base').balance,2.5)
+console.log('PASS bank routing excludes Ethereum reads, includes Polygon, and isolates failed sources without publishing a partial total')

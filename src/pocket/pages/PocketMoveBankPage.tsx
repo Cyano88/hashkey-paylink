@@ -124,6 +124,7 @@ export default function PocketMoveBankPage() {
   }, [direct.result?.intentId])
   const readRoutingSnapshot = useCallback(() => readCachedPocketBalance(balanceOwner(email)), [email])
   const bankLiquidity = usePocketPaymentLiquidityController({
+    bankPayout: true,
     readRoutingSnapshot,
     enabled: direct.status === 'routing' && Boolean(direct.result?.amountUsdc),
     amount: direct.result?.amountUsdc ?? '',

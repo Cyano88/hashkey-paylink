@@ -170,6 +170,8 @@ assert.match(unsafeWindow.body.error, /too close to expiry/i)
 
 const routeMissing = await request(handler, { action: 'routeStatus', intent_id: processingOrder.intent_id })
 assert.equal(routeMissing.body.data, null)
+const ethereumRoute = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'ethereum', destination: 'base', amount: '0.6' })
+assert.equal(ethereumRoute.statusCode,400)
 const routeZero = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'arbitrum', destination: 'base', amount: '0' })
 assert.equal(routeZero.statusCode, 400)
 const routeExcess = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'arbitrum', destination: 'base', amount: '1.000001' })
