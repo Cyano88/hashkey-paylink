@@ -1515,7 +1515,7 @@ export async function listPocketXPayPosDestinations(owner:string) {
 
 export async function listPocketUnifiedXPayPosPayments(owner:string,checkoutId?:string,legacyIds:string[]=[]):Promise<XPayHistoryEntry[]>{
  const store=await readStore()
- const merchants=Object.values(store.merchants).filter(m=>m.owner_id===owner)
+ const merchants=Object.values(store.merchants).filter(m=>m.owner_id===owner&&(!m.source||m.source==='pos'))
  const ids=new Set(merchants.map(m=>m.merchant_id))
  const intents=new Set(Object.values(store.intents||{}).filter(i=>(!checkoutId||i.xpay_checkout_id===checkoutId||(!i.xpay_checkout_id&&legacyIds.includes(i.merchant_id)))&&ids.has(i.merchant_id)).map(i=>i.intent_id))
  const orders=await listPaycrestPosOrdersForMerchants([...ids])

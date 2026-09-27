@@ -29,7 +29,7 @@ export default function PocketRouteShell({
   const scrollPath=pathname+(scrollKey?':'+scrollKey:'')
   const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
-  const [headerHeight, setHeaderHeight] = useState(120)
+  const [headerHeight, setHeaderHeight] = useState(() => Math.ceil(document.querySelector<HTMLElement>('[data-hashpaylink-top-nav]')?.getBoundingClientRect().bottom ?? 0))
   const [pullDistance, setPullDistance] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMessage, setRefreshMessage] = useState('')
@@ -42,7 +42,7 @@ export default function PocketRouteShell({
   const refreshTriggered = useRef(false)
   const refreshInFlight = useRef(false)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const header = document.querySelector<HTMLElement>('[data-hashpaylink-top-nav]')
     if (!header) return
     const updateHeaderHeight = () => setHeaderHeight(Math.ceil(header.getBoundingClientRect().bottom))
@@ -54,7 +54,7 @@ export default function PocketRouteShell({
       observer.disconnect()
       window.removeEventListener('resize', updateHeaderHeight)
     }
-  }, [])
+  }, [pathname])
 
   useLayoutEffect(() => {
     const scroller = scrollerRef.current
