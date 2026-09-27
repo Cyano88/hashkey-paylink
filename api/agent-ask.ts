@@ -1,3 +1,4 @@
+import { migratedJsonStore } from './migrated-json-store.js'
 /**
  * POST /api/agent-ask
  *
@@ -17,7 +18,7 @@ import {
   type ZeroScoutHelperGuidance,
   type ZeroScoutSponsoredAction,
 } from './zeroscout-sponsored-action.js'
-import { readDurableJson, writeDurableJson } from './render-durable-store.js'
+import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './render-durable-store.js'
 import {
   circlePocketIdentityErrorStatus,
   resolveCirclePocketIdentity,
@@ -60,7 +61,11 @@ function normalizeBoundedString(value: unknown, field: string, maxLength: number
   return normalized
 }
 
+const migratedUsageStore = migratedJsonStore<UsageStore>(HELPER_USAGE_STORE_KEY, HELPER_USAGE_STORE, () => ({ usage: {} }))
+
 async function readUsageStore(): Promise<UsageStore> {
+  if (hasRenderDurableStore()) return migratedUsageStore.read()
+  if (process.env.RENDER || process.env.RENDER_SERVICE_ID) throw new Error('Durable usage storage is required.')
   try {
     const remote = await readDurableJson<Partial<UsageStore>>(HELPER_USAGE_STORE_KEY)
     if (remote) return { usage: remote.usage ?? {} }
@@ -76,6 +81,8 @@ async function readUsageStore(): Promise<UsageStore> {
 }
 
 async function writeUsageStore(store: UsageStore) {
+  if (hasRenderDurableStore()) return migratedUsageStore.write(store)
+  if (process.env.RENDER || process.env.RENDER_SERVICE_ID) throw new Error('Durable usage storage is required.')
   await mkdir(dirname(HELPER_USAGE_STORE), { recursive: true })
   await writeFile(HELPER_USAGE_STORE, JSON.stringify(store, null, 2), 'utf8')
   try {

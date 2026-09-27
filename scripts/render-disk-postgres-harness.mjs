@@ -17,7 +17,7 @@ try {
   assert.equal(initialized.status, 0, initialized.stderr || 'isolated PostgreSQL initialization failed')
   const started = spawnSync(pgBin + 'pg_ctl.exe', ['-D', directory, '-l', join(directory, 'server.log'), '-o', `-h 127.0.0.1 -p ${port}`, '-w', 'start'], { encoding: 'utf8', windowsHide: true, timeout: 30_000 })
   assert.equal(started.status, 0, started.stderr || 'isolated PostgreSQL startup failed')
-  for (const file of ['scripts/migrated-json-store-smoke.mjs']) {
+  for (const file of ['scripts/migrated-json-store-smoke.mjs', 'scripts/circle-cli-session-smoke.mjs']) {
     const result = run(file)
     process.stdout.write(result.stdout || '')
     process.stderr.write(result.stderr || '')

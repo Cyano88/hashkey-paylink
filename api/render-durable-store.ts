@@ -152,3 +152,24 @@ export async function withDurablePostgresTransaction<T>(run: (client: pg.PoolCli
     throw error
   } finally { client.release() }
 }
+
+// A session-level lock remains held across the external CLI call. Each journal
+// update commits independently so a crash leaves a durable uncertain marker.
+export async function withDurableSessionLock<T>(key: string, run: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+  await ensureSchema()
+  const client = await requirePool().connect()
+  let locked = false
+  let discard = false
+  try {
+    const result = await client.query('select pg_try_advisory_lock(hashtextextended($1, 0)) as locked', [key])
+    locked = result.rows[0]?.locked === true
+    if (!locked) throw new Error('This wallet is processing another request. Try again shortly.')
+    return await run(client)
+  } finally {
+    if (locked) {
+      try { await client.query('select pg_advisory_unlock(hashtextextended($1, 0))', [key]) }
+      catch { discard = true }
+    }
+    client.release(discard)
+  }
+}
