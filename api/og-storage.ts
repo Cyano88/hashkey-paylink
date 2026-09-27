@@ -70,6 +70,7 @@ export type ArchiveRecord = {
   contextLabel?: string
   settlementType?: string
   amountNgn?: string
+  fiatCurrency?: 'NGN' | 'UGX'
   metadata?: Record<string, unknown>
 }
 

@@ -61,6 +61,7 @@ let routeAction
 let bridgeState = 'pending'
 let persistedOrder = processingOrder
 let refreshedOrder = processingOrder
+let historyReads = 0
 let handlerNow = 2
 const handler = createPocketBankWithdrawHandler({
   executions,
@@ -75,7 +76,8 @@ const handler = createPocketBankWithdrawHandler({
     calls.push({ kind: 'create', body: req.body, headers: req.headers })
     return { ok: true, link: { intent_id: processingOrder.intent_id, merchant_id: processingOrder.merchant_id } }
   },
-  listHistory: async () => ({ merchants: [{ merchant_id: processingOrder.merchant_id }], orders: [], bankSendLinks: [], bankSendOrders: [] }),
+  ownsMerchant: async (owner, merchant) => owner === 'privy-user-1' && merchant === processingOrder.merchant_id,
+  listHistory: async () => { historyReads++; return { merchants: [{ merchant_id: processingOrder.merchant_id }], orders: [], bankSendLinks: [], bankSendOrders: [] } },
   listActions: async () => routeAction ? [routeAction] : [],
   claimAction: async input => {
     routeAction = { id: 'route-1', ownerId: input.ownerId, idempotencyKey: input.idempotencyKey, action: input.action, status: 'started', metadata: input.metadata, createdAt: 1, updatedAt: 1 }
@@ -154,6 +156,7 @@ assert.equal(calls.at(-1).body.ensure_payable, true)
 const unsafeWindowHandler = createPocketBankWithdrawHandler({
   executions,
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
+  ownsMerchant: async (owner, merchant) => owner === 'privy-user-1' && merchant === processingOrder.merchant_id,
   listHistory: async () => ({ merchants: [{ merchant_id: processingOrder.merchant_id }], orders: [], bankSendLinks: [], bankSendOrders: [] }),
   invokeLegacy: async (_req, body) => ({ status: 200, body: { order: body.action === 'createOfframpOrder'
     ? { ...processingOrder, valid_until: new Date(Date.now() + 30_000).toISOString() }
@@ -168,8 +171,12 @@ const unsafeWindow = await request(unsafeWindowHandler, {
 assert.equal(unsafeWindow.statusCode, 409)
 assert.match(unsafeWindow.body.error, /too close to expiry/i)
 
+const historyBeforeRoute = historyReads
 const routeMissing = await request(handler, { action: 'routeStatus', intent_id: processingOrder.intent_id })
 assert.equal(routeMissing.body.data, null)
+assert.equal(historyReads, historyBeforeRoute, 'Ownership must not refresh payment history')
+const ethereumRoute = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'ethereum', destination: 'base', amount: '0.6' })
+assert.equal(ethereumRoute.statusCode,400)
 const routeZero = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'arbitrum', destination: 'base', amount: '0' })
 assert.equal(routeZero.statusCode, 400)
 const routeExcess = await request(handler, { action: 'routeStart', intent_id: processingOrder.intent_id, source: 'arbitrum', destination: 'base', amount: '1.000001' })
@@ -283,6 +290,7 @@ const expiryHandler = createPocketBankWithdrawHandler({
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   authorizeBankAccount: async () => ({ verification: { account_name: 'ADA LOVELACE' } }),
   createBankReceive: async () => ({ ok: true, link: { intent_id: expiredPendingOrder.intent_id, merchant_id: expiredPendingOrder.merchant_id } }),
+  ownsMerchant: async (owner, merchant) => owner === 'privy-user-1' && merchant === expiredPendingOrder.merchant_id,
   listHistory: async () => ({ merchants: [{ merchant_id: expiredPendingOrder.merchant_id }], orders: [], bankSendLinks: [], bankSendOrders: [] }),
   invokeLegacy: async (_req, body) => ({ status: 200, body: { ok: true, order: body.action === 'createOfframpOrder' ? processingOrder : expiredPendingOrder } }),
 })
@@ -303,6 +311,7 @@ assert.match(expiredAuthorize.body.error, /start a new payout/i)
 const forbidden = createPocketBankWithdrawHandler({
   executions,
   verifyUser: async () => ({ userId: 'other-user', email: 'other@example.com' }),
+  ownsMerchant: async () => false,
   listHistory: async () => ({ merchants: [], orders: [], bankSendLinks: [], bankSendOrders: [] }),
   invokeLegacy: async () => ({ status: 200, body: { order: processingOrder } }),
 })

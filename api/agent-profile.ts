@@ -1,8 +1,9 @@
+import { migratedJsonStore } from './migrated-json-store.js'
 import type { Request, Response } from 'express'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import crypto from 'node:crypto'
-import { readDurableJson, writeDurableJson } from './render-durable-store.js'
+import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './render-durable-store.js'
 
 const STORE_PATH = process.env.AGENT_PROFILE_STORE
   ?? (process.env.DATA_PATH ? `${process.env.DATA_PATH}/agent-profiles.json` : './data/agent-profiles.json')
@@ -98,7 +99,11 @@ function ownerKey(value: unknown) {
   return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 32)
 }
 
+const migratedStore = migratedJsonStore<Store>(AGENT_PROFILE_STORE_KEY, STORE_PATH, () => ({ agents: {} }))
+
 async function readStore(): Promise<Store> {
+  if (hasRenderDurableStore()) return migratedStore.read()
+  if (process.env.RENDER || process.env.RENDER_SERVICE_ID) throw new Error('Durable database storage is required.')
   try {
     const remote = await readDurableJson<Partial<Store>>(AGENT_PROFILE_STORE_KEY)
     if (remote) return { agents: remote.agents ?? {} }
@@ -114,6 +119,8 @@ async function readStore(): Promise<Store> {
 }
 
 async function writeStore(store: Store) {
+  if (hasRenderDurableStore()) return migratedStore.write(store)
+  if (process.env.RENDER || process.env.RENDER_SERVICE_ID) throw new Error('Durable database storage is required.')
   await mkdir(dirname(STORE_PATH), { recursive: true })
   const serialized = JSON.stringify(store, null, 2)
   await writeFile(STORE_PATH, serialized, 'utf8')

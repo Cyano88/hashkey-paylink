@@ -21,3 +21,8 @@ assert.equal(pocketActivityStatus({...handoff,bankSettlementStatus:'expired'}),'
 assert.equal(pocketActivityStatus({...handoff,bankSettlementStatus:'failed'}),'failed')
 assert.equal(paymentReceiptView(pocketActivityReceipt({...handoff,bankSettlementStatus:'settled'})).rows.find(r=>r.label==='Bank delivery').value,'Delivered')
 console.log('PASS fresh direct routing hints reject stale/insufficient balances; only verified bank handoffs succeed; bank delivery/refunds remain explicit')
+
+assert.equal(cachedPocketDirectLiquidity({...snapshot,displayRows:[{...row,stale:true,observedAt:now-120000}]},'base',1500000n,now,true)?.route.kind,'direct')
+assert.equal(cachedPocketDirectLiquidity({...snapshot,displayRows:[{...row,balance:1,stale:true}]},'base',1500000n,now,true),null)
+assert.equal(cachedPocketDirectLiquidity({...snapshot,displayRows:[{...row,known:false}]},'base',1500000n,now,true),null)
+console.log('PASS bank routing accepts sufficient known hints but never insufficient or unknown balances')

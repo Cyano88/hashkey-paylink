@@ -95,7 +95,7 @@ type NgPosStore = {
 }
 
 function loadRegistry(): Map<string, PaymentEntry[]> {
-  if (!DATA_FILE || !existsSync(DATA_FILE)) return new Map()
+  if (HAS_DURABLE_STORE || !DATA_FILE || !existsSync(DATA_FILE)) return new Map()
   try {
     const raw = JSON.parse(readFileSync(DATA_FILE, 'utf8')) as Record<string, PaymentEntry[]>
     console.log(`[registry] loaded ${Object.keys(raw).length} event(s) from disk`)
@@ -113,13 +113,14 @@ async function hydrateRegistry(): Promise<void> {
     registry.clear()
     for (const [eventId, entries] of Object.entries(remote)) registry.set(eventId, entries)
   } catch (e) {
+    if (HAS_DURABLE_STORE || IS_RENDER) throw new Error('Durable event registry storage is unavailable.')
     console.warn('[registry] durable load failed; using local registry.', e instanceof Error ? e.message : String(e))
   }
 }
 
 async function persistRegistry(): Promise<void> {
   const serialized = JSON.stringify(Object.fromEntries(registry))
-  if (DATA_FILE) {
+  if (DATA_FILE && !HAS_DURABLE_STORE) {
     const dir = dirname(DATA_FILE)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     writeFileSync(DATA_FILE, serialized, 'utf8')

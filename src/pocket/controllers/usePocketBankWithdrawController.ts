@@ -338,6 +338,15 @@ export default function usePocketBankWithdrawController({
             })
             if (activeIntentId.current !== intentId || cancelled.current) return
             setResult(submitted)
+            if (payoutHandoffSucceeded(submitted)) {
+              clearActivePocketBankPayout(intentId)
+              activeIntentId.current = ''
+              clearStoredOperation()
+              setStatus('sent')
+              setError('')
+              void refreshAfterSent()
+              return
+            }
             setStatus(submittedPayoutStatus(submitted))
             const confirmed = await confirmPocketBankWithdraw({
               accessToken,
@@ -533,6 +542,15 @@ export default function usePocketBankWithdrawController({
           })
           if (activeIntentId.current !== prepared.intentId) return
           setResult(submitted)
+          if (payoutHandoffSucceeded(submitted)) {
+            clearActivePocketBankPayout(prepared.intentId)
+            activeIntentId.current = ''
+            clearStoredOperation()
+            setStatus('sent')
+            setError('')
+            void refreshAfterSent()
+            return
+          }
           const confirmed = await confirmPocketBankWithdraw({
             accessToken,
             request: {

@@ -302,3 +302,21 @@ export async function readPocketDestinationLiquidity(accessToken:string, network
  if(data.wallet!==null&&(!isRecord(data.wallet)||typeof data.wallet.address!=='string'||typeof data.wallet.walletId!=='string'||typeof data.wallet.blockchain!=='string'))throw Error('Destination wallet unavailable.')
  return {balance:data.balance as number,wallet:data.wallet as CirclePocketWallets[UnifiedBalanceChainKey]|null}
 }
+
+export async function readPocketBankRoutingLiquidity(accessToken: string) {
+  const response = await fetch(POCKET_API.balances + '?routing=bank', { headers: { authorization: 'Bearer ' + accessToken }, cache: 'no-store', signal: AbortSignal.timeout(12000) })
+  const data = await response.json().catch(() => null)
+  const networks = ['base', 'arbitrum', 'arc', 'solana', 'polygon'] as const
+  if (!response.ok || !data?.ok || data.routing !== 'bank' || !Array.isArray(data.rows) || data.rows.length !== networks.length) throw Error('Payment balances unavailable.')
+  const wallets: CirclePocketWallets = {}
+  const rows = networks.map((key, index) => {
+    const row = data.rows[index]
+    if (row?.network !== key || (row.balance !== null && (typeof row.balance !== 'number' || !Number.isFinite(row.balance) || row.balance < 0))) throw Error('Payment balance unavailable.')
+    if (row.wallet !== null) {
+      if (!isRecord(row.wallet) || typeof row.wallet.address !== 'string' || typeof row.wallet.walletId !== 'string' || typeof row.wallet.blockchain !== 'string') throw Error('Payment wallet unavailable.')
+      wallets[key] = row.wallet as CirclePocketWallets[typeof key]
+    }
+    return { key, balance: row.balance ?? 0, status: row.balance === null ? 'error' : 'ok' }
+  })
+  return { rows, wallets }
+}
