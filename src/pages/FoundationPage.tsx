@@ -12,23 +12,23 @@ const POCKET_URL = 'https://pocket.hashpaylink.com'
 const products = [
   { index: '01', title: 'Pocket', meta: 'Everyday money', copy: 'Send, receive and request USDC. Pay bills, move money locally and manage your assets.', action: 'Open Pocket', href: POCKET_URL },
   { index: '02', title: 'XStocks', meta: 'On X Layer', copy: 'Explore tokenized stocks, buy, sell and swap supported assets, and track your holdings.', action: 'Explore stocks', href: `${POCKET_URL}/xstocks/home` },
-  { index: '03', title: 'XPay', meta: 'Scan to pay', copy: 'One QR for each business. Offer bank or mobile money settlement, USDC and selected stock assets.', action: 'Open XPay', href: `${POCKET_URL}/xpay` },
-  { index: '04', title: 'Local payments', meta: 'Nigeria and Uganda', copy: 'Send to supported Nigerian bank accounts or Ugandan mobile money providers from Pocket.', action: 'Send locally', href: `${POCKET_URL}/move/bank` },
+  { index: '03', title: 'XPay', meta: 'Scan to pay', copy: 'One QR for each business. Choose to receive local money, USDC or selected stock tokens.', action: 'Open XPay', href: `${POCKET_URL}/xpay` },
+  { index: '04', title: 'Local payments', meta: 'Nigeria and Uganda', copy: 'Send money from Pocket to supported bank accounts in Nigeria or mobile money accounts in Uganda.', action: 'Send locally', href: `${POCKET_URL}/move/bank` },
   { index: '05', title: 'Bills', meta: 'Everyday essentials', copy: 'Buy airtime, data, electricity and TV subscriptions in Nigeria, with payment records and refund tracking.', action: 'Open Bills', href: `${POCKET_URL}/bills` },
   { index: '06', title: 'Pocket Support', meta: 'Talk to us', copy: 'Find answers, report a transaction issue and continue the conversation with Hash or the support team.', action: 'Get support', href: `${POCKET_URL}/assistant` },
-  { index: '07', title: 'Developer platform', meta: 'Build on Hash PayLink', copy: 'Connect hosted checkout, verified payment status, signed webhooks and product APIs through your project.', action: 'Start building', href: '/developers' },
+  { index: '07', title: 'Developer platform', meta: 'Build on Hash PayLink', copy: 'Add a payment page to your app and get updates when customers pay.', action: 'Start building', href: '/developers' },
 ]
 
 const stack = [
-  { name: 'Circle', copy: 'USDC, Stablecoins wallet infrastructure and supported gas sponsorship.' },
+  { name: 'Circle', copy: 'USDC and wallets for Pocket Stablecoins, with network fees sponsored on supported routes.' },
   { name: 'Arc', copy: 'USDC payments and supported token swaps on Arc.' },
-  { name: '0G Labs', copy: 'Storage and onchain archive records for eligible payment proofs.' },
+  { name: '0G Labs', copy: 'Stores eligible payment records so they can be checked later.' },
   { name: 'X Layer', copy: 'The network for Pocket XStocks, asset transfers and stock payments.' },
-  { name: 'Privy', copy: 'Email sign-in and the embedded wallet used for XStocks.' },
-  { name: 'OKX DEX', copy: 'Quotes and swap routes for supported assets on X Layer.' },
+  { name: 'Privy', copy: 'Email sign-in and your wallet for XStocks.' },
+  { name: 'OKX DEX', copy: 'Finds prices and ways to swap supported assets on X Layer.' },
   { name: 'USDC networks', copy: 'Base, Arbitrum, Arc, Solana, Ethereum and Polygon in Pocket. Availability varies by action.' },
-  { name: 'Paycrest', copy: 'Local conversion and eligible bank or mobile money payouts.' },
-  { name: 'VTpass', copy: 'Airtime, data, electricity and TV bill fulfillment in Nigeria.' },
+  { name: 'Paycrest', copy: 'Converts payments into local money for supported bank and mobile money accounts.' },
+  { name: 'VTpass', copy: 'Delivers airtime, data, electricity and TV purchases in Nigeria.' },
 ]
 
 const proofStats = [
@@ -74,23 +74,25 @@ const featuredStocks = [
 ]
 
 const ecosystemPartners = [
-  { name: 'Circle', logo: '/brand/circle-logo.jpeg', role: 'USDC & wallet infrastructure', copy: 'Stablecoin wallet execution and supported gas sponsorship.', href: 'https://www.circle.com/' },
-  { name: 'Arc', logo: '/brand/arc-logo.jpeg', role: 'USDC payment network', copy: 'An integrated network for USDC payments and supported swaps.', href: 'https://www.arc.io/' },
-  { name: '0G Labs', logo: '/brand/0g-logo.jpeg', role: 'Verifiable payment records', copy: 'Storage and onchain anchoring for eligible payment proofs.', href: 'https://0g.ai/' },
-  { name: 'X Layer', role: 'Tokenized stock infrastructure', copy: 'The network behind Pocket XStocks, swaps and asset payments.', href: 'https://web3.okx.com/xlayer' },
+  { name: 'Circle', logo: '/brand/circle-logo.jpeg', role: 'Digital dollars and wallets', copy: 'USDC and wallet tools, including fee sponsorship on supported routes.', href: 'https://www.circle.com/' },
+  { name: 'Arc', logo: '/brand/arc-logo.jpeg', role: 'A network for USDC payments', copy: 'A blockchain network used for USDC payments and supported swaps.', href: 'https://www.arc.io/' },
+  { name: '0G Labs', logo: '/brand/0g-logo.jpeg', role: 'Payment records you can check', copy: 'Stores eligible payment records and proof that they were recorded.', href: 'https://0g.ai/' },
+  { name: 'X Layer', role: 'The network for XStocks', copy: 'Where Pocket users hold, swap and pay with supported stock tokens.', href: 'https://web3.okx.com/xlayer' },
 ]
 
 const faqs = [
-  { question: 'What is Hash PayLink?', answer: 'Hash PayLink connects everyday payments, tokenized assets and developer infrastructure. Pocket brings Stablecoins and XStocks into one app; XPay gives businesses reusable checkout QRs; developers can integrate payment and product APIs.' },
-  { question: 'What can I do in Pocket?', answer: 'Send, receive and request USDC, pay Nigerian bills, use eligible local payout routes, and manage tokenized stocks on X Layer. Each action shows the available route and quoted fees before approval. Cards are coming soon.' },
-  { question: 'How do XStocks work?', answer: 'Pocket uses a Privy embedded wallet on X Layer for supported stock tokens. You can view holdings and buy, sell, swap or transfer supported assets. Tokenized stock products are not the same as directly holding company shares; availability depends on the asset and eligibility.' },
-  { question: 'What can a business accept with XPay?', answer: 'Create a separate terminal for each business, then add bank or mobile money receiving options and supported wallet assets. Payers see the options enabled for that terminal. You can update those options without replacing the QR, download the QR, and view its payment history.' },
-  { question: 'How do bank and asset payments differ?', answer: 'A wallet payment delivers the selected supported asset to the merchant wallet. Bank and mobile money payouts use a local settlement route funded with Base USDC. A stock-funded bank route also needs conversion and bridging; the checkout shows whether that route is available and its progress.' },
-  { question: 'Which networks does Pocket support?', answer: 'Pocket Stablecoins supports USDC on Base, Arbitrum, Arc, Solana, Ethereum and Polygon. Pocket XStocks uses X Layer. Network support varies by action: a supported wallet network does not mean every checkout, bridge or payout route is available on it.' },
-  { question: 'Where are local payouts available?', answer: 'Pocket supports eligible Nigerian bank accounts and Ugandan mobile money providers. Available institutions, conversion rates, limits and fees are shown in the payment flow.' },
-  { question: 'What can developers integrate?', answer: 'The portal provides project configuration, server keys, hosted checkout, payment verification and signed webhooks. Agent checkout and additional product APIs have their own network and activation requirements. Check the public capabilities endpoint for current availability; not every Pocket feature is a public API.' },
-  { question: 'Where does 0G fit?', answer: 'Eligible payment proofs can be uploaded to 0G Storage and anchored onchain. Archive status is separate from payment status. Builders can also use 0G Compute for their own AI features alongside Hash PayLink payments.' },
-  { question: 'How do I get support?', answer: 'Open Support in Pocket for FAQs, transaction help and conversations with Hash, the AI agent. Cases that need a person can be handed to Pocket Support. You can also email support@hashpaylink.com.' },
+  { question: 'Why does Hash PayLink exist?', answer: 'Moving money can mean switching apps, copying wallet addresses, working out fees and chasing payment updates. Hash PayLink brings these steps together. People use Pocket, businesses accept payments with XPay, and developers can add the same payment tools to their apps.' },
+  { question: 'What is USDC, and what can I do with it?', answer: 'USDC is a digital dollar designed to stay close to one US dollar in value. In Pocket, it can do more than sit in a wallet: you can send it, request it, pay supported bills, pay a business, or use an available route to send local money.' },
+  { question: 'How does Pocket make payments simpler?', answer: 'Pocket brings the recipient, amount, available payment route and fees into one flow. You review and approve the payment; the app handles the connected wallet and provider steps and keeps the status in Activity. You do not need to manually move between several apps.' },
+  { question: 'Are payments always instant?', answer: 'No. We aim to remove unnecessary steps and show progress quickly, but timing still depends on the network, bank, mobile money or bill provider. Pocket shows the recorded status instead of calling an unfinished payment successful.' },
+  { question: 'How can I get exposure to overseas stocks?', answer: 'XStocks lets eligible users explore supported tokens linked to the value of foreign-listed stocks and funds that track groups of stocks (ETFs). You can buy, sell, swap and hold supported assets on X Layer. These are tokenized products, not direct company shares; prices can fall, and availability depends on your location and the asset.' },
+  { question: 'What can a business accept with XPay?', answer: 'Create one terminal for each business. Choose whether to receive local bank or mobile money payments, USDC, or supported stock tokens. Customers scan the QR and choose from the options you enabled. Change those options, download the QR and view the business payment history in Pocket.' },
+  { question: 'Does a bank receive stock tokens?', answer: 'No. A direct asset payment goes to the merchant wallet. Bank and mobile money payments use a local payout service funded with USDC on Base. If a stock-funded route is available, the stock must first be swapped and the funds moved to the payout network.' },
+  { question: 'Which networks and countries can I use?', answer: 'Pocket supports USDC wallets on Base, Arbitrum, Arc, Solana, Ethereum and Polygon. XStocks uses X Layer. Local payouts support eligible Nigerian bank accounts and Ugandan mobile money providers. The payment screen shows which route is available for your action.' },
+  { question: 'How do I build with Hash PayLink?', answer: 'Open the developer portal, create a project and follow the API guide. You can add a ready-made payment page, check whether a payment completed and receive secure payment updates. An API is how your app talks to Hash PayLink. Available products depend on your project settings and activation.' },
+  { question: 'Can developers use every Pocket feature?', answer: 'Not yet. Public checkout supports specific networks. Some swap and agreement tools need project activation, Arc Agreements remains draft-only, and a general bridge API is not available. The public API availability page shows the current position before you build.' },
+  { question: 'What does 0G do here?', answer: 'Eligible payment records can be stored with 0G so they can be checked later. Saving that record is separate from completing the payment. Builders can also use 0G Compute to run their own AI features and connect Hash PayLink for payments.' },
+  { question: 'How do I get help?', answer: 'Open Support in Pocket for FAQs, transaction help and a chat with Hash, the AI agent. If a person is needed, your case can go to Pocket Support. You can also email support@hashpaylink.com. Cards are still coming soon.' },
 ]
 
 function HashMark({ className = '' }: { className?: string }) {
@@ -293,7 +295,7 @@ export default function FoundationPage() {
   }, [])
 
   return (
-    <main className="min-h-[100dvh] bg-[#f7f6f2] text-[#0d1117]">
+    <main data-foundation-colour-scope="light" className="min-h-[100dvh] bg-[#f7f6f2] text-[#0d1117]">
       <style>{`
         @keyframes hpl-rail {
           from { transform: translate3d(0, 0, 0); }
@@ -318,6 +320,8 @@ export default function FoundationPage() {
           animation-delay: var(--delay, 0ms);
           backface-visibility: hidden;
         }
+        /* Foundation keeps its designed light surfaces even when the app theme is dark. */
+        [data-foundation-colour-scope] { color-scheme: light; }
         .foundation-ending { height: auto !important; min-height: 100dvh; }
         .foundation-ending footer { padding-top: 80px; padding-bottom: 36px; }
         .foundation-light-section {
@@ -1007,7 +1011,7 @@ export default function FoundationPage() {
               <a href="#retail" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">XPay</a>
               <a href="#pocket" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">Pocket</a>
               <a href="#xstocks" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">XStocks</a>
-                <a href="#stack" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">Infrastructure</a>
+                <a href="#stack" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">Technology</a>
               <a href="#api" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">API</a>
               <Link to="/developers" className="rounded-full px-3.5 py-1.5 transition hover:bg-white/[.08] hover:text-white">Developers</Link>
             </nav>
@@ -1056,7 +1060,7 @@ export default function FoundationPage() {
                 <a href="#retail" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">XPay</a>
                 <a href="#pocket" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Pocket</a>
                 <a href="#xstocks" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">XStocks</a>
-                <a href="#stack" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Infrastructure</a>
+                <a href="#stack" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Technology</a>
                 <a href="#api" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Hosted Checkout API</a>
                 <Link to="/developers" onClick={() => setMobileNavOpen(false)} className="rounded-lg border border-white/[.08] bg-white/[.035] px-4 py-3 hover:border-white/[.16] hover:bg-white/[.06]">Developers</Link>
               </nav>
@@ -1068,13 +1072,13 @@ export default function FoundationPage() {
           <div className="foundation-mobile-hero-grid relative grid flex-1 items-center gap-10 pb-14 pt-12 lg:grid-cols-[minmax(0,1fr)_minmax(420px,540px)] lg:pt-16">
             <div className="hpl-reveal relative z-10 max-w-2xl text-left">
               <p className="max-w-[18rem] text-[10px] font-semibold uppercase tracking-[0.26em] text-blue-700 sm:max-w-none sm:text-[11px] sm:tracking-[0.36em]">
-                Payments and tokenized assets
+                Digital dollars. Stocks. Everyday payments.
               </p>
               <h1 className="mt-5 max-w-[18rem] text-balance text-[40px] font-semibold leading-[1] tracking-[-0.055em] sm:max-w-none sm:text-7xl sm:leading-[0.94] lg:text-[clamp(52px,5.7vw,86px)]">
                 Move money. Put assets to work.
               </h1>
               <p className="mt-6 max-w-[18rem] text-sm leading-7 text-slate-600 sm:max-w-xl sm:text-[15px]">
-                Stablecoin payments, tokenized stocks and local money movement. One connected ecosystem for people, businesses and builders.
+                Send digital dollars, pay everyday expenses and explore tokenized stocks. Use Pocket, accept payments with XPay, or build payments into your own app.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <a
@@ -1133,12 +1137,12 @@ export default function FoundationPage() {
         <div className="absolute left-[48%] top-1/2 h-[620px] w-[620px] -translate-y-1/2 rounded-full bg-blue-100/[.30] blur-3xl" />
         <div className="hpl-section-content relative z-10 mx-auto grid min-h-[100dvh] w-full max-w-7xl items-center gap-10 px-5 py-20 max-sm:min-h-0 max-sm:py-0 sm:px-8 lg:grid-cols-[.72fr_1.28fr] lg:px-10">
           <div className="max-w-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 max-sm:text-[10px] max-sm:tracking-[0.22em]">Product surface</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500 max-sm:text-[10px] max-sm:tracking-[0.22em]">Use Hash PayLink</p>
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-gray-950 max-sm:mt-2 sm:text-5xl">
-              One platform. Connected workflows.
+              For you, your business and your next idea.
             </h2>
             <p className="mt-4 max-w-xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-              Payments, wallets, intelligence, and activity stay connected across the platform.
+              Use it yourself, accept payments for your business, or build with our tools.
             </p>
           </div>
 
@@ -1297,7 +1301,7 @@ export default function FoundationPage() {
           <div className="max-w-xl">
             <p className="section-detail-reveal text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]" style={{ '--section-reveal-delay': '60ms' } as CSSProperties}>Pocket · Stablecoins + XStocks</p>
             <h2 className="section-detail-reveal mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 max-sm:mt-2 sm:text-5xl" style={{ '--section-reveal-delay': '115ms' } as CSSProperties}>
-              Everyday money. Tokenized stocks. One Pocket.
+              Your money and stocks, in one Pocket.
             </h2>
             <p className="foundation-mobile-command-copy section-detail-reveal mt-5 text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5" style={{ '--section-reveal-delay': '170ms' } as CSSProperties}>
               Pay, send and receive with Stablecoins. Explore and trade supported stock assets on X Layer. Keep balances and activity clear in each part of Pocket.
@@ -1447,7 +1451,7 @@ export default function FoundationPage() {
             <h2 className="mt-4 text-4xl font-semibold leading-tight tracking-[-.045em] sm:text-5xl">A new side to your Pocket.</h2>
             <p className="mt-5 text-sm leading-7 text-slate-600">Discover tokenized stocks, manage individual holdings and buy, sell or swap supported assets. Use selected assets at XPay terminals that accept them.</p>
             <a href={`${POCKET_URL}/xstocks/home`} className="foundation-primary-cta mt-7 inline-flex h-12 items-center gap-4 px-5 text-sm font-semibold">Explore XStocks <ArrowRight className="h-4 w-4" /></a>
-            <p className="mt-5 max-w-md text-xs leading-5 text-slate-500">Tokenized stock products provide stock-linked exposure. They are different from directly owning shares. Asset availability and eligibility apply.</p>
+            <p className="mt-5 max-w-md text-xs leading-5 text-slate-500">These tokens follow the value of stocks. They are not the same as owning company shares, and their value can fall. Availability and eligibility apply.</p>
           </div>
           <div className="rounded-[28px] border border-slate-200 bg-white p-6 sm:p-8">
             <div className="flex items-center justify-between border-b border-slate-100 pb-5"><span className="flex items-center gap-2 font-semibold"><CPurseIcon size={24} />Pocket</span><span className="rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white">XStocks</span></div>
@@ -1466,12 +1470,12 @@ export default function FoundationPage() {
         <div className="hpl-section-content relative z-10 mx-auto flex min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center">
           <div className="grid w-full gap-12 max-sm:gap-5 lg:grid-cols-[.78fr_1.22fr]">
             <div id="about" key="stack-copy-v2" className="max-w-xl">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">Infrastructure stack</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">Built with</p>
               <h2 className="mt-3 max-w-xl text-4xl font-semibold tracking-[-0.04em] max-sm:mt-2 sm:text-5xl">
-                Trusted rails. Defined roles.
+                The technology behind your payments.
               </h2>
               <p className="mt-5 max-w-xl text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
-                Each part of the ecosystem has a defined role, from wallet execution to local payouts and asset trading.
+                These services help Pocket manage wallets, move payments, trade supported assets and keep records.
               </p>
             </div>
 
@@ -1495,19 +1499,19 @@ export default function FoundationPage() {
         <div className="absolute left-[44%] top-1/2 h-[620px] w-[620px] -translate-y-1/2 rounded-full bg-blue-100/[.30] blur-3xl" />
         <div className="hpl-section-content relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-10 lg:grid-cols-[.72fr_1.28fr]">
           <div className="max-w-xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">Hosted Checkout API</p>
-            <h2 className="mt-4 text-4xl font-semibold tracking-[-0.045em] text-slate-950 sm:text-5xl">Build with the same payment foundation.</h2>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700">For developers</p>
+            <h2 className="mt-4 text-4xl font-semibold tracking-[-0.045em] text-slate-950 sm:text-5xl">Add payments to what you are building.</h2>
             <p className="mt-5 max-w-lg text-sm leading-6 text-slate-700">
-              Create a project, configure its products and connect checkout, payment verification and signed updates. Human and agent payment paths have their own supported networks.
+              Create a developer project, connect a payment page and receive updates when people pay. Your app can check the result before delivering a product or service.
             </p>
           </div>
 
           <aside className="foundation-surface-card api-portal-card overflow-hidden rounded-[28px] px-5 py-2 text-slate-950 sm:px-6" style={{ backgroundColor: '#ffffff', color: '#0f172a', colorScheme: 'light' }}>
             {[
-              { icon: Wallet, title: 'Hosted checkout', copy: 'Customers review the amount, choose a network, and pay with Pocket.' },
-              { icon: Activity, title: 'Agent checkout', copy: 'Integrate the configured agent payment path and verify its authoritative payment status.' },
-              { icon: ArrowLeftRight, title: 'Product APIs', copy: 'Explore project-enabled swaps, XStocks Agreements and funding integrations.' },
-              { icon: ShieldCheck, title: 'Verified status', copy: 'Confirm payment before fulfillment and receive signed webhook events.' },
+              { icon: Wallet, title: 'A ready-made payment page', copy: 'Customers review the amount and pay, without you building the whole checkout.' },
+              { icon: Activity, title: 'Payments for AI tools', copy: 'Connect supported agent payment flows, with clear approval and payment checks.' },
+              { icon: ArrowLeftRight, title: 'More tools for your app', copy: 'Explore swaps, XStocks Agreements and funding tools where enabled for your project.' },
+              { icon: ShieldCheck, title: 'Know when someone has paid', copy: 'Check payment status and receive secure updates, called webhooks.' },
             ].map(({ icon: Icon, title, copy }, index) => (
               <div key={title} className="grid grid-cols-[32px_minmax(0,1fr)] items-center gap-3 border-b border-slate-100 py-3">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-950 text-white"><Icon className="h-3.5 w-3.5" /></span>
@@ -1522,7 +1526,7 @@ export default function FoundationPage() {
             ))}
 
             <div className="border-b border-slate-100 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-[.16em] text-slate-500">Coverage</p>
+              <p className="text-[9px] font-semibold uppercase tracking-[.16em] text-slate-500">Available networks</p>
               <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-semibold text-slate-700">
                 {['Human checkout: Base, Arbitrum, Arc', 'Agent checkout: Base, Arc', 'Product APIs: activation required'].map(item => (
                   <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">{item}</span>
@@ -1547,7 +1551,7 @@ export default function FoundationPage() {
                     <h3 className="api-card-title text-sm font-semibold text-slate-950">Developer portal</h3>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[.1em] text-slate-500">Privy secured</span>
                   </div>
-                  <p className="api-card-copy mt-1 max-w-md text-[11px] leading-4 text-slate-600">Configure routing, generate a server key, and connect signed payment updates.</p>
+                  <p className="api-card-copy mt-1 max-w-md text-[11px] leading-4 text-slate-600">Choose your project settings, create an API key and connect payment updates.</p>
                 </div>
               </div>
               <div className="flex gap-2 sm:flex-col">
@@ -1564,13 +1568,35 @@ export default function FoundationPage() {
         </div>
       </section>
 
+      <section id="projects" data-no-text-reveal className="foundation-light-section foundation-deck-section foundation-mobile-section hpl-snap-section relative overflow-hidden">
+        <div className="hpl-section-content relative mx-auto flex w-full max-w-7xl flex-col justify-center gap-9 px-5 sm:px-8 lg:px-10">
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[.22em] text-blue-700">The wider ecosystem</p>
+            <h2 className="mt-3 text-4xl font-semibold tracking-[-.045em] text-slate-950 sm:text-5xl">Projects building on our rails</h2>
+            <p className="mt-5 text-sm leading-7 text-slate-600">These projects use Hash PayLink to connect payments, check their progress and provide receipts.</p>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            {[
+              {name:'Hash PayStream',label:'Payments, work and trade',copy:'Send USDC, manage work agreements and trade using XStocks on X Layer. Hash PayLink connects the payment steps, status updates and receipts.',href:'https://hashpaystream.app'},
+              {name:'PolyDesk',label:'Tools for Polymarket apps and agents',copy:'Tools that help apps and AI agents work with Polymarket prediction markets. Hash PayLink handles funding checkout, payment checks and receipts.',href:'https://polydesk.trade'},
+            ].map(project => <article key={project.name} className="foundation-surface-card flex flex-col rounded-[28px] p-6 sm:p-8">
+              <p className="text-xs font-medium text-blue-700">{project.label}</p>
+              <h3 className="mt-4 text-2xl font-semibold tracking-tight text-slate-950">{project.name}</h3>
+              <p className="mt-4 max-w-lg text-sm leading-7 text-slate-600">{project.copy}</p>
+              <a href={project.href} target="_blank" rel="noreferrer" className="foundation-primary-cta mt-7 inline-flex min-h-12 w-fit items-center gap-4 px-5 text-sm font-semibold">Explore {project.name}<ArrowRight className="h-4 w-4" /></a>
+            </article>)}
+          </div>
+          <Link to="/developers" className="inline-flex w-fit items-center gap-3 text-sm font-semibold text-blue-700 underline underline-offset-4">Building something of your own? Start here <ArrowRight className="h-4 w-4" /></Link>
+        </div>
+      </section>
+
       <section id="faq" key="foundation-faq-current-v4" data-no-text-reveal className="foundation-light-section foundation-deck-section foundation-mobile-section foundation-mobile-section-tight hpl-snap-section relative overflow-hidden px-5 py-24 text-gray-950 sm:px-8 lg:px-10">
         <div className="foundation-section-backdrop absolute inset-0 bg-[radial-gradient(circle_at_15%_18%,rgba(37,99,235,.08),transparent_30%),radial-gradient(circle_at_86%_72%,rgba(14,165,233,.08),transparent_32%)]" />
         <div className="hpl-section-content relative z-10 mx-auto grid min-h-[calc(100dvh-12rem)] w-full max-w-7xl items-center gap-12 max-sm:min-h-0 max-sm:gap-4 lg:grid-cols-[.78fr_1.22fr]">
           <div className="max-w-xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-blue-700 max-sm:text-[10px] max-sm:tracking-[0.22em]">FAQs</p>
             <h2 className="mt-3 text-4xl font-semibold tracking-[-0.045em] text-gray-950 max-sm:mt-2 sm:text-5xl">
-              Clear answers before integration.
+              A few things you might want to know.
             </h2>
             <p className="mt-5 text-sm leading-6 text-gray-600 max-sm:mt-2 max-sm:text-xs max-sm:leading-5">
               Pocket, XStocks, XPay and developer tools, explained simply.
@@ -1628,13 +1654,14 @@ export default function FoundationPage() {
           <div className="grid gap-10 pb-12 md:grid-cols-[1.3fr_1fr_1fr]">
             <div>
               <a href="#" className="inline-flex items-center gap-3 text-xl font-semibold tracking-tight" aria-label="Hash PayLink home"><HashMark className="h-9 w-9 object-contain" />Hash PayLink</a>
-              <p className="mt-4 max-w-sm text-sm leading-6 text-slate-500">Stablecoins, tokenized stocks and payments that connect to everyday life.</p>
+              <p className="mt-4 max-w-sm text-sm leading-6 text-slate-500">Digital dollars, stock tokens and simpler everyday payments.</p>
             </div>
             <nav aria-label="Explore Hash PayLink" className="space-y-3 text-sm">
               <p className="mb-4 font-semibold">Explore</p>
               <a className="block text-slate-600 hover:text-black" href={POCKET_URL}>Pocket</a>
               <a className="block text-slate-600 hover:text-black" href={`${POCKET_URL}/xstocks/home`}>XStocks</a>
               <a className="block text-slate-600 hover:text-black" href={`${POCKET_URL}/xpay`}>XPay</a>
+              <a className="block text-slate-600 hover:text-black" href="#projects">Projects on our rails</a>
               <Link className="block text-slate-600 hover:text-black" to="/developers">Developer portal</Link>
             </nav>
             <nav aria-label="Contact Hash PayLink" className="space-y-3 text-sm">
@@ -1645,7 +1672,7 @@ export default function FoundationPage() {
             </nav>
           </div>
           <div className="border-t border-slate-200 pt-9">
-            <p className="text-center text-sm leading-6 text-slate-500">Built with ecosystem infrastructure that connects digital dollars, tokenized stocks and verifiable payments.</p>
+            <p className="text-center text-sm leading-6 text-slate-500">Built with partners that help us move digital dollars, support stocks and keep payment records.</p>
             <div className="mt-10 grid gap-x-10 gap-y-9 sm:grid-cols-2 lg:grid-cols-4">
               {ecosystemPartners.map(partner => <a key={partner.name} href={partner.href} target="_blank" rel="noreferrer" className="group block">
                 <div className="flex h-12 items-center gap-3">

@@ -29,3 +29,12 @@ Footer includes support@hashpaylink.com, Hash_PayLink and PocketByHash on X, pro
 - XStocks catalog images load successfully.
 - Focused TypeScript check reports the same pre-existing missing lucide-react declaration diagnostic on unchanged HEAD and the updated file. No new page diagnostic observed. No whole-repository typecheck claim.
 - Production build and deployment results are recorded in the delivery response.
+
+## Follow-up: theme isolation, plain language and ecosystem projects
+
+- Reproduced the live dark-theme failure: footer background rgb(30,30,30), main text rgb(2,6,23), muted text rgb(85,85,85). Generic application dark-mode utility overrides were recoloring the marketing page.
+- Added a DOM-scoped Foundation marker and excluded it from those generic overrides. The saved theme preference is unchanged; other application routes retain the original dark styling when Foundation is absent.
+- Simplified hero, product, provider and developer language. Added FAQs explaining the payment steps Hash PayLink combines, what USDC can do, overseas stock-token exposure, developer onboarding, and actual timing/product limits.
+- Added Projects building on our rails. Hash PayStream public page (https://hashpaystream.app) currently says payments, work and trade, including USDC and XStocks; used that instead of older savings/early-pay README wording. PolyDesk live manifest (https://polydesk.trade/.well-known/polydesk.json) and current README identify app/agent Polymarket services, with Hash PayLink as the funding checkout and payment-receipt boundary.
+- Repeatable test: `node scripts/foundation-theme-browser-smoke.mjs`. It checks 45-47 CTA/footer text elements against 4.5:1 contrast in light and dark at widths 390, 1024 and 1440; no horizontal page overflow; original dark utility behavior outside Foundation; every FAQ expands; project URLs; mobile footer reachability. All passed.
+- Visually inspected corrected dark-setting footer and ecosystem cards. This page intentionally preserves the reference's light surfaces under both app theme settings.
