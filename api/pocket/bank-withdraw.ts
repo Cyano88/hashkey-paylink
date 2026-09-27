@@ -502,8 +502,15 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
             transactionHash: txHash,
           })
         }
+        // Persist first, then return verified handoff without a second HTTP round trip.
+        const proof = await dependencies.invokeLegacy(req, {
+          action:'markOfframpPaid',intent_id:id,tx_hash:txHash,
+          payer_wallet:ownedOrder.payer_wallet,payer_email:identity.email,
+        }).catch(()=>null)
+        const current = proof?.status===200&&proof.body?.order?.tx_hash ? proof.body.order : ownedOrder
+        if (current !== ownedOrder) execution = await syncExecution(identity.userId,current,dependencies)
         const route = routeRecord(await ownedRoute(identity, text(ownedOrder.intent_id), dependencies))
-        return res.json({ ok: true, data: publicOrder(ownedOrder, execution, route) })
+        return res.json({ ok: true, data: publicOrder(current, execution, route) })
       }
 
       if (action === 'confirm') {

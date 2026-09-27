@@ -9,7 +9,7 @@ import {
   type PocketCheckoutRoute,
 } from '../../lib/pocketCheckoutRouting'
 import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge } from '../api/pocketBridgeClient'
-import { readPocketBalances, readPocketLinkedWallets } from '../api/pocketReadClient'
+import { readPocketBalances, readPocketLinkedWallets, readPocketDestinationLiquidity } from '../api/pocketReadClient'
 import { bridgeCircleSolanaWallet } from '../lib/pocketSolanaBridge'
 import type { CirclePocketWallet, CirclePocketWallets } from '../models/pocketWallet'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
@@ -45,6 +45,11 @@ async function inspectLiquidity(input: {
   destination: PocketCheckoutNetwork
   amountUnits: bigint
 }) {
+  // A slow unrelated chain must not hold up a funded destination.
+  const destination = await readPocketDestinationLiquidity(input.accessToken,input.destination).catch(()=>null)
+  if(destination?.wallet && parseUnits((Math.floor(destination.balance*1_000_000)/1_000_000).toFixed(6),6)>=input.amountUnits) {
+    return {route:{kind:'direct',destination:input.destination,amountUnits:input.amountUnits} as PocketCheckoutRoute, wallets:{[input.destination]:destination.wallet} as CirclePocketWallets}
+  }
   const [snapshot, wallets] = await Promise.all([
     readPocketBalances({ accessToken: input.accessToken }),
     readPocketLinkedWallets({ accessToken: input.accessToken }),

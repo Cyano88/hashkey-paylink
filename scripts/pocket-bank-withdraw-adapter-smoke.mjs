@@ -214,7 +214,7 @@ const submittedTransfer = await request(handler, {
 assert.equal(submittedTransfer.statusCode, 200)
 assert.equal(submittedTransfer.body.data.nextAction, 'provider_processing')
 assert.equal(submittedTransfer.body.data.txHash, `0x${'2'.repeat(64)}`)
-assert.equal(submittedTransfer.body.data.handoffVerified, false)
+assert.equal(submittedTransfer.body.data.handoffVerified, true)
 const duplicateSubmittedTransfer = await request(handler, {
   action: 'submit',
   intent_id: processingOrder.intent_id,
@@ -228,6 +228,7 @@ const conflictingSubmittedTransfer = await request(handler, {
 })
 assert.equal(conflictingSubmittedTransfer.statusCode, 409)
 
+persistedOrder = processingOrder // Simulate a submission whose first proof was not yet available.
 const callsBeforeRecovery = calls.length
 const recoveredHandoff = await request(handler, { action: 'status', intent_id: processingOrder.intent_id })
 assert.equal(recoveredHandoff.statusCode, 200)

@@ -127,6 +127,16 @@ export function createPocketBalancesHandler(dependencies: PocketBalancesHandlerD
 
     try {
       const identity = await dependencies.verifyUser(req)
+      if (req.query?.network !== undefined) {
+        const network = String(req.query.network) as PocketNetwork
+        if (!POCKET_NETWORKS.includes(network)) return fail(400, 'VALIDATION_FAILED', 'Choose a supported network.', false)
+        const link = await dependencies.readLink(circleLinkKey(identity.userId, network, 'payment'))
+        if (!link) return res.json({ok:true,network,balance:0,wallet:null})
+        if (link.chain !== network || (link.purpose ?? 'payment') !== 'payment') return fail(503,'PROVIDER_UNAVAILABLE','Wallet network could not be verified.',true)
+        const balance = await dependencies.readBalance(network,link.circleWalletAddress,true)
+        if (!Number.isFinite(balance) || balance < 0) return fail(503,'PROVIDER_UNAVAILABLE','Balance unavailable.',true)
+        return res.json({ok:true,network,balance,wallet:{walletId:link.circleWalletId,address:link.circleWalletAddress,blockchain:link.circleBlockchain,updatedAt:link.updatedAt}})
+      }
       const updatePromise = dependencies.readWalletUpdate
         ? withTimeout(Promise.resolve().then(() => dependencies.readWalletUpdate!(identity.userId)), 'Wallet update', 500).catch(() => undefined)
         : Promise.resolve(undefined)
