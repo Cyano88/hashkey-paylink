@@ -1,0 +1,602 @@
+{
+  "FCMBNGLA": {
+    "name": "FCMB",
+    "src": "/brand/banks/FCMBNGLA.png"
+  },
+  "UBNINGLA": {
+    "name": "Union Bank",
+    "src": "/brand/banks/UBNINGLA.png"
+  },
+  "FBNINGLA": {
+    "name": "First Bank Of Nigeria",
+    "src": "/brand/banks/FBNINGLA.png"
+  },
+  "UNAFNGLA": {
+    "name": "United Bank for Africa",
+    "src": "/brand/banks/UNAFNGLA.png"
+  },
+  "GTBINGLA": {
+    "name": "Guaranty Trust Bank",
+    "src": "/brand/banks/GTBINGLA.png"
+  },
+  "PRDTNGLA": {
+    "name": "Polaris Bank",
+    "src": "/brand/banks/PRDTNGLA.png"
+  },
+  "ABNGNGLA": {
+    "name": "Access Bank",
+    "src": "/brand/banks/ABNGNGLA.png"
+  },
+  "FIDTNGLA": {
+    "name": "Fidelity Bank",
+    "src": "/brand/banks/FIDTNGLA.png"
+  },
+  "ECOCNGLA": {
+    "name": "Ecobank Bank",
+    "src": "/brand/banks/ECOCNGLA.png"
+  },
+  "SCBLNGLA": {
+    "name": "Standard Chartered Bank",
+    "src": "/brand/banks/SCBLNGLA.png"
+  },
+  "ICITNGLA": {
+    "name": "Unity Bank",
+    "src": "/brand/banks/ICITNGLA.png"
+  },
+  "PLNINGLA": {
+    "name": "Keystone Bank",
+    "src": "/brand/banks/PLNINGLA.png"
+  },
+  "HBCLNGLA": {
+    "name": "Heritage",
+    "src": "/brand/banks/HBCLNGLA.png"
+  },
+  "CITINGLA": {
+    "name": "Citibank",
+    "src": "/brand/banks/CITINGLA.png"
+  },
+  "NAMENGLA": {
+    "name": "Sterling Bank",
+    "src": "/brand/banks/NAMENGLA.png"
+  },
+  "KDHLNGLA": {
+    "name": "FBNQuest Merchant Bank",
+    "src": "/brand/banks/KDHLNGLA.png"
+  },
+  "SUTGNGLA": {
+    "name": "Suntrust Bank",
+    "src": "/brand/banks/SUTGNGLA.png"
+  },
+  "JAIZNGLA": {
+    "name": "Jaiz Bank",
+    "src": "/brand/banks/JAIZNGLA.png"
+  },
+  "FIRNNGLA": {
+    "name": "Rand Merchant Bank",
+    "src": "/brand/banks/FIRNNGLA.png"
+  },
+  "FSDHNGLA": {
+    "name": "FSDH Merchant Bank",
+    "src": "/brand/banks/FSDHNGLA.png"
+  },
+  "GMBLNGLA": {
+    "name": "Greenwich Merchant Bank",
+    "src": "/brand/banks/GMBLNGLA.png"
+  },
+  "ZEIBNGLA": {
+    "name": "Zenith Bank",
+    "src": "/brand/banks/ZEIBNGLA.png"
+  },
+  "KUDANGPC": {
+    "name": "Kuda Microfinance Bank",
+    "src": "/brand/banks/KUDANGPC.png"
+  },
+  "WEMANGLA": {
+    "name": "Wema Bank",
+    "src": "/brand/banks/WEMANGLA.png"
+  },
+  "OPAYNGPC": {
+    "name": "OPay",
+    "src": "/brand/banks/OPAYNGPC.png"
+  },
+  "PAYTNGPC": {
+    "name": "Paystack-Titan MFB",
+    "src": "/brand/banks/PAYTNGPC.png"
+  },
+  "MONINGPC": {
+    "name": "Moniepoint MFB",
+    "src": "/brand/banks/MONINGPC.png"
+  },
+  "SAHVNGPC": {
+    "name": "Safe Haven MFB",
+    "src": "/brand/banks/SAHVNGPC.png"
+  },
+  "PALMNGPC": {
+    "name": "PalmPay",
+    "src": "/brand/banks/PALMNGPC.png"
+  },
+  "BELLNGPC": {
+    "name": "BellBank MFB",
+    "src": "/brand/banks/BELLNGPC.png"
+  },
+  "UMPLNGLA": {
+    "name": "Providus Bank",
+    "src": "/brand/banks/UMPLNGLA.png"
+  },
+  "SBICNGLX": {
+    "name": "Stanbic IBTC Bank",
+    "src": "/brand/banks/SBICNGLX.png"
+  },
+  "CMBBNGLA": {
+    "name": "Coronation Merchant Bank",
+    "src": "/brand/banks/CMBBNGLA.png"
+  },
+  "PTRUNGLA": {
+    "name": "PremiumTrust Bank",
+    "src": "/brand/banks/PTRUNGLA.png"
+  },
+  "HPSBNGLA": {
+    "name": "Hope Payment Service Bank",
+    "src": "/brand/banks/HPSBNGLA.png"
+  },
+  "MOMONGPC": {
+    "name": "MoMo Payment Service Bank",
+    "src": "/brand/banks/MOMONGPC.png"
+  },
+  "IPSBNGLA": {
+    "name": "9 Payment Service Bank",
+    "src": "/brand/banks/IPSBNGLA.png"
+  },
+  "CARBNGPC": {
+    "name": "Carbon",
+    "src": "/brand/banks/CARBNGPC.png"
+  },
+  "SMARNGPC": {
+    "name": "Smartcash Payment Service Bank",
+    "src": "/brand/banks/SMARNGPC.png"
+  },
+  "GOMONGPC": {
+    "name": "GoMoney",
+    "src": "/brand/banks/GOMONGPC.png"
+  },
+  "PAGANGPC": {
+    "name": "Paga",
+    "src": "/brand/banks/PAGANGPC.png"
+  },
+  "NVMBNGLA": {
+    "name": "Nova Bank",
+    "src": "/brand/banks/NVMBNGLA.png"
+  },
+  "TTRUNGLA": {
+    "name": "Titan Trust Bank",
+    "src": "/brand/banks/TTRUNGLA.png"
+  },
+  "GLOUNGLA": {
+    "name": "Globus Bank",
+    "src": "/brand/banks/GLOUNGLA.png"
+  },
+  "OPTSNGLA": {
+    "name": "Optimus Bank",
+    "src": "/brand/banks/OPTSNGLA.png"
+  },
+  "PARANGLA": {
+    "name": "Parallex Bank",
+    "src": "/brand/banks/PARANGLA.png"
+  },
+  "SNIGNGLA": {
+    "name": "Signature Bank",
+    "src": "/brand/banks/SNIGNGLA.png"
+  },
+  "TAJJNGLA": {
+    "name": "TAJ Bank",
+    "src": "/brand/banks/TAJJNGLA.png"
+  },
+  "LOTUNGLA": {
+    "name": "Lotus Bank",
+    "src": "/brand/banks/LOTUNGLA.png"
+  },
+  "ABBENGPC": {
+    "name": "Abbey Mortgage Bank",
+    "src": "/brand/banks/ABBENGPC.png"
+  },
+  "FAIRNGPC": {
+    "name": "Fairmoney Microfinance Bank",
+    "src": "/brand/banks/FAIRNGPC.png"
+  },
+  "SPARNGPC": {
+    "name": "Sparkle Microfinance Bank",
+    "src": "/brand/banks/SPARNGPC.png"
+  },
+  "VFDXNGPC": {
+    "name": "VFD Microfinance Bank",
+    "src": "/brand/banks/VFDXNGPC.png"
+  },
+  "TANGNGPC": {
+    "name": "Tangerine Bank",
+    "src": "/brand/banks/TANGNGPC.png"
+  },
+  "ABOVNGPC": {
+    "name": "Above Only Microfinance Bank",
+    "src": "/brand/banks/ABOVNGPC.png"
+  },
+  "ABXXNGPC": {
+    "name": "AB Microfinance Bank",
+    "src": "/brand/banks/ABXXNGPC.png"
+  },
+  "ACCINGPC": {
+    "name": "Accion Microfinance Bank",
+    "src": "/brand/banks/ACCINGPC.png"
+  },
+  "ADDONGPC": {
+    "name": "Addosser Microfinance Bank",
+    "src": "/brand/banks/ADDONGPC.png"
+  },
+  "ABUXNGPC": {
+    "name": "ABU Microfinance Bank",
+    "src": "/brand/banks/ABUXNGPC.png"
+  },
+  "ADEYNGPC": {
+    "name": "Adeyemi College Staff Microfinance Bank",
+    "src": "/brand/banks/ADEYNGPC.png"
+  },
+  "AGXXNGPC": {
+    "name": "AG Mortgage Bank",
+    "src": "/brand/banks/AGXXNGPC.png"
+  },
+  "ALBANGPC": {
+    "name": "AL-Barakah Microfinance Bank",
+    "src": "/brand/banks/ALBANGPC.png"
+  },
+  "ALEKNGPC": {
+    "name": "Alekun Microfinance Bank",
+    "src": "/brand/banks/ALEKNGPC.png"
+  },
+  "ALHANGPC": {
+    "name": "Al-Hayat Microfinance Bank",
+    "src": "/brand/banks/ALHANGPC.png"
+  },
+  "ALLWNGPC": {
+    "name": "Allworkers Microfinance Bank",
+    "src": "/brand/banks/ALLWNGPC.png"
+  },
+  "ALPHNGPC": {
+    "name": "Alpha Kapital Microfinance Bank",
+    "src": "/brand/banks/ALPHNGPC.png"
+  },
+  "ASTRNGPC": {
+    "name": "Astrapolaris Microfinance Bank",
+    "src": "/brand/banks/ASTRNGPC.png"
+  },
+  "AUCHNGPC": {
+    "name": "Auchi Microfinance Bank",
+    "src": "/brand/banks/AUCHNGPC.png"
+  },
+  "AMJUNGPC": {
+    "name": "AMJU Unique Microfinance Bank",
+    "src": "/brand/banks/AMJUNGPC.png"
+  },
+  "BAINNGPC": {
+    "name": "Baines Credit Microfinance Bank",
+    "src": "/brand/banks/BAINNGPC.png"
+  },
+  "BAYENGPC": {
+    "name": "Bayero Microfinance Bank",
+    "src": "/brand/banks/BAYENGPC.png"
+  },
+  "BCXXNGPC": {
+    "name": "BC Kash Microfinance Bank",
+    "src": "/brand/banks/BCXXNGPC.png"
+  },
+  "BIPCNGPC": {
+    "name": "Bipc Microfinance Bank",
+    "src": "/brand/banks/BIPCNGPC.png"
+  },
+  "BOSANGPC": {
+    "name": "Bosak Microfinance Bank",
+    "src": "/brand/banks/BOSANGPC.png"
+  },
+  "BOWENGPC": {
+    "name": "Bowen Microfinance Bank",
+    "src": "/brand/banks/BOWENGPC.png"
+  },
+  "BRETNGPC": {
+    "name": "Brethren Microfinance Bank",
+    "src": "/brand/banks/BRETNGPC.png"
+  },
+  "BRENNGPC": {
+    "name": "Brent Mortgage Bank",
+    "src": "/brand/banks/BRENNGPC.png"
+  },
+  "BRIDNGPC": {
+    "name": "BRIDGEWAY MICROFINANCE BANK",
+    "src": "/brand/banks/BRIDNGPC.png"
+  },
+  "CEMCNGPC": {
+    "name": "CEMCS Microfinance Bank",
+    "src": "/brand/banks/CEMCNGPC.png"
+  },
+  "CITXNGPC": {
+    "name": "CIT Microfinance Bank",
+    "src": "/brand/banks/CITXNGPC.png"
+  },
+  "CREDNGPC": {
+    "name": "Credit Afrique Microfinance Bank",
+    "src": "/brand/banks/CREDNGPC.png"
+  },
+  "CHIKNGPC": {
+    "name": "Chikum Microfinance Bank",
+    "src": "/brand/banks/CHIKNGPC.png"
+  },
+  "EBARNGPC": {
+    "name": "e-Barcs Microfinance Bank",
+    "src": "/brand/banks/EBARNGPC.png"
+  },
+  "CONSNGPC": {
+    "name": "Consumer Microfinance Bank",
+    "src": "/brand/banks/CONSNGPC.png"
+  },
+  "EKONNGPC": {
+    "name": "Ekondo MFB",
+    "src": "/brand/banks/EKONNGPC.png"
+  },
+  "DAYLNGPC": {
+    "name": "Daylight Microfinance Bank",
+    "src": "/brand/banks/DAYLNGPC.png"
+  },
+  "EMERNGPC": {
+    "name": "Emeralds Microfinance Bank",
+    "src": "/brand/banks/EMERNGPC.png"
+  },
+  "EVERNGPC": {
+    "name": "Evergreen Microfinance Bank",
+    "src": "/brand/banks/EVERNGPC.png"
+  },
+  "ESANNGPC": {
+    "name": "Esan Microfinance Bank",
+    "src": "/brand/banks/ESANNGPC.png"
+  },
+  "FEUNNGPC": {
+    "name": "Federal University Dutse  Microfinance Bank",
+    "src": "/brand/banks/FEUNNGPC.png"
+  },
+  "EYOWNGPC": {
+    "name": "Eyowo MFB",
+    "src": "/brand/banks/EYOWNGPC.png"
+  },
+  "ESOENGPC": {
+    "name": "Eso-E Microfinance Bank",
+    "src": "/brand/banks/ESOENGPC.png"
+  },
+  "FIDFNGPC": {
+    "name": "Fidfund Microfinance Bank",
+    "src": "/brand/banks/FIDFNGPC.png"
+  },
+  "FFSXNGPC": {
+    "name": "FFS Microfinance Bank",
+    "src": "/brand/banks/FFSXNGPC.png"
+  },
+  "FIGENGPC": {
+    "name": "First Generation Mortgage Bank",
+    "src": "/brand/banks/FIGENGPC.png"
+  },
+  "FSTXNGPC": {
+    "name": "FAST Microfinance Bank",
+    "src": "/brand/banks/FSTXNGPC.png"
+  },
+  "FIRONGPC": {
+    "name": "First Royal Microfinance Bank",
+    "src": "/brand/banks/FIRONGPC.png"
+  },
+  "FIRMNGPC": {
+    "name": "Firmus MFB",
+    "src": "/brand/banks/FIRMNGPC.png"
+  },
+  "FUTONGPC": {
+    "name": "Futo Microfinance Bank",
+    "src": "/brand/banks/FUTONGPC.png"
+  },
+  "FULLNGPC": {
+    "name": "Fullrange Microfinance Bank",
+    "src": "/brand/banks/FULLNGPC.png"
+  },
+  "GASHNGPC": {
+    "name": "Gashua Microfinance Bank",
+    "src": "/brand/banks/GASHNGPC.png"
+  },
+  "GATENGPC": {
+    "name": "Gateway Mortgage Bank",
+    "src": "/brand/banks/GATENGPC.png"
+  },
+  "GOWANGPC": {
+    "name": "Gowans Microfinance Bank",
+    "src": "/brand/banks/GOWANGPC.png"
+  },
+  "GREENGPC": {
+    "name": "GreenBank Microfinance Bank",
+    "src": "/brand/banks/GREENGPC.png"
+  },
+  "INFINGPC": {
+    "name": "Infinity Microfinance Bank",
+    "src": "/brand/banks/INFINGPC.png"
+  },
+  "HAGGNGPC": {
+    "name": "Haggai Mortgage Bank Limited",
+    "src": "/brand/banks/HAGGNGPC.png"
+  },
+  "GRNVNGPC": {
+    "name": "Greenville Microfinance Bank",
+    "src": "/brand/banks/GRNVNGPC.png"
+  },
+  "IMOXNGPC": {
+    "name": "Imo State Microfinance Bank",
+    "src": "/brand/banks/IMOXNGPC.png"
+  },
+  "INTRNGPC": {
+    "name": "Infinity Trust Mortgage Bank",
+    "src": "/brand/banks/INTRNGPC.png"
+  },
+  "HACKNGPC": {
+    "name": "Hackman Microfinance Bank",
+    "src": "/brand/banks/HACKNGPC.png"
+  },
+  "IBILNGPC": {
+    "name": "IBILE Microfinance Bank",
+    "src": "/brand/banks/IBILNGPC.png"
+  },
+  "GROONGPC": {
+    "name": "Grooming Microfinance Bank",
+    "src": "/brand/banks/GROONGPC.png"
+  },
+  "LAGONGPC": {
+    "name": "Lagos Building Investment Company",
+    "src": "/brand/banks/LAGONGPC.png"
+  },
+  "IRLXNGPC": {
+    "name": "IRL Microfinance Bank",
+    "src": "/brand/banks/IRLXNGPC.png"
+  },
+  "LAXXNGPC": {
+    "name": "La  Fayette Microfinance Bank",
+    "src": "/brand/banks/LAXXNGPC.png"
+  },
+  "KCMBNGPC": {
+    "name": "KCMB Microfinance Bank",
+    "src": "/brand/banks/KCMBNGPC.png"
+  },
+  "LAPONGPC": {
+    "name": "Lapo Microfinance Bank",
+    "src": "/brand/banks/LAPONGPC.png"
+  },
+  "LETSNGPC": {
+    "name": "Letshego MFB",
+    "src": "/brand/banks/LETSNGPC.png"
+  },
+  "LOVONGPC": {
+    "name": "Lovonus Microfinance Bank",
+    "src": "/brand/banks/LOVONGPC.png"
+  },
+  "LAVENGPC": {
+    "name": "Lavender Microfinance Bank",
+    "src": "/brand/banks/LAVENGPC.png"
+  },
+  "MALANGPC": {
+    "name": "Malachy Microfinance Bank",
+    "src": "/brand/banks/MALANGPC.png"
+  },
+  "KADPNGPC": {
+    "name": "Kadpoly Microfinance Bank",
+    "src": "/brand/banks/KADPNGPC.png"
+  },
+  "MANNNGPC": {
+    "name": "Manny Microfinance bank",
+    "src": "/brand/banks/MANNNGPC.png"
+  },
+  "MAYFNGPC": {
+    "name": "Mayfresh Mortgage Bank",
+    "src": "/brand/banks/MAYFNGPC.png"
+  },
+  "MUTUNGPC": {
+    "name": "Mutual Benefits Microfinance Bank",
+    "src": "/brand/banks/MUTUNGPC.png"
+  },
+  "MAUTNGPC": {
+    "name": "MAUTECH Microfinance Bank",
+    "src": "/brand/banks/MAUTNGPC.png"
+  },
+  "MNLNNGPC": {
+    "name": "Mainland Microfinance Bank",
+    "src": "/brand/banks/MNLNNGPC.png"
+  },
+  "NAVYNGPC": {
+    "name": "Navy Microfinance Bank",
+    "src": "/brand/banks/NAVYNGPC.png"
+  },
+  "NEDANGPC": {
+    "name": "New Dawn Microfinance Bank",
+    "src": "/brand/banks/NEDANGPC.png"
+  },
+  "NIRSNGPC": {
+    "name": "NIRSAL Microfinance Bank",
+    "src": "/brand/banks/NIRSNGPC.png"
+  },
+  "PECANGPC": {
+    "name": "PecanTrust Microfinance Bank",
+    "src": "/brand/banks/PECANGPC.png"
+  },
+  "OLABNGPC": {
+    "name": "Olabisi Onabanjo University Microfinance Bank",
+    "src": "/brand/banks/OLABNGPC.png"
+  },
+  "PATRNGPC": {
+    "name": "PatrickGold Microfinance Bank",
+    "src": "/brand/banks/PATRNGPC.png"
+  },
+  "PERSNGPC": {
+    "name": "Personal Trust Microfinance Bank",
+    "src": "/brand/banks/PERSNGPC.png"
+  },
+  "PETRNGPC": {
+    "name": "Petra Microfinance Bank",
+    "src": "/brand/banks/PETRNGPC.png"
+  },
+  "PENNNGPC": {
+    "name": "Pennywise Microfinance Bank",
+    "src": "/brand/banks/PENNNGPC.png"
+  },
+  "PLATNGPC": {
+    "name": "Platinum Mortgage Bank",
+    "src": "/brand/banks/PLATNGPC.png"
+  },
+  "PRESNGPC": {
+    "name": "Prestige Microfinance Bank",
+    "src": "/brand/banks/PRESNGPC.png"
+  },
+  "REFUNGPC": {
+    "name": "Refuge Mortgage Bank",
+    "src": "/brand/banks/REFUNGPC.png"
+  },
+  "QUICNGPC": {
+    "name": "Quickfund Microfinance Bank",
+    "src": "/brand/banks/QUICNGPC.png"
+  },
+  "ROYANGPC": {
+    "name": "Royal Exchange Microfinance Bank",
+    "src": "/brand/banks/ROYANGPC.png"
+  },
+  "RENMNGPC": {
+    "name": "RenMoney Microfinance Bank",
+    "src": "/brand/banks/RENMNGPC.png"
+  },
+  "REPHNGPC": {
+    "name": "Rephidim Microfinance Bank",
+    "src": "/brand/banks/REPHNGPC.png"
+  },
+  "RELINGPC": {
+    "name": "Reliance Microfinance Bank",
+    "src": "/brand/banks/RELINGPC.png"
+  },
+  "STBANGPC": {
+    "name": "Stanford Microfinance Bak",
+    "src": "/brand/banks/STBANGPC.png"
+  },
+  "STELNGPC": {
+    "name": "Stellas Microfinance Bank",
+    "src": "/brand/banks/STELNGPC.png"
+  },
+  "TRSTNGPC": {
+    "name": "Trustbond Mortgage Bank",
+    "src": "/brand/banks/TRSTNGPC.png"
+  },
+  "UNICNGPC": {
+    "name": "Unical Microfinance Bank",
+    "src": "/brand/banks/UNICNGPC.png"
+  },
+  "YESXNGPC": {
+    "name": "Yes Microfinance Bank",
+    "src": "/brand/banks/YESXNGPC.png"
+  },
+  "NOMBNGPC": {
+    "name": "Nombank Microfinance Bank",
+    "src": "/brand/banks/NOMBNGPC.png"
+  }
+}

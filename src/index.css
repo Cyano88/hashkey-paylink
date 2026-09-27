@@ -1150,3 +1150,11 @@ html.dark[data-pocket-runtime='native']:has([data-pocket-colour-scope='stablecoi
 
 [data-pocket-fixed-page][data-pocket-keyboard] .pocket-pos-identity { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: end; }
 }
+
+/* Match the native resize surface before the WebView paints its next frame. */
+html[data-pocket-runtime='native'],
+html[data-pocket-runtime='native'] body,
+html[data-pocket-runtime='native'] #root { background-color: #F5F5F7; }
+html[data-pocket-runtime='native'].dark:not([data-pocket-light-surface='true']),
+html[data-pocket-runtime='native'].dark:not([data-pocket-light-surface='true']) body,
+html[data-pocket-runtime='native'].dark:not([data-pocket-light-surface='true']) #root { background-color: #000; }

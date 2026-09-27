@@ -1,0 +1,3 @@
+Bank artwork: https://github.com/Nigerian-Bank-Logos/ng-bank-logos
+Additional artwork: https://github.com/supermx1/nigerian-banks-api
+Bank names and marks belong to their respective owners.

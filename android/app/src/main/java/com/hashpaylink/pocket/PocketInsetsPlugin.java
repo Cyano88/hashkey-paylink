@@ -1,5 +1,7 @@
 package com.hashpaylink.pocket;
 
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -17,7 +19,14 @@ public class PocketInsetsPlugin extends Plugin {
     public void setSystemBarAppearance(PluginCall call) {
         boolean darkIcons = Boolean.TRUE.equals(call.getBoolean(\u0022darkIcons\u0022, true));
         boolean navigationDarkIcons = Boolean.TRUE.equals(call.getBoolean("navigationDarkIcons", darkIcons));
+        String backgroundColor = call.getString("backgroundColor", darkIcons ? "#F5F5F7" : "#000000");
         getActivity().runOnUiThread(() -> {
+            int surface;
+            try { surface = Color.parseColor(backgroundColor); }
+            catch (IllegalArgumentException ignored) { surface = darkIcons ? Color.rgb(245,245,247) : Color.BLACK; }
+            getActivity().getWindow().setBackgroundDrawable(new ColorDrawable(surface));
+            getActivity().getWindow().getDecorView().setBackgroundColor(surface);
+            getBridge().getWebView().setBackgroundColor(surface);
             WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
                 getActivity().getWindow(),
                 getActivity().getWindow().getDecorView()

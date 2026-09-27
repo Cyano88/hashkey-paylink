@@ -22,7 +22,7 @@ function nativePocketDestination(rawUrl: string) {
 type PocketNativeInsets = { top: number; bottom: number; topPx?: number; bottomPx?: number; density?: number }
 const PocketInsets = registerPlugin<{
   getInsets(): Promise<PocketNativeInsets>
-  setSystemBarAppearance(options: { darkIcons: boolean; navigationDarkIcons?: boolean }): Promise<void>
+  setSystemBarAppearance(options: { darkIcons: boolean; navigationDarkIcons?: boolean; backgroundColor: string }): Promise<void>
 }>('PocketInsets')
 
 function nativeInsetCssPixels(value: number | undefined, pixels: number | undefined, density: number | undefined) {
@@ -61,7 +61,7 @@ export default function PocketNativeBridge() {
       const darkIcons = lightSurface || (document.documentElement.dataset.pocketSupportSurface === 'home' ? false : navigationDarkIcons)
       const style = darkIcons ? Style.Light : Style.Dark
       void StatusBar.setStyle({ style }).catch(() => undefined)
-      void PocketInsets.setSystemBarAppearance({ darkIcons, navigationDarkIcons }).catch(() => undefined)
+      void PocketInsets.setSystemBarAppearance({ darkIcons, navigationDarkIcons, backgroundColor: navigationDarkIcons ? '#F5F5F7' : '#000000' }).catch(() => undefined)
     }
     syncStatusBar()
     const themeObserver = new MutationObserver(syncStatusBar)

@@ -29,6 +29,7 @@ export default function PocketRouteShell({
   const scrollerRef = useRef<HTMLDivElement>(null)
   const scrollFrame = useRef<number | null>(null)
   const pullStartY = useRef<number | null>(null)
+  const pullStartX = useRef(0)
   const pullDistanceRef = useRef(0)
   const refreshTriggered = useRef(false)
   const refreshInFlight = useRef(false)
@@ -69,10 +70,12 @@ export default function PocketRouteShell({
   }
 
   const startPull = (event: TouchEvent<HTMLDivElement>) => {
-    if (fixedPage || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
+    pullStartY.current = null
+    if (fixedPage || keyboardOpen || inputFocused || navigationDisabled || refreshInFlight.current || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
     pullDistanceRef.current = 0
     refreshTriggered.current = false
     pullStartY.current = event.touches[0].clientY
+    pullStartX.current = event.touches[0].clientX
   }
 
   const runRefresh = async () => {
@@ -82,8 +85,8 @@ export default function PocketRouteShell({
     pullStartY.current = null
     setRefreshMessage('')
     setRefreshing(true)
-    pullDistanceRef.current = 42
-    setPullDistance(42)
+    pullDistanceRef.current = 66
+    setPullDistance(66)
     try {
       await Promise.all([refreshPocketData(), new Promise(resolve => window.setTimeout(resolve, 350))])
     } catch {
@@ -99,20 +102,23 @@ export default function PocketRouteShell({
   const movePull = (event: TouchEvent<HTMLDivElement>) => {
     if (pullStartY.current === null || event.touches.length !== 1 || (scrollerRef.current?.scrollTop ?? 0) > 0) return
     const distance = event.touches[0].clientY - pullStartY.current
+    if (Math.abs(event.touches[0].clientX - pullStartX.current) > Math.max(18, Math.abs(distance))) {
+      pullStartY.current = null; pullDistanceRef.current = 0; setPullDistance(0); return
+    }
     if (distance <= 0) {
       pullDistanceRef.current = 0
       setPullDistance(0)
       return
     }
-    const nextDistance = Math.min(78, distance * 0.62)
+    const nextDistance = Math.min(88, Math.max(0, distance - 20) * 0.55)
     pullDistanceRef.current = nextDistance
     setPullDistance(nextDistance)
-    if (nextDistance >= 62 && !refreshTriggered.current) void runRefresh()
+    // Only release can trigger a refresh; dragging back below the threshold cancels it.
   }
 
   const finishPull = () => {
     pullStartY.current = null
-    if (pullDistanceRef.current < 62 || refreshInFlight.current || refreshTriggered.current) {
+    if (pullDistanceRef.current < 66 || refreshInFlight.current || refreshTriggered.current) {
       pullDistanceRef.current = 0
       if (!refreshInFlight.current) setPullDistance(0)
       return
@@ -185,7 +191,7 @@ export default function PocketRouteShell({
               scrollPaddingBottom: 'calc(7.5rem + var(--pocket-safe-bottom))',
             }}
           >
-            <div role="status" aria-label={refreshing ? 'Refreshing Pocket' : 'Pull to refresh'} aria-hidden={pullDistance <= 4 && !refreshing} className="pointer-events-none absolute inset-x-0 top-2 z-20 flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}>
+            <div role="status" aria-label={refreshing ? 'Refreshing Pocket' : pullDistance >= 66 ? 'Release to refresh' : 'Pull to refresh'} aria-hidden={pullDistance <= 4 && !refreshing} className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${pullDistance - 48}px)` }}>
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-900 shadow-md ring-2 ring-gray-200/80 dark:bg-[#121212] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" style={{ animationDuration: '650ms', animationPlayState: refreshing ? 'running' : 'paused' }} /></span>
             </div>
             <div
