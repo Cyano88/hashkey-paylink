@@ -92,3 +92,17 @@ Remaining before rollout:
 - One payer activity/receipt record across swap, burn, mint and payout; reconcile later provider settlement/refund into that record. The new bank journal is not yet connected to payer Activity.
 - Review recovery for a more expensive expired payout quote and canonical reverted payout broadcasts; neither may silently restart an earlier stage. Current behavior preserves funds and blocks further spending.
 - Complete mobile/web visual and signed-wallet end-to-end validation, then deploy and update Pixel in place while preserving app data.
+
+## Checkout and activity checkpoint - 2026-09-27
+
+Implemented locally (supersedes the preceding unregistered-route checkpoint):
+- Registered authenticated /api/pocket/xpay/bank with separate read/write limits. Existing picker, confirmation sheet, PIN, hidden Privy signing and Circle approvals drive the bank route.
+- Progress follows verified swap, bridge and payout evidence. Low OKB returns Retry; no payment Processing state merely because Circle approval opened. A 90-second foreground window allows later continuation through Activity.
+- Activity records one XPay payment and suppresses only verified intermediate conversion hashes, including cached copies. Original asset/amount and bank delivery remain distinct. Refunding/refunded updates stay on that payment. Incoming refund-transfer deduplication is not yet proven because the existing provider model does not expose its canonical return hash.
+- Resume uses owner-authenticated payment ID, including after the merchant deletes the public QR. Saved source hashes reconcile before further signing; no unknown outcome silently resubmits.
+- Live service env inspection found PAYCREST_SENDER_FEE_PERCENT absent. Removed that draft requirement. Shared-XPay intents now request 0.25% and the existing EVM treasury explicitly per Paycrest V2 order; returned percentage and token fee are validated. Other order types retain their current configuration. Exact provider funding amount is used once, with no duplicate treasury transfer.
+- Public provider reference: https://docs.paycrest.io/api-reference/sender/initiate-payment-order-v2 (senderFeePercent and senderFeeAddress).
+
+Validation: fixture browser checkout and focused API, client-binding, coordinator, journal, activity, payout and fee suites pass. Source-proof recovery tests protect unrelated attempts; refunded cannot regress to settled. Mobile build passed before the final activity/fee changes; a final release build is still required. Tests use mocked signers/providers, not real funds.
+
+Release state: source not yet deployed or installed. Production currently includes e077de5b7 and Circle CLI 1.1.4 signing changes which must be retained. More expensive replacement quotes and canonically reverted payout broadcasts remain conservative recovery stops; do not claim complete money-moving production validation until a supervised signed-wallet test passes.

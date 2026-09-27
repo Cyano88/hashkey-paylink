@@ -1337,6 +1337,7 @@ export default async function handler(req: Request, res: Response) {
         amountNgn: intent.amount_ngn,
         fiatCurrency: pocketFiatCurrency(merchant.country),
         estimatedAmountUsdc: intent.estimated_amount_usdc,
+        unifiedXPay: Boolean(intent.xpay_checkout_id),
         bankCode,
         accountNumber: bank.account_number,
         accountName: bank.account_name,

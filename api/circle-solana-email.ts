@@ -2,7 +2,7 @@ import { paymentBalanceError } from './payment-balance-error.js'
 import { readEvmRpc } from './evm-read.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote, type PaymentFeeBinding } from './payment-fee-quotes.js'
 import { readNativeUsdcRate, nativeFeeToUsdcUnits } from './payment-network-fees.js'
-import { paymentFeeBreakdown } from '../src/lib/platformFees.js'
+import { paymentFeeBreakdown, EVM_PLATFORM_TREASURY } from '../src/lib/platformFees.js'
 import { missingPocketEvmWalletPlan } from './pocket/wallet-setup.js'
 import { withOrdinaryWalletMutation } from './pocket/wallet-migration-guard.js'
 import type { Request, Response } from 'express'
@@ -19,7 +19,7 @@ import {
 import { requireCircleSolanaGasStationWallet } from './circle-solana-gas-station.js'
 import { circleLinkKey, readCircleLink, findPaymentCircleLinkByWallet, verifiedPrivyUser } from './privy-circle-link.js'
 
-const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
+const EVM_TREASURY = EVM_PLATFORM_TREASURY
 const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 const BPS_DENOMINATOR = 10_000n
 

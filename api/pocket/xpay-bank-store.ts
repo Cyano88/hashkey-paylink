@@ -3,7 +3,7 @@ import {mutateDurableJson,readDurableJson} from '../render-durable-store.js'
 import type {XPayPayoutQuote} from './xpay-bank-payout.js'
 import type {StockSwapQuote} from '../../src/pocket/lib/pocketXStocksSwap.js'
 export type XPayBankState='quoted'|'approved'|'swap_authorized'|'swap_submitted'|'swap_confirmed'|'bridging'|'payout_ready'|'payout_requested'|'payout_submitted'|'successful'|'failed'|'refunded'
-export type XPayBankPayment={id:string;key:string;owner:string;checkoutId:string;merchantId:string;source:string;token:string;symbol:string;amount:string;amountUnits:string;fiatAmount:string;state:XPayBankState;payout:XPayPayoutQuote;replacementPayout?:XPayPayoutQuote;previousPayouts?:XPayPayoutQuote[];bridgeId:string;bridgeUnits:string;swap?:StockSwapQuote;swapHash?:string;swapStartBlock?:string;swapScanBlock?:string;receivedUnits?:string;approvedAt?:number;failureStage?:'swap'|'bridge'|'payment';failureState?:XPayBankState;error?:string;payoutKey?:string;challengeId?:string;payoutHash?:string;createdAt:number;updatedAt:number}
+export type XPayBankPayment={id:string;key:string;owner:string;checkoutId:string;merchantId:string;source:string;token:string;symbol:string;amount:string;amountUnits:string;fiatAmount:string;state:XPayBankState;payout:XPayPayoutQuote;replacementPayout?:XPayPayoutQuote;previousPayouts?:XPayPayoutQuote[];bridgeId:string;bridgeUnits:string;swap?:StockSwapQuote;swapHash?:string;swapStartBlock?:string;swapScanBlock?:string;receivedUnits?:string;approvedAt?:number;failureStage?:'swap'|'bridge'|'payment';failureState?:XPayBankState;error?:string;payoutKey?:string;challengeId?:string;payoutHash?:string;burnHash?:string;burnVerified?:boolean;mintHash?:string;bankDelivery?:string;createdAt:number;updatedAt:number}
 type Store={payments:XPayBankPayment[]}
 const key=(owner:string)=>'pocket:xpay:bank-payments:v1:'+owner
 function fail(message:string):never {throw Object.assign(new Error(message),{status:409})}
@@ -36,6 +36,15 @@ export function createXPayBankStore(overrides:Partial<typeof defaults>={}){
   }),
   claimPayout:(owner:string,id:string)=>change(owner,id,r=>{if(['payout_requested','payout_submitted'].includes(r.state))return;if(r.state!=='payout_ready')fail('Base funding has not arrived.');if(r.replacementPayout)fail('Confirm the updated quote before paying.');r.payoutKey=d.id();r.state='payout_requested'}),
   payoutChallenge:(owner:string,id:string,requestKey:string,challengeId:string)=>change(owner,id,r=>{if(!['payout_requested','payout_submitted'].includes(r.state)||r.payoutKey!==requestKey)fail('Payment approval changed.');if(r.challengeId&&r.challengeId!==challengeId)fail('Payment challenge cannot change.');r.challengeId=challengeId;r.state='payout_submitted'}),
+  bridgeEvidence:(owner:string,id:string,bridgeId:string,burnHash?:string,mintHash?:string,burnVerified=false)=>change(owner,id,r=>{
+   if(r.bridgeId!==bridgeId)fail('Bridge recovery changed.');if(burnVerified)r.burnVerified=true
+   for(const [field,value] of [['burnHash',burnHash],['mintHash',mintHash]] as const){if(!value)continue;if(!/^0x[0-9a-f]{64}$/i.test(value))fail('Invalid bridge evidence.');if(r[field]&&r[field]!==value.toLowerCase())fail('Bridge evidence cannot change.');r[field]=value.toLowerCase()}
+  }),
+  delivery:(owner:string,id:string,hash:string,status:string)=>change(owner,id,r=>{
+   if(!['successful','refunded'].includes(r.state)||r.payoutHash!==hash.toLowerCase())fail('Verify bank funding before delivery updates.')
+   if(r.state==='refunded'&&status!=='refunded')return
+   r.bankDelivery=status;if(status==='refunded')r.state='refunded'
+  }),
   payoutBroadcast:(owner:string,id:string,requestKey:string,hash:string)=>change(owner,id,r=>{
    if(r.state!=='payout_submitted'||r.payoutKey!==requestKey||!/^0x[0-9a-f]{64}$/i.test(hash))fail('Payment broadcast does not match the current approval.')
    if(r.payoutHash&&r.payoutHash!==hash.toLowerCase())fail('Payment transaction cannot change.')
@@ -57,7 +66,7 @@ export function createXPayBankStore(overrides:Partial<typeof defaults>={}){
   }),
   retryBridge:(owner:string,id:string,bridgeId:string)=>change(owner,id,r=>{
    if(r.state!=='failed'||r.failureStage!=='bridge'||r.failureState!=='bridging'||!bridgeId)fail('Check the existing bridge before retrying.')
-   r.bridgeId=bridgeId;r.state='bridging';r.failureStage=undefined;r.error=undefined
+   r.bridgeId=bridgeId;r.burnHash=undefined;r.burnVerified=false;r.mintHash=undefined;r.state='bridging';r.failureStage=undefined;r.error=undefined
   }),
   retrySwap:(owner:string,id:string)=>change(owner,id,r=>{
    if(r.state!=='failed'||r.failureStage!=='swap'||r.failureState!=='swap_submitted')fail('Check the existing stock conversion before retrying.')
@@ -65,3 +74,8 @@ export function createXPayBankStore(overrides:Partial<typeof defaults>={}){
   }),
  }
 }
+
+export function verifiedXPayConversionHashes(r:XPayBankPayment){
+ return [r.receivedUnits?r.swapHash:undefined,r.burnVerified?r.burnHash:undefined,r.mintHash,['successful','refunded'].includes(r.state)?r.payoutHash:undefined].filter((h):h is string=>Boolean(h))
+}
+export async function readXPayConversionHashes(owner:string){return new Set((await createXPayBankStore().list(owner)).flatMap(verifiedXPayConversionHashes).map(h=>h.toLowerCase()))}

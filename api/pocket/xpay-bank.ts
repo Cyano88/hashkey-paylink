@@ -1,3 +1,4 @@
+import {verifiedXPayConversionHashes} from './xpay-bank-store.js'
 import type {Request,Response} from 'express'
 import {verifiedPrivyUser} from '../privy-circle-link.js'
 import {createXPayBankService} from './xpay-bank-service.js'
@@ -8,15 +9,15 @@ const defaults={identity:verifiedPrivyUser,service:createXPayBankService()}
 function fail(message:string,status=400):never{throw Object.assign(new Error(message),{status})}
 const text=(v:unknown,max=160)=>typeof v==='string'&&v.length<=max?v:fail('Invalid XPay request.')
 export function publicXPayBankPayment(p:XPayBankPayment,b?:XPayBridgeRecord){
- return {id:p.id,checkoutId:p.checkoutId,merchantId:p.merchantId,merchantName:p.payout.merchantName,source:p.source,token:p.token,symbol:p.symbol,amount:p.amount,amountUnits:p.amountUnits,fiatAmount:p.fiatAmount,currency:p.payout.currency,state:p.state,swapHash:p.swapHash,payoutHash:p.payoutHash,failureStage:p.failureStage,error:p.error,createdAt:p.createdAt,updatedAt:p.updatedAt,
-  fundingUnits:p.payout.fundingUnits,bridgeUnits:p.bridgeUnits,expiresAt:p.payout.expiresAt,quoteExpiresAt:p.swap?.expiresAt,bankName:p.payout.bankName,bankLast4:p.payout.bankLast4,
+ return {id:p.id,checkoutId:p.checkoutId,merchantId:p.merchantId,merchantName:p.payout.merchantName,source:p.source,token:p.token,symbol:p.symbol,amount:p.amount,amountUnits:p.amountUnits,fiatAmount:p.fiatAmount,currency:p.payout.currency,state:p.state,swapHash:p.swapHash,payoutHash:p.payoutHash,failureStage:p.failureStage,error:p.error,bankDelivery:p.bankDelivery,conversionHashes:verifiedXPayConversionHashes(p),createdAt:p.createdAt,updatedAt:p.updatedAt,
+  baseWallet:p.payout.wallet,fundingUnits:p.payout.fundingUnits,bridgeUnits:p.bridgeUnits,expiresAt:p.payout.expiresAt,quoteExpiresAt:p.swap?.expiresAt,bankName:p.payout.bankName,bankLast4:p.payout.bankLast4,
   replacement:p.replacementPayout?{intentId:p.replacementPayout.intentId,fundingUnits:p.replacementPayout.fundingUnits,expiresAt:p.replacementPayout.expiresAt}:undefined,
   bridge:b?{state:b.state,burnHash:b.burnHash,mintHash:b.mintHash}:undefined,
   progress:xpayBankProgress({state:p.state,hasSwap:Boolean(p.swap),swapHash:p.swapHash,payoutHash:p.payoutHash,failureStage:p.failureStage,bridge:b}),
  }
 }
-// Not registered in server.ts yet. Client recovery, activity/receipts and device
-// tests must pass before enabling this money-movement API in production.
+// Registered in the local draft with separate read/write request limits.
+// Deployment still requires wallet/device end-to-end validation.
 export function createXPayBankHandler(overrides:Partial<typeof defaults>={}){
  const d={...defaults,...overrides}
  return async(req:Request,res:Response)=>{

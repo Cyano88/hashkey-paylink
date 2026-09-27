@@ -1,5 +1,6 @@
 /** Shared USDC checkout pricing. Integer base units prevent quote/execution drift. */
 export const PLATFORM_FEE_BPS = 25
+export const EVM_PLATFORM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
 export function paymentFeeBreakdown(amount: bigint, networkFee = 0n, mode: 'gross' | 'net' = 'gross', exempt = false) {
   if (amount <= 0n || networkFee < 0n) throw new Error('Invalid payment amount.')
   const platformFee = exempt ? 0n : amount * BigInt(PLATFORM_FEE_BPS) / 10_000n

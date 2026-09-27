@@ -1,8 +1,8 @@
-﻿import {build} from 'esbuild'
+import {build} from 'esbuild'
 import assert from 'node:assert/strict'
 import {encodeEventTopics,encodeAbiParameters,parseAbiItem} from 'viem'
 const mocks={
- './xpay-bank-payout.js':`export const prepareXPayBankPayout=async()=>{};export const validateXPayBankChoice=async()=>{};export const checkXPayPayout=async()=>{};export const confirmXPayPayout=async()=>{};export const xpayPayoutCall=()=> '0x1234'`,
+ './xpay-bank-payout.js':`export const prepareXPayBankPayout=async()=>{};export const validateXPayBankChoice=async()=>{};export const checkXPayPayout=async()=>{};export const confirmXPayPayout=async()=>{};export const readXPayPayoutDelivery=async()=>undefined;export const xpayPayoutCall=()=> '0x1234'`,
  './xpay-bridge-service.js':`export const createXPayBridgeService=()=>({})`,
  '../circle-solana-email.js':`export const createCircleGasStationEvmChallenge=async()=>{};export const readCircleEvmChallenge=async()=>{}`,
  './payment-security.js':`export const consumePocketPaymentApproval=async()=>false`,

@@ -1,4 +1,4 @@
-﻿import {build} from 'esbuild'
+import {build} from 'esbuild'
 import assert from 'node:assert/strict'
 await build({entryPoints:['api/pocket/xpay-bank.ts'],outfile:'.codex-temp/xpay-bank-api-test.mjs',bundle:true,format:'esm',platform:'node',packages:'external',plugins:[{name:'fixtures',setup(b){const mocks={'../privy-circle-link.js':'export const verifiedPrivyUser=async()=>{}','./xpay-bank-service.js':'export const createXPayBankService=()=>({})'};b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path]}))}}]})
 const {createXPayBankHandler}=await import('../.codex-temp/xpay-bank-api-test.mjs')
@@ -22,4 +22,4 @@ assert.equal((await call({action:'status',id:'other'})).status,404)
 const signed=await call({action:'swap',id:'payment'});assert.equal(signed.result.transaction.value,'0');assert.equal(signed.result.transaction.gas,'100')
 const error=await call({action:'payout',id:'payment',circleUserToken:'session'});assert.equal(error.status,503);assert.equal(JSON.stringify(error.result).includes('private provider'),false)
 assert.equal((await call({action:'unsupported',id:'payment'})).status,400)
-console.log('PASS unregistered XPay API: authenticated owner scope, header-only PIN approval, sanitized snapshots/errors, ephemeral Circle sessions, and JSON-safe signing calls.')
+console.log('PASS XPay API: authenticated owner scope, header-only PIN approval, sanitized snapshots/errors, ephemeral Circle sessions, and JSON-safe signing calls.')

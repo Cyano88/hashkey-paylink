@@ -43,9 +43,11 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
 }
 
 export function mergePocketActivitySnapshot(previous: PocketActivityReadData | undefined, incoming: PocketActivityReadData): PocketActivityReadData {
+  const grouped=new Set([...(previous?.groupedTransactionHashes||[]),...(incoming.groupedTransactionHashes||[])].map(hash=>hash.toLowerCase()))
   return {
     ...incoming,
-    payments: mergePocketActivityRows(previous?.payments ?? [], incoming.payments),
+    groupedTransactionHashes:[...grouped],
+    payments: mergePocketActivityRows(previous?.payments ?? [], incoming.payments).filter(row=>!row.txHash||!grouped.has(row.txHash.toLowerCase())),
     merchants: [...new Map([...(previous?.merchants ?? []), ...incoming.merchants].map(row => [row.merchant_id, row])).values()],
     collections: [...new Map([...(previous?.collections ?? []), ...incoming.collections].map(row => [row.eventId, row])).values()],
   }

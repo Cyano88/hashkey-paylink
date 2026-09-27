@@ -5,7 +5,7 @@ import {createCircleGasStationEvmChallenge,readCircleEvmChallenge} from '../circ
 import {consumePocketPaymentApproval} from './payment-security.js'
 import {createXPayBankStore} from './xpay-bank-store.js'
 import {createXPayBridgeService} from './xpay-bridge-service.js'
-import {prepareXPayBankPayout,validateXPayBankChoice,checkXPayPayout,confirmXPayPayout,xpayPayoutCall} from './xpay-bank-payout.js'
+import {prepareXPayBankPayout,validateXPayBankChoice,checkXPayPayout,confirmXPayPayout,readXPayPayoutDelivery,xpayPayoutCall} from './xpay-bank-payout.js'
 import {quoteXPayStockFunding,verifyXPayStockSwap} from './xpay-stock-funding.js'
 import {quoteStockSwap} from './xstocks-swap-provider.js'
 import {verifyStockWalletOwner} from './xstocks-wallet-owner.js'
@@ -17,7 +17,7 @@ const abi=parseAbi(['function balanceOf(address) view returns(uint256)','functio
 const transfer=parseAbiItem('event Transfer(address indexed from,address indexed to,uint256 value)')
 function fail(message:string,status=409):never {throw Object.assign(new Error(message),{status})}
 const same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase()
-const defaults={store:createXPayBankStore(),bridge:createXPayBridgeService(),source:stockNoticeClient,owns:verifyStockWalletOwner,preparePayout:prepareXPayBankPayout,choice:validateXPayBankChoice,checkPayout:checkXPayPayout,confirmPayout:confirmXPayPayout,funding:quoteXPayStockFunding,swapQuote:quoteStockSwap,validateSwap:validateStockSwap,consumeApproval:consumePocketPaymentApproval,challenge:createCircleGasStationEvmChallenge,challengeStatus:readCircleEvmChallenge}
+const defaults={store:createXPayBankStore(),bridge:createXPayBridgeService(),source:stockNoticeClient,owns:verifyStockWalletOwner,preparePayout:prepareXPayBankPayout,choice:validateXPayBankChoice,checkPayout:checkXPayPayout,confirmPayout:confirmXPayPayout,delivery:readXPayPayoutDelivery,funding:quoteXPayStockFunding,swapQuote:quoteStockSwap,validateSwap:validateStockSwap,consumeApproval:consumePocketPaymentApproval,challenge:createCircleGasStationEvmChallenge,challengeStatus:readCircleEvmChallenge}
 // Internal, owner-scoped coordinator. The HTTP layer must verify the Privy identity.
 // No public route should expose this until client recovery and receipt wiring pass.
 export function createXPayBankService(overrides:Partial<typeof defaults>={}){
@@ -40,8 +40,14 @@ export function createXPayBankService(overrides:Partial<typeof defaults>={}){
   if(proof.state==='confirmed')return d.store.swapConfirmed(r.owner,r.id,proof.receivedUnits)
   return r
  }
+ async function delivery(r:XPayBankPayment){
+  if(!['successful','refunded'].includes(r.state)||!r.payoutHash)return r
+  const latest=await d.delivery(r.payout)
+  if(!latest?.hash||latest.hash.toLowerCase()!==r.payoutHash.toLowerCase()||latest.status===r.bankDelivery)return r
+  return d.store.delivery(r.owner,r.id,r.payoutHash,latest.status)
+ }
  return {
-  list:(owner:string)=>d.store.list(owner),
+  list:async(owner:string)=>Promise.all((await d.store.list(owner)).slice(-100).map(r=>delivery(r).catch(()=>r))),
   async snapshot(owner:string,id:string){const payment=await record(owner,id);return {payment,bridge:await d.bridge.get(owner,payment.bridgeId)}},
   async refreshAttestation(owner:string,id:string){const r=await record(owner,id);if(r.state!=='bridging')fail('This payment is not waiting for a bridge.');return d.bridge.refreshAttestation(owner,r.bridgeId)},
   async prepare(req:Request,identity:VerifiedLinkUser,input:{key:string;checkoutId:string;merchantId:string;source:string;token:string;fiatAmount:string}){
@@ -85,7 +91,7 @@ export function createXPayBankService(overrides:Partial<typeof defaults>={}){
   submittedSwap:(owner:string,id:string,hash:string)=>d.store.swapSubmitted(owner,id,hash),
   async status(owner:string,id:string,circleUserToken?:string){
    let r=await record(owner,id)
-   if(['successful','refunded','failed','quoted'].includes(r.state))return r
+   if(['successful','refunded','failed','quoted'].includes(r.state))return delivery(r)
    if(['swap_authorized','swap_submitted'].includes(r.state)){
     if(await d.source.getChainId()!==196)fail('X Layer could not be verified.',503)
     if(r.state==='swap_authorized'&&r.swap&&r.swapScanBlock){
@@ -104,8 +110,14 @@ export function createXPayBankService(overrides:Partial<typeof defaults>={}){
    }
    if(r.state==='bridging'){
     const bridge=await d.bridge.status(owner,r.bridgeId,circleUserToken)
+    r=await d.store.bridgeEvidence(owner,id,r.bridgeId,bridge.burnHash,bridge.mintHash,['attested','mint_requested','mint_submitted','mint_failed','completed','burn_failed'].includes(bridge.state))
     if(bridge.state==='completed')r=await d.store.bridgeConfirmed(owner,id)
     else if(bridge.state==='burn_failed')r=await d.store.verifiedFailure(owner,id,'bridge',r.bridgeId,'The bridge transaction reverted. Your USDC remains on X Layer.')
+   }
+   if(r.state==='payout_submitted'){
+    const observed=await d.delivery(r.payout)
+    const hash=r.payoutHash||observed?.hash
+    if(hash){r=await d.store.payoutBroadcast(owner,id,r.payoutKey!,hash);await d.confirmPayout(r.payout,hash);return d.store.complete(owner,id,hash)}
    }
    if(r.state==='payout_submitted'&&r.challengeId&&circleUserToken){
     const status=await d.challengeStatus({chain:'base',userToken:circleUserToken,walletId:r.payout.walletId,walletAddress:r.payout.wallet,challengeId:r.challengeId})

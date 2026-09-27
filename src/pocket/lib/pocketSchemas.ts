@@ -164,6 +164,8 @@ export type PocketX402ActivationData = {
 }
 
 export type PocketActivityRow = {
+  assetSymbol?: string
+  xpayCheckoutId?: string
   eventId: string
   txHash: string
   chain: string
@@ -203,6 +205,7 @@ export type PocketActivityRow = {
 }
 
 export type PocketActivityReadData = {
+  groupedTransactionHashes?: string[]
   archivedKeys?: string[]
   complete?: boolean
   partial?: boolean
@@ -598,6 +601,8 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.amountNgn, 80)
     && (value.handoffVerified === undefined || typeof value.handoffVerified === 'boolean')
     && isOptionalBoundedString(value.bankSettlementStatus, 80)
+    && isOptionalBoundedString(value.xpayCheckoutId, 40)
+    && isOptionalBoundedString(value.assetSymbol, 40)
     && isOptionalBoundedString(value.paycrestStatus, 80)
     && isOptionalBoundedString(value.activityLabel, 80)
     && (value.direction === undefined || value.direction === 'in' || value.direction === 'out')
@@ -622,6 +627,7 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
 
 export function isPocketActivityReadData(value: unknown): value is PocketActivityReadData {
   return isRecord(value)
+    && (value.groupedTransactionHashes === undefined || Array.isArray(value.groupedTransactionHashes) && value.groupedTransactionHashes.every(hash=>typeof hash==='string' && /^0x[0-9a-f]{64}$/i.test(hash)))
     && (value.archivedKeys === undefined || Array.isArray(value.archivedKeys) && value.archivedKeys.length<=1000 && value.archivedKeys.every(key=>typeof key==='string' && key.length<=600))
     && Array.isArray(value.payments)
     && value.payments.every(isPocketActivityRow)

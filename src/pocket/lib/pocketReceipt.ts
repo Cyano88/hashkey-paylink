@@ -118,7 +118,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     receiptHash: row.txHash || reference,
     title: pocketMovementTitle(row),
     status: pocketActivityStatus(row),
-    bankSettlementStatus: source === 'bank-withdraw' ? row.bankSettlementStatus || row.paycrestStatus : undefined,
+    bankSettlementStatus: source === 'bank-withdraw' || source === 'xpay' ? row.bankSettlementStatus || row.paycrestStatus : undefined,
     eventId: row.eventId,
     txHash: row.txHash,
     refundTxHash: row.refundTxHash,

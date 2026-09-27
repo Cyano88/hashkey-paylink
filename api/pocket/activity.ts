@@ -1,3 +1,4 @@
+import {readXPayConversionHashes} from './xpay-bank-store.js'
 import { isIncomingPosPayment } from '../../src/pocket/lib/pocketPurchaseKind.js'
 import { createDurablePocketActivityHandler } from './activity-feed.js'
 import type { Request, Response } from 'express'
@@ -397,6 +398,7 @@ const sourceGroups: Record<string, Partial<PocketActivityHandlerDependencies>> =
 }
 export default createDurablePocketActivityHandler({
   verifyUser: verifiedPrivyUser,
+  transformSnapshot:async(owner,snapshot)=>{const hashes=await readXPayConversionHashes(owner);return {...snapshot,groupedTransactionHashes:[...hashes],payments:snapshot.payments.filter(row=>!row.txHash||!hashes.has(row.txHash.toLowerCase()))}},
   sources: Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
   ])),

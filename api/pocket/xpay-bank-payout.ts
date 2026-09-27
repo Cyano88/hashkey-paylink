@@ -9,7 +9,7 @@ import {circleLinkKey,readCircleLink,type VerifiedLinkUser} from '../privy-circl
 import {getPaycrestPosOrder,markPaycrestPosPayment,type PaycrestOrderRecord} from '../paycrest-pos.js'
 import {schedulePaycrestOrderReconciliation} from '../paycrest-reconcile.js'
 import {verifyEvmUsdcTransfer} from '../usdc-transfer-verify.js'
-import {PLATFORM_FEE_BPS} from '../../src/lib/platformFees.js'
+import {assertXPaySenderFee} from './xpay-fee.js'
 
 function fail(message:string,status=409):never {throw Object.assign(new Error(message),{status})}
 const transferAbi=parseAbi(['function transfer(address,uint256) returns(bool)'])
@@ -37,9 +37,6 @@ export async function validateXPayBankChoice(checkoutId:string,merchantId:string
 }
 export async function prepareXPayBankPayout(req:Request,identity:VerifiedLinkUser,input:{checkoutId:string;merchantId:string;symbol:string;fiatAmount:string}):Promise<XPayPayoutQuote>{
  if(!/^(?:0|[1-9]\d{0,8})(?:\.\d{1,2})?$/.test(input.fiatAmount)||Number(input.fiatAmount)<=0)fail('Enter a valid payment amount.',400)
- // Paycrest's sender fee is collected in the provider funding amount. Refuse
- // configuration drift instead of silently omitting or charging the fee twice.
- if(Number(process.env.PAYCREST_SENDER_FEE_PERCENT)!==PLATFORM_FEE_BPS/100)fail('XPay payout fees need configuration review.',503)
  if(!identity.email)fail('Sign in with your verified Pocket email before paying.',403)
  const bank=await validateXPayBankChoice(input.checkoutId,input.merchantId,input.symbol)
  const [link,payer]=await Promise.all([readCircleLink(circleLinkKey(identity.userId,'base')),localCurrencyProfileRepository.ensure({...identity,email:identity.email})])
@@ -48,6 +45,7 @@ export async function prepareXPayBankPayout(req:Request,identity:VerifiedLinkUse
  const q=await invoke(req,{action:'quote',merchant_id:bank.id,settlement_type:'INSTANT_FIAT',network:'base',amount_currency:bank.currency,amount:input.fiatAmount,xpay_checkout_id:input.checkoutId})
  const data=await invoke(req,{action:'createOfframpOrder',intent_id:q.quote.intent_id,ensure_payable:true,refund_address:link.circleWalletAddress,payer_wallet:link.circleWalletAddress,payer_email:identity.email,payer_name:payer.profile.resolvedName})
  const order=data.order as PaycrestOrderRecord,expiresAt=assertXPayPayoutPayable(order)
+ assertXPaySenderFee(order.raw)
  return {intentId:order.intent_id,merchantId:bank.id,merchantName:bank.name,currency:bank.currency as 'NGN'|'UGX',fiatAmount:order.amount_ngn,fundingUnits:String(parseUnits(order.amount_usdc,6)),recipient:getAddress(order.receive_address),wallet:getAddress(link.circleWalletAddress),walletId:link.circleWalletId,expiresAt,providerOrderId:order.paycrest_order_id,bankName:order.bank_name,bankLast4:order.bank_last4}
 }
 export async function checkXPayPayout(quote:XPayPayoutQuote){const order=await getPaycrestPosOrder(quote.intentId);if(!order)fail('Bank order is unavailable.');assertXPayPayoutPayable(order,quote);return order}
@@ -61,4 +59,11 @@ export async function confirmXPayPayout(quote:XPayPayoutQuote,hash:string){
  const paid=await markPaycrestPosPayment({id:quote.intentId,txHash:hash,payerWallet:quote.wallet})
  schedulePaycrestOrderReconciliation(quote.intentId)
  return paid
+}
+
+export async function readXPayPayoutDelivery(quote:XPayPayoutQuote){
+ const order=await getPaycrestPosOrder(quote.intentId)
+ if(!order)return undefined
+ assertXPayPayoutBinding(order,quote)
+ return {hash:order.tx_hash,status:order.status.toLowerCase()}
 }
