@@ -38,15 +38,15 @@ const proofStats = [
   { index: '04', label: 'XPay', value: 'Your business. One QR.', copy: 'Manage receiving options and payment history per terminal.', href: `${POCKET_URL}/xpay` },
 ]
 
-const partnerRail: Array<{ name: string; logo?: string; mark?: string }> = [
+const partnerRail: Array<{ name: string; logo: string }> = [
   { name: 'Circle', logo: '/brand/circle-logo.jpeg' },
   { name: 'Arc', logo: '/brand/arc-logo.jpeg' },
   { name: '0G Labs', logo: '/brand/0g-logo.jpeg' },
-  { name: 'X Layer', mark: 'X' },
+  { name: 'X Layer', logo: '/brand/xlayer-logo.svg' },
   { name: 'Privy', logo: '/brand/privy-logo.jpeg' },
-  { name: 'OKX DEX', mark: 'OKX' },
-  { name: 'Paycrest', mark: 'P' },
-  { name: 'VTpass', mark: 'VT' },
+  { name: 'OKX DEX', logo: '/brand/okx-logo.png' },
+  { name: 'Paycrest', logo: '/brand/paycrest-logo.png' },
+  { name: 'VTpass', logo: '/brand/vtpass-logo.png' },
 ]
 
 // Selected from the Pocket catalog; avoid loading the full trading catalog on the landing page.
@@ -77,7 +77,7 @@ const ecosystemPartners = [
   { name: 'Circle', logo: '/brand/circle-logo.jpeg', role: 'Digital dollars and wallets', copy: 'USDC and wallet tools, including fee sponsorship on supported routes.', href: 'https://www.circle.com/' },
   { name: 'Arc', logo: '/brand/arc-logo.jpeg', role: 'A network for USDC payments', copy: 'A blockchain network used for USDC payments and supported swaps.', href: 'https://www.arc.io/' },
   { name: '0G Labs', logo: '/brand/0g-logo.jpeg', role: 'Payment records you can check', copy: 'Stores eligible payment records and proof that they were recorded.', href: 'https://0g.ai/' },
-  { name: 'X Layer', role: 'The network for XStocks', copy: 'Where Pocket users hold, swap and pay with supported stock tokens.', href: 'https://web3.okx.com/xlayer' },
+  { name: 'X Layer', logo: '/brand/xlayer-logo.svg', role: 'The network for XStocks', copy: 'Where Pocket users hold, swap and pay with supported stock tokens.', href: 'https://web3.okx.com/xlayer' },
 ]
 
 const faqs = [
@@ -1117,11 +1117,7 @@ export default function FoundationPage() {
               {[...partnerRail, ...partnerRail].map((partner, index) => (
                 <div key={`${partner.name}-${index}`} aria-hidden={index >= partnerRail.length} className="flex min-w-max items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                   <span className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm">
-                    {partner.logo ? (
-                      <img src={partner.logo} alt="" loading="lazy" decoding="async" className="h-5 w-5 rounded-full object-contain opacity-[.85]" />
-                    ) : (
-                      <span className="text-[8px] font-black tracking-[-0.02em] text-slate-700">{partner.mark}</span>
-                    )}
+                    <img src={partner.logo} alt="" loading="lazy" decoding="async" className="h-5 w-5 object-contain" />
                   </span>
                   <span>{partner.name}</span>
                 </div>
@@ -1676,7 +1672,7 @@ export default function FoundationPage() {
             <div className="mt-10 grid gap-x-10 gap-y-9 sm:grid-cols-2 lg:grid-cols-4">
               {ecosystemPartners.map(partner => <a key={partner.name} href={partner.href} target="_blank" rel="noreferrer" className="group block">
                 <div className="flex h-12 items-center gap-3">
-                  {'logo' in partner && partner.logo && <img src={partner.logo} alt="" loading="lazy" className="h-10 w-10 rounded-full object-contain" />}
+                  {'logo' in partner && partner.logo && <img src={partner.logo} alt="" loading="lazy" className="h-10 w-10 object-contain" />}
                   <span className="text-xl font-semibold tracking-tight">{partner.name}</span>
                   <ArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-1" />
                 </div>
