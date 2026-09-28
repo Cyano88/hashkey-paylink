@@ -9,7 +9,7 @@ import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import PocketSlideAction from '../../components/PocketSlideAction'
 import PocketSelect from '../../components/PocketSelect'
 import type { PocketBillsController } from '../../controllers/usePocketBillsController'
-import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
+import { formatPocketDisplayAmount, formatPocketPaymentAmount } from '../../lib/pocketMoney'
 import { POCKET_BASE_PATH } from '../../lib/pocketRoutes'
 import PocketDataBundlePicker from './PocketDataBundlePicker'
 import { Link } from 'react-router-dom'
@@ -158,7 +158,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
       : { title: 'Check your details', body: bills.error, action: '', icon: AlertCircle, success: false }
 
   return (
-    <div className="space-y-4">
+    <div className="pocket-bill-form flex min-h-0 flex-1 flex-col gap-3">
       {bills.availability === 'loading' && !preview ? (
         <PocketBillsSkeleton />
       ) : bills.availability === 'disabled' && !preview ? (
@@ -178,7 +178,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
           <div className="flex items-center justify-between gap-3 rounded-[22px] bg-white px-4 py-3 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none">
             <span className="min-w-0">
               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Paying from Base</span>
-              <span className="mt-1 block truncate text-xs font-semibold text-gray-700 dark:text-gray-200">{baseAddress ? `${baseAddress.slice(0, 6)}...${baseAddress.slice(-4)}` : 'Wallet not open'}</span>
+
             </span>
             {baseAddress ? (
               <span className="shrink-0 text-sm font-semibold tabular-nums tracking-[-0.02em] text-gray-950 dark:text-white">{formatPocketDisplayAmount(baseBalance)} <span className="text-[10px] text-gray-500 dark:text-gray-400">USDC</span></span>
@@ -189,7 +189,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             )}
           </div>
 
-          <div className="space-y-5 py-2">
+          <div className="pocket-form-fields pocket-bill-fields min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-1">
             {bills.environment === 'sandbox' && <p className="text-center text-[10px] font-medium text-gray-400 dark:text-gray-500">Test mode · USDC payment is real · no live service is delivered</p>}
             {isMobileBill ? (
               <div>
@@ -226,8 +226,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                 </label>
               </>
             )}
-            {(view === 'airtime' || view === 'electricity') && <div className="grid grid-cols-3 gap-2" aria-label="Suggested amounts">
-              {(view === 'airtime' ? [100, 200, 500, 1000, 2000, 5000] : [2000, 3000, 5000, 10000, 20000, 50000]).map(amount => <button key={amount} type="button" disabled={locked} onClick={() => bills.setAmountNgn(String(amount))} className={cn('min-h-12 rounded-xl border text-xs font-semibold disabled:opacity-40', Number(bills.amountNgn) === amount ? 'border-blue-400 bg-blue-50 dark:bg-blue-400/10' : 'border-gray-200 dark:border-[#262626]')}>{money(String(amount))}</button>)}
+            {(view === 'airtime' || view === 'electricity') && <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Suggested amounts">
+              {(view === 'airtime' ? [100, 200, 500, 1000, 2000, 5000] : [2000, 3000, 5000, 10000, 20000, 50000]).map(amount => <button key={amount} type="button" disabled={locked} onClick={() => bills.setAmountNgn(String(amount))} className={cn('min-h-10 shrink-0 rounded-xl border px-3 text-xs font-semibold disabled:opacity-40', Number(bills.amountNgn) === amount ? 'border-blue-400 bg-blue-50 dark:bg-blue-400/10' : 'border-gray-200 dark:border-[#262626]')}>{money(String(amount))}</button>)}
             </div>}
 
             {isData ? (
@@ -284,25 +284,21 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
               </label>
             )}
 
-            {!showPayment && !reviewBlocked && (
-              <button type="button" onClick={() => void bills.review()} disabled={!bills.formReady || !baseAddress || bills.processing} className="pocket-cta-primary flex w-full items-center justify-center gap-2 px-4 transition disabled:cursor-not-allowed">
-                {bills.status === 'quoting' ? <span role="status" className="animate-pulse motion-reduce:animate-none">Getting live quote</span> : 'Buy'}
-              </button>
-            )}
+
 
             {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">View Bills activity</Link>}
 
             {showPayment && !showResult && bills.intent && (
-              <PocketBottomSheet title="Review payment" dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
+              <PocketBottomSheet title="Confirm payment" dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
                 <>
                     <h2 className="mb-1 text-center text-2xl font-bold">{money(bills.intent.amountNgn)}</h2>
-                    <p className="mb-6 text-center text-xs text-gray-500 dark:text-gray-400">{bills.intent.variationName || billName}</p>
+                    <p className="mb-6 text-center text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</p>
                     <div className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-4 text-xs dark:border-[#262626] dark:bg-[#121212]">
                       <div className="flex justify-between gap-3"><span className="text-gray-500">Biller</span><span className="text-right font-semibold">{bills.intent.serviceName || billName}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500">{bills.intent.variationName || 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard') : view === 'electricity' ? 'Meter' : isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
                       {Number(bills.intent.platformFeeUsdc || '0') > 0 && <div className="flex justify-between gap-3"><span className="text-gray-500">Platform fee</span><span className="font-semibold tabular-nums">{bills.intent.platformFeeUsdc} USDC</span></div>}
-                      <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc))} USDC</span></div>
+                      <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</span></div>
                     </div>
                     {bills.error && <p role="alert" className="mb-3 text-center text-xs text-red-500">{bills.error}</p>}
                     <PocketSlideAction plain onApprovalBusyChange={setApprovalBusy}
@@ -347,6 +343,13 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                 </div>
               )
             })()}
+          </div>
+          <div className="shrink-0 pt-2" style={{ visibility: showPayment || showResult ? 'hidden' : undefined }}>
+            {!showPayment && !reviewBlocked && (
+              <button type="button" onClick={() => void bills.review()} disabled={!bills.formReady || !baseAddress || bills.processing} className="pocket-cta-primary flex w-full items-center justify-center gap-2 px-4 transition disabled:cursor-not-allowed">
+                {bills.status === 'quoting' ? <span role="status" className="animate-pulse motion-reduce:animate-none">Getting live quote</span> : 'Buy'}
+              </button>
+            )}
           </div>
         </>
       )}

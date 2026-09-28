@@ -127,7 +127,7 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
 
   const baseBalance = wallets.rows.find(row => row.key === 'base')?.balance ?? 0
   return (
-    <PocketRouteShell active="bills" onSelect={selectNav}>
+    <PocketRouteShell active="bills" fixedPage refreshEnabled={false} onSelect={selectNav}>
       {flowHeader}
       <PocketBillsPanel
         view={view}

@@ -23,6 +23,7 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
     <dl className="space-y-3 text-xs text-gray-500 dark:text-gray-400">
       {row.direction === 'in' && row.payer && <div className="flex justify-between gap-4"><dt>From</dt><dd className="max-w-[70%] break-all text-right">{row.payer}</dd></div>}
       {row.direction !== 'in' && row.recipient && <div className="flex justify-between gap-4"><dt>To</dt><dd className="max-w-[70%] break-all text-right">{row.recipient}</dd></div>}
+      {row.feeAmount && <div className="flex justify-between gap-4"><dt>Fees</dt><dd>{row.feeAmount} USDC</dd></div>}
       <div className="flex justify-between gap-4"><dt>Network</dt><dd className="capitalize">{row.chain}</dd></div>
       <div className="flex justify-between gap-4"><dt>Date</dt><dd>{new Date(row.ts).toLocaleString()}</dd></div>
     </dl>

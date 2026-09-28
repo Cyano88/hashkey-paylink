@@ -1,3 +1,5 @@
+import { cacheConfirmedPocketActivity } from '../lib/pocketActivityCache'
+import { bankPayoutActivityRow } from '../lib/pocketBankActivity'
 import { normalizePayoutAccount, pocketFiatCurrency } from '../lib/pocketFiatCorridors'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Address } from 'viem'
@@ -102,6 +104,11 @@ export default function usePocketBankWithdrawController({
   const [status, setStatus] = useState<PocketBankWithdrawStatus>('idle')
   const [error, setError] = useState('')
   const [result, setResult] = useState<PocketBankWithdrawData | null>(null)
+  useEffect(() => {
+    if (!result || !authenticated) return
+    const row = bankPayoutActivityRow(result, wallet?.address || '')
+    if (row) cacheConfirmedPocketActivity(email, row)
+  }, [result, authenticated, email, wallet?.address])
   const idempotencyKey = useRef('')
   const activeIntentId = useRef('')
   const cancelled = useRef(false)

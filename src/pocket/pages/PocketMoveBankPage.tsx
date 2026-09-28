@@ -1,3 +1,5 @@
+import usePocketFxQuote from '../hooks/usePocketFxQuote'
+import { formatPocketPaymentAmount } from '../lib/pocketMoney'
 import PocketPayoutCountry from '../components/PocketPayoutCountry'
 import { pocketFiatCurrency } from '../lib/pocketFiatCorridors'
 import PocketBankAmountFields from '../components/PocketBankAmountFields'
@@ -56,6 +58,7 @@ export default function PocketMoveBankPage() {
   const recipients = usePocketBankRecipients({email,enabled:authenticated && mode==='withdraw',getAccessToken})
   const closeDirectory = () => locationState?.bankRecipientDirectory ? navigate(-1) : navigate(POCKET_BASE_PATH + POCKET_ROUTES.bank + '?mode=withdraw', {replace:true})
   const [reviewOpen, setReviewOpen] = useState(false)
+  const reviewFx = usePocketFxQuote(1, reviewOpen)
   const [approvalBusy, setApprovalBusy] = useState(false)
   const [payoutToast, setPayoutToast] = useState('')
 
@@ -351,7 +354,7 @@ export default function PocketMoveBankPage() {
             {mode === 'withdraw' && recipientStep && <div className="pocket-bank-amount-page flex min-h-0 flex-1 flex-col gap-5">
               <PocketBankAmountFields currency={pocketFiatCurrency(bank.country)} accountName={bank.accountName} bankName={bank.bankName} accountNumber={bank.accountNumber} amount={direct.amount} memo={direct.memo} disabled={directLocked} onChangeRecipient={()=>setRecipientStep(false)} onAmountChange={direct.setAmount} onMemoChange={direct.setMemo} />
 
-              <div className="mt-auto space-y-2 pt-6">
+              <div className="mt-auto space-y-2 pt-6" style={{ visibility: reviewOpen || bankReceipt ? 'hidden' : undefined }}>
                 {recoveredPayout ? (
                   <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#121212] dark:text-gray-300">
                     Your previous payout is updating in Activity.
@@ -398,7 +401,7 @@ export default function PocketMoveBankPage() {
         onClose={bank.closeShare}
       />
       {mode === 'withdraw' && reviewOpen && !bankReceipt && !direct.error && <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
-        <PocketConfirmationDetails amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
+        <PocketConfirmationDetails equivalent={direct.result?.amountUsdc ? formatPocketPaymentAmount(Number(direct.result.amountUsdc)) + ' USDC' : bank.country === 'NG' && reviewFx.quote && !reviewFx.quote.stale && reviewFx.quote.expiresAt > Date.now() ? 'Est. ' + formatPocketPaymentAmount(Number(direct.amount) / reviewFx.quote.rate) + ' USDC' : undefined} amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
           ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
         ]} />
 <PocketSlideAction onApprovalBusyChange={setApprovalBusy}
@@ -424,8 +427,9 @@ export default function PocketMoveBankPage() {
           receipt={bankReceipt}
           outcome={direct.status === 'sent' ? direct.result?.state === 'sent' ? 'completed' : 'handed-off' : 'pending'}
           onDone={() => {
-            direct.resetResult()
-            navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)
+            direct.resetResult(false)
+            direct.setAmount('')
+            setReviewOpen(false)
           }}
         />
       )}

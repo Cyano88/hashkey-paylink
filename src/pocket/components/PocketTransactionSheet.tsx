@@ -1,3 +1,4 @@
+import { formatPocketPaymentAmount } from '../lib/pocketMoney'
 import { useState, type ReactNode } from 'react'
 import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
 import { type PaylinkReceipt } from '../../lib/paymentReceiptPdf'
@@ -11,6 +12,10 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
 }) {
   const [viewReceipt, setViewReceipt] = useState(false)
   const canViewReceipt = Boolean(receipt)
+  const localAmount = receipt?.amountNgn && Number.isFinite(Number(receipt.amountNgn)) && (!receipt.asset || receipt.asset === 'USDC')
+    ? `${receipt.fiatCurrency || 'NGN'} ${Number(receipt.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })}` : undefined
+  const usdcEquivalent = localAmount && receipt && Number.isFinite(Number(receipt.amount))
+    ? `${formatPocketPaymentAmount(Number(receipt.amount))} USDC` : undefined
   const label = statusLabel || (state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing')
   const Icon = label.toLowerCase().startsWith('refund') ? Undo2 : state === 'failed' ? X : state === 'reversed' ? Undo2 : Clock3
   if (viewReceipt && receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={() => setViewReceipt(false)} />
@@ -19,7 +24,8 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
     <div className="pb-6 pt-3 text-center" role="status" aria-live="polite">
       {state === 'successful' ? <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" strokeWidth={2.5} className="h-8 w-8" /></span> : <span className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${state === 'failed' ? 'bg-red-50 text-red-500 dark:bg-red-400/10' : 'bg-blue-50 text-blue-500 dark:bg-blue-400/10'}`}><Icon aria-hidden="true" className="h-9 w-9" /></span>}
       <h1 className="mt-4 text-xl font-bold tracking-tight">{label}</h1>
-      {amount && <p className="mt-2 text-lg font-semibold tabular-nums">{amount}</p>}
+      {(localAmount || amount) && <p className="mt-2 text-lg font-semibold tabular-nums">{localAmount || amount}</p>}
+      {usdcEquivalent && <p className="mt-1 text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">{usdcEquivalent}</p>}
       {detail && <p className="mx-auto mt-3 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{detail}</p>}
     </div>
     {children}

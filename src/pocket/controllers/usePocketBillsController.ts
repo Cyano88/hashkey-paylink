@@ -155,7 +155,7 @@ export default function usePocketBillsController({
   }, [category])
 
   useEffect(() => {
-    if (view === 'airtime' && !['mtn', 'airtel', 'glo', 'etisalat'].includes(serviceId)) {
+    if (view === 'airtime' && serviceId && !['mtn', 'airtel', 'glo', 'etisalat'].includes(serviceId)) {
       setServiceIdState('mtn')
     }
   }, [serviceId, view])
@@ -198,7 +198,7 @@ export default function usePocketBillsController({
   const [refundBusy, setRefundBusy] = useState(false)
   const refundInFlight = useRef(false)
   const billScope=useRef(activeBillKey);billScope.current=activeBillKey
-  const dismiss=useCallback(()=>{displayedAttempt.current='';setIntent(null);setStatus('idle');setError('');setErrorCode('');setNotice('');setAmountNgnState('')},[])
+  const dismiss=useCallback(()=>{displayedAttempt.current='';setIntent(null);setStatus('idle');setError('');setErrorCode('');setNotice('');setAmountNgnState('');setPhoneState('');setContactPhoneState('');setServiceIdState('');setVariationCodeState('');setVerification(null);lastVerificationKey.current='';setDataVariations([]);setCatalogBusy(false)},[])
   useEffect(() => { dismiss() }, [owner, dismiss])
   const resetResult = useCallback(() => {
     if (['paying', 'confirming', 'processing'].includes(status)) return
