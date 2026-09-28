@@ -218,6 +218,10 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       if (!record!.binding || !record!.accepted[role]) fail(409, 'Both participants must accept the terms first.')
       const operation = req.body?.operation as TradeXLayerAction | undefined
       if (operation !== undefined && (typeof operation !== 'string' || !Object.prototype.hasOwnProperty.call(TRADE_ACTION_LABELS, operation))) fail(400, 'Unsupported escrow operation.')
+      if (operation && ['dispatch', 'refund', 'dispute'].includes(operation)) {
+        const note = req.body?.evidence;
+        if (typeof note !== 'string' || note.trim().length < 10 || note.length > 2000) fail(400, 'Add a note of 10 to 2000 characters before continuing.');
+      }
       if (operation && startActions.has(operation) && !workXLayerEnabled(env)) fail(409, 'New xStocks payments are paused.')
       const wallet = await d.wallet(userId, record!.accepted[role]!.address, env)
       if (getAddress(wallet.address) !== record!.accepted[role]!.address) fail(403, 'The accepted wallet does not match.')

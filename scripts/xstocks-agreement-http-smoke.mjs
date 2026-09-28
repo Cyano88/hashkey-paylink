@@ -38,6 +38,7 @@ assert.equal((await participant('accept_terms',{address:buyer,consentHash:'wrong
 assert.equal((await participant('accept_terms',{address:buyer,consentHash})).statusCode,200);
 walletOverride=seller;assert.equal((await participant('accept_terms',{address:seller,consentHash})).statusCode,409);walletOverride=undefined;
 who='did:privy:provider';result=await participant('accept_terms',{address:seller,consentHash});assert.equal(result.statusCode,200);
+for(const operation of ['dispatch','refund','dispute'])for(const evidence of [undefined,'','short',' '.repeat(10),'x'.repeat(2001)]){const callsBefore=planCalls;const invalid=await participant('prepare',{operation,evidence});assert.equal(invalid.statusCode,400);assert.match(invalid.body.error,/Add a note/);assert.equal(planCalls,callsBefore,'Invalid notes never reach transaction planning');}
 const binding=result.body.agreement.binding;assert.equal(binding.contractTerms.amount,'125000000000000000');
 assert.deepEqual((await participant('accept_terms',{address:seller,consentHash})).body.agreement.binding,binding);
 assert.equal((await participant('prepare',{operation:'toString'})).statusCode,400);
