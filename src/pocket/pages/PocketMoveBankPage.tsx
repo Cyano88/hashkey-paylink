@@ -8,7 +8,6 @@ import usePocketBankRecipients, { type PocketBankRecipient } from '../hooks/useP
 import PocketConfirmationDetails from '../components/PocketConfirmationDetails'
 import usePocketSlowConfirmation from '../hooks/usePocketSlowConfirmation'
 import { readCachedPocketBalance, balanceOwner } from '../lib/pocketBalanceCache'
-import PocketTransactionSheet from '../components/PocketTransactionSheet'
 import PocketBottomSheet from '../components/PocketBottomSheet'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom'
@@ -400,7 +399,7 @@ export default function PocketMoveBankPage() {
         onCopy={bank.copy}
         onClose={bank.closeShare}
       />
-      {mode === 'withdraw' && reviewOpen && !bankReceipt && !direct.error && <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
+      {mode === 'withdraw' && reviewOpen && !bankReceipt && <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
         <PocketConfirmationDetails equivalent={direct.result?.amountUsdc ? formatPocketPaymentAmount(Number(direct.result.amountUsdc)) + ' USDC' : bank.country === 'NG' && reviewFx.quote && !reviewFx.quote.stale && reviewFx.quote.expiresAt > Date.now() ? 'Est. ' + formatPocketPaymentAmount(Number(direct.amount) / reviewFx.quote.rate) + ' USDC' : undefined} amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
           ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
         ]} />
@@ -410,7 +409,7 @@ export default function PocketMoveBankPage() {
                   onPrepare={direct.prepareApproval}
                   onConfirm={() => void direct.submit()}
                   labels={{
-                    idle: 'Confirm payout',
+                    idle: direct.error ? 'Try again' : 'Confirm payout',
                     disabled: 'Complete payout details',
                     pending: direct.status === 'routing' && bankLiquidity.status === 'moving' ? 'Moving USDC' : 'Confirming payment',
                     submitted: direct.status === 'route-review' ? 'USDC move confirming' : direct.status === 'routing' ? 'USDC moving to Base' : 'Payment processing',
@@ -421,7 +420,6 @@ export default function PocketMoveBankPage() {
         {direct.error && <p role="alert" className="mt-3 text-center text-xs text-red-500">{direct.error}</p>}
         {bankLiquidity.notice && directLocked && ['moving', 'waiting', 'reconciling'].includes(bankLiquidity.status) && <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">{bankLiquidity.notice}</p>}
       </PocketBottomSheet>}
-      {mode === 'withdraw' && reviewOpen && !bankReceipt && direct.error && !directLocked && <PocketTransactionSheet title="Bank transfer" state="failed" detail={direct.error} onDone={()=>setReviewOpen(false)}/>}
       {mode === 'withdraw' && bankReceipt && (
         <PocketPaymentSuccess
           receipt={bankReceipt}
