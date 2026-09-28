@@ -1,3 +1,4 @@
+import type { PocketActivityRow } from '../models/pocketActivity'
 import { readPocketActivity, type PocketActivityReadResult } from '../api/pocketReadClient'
 import { isPocketActivityReadData, isPocketActivityRow } from './pocketSchemas'
 import { mergePocketActivityRows, mergePocketActivitySnapshot } from './pocketActivitySnapshot'
@@ -89,4 +90,14 @@ export function retireCachedPocketPos(email:string,id:string,deletedAt:string){
  snapshots.set(scope,snapshot)
  try{localStorage.setItem(prefix+encodeURIComponent(scope),JSON.stringify(snapshot))}catch{/* Memory remains current. */}
  listeners.get(scope)?.forEach(notify=>notify())
+}
+
+export function cacheConfirmedPocketActivity(email: string, row: PocketActivityRow) {
+  const scope = activityScope(email)
+  if (!scope) return
+  const previous = cachedPocketActivity(scope)
+  const snapshot: Snapshot = { ...previous, ...mergePocketActivitySnapshot(previous, { payments: [row], merchants: [], collections: [] }), savedAt: previous?.savedAt || 0, full: previous?.full || false }
+  snapshots.set(scope, snapshot)
+  try { localStorage.setItem(prefix + encodeURIComponent(scope), JSON.stringify(snapshot)) } catch { /* Keep the in-memory result. */ }
+  listeners.get(scope)?.forEach(notify => notify())
 }

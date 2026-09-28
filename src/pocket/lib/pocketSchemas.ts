@@ -171,6 +171,7 @@ export type PocketActivityRow = {
   chain: string
   payer: string
   memo: string
+  feeAmount?: string
   amount: string
   ts: number
   source?: string
@@ -601,6 +602,7 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.contextLabel, 500)
     && isOptionalBoundedString(value.settlementType, 80)
     && isOptionalBoundedString(value.amountNgn, 80)
+    && (value.feeAmount === undefined || typeof value.feeAmount === 'string' && /^\d+(?:\.\d{1,6})?$/.test(value.feeAmount))
     && (value.handoffVerified === undefined || typeof value.handoffVerified === 'boolean')
     && isOptionalBoundedString(value.bankSettlementStatus, 80)
     && isOptionalBoundedString(value.xpayCheckoutId, 40)

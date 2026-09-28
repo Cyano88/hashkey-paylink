@@ -1,3 +1,4 @@
+import { EVM_PLATFORM_TREASURY } from '../../lib/platformFees'
 import type { PocketActivityReadData, PocketActivityRow } from './pocketSchemas'
 
 const transactionKey = (row: PocketActivityRow) => JSON.stringify([
@@ -31,9 +32,31 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
     const savedStatus = bank && !row.paycrestStatus?.trim() && old?.paycrestStatus
       ? { paycrestStatus: old.paycrestStatus } : {}
     const receiptIdentity=bank && old?.eventId.startsWith('ngpos-') && !row.eventId.startsWith('ngpos-') ? {eventId:old.eventId,txHash:old.txHash} : {}
-    rows.set(rowKey(row), { ...row, ...savedStatus, ...receiptIdentity, ...(bank && row.handoffVerified === undefined && old?.handoffVerified ? {handoffVerified:true} : {}), ...(bank && !row.bankSettlementStatus && !row.paycrestStatus?.trim() && old?.bankSettlementStatus ? {bankSettlementStatus:old.bankSettlementStatus} : {}), ts: old?.ts || row.ts })
+    const retainedDetails = Object.fromEntries(['accountName','bankName','bankLast4','recipient','amountNgn','fiatCurrency','feeAmount'].flatMap(field => {
+      const key = field as keyof PocketActivityRow
+      return !row[key] && old?.[key] ? [[field, old[key]]] : []
+    }))
+    rows.set(rowKey(row), { ...row, ...retainedDetails, ...savedStatus, ...receiptIdentity, ...(bank && row.handoffVerified === undefined && old?.handoffVerified ? {handoffVerified:true} : {}), ...(bank && !row.bankSettlementStatus && !row.paycrestStatus?.trim() && old?.bankSettlementStatus ? {bankSettlementStatus:old.bankSettlementStatus} : {}), ts: old?.ts || row.ts })
   }
-  const values = [...rows.values()]
+  // Fees are a second USDC log in the same payment batch, not a second send.
+  // A standalone transfer to treasury, a different sender/chain, or an ambiguous
+  // multi-recipient transaction must remain visible.
+  const observed = [...rows.values()]
+  const feeRows = new Set<PocketActivityRow>()
+  const fees = new Map<string, string>()
+  for (const fee of observed) {
+    if (fee.source !== 'wallet-withdrawal' || fee.direction !== 'out' || !/^0x[0-9a-f]{64}$/i.test(fee.txHash)
+      || fee.recipient?.toLowerCase() !== EVM_PLATFORM_TREASURY.toLowerCase() || fee.assetSymbol && fee.assetSymbol !== 'USDC') continue
+    const peers = observed.filter(row => row !== fee && row.source === 'wallet-withdrawal' && row.direction === 'out'
+      && transactionKey(row) === transactionKey(fee) && row.payer.toLowerCase() === fee.payer.toLowerCase()
+      && row.recipient && row.recipient.toLowerCase() !== EVM_PLATFORM_TREASURY.toLowerCase()
+      && (!row.assetSymbol || row.assetSymbol === 'USDC'))
+    if (peers.length !== 1) continue
+    feeRows.add(fee)
+    fees.set(transactionKey(fee), fee.amount)
+  }
+  const values = observed.filter(row => !feeRows.has(row)).map(row => row.direction === 'out' && fees.has(transactionKey(row))
+    ? { ...row, feeAmount: fees.get(transactionKey(row)) } : row)
   const refundDeposits = new Set(values.filter(row => row.source === 'bills' && row.refundTxHash).map(row => transactionKey({ ...row, txHash: row.refundTxHash! }) + ':' + Number(row.amount)))
   const contextual = new Set(values.filter(row => row.source && !['wallet-deposit', 'wallet-withdrawal'].includes(row.source)).map(row => transactionKey(row) + ':' + (row.direction || 'in')))
   return values.filter(row => !['wallet-deposit', 'wallet-withdrawal'].includes(row.source || '')

@@ -1,3 +1,4 @@
+import { mergePocketActivityRows } from '../../src/pocket/lib/pocketActivitySnapshot.js'
 import {readXPayConversionHashes} from './xpay-bank-store.js'
 import { isIncomingPosPayment } from '../../src/pocket/lib/pocketPurchaseKind.js'
 import { createDurablePocketActivityHandler } from './activity-feed.js'
@@ -214,6 +215,7 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     payer: value.payer,
     memo: value.memo,
     amount: value.amount,
+    ...(value.feeAmount !== undefined ? { feeAmount: value.feeAmount } : {}),
     ts: value.ts,
     ...(value.source !== undefined ? { source: value.source } : {}),
     ...(value.merchantId !== undefined ? { merchantId: value.merchantId } : {}),
@@ -298,7 +300,7 @@ async function readActivitySnapshot(dependencies: PocketActivityHandlerDependenc
   const allPayments = [...posPurchases, ...externalPayments, ...closedBankPayouts, ...bills, ...collectionPayments, ...durableBridges, ...history.payments.map(sanitizedActivityRow), ...walletHistory.map(sanitizedActivityRow)]
     .filter(row => row.source === 'purchase' || row.direction === 'in' || !contextualTxHashes.has(row.chain + ":" + row.txHash.toLowerCase()))
     .filter((row, index, rows) => rows.findIndex(candidate => candidate.chain === row.chain && candidate.txHash === row.txHash && (
-      candidate.source === row.source || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
+      candidate.source === row.source && (!['wallet-deposit','wallet-withdrawal'].includes(row.source || '') || candidate.eventId === row.eventId) || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
     )) === index)
     .sort((a, b) => b.ts - a.ts)
   const payments = options.recent ? allPayments.filter(row => !isIncomingPosPayment(row)).slice(0, options.limit) : allPayments
@@ -398,7 +400,13 @@ const sourceGroups: Record<string, Partial<PocketActivityHandlerDependencies>> =
 }
 export default createDurablePocketActivityHandler({
   verifyUser: verifiedPrivyUser,
-  transformSnapshot:async(owner,snapshot)=>{const hashes=await readXPayConversionHashes(owner);return {...snapshot,groupedTransactionHashes:[...hashes],payments:snapshot.payments.filter(row=>!row.txHash||!hashes.has(row.txHash.toLowerCase()))}},
+  transformSnapshot: async (owner, snapshot) => {
+    // Read persisted bank context before publishing wallet logs. This does not
+    // poll Paycrest or wait for bank settlement; the workers own that work.
+    const [hashes, history] = await Promise.all([readXPayConversionHashes(owner), listNgPosHistoryForOwner(owner, { repair: false })])
+    const bankRows = history.payments.map(sanitizedActivityRow)
+    return { ...snapshot, groupedTransactionHashes: [...hashes], payments: mergePocketActivityRows(snapshot.payments, bankRows).filter(row => !row.txHash || !hashes.has(row.txHash.toLowerCase())) }
+  },
   sources: Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
   ])),

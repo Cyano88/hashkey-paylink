@@ -9,7 +9,7 @@ import { PrivyConnectButton } from '../../../lib/PrivyConnectButton'
 import PocketSlideAction from '../../components/PocketSlideAction'
 import PocketSelect from '../../components/PocketSelect'
 import type { PocketBillsController } from '../../controllers/usePocketBillsController'
-import { formatPocketDisplayAmount } from '../../lib/pocketMoney'
+import { formatPocketDisplayAmount, formatPocketPaymentAmount } from '../../lib/pocketMoney'
 import { POCKET_BASE_PATH } from '../../lib/pocketRoutes'
 import PocketDataBundlePicker from './PocketDataBundlePicker'
 import { Link } from 'react-router-dom'
@@ -296,13 +296,13 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
               <PocketBottomSheet title="Review payment" dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
                 <>
                     <h2 className="mb-1 text-center text-2xl font-bold">{money(bills.intent.amountNgn)}</h2>
-                    <p className="mb-6 text-center text-xs text-gray-500 dark:text-gray-400">{bills.intent.variationName || billName}</p>
+                    <p className="mb-6 text-center text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</p>
                     <div className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-4 text-xs dark:border-[#262626] dark:bg-[#121212]">
                       <div className="flex justify-between gap-3"><span className="text-gray-500">Biller</span><span className="text-right font-semibold">{bills.intent.serviceName || billName}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500">{bills.intent.variationName || 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500">{view === 'tv' ? (isDirectTv ? 'Subscriber phone' : 'Smartcard') : view === 'electricity' ? 'Meter' : isData ? 'Recipient' : 'Mobile number'}</span><span className="font-semibold text-gray-900 dark:text-white">{bills.intent.phone}</span></div>
                       {Number(bills.intent.platformFeeUsdc || '0') > 0 && <div className="flex justify-between gap-3"><span className="text-gray-500">Platform fee</span><span className="font-semibold tabular-nums">{bills.intent.platformFeeUsdc} USDC</span></div>}
-                      <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketDisplayAmount(Number(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc))} USDC</span></div>
+                      <div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-[#262626]"><span className="text-gray-500">Total debit / Base</span><span className="font-semibold tabular-nums tracking-[-0.02em] text-gray-900 dark:text-white">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</span></div>
                     </div>
                     {bills.error && <p role="alert" className="mb-3 text-center text-xs text-red-500">{bills.error}</p>}
                     <PocketSlideAction plain onApprovalBusyChange={setApprovalBusy}

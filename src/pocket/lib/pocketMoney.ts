@@ -26,3 +26,9 @@ export function formatPocketDollarAmount(value: string | number) {
     maximumFractionDigits: compact.decimals,
   })
 }
+
+/** Payment amounts retain USDC precision; balance-card compacting must not alter a debit quote. */
+export function formatPocketPaymentAmount(value: string | number) {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount.toLocaleString('en-US', { maximumFractionDigits: 6 }) : ''
+}

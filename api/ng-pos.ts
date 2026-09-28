@@ -602,7 +602,8 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
   const bankSendLinkIds = bankSendLinks.map(link => link.link_id)
   const bankSendById = new Map(bankSendLinks.map(link => [link.link_id, link]))
   const merchantById = new Map(merchants.map(merchant => [merchant.merchant_id, merchant]))
-  const paycrestOrders = await refreshPendingHistoryOrders(await listPaycrestPosOrdersForMerchants([...merchantIds, ...bankSendLinkIds]))
+  const storedOrders = await listPaycrestPosOrdersForMerchants([...merchantIds, ...bankSendLinkIds])
+  const paycrestOrders = options.repair === false ? storedOrders : await refreshPendingHistoryOrders(storedOrders)
   for (const order of options.repair === false ? [] : paycrestOrders) {
     if (order.source !== 'bank-send' && order.tx_hash && /^0x[a-fA-F0-9]{64}$/.test(order.tx_hash)) {
       // Repair a receipt synchronously when payment was persisted but a browser,
