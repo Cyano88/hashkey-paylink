@@ -8,12 +8,13 @@ export type PocketCheckoutRoute =
   | { kind: 'bridge'; source: PocketCheckoutNetwork; destination: PocketCheckoutNetwork; amountUnits: bigint; totalSourceUnits: bigint }
   | { kind: 'insufficient'; destination: PocketCheckoutNetwork; amountUnits: bigint; availableUnits: bigint }
 
-const SOURCE_PRIORITY: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon']
+export const POCKET_AUTO_FUNDING_NETWORKS: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'arc', 'solana', 'polygon']
+const SOURCE_PRIORITY = POCKET_AUTO_FUNDING_NETWORKS
 
 // Automatic Pocket payment routing must remain gas-sponsored end to end.
 // EVM sources use Circle sponsorship, while Solana CCTP uses the validated
 // Hash PayLink fee-payer relay. Each route still selects exactly one source.
-const GAS_SPONSORED_BRIDGE_SOURCES = new Set<PocketCheckoutNetwork>(['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'])
+const GAS_SPONSORED_BRIDGE_SOURCES = new Set<PocketCheckoutNetwork>(POCKET_AUTO_FUNDING_NETWORKS)
 
 function balanceFor(balances: PocketCheckoutBalance[], network: PocketCheckoutNetwork) {
   return balances.find(balance => balance.network === network && balance.available)?.units ?? 0n
@@ -51,6 +52,6 @@ export function selectPocketCheckoutRoute(input: {
       return { kind: 'bridge', source: source.network, destination: input.destination, amountUnits: bridgeAmountUnits, totalSourceUnits }
     }
   }
-  const availableUnits = input.balances.filter(balance => balance.available).reduce((total, balance) => total + balance.units, 0n)
+  const availableUnits = input.balances.filter(balance => balance.available && (balance.network === input.destination || GAS_SPONSORED_BRIDGE_SOURCES.has(balance.network))).reduce((total, balance) => total + balance.units, 0n)
   return { kind: 'insufficient', destination: input.destination, amountUnits: input.amountUnits, availableUnits }
 }

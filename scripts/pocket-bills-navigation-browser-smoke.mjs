@@ -24,9 +24,9 @@ try{
   await page.getByRole('button',{name:'Back',exact:true}).click();await page.getByRole('region',{name:'Bill services'}).waitFor()
  }
  await page.evaluate(()=>window.go('/pocket/bills/tv'));await page.locator('[data-flow="tv"]').waitFor()
- await page.getByRole('button',{name:'XPay',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#route')?.textContent==='/pocket/xpay');
- for(const path of ['/home/transfer','/home/send?mode=address','/home/send?mode=pocket','/move/bank?mode=withdraw','/xstocks/send']){await page.evaluate(path=>window.go('/pocket'+path),path);await page.waitForFunction(()=>!document.querySelector('nav[aria-label="Pocket navigation"]'))}
- await page.evaluate(()=>window.go('/pocket/home/receive'));await page.getByRole('navigation',{name:'Pocket navigation'}).waitFor();
- await page.evaluate(()=>window.go('/pocket/move/bank?mode=request'));await page.getByRole('navigation',{name:'Pocket navigation'}).waitFor();
+ await page.evaluate(()=>window.go('/pocket/home'));await page.getByRole('button',{name:'XPay',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#route')?.textContent==='/pocket/xpay');
+ for(const path of ['/home/transfer','/home/send?mode=address','/home/send?mode=pocket','/move/bank?mode=withdraw','/xstocks/send','/home/swap','/home/receive','/home/deposit','/move/usdc','/bills','/bills/data','/move/bank?mode=request']){await page.evaluate(path=>window.go('/pocket'+path),path);await page.waitForFunction(()=>!document.querySelector('nav[aria-label="Pocket navigation"]'))}
+ await page.evaluate(()=>window.go('/pocket/home'));await page.getByRole('navigation',{name:'Pocket navigation'}).waitFor();
+
  assert.deepEqual(errors,[]);console.log('PASS Bills list, all four flows, existing Back CTA, direct flow URLs and bottom navigation; list performs no wallet work.')
 }finally{await browser.close()}

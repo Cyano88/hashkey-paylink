@@ -77,7 +77,7 @@ import { PocketPillMark } from '../pocket/components/CPurseIcon'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { linkPocketWallet, readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
-import { readPocketBalances, readPocketLinkedWallets } from '../pocket/api/pocketReadClient'
+import { readPocketBankRoutingLiquidity, readPocketDestinationLiquidity } from '../pocket/api/pocketReadClient'
 import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge } from '../pocket/api/pocketBridgeClient'
 import { bridgeCircleSolanaWallet } from '../pocket/lib/pocketSolanaBridge'
 import { selectPocketCheckoutRoute, type PocketCheckoutNetwork, type PocketCheckoutRoute } from '../lib/pocketCheckoutRouting'
@@ -1293,10 +1293,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
       try {
         const accessToken = await getAccessToken()
         if (!accessToken) throw new Error('Sign in again to check Pocket balances.')
-        const [snapshot, wallets] = await Promise.all([
-          readPocketBalances({ accessToken }),
-          readPocketLinkedWallets({ accessToken }),
-        ])
+        const snapshot = await readPocketBankRoutingLiquidity(accessToken)
+        const wallets = snapshot.wallets
         if (cancelled) return
         setPocketCheckoutWallets(wallets)
         const balances = (['base', 'arbitrum', 'solana'] as PocketCheckoutNetwork[]).map(network => {
@@ -2503,6 +2501,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
             accessToken,
           })
         : await bridgeCircleEvmEmailWallet({
+            privyAccessToken: accessToken,
             session: {
               userToken: credentials.userToken,
               encryptionKey: credentials.encryptionKey,
@@ -2529,9 +2528,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         .catch(() => undefined)
       let arrived = false
       for (let attempt = 0; attempt < 20 && !arrived; attempt += 1) {
-        const snapshot = await readPocketBalances({ accessToken })
-        const destination = snapshot.rows.find(row => row.key === route.destination)
-        const destinationUnits = destination?.status === 'ok' ? parseUnits(destination.balance.toFixed(6), 6) : 0n
+        const destination = await readPocketDestinationLiquidity(accessToken, route.destination)
+        const destinationUnits = parseUnits(destination.balance.toFixed(6), 6)
         arrived = destinationUnits >= circleRequiredUnits
         if (!arrived) await new Promise(resolve => window.setTimeout(resolve, 3_000))
       }

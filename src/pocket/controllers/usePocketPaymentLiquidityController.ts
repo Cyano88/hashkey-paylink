@@ -5,11 +5,12 @@ import { formatUnits, parseUnits } from 'viem'
 import { bridgeCircleEvmEmailWallet, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import {
   selectPocketCheckoutRoute,
+  POCKET_AUTO_FUNDING_NETWORKS,
   type PocketCheckoutNetwork,
   type PocketCheckoutRoute,
 } from '../../lib/pocketCheckoutRouting'
 import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge } from '../api/pocketBridgeClient'
-import { readPocketBalances, readPocketLinkedWallets, readPocketDestinationLiquidity, readPocketBankRoutingLiquidity } from '../api/pocketReadClient'
+import { readPocketDestinationLiquidity, readPocketBankRoutingLiquidity } from '../api/pocketReadClient'
 import { bridgeCircleSolanaWallet } from '../lib/pocketSolanaBridge'
 import type { CirclePocketWallet, CirclePocketWallets } from '../models/pocketWallet'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
@@ -35,7 +36,7 @@ function liquidityError(reason: unknown) {
     ? 'Pocket could not connect. Check your connection and try again.'
     : message || 'Pocket routing is temporarily unavailable.'
 }
-const NETWORKS: PocketCheckoutNetwork[] = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon']
+const NETWORKS = POCKET_AUTO_FUNDING_NETWORKS
 const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms))
 const networkLabel = (network: PocketCheckoutNetwork) => ({ base: 'Base', arbitrum: 'Arbitrum', arc: 'Arc', solana: 'Solana', ethereum: 'Ethereum', polygon: 'Polygon' })[network]
 export const pocketBridgePollDelay = (attempt: number) => attempt < 12 ? 1_500 : attempt < 32 ? 3_000 : 5_000
@@ -51,12 +52,10 @@ async function inspectLiquidity(input: {
   if(destination?.wallet && parseUnits((Math.floor(destination.balance*1_000_000)/1_000_000).toFixed(6),6)>=input.amountUnits) {
     return {route:{kind:'direct',destination:input.destination,amountUnits:input.amountUnits} as PocketCheckoutRoute, wallets:{[input.destination]:destination.wallet} as CirclePocketWallets}
   }
-  const bank = input.bankPayout ? await readPocketBankRoutingLiquidity(input.accessToken) : null
-  const [snapshot, wallets] = bank ? [bank, bank.wallets] : await Promise.all([
-    readPocketBalances({ accessToken: input.accessToken }),
-    readPocketLinkedWallets({ accessToken: input.accessToken }),
-  ])
-  const networks = input.bankPayout ? NETWORKS.filter(network => network !== 'ethereum') : NETWORKS
+  // All automatic payment funding uses the isolated non-Ethereum scan.
+  const snapshot = await readPocketBankRoutingLiquidity(input.accessToken)
+  const wallets = snapshot.wallets
+  const networks = NETWORKS
   const balances = networks.map(network => {
     const row = snapshot.rows.find(candidate => candidate.key === network)
     return {

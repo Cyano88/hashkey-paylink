@@ -70,6 +70,8 @@ try {
   assert.equal(invalidRoute.statusCode, 400)
   const excessiveRoute = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '6' })
   assert.equal(excessiveRoute.statusCode, 400)
+  const excludedRoute = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'ethereum', destination: 'base', amount: '4' })
+  assert.equal(excludedRoute.statusCode, 400)
   const routeStarted = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '4' })
   assert.equal(routeStarted.statusCode, 200, JSON.stringify(routeStarted.body))
   assert.equal(routeStarted.body.route.phase, 'started')
