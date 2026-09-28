@@ -1,3 +1,5 @@
+import { installCircleApprovalSurface } from './circleApprovalSurface'
+import { executeRecoverableCircleApproval } from './circleRecoverableApproval'
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
 import { Capacitor } from '@capacitor/core'
 import { takePocketPaymentApproval } from '../pocket/lib/pocketPaymentApproval'
@@ -149,20 +151,7 @@ function capturePocketViewport() {
 
 function executeChallenge(sdk: W3SSdk, challengeId: string) {
   const restorePocketViewport = capturePocketViewport()
-  return new Promise<CircleChallengeResult>((resolve, reject) => {
-    sdk.execute(challengeId, (error, result) => {
-      restorePocketViewport()
-      if (error) {
-        reject(new Error(sdkError(error)))
-        return
-      }
-      if (!result) {
-        reject(new Error('Circle wallet action did not complete.'))
-        return
-      }
-      resolve(result as CircleChallengeResult)
-    })
-  })
+  return executeRecoverableCircleApproval(sdk, challengeId, sdkError).finally(restorePocketViewport)
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
@@ -270,9 +259,12 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
   let currentOtp = otp
   const restorePocketViewport = capturePocketViewport()
 
+  let removeCircleSurface = () => {}
+  let removeLoginListener = () => {}
   const login = await withTimeout(new Promise<CircleEmailLoginResult>((resolve, reject) => {
     const handleClose = (event: MessageEvent) => {
-      if (!isCircleCloseMessage(event.data)) return
+      const frame = document.getElementById('sdkIframe') as HTMLIFrameElement | null
+      if (event.origin !== 'https://pw-auth.circle.com' || event.source !== frame?.contentWindow || !isCircleCloseMessage(event.data)) return
       window.removeEventListener('message', handleClose)
       restorePocketViewport()
       reject(new Error('Payment cancelled. Try again.'))
@@ -303,6 +295,7 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
       }, onLoginComplete)
     }
     window.addEventListener('message', handleClose)
+    removeLoginListener = () => window.removeEventListener('message', handleClose)
     sdk.setOnResendOtpEmail(() => {
       void circleSolanaApi<typeof currentOtp>({
         action: 'requestEmailOtp',
@@ -317,6 +310,12 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
         reject(new Error(emailVerificationError(err)))
       })
     })
+    removeCircleSurface = installCircleApprovalSurface(() => {
+      closeCircleSdkModal()
+      window.removeEventListener('message', handleClose)
+      restorePocketViewport()
+      reject(new Error('Payment cancelled.'))
+    }, 'Cancel Circle sign in')
     refreshOtpConfig()
     try {
       sdk.verifyOtp()
@@ -325,7 +324,7 @@ export async function connectCircleSolanaEmailWallet(email: string): Promise<Sol
       closeCircleSdkModal()
       reject(new Error(emailVerificationError(err)))
     }
-  }), CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS, 'Code expired. Request a new code.')
+  }), CIRCLE_EMAIL_VERIFICATION_TIMEOUT_MS, 'Code expired. Request a new code.').finally(() => { removeCircleSurface(); removeLoginListener(); closeCircleSdkModal(); restorePocketViewport() })
 
   const wallet = await ensureInitializedWallet(sdk, login.userToken, login.encryptionKey)
   if (!isSolanaAddress(wallet.address)) {

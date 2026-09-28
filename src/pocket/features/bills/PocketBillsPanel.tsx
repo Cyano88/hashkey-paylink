@@ -289,7 +289,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">View Bills activity</Link>}
 
             {showPayment && !showResult && bills.intent && (
-              <PocketBottomSheet title="Confirm payment" dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
+              <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
                 <>
                     <h2 className="mb-1 text-center text-2xl font-bold">{money(bills.intent.amountNgn)}</h2>
                     <p className="mb-6 text-center text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</p>

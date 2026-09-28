@@ -1,3 +1,4 @@
+import { installCircleApprovalSurface } from './circleApprovalSurface'
 type ApprovalSdk = {
  execute(id:string,callback:(error:any,result:any)=>void):void
  messageHandler:(event:any)=>void
@@ -10,26 +11,29 @@ export function executeRecoverableCircleApproval(sdk:ApprovalSdk,id:string,error
  return new Promise((resolve,reject)=>{
   let settled=false,frame:HTMLIFrameElement|null=null,timer:ReturnType<typeof setTimeout>|undefined
   let pollTimer:ReturnType<typeof setTimeout>|undefined
+  let removeSurface=()=>{}
   const cleanup=()=>{
+   removeSurface()
    if(timer)clearTimeout(timer)
    if(pollTimer)clearTimeout(pollTimer)
    window.removeEventListener('message',close)
    window.removeEventListener('message',sdk.messageHandler)
    window.removeEventListener('offline',offline)
    signal?.removeEventListener('abort',abort)
-   frame?.remove()
+   ;(frame ?? document.getElementById('sdkIframe'))?.remove()
   }
   const finish=(error?:Error,result?:any)=>{if(settled)return;settled=true;cleanup();error?reject(error):resolve(result)}
   const abort=()=>finish(new Error('Approval closed. Pocket will check your saved transfer before you continue.'))
   const offline=()=>finish(new Error('Connection lost during approval. Reconnect and continue your saved transfer.'))
   const close=(event:MessageEvent)=>{
-   if(event.origin==='https://pw-auth.circle.com'&&event.source===frame?.contentWindow&&event.data?.onClose)abort()
+   if(event.origin==='https://pw-auth.circle.com'&&event.source===(frame ?? document.getElementById('sdkIframe') as HTMLIFrameElement | null)?.contentWindow&&event.data?.onClose)abort()
   }
   window.addEventListener('message',close)
   window.addEventListener('offline',offline)
   signal?.addEventListener('abort',abort,{once:true})
   timer=setTimeout(()=>finish(new Error('The approval screen stopped responding. Pocket will check your saved transfer before you continue.')),timeoutMs)
   try {
+   removeSurface=installCircleApprovalSurface(abort)
    sdk.execute(id,(error,result)=>{if(error)finish(new Error(errorText(error)));else if(!result)finish(new Error('Approval did not finish. Check your saved transfer.'));else finish(undefined,result)})
    frame=document.getElementById('sdkIframe') as HTMLIFrameElement|null
    if(settled){frame?.remove();return}
