@@ -1,3 +1,4 @@
+import PocketTransactionDetails from './PocketTransactionDetails'
 import { formatPocketPaymentAmount } from '../lib/pocketMoney'
 import { useState, type ReactNode } from 'react'
 import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
@@ -7,8 +8,8 @@ import PocketGetApp from './PocketGetApp'
 import { Check, Clock3, X, Undo2 } from './PocketIcons'
 
 export type PocketTransactionState = 'successful' | 'pending' | 'failed' | 'reversed'
-export default function PocketTransactionSheet({ title, state, statusLabel, amount, detail, receipt, onDone, inline = false, children }: {
-  statusLabel?: string; title: string; state: PocketTransactionState; amount?: string; detail?: string; receipt?: PaylinkReceipt | null; onDone: () => void; inline?: boolean; children?: ReactNode
+export default function PocketTransactionSheet({ title, state, statusLabel, amount, detail, receipt, onDone, inline = false, children, detailsRows }: {
+  detailsRows?: Array<[string, ReactNode]>; statusLabel?: string; title: string; state: PocketTransactionState; amount?: string; detail?: string; receipt?: PaylinkReceipt | null; onDone: () => void; inline?: boolean; children?: ReactNode
 }) {
   const [viewReceipt, setViewReceipt] = useState(false)
   const canViewReceipt = Boolean(receipt)
@@ -19,6 +20,14 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
   const label = statusLabel || (state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing')
   const Icon = label.toLowerCase().startsWith('refund') ? Undo2 : state === 'failed' ? X : state === 'reversed' ? Undo2 : Clock3
   if (viewReceipt && receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={() => setViewReceipt(false)} />
+  const rows: Array<[string, ReactNode]> = detailsRows ?? (receipt ? [
+    ...(receipt.providerName ? [['Provider', receipt.providerName] as [string, ReactNode]] : []),
+    ...(receipt.targetLabel && receipt.targetValue ? [[receipt.targetLabel, receipt.targetValue] as [string, ReactNode]] : []),
+    ...(receipt.recipient ? [['To', receipt.recipient] as [string, ReactNode]] : []),
+    ...(receipt.destination ? [['Destination', receipt.destination] as [string, ReactNode]] : []),
+    ...(receipt.chain ? [['Network', <span className="capitalize">{receipt.chain}</span>] as [string, ReactNode]] : []),
+    ...(Number.isFinite(receipt.createdAt) && receipt.createdAt > 0 ? [['Date', new Date(receipt.createdAt).toLocaleString()] as [string, ReactNode]] : []),
+  ] : [])
   const content = <>
     <p className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{title}</p>
     <div className="pb-6 pt-3 text-center" role="status" aria-live="polite">
@@ -28,6 +37,7 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
       {usdcEquivalent && <p className="mt-1 text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">{usdcEquivalent}</p>}
       {detail && <p className="mx-auto mt-3 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{detail}</p>}
     </div>
+    <PocketTransactionDetails rows={rows} />
     {children}
     <div className={`mt-4 grid gap-3 ${canViewReceipt && !inline ? 'grid-cols-2' : 'grid-cols-1'}`}>
       {canViewReceipt && <button type="button" onClick={() => setViewReceipt(true)} className="pocket-cta-secondary">View receipt</button>}
