@@ -354,7 +354,7 @@ export default function PocketMoveBankPage() {
             {mode === 'withdraw' && recipientStep && <div className="pocket-bank-amount-page flex min-h-0 flex-1 flex-col gap-5">
               <PocketBankAmountFields currency={pocketFiatCurrency(bank.country)} accountName={bank.accountName} bankName={bank.bankName} accountNumber={bank.accountNumber} amount={direct.amount} memo={direct.memo} disabled={directLocked} onChangeRecipient={()=>setRecipientStep(false)} onAmountChange={direct.setAmount} onMemoChange={direct.setMemo} />
 
-              <div className="mt-auto space-y-2 pt-6">
+              <div className="mt-auto space-y-2 pt-6" style={{ visibility: reviewOpen || bankReceipt ? 'hidden' : undefined }}>
                 {recoveredPayout ? (
                   <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#121212] dark:text-gray-300">
                     Your previous payout is updating in Activity.
@@ -427,8 +427,9 @@ export default function PocketMoveBankPage() {
           receipt={bankReceipt}
           outcome={direct.status === 'sent' ? direct.result?.state === 'sent' ? 'completed' : 'handed-off' : 'pending'}
           onDone={() => {
-            direct.resetResult()
-            navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)
+            direct.resetResult(false)
+            direct.setAmount('')
+            setReviewOpen(false)
           }}
         />
       )}
