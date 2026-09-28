@@ -22,8 +22,8 @@ export function pocketActivityIcon(row: PocketActivityRow) {
   if (isIncomingPosPayment(row) || source === 'xpay') return QrCode
   if (source === 'wallet-swap' || source === 'wallet-bridge') return ArrowLeftRight
   if (source.startsWith('wallet-') || row.settlementType?.startsWith('wallet_')) {
-    if (row.direction === 'in' || ['refunded', 'reversed'].includes(pocketActivityStatus(row))) return ArrowDownToLine
-    return !row.assetSymbol || row.assetSymbol.toUpperCase() === 'USDC' ? UsdcActivityLogo : ArrowUpFromLine
+    if (!row.assetSymbol || row.assetSymbol.toUpperCase() === 'USDC') return UsdcActivityLogo
+    return row.direction === 'in' || ['refunded', 'reversed'].includes(pocketActivityStatus(row)) ? ArrowDownToLine : ArrowUpFromLine
   }
   return CreditCard
 }

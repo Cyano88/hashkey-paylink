@@ -56,7 +56,7 @@ export default function PocketHomePage() {
   const fx = usePocketFxQuote(1, showNgn)
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
   const [selectedActivity, setSelectedActivity] = useState<PocketActivityRow | null>(null)
-  const [networkPage, setNetworkPage] = useState(0)
+  const [networkPage, setNetworkPage] = useState(() => ['polygon', 'ethereum'].includes(initialNetwork()) ? 1 : 0)
   const [balanceVisible, setBalanceVisible] = useState(() => window.localStorage.getItem(BALANCE_VISIBLE_KEY) !== 'false')
   const selectedActivityRow = currentPocketActivityRow(selectedActivity, activity.rows)
   const recent = activity.rows.filter(row => !isIncomingPosPayment(row)).slice(0, 4)
@@ -94,9 +94,9 @@ export default function PocketHomePage() {
         </div>
       </div>
       <div className="mt-4 flex items-center gap-2"><div className="pocket-network-page grid min-w-0 flex-1 grid-cols-4 gap-2" aria-label="Balance networks" key={networkPage}>
-        {NETWORKS.slice(networkPage * 4, networkPage * 4 + 4).map(network => <button key={network.key} type="button" onClick={() => setSelected(network.key)} className={cn('relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl transition', selected === network.key ? 'bg-white/12 dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={'Show ' + network.label + ' balance'} aria-pressed={selected === network.key}>
+        {NETWORKS.slice(networkPage * 4, networkPage * 4 + 4).map(network => <button key={network.key} type="button" onClick={() => setSelected(network.key)} className={cn('relative flex h-14 min-w-0 w-full flex-col items-center justify-center gap-1 rounded-xl px-0.5 py-1.5 transition-colors', selected === network.key ? 'bg-white/[0.12] dark:bg-gray-950/[0.08]' : 'opacity-55 hover:opacity-90')} aria-label={'Show ' + network.label + ' balance'} aria-pressed={selected === network.key}>
           <img src={network.logo} alt="" className={cn('h-6 w-6 rounded-md object-cover grayscale contrast-200', network.dark ? 'invert dark:invert-0' : 'dark:invert')} />
-          <span className="text-[9px] font-semibold">{network.label}</span>
+          <span className="whitespace-nowrap text-[9px] font-semibold leading-3">{network.label}</span>
         </button>)}
       </div><button type="button" aria-label={networkPage === 0 ? 'More networks' : 'Previous networks'} onClick={() => { const next = networkPage === 0 ? 1 : 0; setNetworkPage(next); setSelected(next === 1 ? 'polygon' : 'base') }} className="flex h-10 w-8 shrink-0 items-center justify-center rounded-full"><ArrowRight className={cn('h-5 w-5 transition-transform', networkPage === 1 && 'rotate-180')} /></button></div>
       <div className="mt-3 border-t border-white/10 pt-3 text-center dark:border-gray-950/10">
