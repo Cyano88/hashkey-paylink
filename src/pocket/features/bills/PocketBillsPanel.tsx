@@ -177,8 +177,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? `${billName} testing is not enabled yet.` : `${billName} payments are not available yet.`}</p>
         </div>
       ) : (
-        <div data-pocket-bill-card className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
-          <div className="flex shrink-0 items-center justify-between gap-3 pb-1">
+        <div data-pocket-bill-card={isData ? '' : undefined} className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-3", isData && "rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none")}>
+          <div className={cn("flex shrink-0 items-center justify-between gap-3", isData ? "pb-1" : "rounded-[22px] bg-white px-4 py-3 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none")}>
             <span className="min-w-0">
               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Paying from Base</span>
 
