@@ -5,8 +5,8 @@ import { isOutgoingPosPurchase, isIncomingPosPayment } from '../lib/pocketPurcha
 import { pocketActivityStatus } from '../lib/pocketReceipt'
 
 function UsdcActivityLogo({ className }: { className?: string }) {
-  return createElement('img', { src: '/brand/usdc-circle-logo.png', alt: 'USDC', className,
-    style: { width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' } })
+  return createElement('img', { src: '/brand/usdc-circle-logo.png', alt: 'USDC',
+    className: `${className ?? ''} shrink-0 rounded-full object-contain grayscale contrast-200 dark:invert` })
 }
 
 export function pocketActivityIcon(row: PocketActivityRow) {
