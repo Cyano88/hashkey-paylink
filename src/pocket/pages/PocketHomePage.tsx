@@ -111,7 +111,7 @@ export default function PocketHomePage() {
         { label: 'Bills', icon: Receipt, path: POCKET_ROUTES.bills },
         { label: 'Swap', icon: ArrowLeftRight, path: POCKET_ROUTES.swap },
         { label: 'Receive', icon: Deposit, path: POCKET_ROUTES.receive },
-      ].map(item => <PocketHomeAction key={item.label} label={item.label} icon={<item.icon className="h-5 w-5" />} onClick={() => open(item.path)} />)}
+      ].map(item => <PocketHomeAction key={item.label} label={item.label} icon={<item.icon className="h-6 w-6" />} onClick={() => open(item.path)} />)}
     </section>
 
     <section className="pt-2">
