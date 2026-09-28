@@ -65,6 +65,8 @@ try {
   request.feeQuoteToken=quoteFor(request)
   const first=await call(request),retry=await call(request)
   assert.equal(first.challengeId,retry.challengeId)
+  assert.deepEqual(first.approval,{amount:'100',total:'101.05',asset:'USDC'})
+  assert.deepEqual(retry.approval,first.approval)
   assert.equal(executions.at(-1).idempotencyKey,request.idempotencyKey)
   const batch=decodeFunctionData({abi:parseAbi(['function executeBatch((address target,uint256 value,bytes data)[] calls)']),data:executions.at(-1).callData})
   assert.equal(batch.args[0].length,2)

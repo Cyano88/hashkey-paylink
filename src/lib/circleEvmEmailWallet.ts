@@ -467,6 +467,7 @@ function authenticatedSdk(session: CircleEvmEmailSession) {
 }
 
 function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
+  totalAmount?: string
   amount?: string
   asset?: string
   recipient?: string
@@ -527,6 +528,8 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
       toLabel: 'Recipient',
       to: shortRecipient ? [shortRecipient] : undefined,
       totalLabel: 'Total',
+      mainCurrency: amount ? { amount, symbol: asset } : undefined,
+      total: context?.totalAmount ? [context.totalAmount + ' ' + asset] : undefined,
       rawTxDescription: 'Payment details',
       rawTx: 'Approve payment',
     },
@@ -539,6 +542,8 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
       contractAddressLabel: 'Payment contract',
       contractInfo: ['Hash PayLink'],
       totalLabel: 'Total',
+      mainCurrency: amount ? { amount, symbol: asset } : undefined,
+      total: context?.totalAmount ? [context.totalAmount + ' ' + asset] : undefined,
       dataDetails: {
         dataDetailsLabel: 'Authorization details',
         callData: {
@@ -923,6 +928,7 @@ export async function sendCircleEvmEmailPayment(params: {
   })
   const totalUnits = parseUnits(params.amount || '0', CHAIN_META[params.session.chain].decimals)
   const challenge = await circleWalletApi<{
+    approval?: { amount: string; total: string; asset: string }
     challengeId?: string
     id?: string
     transactionId?: string
@@ -942,6 +948,7 @@ export async function sendCircleEvmEmailPayment(params: {
     payoutIntentId: params.payoutIntentId,
   }, { privyAccessToken: params.privyAccessToken })
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
+  applyHashPayLinkCircleUi(sdk, { amount: challenge.approval?.amount ?? params.amount, totalAmount: challenge.approval?.total ?? (!params.feeQuoteToken ? params.amount : undefined), asset: CHAIN_META[params.session.chain].asset, recipient: params.recipient, chainLabel: CHAIN_META[params.session.chain].label })
   const result = await executeChallengeWithTimeout(
     sdk,
     challenge.challengeId,
@@ -1000,6 +1007,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
   })
   const totalUnits = parseUnits(params.amount || '0', CHAIN_META[params.session.chain].decimals)
   const challenge = await circleWalletApi<{
+    approval?: { amount: string; total: string; asset: string }
     challengeId?: string
     id?: string
     transactionId?: string
@@ -1017,6 +1025,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
     idempotencyKey: params.idempotencyKey,
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a withdraw challenge.')
+  applyHashPayLinkCircleUi(sdk, { amount: challenge.approval?.amount ?? params.amount, totalAmount: challenge.approval?.total ?? (!params.feeQuoteToken ? params.amount : undefined), asset: CHAIN_META[params.session.chain].asset, recipient: params.recipient, chainLabel: CHAIN_META[params.session.chain].label })
   params.onChallenge?.({ challengeId: challenge.challengeId, transactionId: findTransactionId(challenge) ?? '' })
   let observedTransactionId = findTransactionId(challenge) ?? ''
   let confirmedHash: Hex | null = null

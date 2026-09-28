@@ -10,7 +10,7 @@ import { consumePocketPaymentApproval, requiresPocketPaymentApproval } from './p
 import crypto from 'crypto'
 import { inspectEvmReplacement, isEvmReplacementCandidate, replacementBatchRequest, replacementAlignmentRef, replacementAlignmentRequest, canAlignReplacementInventory } from '../src/lib/circleEvmReplacement.js'
 import { PublicKey } from '@solana/web3.js'
-import { encodeFunctionData, isAddress, parseAbi, parseUnits } from 'viem'
+import { encodeFunctionData, formatUnits, isAddress, parseAbi, parseUnits } from 'viem'
 import { CCTP_DOMAIN, CCTP_FORWARD_HOOK, CCTP_TOKEN_MESSENGER_V2, cctpForwardHookForSolana, cctpMintRecipient, readCctpForwardQuote, solanaRecipient, type PocketBridgeNetwork } from './pocket/cctp.js'
 import {
   requireCircleGasStationEvmWallet,
@@ -747,7 +747,7 @@ export default async function handler(req: Request, res: Response) {
         refId: `hashpaylink-${chain}`,
         callData: batchCallData,
       })
-      return res.json({ ok: true, ...data })
+      return res.json({ ok: true, ...data, approval: { amount: formatUnits(BigInt(quote.recipientUnits), 6), total: formatUnits(BigInt(quote.totalUnits), 6), asset: 'USDC' } })
     }
 
     if (action === 'executeEvmWithdraw') {
@@ -793,7 +793,7 @@ export default async function handler(req: Request, res: Response) {
         callData: batchCallData,
         idempotencyKey,
       })
-      return res.json({ ok: true, ...data })
+      return res.json({ ok: true, ...data, approval: { amount: formatUnits(total, 6), total: formatUnits(total, 6), asset: 'USDC' } })
     }
 
     if (action === 'executeEvmBridge') {

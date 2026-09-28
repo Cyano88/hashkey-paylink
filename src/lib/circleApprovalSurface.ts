@@ -1,23 +1,18 @@
 import { POCKET_NATIVE_BACK_EVENT } from '../pocket/lib/pocketNativeBack'
 
-// Keep Circle's cross-origin controls intact. Only size the host frame and add
-// Pocket's own close action; closing approval is not proof a payment was cancelled.
-export function installCircleApprovalSurface(onCancel: () => void, label = 'Close wallet approval') {
+// Circle owns the single close control and secure authorization content.
+// Pocket supplies a compact, scrollable host; closing does not reverse a transfer.
+export function installCircleApprovalSurface(onCancel: () => void, _label = 'Close wallet approval') {
   const backdrop = document.createElement('div')
   backdrop.dataset.circleApprovalSurface = ''
   Object.assign(backdrop.style, { position: 'fixed', inset: '0', background: 'rgba(0,0,0,.4)', zIndex: '2147483645' })
   const panel = document.createElement('div')
-  Object.assign(panel.style, { position: 'fixed', background: '#FFFFFF', borderRadius: '28px 28px 0 0', overflow: 'hidden', transition: 'none' })
-  const button = document.createElement('button')
-  button.type = 'button'
-  button.setAttribute('aria-label', label)
-  button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>'
-  Object.assign(button.style, { position: 'absolute', top: '4px', right: '8px', transition: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', padding: '12px', border: '0', borderRadius: '9999px', color: '#111827', background: '#FFFFFF', cursor: 'pointer', zIndex: '2147483647' })
-  button.addEventListener('click', onCancel)
-  panel.append(button)
+  Object.assign(panel.style, { position: 'fixed', boxSizing: 'border-box', background: '#FFFFFF', borderRadius: '28px 28px 0 0', overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', transition: 'none' })
   backdrop.append(panel)
   let frame: HTMLIFrameElement | null = null
   let previousStyle: string | null = null
+  let scrollTop = 0
+  panel.addEventListener('scroll', () => { if (frame?.style.position === 'relative') scrollTop = panel.scrollTop })
   const sync = () => {
     frameObserver.disconnect()
     const current = document.getElementById('sdkIframe') as HTMLIFrameElement | null
@@ -34,17 +29,25 @@ export function installCircleApprovalSurface(onCancel: () => void, label = 'Clos
     const panelHeight = `min(${preferredHeight}px, calc(${height}px - max(8px, var(--pocket-safe-top, env(safe-area-inset-top, 0px)))))`
     const top = `calc(${(viewport?.offsetTop ?? 0) + height}px - ${panelHeight})`
     Object.assign(panel.style, { top, left: `${x}px`, width: `${panelWidth}px`, height: panelHeight })
-    Object.assign(frame.style, { position: 'fixed', inset: 'auto', margin: '0', transform: 'none', transition: 'none', top: `calc(${top} + 52px)`, left: `${x}px`, width: `${panelWidth}px`, maxWidth: 'none', height: `calc(${panelHeight} - 52px - var(--pocket-safe-bottom, env(safe-area-inset-bottom, 0px)))`, maxHeight: 'none', border: '0', borderRadius: '0', zIndex: '2147483646' })
-    // Apply all geometry before mounting. The X stays right-anchored to its
-    // panel throughout frame insertion, viewport resizing and keyboard changes.
+    Object.assign(frame.style, { position: 'relative', inset: 'auto', margin: '0', transform: 'none', transition: 'none', top: 'auto', left: 'auto', width: '100%', maxWidth: 'none', height: '640px', minHeight: '100%', maxHeight: 'none', display: 'block', border: '0', borderRadius: '0', zIndex: 'auto' })
+    frame.setAttribute('scrolling', 'yes')
+    panel.style.paddingBottom = 'var(--pocket-safe-bottom, env(safe-area-inset-bottom, 0px))'
+    // Mount before moving the newly-created SDK frame. Modern browsers preserve
+    // its browsing context with moveBefore; the fallback runs before frame-ready.
     if (!backdrop.isConnected) document.body.appendChild(backdrop)
+    if (frame.parentElement !== panel) {
+      const host = panel as HTMLDivElement & { moveBefore?: (node: Node, child: Node | null) => void }
+      if (host.moveBefore) host.moveBefore(frame, null)
+      else host.appendChild(frame)
+    }
+    panel.scrollTop = scrollTop
     frameObserver.observe(frame, { attributes: true, attributeFilter: ['style', 'width', 'height'] })
   }
   const back = (event: Event) => { if (!backdrop.isConnected) return; event.preventDefault(); event.stopImmediatePropagation(); onCancel() }
   const key = (event: KeyboardEvent) => { if (event.key === 'Escape') back(event) }
   const frameObserver = new MutationObserver(sync)
   const observer = new MutationObserver(sync)
-  observer.observe(document.body, { childList: true })
+  observer.observe(document.body, { childList: true, subtree: true })
   window.addEventListener('resize', sync)
   window.visualViewport?.addEventListener('resize', sync)
   window.visualViewport?.addEventListener('scroll', sync)
@@ -59,7 +62,7 @@ export function installCircleApprovalSurface(onCancel: () => void, label = 'Clos
     window.visualViewport?.removeEventListener('scroll', sync)
     window.removeEventListener(POCKET_NATIVE_BACK_EVENT, back, true)
     document.removeEventListener('keydown', key, true)
-    backdrop.remove()
     if (frame?.isConnected) { if (previousStyle === null) frame.removeAttribute('style'); else frame.setAttribute('style', previousStyle) }
+    backdrop.remove()
   }
 }
