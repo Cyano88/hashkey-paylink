@@ -7,31 +7,36 @@ export function installCircleApprovalSurface(onCancel: () => void, label = 'Clos
   backdrop.dataset.circleApprovalSurface = ''
   Object.assign(backdrop.style, { position: 'fixed', inset: '0', background: 'rgba(0,0,0,.4)', zIndex: '2147483645' })
   const panel = document.createElement('div')
-  Object.assign(panel.style, { position: 'fixed', background: '#FFFFFF', borderRadius: '24px', overflow: 'hidden' })
+  Object.assign(panel.style, { position: 'fixed', background: '#FFFFFF', borderRadius: '28px 28px 0 0', overflow: 'hidden', transition: 'none' })
   const button = document.createElement('button')
   button.type = 'button'
   button.setAttribute('aria-label', label)
   button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/></svg>'
-  Object.assign(button.style, { position: 'fixed', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', padding: '12px', border: '0', borderRadius: '9999px', color: '#111827', background: '#FFFFFF', cursor: 'pointer', zIndex: '2147483647' })
+  Object.assign(button.style, { position: 'absolute', top: '4px', right: '8px', transition: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '44px', height: '44px', padding: '12px', border: '0', borderRadius: '9999px', color: '#111827', background: '#FFFFFF', cursor: 'pointer', zIndex: '2147483647' })
   button.addEventListener('click', onCancel)
-  backdrop.append(panel, button)
+  panel.append(button)
+  backdrop.append(panel)
   let frame: HTMLIFrameElement | null = null
   let previousStyle: string | null = null
   const sync = () => {
     const current = document.getElementById('sdkIframe') as HTMLIFrameElement | null
     if (!current) { backdrop.remove(); return }
     if (current !== frame) { frame = current; previousStyle = frame.getAttribute('style') }
-    if (!backdrop.isConnected) document.body.appendChild(backdrop)
     const viewport = window.visualViewport
     const height = viewport?.height ?? window.innerHeight
     const width = viewport?.width ?? window.innerWidth
-    const x = (viewport?.offsetLeft ?? 0) + Math.max(8, (width - 480) / 2)
-    const top = `calc(${viewport?.offsetTop ?? 0}px + max(8px, var(--pocket-safe-top, env(safe-area-inset-top, 0px))))`
-    const panelHeight = `calc(${height}px - max(8px, var(--pocket-safe-top, env(safe-area-inset-top, 0px))) - max(8px, var(--pocket-safe-bottom, env(safe-area-inset-bottom, 0px))))`
-    const panelWidth = Math.min(480, width - 16)
+    const panelWidth = Math.min(512, width)
+    const x = (viewport?.offsetLeft ?? 0) + (width - panelWidth) / 2
+    const confirmations = document.querySelectorAll<HTMLElement>('[data-pocket-sheet]')
+    const confirmation = confirmations[confirmations.length - 1]
+    const preferredHeight = Math.min(600, Math.max(480, (confirmation?.getBoundingClientRect().height || 496) + 64))
+    const panelHeight = `min(${preferredHeight}px, calc(${height}px - max(8px, var(--pocket-safe-top, env(safe-area-inset-top, 0px)))))`
+    const top = `calc(${(viewport?.offsetTop ?? 0) + height}px - ${panelHeight})`
     Object.assign(panel.style, { top, left: `${x}px`, width: `${panelWidth}px`, height: panelHeight })
-    Object.assign(button.style, { top: `calc(${top} + 4px)`, left: `${x + panelWidth - 48}px` })
-    Object.assign(frame.style, { position: 'fixed', inset: 'auto', margin: '0', transform: 'none', top: `calc(${top} + 52px)`, left: `${x}px`, width: `${panelWidth}px`, maxWidth: 'none', height: `calc(${panelHeight} - 52px)`, maxHeight: 'none', border: '0', borderRadius: '0 0 24px 24px', zIndex: '2147483646' })
+    Object.assign(frame.style, { position: 'fixed', inset: 'auto', margin: '0', transform: 'none', transition: 'none', top: `calc(${top} + 52px)`, left: `${x}px`, width: `${panelWidth}px`, maxWidth: 'none', height: `calc(${panelHeight} - 52px - var(--pocket-safe-bottom, env(safe-area-inset-bottom, 0px)))`, maxHeight: 'none', border: '0', borderRadius: '0', zIndex: '2147483646' })
+    // Apply all geometry before mounting. The X stays right-anchored to its
+    // panel throughout frame insertion, viewport resizing and keyboard changes.
+    if (!backdrop.isConnected) document.body.appendChild(backdrop)
   }
   const back = (event: Event) => { if (!backdrop.isConnected) return; event.preventDefault(); event.stopImmediatePropagation(); onCancel() }
   const key = (event: KeyboardEvent) => { if (event.key === 'Escape') back(event) }

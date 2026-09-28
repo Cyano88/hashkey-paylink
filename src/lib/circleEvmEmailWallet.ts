@@ -514,36 +514,36 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
     },
     emailOtp: {
       title: 'Enter Circle code',
-      subtitle: 'Use the newest code from your email. If it fails, resend for a clean code.',
+      subtitle: 'Enter the code sent to your email.',
       resendHint: 'Code not working?',
       resend: 'Resend code',
     },
     transactionRequest: {
       title: 'Confirm payment',
       subtitle: amount
-        ? `Approve ${amount} ${asset} on ${chainLabel}.`
-        : `Approve this ${asset} payment on ${chainLabel}.`,
+        ? `${amount} ${asset} on ${chainLabel}`
+        : `${asset} on ${chainLabel}`,
       fromLabel: 'Paying from',
       toLabel: 'Recipient',
       to: shortRecipient ? [shortRecipient] : undefined,
       totalLabel: 'Total',
-      rawTxDescription: 'Secure payment authorization',
-      rawTx: 'Circle protects this final approval before funds move.',
+      rawTxDescription: 'Payment details',
+      rawTx: 'Approve payment',
     },
     contractInteraction: {
       title: 'Confirm payment',
       subtitle: amount
-        ? `Approve ${amount} ${asset} on ${chainLabel}.`
-        : `Approve this ${asset} payment on ${chainLabel}.`,
+        ? `${amount} ${asset} on ${chainLabel}`
+        : `${asset} on ${chainLabel}`,
       fromLabel: 'Smart wallet',
       contractAddressLabel: 'Payment contract',
-      contractInfo: ['Hash PayLink payment approval'],
+      contractInfo: ['Hash PayLink'],
       totalLabel: 'Total',
       dataDetails: {
         dataDetailsLabel: 'Authorization details',
         callData: {
           callDataLabel: 'Secure call data',
-          data: 'Payment is prepared by Hash PayLink and approved through Circle.',
+          data: 'Payment authorization',
         },
         abiInfo: {
           functionNameLabel: 'Action',
@@ -562,10 +562,10 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
       contractName: 'Hash PayLink',
       contractUrl: 'https://hashpaylink.com',
       subtitle: amount
-        ? `Approve ${amount} ${asset} on ${chainLabel}.`
-        : `Approve this ${asset} payment on ${chainLabel}.`,
+        ? `${amount} ${asset} on ${chainLabel}`
+        : `${asset} on ${chainLabel}`,
       descriptionLabel: 'Request',
-      description: 'Final Circle security confirmation for your Hash PayLink payment.',
+      description: 'Approve payment.',
     },
   })
 }

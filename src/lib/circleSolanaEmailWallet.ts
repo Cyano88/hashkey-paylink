@@ -197,7 +197,7 @@ function applyHashPayLinkCircleSolanaUi(sdk: W3SSdk) {
     },
     emailOtp: {
       title: 'Enter Circle code',
-      subtitle: 'Use the newest code from your email. If it fails, resend for a clean code.',
+      subtitle: 'Enter the code sent to your email.',
       resendHint: 'Code not working?',
       resend: 'Resend code',
     },
