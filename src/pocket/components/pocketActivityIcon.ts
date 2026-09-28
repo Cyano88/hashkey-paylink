@@ -1,7 +1,13 @@
+import { createElement } from 'react'
 import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Receipt, Landmark, Store, QrCode, RequestMoney, CreditCard, Phone, Wifi, Tv, Lightbulb } from './PocketIcons'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { isOutgoingPosPurchase, isIncomingPosPayment } from '../lib/pocketPurchaseKind'
 import { pocketActivityStatus } from '../lib/pocketReceipt'
+
+function UsdcActivityLogo({ className }: { className?: string }) {
+  return createElement('img', { src: '/brand/usdc-circle-logo.png', alt: 'USDC', className,
+    style: { width: '100%', height: '100%', objectFit: 'contain', borderRadius: '50%' } })
+}
 
 export function pocketActivityIcon(row: PocketActivityRow) {
   const source = String(row.source || '').toLowerCase().replace(/_/g, '-')
@@ -12,7 +18,10 @@ export function pocketActivityIcon(row: PocketActivityRow) {
   if (source === 'xpay' && ['NGN','UGX'].includes(row.fiatCurrency || row.assetSymbol || '')) return Landmark
   if (isIncomingPosPayment(row) || source === 'xpay') return QrCode
   if (source === 'wallet-swap' || source === 'wallet-bridge') return ArrowLeftRight
-  if (source.startsWith('wallet-') || row.settlementType?.startsWith('wallet_')) return row.direction === 'in' || ['refunded', 'reversed'].includes(pocketActivityStatus(row)) ? ArrowDownToLine : ArrowUpFromLine
+  if (source.startsWith('wallet-') || row.settlementType?.startsWith('wallet_')) {
+    if (row.direction === 'in' || ['refunded', 'reversed'].includes(pocketActivityStatus(row))) return ArrowDownToLine
+    return !row.assetSymbol || row.assetSymbol.toUpperCase() === 'USDC' ? UsdcActivityLogo : ArrowUpFromLine
+  }
   return CreditCard
 }
 
