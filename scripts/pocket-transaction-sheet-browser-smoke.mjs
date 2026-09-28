@@ -14,7 +14,7 @@ try{
  for(const [state,label] of [['pending','Processing'],['failed','Failed'],['successful','Successful']]){
   await page.evaluate(s=>window.show(s),state);const sheet=page.getByRole('dialog',{name:label,exact:true});await sheet.waitFor();assert.equal(await sheet.getByRole('button',{name:'Close',exact:true}).count(),0);
   await page.mouse.click(5,5);await page.keyboard.press('Escape');await page.evaluate(()=>window.dispatchEvent(new Event('pocket:native-back',{cancelable:true})));assert.equal(await sheet.count(),1);
-  await sheet.getByRole('button',{name:'View receipt',exact:true}).click();const preview=page.getByRole('dialog',{name:'Receipt preview'});await preview.waitFor();await preview.getByText(label,{exact:true}).waitFor();await preview.getByText('NVDAx',{exact:false}).first().waitFor();
+  await sheet.getByRole('button',{name:'View receipt',exact:true}).click();const preview=page.getByRole('dialog',{name:'Receipt preview'});await preview.waitFor();assert.equal(await preview.evaluate(e=>getComputedStyle(e).top),'0px');await preview.getByText(label,{exact:true}).waitFor();await preview.getByText('NVDAx',{exact:false}).first().waitFor();
   await page.screenshot({path:'output/playwright/receipt-'+state+'.png'});await preview.getByRole('button',{name:'Done',exact:true}).click();await sheet.waitFor();await sheet.getByRole('button',{name:'Done',exact:true}).click();assert.equal(await page.getByRole('dialog').count(),0)
  }
  for(const source of ['bank-withdraw','bills'])for(const dark of [false,true]){

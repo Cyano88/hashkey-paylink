@@ -248,7 +248,7 @@ export default function PocketPaymentSecurityGate({ email, getAccessToken, onIni
     </section>
   </PocketSecuritySurface>
 
-  return <>{children}{pending.current && approvalOpen && <PocketBottomSheet title="Enter Pocket PIN" onClose={cancelApproval} dismissible={!busy} dismissOnBackdrop={false} layer={90}>
+  return <>{children}{pending.current && approvalOpen && <PocketBottomSheet title="Enter Pocket PIN" showCloseButton onClose={cancelApproval} dismissible={!busy} dismissOnBackdrop={false} layer={90}>
     <section className='pb-1 pt-2 text-center'>
       <p className='text-xs text-gray-500 dark:text-gray-400'>Enter your PIN to approve.</p>
       <div className='relative mx-auto mt-4 w-fit' onClick={() => document.getElementById('pocket-payment-pin')?.focus()}>

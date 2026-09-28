@@ -207,8 +207,8 @@ export function FullScreenReceiptSurface({ receipt, surface, onClose, extraActio
   }
 
   return createPortal(
-    <div className="fixed inset-x-0 bottom-0 z-[140] flex flex-col overflow-hidden bg-[#F5F5F7] font-sans text-gray-950 dark:bg-[#0A0A0A] dark:text-white" style={{ top: 'var(--pocket-safe-top)' }} role="dialog" aria-modal="true" aria-label={surface === 'details' ? 'Transaction details' : 'Receipt preview'}>
-      <div className="z-10 shrink-0 border-b border-gray-200/80 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:border-white/10 dark:bg-[#0A0A0A]/95">
+    <div className="fixed inset-x-0 bottom-0 z-[140] flex flex-col overflow-hidden bg-[#F5F5F7] font-sans text-gray-950 dark:bg-black dark:text-white" style={{ top: 0, paddingTop: 'var(--pocket-safe-top)' }} role="dialog" aria-modal="true" aria-label={surface === 'details' ? 'Transaction details' : 'Receipt preview'}>
+      <div className="z-10 shrink-0 border-b border-gray-200/80 bg-[#F5F5F7]/95 px-4 backdrop-blur dark:border-white/10 dark:bg-black">
         <div className="mx-auto grid h-14 max-w-lg grid-cols-[48px_1fr_48px] items-center">
           <span className="h-10 w-12" />
           <h1 className="text-center text-sm font-bold tracking-[-0.02em]">{surface === 'details' ? 'Transaction details' : 'Receipt'}</h1>
