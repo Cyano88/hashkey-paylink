@@ -14,7 +14,7 @@ await build({entryPoints:['src/components/xstocksAgreement/HostedWorkCheckout.ts
 try{
  const {default:Checkout}=await import(output.href);
  let readCount=0,waitForRead,fail=false,state=1,resolveConfirmation,receipt,networkPending=false;
- const request=async()=>{readCount++;await waitForRead;if(fail)throw Error('upstream HTML');return {enabled:true,state,pending:networkPending,stockReceipt:receipt,actions:state===1?['approve','cancel']:[],wallet:{address},customerReady:true,providerReady:true}};
+ const request=async()=>{readCount++;await waitForRead;if(fail)throw Error('upstream HTML');return {enabled:true,state,pending:networkPending,stockReceipt:receipt,actions:state===0?['accept','cancel']:state===1?['approve','cancel']:[],wallet:{address},customerReady:true,providerReady:true}};
  const item={id:'fixture',activeVersion:1,role:'customer',terms:[{kind:'trade',version:1,amount:'0.00222',durationSeconds:86400,xlayerPayment:{token:'0xc845b2894dbddd03858fd2d643b4ef725fe0849d',decimals:18,amountUnits:'2220000000000000',reviewHours:48}}]};
  let tree;await act(async()=>{tree=TestRenderer.create(React.createElement(Checkout,{item,request,onUpdated(){}}))});
  const buttons=()=>tree.root.findAllByType('button');const find=t=>buttons().find(b=>b.children.join('')===t);const text=()=>JSON.stringify(tree.toJSON());
@@ -26,6 +26,7 @@ try{
  await act(async()=>{find('Pay securely').props.onClick()});assert.equal(find('Pay securely'),undefined);assert.equal(find('Cancel payment'),undefined);assert.equal(buttons().filter(b=>b.props['aria-busy']).length,1,'progress stays in a single disabled CTA');assert.equal(buttons().find(b=>b.props['aria-busy']).props.disabled,true);
  await act(async()=>{resolveConfirmation(false)});assert.ok(find('Pay securely'));
  networkPending=true;await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.equal(find('Pay securely'),undefined);assert.equal(buttons().filter(b=>b.props['aria-busy']).length,1);assert.match(text(),/Confirming transaction/);networkPending=false;
+ state=0;item.role='provider';await act(async()=>{tree.update(React.createElement(Checkout,{item,request,onUpdated(){}}));window.dispatchEvent(new Event('focus'))});assert.ok(find('Confirm payment terms'));assert.equal((text().match(/Confirm payment terms/g)||[]).length,1,'next action appears once, not repeated as body status');item.role='customer';
  state=2;await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.match(text(),/Payment held securely/);assert.equal(find('Pay securely'),undefined);assert.equal(find('Cancel payment'),undefined);
  receipt={fundedShares:'2216229757026900',currentUnderlyingUnits:'0',buyerUnderlyingAtSettlement:'0',sellerUnderlyingAtSettlement:'2219999999999999',buyerSettledShares:'0',sellerSettledShares:'2216229757026900',observedBlock:'100'};
  state=6;await act(async()=>{window.dispatchEvent(new Event('focus'))});
