@@ -52,3 +52,12 @@ The disk is still attached during this deployment. A diskless service cutover, b
 Stage 2 live migration: release fc9e09ddd8997d0aae637e1ce389106f2fe62890 reached live as dep-das7h60u01pc73eq16g0. All 6 sessions / 26 files migrated and restored successfully, with zero recovery-required markers. Health returned 200. Subsequent release f6b06c4bdc80dc92f88dff7054a9ec0aad412d5f retains the change (ancestry verified).
 
 The first live wallet-list checks were blocked before ownership verification by the installed Circle CLI version policy. The release pinned CLI 1.1.0; npm currently publishes 1.1.4. A separate isolated 1.1.4 installation was used to verify both existing tuple-parameter and raw-callData patches still apply exactly and idempotently. Pinning the new version changes only the CLI package lock entry; the shared node_modules used by the other worktree was not modified. Version-policy enforcement is preserved, not bypassed. Package source: https://www.npmjs.com/package/@circle-fin/cli . Live wallet access must be checked again after the version update; snapshot verification alone is not authentication proof.
+
+
+## Supported CLI release and final read-only checks
+
+Release e077de5b7e1a1a1c4e438f0421a24c08f93accdc deployed live as dep-das7slbtqb8s739hvfag with CLI 1.1.4. The version block is gone. The verification script checked two existing mainnet agent-wallet records: both require reauthentication, zero version-policy failures and zero other failures. A private aggregate inspection confirmed both ORIGINAL source mainnet slots were already expired and each migrated mainnet slot is deeply identical to its original; no authentication value was printed. This is an existing sign-in expiry, not evidence of lost session files.
+
+A final restore rehearsal passed for all 6 sessions and their current 28 files (the earlier 26-file migration preceded read-only CLI cache updates). There are zero recovery-required markers. The API health endpoint returned HTTP 200. No financial operation was run.
+
+One fresh Circle agent-wallet login is required before claiming live wallet ownership/access is verified after migration. The user has been asked which email to use; do not invent an account or send OTPs to an unconfirmed identity. The physical disk remains attached. A diskless cutover still needs a concrete infrastructure/routing rollback plan and should not be described as completed.
