@@ -1,3 +1,4 @@
+import {xpayOrigin} from '../lib/pocketXPayNavigation'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from '../components/PocketIcons'
@@ -7,6 +8,7 @@ import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRout
 const PaymentPage=lazy(()=>import('../../pages/PaymentPage'))
 export default function PocketScanPage() {
  const navigate=useNavigate(),location=useLocation()
+ const scanState={xpayOrigin:new URLSearchParams(location.search).get('rail')==='xstocks'?'xstocks':xpayOrigin(location.state),...(location.state?.xpayReturnTo?{xpayReturnTo:location.state.xpayReturnTo}:{})}
  const [checkout,setCheckout]=useState<{params:string;merchant:string;settlement:string}|null>(null)
  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[camera,setCamera]=useState(false),[pasted,setPasted]=useState('')
  const video=useRef<HTMLVideoElement>(null),stream=useRef<MediaStream|null>(null),timer=useRef<number|undefined>(undefined),generation=useRef(0),pending=useRef(false),abort=useRef<AbortController|null>(null)
@@ -16,15 +18,18 @@ export default function PocketScanPage() {
   pending.current=true;stop();setBusy(true);setError('');abort.current?.abort();const controller=new AbortController();abort.current=controller
   try {
    const code=parsePocketScanCode(raw)
-   if(code.kind==='xpay'){navigate(xStockPath('xpay')+'?merchant='+encodeURIComponent(code.id),{replace:true});return}
+   if(code.kind==='unified-xpay'){navigate('/xpay/checkout/'+code.id,{replace:true,state:scanState});return}
+   if(code.kind==='xpay'){navigate(xStockPath('xpay')+'?merchant='+encodeURIComponent(code.id),{replace:true,state:scanState});return}
    const path=code.kind==='pos'?'/api/ng-pos?view=pocket-scan&merchant_id='+encodeURIComponent(code.id)+'&code='+encodeURIComponent(code.url):'/api/v2/checkouts?id='+encodeURIComponent(code.id)+'&attempt='+encodeURIComponent(code.attempt)
    const response=await fetch(pocketApiUrl(path),{cache:'no-store',signal:controller.signal})
    const data=await response.json()
+   if(response.ok&&data.ok&&/^xp_[0-9a-f-]{36}$/.test(data.terminalId||'')){navigate('/xpay/checkout/'+data.terminalId,{replace:true,state:scanState});return}
    if(!response.ok||data.ok!==true||typeof data.paymentUrl!=='string'||!data.paymentUrl.startsWith('/pay?'))throw Error(typeof data.error==='string'?data.error:'This checkout is unavailable.')
    if(code.kind==='checkout'&&['paid','failed','expired'].includes(data.checkout?.status))throw Error('This checkout is already closed. Do not pay it again.')
    const params=new URLSearchParams(data.paymentUrl.slice(5))
    if(code.kind==='pos'&&(params.get('merchant')!==code.id||params.get('src')!=='ngpos'))throw Error('Merchant verification did not match.')
    if(code.kind==='checkout'&&params.get('checkout')!==code.id)throw Error('Checkout verification did not match.')
+   if(code.kind==='pos'){const unified=new URL(code.url).searchParams.get('xpay_checkout_id');if(unified)params.set('xpay_checkout_id',unified)}
    if(!controller.signal.aborted)setCheckout({params:params.toString(),merchant:data.merchantName||data.checkout?.merchantName||'Merchant checkout',settlement:data.settlement||data.checkout?.settlementMode||'USDC'})
   }catch(reason){if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:'Checkout could not be opened.')}
   finally{if(!controller.signal.aborted){pending.current=false;setBusy(false)}}

@@ -1,3 +1,7 @@
+import {readPosRetirements,isPosRetired} from './pocket/pos-retirement.js'
+import {hasXPayBankFunding} from './pocket/xpay-bank-history.js'
+import {legacyXPayTerminal,assertUnifiedXPayDestination} from './pocket/unified-xpay-store.js'
+import type {XPayHistoryEntry} from '../src/pocket/lib/pocketUnifiedXPay.js'
 import { normalizePayoutAccount, pocketFiatCurrency, validPayoutCurrency } from '../src/pocket/lib/pocketFiatCorridors.js'
 import { pocketBankStatus } from '../src/pocket/lib/pocketBankStatus.js'
 import { resolvePocketPosCheckout } from './pocket/scan-checkout.js'
@@ -85,6 +89,7 @@ type Store = {
 }
 
 type OfframpIntent = {
+  xpay_checkout_id?: string
   fiat_currency?: 'NGN' | 'UGX'
   intent_id: string
   merchant_id: string
@@ -568,11 +573,16 @@ export function paycrestActivityTimestamp(order: { created_at?: string; updated_
 }
 
 export async function listNgPosResourcesForOwner(privyUserId: string) {
-  const store = await readStore()
+  const [store,retired] = await Promise.all([readStore(),readPosRetirements()])
   return Object.values(store.merchants ?? {}).filter(merchant => merchant.owner_id === privyUserId).map(merchant => ({
-    merchant_id: merchant.merchant_id, display_name: merchant.display_name,
+    merchant_id: merchant.merchant_id, display_name: merchant.display_name, deleted_at:retired[merchant.merchant_id]?.deletedAt,
     source: merchant.source, bank_name: merchant.bank_name, bank_last4: merchant.bank_last4, created_at: merchant.created_at,
   }))
+}
+
+export async function ownsPocketPosQr(owner:string,id:string){
+ const merchant=(await readStore()).merchants[id]
+ return !!merchant&&merchant.owner_id===owner&&(!merchant.source||merchant.source==='pos')
 }
 
 // Authorization must read ownership only, never refresh or repair payment history.
@@ -723,6 +733,9 @@ export async function verifyNgPosBankAccount(body: Record<string, unknown>) {
   if (currency === 'UGX' && !['MOMOUGPC', 'AIRTUGPC'].includes(resolvedBankCode)) throw ngPosRequestError(400, 'Select a supported Uganda mobile money provider.')
   if (currency === 'NGN' && ['MOMOUGPC', 'AIRTUGPC'].includes(resolvedBankCode)) throw ngPosRequestError(400, 'Select the matching payout country.')
   const accountName = await verifyPaycrestAccount({ institution: resolvedBankCode, accountIdentifier: accountNumber, currency })
+  if (accountName === 'OK' && currency === 'UGX') {
+    return { account_name: '', bank_code: resolvedBankCode, name_required: true as const }
+  }
   if (!accountName || accountName === 'OK') {
     throw ngPosRequestError(503, 'The provider could not return the account holder name. Ownership cannot be verified yet. Try again later.')
   }
@@ -1094,15 +1107,17 @@ export default async function handler(req: Request, res: Response) {
       if (!merchantId) return res.status(400).json({ ok: false, error: 'Missing merchant_id' })
       const store = await readStore()
       const merchant = store.merchants[merchantId]
-      if (!merchant) return res.status(404).json({ ok: false, error: 'Merchant not found' })
+      if (!merchant || await isPosRetired(merchantId)) return res.status(404).json({ ok: false, error: 'This QR is no longer available.' })
+      const terminalId=await legacyXPayTerminal(merchantId,merchant.idempotency_key)
       if(req.query.view==='pocket-scan') {
         const raw=typeof req.query.code==='string'?req.query.code:''
         let intentId=''
         try { intentId=new URL(raw).searchParams.get('intent')||'' } catch { return res.status(400).json({ok:false,error:'Invalid checkout link.'}) }
+        if(terminalId&&!intentId&&!new URL(raw).searchParams.get('xpay_checkout_id'))return res.json({ok:true,terminalId})
         try { res.setHeader('Cache-Control','no-store');return res.json({ok:true,...resolvePocketPosCheckout(merchant,raw,intentId?store.intents?.[intentId]:undefined)}) }
         catch(error){return res.status(400).json({ok:false,error:error instanceof Error?error.message:'Checkout unavailable.'})}
       }
-      return res.json({ ok: true, merchant: await publicMerchant(merchant) })
+      return res.json({ ok: true, terminalId, merchant: await publicMerchant(merchant) })
     }
 
     if (req.method !== 'POST') {
@@ -1164,7 +1179,9 @@ export default async function handler(req: Request, res: Response) {
 
       const store = await readStore()
       const merchant = store.merchants[merchantId]
-      if (!merchant || !merchant.settlement_enabled) return res.status(404).json({ ok: false, error: 'Merchant is not available.' })
+      if (!merchant || !merchant.settlement_enabled || await isPosRetired(merchant.merchant_id)) return res.status(404).json({ ok: false, error: 'Merchant is not available.' })
+      if(!body.xpay_checkout_id&&await legacyXPayTerminal(merchantId,merchant.idempotency_key))return res.status(409).json({ok:false,error:'Reopen this QR to use the business terminal.'})
+      if(body.xpay_checkout_id)await assertUnifiedXPayDestination(body.xpay_checkout_id,merchantId,merchant.updated_at)
       const fiatCurrency = pocketFiatCurrency(merchant.country)
       if (amountCurrency !== 'USDC' && amountCurrency !== fiatCurrency) return res.status(400).json({ ok: false, error: 'Amount currency does not match this terminal.' })
       if (requestedSettlementType !== merchant.payout_preference) {
@@ -1201,6 +1218,7 @@ export default async function handler(req: Request, res: Response) {
         if (!isPaycrestConfigured()) return res.status(400).json({ ok: false, error: 'Paycrest is not configured for local settlement yet.' })
         store.intents ??= {}
         store.intents[intentId] = {
+          xpay_checkout_id: body.xpay_checkout_id || undefined,
           intent_id: intentId,
           merchant_id: merchant.merchant_id,
           fiat_currency: fiatCurrency,
@@ -1298,6 +1316,10 @@ export default async function handler(req: Request, res: Response) {
       if (!payerName) return res.status(400).json({ ok: false, error: 'Payer name is required before creating naira settlement.' })
       let existing = await getPaycrestPosOrder(intentId)
       const ensurePayable = body.ensure_payable === true
+      const store = await readStore()
+      const intent = store.intents?.[intentId]
+      const merchant = intent ? store.merchants[intent.merchant_id] : undefined
+      if(intent?.xpay_checkout_id&&!existing?.tx_hash)await assertUnifiedXPayDestination(intent.xpay_checkout_id,intent.merchant_id,merchant?.updated_at || '',true)
       if (existing && !ensurePayable) {
         const execution = await syncOwnedPosExecution(existing)
         return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
@@ -1317,11 +1339,8 @@ export default async function handler(req: Request, res: Response) {
           return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
         }
       }
-      const store = await readStore()
-      const intent = store.intents?.[intentId]
       if (!intent) return res.status(404).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
       if (!existing && new Date(intent.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'POS settlement intent expired. Start this payment again.' })
-      const merchant = store.merchants[intent.merchant_id]
       if (!merchant?.encrypted_bank_details) return res.status(404).json({ ok: false, error: 'Merchant bank payout is not available.' })
       const bank = decryptBankDetails(merchant.encrypted_bank_details)
       const bankCode = await resolvePaycrestInstitutionCode({ bankCode: bank.bank_code, bankName: merchant.bank_name, currency: pocketFiatCurrency(merchant.country) })
@@ -1331,6 +1350,7 @@ export default async function handler(req: Request, res: Response) {
         amountNgn: intent.amount_ngn,
         fiatCurrency: pocketFiatCurrency(merchant.country),
         estimatedAmountUsdc: intent.estimated_amount_usdc,
+        unifiedXPay: Boolean(intent.xpay_checkout_id),
         bankCode,
         accountNumber: bank.account_number,
         accountName: bank.account_name,
@@ -1483,3 +1503,31 @@ export async function listPocketBankRecipients(ownerId: string) {
   }
   return [...recipients.values()].sort((a,b) => b.lastUsedAt - a.lastUsedAt).slice(0,500)
 }
+
+/** Owned, active POS destinations only; never return bank details or arbitrary redirects. */
+export async function listPocketXPayPosDestinations(owner:string) {
+ const [store,retired]=await Promise.all([readStore(),readPosRetirements()])
+ return Object.values(store.merchants).filter(m=>m.owner_id===owner&&m.source==='pos'&&!retired[m.merchant_id]&&m.settlement_enabled&&m.kyc_status!=='RESTRICTED').flatMap(m=>{
+  try { resolvePocketPosCheckout(m,'https://app.hashpaylink.com/pos/ng?merchant_id='+encodeURIComponent(m.merchant_id)) } catch { return [] }
+  return [{id:m.merchant_id,name:m.display_name,kind:m.payout_preference==='INSTANT_FIAT'?'bank' as const:'stablecoins' as const,currency:m.payout_preference==='INSTANT_FIAT'?(m.country==='UG'?'UGX':'NGN'):'USDC',assets:['USDC'],revision:m.updated_at}]
+ })
+}
+
+export async function listPocketUnifiedXPayPosPayments(owner:string,checkoutId?:string,legacyIds:string[]=[]):Promise<XPayHistoryEntry[]>{
+ const store=await readStore()
+ const merchants=Object.values(store.merchants).filter(m=>m.owner_id===owner&&(!m.source||m.source==='pos'))
+ const ids=new Set(merchants.map(m=>m.merchant_id))
+ const intents=new Set(Object.values(store.intents||{}).filter(i=>(!checkoutId||i.xpay_checkout_id===checkoutId||(!i.xpay_checkout_id&&legacyIds.includes(i.merchant_id)))&&ids.has(i.merchant_id)).map(i=>i.intent_id))
+ const orders=await listPaycrestPosOrdersForMerchants([...ids])
+ const bank:XPayHistoryEntry[]=orders.filter(o=>intents.has(o.intent_id)&&hasXPayBankFunding(o)).map(o=>({merchantName:store.merchants[o.merchant_id]?.display_name,id:o.intent_id,rail:'stablecoins',amount:o.amount_ngn,asset:o.fiat_currency||'NGN',state:o.status==='settled'?'successful':o.status==='refunded'?'refunded':o.status==='refunding'?'refunding':['failed','expired','cancelled','canceled'].includes(o.status)?'failed':'pending',createdAt:Date.parse(o.created_at),hash:o.tx_hash||undefined,network:'base',bankDelivery:o.status}))
+ const receipts=await listRegisteredPaymentsForEventIds([...ids].map(id=>'ngpos-'+id))
+ const wallet:XPayHistoryEntry[]=receipts.filter(p=>(!checkoutId||p.xpayCheckoutId===checkoutId||(!p.xpayCheckoutId&&legacyIds.some(id=>p.eventId==='ngpos-'+id)))&&!bank.some(b=>b.hash?.toLowerCase()===p.txHash.toLowerCase())).map(p=>({merchantName:store.merchants[p.eventId.replace(/^ngpos-/,'')]?.display_name,id:p.txHash,rail:'stablecoins',amount:p.amount,asset:'USDC',state:'successful',createdAt:p.ts,hash:p.txHash,network:p.chain}))
+ return [...bank,...wallet]
+}
+
+export async function ownedPosSetupKey(owner:string,id:string){
+ const merchant=(await readStore()).merchants[id]
+ return merchant?.owner_id===owner&&merchant.source==='pos'?merchant.idempotency_key:undefined
+}
+
+export async function ownedPosSetupKeys(owner:string){return Object.fromEntries(Object.values((await readStore()).merchants).filter(m=>m.owner_id===owner).map(m=>[m.merchant_id,m.idempotency_key]))}

@@ -2,7 +2,7 @@ import { paymentBalanceError } from './payment-balance-error.js'
 import { readEvmRpc } from './evm-read.js'
 import { createPaymentFeeQuote, verifyPaymentFeeQuote, type PaymentFeeBinding } from './payment-fee-quotes.js'
 import { readNativeUsdcRate, nativeFeeToUsdcUnits } from './payment-network-fees.js'
-import { paymentFeeBreakdown } from '../src/lib/platformFees.js'
+import { paymentFeeBreakdown, EVM_PLATFORM_TREASURY } from '../src/lib/platformFees.js'
 import { missingPocketEvmWalletPlan } from './pocket/wallet-setup.js'
 import { withOrdinaryWalletMutation } from './pocket/wallet-migration-guard.js'
 import type { Request, Response } from 'express'
@@ -19,7 +19,7 @@ import {
 import { requireCircleSolanaGasStationWallet } from './circle-solana-gas-station.js'
 import { circleLinkKey, readCircleLink, findPaymentCircleLinkByWallet, verifiedPrivyUser } from './privy-circle-link.js'
 
-const EVM_TREASURY = '0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753'
+const EVM_TREASURY = EVM_PLATFORM_TREASURY
 const SOLANA_USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 const BPS_DENOMINATOR = 10_000n
 
@@ -1206,10 +1206,10 @@ function normalizeSolanaUsdcAmount(value: string | undefined) {
   return fractionText ? `${whole}.${fractionText}` : whole.toString()
 }
 
-export async function readCircleArcSwapChallenge(input: { userToken: string; walletId: string; walletAddress: string; challengeId: string }) {
-  const owned = await readCircleUserWallet(input.userToken, 'arc', input.walletId)
-  requireCircleGasStationEvmWallet({ chain: 'arc', walletId: input.walletId, walletAddress: input.walletAddress, wallets: owned ? [owned] : [] })
-  const response = await circleJson<{ challenge?: Record<string, unknown> }>('/v1/w3s/user/challenges/' + encodeURIComponent(input.challengeId), { method: 'GET', userToken: input.userToken })
+export async function readCircleEvmChallenge(input: { chain: CircleGasStationEvmChain; userToken: string; walletId: string; walletAddress: string; challengeId: string }) {
+  const owned = await readCircleUserWallet(input.userToken, input.chain, input.walletId)
+  requireCircleGasStationEvmWallet({ chain: input.chain, walletId: input.walletId, walletAddress: input.walletAddress, wallets: owned ? [owned] : [] })
+  const response = await circleJson<{ challenge?: Record<string, unknown> }>('/v1/w3s/user/challenges/' + encodeURIComponent(input.challengeId), { method: 'GET', userToken: input.userToken, apiKey: circleApiKey({ chain: input.chain }) })
   const challenge = response.challenge
   if (!challenge) return { status: 'pending' as const }
   const ids = challenge.correlationIds
@@ -1218,11 +1218,15 @@ export async function readCircleArcSwapChallenge(input: { userToken: string; wal
     const state = String(challenge.status ?? challenge.state ?? '').toUpperCase()
     return { status: ['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state) ? 'failed' as const : 'pending' as const }
   }
-  const data = await circleJson<{ transaction?: Record<string, unknown> }>('/v1/w3s/transactions/' + encodeURIComponent(transactionId), { method: 'GET', userToken: input.userToken })
+  const data = await circleJson<{ transaction?: Record<string, unknown> }>('/v1/w3s/transactions/' + encodeURIComponent(transactionId), { method: 'GET', userToken: input.userToken, apiKey: circleApiKey({ chain: input.chain }) })
   const tx = data.transaction
-  if (!tx || tx.walletId !== input.walletId || tx.blockchain !== 'ARC') return { status: 'pending' as const }
+  if (!tx || tx.walletId !== input.walletId || tx.blockchain !== EVM_CHAINS[input.chain].blockchain) return { status: 'pending' as const }
   if (String(tx.state ?? tx.status).toUpperCase() === 'FAILED') return { status: 'failed' as const }
   return { status: 'pending' as const, txHash: typeof tx.txHash === 'string' ? tx.txHash : undefined }
+}
+
+export async function readCircleArcSwapChallenge(input: { userToken: string; walletId: string; walletAddress: string; challengeId: string }) {
+  return readCircleEvmChallenge({ ...input, chain: 'arc' })
 }
 
 // Internal migration transport. HTTP callers cannot supply these paths.

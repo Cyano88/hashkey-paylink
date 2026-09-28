@@ -37,6 +37,7 @@ export default function usePocketBankReceiveController({
   const [bankName, setBankName] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
   const [accountName, setAccountName] = useState('')
+  const [nameRequired, setNameRequired] = useState(false)
   const [verified, setVerified] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [amount, setAmountState] = useState('')
@@ -59,7 +60,7 @@ export default function usePocketBankReceiveController({
   const normalizeName = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '')
   const profileVerified = profile?.nameStatus === 'bank_resolved' && Boolean(profile.resolvedName)
   const staleOwnerNameRejection = /different verified name/i.test(error)
-  const beneficiaryVerified = verified || (allowThirdPartyAccount && staleOwnerNameRejection && Boolean(accountName))
+  const beneficiaryVerified = (verified && (!nameRequired || (accountName.trim().length >= 2 && accountName.trim().toUpperCase() !== 'OK'))) || (allowThirdPartyAccount && staleOwnerNameRejection && Boolean(accountName))
   const displayedError = allowThirdPartyAccount && staleOwnerNameRejection ? '' : error
   const identityMatches = profileVerified && beneficiaryVerified && (allowThirdPartyAccount || normalizeName(accountName) === normalizeName(profile?.resolvedName ?? ''))
   const canSubmit = (flexibleAmount || amountValid) && identityMatches && Boolean(bankCode && accountName) && authenticated && profileReady
@@ -94,7 +95,7 @@ export default function usePocketBankReceiveController({
 
   const setCountry = useCallback((value: string) => {
     if (value === country || !['NG','UG'].includes(value) || (!allowThirdPartyAccount && value !== 'NG')) return
-    setBankCode('');setBankName('');setAccountNumber('');setAccountName('');setVerified(false);setError('');setInstitutions([]);setInstitutionsBusy(true);lastVerificationKey.current=''
+    setBankCode('');setBankName('');setAccountNumber('');setAccountName('');setVerified(false);setNameRequired(false);setError('');setInstitutions([]);setInstitutionsBusy(true);lastVerificationKey.current=''
     verificationSequence.current++
     setVerifying(false)
     idempotencyKey.current = ''
@@ -110,7 +111,7 @@ export default function usePocketBankReceiveController({
     setBankCode(code)
     setBankName(name)
     if (resetAccount) setAccountNumber('')
-    setVerified(false)
+    setVerified(false);setNameRequired(false)
     setAccountName('')
     setError('')
     invalidateResult()
@@ -122,7 +123,7 @@ export default function usePocketBankReceiveController({
     idempotencyKey.current = ''
     lastVerificationKey.current = ''
     setAccountNumber(value.replace(/\D/g, '').slice(0, country === 'UG' ? 12 : 10))
-    setVerified(false)
+    setVerified(false);setNameRequired(false)
     setAccountName('')
     setError('')
     invalidateResult()
@@ -133,7 +134,7 @@ export default function usePocketBankReceiveController({
     const valid = () => sequence === verificationSequence.current && verificationOwner.current === email
     setVerifying(true)
     setError('')
-    setVerified(false)
+    setVerified(false);setNameRequired(false)
     setAccountName('')
     try {
       const accessToken = await getAccessToken()
@@ -149,6 +150,12 @@ export default function usePocketBankReceiveController({
       })
       if (!valid()) return
       if (data.bank_code) setBankCode(String(data.bank_code).trim())
+      if (data.name_required) {
+        if (!allowThirdPartyAccount || country !== 'UG') throw new Error('This provider does not verify account ownership. Use an account that returns your registered name.')
+        setNameRequired(true)
+        setVerified(true)
+        return
+      }
       const resolved = String(data.account_name ?? '').trim()
       setAccountName(resolved)
       if (!allowThirdPartyAccount && profileVerified && normalizeName(resolved) !== normalizeName(profile?.resolvedName ?? '')) {
@@ -300,6 +307,8 @@ export default function usePocketBankReceiveController({
     bankName,
     accountNumber,
     accountName,
+    nameRequired,
+    setRecipientName: (value: string) => { if (nameRequired && allowThirdPartyAccount) { setAccountName(value.slice(0, 160)); invalidateResult() } },
     verified: beneficiaryVerified,
     profileVerified,
     identityMatches,

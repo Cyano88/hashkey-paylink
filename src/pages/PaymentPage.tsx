@@ -596,6 +596,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const bankSendLinkId = (initParams.get('bankSend') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
   const bankSendDestinationNetwork = (initParams.get('destNet') ?? initParams.get('n') ?? 'base').trim().toLowerCase()
   const ngPosMerchantId  = (initParams.get('merchant') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
+  const ngPosUnifiedXPayId = initParams.get('xpay_checkout_id') || ''
   const ngPosEventId     = ngPosMerchantId ? `ngpos-${ngPosMerchantId}` : ''
   const ngPosSettlement  = (initParams.get('settlement') ?? '').trim()
   const ngPosAmountNgn   = (initParams.get('ngn') ?? '').trim()
@@ -2750,6 +2751,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             action: 'quote',
+            xpay_checkout_id: ngPosUnifiedXPayId || undefined,
             merchant_id: ngPosMerchantId,
             settlement_type: 'INSTANT_FIAT',
             amount_currency: posFiatCurrency,
@@ -3546,6 +3548,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     }
     const payload = {
       eventId: ngPosEventId,
+      xpayCheckoutId: ngPosUnifiedXPayId || undefined,
       txHash,
       chain,
       payer: payer || 'POS payer',

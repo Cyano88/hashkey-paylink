@@ -7,6 +7,7 @@ import { cn } from '../../lib/utils'
 export type PocketNavTab = 'home' | 'bills' | 'cards' | 'activity' | 'profile'
 
 type PocketBottomNavProps = {
+  rail?: 'stablecoins' | 'xstocks'
   active: PocketNavTab
   disabled?: boolean
   keyboardOpen?: boolean
@@ -20,10 +21,10 @@ const items = [
   { key: 'profile', label: 'Profile', icon: UserRound },
 ] as const
 
-export default function PocketBottomNav({ active, disabled = false, keyboardOpen = false, onSelect }: PocketBottomNavProps) {
+export default function PocketBottomNav({ rail, active, disabled = false, keyboardOpen = false, onSelect }: PocketBottomNavProps) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const stocks = isXStocksPath(pathname)
+  const stocks = rail ? rail==='xstocks' : isXStocksPath(pathname)
   const visibleItems = stocks ? [items[0], { key: 'bills' as const, label: 'XStocks', icon: TrendingUp }, { key: 'activity' as const, label: 'Activity', icon: History }, { key: 'profile' as const, label: 'Portfolio', icon: Wallet }] : items
   return (
     <nav

@@ -33,7 +33,7 @@ export function createPocketBankVerifyHandler(dependencies: PocketBankVerifyHand
     try {
       const identity = await dependencies.verifyUser(req)
       if (!isPocketBankVerifyRequest(req.body)) {
-        return fail(400, 'VALIDATION_FAILED', 'Enter a valid bank and 10-digit account number.', false, 'bankAccount')
+        return fail(400, 'VALIDATION_FAILED', req.body?.currency === 'UGX' ? 'Enter a valid Uganda mobile money number and provider.' : 'Enter a valid bank and 10-digit account number.', false, 'bankAccount')
       }
       const data = await dependencies.verifyAccount(req.body)
       if (!isPocketBankVerifyData(data)) {
@@ -42,6 +42,7 @@ export function createPocketBankVerifyHandler(dependencies: PocketBankVerifyHand
       // Resolving a payout account is not consent to lock the user's identity.
       // Profile enrollment repeats provider verification with an explicit flag.
       if (req.body.confirm_profile_name === true) {
+        if (data.name_required) return fail(400, 'VALIDATION_FAILED', 'This provider does not verify account ownership. Use an account that returns your registered name.', false, 'bankAccount')
         await dependencies.repository?.bindBankResolvedName(identity, data.account_name)
       }
       return res.json({ ok: true, ...data })

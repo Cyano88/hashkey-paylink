@@ -48,7 +48,7 @@ export function parsePocketBankVerification(value: unknown): PocketBankVerifyDat
     throw new Error(bankErrorMessage(value, 'Account verification failed.'))
   }
   if (!isPocketBankVerifyData(value)) throw new Error('Bank verification response was invalid.')
-  return { account_name: value.account_name, bank_code: value.bank_code }
+  return { account_name: value.account_name, bank_code: value.bank_code, ...(value.name_required ? { name_required: true as const } : {}) }
 }
 
 export async function readPocketBankInstitutions(fetcher: typeof fetch = fetch, currency: 'NGN' | 'UGX' = 'NGN'): Promise<PocketBankInstitutionsData> {

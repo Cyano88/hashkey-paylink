@@ -293,6 +293,8 @@ export default function PocketMoveBankPage() {
               bankName={bank.bankName}
               accountNumber={bank.accountNumber}
               accountName={bank.accountName}
+              nameRequired={bank.nameRequired}
+              onRecipientNameChange={bank.setRecipientName}
               verified={bank.verified}
               verifying={bank.verifying}
               error={bank.error}

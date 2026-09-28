@@ -21,7 +21,9 @@ export default function usePocketPosPageController({
   verifiedIdentityName = '',
   routeStep,
   onStepChange,
+  setupKey,
 }: {
+  setupKey?: string
   authenticated: boolean
   email: string
   getAccessToken: PocketAccessTokenReader
@@ -123,6 +125,7 @@ export default function usePocketPosPageController({
       })
       if (!valid()) return
       if (data.bank_code) setBankCode(String(data.bank_code).trim())
+      if (data.name_required) throw new Error('This provider does not verify account ownership. Use an account that returns your registered name.')
       const resolved = String(data.account_name ?? '').trim()
       setBankAccountName(resolved)
       if (profileVerified && normalizeName(resolved) !== normalizeName(verifiedIdentityName)) {
@@ -166,7 +169,7 @@ export default function usePocketPosPageController({
     try {
       const accessToken = await getAccessToken()
       if (!accessToken) throw new Error('Sign in again to create POS.')
-      const idempotencyKey = creationIdempotencyKey.current || window.crypto.randomUUID()
+      const idempotencyKey = setupKey || creationIdempotencyKey.current || window.crypto.randomUUID()
       creationIdempotencyKey.current = idempotencyKey
       const data = await createPocketPos({
         accessToken,
@@ -272,7 +275,7 @@ export default function usePocketPosPageController({
     ? `${hashPayLinkAppOriginForOrigin(window.location.origin)}/pos/ng?merchant_id=${encodeURIComponent(merchant.merchant_id)}`
     : ''
   const dashboardUrl = merchant
-    ? `${POCKET_BASE_PATH}/move/pos/manage?terminal=${encodeURIComponent(merchant.merchant_id)}`
+    ? `${POCKET_BASE_PATH}/move/pos/manage?terminal=${encodeURIComponent(merchant.merchant_id)}&view=payments`
     : ''
 
   const copyCustomerUrl = useCallback(async () => {

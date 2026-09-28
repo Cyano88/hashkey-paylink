@@ -47,7 +47,7 @@ export const POCKET_BASE_PATH = pocketBasePathForHostname(typeof window === 'und
 
 export type PocketRouteState =
   | { section: 'xstocks'; view: 'home' | 'market' | 'activity' | 'portfolio' | 'account' | 'send' | 'receive' | 'trade' | 'request' | 'xpay' | 'notifications' | 'verify-name' }
-  | { section: 'home'; view: 'overview' | 'deposit' | 'send' | 'swap' | 'scan' | 'transfer' | 'receive' | 'pos-manage' }
+  | { section: 'home'; view: 'xpay' | 'overview' | 'deposit' | 'send' | 'swap' | 'scan' | 'transfer' | 'receive' | 'pos-manage' }
   | { section: 'profile'; view: 'details' | 'verify-name' }
   | { section: 'notifications'; view: 'inbox' }
   | { section: 'move'; view: PocketMoveView }
@@ -70,6 +70,7 @@ export const POCKET_ROUTES = {
   notifications: '/notifications',
   usdc: '/move/usdc',
   bank: '/move/bank',
+  xpay: '/xpay',
   pos: '/move/pos',
   posManage: '/move/pos/manage',
   bills: '/bills',
@@ -95,6 +96,7 @@ function cleanPathname(pathname: string) {
 
 export function resolvePocketRoute(pathname: string): PocketRouteState | null {
   const path = cleanPathname(pathname)
+  if (path === '/xpay' || /^\/xpay\/checkout\/xp_[0-9a-f-]{36}$/.test(path)) return {section:'home',view:'xpay'}
   if (/^\/xpay\/[0-9a-f-]{36}$/.test(path)) return { section: 'xstocks', view: 'xpay' }
   const stockView = path.match(/^\/xstocks\/(home|market|activity|portfolio|account|send|receive|trade|request|xpay|notifications|verify-name)$/)?.[1]
   if (stockView) return { section: 'xstocks', view: stockView as Extract<PocketRouteState, { section: 'xstocks' }>['view'] }
@@ -129,7 +131,7 @@ export function resolvePocketRoute(pathname: string): PocketRouteState | null {
 
 export function pocketPathFor(state: PocketRouteState) {
   if (state.section === 'xstocks') return '/xstocks/' + state.view
-  if (state.section === 'home') return state.view === 'pos-manage' ? POCKET_ROUTES.posManage : state.view === 'transfer' ? POCKET_ROUTES.transfer : state.view === 'receive' ? POCKET_ROUTES.receive : state.view === 'scan' ? POCKET_ROUTES.scan : state.view === 'deposit' ? POCKET_ROUTES.deposit : state.view === 'send' ? POCKET_ROUTES.send : state.view === 'swap' ? POCKET_ROUTES.swap : POCKET_ROUTES.home
+  if (state.section === 'home') return state.view === 'xpay' ? POCKET_ROUTES.xpay : state.view === 'pos-manage' ? POCKET_ROUTES.posManage : state.view === 'transfer' ? POCKET_ROUTES.transfer : state.view === 'receive' ? POCKET_ROUTES.receive : state.view === 'scan' ? POCKET_ROUTES.scan : state.view === 'deposit' ? POCKET_ROUTES.deposit : state.view === 'send' ? POCKET_ROUTES.send : state.view === 'swap' ? POCKET_ROUTES.swap : POCKET_ROUTES.home
   if (state.section === 'profile') return state.view === 'verify-name' ? POCKET_ROUTES.verifyName : POCKET_ROUTES.profile
   if (state.section === 'notifications') return POCKET_ROUTES.notifications
   if (state.section === 'move') return POCKET_ROUTES[state.view]

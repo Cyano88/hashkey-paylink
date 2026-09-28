@@ -1,3 +1,4 @@
+import {assertUnifiedXPayDestination} from './pocket/unified-xpay-store.js'
 import { isAddress } from 'viem'
 import type { Request, Response } from 'express'
 import { archivePayment }          from './og-storage.js'
@@ -11,6 +12,7 @@ import { normalizeEvmUsdcChain, verifyEvmUsdcTransfer } from './usdc-transfer-ve
 import { attachHostedCheckoutReceipt, hostedCheckoutMode, hostedCheckoutPaymentOption, markHostedCheckoutPaid, readVerifiedHostedCheckoutRecord } from './hosted-checkouts.js'
 
 type PaymentEntry = {
+  xpayCheckoutId?: string
   eventId:     string
   txHash:      string
   chain:       string
@@ -38,6 +40,7 @@ export type RegisteredPaymentReceipt = PaymentEntry & {
 }
 
 export type RegisterPaymentInput = {
+  xpayCheckoutId?: unknown
   eventId?: unknown
   txHash?: unknown
   payer?: unknown
@@ -548,6 +551,11 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     }
   }
 
+  const xpayCheckoutId = input?.xpayCheckoutId ? String(input.xpayCheckoutId) : undefined
+  if(xpayCheckoutId){
+    if(source!=='ngpos'||!merchantId||txHash.startsWith('manual_'))throw paymentError('Invalid XPay payment attribution.',400)
+    await assertUnifiedXPayDestination(xpayCheckoutId,merchantId,undefined,true)
+  }
   await hydrateRegistry()
   const entries = registry.get(eventId) ?? []
   if (!txHash.startsWith('manual_')) {
@@ -593,6 +601,8 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     ? entries.some(e => e.payer.toLowerCase() === payer.toLowerCase())
     : entries.some(e => e.txHash.toLowerCase() === txHash.toLowerCase())
   if (isDupe) {
+    const previous=entries.find(e=>e.txHash.toLowerCase()===txHash.toLowerCase())
+    if(xpayCheckoutId&&previous?.xpayCheckoutId&&previous.xpayCheckoutId!==xpayCheckoutId)throw paymentError('Payment already belongs to another QR.',409)
     const duplicate = txHash.startsWith('manual_')
       ? entries.find(e => e.payer.toLowerCase() === payer.toLowerCase())
       : entries.find(e => e.txHash.toLowerCase() === txHash.toLowerCase())
@@ -606,7 +616,7 @@ export async function registerVerifiedPayment(input: RegisterPaymentInput) {
     if (duplicate) scheduleArchivePayment(duplicate, payer)
     return result
   }
-  const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now() }
+  const entry: PaymentEntry = { eventId, txHash, chain, payer, memo, amount, ts: Date.now(), ...(xpayCheckoutId?{xpayCheckoutId}:{}) }
   if(source==='ngpos' && isAddress(payer))entry.verifiedPayer=payer.toLowerCase()
   if (requestedAmount) entry.requestedAmount = requestedAmount
   if (source) entry.source = source

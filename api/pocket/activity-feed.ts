@@ -15,6 +15,7 @@ type Store = {
 type Dependencies = {
   verifyUser(req: Request): Promise<{ userId: string }>
   sources: Record<string, (owner: string) => Promise<PocketActivityReadData>>
+  transformSnapshot?(owner:string,snapshot:PocketActivityReadData):Promise<PocketActivityReadData>
   store?: Store
   now?: () => number
   coldWaitMs?: number
@@ -101,7 +102,8 @@ export function createDurablePocketActivityHandler(dependencies: Dependencies) {
         } finally { clearTimeout(timer) }
         saved = await store.read(key)
       }
-      const snapshot = Object.values(saved?.sources ?? {}).reduce((result, source) => mergePocketActivitySnapshot(result, source.snapshot), empty())
+      let snapshot = Object.values(saved?.sources ?? {}).reduce((result, source) => mergePocketActivitySnapshot(result, source.snapshot), empty())
+      if(dependencies.transformSnapshot)snapshot=await dependencies.transformSnapshot(userId,snapshot)
       const complete = sourceNames.every(name => Boolean(saved?.sources[name]))
       const partial = !complete || sourceNames.some(name => now() - (saved?.sources[name]?.updatedAt ?? 0) > 60_000)
       return res.json({

@@ -1,10 +1,11 @@
+import {validateXPayBankCall,type XPayBankPayment,type XPayBankResponse} from '../lib/pocketXPayBankClient'
 import usePocketEmbeddedWallet from './usePocketEmbeddedWallet'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSendTransaction, useWallets } from '@privy-io/react-auth'
 import { getAddress, encodeFunctionData, parseAbi, parseUnits, type Address, type Hex } from 'viem'
 import { stockSwapRequest } from '../api/pocketStockSwapClient'
 import { validateStockSwap, type StockSwapQuote } from '../lib/pocketXStocksSwap'
-import { hasStockSubmission, readStockAttempts, STOCK_ATTEMPTS_UPDATED, readStockLast, readStockPending, runStockSubmission, settleStockPending, type StockPending, type StockTradeStage } from '../lib/pocketStockSubmission'
+import { settleXPaySourceProof, hasStockSubmission, readStockAttempts, STOCK_ATTEMPTS_UPDATED, readStockLast, readStockPending, runStockSubmission, settleStockPending, type StockPending, type StockTradeStage } from '../lib/pocketStockSubmission'
 import { ensurePocketXLayerWallet } from '../lib/pocketStockWalletNetwork'
 import { registerStockNotifications } from '../api/pocketStockNotificationsClient'
 import usePocketStockBalances from './usePocketStockBalances'
@@ -154,5 +155,36 @@ export default function usePocketStockWallet(options: {swapRequest?:typeof stock
       throw reason
     } finally { inFlight.current = false; setBusy(false) }
   }
-  return { attempts:attempts.filter(r=>r.key===ownerKey), address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
+  const reconcileXPay=(p:XPayBankPayment)=>{
+    if(p.source.toLowerCase()!==address?.toLowerCase())return
+    if(p.swapHash&&p.progress.swap==='confirmed')settleXPaySourceProof(ownerKey,p.id,p.swapHash as Hex)
+    if(p.bridge?.burnHash&&['attested','mint_requested','mint_submitted','mint_failed','completed'].includes(p.bridge.state))settleXPaySourceProof(ownerKey,p.id,p.bridge.burnHash as Hex)
+    setPending(readStockPending(ownerKey));setUncertain(!!localStorage.getItem('pocket.xstocks.signing:'+ownerKey))
+  }
+  // PIN approval has already been consumed by the owner-bound XPay coordinator.
+  // This signer accepts only the exact server-bound swap/allowance/CCTP call.
+  const signXPay = async(review:XPayBankPayment,response:XPayBankResponse,onHash:(hash:Hex)=>void) => {
+    if(!wallet||!address||inFlight.current||hasStockSubmission(ownerKey))throw Error('Wait for your current wallet submission to be checked.')
+    if(review.source.toLowerCase()!==address.toLowerCase()||response.payment.state==='quoted')throw Error('Review and approve this XPay payment first.')
+    const tx=validateXPayBankCall(review,response),key=ownerKey
+    const current=()=>{if(!mounted.current||scope.current!==key)throw Error('Your Pocket account changed.')}
+    inFlight.current=true;setBusy(true)
+    try{
+      await ensurePocketXLayerWallet(()=>walletRef.current,address,current)
+      current();validateXPayBankCall(review,response)
+      if(await stockClient.getChainId()!==196)throw Error('X Layer could not be verified.')
+      const call={account:address,to:tx.to,data:tx.data,value:BigInt(tx.value)}
+      const [gas,price,balance]=await Promise.all([stockClient.estimateGas(call),stockClient.getGasPrice(),stockClient.getBalance({address})])
+      if(gas*price>BigInt(tx.gas)*BigInt(tx.gasPrice)*120n/100n)throw Error('The network fee changed. Check your payment before continuing.')
+      if(balance<(gas*price*120n+99n)/100n)throw Error('Not enough OKB for the network fee. Add OKB in Pocket, then retry.')
+      current()
+      return await runStockSubmission({key,xpayPaymentId:review.id,kind:tx.kind==='approval'?'approval':'trade',
+        send:()=>sendTransaction({chainId:196,from:address,to:tx.to,data:tx.data,value:BigInt(tx.value)},{address,uiOptions:{showWalletUIs:false}}),
+        ...(tx.kind==='approval'?{wait:(hash:Hex)=>stockClient.waitForTransactionReceipt({hash,timeout:45000})}:{}),
+        onPending:next=>{if(scope.current===key){setPending(next);if(next.hash)onHash(next.hash)}},
+        onUncertain:value=>{if(scope.current===key)setUncertain(value)},
+      })
+    }finally{inFlight.current=false;if(mounted.current)setBusy(false)}
+  }
+  return { attempts:attempts.filter(r=>r.key===ownerKey), address, ready: ready || !!address || !!setup.error, busy: busy || setup.busy, uncertain, balanceError, actionError: error || setup.error, error: error || setup.error || balanceError || (!ready && !wallet && walletWaitExpired ? 'Wallet connection is taking longer. Reopen Pocket to try again.' : ''), connect, refresh, send, trade, signXPay, reconcileXPay, balanceStale, displaySnapshot: displaySnapshot?.key === ownerKey ? displaySnapshot : null, snapshot: snapshot?.key === ownerKey ? snapshot : null, pending: pending?.key === ownerKey ? pending : null }
 }

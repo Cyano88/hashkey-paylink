@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { xpaySenderFee, assertXPaySenderFee } from './pocket/xpay-fee.js'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
@@ -212,7 +213,6 @@ export async function verifyPaycrestAccount(input: { institution: string; accoun
     body: JSON.stringify({
       institution: input.institution,
       accountIdentifier: input.accountIdentifier,
-      currency: input.currency ?? 'NGN',
     }),
   })
   return firstText(data?.accountName, data?.account_name, data?.name, data)
@@ -357,6 +357,7 @@ export async function createPaycrestOfframpOrder(input: {
   source?: 'ngpos' | 'bank-receive' | 'bank-withdraw' | 'hosted-checkout'
   memo?: string
   referenceSuffix?: string
+  unifiedXPay?: boolean
 }) {
   if (!isAddress(input.refundAddress)) throw new Error('A valid Circle refund wallet is required.')
   const referenceSuffix = String(input.referenceSuffix ?? '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 20)
@@ -383,12 +384,16 @@ export async function createPaycrestOfframpOrder(input: {
     },
     reference,
   }
-  if (senderFeePercent) payload.senderFeePercent = senderFeePercent
+  // Pocket payouts use the same explicit treasury fee as XPay, never the provider account default.
+  const pocketSenderFee = input.unifiedXPay || input.source === 'bank-withdraw'
+  if (pocketSenderFee) Object.assign(payload, xpaySenderFee())
+  else if (senderFeePercent) payload.senderFeePercent = senderFeePercent
 
   const data = await paycrestFetch<any>('/v2/sender/orders', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
+  if (pocketSenderFee) assertXPaySenderFee(data)
   const providerAccount = data?.providerAccount ?? data?.provider_account ?? {}
   const receiveAddress = firstText(providerAccount.receiveAddress, providerAccount.receive_address)
   if (!isAddress(receiveAddress)) throw new Error('Paycrest did not return a valid Base receive address.')

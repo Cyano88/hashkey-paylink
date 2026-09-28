@@ -1,7 +1,7 @@
-﻿import type { Hex } from 'viem'
+import type { Hex } from 'viem'
 
 export type StockTradeStage = 'idle' | 'preparing' | 'processing' | 'confirming' | 'completed' | 'failed'
-export type StockPending = { id?:string; details?:{recipient:string;amount:string;symbol:string;at:number}; key: string; hash: Hex; kind?: 'approval' | 'trade' | 'send'; status: 'pending' | 'confirmed' | 'failed' }
+export type StockPending = { id?:string; xpayPaymentId?:string; details?:{recipient:string;amount:string;symbol:string;at:number}; key: string; hash: Hex; kind?: 'approval' | 'trade' | 'send'; status: 'pending' | 'confirmed' | 'failed' }
 export const signingKey = (key: string) => 'pocket.xstocks.signing:' + key
 const pendingKey = (key: string) => 'pocket.xstocks.pending:' + key
 export const STOCK_ATTEMPTS_UPDATED='pocket:stock-attempts-updated'
@@ -60,7 +60,7 @@ export function settleStockPending(pending: StockPending, success: boolean): Sto
  return settled
 }
 export async function runStockSubmission(options: {
- key: string; kind: NonNullable<StockPending['kind']>;
+ key: string; kind: NonNullable<StockPending['kind']>; xpayPaymentId?:string;
  details?:StockPending['details'];
  send: () => Promise<{ hash: Hex }>;
  wait?: (hash: Hex) => Promise<{ status: string }>;
@@ -68,7 +68,7 @@ export async function runStockSubmission(options: {
  onUncertain: (uncertain: boolean) => void;
  onSubmitted?: () => void;
 }) {
- const { key, kind, send, wait, onPending, onUncertain, onSubmitted, details } = options
+ const { key, kind, send, wait, onPending, onUncertain, onSubmitted, details, xpayPaymentId } = options
  const existing=details?readStockAttempts(key).find(r=>r.status==='pending'&&r.details?.recipient.toLowerCase()===details.recipient.toLowerCase()&&r.details?.amount===details.amount&&r.details?.symbol===details.symbol):undefined
  if(existing){
   onPending(existing)
@@ -79,7 +79,7 @@ export async function runStockSubmission(options: {
   } catch(reason){const error=stockSubmissionError(reason);if(readStockAttempts(key).some(r=>r.id===existing.id&&r.status==='pending'))Object.assign(error,{transactionPending:true,attemptId:existing.id});throw error}
  }
  const id=crypto.randomUUID()
- const draft:StockPending={key,kind,id,details,hash:'' as Hex,status:'pending'}
+ const draft:StockPending={key,kind,id,details,xpayPaymentId,hash:'' as Hex,status:'pending'}
  saveStockAttempt(draft)
  localStorage.setItem(signingKey(key), String(Date.now()))
  // Signing in progress is not an uncertain outcome. Only a rejected call with
@@ -90,7 +90,7 @@ export async function runStockSubmission(options: {
   const result = await send()
   if (!/^0x[0-9a-f]{64}$/i.test(result.hash)) throw Error('The wallet returned an invalid transaction reference.')
   hash = result.hash
-  const pending: StockPending = { key, kind, id, details, hash, status: 'pending' }
+  const pending: StockPending = { key, kind, id, details, xpayPaymentId, hash, status: 'pending' }
   saveStockAttempt(pending)
   localStorage.setItem(pendingKey(key), JSON.stringify(pending))
   localStorage.removeItem(signingKey(key))
@@ -112,4 +112,13 @@ export async function runStockSubmission(options: {
   if (hash && readStockAttempts(key).some(r=>r.hash===hash&&r.status==='pending')) Object.assign(error, {transactionPending:true})
   throw error
  }
+}
+
+// Server-verified XPay source proof can clear only that payment's trade attempt.
+export function settleXPaySourceProof(key:string,paymentId:string,hash:Hex){
+ const matches=readStockAttempts(key).filter(r=>r.xpayPaymentId===paymentId&&r.kind==='trade'&&r.status==='pending'&&(!r.hash||r.hash.toLowerCase()===hash.toLowerCase()))
+ if(matches.length!==1)return
+ const r=matches[0]
+ settleStockPending({...r,hash},true)
+ if(!r.hash&&!readStockAttempts(key).some(other=>other.id!==r.id&&other.status==='pending'&&!other.hash))localStorage.removeItem(signingKey(key))
 }

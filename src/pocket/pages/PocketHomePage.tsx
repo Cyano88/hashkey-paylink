@@ -64,7 +64,7 @@ export default function PocketHomePage() {
   const displayTotal = wallets.displayTotal
   const activityReady = !authenticated || activity.resolved
 
-  const open = (path: string) => navigate(POCKET_BASE_PATH + path)
+  const open = (path: string) => navigate(POCKET_BASE_PATH + path, path===POCKET_ROUTES.xpay?{state:{xpayOrigin:'stablecoins'}}:undefined)
   const selectedRow = wallets.displayRows.find(row => row.key === selected)
   const selectedVisible = !authenticated || selectedRow?.known
   const comingSoon = false
@@ -108,7 +108,7 @@ export default function PocketHomePage() {
     <section className="grid grid-cols-4 gap-2">
       {[
         { label: 'Send', icon: Send, path: POCKET_ROUTES.transfer },
-        { label: 'POS', icon: Store, path: POCKET_ROUTES.pos },
+        { label: 'XPay', icon: Store, path: POCKET_ROUTES.xpay },
         { label: 'Swap', icon: ArrowLeftRight, path: POCKET_ROUTES.swap },
         { label: 'Receive', icon: Deposit, path: POCKET_ROUTES.receive },
       ].map(item => <PocketHomeAction key={item.label} label={item.label} icon={<item.icon className="h-5 w-5" />} onClick={() => open(item.path)} />)}

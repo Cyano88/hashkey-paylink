@@ -164,6 +164,8 @@ export type PocketX402ActivationData = {
 }
 
 export type PocketActivityRow = {
+  assetSymbol?: string
+  xpayCheckoutId?: string
   eventId: string
   txHash: string
   chain: string
@@ -203,6 +205,7 @@ export type PocketActivityRow = {
 }
 
 export type PocketActivityReadData = {
+  groupedTransactionHashes?: string[]
   archivedKeys?: string[]
   complete?: boolean
   partial?: boolean
@@ -214,6 +217,7 @@ export type PocketActivityReadData = {
 }
 
 export type PocketPosResource = {
+  deleted_at?: string
   merchant_id: string
   display_name: string
   source?: string
@@ -323,6 +327,7 @@ export type PocketBankVerifyRequest = {
 export type PocketBankVerifyData = {
   account_name: string
   bank_code: string
+  name_required?: true
 }
 
 export type PocketBankSendCreateRequest = {
@@ -598,6 +603,8 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && isOptionalBoundedString(value.amountNgn, 80)
     && (value.handoffVerified === undefined || typeof value.handoffVerified === 'boolean')
     && isOptionalBoundedString(value.bankSettlementStatus, 80)
+    && isOptionalBoundedString(value.xpayCheckoutId, 40)
+    && isOptionalBoundedString(value.assetSymbol, 40)
     && isOptionalBoundedString(value.paycrestStatus, 80)
     && isOptionalBoundedString(value.activityLabel, 80)
     && (value.direction === undefined || value.direction === 'in' || value.direction === 'out')
@@ -622,6 +629,7 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
 
 export function isPocketActivityReadData(value: unknown): value is PocketActivityReadData {
   return isRecord(value)
+    && (value.groupedTransactionHashes === undefined || Array.isArray(value.groupedTransactionHashes) && value.groupedTransactionHashes.every(hash=>typeof hash==='string' && /^0x[0-9a-f]{64}$/i.test(hash)))
     && (value.archivedKeys === undefined || Array.isArray(value.archivedKeys) && value.archivedKeys.length<=1000 && value.archivedKeys.every(key=>typeof key==='string' && key.length<=600))
     && Array.isArray(value.payments)
     && value.payments.every(isPocketActivityRow)
@@ -632,6 +640,7 @@ export function isPocketActivityReadData(value: unknown): value is PocketActivit
       && isOptionalBoundedString(item.source, 40)
       && isOptionalBoundedString(item.bank_name, 90)
       && isOptionalBoundedString(item.bank_last4, 8)
+      && isOptionalBoundedString(item.deleted_at, 64)
       && isOptionalBoundedString(item.created_at, 64))
     && Array.isArray(value.collections)
     && value.collections.every(item => isRecord(item)
@@ -732,7 +741,9 @@ export function isPocketBankVerifyRequest(value: unknown): value is PocketBankVe
 
 export function isPocketBankVerifyData(value: unknown): value is PocketBankVerifyData {
   return isRecord(value)
-    && isNonEmptyString(value.account_name, 160)
+    && (value.name_required === true
+      ? value.account_name === '' && ['MOMOUGPC', 'AIRTUGPC'].includes(String(value.bank_code))
+      : value.name_required === undefined && isNonEmptyString(value.account_name, 160))
     && isNonEmptyString(value.bank_code, 90)
 }
 

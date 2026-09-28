@@ -45,6 +45,7 @@ const PocketScanPage = lazy(() => import('./pages/PocketScanPage'))
 const PocketSendPage = lazy(() => import('./pages/PocketSendPage'))
 const PocketNotificationsPage = lazy(() => import('./pages/PocketNotificationsPage'))
 const PocketMoveBankPage = lazy(() => import('./pages/PocketMoveBankPage'))
+const PocketUnifiedXPayPage = lazy(() => import('./pages/PocketUnifiedXPayPage'))
 const PocketPosManagePage = lazy(() => import('./pages/PocketPosManagePage'))
 const PocketMovePosPage = lazy(() => import('./pages/PocketMovePosPage'))
 const PocketMoveUsdcPage = lazy(() => import('./pages/PocketMoveUsdcPage'))
@@ -323,6 +324,7 @@ export default function CirclePocketApp() {
   else if (route?.section === 'xstocks' && route.view === 'verify-name') content = <PocketPageBoundary active="profile"><PocketVerifyNamePage /></PocketPageBoundary>
   else if (route?.section === 'xstocks' && route.view !== 'account' && route.view !== 'verify-name') content = <PocketPageBoundary active={route.view === 'portfolio' ? 'profile' : route.view === 'market' ? 'bills' : route.view === 'activity' ? 'activity' : 'home'}><PocketXStocksPage view={route.view} /></PocketPageBoundary>
   else if (route?.section === 'home' && (route.view === 'transfer' || route.view === 'receive')) content = <PocketPageBoundary active="home"><PocketTransferMenuPage kind={route.view === 'transfer' ? 'send' : 'receive'} /></PocketPageBoundary>
+  else if (route?.section === 'home' && route.view === 'xpay') content = <PocketPageBoundary active="home"><PocketUnifiedXPayPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'pos-manage') content = <PocketPageBoundary active="home"><PocketPosManagePage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'deposit') content = <PocketPageBoundary active="home"><PocketDepositPage /></PocketPageBoundary>
   else if (route?.section === 'home' && route.view === 'scan') content = <PocketPageBoundary active='home'><PocketScanPage /></PocketPageBoundary>

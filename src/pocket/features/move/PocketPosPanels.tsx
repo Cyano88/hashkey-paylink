@@ -124,6 +124,7 @@ export function PocketPosCountryPanel({ controller, countries, profileReady }: P
 }
 
 type PocketPosSetupPanelProps = {
+  showName?: boolean
   controller: PocketMoveController<'pos', PocketPosDraft, PocketPosActions>
   networkOptions: PocketPosNetworkOption[]
   instantBankPayout: boolean
@@ -138,6 +139,7 @@ type PocketPosSetupPanelProps = {
 }
 
 export function PocketPosSetupPanel({
+  showName = true,
   controller,
   instantBankPayout,
   bankInstitutions,
@@ -153,7 +155,7 @@ export function PocketPosSetupPanel({
     <fieldset disabled={controller.submitting} className="pocket-pos-setup flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex min-h-0 flex-1 flex-col gap-5">
         <div className="pocket-pos-identity grid gap-5"><PocketPayoutCountry value={controller.draft.country || 'NG'} onChange={controller.actions.selectCountry} />
-        <label className="block">
+        <label hidden={!showName} className="block">
           <span className="text-xs text-gray-500 dark:text-gray-400">Terminal name</span>
           <input aria-label="Terminal name" value={controller.draft.merchantName} onChange={event=>controller.actions.setMerchantName(event.target.value)} placeholder="Store name" className="mt-2 min-h-14 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#0D0D0D] dark:placeholder:text-gray-600" />
         </label></div>

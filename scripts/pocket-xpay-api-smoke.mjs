@@ -4,13 +4,13 @@ fs.mkdirSync('.codex-temp',{recursive:true})
 const mocks={
 './payment-security.js':`export const consumePocketPaymentApproval=async(token,owner)=>{if(token!=='single-use-fixture-'+owner||globalThis.fixture.usedApproval)return false;globalThis.fixture.usedApproval=true;return true}`,
 '../local-currency-profile.js':`export const verifiedPrivyUser=async()=>({userId:globalThis.fixture.owner});export const localCurrencyProfileRepository={ensure:async()=>({profile:{pocketId:'12345678'}})}`,
-'../render-durable-store.js':`let state;export const readDurableJson=async()=>structuredClone(state);export const mutateDurableJson=async(k,fn)=>{state=await fn(structuredClone(state));return structuredClone(state)}`,
+'../render-durable-store.js':`let state;export const readDurableJson=async(key)=>structuredClone(key==='pocket:unified-xpay:v1'?globalThis.fixture.unified:state);export const mutateDurableJson=async(k,fn)=>{state=await fn(structuredClone(state));return structuredClone(state)}`,
 './xstocks-wallet-owner.js':`export const verifyStockWalletOwner=async(owner,wallet)=>{if(globalThis.fixture.wallets[owner]!==wallet)throw Object.assign(Error('Wrong wallet'),{status:403})}`,
 './xstocks-notifications-store.js':`export const stockNoticeClient={getChainId:async()=>196,getLogs:async()=>globalThis.fixture.logs||[],getTransactionReceipt:async({hash})=>{if(!globalThis.fixture.receipts[hash])throw Error('pending');return globalThis.fixture.receipts[hash]},getBlock:async({blockNumber}={})=>({number:blockNumber||globalThis.fixture.head||100n,hash:'block',timestamp:BigInt(Math.floor(Date.now()/1000))})};export const stockNoticeAsset=async(token)=>({address:token,symbol:'NVDAx',decimals:18});export const mutateStockNotices=async fn=>fn({notices:{}});export const putStockNotice=()=>{}`,
 './xstocks-prices.js':`export const readStockMarketPrices=async tokens=>Object.fromEntries(tokens.map(t=>[t,{usd:200,fetchedAt:Date.now()}]))`
 }
 await build({entryPoints:['api/pocket/xpay.ts'],outfile:'.codex-temp/xpay-handler-test.mjs',bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixture',setup(b){b.onResolve({filter:/.*/},a=>mocks[a.path]?{path:a.path,namespace:'fixture'}:undefined);b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:mocks[a.path],loader:'js'}))}}]})
-const {default:handler}=await import('../.codex-temp/xpay-handler-test.mjs')
+const {default:handler,listPocketUnifiedXPayStockPayments}=await import('../.codex-temp/xpay-handler-test.mjs')
 const {stockAssets}=await import('../src/pocket/lib/pocketXStocksWallet.ts')
 const {encodeEventTopics,encodeAbiParameters,parseAbiItem}=await import('viem')
 const assert=(await import('node:assert/strict')).default
@@ -68,3 +68,25 @@ try {
  await call({action:'authorize',id:slow.id},409);
  console.log('PASS slow PIN approval preserves reviewed amount; exact five-minute expiry rejects; duplicate authorization rejected');
 } finally {Date.now=realNow}
+
+fixture.owner='merchant';
+const setup={action:'merchant-save',create:true,key:'fixture-setup-key-001',wallet:to,name:'Unified setup',tokens:[token]};
+const setupMerchant=(await call(setup)).merchant;
+assert.equal((await call(setup)).merchant.id,setupMerchant.id);
+await call({...setup,name:'Changed'},409);
+assert.equal(setupMerchant.createKey,undefined);
+const unifiedId='xp_11111111-1111-4111-8111-111111111111';
+fixture.unified={checkouts:[{id:unifiedId,owner:'merchant',name:'Unified',destinationIds:[setupMerchant.id],revisions:[String(setupMerchant.updatedAt)],key:'fixture-unified-key',createdAt:Date.now()}]};
+fixture.owner='payer2';fixture.wallets.payer2='0x'+'3'.repeat(40);
+const unifiedBody={action:'prepare',id:setupMerchant.id,wallet:fixture.wallets.payer2,token,usd:'2',key:'fixture-unified-pay-001',checkoutId:unifiedId};
+const unifiedPayment=(await call(unifiedBody)).payment;
+assert.equal(unifiedPayment.checkoutId,unifiedId);
+await call({...unifiedBody,checkoutId:undefined},409);
+fixture.unified.checkouts[0].deletedAt=Date.now();await call({action:'authorize',id:unifiedPayment.id},409);
+delete fixture.unified.checkouts[0].deletedAt;
+fixture.unified.checkouts[0].revisions=['changed'];await call({action:'authorize',id:unifiedPayment.id},409);
+fixture.unified.checkouts[0].revisions=[String(setupMerchant.updatedAt)];
+await call({action:'authorize',id:unifiedPayment.id});
+assert.deepEqual((await listPocketUnifiedXPayStockPayments('merchant',unifiedId)).map(p=>p.id),[unifiedPayment.id]);
+assert.equal((await listPocketUnifiedXPayStockPayments('payer2',unifiedId)).length,0);
+console.log('PASS unified setup retries; QR binding, revision/deletion guards, immutable replay and owner-only history');

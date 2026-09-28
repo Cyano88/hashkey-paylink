@@ -4,6 +4,7 @@ import { SolanaProvider } from '../lib/SolanaContext'
 import SurfaceLayout from './SurfaceLayout'
 import ExternalRedirect from './ExternalRedirect'
 const PublicPosCheckoutPage = lazy(() => import('../pages/PublicPosCheckoutPage'))
+const UnifiedXPayCheckout = lazy(() => import('../pocket/pages/PocketUnifiedXPayPage'))
 const XPayCheckout = lazy(() => import('../pocket/pages/PocketXPayCheckoutPage'))
 const PaymentPage = lazy(() => import('../pages/PaymentPage'))
 const HostedCheckoutEntry = lazy(() => import('../pages/HostedCheckoutEntry'))
@@ -36,6 +37,7 @@ export default function CheckoutApp() {
     <Route element={<SurfaceLayout />}>
       <Route index element={<CheckoutHome />} />
       <Route path="pos/ng" element={<PublicPosCheckoutPage />} />
+      <Route path="xpay/checkout/:checkoutId" element={<UnifiedXPayCheckout publicCheckout />} />
       <Route path="xpay/:merchantId" element={<XPayCheckout />} />
       <Route path="pay" element={<PaymentPage />} />
       <Route path="pay/c/:checkoutId" element={<HostedCheckoutEntry />} />
