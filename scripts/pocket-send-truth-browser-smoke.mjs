@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { build } from 'esbuild'
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const stubs = {
- circleEvmEmailWallet: `export const readCirclePaymentFeeQuote=async()=>{}; export const reconcileCircleEvmEmailWithdraw=async()=>({state:'pending'});`,
+ circleEvmEmailWallet: `export const resumeCircleEvmEmailWithdraw=(...args)=>reconcileCircleEvmEmailWithdraw(...args);export const readCirclePaymentFeeQuote=async()=>{}; export const reconcileCircleEvmEmailWithdraw=async()=>({state:'pending'});`,
  circleSolanaEmailWallet: `export const reconcileCircleSolanaTransfer=async()=>({state:'pending'}); export const sendCircleSolanaTransfer=async()=>{};`,
  solanaPaymentFees: `export const readSolanaPaymentQuote=async()=>{};export const sendQuotedSolanaPayment=async()=>{};`,
  pocketEvmTransferStatusClient: `export const recoverPocketEvmTransfer=async()=>({status:'pending'});`,

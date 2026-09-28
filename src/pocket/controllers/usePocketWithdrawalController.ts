@@ -9,7 +9,7 @@ import { registerPocketPaymentPreparer } from '../lib/pocketPaymentApproval'
 import type { PocketNetwork } from '../lib/pocketSchemas'
 import type { CirclePocketWallet } from '../models/pocketWallet'
 import type { PocketSolanaEmailSession } from './usePocketWalletController'
-import { reconcileCircleEvmEmailWithdraw, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
+import { reconcileCircleEvmEmailWithdraw, resumeCircleEvmEmailWithdraw, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { validatePocketWithdrawal } from './pocketWithdrawalValidation'
 
 function sendError(reason: unknown) {
@@ -200,7 +200,7 @@ export default function usePocketWithdrawalController({
       }else{
         const session=await getEvmSession(network,selectedWallet.address)
         if(!visible())return false
-        if(existing?.challengeId)result=await reconcileCircleEvmEmailWithdraw({session,challengeId:existing.challengeId,transactionId:existing.transactionId,timeoutMs:30_000})
+        if(existing?.challengeId)result=await resumeCircleEvmEmailWithdraw({session,challengeId:existing.challengeId,transactionId:existing.transactionId,timeoutMs:30_000})
         else{
           const feeQuoteToken=acceptedFeeToken();saveSendAttempt(operation);submissionStarted=true
           const transfer=await executePocketEvmTransfer({session,linkedWalletAddress:selectedWallet.address,feeQuoteToken,recipient:recipient as Address,amount,idempotencyKey:operation.idempotencyKey,onChallenge,onAccepted,confirm:true})

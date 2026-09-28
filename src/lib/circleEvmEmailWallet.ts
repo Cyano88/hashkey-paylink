@@ -1079,6 +1079,31 @@ export async function sendCircleEvmEmailWithdraw(params: {
   return null
 }
 
+// Only explicit user retries may reopen an unsigned challenge. Background
+// reconciliation remains read-only, and an accepted challenge is never resubmitted.
+export async function resumeCircleEvmEmailWithdraw(params: {
+  session: CircleEvmEmailSession
+  challengeId: string
+  transactionId?: string
+  timeoutMs?: number
+}) {
+  const detail = await circleWalletApi<{ challenge?: Record<string, unknown> }>({
+    action: 'getChallenge', userToken: params.session.userToken,
+    chain: params.session.chain, challengeId: params.challengeId,
+  })
+  if (!detail.challenge) throw new Error('Could not check the saved approval. Please try again.')
+  const state = transactionState(detail.challenge)
+  if (['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state)) {
+    throw Object.assign(new Error('The previous approval expired or was cancelled. Review your transfer again.'), { terminalFailure: true })
+  }
+  if (state === 'PENDING') {
+    // Use the existing immutable challenge and Circle's own decoded amounts.
+    // A newly fetched fee quote must not relabel this earlier authorization.
+    await executeChallenge(authenticatedSdk(params.session), params.challengeId)
+  }
+  return reconcileCircleEvmEmailWithdraw({ ...params, transactionId: challengeCorrelationId(detail.challenge) ?? params.transactionId })
+}
+
 export async function reconcileCircleEvmEmailWithdraw(params: {
   session: CircleEvmEmailSession
   challengeId: string
