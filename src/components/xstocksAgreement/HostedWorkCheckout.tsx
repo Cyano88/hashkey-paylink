@@ -26,6 +26,9 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
   const refreshVersion=useRef(0),background=useRef<Promise<unknown>|null>(null);
   const [loadError,setLoadError]=useState('');
   const [status,setStatus]=useState<WorkStatus>(),[busy,setBusy]=useState(''),[error,setError]=useState(''),[evidence,setEvidence]=useState(''),[pending,setPending]=useState(false);
+  const [noteAction,setNoteAction]=useState<'refund'|'dispute'>();
+  useEffect(()=>{setNoteAction(undefined);setEvidence('');},[identity,status?.state]);
+  const editingNote=noteAction||(status?.actions.includes('dispatch')?'dispatch':undefined);
   const {confirm,confirmation}=useStreamConfirm();
   const storageKey='hashpaylink:xstocks-agreement-pending:v1:'+identity;
   function assertCurrent(){if(!mounted.current||(current.current.identity!==identity||current.current.epoch!==epoch))throw Error('Your account or agreement changed. Please reopen it.');}
@@ -55,7 +58,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
   }
   async function run(action:TradeXLayerAction|'wallet'|'recover'){
     if(lock.current)return;
-    if(['dispatch','refund','dispute'].includes(action)&&(evidence.trim().length<10||evidence.length>2000)){setError('Add a note of 10 to 2000 characters before continuing.');return;}
+    if(action===editingNote&&(evidence.trim().length<10||evidence.length>2000)){setError('Add a note of 10 to 2000 characters before continuing.');return;}
     ++refreshVersion.current;lock.current=true;setBusy('Checking payment...');setError('');
     try{
       if(action==='wallet'){if(!wallet)throw Error('Your payment wallet is still loading. Please try again.');if(!await confirm({title:'Accept payment terms?',description:terms.amount+' '+workPaymentLabel(payment)+'. '+notice,action:'Accept terms'}))return;assertCurrent();await api({action:'work_xlayer_wallet',address:wallet.address});}
@@ -83,9 +86,10 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     {!busy&&!pending&&!loadError&&status&&!status.wallet&&<button className={button} disabled={!!busy||!wallet||!status.enabled} onClick={()=>void run('wallet')}>Accept payment terms</button>}
     {item.role==='provider'&&!status?.fundingIssue&&status?.customerReady&&status.providerReady&&!status.pending&&status.state===undefined&&!status.actions.length&&<p className='text-xs text-gray-500'>Payment setup is temporarily unavailable. Please try again.</p>}
     {status?.wallet&&!(status.customerReady&&status.providerReady)&&<p className='text-xs'>Waiting for the other person to accept the payment terms.</p>}
-    {status?.actions.some(action=>['dispatch','refund','dispute'].includes(action))&&<label className='block text-xs'>{isTrade?'Delivery or pickup note':'Work link or explanation'}<span className='mt-1 block text-gray-500'>Add a note of at least 10 characters.</span><textarea required className='mt-1 w-full rounded-xl border bg-transparent p-3' minLength={10} maxLength={2000} value={evidence} disabled={!!busy} onChange={event=>setEvidence(event.target.value)}/></label>}
+    {editingNote&&status?.actions.includes(editingNote)&&<label className='block text-xs'>{editingNote==='refund'?'Refund reason':editingNote==='dispute'?'Dispute reason':isTrade?'Delivery or pickup note':'Work link or explanation'}<span className='mt-1 block text-gray-500'>Add a note of at least 10 characters.</span><textarea required className='mt-1 w-full rounded-xl border bg-transparent p-3' minLength={10} maxLength={2000} value={evidence} disabled={!!busy} onChange={event=>setEvidence(event.target.value)}/></label>}
     {!!status?.workEvidence?.length&&<details className='text-xs'><summary>Shared notes</summary><p className='text-gray-500'>Notes are saved before confirmation. Check the payment status to see whether an action completed.</p>{status.workEvidence.map(note=><p className='mt-2 whitespace-pre-wrap break-words' key={note.actor+note.hash}>{note.actor==='provider'?sellerLabel:buyerLabel}: {note.body}</p>)}</details>}
-    {!busy&&!pending&&!loadError&&!status?.pending&&status?.actions.map(action=><button key={action} className={action==='cancel'?'block min-h-11 w-full text-xs text-gray-500 underline disabled:opacity-40':button} disabled={!!busy||!wallet||status.wallet?.address.toLowerCase()!==wallet.address.toLowerCase()||(['dispatch','refund','dispute'].includes(action)&&(evidence.trim().length<10||evidence.length>2000))} onClick={()=>void run(action)}>{action==='approve'||action==='fund'?'Pay securely':labels[action]}</button>)}
+    {!busy&&!pending&&!loadError&&!status?.pending&&status?.actions.filter(action=>!noteAction||action===noteAction).map(action=><button key={action} className={action==='cancel'?'block min-h-11 w-full text-xs text-gray-500 underline disabled:opacity-40':button} disabled={!!busy||!wallet||status.wallet?.address.toLowerCase()!==wallet.address.toLowerCase()||(action===editingNote&&(evidence.trim().length<10||evidence.length>2000))} onClick={()=>{if((action==='refund'||action==='dispute')&&noteAction!==action){setEvidence('');setError('');setNoteAction(action);}else void run(action);}}>{action==='approve'||action==='fund'?'Pay securely':labels[action]}</button>)}
+    {noteAction&&!busy&&!pending&&<button type='button' className='block min-h-11 w-full text-xs font-semibold' onClick={()=>{setNoteAction(undefined);setEvidence('');setError('');}}>Cancel</button>}
     {pending&&!busy&&<button className={button} disabled={!!busy} onClick={()=>void run('recover')}>Check pending transaction</button>}
     {loadError&&<p role='alert' className='text-xs text-red-600'>{loadError}</p>}{error&&<p role='alert' className='text-xs text-red-600'>{error}</p>}
     {(loadError||error)&&<button className='block min-h-11 w-full text-center text-xs font-bold underline' disabled={!!busy} onClick={()=>void refresh(true).then(()=>updatedRef.current()).catch(()=>{})}>Try again</button>}
