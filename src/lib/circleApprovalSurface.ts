@@ -11,6 +11,7 @@ export function installCircleApprovalSurface(onCancel: () => void, _label = 'Clo
   backdrop.append(panel)
   let frame: HTMLIFrameElement | null = null
   let previousStyle: string | null = null
+  let frameWindow: Window | null = null
   let scrollTop = 0
   panel.addEventListener('scroll', () => { if (frame?.style.position === 'relative') scrollTop = panel.scrollTop })
   const sync = () => {
@@ -40,10 +41,17 @@ export function installCircleApprovalSurface(onCancel: () => void, _label = 'Clo
       if (host.moveBefore) host.moveBefore(frame, null)
       else host.appendChild(frame)
     }
+    frameWindow = frame.contentWindow
     panel.scrollTop = scrollTop
     frameObserver.observe(frame, { attributes: true, attributeFilter: ['style', 'width', 'height'] })
   }
   const back = (event: Event) => { if (!backdrop.isConnected) return; event.preventDefault(); event.stopImmediatePropagation(); onCancel() }
+  const message = (event: MessageEvent) => {
+    // Circle can remove the iframe in its earlier listener. Keep the exact
+    // browsing-context identity so its own X still settles this approval.
+    if (frameWindow && event.origin === 'https://pw-auth.circle.com' && event.source === frameWindow && event.data?.onClose) onCancel()
+  }
+  window.addEventListener('message', message)
   const key = (event: KeyboardEvent) => { if (event.key === 'Escape') back(event) }
   const frameObserver = new MutationObserver(sync)
   const observer = new MutationObserver(sync)
@@ -57,6 +65,7 @@ export function installCircleApprovalSurface(onCancel: () => void, _label = 'Clo
   return () => {
     observer.disconnect()
     frameObserver.disconnect()
+    window.removeEventListener('message', message)
     window.removeEventListener('resize', sync)
     window.visualViewport?.removeEventListener('resize', sync)
     window.visualViewport?.removeEventListener('scroll', sync)
