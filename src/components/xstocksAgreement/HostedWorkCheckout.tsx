@@ -34,7 +34,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
   useEffect(()=>{mounted.current=true;lock.current=false;++refreshVersion.current;setStatus(undefined);setBusy('');setError('');setLoadError('');setEvidence('');try{setPending(Boolean(localStorage.getItem(storageKey)))}catch{setPending(true);setError('Allow browser storage to keep payment recovery available.')}const update=()=>{if(lock.current||background.current||(typeof document!=='undefined'&&document.visibilityState==='hidden'))return;const read=refresh().catch(()=>{});background.current=read;void read.finally(()=>{if(background.current===read)background.current=null;});};background.current=null;update();const timer=setInterval(update,15000);window.addEventListener('focus',update);document.addEventListener('visibilitychange',update);return()=>{mounted.current=false;++refreshVersion.current;clearInterval(timer);window.removeEventListener('focus',update);document.removeEventListener('visibilitychange',update);};},[identity]);
   async function reconcile(record:Pending){
     if(!record.hash)throw Error('Submission is uncertain. Check wallet activity before retrying; another payment will not be sent.');
-    setBusy('Confirming transaction?');
+    setBusy('Confirming transaction...');
     const receipt=await rpc.waitForTransactionReceipt({hash:record.hash,confirmations:3,timeout:90000});assertCurrent();
     if(receipt.transactionHash.toLowerCase()!==record.hash.toLowerCase())throw Error('Transaction was replaced. Review wallet activity.');
     const tx=await rpc.getTransaction({hash:record.hash});assertCurrent();
@@ -49,12 +49,12 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     const plan=await api({operation,evidence}),tx=plan.transaction;
     if(!tx||tx.chainId!==196||tx.value!=='0'||getAddress(tx.account)!==getAddress(wallet.address)||plan.token?.toLowerCase()!==payment.token.toLowerCase()||plan.amount!==payment.amountUnits||plan.decimals!==payment.decimals)throw Error('The payment details do not match this agreement. Reopen checkout.');
     await wallet.switchChain(196);assertCurrent();
-    const record:Pending={transaction:tx};localStorage.setItem(storageKey,JSON.stringify(record));setPending(true);setBusy(operation==='approve'?'Approving payment?':operation==='fund'?'Sending payment?':operation==='create'?'Setting up payment?':operation==='accept'?'Confirming payment terms?':'Confirming '+labels[operation].toLowerCase()+'?');
+    const record:Pending={transaction:tx};localStorage.setItem(storageKey,JSON.stringify(record));setPending(true);setBusy(operation==='approve'?'Approving payment...':operation==='fund'?'Sending payment...':operation==='create'?'Setting up payment...':operation==='accept'?'Confirming payment terms...':'Confirming '+labels[operation].toLowerCase()+'...');
     try{const result=await sendTransaction({to:tx.to,data:tx.data,value:0n,chainId:196},{address:wallet.address,uiOptions:{showWalletUIs:false}});record.hash=result.hash;localStorage.setItem(storageKey,JSON.stringify(record));assertCurrent();await reconcile(record);}
     catch(e){const code=(e as {code?:number;cause?:{code?:number}}).code??(e as {cause?:{code?:number}}).cause?.code;if(code===4001&&!record.hash){localStorage.removeItem(storageKey);if((current.current.identity===identity&&current.current.epoch===epoch))setPending(false);}throw e;}
   }
   async function run(action:TradeXLayerAction|'wallet'|'recover'){
-    if(lock.current)return;++refreshVersion.current;lock.current=true;setBusy('Checking payment?');setError('');
+    if(lock.current)return;++refreshVersion.current;lock.current=true;setBusy('Checking payment...');setError('');
     try{
       if(action==='wallet'){if(!wallet)throw Error('Your payment wallet is still loading. Please try again.');if(!await confirm({title:'Accept payment terms?',description:terms.amount+' '+workPaymentLabel(payment)+'. '+notice,action:'Accept terms'}))return;assertCurrent();await api({action:'work_xlayer_wallet',address:wallet.address});}
       else if(action==='recover'){const raw=localStorage.getItem(storageKey);if(raw)await reconcile(JSON.parse(raw));}
@@ -77,7 +77,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     {status?.fundingIssue&&<p role='alert' className='text-xs text-red-600'>{status.fundingIssue}</p>}
     {status&&<StockPaymentReceipt status={status} decimals={payment.decimals} label={workPaymentLabel(payment)} role={item.role}/>}
     {!wallet&&<p className='text-xs'>Your payment wallet is loading. Sign in again if it does not load.</p>}
-    {(busy||(!pending&&!loadError&&!error&&(!status||status.pending)))&&<button type='button' className={button+' flex items-center justify-center gap-2 disabled:opacity-100'} disabled aria-busy='true'><span aria-hidden='true' className='h-4 w-4 rounded-full border-2 border-current border-r-transparent motion-safe:animate-spin'/><span role='status' aria-live='polite'>{busy||(!status?'Checking payment?':'Confirming transaction?')}</span></button>}
+    {(busy||(!pending&&!loadError&&!error&&(!status||status.pending)))&&<button type='button' className={button+' flex items-center justify-center gap-2 disabled:opacity-100'} disabled aria-busy='true'><span aria-hidden='true' className='h-4 w-4 rounded-full border-2 border-current border-r-transparent motion-safe:animate-spin'/><span role='status' aria-live='polite'>{busy||(!status?'Checking payment...':'Confirming transaction...')}</span></button>}
     {!busy&&!pending&&!loadError&&status&&!status.wallet&&<button className={button} disabled={!!busy||!wallet||!status.enabled} onClick={()=>void run('wallet')}>Accept payment terms</button>}
     {item.role==='provider'&&!status?.fundingIssue&&status?.customerReady&&status.providerReady&&!status.pending&&status.state===undefined&&!status.actions.length&&<p className='text-xs text-gray-500'>Payment setup is temporarily unavailable. Please try again.</p>}
     {status?.wallet&&!(status.customerReady&&status.providerReady)&&<p className='text-xs'>Waiting for the other person to accept the payment terms.</p>}
