@@ -195,7 +195,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
           <div className="pocket-form-fields pocket-bill-fields min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-1">
             {bills.environment === 'sandbox' && <p className="text-center text-[10px] font-medium text-gray-400 dark:text-gray-500">Test mode · USDC payment is real · no live service is delivered</p>}
             {isMobileBill ? (
-              <div data-pocket-data-phone={isData || undefined} className={isData ? 'rounded-[24px] border border-gray-200/80 bg-white p-4 dark:border-[#262626] dark:bg-[#0D0D0D]' : undefined}>
+              <div data-pocket-data-phone={isData || undefined}>
                 {isData && bills.catalogBusy && !networks.length ? <PocketLoadingField label="Loading networks" /> : <PocketMobileNumberInput
                   category={isData ? 'data' : 'airtime'}
                   validationMessage={isData && dataNumberRequired && !dataPhoneValid ? (bills.phone ? 'Enter the full 11-digit phone number first' : 'Enter a phone number first') : undefined}
