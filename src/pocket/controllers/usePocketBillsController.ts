@@ -195,6 +195,7 @@ export default function usePocketBillsController({
   const terminalAttempts = useRef(new Set<string>())
   const billPayInFlight=useRef(false)
   const quoteInFlight=useRef(false)
+  const quoteGeneration=useRef(0)
   const [confirming,setConfirming]=useState(false)
   const [refundBusy, setRefundBusy] = useState(false)
   const refundInFlight = useRef(false)
@@ -203,6 +204,7 @@ export default function usePocketBillsController({
   useEffect(() => { dismiss() }, [owner, dismiss])
   const resetResult = useCallback(() => {
     if (['paying', 'confirming', 'processing'].includes(status)) return
+    quoteGeneration.current += 1
     setIntent(null)
     setStatus('idle')
     setError('')
@@ -516,6 +518,7 @@ export default function usePocketBillsController({
     }
     quoteInFlight.current = true
     const reviewScope=billScope.current
+    const generation=++quoteGeneration.current
     setStatus('quoting')
     setError('')
     setErrorCode('')
@@ -528,12 +531,12 @@ export default function usePocketBillsController({
         : category === 'tv' ? await quotePocketTv({ accessToken, serviceId, variationCode, smartcard: phone, contactPhone: tvRequiresCustomerVerification(serviceId) ? contactPhone : phone, payerWallet: wallet.address })
           : category === 'electricity' ? await quotePocketElectricity({ accessToken, serviceId, meterType: variationCode as 'prepaid' | 'postpaid', meterNumber: phone, contactPhone, amountNgn, payerWallet: wallet.address })
             : await quotePocketAirtime({ accessToken, serviceId, phone, amountNgn, payerWallet: wallet.address })
-      if(!mounted.current||billScope.current!==reviewScope)return
+      if(!mounted.current||billScope.current!==reviewScope||quoteGeneration.current!==generation)return
       if (result.intent.quoteExpiresAt <= Date.now()) throw new PocketBillsApiError(`The ${billLabel(category)} quote expired. Review it again.`, { code: 'BILLS_QUOTE_EXPIRED', status: 409 })
       setIntent(result.intent)
       setStatus('ready')
     } catch (reason) {
-      if(!mounted.current||billScope.current!==reviewScope)return
+      if(!mounted.current||billScope.current!==reviewScope||quoteGeneration.current!==generation)return
       setStatus('error')
       setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
       setError(reason instanceof Error ? reason.message : `Could not prepare the ${billLabel(category)} payment.`)

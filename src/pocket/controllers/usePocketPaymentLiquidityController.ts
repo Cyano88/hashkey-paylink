@@ -250,6 +250,7 @@ export default function usePocketPaymentLiquidityController(input: {
                 accessToken: inspected.accessToken,
               })
             : await bridgeCircleEvmEmailWallet({
+                privyAccessToken: inspected.accessToken,
                 session: await input.getEvmSession(currentRoute.source, sourceWallet.address),
                 destination: currentRoute.destination,
                 destinationAddress: destinationWallet.address,

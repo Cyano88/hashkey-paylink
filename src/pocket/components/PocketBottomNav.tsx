@@ -1,10 +1,11 @@
-import { Home, Receipt, History, CreditCard, UserRound, TrendingUp, Wallet } from './PocketIcons'
+import { Home, Store, History, CreditCard, UserRound, TrendingUp, Wallet } from './PocketIcons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isXStocksPath, xStockNavPath } from '../lib/pocketRail'
 
+import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { cn } from '../../lib/utils'
 
-export type PocketNavTab = 'home' | 'bills' | 'cards' | 'activity' | 'profile'
+export type PocketNavTab = 'home' | 'xpay' | 'bills' | 'cards' | 'activity' | 'profile'
 
 type PocketBottomNavProps = {
   rail?: 'stablecoins' | 'xstocks'
@@ -16,7 +17,7 @@ type PocketBottomNavProps = {
 
 const items = [
   { key: 'home', label: 'Home', icon: Home },
-  { key: 'bills', label: 'Bills', icon: Receipt },
+  { key: 'xpay', label: 'XPay', icon: Store },
   { key: 'cards', label: 'Cards', icon: CreditCard },
   { key: 'profile', label: 'Profile', icon: UserRound },
 ] as const
@@ -46,7 +47,7 @@ export default function PocketBottomNav({ rail, active, disabled = false, keyboa
               aria-disabled={disabled || key === 'cards' || undefined}
               aria-current={selected ? 'page' : undefined}
               aria-label={key === 'cards' ? 'Cards coming soon' : undefined}
-              onClick={() => { if (key === 'cards') return; if (stocks) navigate(xStockNavPath(key)); else onSelect(key) }}
+              onClick={() => { if (key === 'cards') return; if (stocks) navigate(xStockNavPath(key)); else if (key === 'xpay') navigate(POCKET_BASE_PATH + POCKET_ROUTES.xpay, { state: { xpayOrigin: 'stablecoins' } }); else onSelect(key) }}
               className={cn(
                 'flex min-h-[54px] flex-col items-center justify-center gap-1 rounded-xl px-2 text-[10px] font-bold transition-[background-color,color,transform] duration-150 enabled:active:scale-[0.97] disabled:cursor-default',
                 selected

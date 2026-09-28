@@ -2,11 +2,12 @@ import assert from 'node:assert/strict'
 import {build} from 'esbuild'
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright')
 const mocks={
+ '../../lib/circleEvmEmailWallet':`export const reconcileCircleEvmEmailWithdraw=async()=>null`,
  '../hooks/usePocketIdentity':`export default ()=>({authenticated:false,email:'',getAccessToken:async()=>null})`,
  '../hooks/usePocketWallets':`export default ()=>{window.walletReads++;return {resolved:true,wallets:{},rows:[],setWallets:()=>{},refreshBalances:async()=>{},setError:()=>{}}}`,
  '../controllers/usePocketBillsController':`export default ()=>({status:'idle'})`,
  '../controllers/usePocketPaymentLiquidityController':`export default ()=>({status:'idle'})`,
- '../controllers/usePocketWalletController':`export default ()=>({})`,
+ '../controllers/usePocketWalletController':`export const activePocketEvmSession=()=>null,restorePocketWalletSession=async()=>{};export default ()=>({})`,
  '../features/bills/PocketBillsPanel':`export default ({view})=><div data-flow={view}>Fixture {view} flow</div>`,
 }
 const entry=`import React from'react';import{createRoot}from'react-dom/client';import{MemoryRouter,useLocation,useNavigate}from'react-router-dom';import Page from'./src/pocket/pages/PocketBillsPage';import{resolvePocketRoute,pocketPathFor}from'./src/pocket/lib/pocketRoutes';window.walletReads=0;function App(){const location=useLocation();window.go=useNavigate();const route=resolvePocketRoute(location.pathname.replace(/^\\/pocket/,''));return <><output id='route'>{location.pathname}</output><Page view={route?.section==='bills'?route.view:'overview'}/></>}createRoot(document.getElementById('root')).render(<MemoryRouter initialEntries={['/pocket/bills']}><App/></MemoryRouter>)`
@@ -23,6 +24,9 @@ try{
   await page.getByRole('button',{name:'Back',exact:true}).click();await page.getByRole('region',{name:'Bill services'}).waitFor()
  }
  await page.evaluate(()=>window.go('/pocket/bills/tv'));await page.locator('[data-flow="tv"]').waitFor()
- await page.getByRole('button',{name:'Bills',exact:true}).click();await page.getByRole('region',{name:'Bill services'}).waitFor()
+ await page.getByRole('button',{name:'XPay',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#route')?.textContent==='/pocket/xpay');
+ for(const path of ['/home/transfer','/home/send?mode=address','/home/send?mode=pocket','/move/bank?mode=withdraw','/xstocks/send']){await page.evaluate(path=>window.go('/pocket'+path),path);await page.waitForFunction(()=>!document.querySelector('nav[aria-label="Pocket navigation"]'))}
+ await page.evaluate(()=>window.go('/pocket/home/receive'));await page.getByRole('navigation',{name:'Pocket navigation'}).waitFor();
+ await page.evaluate(()=>window.go('/pocket/move/bank?mode=request'));await page.getByRole('navigation',{name:'Pocket navigation'}).waitFor();
  assert.deepEqual(errors,[]);console.log('PASS Bills list, all four flows, existing Back CTA, direct flow URLs and bottom navigation; list performs no wallet work.')
 }finally{await browser.close()}

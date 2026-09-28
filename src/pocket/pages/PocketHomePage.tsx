@@ -9,7 +9,7 @@ import PocketWalletUpdateCard from '../components/PocketWalletUpdateCard'
 import { pocketWalletPreparationNotice } from '../lib/pocketWalletPreparationNotice'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, ArrowRight, ChevronRight, Eye, EyeOff, QrCode, Send, Store, Deposit } from '../components/PocketIcons'
+import { ArrowLeftRight, ArrowRight, ChevronRight, Eye, EyeOff, QrCode, Send, Receipt, Deposit } from '../components/PocketIcons'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -108,7 +108,7 @@ export default function PocketHomePage() {
     <section className="grid grid-cols-4 gap-2">
       {[
         { label: 'Send', icon: Send, path: POCKET_ROUTES.transfer },
-        { label: 'XPay', icon: Store, path: POCKET_ROUTES.xpay },
+        { label: 'Bills', icon: Receipt, path: POCKET_ROUTES.bills },
         { label: 'Swap', icon: ArrowLeftRight, path: POCKET_ROUTES.swap },
         { label: 'Receive', icon: Deposit, path: POCKET_ROUTES.receive },
       ].map(item => <PocketHomeAction key={item.label} label={item.label} icon={<item.icon className="h-5 w-5" />} onClick={() => open(item.path)} />)}

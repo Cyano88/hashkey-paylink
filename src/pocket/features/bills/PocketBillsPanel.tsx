@@ -177,8 +177,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? `${billName} testing is not enabled yet.` : `${billName} payments are not available yet.`}</p>
         </div>
       ) : (
-        <div data-pocket-bill-card={isData ? '' : undefined} className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-3", isData && "rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none")}>
-          <div className={cn("flex shrink-0 items-center justify-between gap-3", isData ? "pb-1" : "rounded-[22px] bg-white px-4 py-3 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none")}>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+          <div className="flex shrink-0 items-center justify-between gap-3 rounded-[22px] bg-white px-4 py-3 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none">
             <span className="min-w-0">
               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Paying from Base</span>
 
@@ -195,7 +195,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
           <div className="pocket-form-fields pocket-bill-fields min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-1">
             {bills.environment === 'sandbox' && <p className="text-center text-[10px] font-medium text-gray-400 dark:text-gray-500">Test mode · USDC payment is real · no live service is delivered</p>}
             {isMobileBill ? (
-              <div>
+              <div data-pocket-data-phone={isData || undefined} className={isData ? 'rounded-[24px] border border-gray-200/80 bg-white p-4 dark:border-[#262626] dark:bg-[#0D0D0D]' : undefined}>
                 {isData && bills.catalogBusy && !networks.length ? <PocketLoadingField label="Loading networks" /> : <PocketMobileNumberInput
                   category={isData ? 'data' : 'airtime'}
                   validationMessage={isData && dataNumberRequired && !dataPhoneValid ? (bills.phone ? 'Enter the full 11-digit phone number first' : 'Enter a phone number first') : undefined}
@@ -235,7 +235,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             </div>}
 
             {isData ? (
-              <div>
+              <div data-pocket-data-plans className="rounded-[24px] border border-gray-200/80 bg-white p-4 dark:border-[#262626] dark:bg-[#0D0D0D]">
                 <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Data plan</span>
                 {bills.catalogBusy ? (
                   <PocketLoadingField label="Loading plans" cards />
@@ -297,6 +297,11 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
             {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">View Bills activity</Link>}
 
+            {bills.status === 'quoting' && (
+              <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} onClose={bills.edit}>
+                <div role="status" className="flex min-h-40 flex-col items-center justify-center gap-3 py-6"><Loader2 aria-hidden="true" className="h-6 w-6 animate-spin motion-reduce:animate-none" /><p className="text-sm font-semibold">Getting live quote</p></div>
+              </PocketBottomSheet>
+            )}
             {showPayment && !showResult && bills.intent && (
               <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
                 <>
@@ -337,7 +342,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             )}
 
             {bills.notice && !showPayment && !showResult && <p className={cn('text-center text-xs font-semibold', bills.status === 'successful' ? 'text-emerald-600 dark:text-emerald-400' : 'text-blue-600 dark:text-blue-300')}>{bills.notice}</p>}
-            {bills.error && (() => {
+            {bills.error && !showPayment && !showResult && (() => {
               const ErrorIcon = errorPresentation.icon
               return (
                 <div className={cn('rounded-2xl border p-3.5', errorPresentation.success ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-400/20 dark:bg-emerald-400/10' : 'border-gray-200 bg-gray-50/80 dark:border-[#262626] dark:bg-[#121212]')}>
