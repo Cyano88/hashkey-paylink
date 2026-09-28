@@ -11,6 +11,7 @@ try {
   await page.setViewportSize({width:390,height});await page.evaluate(()=>window.start(30));const close=page.getByRole('button',{name:'Close wallet approval'});await close.waitFor()
   const f=await page.locator('#sdkIframe').boundingBox(),b=await close.boundingBox()
   assert(f.y>=84);if(height===844)assert(f.height<520,'Approval stays compact rather than filling the screen');assert(Math.abs(b.x+b.width-382)<1,'X stays anchored to the right edge');assert(f.y+f.height<=height-23);assert(f.x>=0&&f.x+f.width<=390);assert(b.y>=32&&b.y+b.height<=f.y)
+  await page.evaluate(()=>{const f=document.getElementById('sdkIframe');Object.assign(f.style,{zIndex:'2147483647',top:'50%',left:'50%',transform:'translate(-50%, -50%)'});f.width='100%';f.height='100%'});await page.waitForFunction(()=>document.getElementById('sdkIframe').style.transform==='none');const stable=await page.locator('#sdkIframe').boundingBox();assert.deepEqual(stable,f,'Late SDK showUi cannot move or enlarge the frame');assert.deepEqual(await close.boundingBox(),b,'Late SDK showUi cannot shift the X');
   await page.mouse.click(2,2);assert.equal(await page.locator('#sdkIframe').count(),1,'Backdrop cannot dismiss approval')
   await close.click();await page.waitForFunction(()=>window.outcome!==null);assert.match(await page.evaluate(()=>window.outcome),/Approval closed/)
   assert.equal(await page.locator('#sdkIframe').count(),0);assert.equal(await page.locator('[data-circle-approval-surface]').count(),0)

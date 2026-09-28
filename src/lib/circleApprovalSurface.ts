@@ -19,6 +19,7 @@ export function installCircleApprovalSurface(onCancel: () => void, label = 'Clos
   let frame: HTMLIFrameElement | null = null
   let previousStyle: string | null = null
   const sync = () => {
+    frameObserver.disconnect()
     const current = document.getElementById('sdkIframe') as HTMLIFrameElement | null
     if (!current) { backdrop.remove(); return }
     if (current !== frame) { frame = current; previousStyle = frame.getAttribute('style') }
@@ -37,9 +38,11 @@ export function installCircleApprovalSurface(onCancel: () => void, label = 'Clos
     // Apply all geometry before mounting. The X stays right-anchored to its
     // panel throughout frame insertion, viewport resizing and keyboard changes.
     if (!backdrop.isConnected) document.body.appendChild(backdrop)
+    frameObserver.observe(frame, { attributes: true, attributeFilter: ['style', 'width', 'height'] })
   }
   const back = (event: Event) => { if (!backdrop.isConnected) return; event.preventDefault(); event.stopImmediatePropagation(); onCancel() }
   const key = (event: KeyboardEvent) => { if (event.key === 'Escape') back(event) }
+  const frameObserver = new MutationObserver(sync)
   const observer = new MutationObserver(sync)
   observer.observe(document.body, { childList: true })
   window.addEventListener('resize', sync)
@@ -50,6 +53,7 @@ export function installCircleApprovalSurface(onCancel: () => void, label = 'Clos
   sync()
   return () => {
     observer.disconnect()
+    frameObserver.disconnect()
     window.removeEventListener('resize', sync)
     window.visualViewport?.removeEventListener('resize', sync)
     window.visualViewport?.removeEventListener('scroll', sync)
