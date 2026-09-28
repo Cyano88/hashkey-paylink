@@ -1,3 +1,4 @@
+import { normalizeNigerianMobileNumber } from '../../lib/nigerianMobileNetwork'
 import usePocketSlowConfirmation from '../../hooks/usePocketSlowConfirmation'
 import { pocketBillTitle } from '../../lib/pocketReceipt'
 import { useEffect, useState } from 'react'
@@ -80,6 +81,8 @@ function SignInCard() {
 
 export default function PocketBillsPanel({ view, authenticated, preview = false, bills, baseAddress, baseBalance, walletBusy, onOpenWallet, onPreparePayment, paymentRouting }: PocketBillsPanelProps) {
   const [resultDismissed, setResultDismissed] = useState(false)
+  const [dataNumberRequired, setDataNumberRequired] = useState(false)
+  const dataPhoneValid = /^0\d{10}$/.test(normalizeNigerianMobileNumber(bills.phone))
   const [approvalBusy, setApprovalBusy] = useState(false)
   useEffect(() => { if (bills.status === 'ready') setResultDismissed(false) }, [bills.status])
   const meta = billMeta[view]
@@ -174,8 +177,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
           <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{bills.environment === 'sandbox' ? `${billName} testing is not enabled yet.` : `${billName} payments are not available yet.`}</p>
         </div>
       ) : (
-        <>
-          <div className="flex items-center justify-between gap-3 rounded-[22px] bg-white px-4 py-3 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none">
+        <div data-pocket-bill-card className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
+          <div className="flex shrink-0 items-center justify-between gap-3 pb-1">
             <span className="min-w-0">
               <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Paying from Base</span>
 
@@ -195,6 +198,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
               <div>
                 {isData && bills.catalogBusy && !networks.length ? <PocketLoadingField label="Loading networks" /> : <PocketMobileNumberInput
                   category={isData ? 'data' : 'airtime'}
+                  validationMessage={isData && dataNumberRequired && !dataPhoneValid ? (bills.phone ? 'Enter the full 11-digit phone number first' : 'Enter a phone number first') : undefined}
                   phoneNumber={bills.phone}
                   selectedNetworkId={bills.serviceId}
                   options={networks}
@@ -242,7 +246,12 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
                       variations={bills.dataVariations}
                       value={bills.variationCode}
                       disabled={locked}
-                      onChange={bills.setVariationCode}
+                      onChange={code => {
+                        if (!dataPhoneValid) { setDataNumberRequired(true); return }
+                        setDataNumberRequired(false)
+                        void bills.review(code)
+                        if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+                      }}
                     />
                   </div>
                 )}
@@ -344,14 +353,14 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
               )
             })()}
           </div>
-          <div className="shrink-0 pt-2" style={{ visibility: showPayment || showResult ? 'hidden' : undefined }}>
+          {!isData && <div className="shrink-0 pt-2" style={{ visibility: showPayment || showResult ? 'hidden' : undefined }}>
             {!showPayment && !reviewBlocked && (
               <button type="button" onClick={() => void bills.review()} disabled={!bills.formReady || !baseAddress || bills.processing} className="pocket-cta-primary flex w-full items-center justify-center gap-2 px-4 transition disabled:cursor-not-allowed">
                 {bills.status === 'quoting' ? <span role="status" className="animate-pulse motion-reduce:animate-none">Getting live quote</span> : 'Buy'}
               </button>
             )}
-          </div>
-        </>
+          </div>}
+        </div>
       )}
       {showResult && !resultDismissed && billReceipt && (
         <PocketPaymentSuccess receipt={billReceipt} onDone={() => {setResultDismissed(true); bills.dismiss()}}>
