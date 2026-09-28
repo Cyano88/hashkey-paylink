@@ -35,6 +35,9 @@ try{
  assert.match(text(),/Paid to seller/);assert.match(text(),/0.00222/);assert.doesNotMatch(text(),/Refunded to you/);
  const details=tree.root.findAllByType('details').find(d=>JSON.stringify(d.toJSON?.()||d.findAllByType('summary').map(n=>n.children)).includes('Transaction details'));
  assert.ok(details);assert.equal(details.props.open,undefined,'Exact records are collapsed by default');
+ const afterFinal=readCount;fail=true;await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.equal(readCount,afterFinal,'Verified final receipts stop background polling');assert.match(text(),/Paid to seller/);assert.doesNotMatch(text(),/Payment status unavailable/);assert.equal(find('Try again'),undefined);fail=false;
+ // A different agreement must still load and poll normally.
+ state=1;receipt=undefined;item.id='another-agreement';await act(async()=>{tree.update(React.createElement(Checkout,{item,request,onUpdated(){}}))});assert.ok(find('Pay securely'));
  const beforeHidden=readCount;document.visibilityState='hidden';await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.equal(readCount,beforeHidden);
  document.visibilityState='visible';let finishRead;waitForRead=new Promise(resolve=>finishRead=resolve);
  await act(async()=>{window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('focus'))});assert.equal(readCount,beforeHidden+1,'Only one background request at a time');
