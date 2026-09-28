@@ -6,3 +6,11 @@
 .hpl-stock-checkout summary::after { content: ''; width: 8px; height: 8px; flex: 0 0 8px; margin: 0 4px 4px 0; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: rotate(45deg); transition: transform 160ms ease; }
 .hpl-stock-checkout details[open] > summary::after { transform: rotate(225deg); margin-bottom: 0; }
 @media (prefers-reduced-motion: reduce) { .hpl-stock-checkout summary::after { transition: none; } }
+
+/* Keep text-field focus visible without the browser's heavy black outline. */
+.hpl-stock-checkout :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='submit']):not([type='button']), textarea):focus {
+  outline: none;
+  box-shadow: none;
+  border-color: #6b7280;
+}
+.dark .hpl-stock-checkout :is(input, textarea):focus { border-color: #9ca3af; }
