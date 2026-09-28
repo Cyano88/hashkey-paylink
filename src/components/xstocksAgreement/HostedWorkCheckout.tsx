@@ -58,7 +58,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
   }
   async function run(action:TradeXLayerAction|'wallet'|'recover'){
     if(lock.current)return;
-    if(action===editingNote&&(evidence.trim().length<10||evidence.length>2000)){setError('Add a note of 10 to 2000 characters before continuing.');return;}
+    if(['dispatch','refund','dispute'].includes(action)&&(evidence.trim().length<10||evidence.length>2000)){setError('Add a note of 10 to 2000 characters before continuing.');return;}
     ++refreshVersion.current;lock.current=true;setBusy('Checking payment...');setError('');
     try{
       if(action==='wallet'){if(!wallet)throw Error('Your payment wallet is still loading. Please try again.');if(!await confirm({title:'Accept payment terms?',description:terms.amount+' '+workPaymentLabel(payment)+'. '+notice,action:'Accept terms'}))return;assertCurrent();await api({action:'work_xlayer_wallet',address:wallet.address});}
