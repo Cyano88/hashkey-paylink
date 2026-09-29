@@ -6,7 +6,7 @@ import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {smileConfig,type SmileConfig,type SmileEnvironment} from './smile-provider.js'
 import {smileV3Token,smileV3Status,smileV3Replay,assertSmileV3Policy,smileIdentityMatchKey,validV3Signature,v3Failure as fail} from './smile-v3.js'
 type Method='bvn'|'nin'|'government_id'
-type Job={consent?:{granted:true;grantedAt:string;noticeVersion:string;privacyPolicyUrl:string};submissionHint?:{jobId:string;userId:string};replayedAt?:number;replayAttempts?:number;idTypes?:string[];id:string;method:Method;environment:SmileEnvironment;status:'pending'|'passed'|'failed'|'review';createdAt:number;sessionAt?:number;checkedAt?:number;providerJobId?:string;providerUserId?:string;uploadReportedAt?:number;callbackProof:string;bvnJobId?:string;legalName?:string;identityMatch?:string;failureReason?:string;providerStatus?:string}
+type Job={replayBindingVersion?:number;consent?:{granted:true;grantedAt:string;noticeVersion:string;privacyPolicyUrl:string};submissionHint?:{jobId:string;userId:string};replayedAt?:number;replayAttempts?:number;idTypes?:string[];id:string;method:Method;environment:SmileEnvironment;status:'pending'|'passed'|'failed'|'review';createdAt:number;sessionAt?:number;checkedAt?:number;providerJobId?:string;providerUserId?:string;uploadReportedAt?:number;callbackProof:string;bvnJobId?:string;legalName?:string;identityMatch?:string;failureReason?:string;providerStatus?:string}
 type Store={jobs:Job[]}
 const key=(owner:string,environment:SmileEnvironment)=>'hashpaylink:pocket-kyc:v3:'+environment+':'+createHash('sha256').update(owner).digest('hex')
 const indexKey=(id:string)=>'hashpaylink:pocket-kyc-job:v3:'+id
@@ -38,11 +38,12 @@ async function refresh(config:SmileConfig,owner:string,j:Job){
   if(v&&!['passed','failed'].includes(v.status)){
    // An untrusted browser reference must never assign the identity or a verdict.
    if(v.providerJobId===providerJobId){v.providerStatus=result.status;if(result.status==='block'||result.status==='error'){v.status='failed';v.failureReason=result.status==='error'?'provider_error':'provider_rejected'}else if(['clear','attention','not_found'].includes(result.status))v.status='review'}
+   if(v.replayBindingVersion!==1){v.replayAttempts=0;v.replayedAt=0;v.replayBindingVersion=1}
    if(['clear','block','attention','error'].includes(result.status)&&(v.replayAttempts||0)<3&&Date.now()-(v.replayedAt||0)>=300000){v.replayedAt=Date.now();v.replayAttempts=(v.replayAttempts||0)+1;replay=true}
   }
   return r||{jobs:[]}
  })
- if(replay)await smileV3Replay(config,providerJobId)
+ if(replay)await smileV3Replay(config,providerJobId,{reference:j.id,proof:j.callbackProof})
 }
 export default async function pocketKycV3(req:Request,res:Response){
  res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({ok:false,error:'Method not allowed.'})
@@ -83,22 +84,23 @@ export default async function pocketKycV3(req:Request,res:Response){
  }catch(error){const detail=error as Error&{status?:number;code?:string;retryable?:boolean},status=detail.status||503;return res.status(status).json({ok:false,code:detail.code?.startsWith('KYC_')?detail.code:undefined,retryable:detail.retryable??status>=500,error:status<500||detail.code?.startsWith('KYC_')?detail.message:'Identity verification could not load. Please try again.'})}
 }
 export async function pocketKycV3Callback(req:Request,res:Response){
+ const reject=(status:number,reason:string)=>{console.warn('[pocket-kyc-callback]',{reason,hasSignature:typeof req.headers['response-signature']==='string',hasTimestamp:typeof req.headers['response-timestamp']==='string',hasReference:typeof req.query?.reference==='string',hasProof:typeof req.query?.proof==='string',hasJobHeader:typeof req.headers['job-id']==='string',hasUserHeader:typeof req.headers['user-id']==='string',timestampAgeMinutes:Number.isFinite(Date.parse(String(req.headers['response-timestamp'])))?Math.round((Date.now()-Date.parse(String(req.headers['response-timestamp'])))/60000):null});return res.status(status).json({ok:false})}
  try{
-  const config=smileConfig();if(!validV3Signature(config,req.headers))return res.status(401).json({ok:false})
+  const config=smileConfig();if(!validV3Signature(config,req.headers))return reject(401,'signature')
   const reference=req.query.reference,proof=req.query.proof,body=req.body||{},providerJobId=req.headers['job-id'],providerUserId=req.headers['user-id']
-  if(typeof reference!=='string'||!/^pkyc_[a-f0-9]{32}$/.test(reference)||typeof proof!=='string'||!/^[a-f0-9]{64}$/.test(proof)||typeof providerJobId!=='string'||!/^job_[0-9a-hjkmnp-tv-z]{26}$/.test(providerJobId)||typeof providerUserId!=='string'||!providerUserId||providerUserId.length>160)return res.status(400).json({ok:false})
-  const index=await readDurableJson<{owner:string;environment:SmileEnvironment}>(indexKey(reference));if(!index||index.environment!==config.environment)return res.status(404).json({ok:false})
+  if(typeof reference!=='string'||!/^pkyc_[a-f0-9]{32}$/.test(reference)||typeof proof!=='string'||!/^[a-f0-9]{64}$/.test(proof)||typeof providerJobId!=='string'||!/^job_[0-9a-hjkmnp-tv-z]{26}$/.test(providerJobId)||typeof providerUserId!=='string'||!providerUserId||providerUserId.length>160)return reject(400,'routing_or_provider_headers')
+  const index=await readDurableJson<{owner:string;environment:SmileEnvironment}>(indexKey(reference));if(!index||index.environment!==config.environment)return reject(404,'session_index')
   const k=key(index.owner,index.environment),record=await readDurableJson<Store>(k),selected=record?.jobs.find(j=>j.id===reference)
-  if(!selected||!timingSafeEqual(Buffer.from(proof,'hex'),Buffer.from(selected.callbackProof,'hex')))return res.status(401).json({ok:false})
-  if(body.partner_params?.internal_reference!==reference||body.product!==jobPolicy(selected).apiProduct||selected.providerJobId&&selected.providerJobId!==providerJobId||selected.providerUserId&&selected.providerUserId!==providerUserId)return res.status(409).json({ok:false})
+  if(!selected||!timingSafeEqual(Buffer.from(proof,'hex'),Buffer.from(selected.callbackProof,'hex')))return reject(401,'session_proof')
+  if(body.partner_params?.internal_reference!==reference||body.product!==jobPolicy(selected).apiProduct||selected.providerJobId&&selected.providerJobId!==providerJobId||selected.providerUserId&&selected.providerUserId!==providerUserId)return reject(409,'correlation')
   // Header HMAC authenticates timestamp, not JSON. A per-session callback proof and
   // credentialed status lookup bind the payload to the token and actual provider job.
   // Persist only authenticated correlation before a transient provider lookup can fail.
   // This enables bounded status/replay recovery; it does not approve the identity.
   await mutateDurableJson<Store>(k,current=>{const j=current?.jobs.find(x=>x.id===reference);if(!j)throw fail('Unknown verification.',404);if(j.providerJobId&&j.providerJobId!==providerJobId||j.providerUserId&&j.providerUserId!==providerUserId)throw fail('Verification reference changed.',409);j.providerJobId=providerJobId;j.providerUserId=providerUserId;return current!})
   const authoritative=await smileV3Status(config,providerJobId)
-  if(authoritative.job_id!==providerJobId||authoritative.user_id!==providerUserId||authoritative.status!==body.status)return res.status(409).json({ok:false})
-  if(!['clear','block','attention','error'].includes(body.status))return res.status(409).json({ok:false})
+  if(authoritative.job_id!==providerJobId||authoritative.user_id!==providerUserId||authoritative.status!==body.status)return reject(409,'provider_status')
+  if(!['clear','block','attention','error'].includes(body.status))return reject(409,'terminal_status')
   const fields=body.id_fields&&typeof body.id_fields==='object'?body.id_fields:{},identity=evidence(config,fields)
   const typeMatches=selected.method!=='government_id'||fields.country==='NG'&&jobPolicy(selected).idSelection.NG.includes(fields.id_type)
   const approved=body.status==='clear'&&typeMatches&&!!identity.identityMatch&&body.antifraud?.summary?.fraud_detected!==true
