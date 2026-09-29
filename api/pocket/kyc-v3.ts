@@ -120,6 +120,8 @@ export async function pocketKycV3Callback(req:Request,res:Response){
    if(approved&&!pairMatches)j.failureReason='identity_mismatch'
    else if(body.status==='block')j.failureReason='provider_rejected'
    else if(body.status==='error')j.failureReason='provider_error'
+   else if(body.status==='clear'&&!approved)j.failureReason=!typeMatches?'document_type_mismatch':body.antifraud?.summary?.fraud_detected===true?'provider_fraud_review':!identity.legalName?'identity_name_missing':'identity_birth_date_missing_or_invalid'
+   if(j.status==='review')console.warn('[pocket-kyc-callback]',JSON.stringify({reason:j.failureReason||'provider_review',fieldNames:Object.keys(fields),hasName:!!identity.legalName,hasIdentityMatch:!!identity.identityMatch,dateType:typeof fields.date_of_birth,dateFormat:typeof fields.date_of_birth==='string'?fields.date_of_birth.replace(/[0-9]/g,'0').replace(/[a-zA-Z]/g,'x'):null}))
    return current!
   });return res.json({ok:true})
  }catch(error){return res.status((error as {status?:number}).status||503).json({ok:false})}
