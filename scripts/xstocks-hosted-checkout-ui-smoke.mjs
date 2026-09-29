@@ -6,11 +6,12 @@ import {createRequire} from 'node:module';
 const require=createRequire(process.env.CHECKOUT_UI_TEST_MODULE_ROOT || import.meta.url);
 const React=require('react'),TestRenderer=require('react-test-renderer'),{act}=TestRenderer;
 const output=new URL('../.codex-temp/hosted-ui-test.mjs',import.meta.url);
+Object.defineProperty(globalThis,'navigator',{value:{locks:{request:async(_key,_options,callback)=>callback({})}},configurable:true});
 globalThis.window=new EventTarget();globalThis.document=new EventTarget();document.visibilityState='visible';
 const address='0x'+'11'.repeat(20);
 globalThis.__checkout={wallet:{address},confirm:async()=>false};
 const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null,removeItem:k=>storage.delete(k),setItem:(k,v)=>storage.set(k,v)};
-await build({entryPoints:['src/components/xstocksAgreement/HostedWorkCheckout.tsx'],bundle:true,platform:'node',format:'esm',packages:'external',jsx:'automatic',outfile:output.pathname.replace(/^\/([A-Za-z]:)/,'$1'),plugins:[{name:'wallet-fixtures',setup(b){b.onResolve({filter:/^react(\/jsx-runtime)?$/},a=>({path:pathToFileURL(require.resolve(a.path)).href,external:true}));b.onResolve({filter:/(@privy-io\/react-auth|\/hostedWallet|\.\/ConfirmSheet)$/},a=>({path:a.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path.includes('react-auth')?`export const usePrivy=()=>({authenticated:true,user:{id:'fixture'}}),useWallets=()=>({wallets:[]}),useSendTransaction=()=>({sendTransaction:()=>{throw Error('Unexpected signing')}});`:a.path.includes('hostedWallet')?`export const selectHostedWallet=()=>globalThis.__checkout.wallet;`:`export const useStreamConfirm=()=>({confirm:(...a)=>globalThis.__checkout.confirm(...a),confirmation:null});` }));}}]});
+await build({entryPoints:['src/components/xstocksAgreement/HostedWorkCheckout.tsx'],bundle:true,platform:'node',format:'esm',packages:'external',jsx:'automatic',outfile:output.pathname.replace(/^\/([A-Za-z]:)/,'$1'),plugins:[{name:'wallet-fixtures',setup(b){b.onResolve({filter:/^react(\/jsx-runtime)?$/},a=>({path:pathToFileURL(require.resolve(a.path)).href,external:true}));b.onResolve({filter:/(@privy-io\/react-auth|\/hostedWallet|\.\/ConfirmSheet)$/},a=>({path:a.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path.includes('react-auth')?`export const usePrivy=()=>({authenticated:true,user:{id:'fixture'}}),useWallets=()=>({wallets:[]}),useSignTransaction=()=>({signTransaction:()=>{throw Error('Unexpected signing')}});`:a.path.includes('hostedWallet')?`export const selectHostedWallet=()=>globalThis.__checkout.wallet;`:`export const useStreamConfirm=()=>({confirm:(...a)=>globalThis.__checkout.confirm(...a),confirmation:null});` }));}}]});
 try{
  const {default:Checkout}=await import(output.href);
  let readCount=0,waitForRead,fail=false,state=1,resolveConfirmation,receipt,networkPending=false;
@@ -35,6 +36,15 @@ try{
  assert.match(text(),/Paid to seller/);assert.match(text(),/0.00222/);assert.doesNotMatch(text(),/Refunded to you/);
  const details=tree.root.findAllByType('details').find(d=>JSON.stringify(d.toJSON?.()||d.findAllByType('summary').map(n=>n.children)).includes('Transaction details'));
  assert.ok(details);assert.equal(details.props.open,undefined,'Exact records are collapsed by default');
+ for(const role of ['customer','provider']){
+   item.role=role;state=7;receipt={...receipt,buyerUnderlyingAtSettlement:'2220000000000000',buyerSettledShares:'2216229757026900',sellerUnderlyingAtSettlement:'0',sellerSettledShares:'0'};
+   item.id='refund-'+role;await act(async()=>tree.update(React.createElement(Checkout,{item,request,onUpdated(){}})));
+   assert.match(text(),role==='customer'?/Refunded to you/:/Refunded to buyer/);assert.doesNotMatch(text(),/Paid to seller|Payment held/);
+ }
+ state=8;item.id='split';receipt={...receipt,sellerUnderlyingAtSettlement:'1110000000000000',sellerSettledShares:'1108114878513450',buyerUnderlyingAtSettlement:'1110000000000000',buyerSettledShares:'1108114878513450'};
+ await act(async()=>tree.update(React.createElement(Checkout,{item,request,onUpdated(){}})));assert.match(text(),/You received/);assert.match(text(),/Refunded to buyer/);
+ state=6;item.id='complete';item.role='customer';receipt={...receipt,buyerSettledShares:'0',sellerSettledShares:'2216229757026900'};
+ await act(async()=>tree.update(React.createElement(Checkout,{item,request,onUpdated(){}})));
  const afterFinal=readCount;fail=true;await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.equal(readCount,afterFinal,'Verified final receipts stop background polling');assert.match(text(),/Paid to seller/);assert.doesNotMatch(text(),/Payment status unavailable/);assert.equal(find('Try again'),undefined);fail=false;
  // A different agreement must still load and poll normally.
  state=1;receipt=undefined;item.id='another-agreement';await act(async()=>{tree.update(React.createElement(Checkout,{item,request,onUpdated(){}}))});assert.ok(find('Pay securely'));
