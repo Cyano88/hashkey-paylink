@@ -1,4 +1,4 @@
-import { validateSignedStockTransaction, type PendingStockTransaction } from '../../lib/xstocksAgreement/transactionRecovery';
+import { stockIntrinsicGasFloor, stockActionError, validateSignedStockTransaction, type PendingStockTransaction } from '../../lib/xstocksAgreement/transactionRecovery';
 import StockPaymentReceipt from './StockPaymentReceipt';
 import { selectHostedWallet } from '../../lib/xstocksAgreement/hostedWallet';
 // Signing/reconciliation adapted from PrivyTradeCheckout; work terms remain independent.
@@ -59,11 +59,18 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     const record:Pending={transaction:tx,operation,evidence};setBusy(operation==='approve'?'Approving payment...':operation==='fund'?'Sending payment...':operation==='create'?'Setting up payment...':operation==='accept'?'Confirming payment terms...':'Confirming '+labels[operation].toLowerCase()+'...');
     // Sign-only cannot send funds. Interrupted preparation/signing leaves no ambiguous pending entry.
     let signTimer:ReturnType<typeof setTimeout>|undefined;
-    const signing=signTransaction({to:tx.to,data:tx.data,value:0n,chainId:196},{address:wallet.address,uiOptions:{showWalletUIs:false}});
+    const [estimatedGas,gasPrice,nonce]=await Promise.all([
+      rpc.estimateGas({account:tx.account,to:tx.to,data:tx.data,value:0n}),
+      rpc.getGasPrice(),rpc.getTransactionCount({address:tx.account,blockTag:'pending'})
+    ]);assertCurrent();
+    const gasLimit=(estimatedGas*120n+99n)/100n;
+    if(gasLimit<stockIntrinsicGasFloor(tx.data))throw Error('The network could not prepare this action. Please try again.');
+    const signing=signTransaction({to:tx.to,data:tx.data,value:0n,chainId:196,type:0,gasLimit,gasPrice,nonce},{address:wallet.address,uiOptions:{showWalletUIs:false}});
     const result=await Promise.race([signing,new Promise<never>((_,reject)=>{signTimer=setTimeout(()=>reject(Error('Signing timed out. Nothing was sent. Please try again.')),60000)})]).finally(()=>clearTimeout(signTimer));
     assertCurrent();
     record.serialized=result.signature;record.hash=keccak256(result.signature);
-    await validateSignedStockTransaction(record);assertCurrent();
+    const signed=await validateSignedStockTransaction(record);assertCurrent();
+    if(signed.gas!==gasLimit||signed.gasPrice!==gasPrice||signed.nonce!==nonce)throw Error('Wallet preparation changed. Please try again.');
     localStorage.setItem(storageKey,JSON.stringify(record));setPending(true);
     // Persistence must succeed before the first broadcast. Network failures retain this exact intent.
     try{await rpc.sendRawTransaction({serializedTransaction:record.serialized});}catch{ /* Reconcile by deterministic hash even if the RPC response was lost. */ }
@@ -80,7 +87,11 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
         if(raw){
           const record:Pending=JSON.parse(raw);
           if(record.serialized){
-            await validateSignedStockTransaction(record);assertCurrent();
+            const signed=await validateSignedStockTransaction(record);assertCurrent();
+            if((signed.gas??0n)<stockIntrinsicGasFloor(record.transaction.data)){
+              localStorage.removeItem(storageKey);setPending(false);
+              throw Error('The previous setup could not be sent. Please try the action again.');
+            }
             if(record.transaction.account.toLowerCase()!==wallet?.address.toLowerCase())throw Error('Reopen checkout with the payment account.');
             let known=false;
             try{await rpc.getTransaction({hash:record.hash!});known=true;}catch(e){if((e as {name?:string}).name!=='TransactionNotFoundError')throw e;}
@@ -104,7 +115,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
         if(paying){let funded=false;for(let step=0;step<3;step++){const next=await api(),operation=next.actions.includes('fund')?'fund':next.actions.includes('approve')?'approve':undefined;if(!operation)throw Error('Payment state changed. Refresh.');await submit(operation);if(operation==='fund'){funded=true;break;}}if(!funded)throw Error('Approval completed. Refresh to continue.');}
         else await submit(action);
       }
-    }catch(e){if((current.current.identity===identity&&current.current.epoch===epoch)&&mounted.current)setError('Action did not complete: '+(e as Error).message);}
+    }catch(e){if((current.current.identity===identity&&current.current.epoch===epoch)&&mounted.current)setError(stockActionError(e,Boolean(localStorage.getItem(storageKey))));}
     finally{if((current.current.identity===identity&&current.current.epoch===epoch)&&mounted.current){await refresh().catch(()=>{});if(current.current.identity===identity&&current.current.epoch===epoch&&mounted.current){lock.current=false;setBusy('');updatedRef.current();}}}
   }
   async function run(action:TradeXLayerAction|'wallet'|'recover'){
@@ -132,7 +143,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     {!busy&&!pending&&!loadError&&!status?.pending&&status?.actions.filter(action=>!noteAction||action===noteAction).map(action=><button key={action} className={action==='cancel'?'block min-h-11 w-full text-xs text-gray-500 underline disabled:opacity-40':button} disabled={!!busy||!wallet||status.wallet?.address.toLowerCase()!==wallet.address.toLowerCase()||(action===editingNote&&(evidence.trim().length<10||evidence.length>2000))} onClick={()=>{if((action==='refund'||action==='dispute')&&noteAction!==action){setEvidence('');setError('');setNoteAction(action);}else void run(action);}}>{action==='approve'||action==='fund'?'Pay securely':labels[action]}</button>)}
     {noteAction&&!busy&&!pending&&<button type='button' className='block min-h-11 w-full text-xs font-semibold' onClick={()=>{setNoteAction(undefined);setEvidence('');setError('');}}>Cancel</button>}
     {pending&&!busy&&<button className={button} disabled={!!busy} onClick={()=>void run('recover')}>Check pending transaction</button>}
-    {loadError&&<p role='alert' className='text-xs text-red-600'>{loadError}</p>}{error&&<p role='alert' className='text-xs text-red-600'>{error}</p>}
-    {(loadError||error)&&<button className='block min-h-11 w-full text-center text-xs font-bold underline' disabled={!!busy} onClick={()=>void refresh(true).then(()=>updatedRef.current()).catch(()=>{})}>Try again</button>}
+    {loadError&&!pending&&!error&&<p role='alert' className='text-xs text-red-600'>{loadError}</p>}{error&&<p role='alert' className='break-words text-xs text-red-600'>{error}</p>}
+    {!pending&&(loadError||error)&&<button className='block min-h-11 w-full text-center text-xs font-bold underline' disabled={!!busy} onClick={()=>void refresh(true).then(()=>updatedRef.current()).catch(()=>{})}>Try again</button>}
   </section>;
 }
