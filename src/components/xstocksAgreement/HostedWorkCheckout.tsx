@@ -1,9 +1,10 @@
+import { validateSignedStockTransaction, type PendingStockTransaction } from '../../lib/xstocksAgreement/transactionRecovery';
 import StockPaymentReceipt from './StockPaymentReceipt';
 import { selectHostedWallet } from '../../lib/xstocksAgreement/hostedWallet';
 // Signing/reconciliation adapted from PrivyTradeCheckout; work terms remain independent.
 import { useEffect, useRef, useState } from 'react';
-import { usePrivy, useWallets, useSendTransaction } from '@privy-io/react-auth';
-import { createPublicClient, getAddress, http, type Hex } from 'viem';
+import { usePrivy, useWallets, useSignTransaction } from '@privy-io/react-auth';
+import { createPublicClient, getAddress, http, keccak256 } from 'viem';
 import { useStreamConfirm } from './ConfirmSheet';
 import type { HostedWorkItem as ServiceRequest } from '../../lib/xstocksAgreement/hostedClient';
 import { WORK_ACTION_LABELS, WORK_STATES, workPaymentLabel, workTermsNotice } from '../../lib/xstocksAgreement/workXLayer';
@@ -11,9 +12,9 @@ import { SHARE_CUSTODY_NOTICE, TRADE_XLAYER_ARBITER, TRADE_ACTION_LABELS, type T
 const rpc=createPublicClient({transport:http('https://rpc.xlayer.tech',{timeout:15000,retryCount:1})});
 const button='block min-h-11 w-full rounded-full bg-gray-950 px-4 text-xs font-bold text-white disabled:opacity-40 dark:bg-white dark:text-gray-950';
 type WorkStatus=TradeXLayerStatus&{wallet:{address:string}|null;clientAddress?:string;workerAddress?:string;customerReady:boolean;providerReady:boolean;fundBy?:number;workEvidence?:Array<{hash:string;body:string;actor:string;createdAt:string}>};
-type Pending={transaction:TradeXLayerTransaction;hash?:Hex};
+type Pending=PendingStockTransaction;
 export default function HostedWorkCheckout({item,request,onUpdated}:{item:ServiceRequest;request(payload:Record<string,unknown>):Promise<unknown>;onUpdated():void}){
-  const {user,authenticated}=usePrivy(),{wallets}=useWallets(),{sendTransaction}=useSendTransaction();
+  const {user,authenticated}=usePrivy(),{wallets}=useWallets(),{signTransaction}=useSignTransaction();
   const wallet=selectHostedWallet(authenticated,user,wallets);
   const terms=item.terms.find(term=>term.version===item.activeVersion)!,payment=terms.xlayerPayment!;
   const isTrade=terms.kind==='trade',labels=isTrade?{...TRADE_ACTION_LABELS,create:'Set up payment',accept:'Confirm payment terms',dispatch:terms.trade?.handover==='Pickup'?'Mark ready for pickup':'Mark as sent',receipt:'Confirm received',cancel:'Cancel payment'}:WORK_ACTION_LABELS;
@@ -38,6 +39,8 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
   useEffect(()=>{mounted.current=true;lock.current=false;verifiedFinal.current=false;++refreshVersion.current;setStatus(undefined);setBusy('');setError('');setLoadError('');setEvidence('');try{setPending(Boolean(localStorage.getItem(storageKey)))}catch{setPending(true);setError('Allow browser storage to keep payment recovery available.')}const update=()=>{if(verifiedFinal.current||lock.current||background.current||(typeof document!=='undefined'&&document.visibilityState==='hidden'))return;const read=refresh().catch(()=>{});background.current=read;void read.finally(()=>{if(background.current===read)background.current=null;});};background.current=null;update();const timer=setInterval(update,15000);window.addEventListener('focus',update);document.addEventListener('visibilitychange',update);return()=>{mounted.current=false;++refreshVersion.current;clearInterval(timer);window.removeEventListener('focus',update);document.removeEventListener('visibilitychange',update);};},[identity]);
   async function reconcile(record:Pending){
     if(!record.hash)throw Error('Submission is uncertain. Check wallet activity before retrying; another payment will not be sent.');
+    if(record.transaction.account.toLowerCase()!==wallet?.address.toLowerCase())throw Error('Reopen checkout with the payment account.');
+    if(record.serialized)await validateSignedStockTransaction(record);
     setBusy('Confirming transaction...');
     const receipt=await rpc.waitForTransactionReceipt({hash:record.hash,confirmations:3,timeout:90000});assertCurrent();
     if(receipt.transactionHash.toLowerCase()!==record.hash.toLowerCase())throw Error('Transaction was replaced. Review wallet activity.');
@@ -53,17 +56,47 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     const plan=await api({operation,evidence}),tx=plan.transaction;
     if(!tx||tx.chainId!==196||tx.value!=='0'||getAddress(tx.account)!==getAddress(wallet.address)||plan.token?.toLowerCase()!==payment.token.toLowerCase()||plan.amount!==payment.amountUnits||plan.decimals!==payment.decimals)throw Error('The payment details do not match this agreement. Reopen checkout.');
     await wallet.switchChain(196);assertCurrent();
-    const record:Pending={transaction:tx};localStorage.setItem(storageKey,JSON.stringify(record));setPending(true);setBusy(operation==='approve'?'Approving payment...':operation==='fund'?'Sending payment...':operation==='create'?'Setting up payment...':operation==='accept'?'Confirming payment terms...':'Confirming '+labels[operation].toLowerCase()+'...');
-    try{const result=await sendTransaction({to:tx.to,data:tx.data,value:0n,chainId:196},{address:wallet.address,uiOptions:{showWalletUIs:false}});record.hash=result.hash;localStorage.setItem(storageKey,JSON.stringify(record));assertCurrent();await reconcile(record);}
-    catch(e){const code=(e as {code?:number;cause?:{code?:number}}).code??(e as {cause?:{code?:number}}).cause?.code;if(code===4001&&!record.hash){localStorage.removeItem(storageKey);if((current.current.identity===identity&&current.current.epoch===epoch))setPending(false);}throw e;}
+    const record:Pending={transaction:tx,operation,evidence};setBusy(operation==='approve'?'Approving payment...':operation==='fund'?'Sending payment...':operation==='create'?'Setting up payment...':operation==='accept'?'Confirming payment terms...':'Confirming '+labels[operation].toLowerCase()+'...');
+    // Sign-only cannot send funds. Interrupted preparation/signing leaves no ambiguous pending entry.
+    let signTimer:ReturnType<typeof setTimeout>|undefined;
+    const signing=signTransaction({to:tx.to,data:tx.data,value:0n,chainId:196},{address:wallet.address,uiOptions:{showWalletUIs:false}});
+    const result=await Promise.race([signing,new Promise<never>((_,reject)=>{signTimer=setTimeout(()=>reject(Error('Signing timed out. Nothing was sent. Please try again.')),60000)})]).finally(()=>clearTimeout(signTimer));
+    assertCurrent();
+    record.serialized=result.signature;record.hash=keccak256(result.signature);
+    await validateSignedStockTransaction(record);assertCurrent();
+    localStorage.setItem(storageKey,JSON.stringify(record));setPending(true);
+    // Persistence must succeed before the first broadcast. Network failures retain this exact intent.
+    try{await rpc.sendRawTransaction({serializedTransaction:record.serialized});}catch{ /* Reconcile by deterministic hash even if the RPC response was lost. */ }
+    await reconcile(record);
   }
-  async function run(action:TradeXLayerAction|'wallet'|'recover'){
+  async function runExclusive(action:TradeXLayerAction|'wallet'|'recover'){
     if(lock.current)return;
     if(['dispatch','refund','dispute'].includes(action)&&(evidence.trim().length<10||evidence.length>2000)){setError('Add a note of 10 to 2000 characters before continuing.');return;}
     ++refreshVersion.current;lock.current=true;setBusy('Checking payment...');setError('');
     try{
       if(action==='wallet'){if(!wallet)throw Error('Your payment wallet is still loading. Please try again.');if(!await confirm({title:'Accept payment terms?',description:terms.amount+' '+workPaymentLabel(payment)+'. '+notice,action:'Accept terms'}))return;assertCurrent();await api({action:'work_xlayer_wallet',address:wallet.address});}
-      else if(action==='recover'){const raw=localStorage.getItem(storageKey);if(raw)await reconcile(JSON.parse(raw));}
+      else if(action==='recover'){
+        const raw=localStorage.getItem(storageKey);
+        if(raw){
+          const record:Pending=JSON.parse(raw);
+          if(record.serialized){
+            await validateSignedStockTransaction(record);assertCurrent();
+            if(record.transaction.account.toLowerCase()!==wallet?.address.toLowerCase())throw Error('Reopen checkout with the payment account.');
+            let known=false;
+            try{await rpc.getTransaction({hash:record.hash!});known=true;}catch(e){if((e as {name?:string}).name!=='TransactionNotFoundError')throw e;}
+            if(!known){
+              if(!record.operation)throw Error('Saved action needs review before it can continue.');
+              const plan=await api({operation:record.operation,evidence:record.evidence||''}),next=plan.transaction;
+              if(!next||next.to.toLowerCase()!==record.transaction.to.toLowerCase()||next.data!==record.transaction.data||next.account.toLowerCase()!==record.transaction.account.toLowerCase()||next.chainId!==196||next.value!=='0'||plan.token?.toLowerCase()!==payment.token.toLowerCase()||plan.amount!==payment.amountUnits||plan.decimals!==payment.decimals)
+                throw Error('Payment details changed. This saved action was not sent.');
+              if(!await confirm({title:'Resume this action?',description:'Continue the exact transaction you already approved. This will not create a second payment.',action:'Resume action'}))return;
+              assertCurrent();
+              try{await rpc.sendRawTransaction({serializedTransaction:record.serialized});}catch{ /* The network may already have it. Verify the saved hash below. */ }
+            }
+          }
+          await reconcile(record);
+        }
+      }
       else{
         const paying=action==='approve'||action==='fund';
         const description=isTrade?(paying?terms.amount+' '+workPaymentLabel(payment)+' will be held securely until it can be released under the agreed terms. Your wallet may ask for permission first, then payment. Network fees are paid in OKB.':action==='receipt'?'Confirm receipt and start the '+payment.reviewHours+'-hour inspection period. The seller can claim payment after it ends unless a dispute is confirmed on-chain before the deadline.':action==='release'?'Release the full stock payment to the seller. This cannot be undone.':action==='dispatch'?(terms.trade?.handover==='Pickup'?'Let the buyer know the item is ready for pickup.':'Let the buyer know the item has been sent.')+' Your note will be saved. Payment stays held until release.':(action==='create'?'Set up a secure payment for this agreement. This does not take payment yet.':action==='accept'?'Confirm the agreed amount and terms so the buyer can pay.':action==='cancel'?'Cancel this unpaid agreement. No stock payment will be taken.':action==='refund'?'Return the held payment to the buyer. This cannot be undone.':action==='dispute'?'Ask for help resolving this agreement. Payment stays held until the dispute is resolved.': 'Continue with '+labels[action].toLowerCase()+'.')+' A network fee may apply.'):paying?terms.amount+' '+workPaymentLabel(payment)+' will be held for this work agreement and paid to '+(status?.workerAddress||'the worker')+'. Network fees are paid in OKB.':action==='receipt'?'Start the '+payment.reviewHours+'-hour review period. After it ends, the worker can claim payment unless you confirm a dispute on-chain before the deadline.':action==='release'?'Approve this work and release the full token payment to the worker. This cannot be undone.':action==='dispatch'?'Record your work submission and its evidence. This does not prove client approval or release payment.':'Confirm '+labels[action].toLowerCase()+'. A network fee may apply.';
@@ -73,6 +106,13 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
       }
     }catch(e){if((current.current.identity===identity&&current.current.epoch===epoch)&&mounted.current)setError('Action did not complete: '+(e as Error).message);}
     finally{if((current.current.identity===identity&&current.current.epoch===epoch)&&mounted.current){await refresh().catch(()=>{});if(current.current.identity===identity&&current.current.epoch===epoch&&mounted.current){lock.current=false;setBusy('');updatedRef.current();}}}
+  }
+  async function run(action:TradeXLayerAction|'wallet'|'recover'){
+    if(!navigator.locks){setError('Use an up-to-date browser to continue securely.');return;}
+    await navigator.locks.request('hpl-stock:'+identity,{ifAvailable:true},async held=>{
+      if(!held){setError('This checkout is already open for an action in another tab. Finish it there first.');return;}
+      await runExclusive(action);
+    });
   }
   return <section className='mt-4 space-y-3 border-t border-gray-200 pt-4 dark:border-white/10' aria-label={isTrade?'Trade escrow':'Work escrow'}>
     {confirmation}<h3 className='text-sm font-bold'>{isTrade?'Trade payment':'Work payment'}</h3>

@@ -57,3 +57,18 @@ assert.ok((await prepareTradeXLayerAction({...input,action:'cancel'},client())).
 assert.ok((await prepareTradeXLayerAction({...input,action:'release'},client({state:3}))).transaction);
 binding.contractTerms.token=originalToken;
 console.log('Legacy stock custody guard blocks approvals/funding and preserves cancellation and funded recovery.');
+
+const matrix=[
+ [0,[],['accept','cancel']], [1,['fund','cancel'],['cancel']],
+ [2,[],['dispatch','refund']], [3,['receipt','release','dispute'],['refund']],
+ [4,['release','dispute'],['refund']], [5,[],['refund']],
+ [6,[],[]],[7,[],[]],[8,[],[]],[9,[],[]]
+];
+matrix[0][1]=['cancel'];
+for(const [state,buyerActions,sellerActions] of matrix){
+ assert.deepEqual(tradeLifecycleActions(state,true,1000n,deadlines),buyerActions,'buyer state '+state);
+ assert.deepEqual(tradeLifecycleActions(state,false,1000n,deadlines),sellerActions,'seller state '+state);
+}
+assert.deepEqual(tradeLifecycleActions(4,false,2000n,deadlines),['refund','inspectionRelease']);
+assert.deepEqual(tradeLifecycleActions(3,false,2000n,deadlines),['refund','dispute']);
+console.log('All ten Trade states checked for buyer and seller, including deadline boundaries.');
