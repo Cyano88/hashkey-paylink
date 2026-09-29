@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Banknote, Bell, Check, ChevronRight, Coins, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil, Trash, TrendingUp } from '../components/PocketIcons'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -46,6 +46,11 @@ export default function PocketProfilePage() {
     return requested === 'rates' || requested === 'limits' || requested === 'notifications' || requested === 'security' || requested === 'wallet-setup' || requested === 'kyc' ? requested : null
   })
   useEffect(() => { if (new URLSearchParams(location.search).get('feature') === 'kyc') setFeature('kyc') }, [location.search])
+  const visitedKyc = useRef(false)
+  useEffect(() => {
+    if (feature === 'kyc') { visitedKyc.current = true; return }
+    if (visitedKyc.current) { visitedKyc.current = false; void profile.reload() }
+  }, [feature, profile.reload])
   const quickApprovalAvailable = false
   const quickApprovalBusy = false
   const quickApprovalEnabled = false
