@@ -21,7 +21,7 @@ export type LocalCurrencyProfile = {
   pocketNumber: string
   pocketId: string
   avatarId: number
-  displayCurrency: 'USDC' | 'NGN' | 'GHS' | 'KES'
+  displayCurrency: 'USDC' | 'NGN' | 'UGX'
   updatedAt: string
 }
 
@@ -147,7 +147,7 @@ function normalizedName(value: string) {
 }
 
 function normalizedDisplayCurrency(value: unknown): LocalCurrencyProfile['displayCurrency'] {
-  return value === 'NGN' || value === 'GHS' || value === 'KES' ? value : 'USDC'
+  return value === 'NGN' || value === 'UGX' ? value : 'USDC'
 }
 
 function nameParts(resolvedName: string) {

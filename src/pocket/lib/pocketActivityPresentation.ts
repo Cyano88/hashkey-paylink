@@ -2,10 +2,10 @@ import type { PocketActivityRow } from '../models/pocketActivity'
 import { formatPocketDisplayAmount } from './pocketMoney'
 import { formatStockQuantity } from './pocketStockDisplay'
 
-/** The same bill face value in Recent, Activity, and the status sheet. */
+/** USDC remains primary; the recorded local delivery amount stays in details. */
 export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol'>): string {
   if (row.source === 'wallet-swap') return 'Swap'
-  if (row.amountNgn && Number.isFinite(Number(row.amountNgn))) return (row.fiatCurrency === 'UGX' ? 'UGX ' : 'NGN ') + Number(row.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })
+  if ((!row.amount || !Number.isFinite(Number(row.amount))) && row.amountNgn && Number.isFinite(Number(row.amountNgn))) return (row.fiatCurrency === 'UGX' ? 'UGX ' : 'NGN ') + Number(row.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })
   return (row.assetSymbol ? formatStockQuantity(row.amount) : formatPocketDisplayAmount(Number(row.amount))) + ' ' + (row.assetSymbol || 'USDC')
 }
 

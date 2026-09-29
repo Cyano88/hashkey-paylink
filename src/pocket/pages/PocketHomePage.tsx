@@ -1,3 +1,4 @@
+import PocketLocalEquivalent from '../components/PocketLocalEquivalent'
 import PocketActivityStatusIcon from '../components/PocketActivityStatusIcon'
 import { pocketActivityIcon, pocketActivityShortDate } from '../components/pocketActivityIcon'
 import PocketHomeAction from '../components/PocketHomeAction'
@@ -52,8 +53,9 @@ export default function PocketHomePage() {
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
   const activity = usePocketActivity({ authenticated, email, enabled: true, recent: true, getAccessToken })
-  const showNgn = profile.profile?.displayCurrency === 'NGN'
-  const fx = usePocketFxQuote(1, showNgn)
+  const currency = profile.profile?.displayCurrency ?? 'USDC'
+  const showNgn = currency !== 'USDC'
+  const fx = usePocketFxQuote(1, showNgn, currency === 'UGX' ? 'UGX' : 'NGN')
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
   const [selectedActivity, setSelectedActivity] = useState<PocketActivityRow | null>(null)
   const [networkPage, setNetworkPage] = useState(() => ['polygon', 'ethereum'].includes(initialNetwork()) ? 1 : 0)
@@ -87,7 +89,7 @@ export default function PocketHomePage() {
           <div className="mt-1.5">
             {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(displayTotal) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label="Loading balances" className="block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
           </div>
-          {showNgn && balancesVisible && (fx.quote ? <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ NGN ' + Math.round(displayTotal * fx.quote.rate).toLocaleString('en-NG') : 'NGN ' + hidden}</p> : fx.busy ? <span aria-label="Loading Naira equivalent" className="mt-2 block h-3 w-24 animate-pulse rounded bg-white/10 dark:bg-gray-950/[0.08]" /> : null)}
+          {showNgn && balancesVisible && (fx.quote ? <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ ' + currency + ' ' + Math.round(displayTotal * fx.quote.rate).toLocaleString('en-NG') : currency + ' ' + hidden}</p> : fx.busy ? <span aria-label="Loading local equivalent" className="mt-2 block h-3 w-24 animate-pulse rounded bg-white/10 dark:bg-gray-950/[0.08]" /> : null)}
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => open(POCKET_ROUTES.scan)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><QrCode className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Scan</span></button>
@@ -116,7 +118,7 @@ export default function PocketHomePage() {
 
     <section className="pt-2">
       <div className="flex items-center justify-between"><div><p className="text-sm font-black text-gray-950 dark:text-white">Recent activity</p></div><button type="button" onClick={() => open(POCKET_ROUTES.activity)} className="flex items-center gap-1 text-[11px] font-bold text-gray-500 dark:text-gray-400">View all<ChevronRight className="h-3.5 w-3.5" /></button></div>
-      <div className="mt-3">{!activityReady ? <PocketRecentActivitySkeleton /> : recent.length ? recent.map(row => { const Icon = pocketActivityIcon(row); return <button key={row.eventId + ':' + row.txHash} type="button" onClick={() => setSelectedActivity(row)} className="relative flex w-full items-center gap-3 py-4 text-left after:absolute after:bottom-0 after:left-12 after:right-0 after:h-px after:bg-gray-200/70 last:after:hidden dark:after:bg-white/[0.07]"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-white/[0.07]"><Icon className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-gray-900 dark:text-white">{pocketBankRecipientLabel(row) || row.activityLabel || row.memo || 'Payment'}</span><span className="mt-1 flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400"><PocketActivityStatusIcon row={row} />{pocketActivityShortDate(row.ts)}</span></span><span className="text-xs font-black tabular-nums text-gray-900 dark:text-white">{row.direction === 'in' || ['refunded', 'reversed'].includes(String(row.paycrestStatus ?? '').toLowerCase()) || row.refundTxHash ? '+' : '-'}{pocketActivityAmount(row)}</span></button>}) : <p className="py-8 text-center text-xs font-medium text-gray-500 dark:text-gray-400">{activity.error || 'Your completed payments will appear here.'}</p>}</div>
+      <div className="mt-3">{!activityReady ? <PocketRecentActivitySkeleton /> : recent.length ? recent.map(row => { const Icon = pocketActivityIcon(row); return <button key={row.eventId + ':' + row.txHash} type="button" onClick={() => setSelectedActivity(row)} className="relative flex w-full items-center gap-3 py-4 text-left after:absolute after:bottom-0 after:left-12 after:right-0 after:h-px after:bg-gray-200/70 last:after:hidden dark:after:bg-white/[0.07]"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-white/[0.07]"><Icon className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold text-gray-900 dark:text-white">{pocketBankRecipientLabel(row) || row.activityLabel || row.memo || 'Payment'}</span><span className="mt-1 flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400"><PocketActivityStatusIcon row={row} />{pocketActivityShortDate(row.ts)}</span></span><span className="text-xs font-black tabular-nums text-gray-900 dark:text-white">{row.direction === 'in' || ['refunded', 'reversed'].includes(String(row.paycrestStatus ?? '').toLowerCase()) || row.refundTxHash ? '+' : '-'}{pocketActivityAmount(row)}{(!row.assetSymbol || row.assetSymbol === 'USDC') && row.source !== 'wallet-swap' && <PocketLocalEquivalent amount={Number(row.amount)} className="mt-1 block text-right text-[10px] font-normal text-gray-500 dark:text-gray-400" />}</span></button>}) : <p className="py-8 text-center text-xs font-medium text-gray-500 dark:text-gray-400">{activity.error || 'Your completed payments will appear here.'}</p>}</div>
     </section>
     {selectedActivityRow && <PocketActivityReceipt row={selectedActivityRow} onClose={() => setSelectedActivity(null)} />}
   </PocketRouteShell>

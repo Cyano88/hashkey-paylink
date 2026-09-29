@@ -258,7 +258,8 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const networkKey = receiptChainKey(receipt.chain)
   const network = networkKey === 'xlayer' ? 'X Layer' : networkKey ? CHAIN_META[networkKey].label : titleCase(receipt.chain || 'Network unavailable')
   const localAmount = receipt.fiatCurrency === 'UGX' && receipt.amountNgn && Number.isFinite(Number(receipt.amountNgn)) ? 'UGX ' + Number(receipt.amountNgn).toLocaleString('en-UG', { maximumFractionDigits: 2 }) : formatNgn(receipt.amountNgn)
-  const amount = localAmount || `${compactReceiptAmount(receipt.amount)} ${receipt.asset}`
+  const pocketUsdc = paymentReceiptBrand(receipt).kind === 'pocket' && receipt.asset === 'USDC' && receipt.amount !== '' && Number.isFinite(Number(receipt.amount))
+  const amount = (!pocketUsdc && localAmount) || `${compactReceiptAmount(receipt.amount)} ${receipt.asset}`
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
   if (receipt.source === 'arc-agreement') {
@@ -295,7 +296,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
         ...(isElectricity && receipt.providerName ? [{ label: 'Provider', value: receipt.providerName }] : []),
         { label: targetLabel, value: receipt.targetValue || receipt.recipient || '-' },
         { label: 'Amount', value: amount },
-        ...(localAmount ? [{ label: 'Total USDC', value: `${compactReceiptAmount(receipt.amount)} ${receipt.asset}` }] : []),
+        ...(localAmount ? [{ label: pocketUsdc ? 'Local amount' : 'Total USDC', value: pocketUsdc ? localAmount : `${compactReceiptAmount(receipt.amount)} ${receipt.asset}` }] : []),
         ...(receipt.refundTxHash ? [{ label: 'Refund transaction', value: receipt.refundTxHash, mono: true }] : []),
         ...(receipt.status === 'refunded' ? [{ label: 'USDC returned', value: `${compactReceiptAmount(receipt.amount)} ${receipt.asset}` }] : []),
         ...(receipt.billToken ? [{ label: 'Meter Token', value: receipt.billToken.replace(/^token\s*:\s*/i, '').trim(), mono: true }] : []),
@@ -320,7 +321,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       { label: 'To', value: recipient, mono: /^0x/.test(recipient) },
       { label: isBank ? 'Receiver account' : 'Destination', value: destination, mono: /^0x/.test(destination) },
       { label: 'Amount & narration', value: `${amount} · ${narration}` },
-      ...(localAmount ? [{ label: 'Total USDC', value: `${compactReceiptAmount(receipt.amount)} ${receipt.asset}` }] : []),
+      ...(localAmount ? [{ label: pocketUsdc ? 'Local amount' : 'Total USDC', value: pocketUsdc ? localAmount : `${compactReceiptAmount(receipt.amount)} ${receipt.asset}` }] : []),
       ...(receipt.feeAmount ? [{ label: 'Fees', value: `${compactReceiptAmount(receipt.feeAmount)} USDC` }] : []),
       ...(receipt.source === 'bank-withdraw' && receipt.bankSettlementStatus ? [{label:'Bank delivery',value:['settled','completed','successful'].includes(receipt.bankSettlementStatus) ? 'Delivered' : ['refunded','reversed'].includes(receipt.bankSettlementStatus) ? 'Refunded' : ['refunding','reversing'].includes(receipt.bankSettlementStatus) ? 'Refund pending' : ['failed','expired','cancelled','canceled'].includes(receipt.bankSettlementStatus) ? 'Not completed' : 'Processing'}] : []),
     ],

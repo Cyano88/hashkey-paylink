@@ -1,3 +1,5 @@
+import usePocketLimitDisplay from '../hooks/usePocketLimitDisplay'
+import PocketLocalEquivalent from './PocketLocalEquivalent'
 import PocketTransferAllowanceView from './PocketTransferAllowanceView'
 import PocketKycPanel from './PocketKycPanel'
 import PocketFlowHeader from './PocketFlowHeader'
@@ -16,15 +18,10 @@ import { reconnectPocketBaseWallet } from '../controllers/usePocketWalletControl
 
 export type PocketProfileFeature = 'rates' | 'limits' | 'notifications' | 'security' | 'wallet-setup' | 'kyc'
 
-function ngn(value: number, maximumFractionDigits = 0) {
-  return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits }).format(value)
-}
-
 function RatesPanel({ fx, currency, onCurrency }: { fx: ReturnType<typeof usePocketFxQuote>; currency: string; onCurrency(value: string): void }) {
   const options = [
     { code: 'NGN', country: 'Nigeria', available: true },
-    { code: 'GHS', country: 'Ghana', available: false },
-    { code: 'KES', country: 'Kenya', available: false },
+    { code: 'UGX', country: 'Uganda', available: true },
   ]
   return <section className='pt-10'>
     <p className='text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Direct payout rate</p>
@@ -41,7 +38,7 @@ function RatesPanel({ fx, currency, onCurrency }: { fx: ReturnType<typeof usePoc
         {fx.busy && !fx.quote
           ? <p className='mt-6 flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400'><Loader2 className='h-4 w-4 animate-spin' />Loading live rate</p>
           : fx.quote
-            ? <><p className='mt-6 text-3xl font-black tracking-[-0.04em]'>{ngn(fx.quote.rate * 10, 2)}</p><p className='mt-2 text-xs font-bold text-gray-500 dark:text-gray-400'>1 USDC = {ngn(fx.quote.rate, 2)}</p></>
+            ? <><p className='mt-6 text-3xl font-black tracking-[-0.04em]'>{currency + ' ' + (fx.quote.rate * 10).toLocaleString('en', {maximumFractionDigits: 2})}</p><p className='mt-2 text-xs font-bold text-gray-500 dark:text-gray-400'>1 USDC = {currency + ' ' + fx.quote.rate.toLocaleString('en', {maximumFractionDigits: 2})}</p></>
             : <p className='mt-6 text-sm font-bold text-red-500'>{fx.error || 'The live rate could not be reached. Tap refresh.'}</p>}
         <p className='mt-2 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>{fx.quote?.stale ? 'Last confirmed rate. A fresh quote is requested before payment.' : 'Live sell quote for 10 USDC. Your amount-specific rate is locked when the payout is prepared.'}</p>
         <button type='button' onClick={() => void fx.refresh()} disabled={fx.busy} className='pocket-cta-secondary mt-5 w-full'>Refresh rate</button>
@@ -51,22 +48,24 @@ function RatesPanel({ fx, currency, onCurrency }: { fx: ReturnType<typeof usePoc
 }
 
 function LimitProgress({ title, used, limit, detail }: { title: string; used: number | null; limit: number; detail: string }) {
+  const display = usePocketLimitDisplay()
   const percent = used !== null && limit > 0 ? Math.min(100, Math.max(0, used / limit * 100)) : 0
   return <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
     <div className='flex items-start justify-between gap-4'>
       <div><h2 className='text-sm font-black'>{title}</h2><p className='mt-1 text-[11px] text-gray-500 dark:text-gray-400'>{detail}</p></div>
-      <strong className='shrink-0 text-xs'>{ngn(limit)} daily</strong>
+      <strong className='shrink-0 text-xs'>{display.usdc(limit)} daily{display.secondary(limit) && <small className="mt-1 block text-right font-normal text-gray-500">{display.secondary(limit)}</small>}</strong>
     </div>
     <div className='mt-5 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10'><div className='h-full rounded-full bg-blue-600 transition-[width]' style={{ width: `${percent}%` }} /></div>
     <div className='mt-3 flex justify-between text-[11px]'>
       {used === null
         ? <span role='status' aria-label="Loading today's usage" className='block h-3 w-full animate-pulse rounded bg-gray-200 motion-reduce:animate-none dark:bg-white/10' />
-        : <><span className='font-bold'>{ngn(used)} used</span><span className='text-gray-400'>{ngn(Math.max(0, limit - used))} remaining</span></>}
+        : <><span className='font-bold'>{display.usdc(used)} used</span><span className='text-gray-400'>{display.usdc(Math.max(0, limit - used))} remaining</span></>}
     </div>
   </article>
 }
 
 function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBillsLimitUsage | null; bank: PocketBankPayoutLimit | null; busy: boolean; error: string; onRefresh(): void }) {
+  const display = usePocketLimitDisplay()
   const airtime = usage?.airtime ?? { perPaymentNgn: 50_000, dailyLimitNgn: 200_000, usedTodayNgn: null }
   const otherBills = usage?.otherBills ?? { dailyLimitNgn: 1_000_000, usedTodayNgn: null }
   return <section className='pt-10'>
@@ -75,10 +74,10 @@ function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBil
       {bank && <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
         <p className='text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Bank payout</p>
         <p className='mt-2 text-2xl font-black'>{new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(bank.maxUsdc)} USDC</p>
-        <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>About {ngn(bank.ngnEquivalent)} currently</p>
+        <PocketLocalEquivalent amount={bank.maxUsdc} />
         <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Provider capacity per payout. Your verification allowance also applies.</p>
       </article>}
-      <LimitProgress title='Airtime' used={airtime.usedTodayNgn} limit={airtime.dailyLimitNgn} detail={`Up to ${ngn(airtime.perPaymentNgn)} per payment`} />
+      <LimitProgress title='Airtime' used={airtime.usedTodayNgn} limit={airtime.dailyLimitNgn} detail={`Up to ${display.usdc(airtime.perPaymentNgn)} per payment`} />
       <LimitProgress title='Other Bills' used={otherBills.usedTodayNgn} limit={otherBills.dailyLimitNgn} detail='Data, TV, and electricity combined' />
       <p className='px-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Resets daily at midnight, Lagos time. Product-specific limits may be lower.</p>
       {!usage && !busy && error && <div className='rounded-[20px] bg-gray-50 p-4 dark:bg-[#121212]'>
@@ -185,8 +184,8 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
 }
 
 export default function PocketProfileFeaturePage({ feature, onBack, getAccessToken, email = '', onResetPin = async () => undefined, stocks = false }: { stocks?: boolean; feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null>; email?: string; onResetPin?(): Promise<void> }) {
-  const fx = usePocketFxQuote(10, feature === 'rates')
   const [currency, setCurrency] = useState('NGN')
+  const fx = usePocketFxQuote(10, feature === 'rates', currency === 'UGX' ? 'UGX' : 'NGN')
   const [pushEnabled, setPushEnabled] = useState(pocketPushEnabled)
   const [limits, setLimits] = useState<PocketBillsLimitUsage | null>(null)
   const [bankLimit, setBankLimit] = useState<PocketBankPayoutLimit | null>(null)

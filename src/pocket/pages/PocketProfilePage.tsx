@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Banknote, Bell, Check, ChevronRight, Coins, Copy, Loader2, Lock, LogOut, MessageCircle, Pencil, Trash, TrendingUp } from '../components/PocketIcons'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -46,6 +46,11 @@ export default function PocketProfilePage() {
     return requested === 'rates' || requested === 'limits' || requested === 'notifications' || requested === 'security' || requested === 'wallet-setup' || requested === 'kyc' ? requested : null
   })
   useEffect(() => { if (new URLSearchParams(location.search).get('feature') === 'kyc') setFeature('kyc') }, [location.search])
+  const visitedKyc = useRef(false)
+  useEffect(() => {
+    if (feature === 'kyc') { visitedKyc.current = true; return }
+    if (visitedKyc.current) { visitedKyc.current = false; void profile.reload() }
+  }, [feature, profile.reload])
   const quickApprovalAvailable = false
   const quickApprovalBusy = false
   const quickApprovalEnabled = false
@@ -157,13 +162,13 @@ export default function PocketProfilePage() {
           <button type="button" onClick={() => void save()} disabled={profile.busy || !/^\d{6,12}$/.test(profile.draft.pocketId)} className="pocket-cta-primary flex w-full items-center justify-center gap-2">{profile.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}Save profile</button>
         </div> : <div className="mt-8 space-y-3">
           <button type="button" onClick={() => void copyId()} className="flex w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Pocket ID</span><span className="mt-1 block text-base font-black tabular-nums">{current?.pocketId}</span></span><Copy className="h-4 w-4 text-gray-500 dark:text-gray-400" />{copied && <span className="text-xs font-bold text-emerald-500">Copied</span>}</button>
-          <button type="button" onClick={() => setFeature('kyc')} className="flex w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left dark:bg-[#0D0D0D]"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Identity verification</span><span className="mt-1 block text-sm font-bold">Verify with Smile ID</span></span><ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" /></button>
+          <button type="button" onClick={() => setFeature('kyc')} className="flex w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left dark:bg-[#0D0D0D]"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Identity verification</span><span className="mt-1 block text-sm font-bold">{profile.profile?.nameStatus === 'kyc_verified' ? <span className="inline-flex items-center gap-2">Verified<Check className="h-4 w-4 text-green-600" /></span> : 'Verify with Smile ID'}</span></span><ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" /></button>
           {!stocks && <button type="button" onClick={() => setFeature('wallet-setup')} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Wallets</span><span className="mt-1 block text-sm font-bold">Wallet update</span></span><ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" /></button>}
           <div className="rounded-[22px] bg-white p-4 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none"><p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Email<Lock className="h-3 w-3" /></p><p className="mt-1 truncate text-sm font-bold">{email}</p></div>
           {!stocks && <div className="flex min-h-16 items-center gap-3 rounded-[22px] bg-white p-4 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none"><span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Appearance</span><span className="mt-1 block text-sm font-bold">Light or dark theme</span></span><PocketThemeToggle /></div>}
           <button type="button" onClick={() => setCurrencyOpen(true)} className="flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none">
             <Coins className="h-5 w-5 text-gray-500 dark:text-gray-300" />
-            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Display currency</span><span className="mt-1 block text-sm font-bold">{displayCurrency === 'NGN' ? 'Nigeria (NGN)' : stocks ? 'Default (USD)' : 'Default (USDC)'}</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Display currency</span><span className="mt-1 block text-sm font-bold">{displayCurrency === 'NGN' ? 'Naira (NGN)' : displayCurrency === 'UGX' ? 'Ugandan shilling (UGX)' : stocks ? 'Default (USD)' : 'Default (USDC)'}</span></span>
             <ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" />
           </button>
           {!stocks && <button type='button' onClick={() => setFeature('rates')} className='flex min-h-16 w-full items-center gap-3 rounded-[22px] bg-white p-4 text-left shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'><TrendingUp className='h-5 w-5 text-gray-500 dark:text-gray-300' /><span className='min-w-0 flex-1'><span className='block text-[9px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Rates</span><span className='mt-1 block text-sm font-bold'>USDC to local currency</span></span><ChevronRight className='h-4 w-4 text-gray-500 dark:text-gray-400' /></button>}

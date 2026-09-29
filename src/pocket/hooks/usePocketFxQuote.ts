@@ -1,93 +1,50 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { readPocketFxQuote, type PocketFxQuote } from '../api/pocketFxClient'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
-const POCKET_FX_REFRESH_INTERVAL_MS = 30_000
-const POCKET_FX_FOCUS_THROTTLE_MS = 10_000
-
-const POCKET_FX_STORAGE_KEY = 'pocket:paycrest-ngn-quote'
-
-function storedQuote() {
-  try {
-    const value = JSON.parse(window.localStorage.getItem(POCKET_FX_STORAGE_KEY) || 'null') as PocketFxQuote | null
-    return value?.source === 'paycrest' && Number.isFinite(value.rate) && value.rate > 0 ? value : null
-  } catch {
-    return null
-  }
-}
-
-let cachedQuote: PocketFxQuote | null = typeof window === 'undefined' ? null : storedQuote()
-
-function quoteAmount(value: number) {
-  if (!Number.isFinite(value) || value <= 0) return '1'
-  return value.toFixed(6).replace(/\.?0+$/, '')
-}
-
-export default function usePocketFxQuote(balance: number, enabled = true) {
-  const amount = quoteAmount(balance)
-  const initialQuote = cachedQuote?.amount === amount ? cachedQuote : null
-  const [quote, setQuote] = useState<PocketFxQuote | null>(initialQuote)
+const cache = new Map<string, PocketFxQuote>()
+const pending = new Map<string, Promise<PocketFxQuote>>()
+export default function usePocketFxQuote(balance: number, enabled = true, currency: 'NGN' | 'UGX' = 'NGN') {
+  const amount = Number.isFinite(balance) && balance > 0 ? balance.toFixed(6).replace(/\.?0+$/, '') : '1'
+  const key = currency + ':' + amount
+  const [quote, setQuote] = useState<PocketFxQuote | null>(() => cache.get(key) ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const requestInFlight = useRef(false)
-  const lastRequestAt = useRef(0)
-
-  const refresh = useCallback(async () => {
-    if (!enabled) return
-    if (requestInFlight.current) return
-    requestInFlight.current = true
-    lastRequestAt.current = Date.now()
-    setBusy(true)
-    try {
-      const nextQuote = await readPocketFxQuote(amount)
-      cachedQuote = nextQuote
-      window.localStorage.setItem(POCKET_FX_STORAGE_KEY, JSON.stringify(nextQuote))
-      setQuote(nextQuote)
-      setError('')
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Live FX rate is unavailable.')
-    } finally {
-      requestInFlight.current = false
-      setBusy(false)
-    }
-  }, [amount, enabled])
-
-  useEffect(() => {
-    if (!enabled || !quote || quote.stale) return
-    const remaining = quote.expiresAt - Date.now()
-    if (remaining <= 0) {
-      void refresh()
-      return
-    }
-    const expiry = window.setTimeout(() => {
-      void refresh()
-    }, remaining)
-    return () => window.clearTimeout(expiry)
-  }, [enabled, quote, refresh])
-
-  useEffect(() => {
-    const refreshVisibleQuote = () => {
-      if (document.visibilityState !== 'visible') return
-      if (Date.now() - lastRequestAt.current < POCKET_FX_FOCUS_THROTTLE_MS) return
-      void refresh()
-    }
-
-    if (!enabled) return
-    if (!initialQuote) void refresh()
-    const interval = window.setInterval(refreshVisibleQuote, POCKET_FX_REFRESH_INTERVAL_MS)
-    window.addEventListener('focus', refreshVisibleQuote)
-    document.addEventListener('visibilitychange', refreshVisibleQuote)
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('focus', refreshVisibleQuote)
-      document.removeEventListener('visibilitychange', refreshVisibleQuote)
-    }
-  }, [enabled, initialQuote, refresh])
-
+  const [revision, setRevision] = useState(0)
+  const refresh = useCallback(async () => { setRevision(n => n + 1) }, [])
   useEffect(() => {
     if (!enabled) return
-    return registerPocketRefreshHandler(refresh)
-  }, [enabled, refresh])
-
-  return { quote: quote?.amount === amount ? quote : null, busy, error, refresh }
+    let active = true
+    const update = async () => {
+      const saved = cache.get(key)
+      if (saved && !saved.stale && saved.expiresAt > Date.now() && Date.now() - saved.quotedAt < 30_000) {
+        setQuote(saved); return
+      }
+      setBusy(true)
+      try {
+        let request = pending.get(key)
+        if (!request) {
+          request = readPocketFxQuote(amount, fetch, currency).then(value => { cache.set(key, value); return value }).finally(() => pending.delete(key))
+          pending.set(key, request)
+        }
+        const value = await request
+        if (active) { setQuote(value); setError('') }
+      } catch (reason) {
+        if (active) { setError(reason instanceof Error ? reason.message : 'Live rate is unavailable.'); setQuote(null) }
+      } finally { if (active) setBusy(false) }
+    }
+    void update()
+    const visible = () => { if (document.visibilityState === 'visible') void update() }
+    const timer = window.setInterval(visible, 30_000)
+    window.addEventListener('focus', visible)
+    document.addEventListener('visibilitychange', visible)
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', visible); document.removeEventListener('visibilitychange', visible) }
+  }, [key, amount, currency, enabled, revision])
+  useEffect(() => enabled ? registerPocketRefreshHandler(refresh) : undefined, [enabled, refresh])
+  useEffect(() => {
+    if (!quote || quote.expiresAt <= Date.now()) return
+    const timer = window.setTimeout(() => { setQuote(null); void refresh() }, quote.expiresAt - Date.now())
+    return () => window.clearTimeout(timer)
+  }, [quote, refresh])
+  return { quote: enabled && quote?.currency === currency && quote.amount === amount && !quote.stale && quote.expiresAt > Date.now() ? quote : null, busy, error, refresh }
 }

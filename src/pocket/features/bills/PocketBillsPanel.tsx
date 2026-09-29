@@ -1,3 +1,5 @@
+import PocketFiatUsdcEstimate from '../../components/PocketFiatUsdcEstimate'
+import PocketLocalEquivalent from '../../components/PocketLocalEquivalent'
 import { normalizeNigerianMobileNumber } from '../../lib/nigerianMobileNetwork'
 import usePocketSlowConfirmation from '../../hooks/usePocketSlowConfirmation'
 import { pocketBillTitle } from '../../lib/pocketReceipt'
@@ -295,6 +297,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
 
 
+            {!isData && Number(bills.amountNgn) > 0 && <PocketFiatUsdcEstimate amount={Number(bills.amountNgn)} />}
             {reviewBlocked && <Link to={`${POCKET_BASE_PATH}/activity/bills`} className="flex min-h-11 w-full items-center justify-center rounded-full border border-gray-200 bg-white text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200">View Bills activity</Link>}
 
             {bills.status === 'quoting' && (
@@ -305,8 +308,8 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
             {showPayment && !showResult && bills.intent && (
               <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={bills.status === 'ready' && !approvalBusy} onClose={bills.edit}>
                 <>
-                    <h2 className="mb-1 text-center text-2xl font-bold">{money(bills.intent.amountNgn)}</h2>
-                    <p className="mb-6 text-center text-xs font-medium tabular-nums text-gray-500 dark:text-gray-400">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</p>
+                    <h2 className="mb-1 text-center text-2xl font-bold">{formatPocketPaymentAmount(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} USDC</h2>
+                    <div className="mb-6 text-center"><PocketLocalEquivalent amount={Number(bills.intent.paymentAmountUsdc || bills.intent.amountUsdc)} /></div>
                     <div className="mb-5 space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-4 text-xs dark:border-[#262626] dark:bg-[#121212]">
                       <div className="flex justify-between gap-3"><span className="text-gray-500">Biller</span><span className="text-right font-semibold">{bills.intent.serviceName || billName}</span></div>
                       <div className="flex justify-between gap-3"><span className="text-gray-500">{bills.intent.variationName || 'Airtime'}</span><span className="shrink-0 font-semibold text-gray-900 dark:text-white">{money(bills.intent.amountNgn)}</span></div>
