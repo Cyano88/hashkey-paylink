@@ -103,7 +103,7 @@ function isLocalCurrencyProfile(value: unknown): value is CompatibleLocalCurrenc
     && Number.isInteger(value.avatarId)
     && Number(value.avatarId) >= 1
     && Number(value.avatarId) <= 4
-    && (value.displayCurrency === undefined || value.displayCurrency === 'USDC' || value.displayCurrency === 'NGN' || value.displayCurrency === 'GHS' || value.displayCurrency === 'KES')
+    && (value.displayCurrency === undefined || value.displayCurrency === 'USDC' || value.displayCurrency === 'NGN' || value.displayCurrency === 'UGX' || value.displayCurrency === 'GHS' || value.displayCurrency === 'KES')
     && (value.updatedAt === undefined || (typeof value.updatedAt === 'string' && Number.isFinite(Date.parse(value.updatedAt))))
 }
 
@@ -119,7 +119,7 @@ export function parsePocketLocalCurrencyProfileRead(value: unknown): PocketLocal
   }
   return {
     email: typeof value.email === 'string' ? value.email : '',
-    profile: value.profile ? { ...value.profile, displayCurrency: value.profile.displayCurrency ?? 'USDC' } : null,
+    profile: value.profile ? { ...value.profile, displayCurrency: value.profile.displayCurrency === 'NGN' || value.profile.displayCurrency === 'UGX' ? value.profile.displayCurrency : 'USDC' } : null,
   }
 }
 

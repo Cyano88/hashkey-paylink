@@ -1,3 +1,4 @@
+import PocketLocalEquivalent from '../../components/PocketLocalEquivalent'
 import { pocketActivityIcon } from '../../components/pocketActivityIcon'
 import { pocketActivityAmount, currentPocketActivityRow } from '../../lib/pocketActivityPresentation'
 import { pocketActivityArchiveKey } from '../../lib/pocketActivityArchive'
@@ -108,7 +109,7 @@ export default function PocketActivityPanel({renderHeader,incomingPos=false,rail
         return <button key={row.eventId+':'+row.txHash} type="button" onClick={()=>{setSelected(row)}} className="flex w-full items-center gap-3 py-4 text-left" data-pocket-transaction-row>
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-[#121212] dark:text-gray-200"><Icon className="h-5 w-5"/></span>
           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{title}</span><span className="mt-1 block truncate text-[11px] text-gray-500 dark:text-gray-400">{detail}</span></span>
-          <span className="shrink-0 text-right"><span className={`block text-xs font-semibold tabular-nums ${incoming?'text-emerald-600 dark:text-emerald-400':''}`}>{row.source==='wallet-swap'?'Swap':(incoming?'+':'-')+pocketActivityAmount(row)}</span><span className={`mt-1 block text-[10px] capitalize ${outcome.state==='failed'?'text-red-600 dark:text-red-400':outcome.state==='successful'?'text-emerald-600 dark:text-emerald-400':'text-amber-600 dark:text-amber-400'}`}>{status}</span></span>
+          <span className="shrink-0 text-right"><span className={`block text-xs font-semibold tabular-nums ${incoming?'text-emerald-600 dark:text-emerald-400':''}`}>{row.source==='wallet-swap'?'Swap':(incoming?'+':'-')+pocketActivityAmount(row)}</span>{(!row.assetSymbol || row.assetSymbol === 'USDC') && row.source !== 'wallet-swap' && <PocketLocalEquivalent amount={Number(row.amount)} className="mt-1 text-[10px] font-normal text-gray-500 dark:text-gray-400" />}<span className={`mt-1 block text-[10px] capitalize ${outcome.state==='failed'?'text-red-600 dark:text-red-400':outcome.state==='successful'?'text-emerald-600 dark:text-emerald-400':'text-amber-600 dark:text-amber-400'}`}>{status}</span></span>
         </button>
       })}</div></section>)}
     </div>}

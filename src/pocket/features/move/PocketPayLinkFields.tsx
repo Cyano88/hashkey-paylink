@@ -1,3 +1,5 @@
+import PocketLocalEquivalent from '../../components/PocketLocalEquivalent'
+import PocketFiatUsdcEstimate from '../../components/PocketFiatUsdcEstimate'
 import { ArrowRight as PaymentArrowRight } from 'lucide-react'
 import { Coins, Info, Landmark, Link2, Loader2, Sliders, Tag } from '../../components/PocketIcons'
 import { cn } from '../../../lib/utils'
@@ -57,6 +59,7 @@ export function PocketPaymentAmountField({ lane, flexible, amount, dirty, valid,
             />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-[11px] font-semibold text-gray-500 dark:text-gray-400">{naira ? 'NGN' : 'USDC'}</span>
           </div>
+          {valid && Number(amount) > 0 && (naira ? <PocketFiatUsdcEstimate amount={Number(amount)} /> : <PocketLocalEquivalent amount={Number(amount)} />)}
           {dirty && !valid && <p className="flex items-center gap-1 text-xs text-red-500"><Info className="h-3 w-3" /> Enter a valid amount greater than 0</p>}
           {!dirty && <p className="text-[11px] text-gray-400 dark:text-gray-500">{helperText}</p>}
         </fieldset>

@@ -1,3 +1,4 @@
+import PocketFiatUsdcEstimate from '../components/PocketFiatUsdcEstimate'
 import PocketBankKycBoundary from '../components/PocketBankKycBoundary'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
 import { formatPocketPaymentAmount } from '../lib/pocketMoney'
@@ -60,7 +61,6 @@ function PocketMoveBankContent() {
   const closeDirectory = () => locationState?.bankRecipientDirectory ? navigate(-1) : navigate(POCKET_BASE_PATH + POCKET_ROUTES.bank + '?mode=withdraw', {replace:true})
   const [reviewOpen, setReviewOpen] = useState(false)
   useEffect(() => { const close=()=>setReviewOpen(false);window.addEventListener('pocket:kyc-required',close);return()=>window.removeEventListener('pocket:kyc-required',close) }, [])
-  const reviewFx = usePocketFxQuote(1, reviewOpen)
   const [approvalBusy, setApprovalBusy] = useState(false)
   const [payoutToast, setPayoutToast] = useState('')
 
@@ -72,6 +72,7 @@ function PocketMoveBankContent() {
     profileDraft: profile.draft,
     allowThirdPartyAccount: mode === 'withdraw',
   })
+  const reviewFx = usePocketFxQuote(1, reviewOpen, bank.country === 'UG' ? 'UGX' : 'NGN')
   const pickRecipient = (recipient: PocketBankRecipient) => {
     if ((recipient.country || 'NG') !== bank.country) return
     setRecipientStep(false)
@@ -255,7 +256,6 @@ function PocketMoveBankContent() {
           <section className="space-y-2 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
             <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Collection country</p>
             <div className="flex min-h-14 items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 dark:border-blue-400/20 dark:bg-blue-400/10"><span><span className="block text-sm font-bold">Nigeria</span><span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">Collect in NGN</span></span><span className="rounded-full bg-blue-600 px-2.5 py-1 text-[9px] font-black uppercase text-white">Selected</span></div>
-            {([['Ghana', 'GHS'], ['Kenya', 'KES']] as const).map(([country, currency]) => <div key={country} className="flex min-h-14 items-center justify-between rounded-2xl border border-gray-200 px-4 opacity-55 dark:border-[#262626]"><span><span className="block text-sm font-bold">{country}</span><span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">Collect in {currency}</span></span><span className="rounded-full bg-gray-100 px-2.5 py-1 text-[9px] font-black uppercase text-gray-500 dark:bg-white/[0.08] dark:text-gray-400">Soon</span></div>)}
             <p className="px-2 pt-1 text-center text-[11px] leading-5 text-gray-400 dark:text-gray-500">Nigeria is available now. Ghana and Kenya will unlock when their local payment rails are ready.</p>
           </section>
         </>}
@@ -356,6 +356,7 @@ function PocketMoveBankContent() {
             {mode === 'withdraw' && recipientStep && <div className="pocket-bank-amount-page flex min-h-0 flex-1 flex-col gap-5">
               <PocketBankAmountFields currency={pocketFiatCurrency(bank.country)} accountName={bank.accountName} bankName={bank.bankName} accountNumber={bank.accountNumber} amount={direct.amount} memo={direct.memo} disabled={directLocked} onChangeRecipient={()=>setRecipientStep(false)} onAmountChange={direct.setAmount} onMemoChange={direct.setMemo} />
 
+              <PocketFiatUsdcEstimate amount={Number(direct.amount)} currency={pocketFiatCurrency(bank.country)} />
               <div className="mt-auto space-y-2 pt-6" style={{ visibility: reviewOpen || bankReceipt ? 'hidden' : undefined }}>
                 {recoveredPayout ? (
                   <p className="rounded-2xl bg-gray-100 px-4 py-3 text-center text-xs font-medium text-gray-600 dark:bg-[#121212] dark:text-gray-300">
@@ -403,7 +404,7 @@ function PocketMoveBankContent() {
         onClose={bank.closeShare}
       />
       {mode === 'withdraw' && reviewOpen && !bankReceipt && <PocketBottomSheet title="Confirm payment" showCloseButton dismissOnBackdrop={false} dismissible={!approvalBusy && !directLocked} onClose={() => setReviewOpen(false)}>
-        <PocketConfirmationDetails equivalent={direct.result?.amountUsdc ? formatPocketPaymentAmount(Number(direct.result.amountUsdc)) + ' USDC' : bank.country === 'NG' && reviewFx.quote && !reviewFx.quote.stale && reviewFx.quote.expiresAt > Date.now() ? 'Est. ' + formatPocketPaymentAmount(Number(direct.amount) / reviewFx.quote.rate) + ' USDC' : undefined} amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
+        <PocketConfirmationDetails equivalent={direct.result?.amountUsdc ? formatPocketPaymentAmount(Number(direct.result.amountUsdc)) + ' USDC' : reviewFx.quote && !reviewFx.quote.stale && reviewFx.quote.expiresAt > Date.now() ? 'Est. ' + formatPocketPaymentAmount(Number(direct.amount) / reviewFx.quote.rate) + ' USDC' : undefined} amount={pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})} rows={[
           ['Bank', bank.bankName], ['Account name', bank.accountName], ['Account number', bank.accountNumber], ['Amount to receive', pocketFiatCurrency(bank.country) + ' ' + Number(direct.amount || 0).toLocaleString('en', {maximumFractionDigits:2})], ['Paying from', 'Base USDC'], ...(direct.memo ? [['Note', direct.memo] as [string,string]] : []),
         ]} />
 <PocketSlideAction onApprovalBusyChange={setApprovalBusy}

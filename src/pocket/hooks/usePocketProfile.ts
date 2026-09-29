@@ -1,3 +1,4 @@
+import { publishPocketDisplayCurrency } from '../lib/pocketDisplayCurrency'
 import { useCallback, useEffect, useState } from 'react'
 import {
   readPocketLocalCurrencyProfile,
@@ -66,6 +67,7 @@ export default function usePocketProfile({
       if (!isCurrent()) return
       const nextProfile = data.profile ?? null
       pocketProfileCache.set(email, nextProfile)
+      publishPocketDisplayCurrency(email, nextProfile?.displayCurrency)
       setProfile(nextProfile)
       setDraft({
         firstName: nextProfile?.firstName ?? '',
@@ -109,6 +111,7 @@ export default function usePocketProfile({
       setProfile(data.profile)
       setDraft(data.profile)
       pocketProfileCache.set(email, data.profile)
+      publishPocketDisplayCurrency(email, data.profile.displayCurrency)
       setEditing(false)
       return data.profile
     } catch (reason) {
@@ -136,6 +139,7 @@ export default function usePocketProfile({
       setProfile(data.profile)
       setDraft(data.profile)
       pocketProfileCache.set(email, data.profile)
+      publishPocketDisplayCurrency(email, data.profile.displayCurrency)
       return data.profile
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save display currency.')
