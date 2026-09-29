@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {privateKeyToAccount} from 'viem/accounts';
 import {keccak256} from 'viem';
-import {validateSignedStockTransaction} from '../src/lib/xstocksAgreement/transactionRecovery.ts';
+import {stockIntrinsicGasFloor,stockActionError,validateSignedStockTransaction} from '../src/lib/xstocksAgreement/transactionRecovery.ts';
 const account=privateKeyToAccount('0x'+'11'.repeat(32)); // Synthetic test-only key.
 const to='0x'+'22'.repeat(20),data='0x7d94ad98';
 const transaction={account:account.address,to,data,chainId:196,value:'0'};
@@ -17,3 +17,6 @@ await assert.rejects(()=>validateSignedStockTransaction({...record,hash:'0x'+'00
 await assert.rejects(()=>validateSignedStockTransaction({transaction}),/could not be verified/);
 assert.equal(keccak256(JSON.parse(JSON.stringify(record)).serialized),record.hash,'Reload retains the identical signed transaction hash');
 console.log('Signed recovery checks passed: sender, chain, recipient, calldata, value, hash and reload identity.');
+
+assert.equal(stockIntrinsicGasFloor('0x0001'),21020n);
+assert.doesNotMatch(stockActionError(Error('Timed out hash 0x123 Version: viem'),true),/0x123|viem|Version/);

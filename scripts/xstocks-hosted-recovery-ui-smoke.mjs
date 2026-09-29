@@ -14,7 +14,8 @@ const hash=keccak256(raw),storage=new Map();let signingFails=true,available=fals
 globalThis.window=new EventTarget();globalThis.document=new EventTarget();document.visibilityState='visible';
 Object.defineProperty(globalThis,'navigator',{value:{locks:{request:async(_k,_o,cb)=>cb(otherTab?null:{})}},configurable:true});
 globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
-globalThis.__recovery={wallet:{address:account.address,switchChain:async()=>{}},sign:async()=>{signCalls++;if(signingFails)throw Error('Preparation unavailable');return {signature:raw}},rpc:{
+globalThis.__recovery={wallet:{address:account.address,switchChain:async()=>{}},sign:async(input)=>{assert.equal(input.gasLimit,50000n);assert.equal(input.gasPrice,1000000000n);assert.equal(input.nonce,4);signCalls++;if(signingFails)throw Error('Preparation unavailable');return {signature:raw}},rpc:{
+ estimateGas:async()=>41666n,getGasPrice:async()=>1000000000n,getTransactionCount:async()=>4,
  sendRawTransaction:async({serializedTransaction})=>{assert.ok([...storage.values()].some(v=>JSON.parse(v).hash===hash),'persist before broadcast');broadcasts.push(serializedTransaction);throw Error('Lost response')},
  waitForTransactionReceipt:async()=>{if(!available)throw Error('Receipt timeout');return {transactionHash:hash,status:'success'}},
  getTransaction:async()=>{if(!available){const e=Error('not found');e.name='TransactionNotFoundError';throw e;}return {from:account.address,to,input:data,value:0n}},getChainId:async()=>196
@@ -33,10 +34,17 @@ try{
  const button=name=>tree.root.findAllByType('button').find(b=>b.children.join('')===name);
  await mount();
  await act(async()=>{await button('Confirm received').props.onClick()});assert.equal(storage.size,0);assert.equal(broadcasts.length,0);
- signingFails=false;await act(async()=>{await button('Confirm received').props.onClick()});assert.equal(storage.size,1);assert.equal(broadcasts.length,1);assert.ok(button('Check pending transaction'));
+ signingFails=false;await act(async()=>{await button('Confirm received').props.onClick()});assert.equal(storage.size,1);assert.equal(broadcasts.length,1);assert.ok(button('Check pending transaction'));const pendingKey=[...storage.keys()][0];
  await act(async()=>tree.unmount());await mount();
  otherTab=true;await act(async()=>{await button('Check pending transaction').props.onClick()});assert.equal(broadcasts.length,1);otherTab=false;
  await act(async()=>{await button('Check pending transaction').props.onClick()});assert.equal(broadcasts.length,2);assert.equal(broadcasts[0],broadcasts[1]);assert.equal(signCalls,2);assert.equal(storage.size,1);
  available=true;await act(async()=>{await button('Check pending transaction').props.onClick()});assert.equal(storage.size,0);assert.equal(broadcasts.length,2);
+ await act(async()=>tree.unmount());
+ const invalid=await account.signTransaction({chainId:196,to,data,value:0n,nonce:4,gas:0n,gasPrice:1000000000n});
+ storage.set(pendingKey,JSON.stringify({transaction:{account:account.address,to,data,chainId:196,value:'0'},serialized:invalid,hash:keccak256(invalid),operation:'receipt'}));
+ await mount();await act(async()=>{await button('Check pending transaction').props.onClick()});
+ assert.equal(storage.size,0,'provably invalid zero-gas transaction is safely retired');
+ assert.equal(broadcasts.length,2,'invalid recovery does not send');
+ assert.ok(button('Confirm received'),'action becomes available again');
  await act(async()=>tree.unmount());console.log('Recovery UI passed: failed signing, persist before broadcast, lost response, reload, other-tab exclusion, exact-byte resume and confirmed cleanup.');
 }finally{await unlink(output)}
