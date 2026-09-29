@@ -26,7 +26,7 @@ function evidence(config:SmileConfig,fields:Record<string,unknown>){
 }
 async function refresh(config:SmileConfig,owner:string,j:Job){
  const providerJobId=j.providerJobId||j.submissionHint?.jobId,providerUserId=j.providerUserId||j.submissionHint?.userId
- if(!providerJobId||['passed','failed'].includes(j.status)||Date.now()-(j.checkedAt||0)<30000)return
+ if(!providerJobId||j.status==='review'&&!!j.failureReason||['passed','failed'].includes(j.status)||Date.now()-(j.checkedAt||0)<30000)return
  let claimed=false
  await mutateDurableJson<Store>(key(owner,config.environment),r=>{const v=r?.jobs.find(x=>x.id===j.id);if(v&&!['passed','failed'].includes(v.status)&&Date.now()-(v.checkedAt||0)>=30000){v.checkedAt=Date.now();claimed=true}return r||{jobs:[]}})
  if(!claimed)return
@@ -61,6 +61,7 @@ export default async function pocketKycV3(req:Request,res:Response){
   }
   if(req.body.consent!==true)throw fail('Please consent to identity verification first.',400)
   if(req.body.country!==undefined&&req.body.country!=='NG')throw fail('Identity verification is not available for this country yet.',409)
+  if(action==='start'&&latest?.status==='failed'&&!['session_failed','provider_error'].includes(latest.failureReason||''))throw fail('Contact support to review your verification before trying again.',409)
   const method=action==='resume'?latest?.method:req.body.method||'bvn'
   if(!['bvn','nin','government_id'].includes(method))throw fail('Choose a supported verification method.',400)
   if(action==='resume'&&(!resumable(latest)||req.body.method!==undefined&&req.body.method!==method))throw fail('Check progress before continuing verification.',409)
@@ -117,6 +118,7 @@ export async function pocketKycV3Callback(req:Request,res:Response){
    const pairMatches=j.method==='bvn'||!!first?.identityMatch&&first.identityMatch===identity.identityMatch
    j.status=approved&&pairMatches?'passed':['block','error'].includes(body.status)?'failed':'review'
    if(approved){j.legalName=identity.legalName;j.identityMatch=identity.identityMatch}
+   if(approved&&pairMatches)delete j.failureReason
    if(approved&&!pairMatches)j.failureReason='identity_mismatch'
    else if(body.status==='block')j.failureReason='provider_rejected'
    else if(body.status==='error')j.failureReason='provider_error'
