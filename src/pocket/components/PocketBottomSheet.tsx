@@ -40,7 +40,7 @@ export default function PocketBottomSheet({ title, onClose, children, dismissibl
     }
   }, [])
   return createPortal(<div style={{zIndex:layer}} className="fixed inset-0 z-[85] flex items-end justify-center bg-black/40 px-0 pt-[max(1rem,var(--pocket-safe-top))]" onClick={event => { if (event.target === event.currentTarget && dismissible && dismissOnBackdrop) onClose() }}>
-    <div data-pocket-sheet ref={root} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className="font-sans relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-[28px] bg-white px-5 pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-4 text-gray-950 outline-none dark:bg-[#121212] dark:text-white">
+    <div data-pocket-sheet ref={root} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className="font-sans relative max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-[28px] border border-gray-100 bg-white px-5 pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-4 text-gray-950 outline-none dark:border-[#262626] dark:bg-[#121212] dark:text-white">
       {headerLabel ? <div data-pocket-sheet-header className="relative mb-4 flex h-5 items-center justify-center">
         <div aria-hidden="true" className="h-1 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />
         <p className="absolute right-0 max-w-[42%] truncate text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{headerLabel}</p>

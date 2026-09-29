@@ -20,7 +20,7 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
     ? `${formatPocketPaymentAmount(Number(receipt.amount))} USDC` : undefined
   const label = statusLabel || (state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing')
   const Icon = label.toLowerCase().startsWith('refund') ? Undo2 : state === 'failed' ? X : state === 'reversed' ? Undo2 : Clock3
-  if (viewReceipt && receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={() => setViewReceipt(false)} />
+  if (viewReceipt && receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={() => setViewReceipt(false)} extraActions={children} />
   const rows: Array<[string, ReactNode]> = detailsRows ?? (receipt ? [
     ...(localAmount ? [['Local amount', localAmount] as [string, ReactNode]] : []),
     ...(receipt.providerName ? [['Provider', receipt.providerName] as [string, ReactNode]] : []),
@@ -35,12 +35,12 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
     <div className="pb-4 pt-1 text-center" role="status" aria-live="polite">
       {state === 'successful' ? <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" strokeWidth={2.5} className="h-8 w-8" /></span> : <span className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${state === 'failed' ? 'bg-red-50 text-red-500 dark:bg-red-400/10' : 'bg-blue-50 text-blue-500 dark:bg-blue-400/10'}`}><Icon aria-hidden="true" className="h-9 w-9" /></span>}
       <h1 className="mt-3 text-xl font-bold tracking-tight">{label}</h1>
-      {(usdcEquivalent || amount || localAmount) && <p className="mt-2 text-lg font-semibold tabular-nums">{usdcEquivalent || amount || localAmount}</p>}
-      {usdcEquivalent && receipt && (localAmount ? <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{localAmount}</p> : <PocketLocalEquivalent amount={Number(receipt.amount)} />)}
-      {detail && <p className="mx-auto mt-3 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{detail}</p>}
+      {(usdcEquivalent || amount || localAmount) && <p className="mt-2 text-lg font-semibold tabular-nums">{localAmount || usdcEquivalent || amount}</p>}
+      {usdcEquivalent && receipt && (localAmount ? <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{usdcEquivalent}</p> : <PocketLocalEquivalent amount={Number(receipt.amount)} />)}
+      {state !== 'successful' && detail && <p className="mx-auto mt-3 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{detail}</p>}
     </div>
-    <PocketTransactionDetails rows={rows} />
-    {children}
+    {state !== 'successful' && <PocketTransactionDetails rows={rows} />}
+    {state !== 'successful' && children}
     <div className={`mt-4 grid gap-3 ${canViewReceipt && !inline ? 'grid-cols-2' : 'grid-cols-1'}`}>
       {canViewReceipt && <button type="button" onClick={() => setViewReceipt(true)} className="pocket-cta-secondary">View receipt</button>}
       {!inline && <button type="button" onClick={onDone} className="pocket-cta-primary ">Done</button>}
