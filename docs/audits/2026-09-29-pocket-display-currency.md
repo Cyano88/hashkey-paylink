@@ -13,3 +13,5 @@ VTpass: Pocket's existing TV vending path accepts service ID, smartcard, package
 Sources:
 - https://vtpass.com/documentation/tv-subscription-api/
 - https://vtpass.com/blog/buy-international-airtime-for-these-countries-on-vtpass/
+
+Loading follow-up: limits, equivalents, amount-entry estimates and rate panels use compact existing Pocket skeleton bars. Available values remain visible during background refresh. FX requests time out after 15 seconds; stale provider responses are treated as unavailable rather than loading forever.

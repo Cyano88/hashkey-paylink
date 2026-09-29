@@ -125,7 +125,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   const guidance = state ? kycGuidance(state) : null
   const passed = state?.status === 'passed'
   const resultTitle = basicPassed && passed && state?.environment==='production' && !state?.workflow?.complete ? 'Basic verification complete' : guidance?.title ? guidance.title : passed ? state.verified ? 'Verification complete' : 'Sandbox test completed' : 'Verification submitted'
-  const resultText = basicPassed && passed && state?.environment==='production' && !complete ? `Your daily allowance is ${limitDisplay.usdc(50_000)}. Advanced verification is optional.` : guidance?.message ? guidance.message : passed ? state.verified ? 'Your identity check passed. You can continue to Pocket.' : 'Your sandbox identity check passed. This is a test result, not a production identity verification.' : 'Your submission has been received. We are checking the result with Smile ID. You can stay here for the update or continue while it processes.'
+  const resultText = basicPassed && passed && state?.environment==='production' && !complete ? <>Your daily allowance is {limitDisplay.usdc(50_000)}. Advanced verification is optional.</> : guidance?.message ? guidance.message : passed ? state.verified ? 'Your identity check passed. You can continue to Pocket.' : 'Your sandbox identity check passed. This is a test result, not a production identity verification.' : 'Your submission has been received. We are checking the result with Smile ID. You can stay here for the update or continue while it processes.'
   const retryable = !complete && guidance?.action !== 'support' && (selectedLevel==='advanced' ? basicPassed && (needsAdditional || state?.canResume === true || state?.status==='failed') : !basicPassed && (state?.canCorrectNames === true || state?.status === 'not_started' || state?.status === 'failed' || state?.canResume === true))
   return <section className="mt-6 space-y-5">
     {!state && !error && <div role="status" aria-label="Loading verification" className="h-44 animate-pulse rounded-3xl bg-gray-200/70 dark:bg-white/10" />}
@@ -138,7 +138,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         </button>
         <button type="button" disabled={!basicPassed} onClick={()=>setSelectedLevel('advanced')} className={`w-full rounded-2xl border p-4 text-left disabled:opacity-50 ${selectedLevel==='advanced'?'border-gray-900 dark:border-white':'border-gray-200 dark:border-[#262626]'}`}>
           <span className="flex items-center justify-between text-sm font-semibold"><span>Advanced</span>{complete&&<Check aria-label="Advanced complete" className="h-4 w-4 text-green-600"/>}</span>
-          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{!basicPassed?'Complete Basic first':state.advancedDailyLimitNgn?`NIN or government ID · ${limitDisplay.usdc(state.advancedDailyLimitNgn)} daily`:'NIN or government ID · Higher limits pending activation'}</span>
+          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{!basicPassed?'Complete Basic first':state.advancedDailyLimitNgn?<>NIN or government ID · {limitDisplay.usdc(state.advancedDailyLimitNgn)} daily</>:'NIN or government ID · Higher limits pending activation'}</span>
         </button>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400">Bank transfers and XPay bank payouts share this allowance. Bills are excluded.</p>

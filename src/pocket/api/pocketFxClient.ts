@@ -45,7 +45,7 @@ export function parsePocketFxQuote(value: unknown): PocketFxQuote {
 
 export async function readPocketFxQuote(amount = '1', fetcher: typeof fetch = fetch, currency: 'NGN' | 'UGX' = 'NGN'): Promise<PocketFxQuote> {
   const params = new URLSearchParams({ currency, amount })
-  const response = await fetcher(`${POCKET_API.fxQuote}?${params.toString()}`, { method: 'GET' })
+  const response = await fetcher(`${POCKET_API.fxQuote}?${params.toString()}`, { method: 'GET', signal: AbortSignal.timeout(15_000) })
   const data = await response.json().catch(() => undefined)
   if (!response.ok) {
     const message = isRecord(data) && typeof data.error === 'string' ? data.error : 'Live FX rate is unavailable.'

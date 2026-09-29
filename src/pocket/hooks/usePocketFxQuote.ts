@@ -18,7 +18,7 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
     const update = async () => {
       const saved = cache.get(key)
       if (saved && !saved.stale && saved.expiresAt > Date.now() && Date.now() - saved.quotedAt < 30_000) {
-        setQuote(saved); return
+        setQuote(saved); setBusy(false); setError(''); return
       }
       setBusy(true)
       try {
@@ -28,7 +28,7 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
           pending.set(key, request)
         }
         const value = await request
-        if (active) { setQuote(value); setError('') }
+        if (active) { setQuote(value); setError(value.stale ? 'Live FX rate is unavailable.' : '') }
       } catch (reason) {
         if (active) { setError(reason instanceof Error ? reason.message : 'Live rate is unavailable.'); setQuote(null) }
       } finally { if (active) setBusy(false) }
@@ -46,5 +46,7 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
     const timer = window.setTimeout(() => { setQuote(null); void refresh() }, quote.expiresAt - Date.now())
     return () => window.clearTimeout(timer)
   }, [quote, refresh])
-  return { quote: enabled && quote?.currency === currency && quote.amount === amount && !quote.stale && quote.expiresAt > Date.now() ? quote : null, busy, error, refresh }
+  const visibleQuote = enabled && quote?.currency === currency && quote.amount === amount && !quote.stale && quote.expiresAt > Date.now() ? quote : null
+  const loading = enabled && !visibleQuote && (busy || !error)
+  return { quote: visibleQuote, loading, busy, error, refresh }
 }

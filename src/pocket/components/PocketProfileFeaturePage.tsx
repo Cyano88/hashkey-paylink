@@ -1,3 +1,5 @@
+import PocketAmountShimmer from './PocketAmountShimmer'
+import type { ReactNode } from 'react'
 import usePocketLimitDisplay from '../hooks/usePocketLimitDisplay'
 import PocketLocalEquivalent from './PocketLocalEquivalent'
 import PocketTransferAllowanceView from './PocketTransferAllowanceView'
@@ -35,8 +37,8 @@ function RatesPanel({ fx, currency, onCurrency }: { fx: ReturnType<typeof usePoc
         <select id='pocket-rate-currency' value={currency} onChange={event => onCurrency(event.target.value)} className='mt-2 min-h-12 w-full rounded-2xl bg-gray-50 px-4 text-sm font-bold outline-none dark:bg-[#121212]'>
           {options.map(option => <option key={option.code} value={option.code} disabled={!option.available}>{option.country} ({option.code}){option.available ? '' : ' - Coming soon'}</option>)}
         </select>
-        {fx.busy && !fx.quote
-          ? <p className='mt-6 flex items-center gap-2 text-sm font-bold text-gray-500 dark:text-gray-400'><Loader2 className='h-4 w-4 animate-spin' />Loading live rate</p>
+        {fx.loading
+          ? <div className="mt-6 space-y-3"><PocketAmountShimmer label="Loading payout rate" className="text-3xl" /><div><PocketAmountShimmer label="Loading unit rate" className="text-xs" /></div></div>
           : fx.quote
             ? <><p className='mt-6 text-3xl font-black tracking-[-0.04em]'>{currency + ' ' + (fx.quote.rate * 10).toLocaleString('en', {maximumFractionDigits: 2})}</p><p className='mt-2 text-xs font-bold text-gray-500 dark:text-gray-400'>1 USDC = {currency + ' ' + fx.quote.rate.toLocaleString('en', {maximumFractionDigits: 2})}</p></>
             : <p className='mt-6 text-sm font-bold text-red-500'>{fx.error || 'The live rate could not be reached. Tap refresh.'}</p>}
@@ -47,7 +49,7 @@ function RatesPanel({ fx, currency, onCurrency }: { fx: ReturnType<typeof usePoc
   </section>
 }
 
-function LimitProgress({ title, used, limit, detail }: { title: string; used: number | null; limit: number; detail: string }) {
+function LimitProgress({ title, used, limit, detail }: { title: string; used: number | null; limit: number; detail: ReactNode }) {
   const display = usePocketLimitDisplay()
   const percent = used !== null && limit > 0 ? Math.min(100, Math.max(0, used / limit * 100)) : 0
   return <article className='rounded-[24px] bg-white p-5 shadow-sm dark:bg-[#0D0D0D] dark:shadow-none'>
@@ -77,7 +79,7 @@ function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBil
         <PocketLocalEquivalent amount={bank.maxUsdc} />
         <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Provider capacity per payout. Your verification allowance also applies.</p>
       </article>}
-      <LimitProgress title='Airtime' used={airtime.usedTodayNgn} limit={airtime.dailyLimitNgn} detail={`Up to ${display.usdc(airtime.perPaymentNgn)} per payment`} />
+      <LimitProgress title='Airtime' used={airtime.usedTodayNgn} limit={airtime.dailyLimitNgn} detail={<>Up to {display.usdc(airtime.perPaymentNgn)} per payment</>} />
       <LimitProgress title='Other Bills' used={otherBills.usedTodayNgn} limit={otherBills.dailyLimitNgn} detail='Data, TV, and electricity combined' />
       <p className='px-1 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Resets daily at midnight, Lagos time. Product-specific limits may be lower.</p>
       {!usage && !busy && error && <div className='rounded-[20px] bg-gray-50 p-4 dark:bg-[#121212]'>
