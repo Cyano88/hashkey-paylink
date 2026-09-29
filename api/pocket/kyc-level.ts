@@ -7,12 +7,12 @@ export function advancedDailyNgn() {
  const value=Number(process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN)
  return Number.isSafeInteger(value*100)&&value>BASIC_DAILY_NGN?value:null
 }
-export function kycLevelFromJobs(jobs:any[],legacy=false):{level:PocketKycLevel;legalName?:string} {
+export function kycLevelFromJobs(jobs:any[],legacy=false):{level:PocketKycLevel;legalName?:string;firstName?:string;lastName?:string;reference?:string} {
  const method=(j:any)=>{try{return legacy?storedKycPolicy(j).method:j.method}catch{return undefined}}
  const basic=jobs.find(j=>j.environment==='production'&&j.status==='passed'&&method(j)==='bvn'&&j.identityMatch&&j.legalName)
  if(!basic)return {level:'none'}
  const advanced=jobs.find(j=>j.environment==='production'&&j.status==='passed'&&['nin','government_id'].includes(method(j))&&j.identityMatch&&jobs.some(b=>b.id===j.bvnJobId&&b.environment==='production'&&b.status==='passed'&&method(b)==='bvn'&&b.identityMatch===j.identityMatch))
- return {level:advanced?'advanced':'basic',legalName:basic.legalName}
+ return {level:advanced?'advanced':'basic',legalName:basic.legalName,firstName:basic.firstName,lastName:basic.lastName,reference:basic.providerJobId||basic.id}
 }
 export async function readPocketKycLevel(owner:string) {
  const hash=createHash('sha256').update(owner).digest('hex')

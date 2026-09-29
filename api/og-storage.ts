@@ -1,3 +1,4 @@
+import {containsPrivateIdentity} from './og-privacy.js'
 /**
  * 0G Storage — fire-and-forget archive layer for Hash PayLink payment records.
  *
@@ -85,6 +86,7 @@ export type ArchiveResult = {
  * Never throws — all errors are caught and logged.
  */
 export async function archivePayment(entry: ArchiveRecord): Promise<ArchiveResult | null> {
+  if(containsPrivateIdentity(entry)){console.warn('[0g] Private identity payload rejected');return null}
   const signer = getSigner()
   if (!signer) {
     console.warn('[0g] OG_STORAGE_KEY not set — skipping archive')

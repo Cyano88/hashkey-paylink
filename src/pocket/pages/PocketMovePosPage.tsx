@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import PocketVerifiedNameGate from '../components/PocketVerifiedNameGate'
+import PocketIdentityGate from '../components/PocketIdentityGate'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -21,7 +21,7 @@ export default function PocketMovePosPage() {
   const [searchParams] = useSearchParams()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
-  const verifiedIdentityName = profile.profile?.nameStatus === 'bank_resolved' ? profile.profile.resolvedName : ''
+  const verifiedIdentityName = profile.profile?.nameStatus === 'kyc_verified' ? profile.profile.resolvedName : ''
   const identityVerified = Boolean(verifiedIdentityName)
   const profileReady = Boolean(verifiedIdentityName && email)
   const stepParam = searchParams.get('posStep')
@@ -65,7 +65,7 @@ export default function PocketMovePosPage() {
       <PocketFlowHeader centered rightAction={<button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.posManage)} className="min-h-10 px-1 text-xs font-bold">Manage</button>} title={pos.country && !pos.merchant ? "Create POS" : "POS"} onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       <PocketPosShell standalone fixedPage={authenticated && identityVerified && Boolean(pos.country) && !pos.merchant}>
         {authenticated && !identityVerified && (
-          <PocketVerifiedNameGate />
+          <PocketIdentityGate />
         )}
 
         {authenticated && identityVerified && (!pos.merchant ? (

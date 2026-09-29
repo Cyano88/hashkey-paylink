@@ -6,7 +6,7 @@ import {readDurableJson,mutateDurableJson} from '../render-durable-store.js'
 import {smileConfig,type SmileConfig,type SmileEnvironment} from './smile-provider.js'
 import {smileV3Token,smileV3Status,smileV3Replay,assertSmileV3Policy,smileIdentityMatchKey,validV3Signature,v3Failure as fail} from './smile-v3.js'
 type Method='bvn'|'nin'|'government_id'
-type Job={supersededBy?:string;replayBindingVersion?:number;consent?:{granted:true;grantedAt:string;noticeVersion:string;privacyPolicyUrl:string};submissionHint?:{jobId:string;userId:string};replayedAt?:number;replayAttempts?:number;idTypes?:string[];id:string;method:Method;environment:SmileEnvironment;status:'pending'|'passed'|'failed'|'review';createdAt:number;sessionAt?:number;checkedAt?:number;providerJobId?:string;providerUserId?:string;uploadReportedAt?:number;callbackProof:string;bvnJobId?:string;legalName?:string;identityMatch?:string;failureReason?:string;providerStatus?:string}
+type Job={supersededBy?:string;replayBindingVersion?:number;consent?:{granted:true;grantedAt:string;noticeVersion:string;privacyPolicyUrl:string};submissionHint?:{jobId:string;userId:string};replayedAt?:number;replayAttempts?:number;idTypes?:string[];id:string;method:Method;environment:SmileEnvironment;status:'pending'|'passed'|'failed'|'review';createdAt:number;sessionAt?:number;checkedAt?:number;providerJobId?:string;providerUserId?:string;uploadReportedAt?:number;callbackProof:string;bvnJobId?:string;legalName?:string;firstName?:string;lastName?:string;identityMatch?:string;failureReason?:string;providerStatus?:string}
 type Store={jobs:Job[]}
 const key=(owner:string,environment:SmileEnvironment)=>'hashpaylink:pocket-kyc:v3:'+environment+':'+createHash('sha256').update(owner).digest('hex')
 const indexKey=(id:string)=>'hashpaylink:pocket-kyc-job:v3:'+id
@@ -119,12 +119,13 @@ export async function pocketKycV3Callback(req:Request,res:Response){
   const approved=body.status==='clear'&&typeMatches&&!!identity.identityMatch
   await mutateDurableJson<Store>(k,current=>{const j=current?.jobs.find(x=>x.id===reference);if(!j)throw fail('Unknown verification.',404)
    if(j.providerJobId&&j.providerJobId!==providerJobId)throw fail('Verification reference changed.',409)
+   if(j.status==='passed'&&approved&&j.identityMatch===identity.identityMatch){j.firstName=String(fields.first_name||'').trim();j.lastName=String(fields.last_name||'').trim()}
    if(['passed','failed'].includes(j.status)&&j.providerJobId)return current!
    j.providerJobId=providerJobId;j.providerUserId=providerUserId;j.providerStatus=body.status;j.checkedAt=Date.now();j.uploadReportedAt||=Date.now()
    const first=current!.jobs.find(x=>x.id===j.bvnJobId&&x.status==='passed'&&x.method==='bvn')
    const pairMatches=j.method==='bvn'||!!first?.identityMatch&&first.identityMatch===identity.identityMatch
    j.status=approved&&pairMatches?'passed':['block','error'].includes(body.status)?'failed':'review'
-   if(approved){j.legalName=identity.legalName;j.identityMatch=identity.identityMatch}
+   if(approved){j.legalName=identity.legalName;j.identityMatch=identity.identityMatch;j.firstName=String(fields.first_name||'').trim();j.lastName=String(fields.last_name||'').trim()}
    if(approved&&pairMatches)delete j.failureReason
    if(approved&&!pairMatches)j.failureReason='identity_mismatch'
    else if(body.status==='block')j.failureReason='provider_rejected'

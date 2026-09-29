@@ -94,7 +94,7 @@ function isLocalCurrencyProfile(value: unknown): value is CompatibleLocalCurrenc
   return typeof value.firstName === 'string'
     && typeof value.lastName === 'string'
     && typeof value.resolvedName === 'string'
-    && (value.nameStatus === 'unverified' || value.nameStatus === 'bank_resolved')
+    && (value.nameStatus === 'unverified' || value.nameStatus === 'bank_resolved' || value.nameStatus === 'kyc_verified')
     && typeof value.email === 'string'
     && typeof value.pocketNumber === 'string'
     && /^\d{6,12}$/.test(value.pocketNumber)

@@ -98,11 +98,8 @@ assert.deepEqual(boundNames, [])
 const confirmed = await request(verifyHandler, 'POST', { ...bankRequest, confirm_profile_name: true }, {
   authorization: 'Bearer privy-secret',
 })
-assert.equal(confirmed.statusCode, 200)
-assert.deepEqual(boundNames, [{
-  identity: { userId: 'privy-user-1', email: 'ada@example.com' },
-  resolvedName: 'ADA LOVELACE',
-}])
+assert.equal(confirmed.statusCode, 410)
+assert.deepEqual(boundNames, [])
 assert.deepEqual(parsePocketBankVerification(verified.body), {
   account_name: 'ADA LOVELACE',
   bank_code: '001',
@@ -130,9 +127,9 @@ const nameConflictHandler = createPocketBankVerifyHandler({
   },
 })
 const nameConflict = await request(nameConflictHandler, 'POST', { ...bankRequest, confirm_profile_name: true })
-assert.equal(nameConflict.statusCode, 409)
-assert.equal(nameConflict.body.error.code, 'VERSION_CONFLICT')
-assert.equal(nameConflict.body.error.field, 'bankAccount')
+assert.equal(nameConflict.statusCode, 410)
+assert.equal(nameConflict.body.error.code, 'FORBIDDEN')
+
 
 const readCalls = []
 const readResult = await readPocketBankInstitutions(async (url, init) => {

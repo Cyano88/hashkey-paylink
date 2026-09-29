@@ -1,3 +1,4 @@
+import PocketLoadingState from './PocketLoadingState'
 import {useEffect,useRef,useState,type ReactNode} from 'react'
 import {useNavigate} from 'react-router-dom'
 import usePocketIdentity from '../hooks/usePocketIdentity'
@@ -10,5 +11,5 @@ export default function PocketBankKycBoundary({children}:{children:ReactNode}){
  if(!identity.authenticated||state==='allowed')return <>{children}</>
  if(state==='required')return <PocketKycGate onClose={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.home)}/>
  if(state==='error')return <div className="p-6 text-center text-sm"><p>Verification status could not load.</p><button className="pocket-cta-primary mt-4 px-6" onClick={()=>setRetry(n=>n+1)}>Try again</button></div>
- return <div role="status" aria-label="Checking verification" className="mx-4 mt-8 h-40 animate-pulse rounded-2xl bg-gray-100 dark:bg-white/5"/>
+ return <PocketLoadingState active="home"/>
 }

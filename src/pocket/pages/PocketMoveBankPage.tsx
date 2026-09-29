@@ -17,7 +17,7 @@ import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import { formatNgnAmount } from '../../lib/utils'
-import PocketVerifiedNameGate, { PocketVerifiedNameBadge } from '../components/PocketVerifiedNameGate'
+import PocketIdentityGate, { PocketIdentityBadge } from '../components/PocketIdentityGate'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -284,10 +284,10 @@ function PocketMoveBankContent() {
             </div>
           )}
 
-          {authenticated && !bank.profileVerified && <PocketVerifiedNameGate />}
+          {authenticated && !bank.profileVerified && <PocketIdentityGate />}
 
           {authenticated && bank.profileVerified && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className={mode === "withdraw" && recipientStep ? "flex min-h-0 min-w-0 w-full flex-1 flex-col" : "min-w-0 w-full space-y-3.5"}>
-            {mode === 'request' && <PocketVerifiedNameBadge name={profile.profile?.resolvedName ?? ''} />}
+            {mode === 'request' && <PocketIdentityBadge name={profile.profile?.resolvedName ?? ''} />}
 
             <div hidden={mode === 'withdraw' && recipientStep} className="space-y-3">{mode === 'withdraw' && <PocketPayoutCountry value={bank.country} onChange={value=>{bank.setCountry(value);direct.setAmount('');setReviewOpen(false)}} />}<PocketVerifiedBankFields
               recipientEntry={mode === 'withdraw'}

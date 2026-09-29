@@ -25,7 +25,7 @@ const thirdPartyBeneficiary = await verifyBankPayoutBeneficiary({}, {
   account_number: '0123456789',
 }, {
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
-  profiles: { get: async () => ({ nameStatus: 'bank_resolved', resolvedName: 'ADA LOVELACE' }) },
+  profiles: { get: async () => ({ nameStatus: 'kyc_verified', resolvedName: 'ADA LOVELACE' }) },
   verifyAccount: async () => ({ bank_code: '001', account_name: 'GRACE HOPPER' }),
 })
 assert.equal(thirdPartyBeneficiary.verification.account_name, 'GRACE HOPPER')
