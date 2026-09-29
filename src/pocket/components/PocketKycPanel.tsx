@@ -9,7 +9,7 @@ import { Check, Clock3, Info } from './PocketIcons'
 import { protectSmileViewport } from '../lib/smileViewport'
 import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 
-type VerificationMethod = 'bvn' | 'nin' | 'government_id'
+type VerificationMethod = 'bvn' | 'nin' | 'government_id' | 'national_id'
 type VerificationPolicy = { method?: VerificationMethod; product?: string; country: string; countryName: string; provider: string; idSelection: Record<string, string[]>; consentRequired: Record<string, string[]>; previewBVNMFA: boolean }
 type KycState = {level?:'none'|'basic'|'advanced';basicDailyLimitNgn?:number;advancedDailyLimitNgn?:number|null; workflow?: { basicPassed?:boolean; bvnPassed: boolean; complete: boolean; needsAdditional: boolean; methods: string[] }; environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; canCorrectNames?: boolean; uploadReported?: boolean; failureReason?: string | null; verification?: VerificationPolicy; jobId?: string }
 type Session = KycState & { token: string; partnerId: string; callbackUrl: string; partnerParams?: Record<string,string> }
@@ -22,6 +22,8 @@ function loadSmile() {
 
 export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () => Promise<string | null> }) {
   const [country,setCountry]=useState<'NG'|'UG'>('NG')
+  const [ugandaIdentity,setUgandaIdentity]=useState({idNumber:'',cardNumber:'',dob:''})
+  const identityRef=useRef(ugandaIdentity);identityRef.current=ugandaIdentity
   const countryRef=useRef(country);countryRef.current=country
   const limitDisplay = usePocketLimitDisplay()
   const [providerVisible, setProviderVisible] = useState(false)
@@ -43,7 +45,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
     if (Date.now() < retryNotBefore.current) throw Object.assign(new Error('Verification is busy. Please wait a moment.'), {retryable:true})
     const token = await tokenReader.current()
     if (!token) throw Object.assign(new Error('Sign in again to continue.'), {retryable:false})
-    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(action==='start'?{country:countryRef.current}:{}), ...(method ? { method } : {}), ...(jobId ? { jobId } : {}), ...(submission ? {submission} : {}), ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) }).catch(() => { throw new Error(TEMPORARY_ERROR) })
+    const response = await fetch(pocketApiUrl('/api/pocket/kyc'), { method: 'POST', cache: 'no-store', headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...(action==='start'?{country:countryRef.current,...countryRef.current==='UG'?{identity:identityRef.current}:{}}:{}), ...(method ? { method } : {}), ...(jobId ? { jobId } : {}), ...(submission ? {submission} : {}), ...(action !== 'status' ? { consent: true } : {}) }), signal: AbortSignal.timeout(20000) }).catch(() => { throw new Error(TEMPORARY_ERROR) })
     if (response.status === 429) {
       const header = response.headers.get('Retry-After')
       const seconds = header ? Number(header) : NaN
@@ -88,10 +90,11 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
     try {
       await loadSmile()
       if (!mounted.current) return
-      const session = await api(state?.canCorrectNames ? 'correct_names' : state?.canResume ? 'resume' : 'start', state?.canCorrectNames ? state.jobId : undefined, state?.canResume ? state.verification?.method : state?.workflow?.bvnPassed && selectedLevel==='advanced' ? additionalMethod : country==='UG'?'government_id':'bvn')
+      const session = await api(state?.canCorrectNames ? 'correct_names' : state?.canResume ? 'resume' : 'start', state?.canCorrectNames ? state.jobId : undefined, state?.canResume ? state.verification?.method : state?.workflow?.bvnPassed && selectedLevel==='advanced' ? additionalMethod : country==='UG'?'national_id':'bvn')
       if (!mounted.current) return
       if (!session.verification || session.verification.provider !== 'smile') throw new Error(TEMPORARY_ERROR)
       setState(session)
+      if(session.verification.method==='national_id'){setUgandaIdentity({idNumber:'',cardNumber:'',dob:''});setSubmittedSheet(true);setBusy(false);return}
       const done = () => { if (mounted.current) { setBusy(false); void refresh() } }
       ;(window as SmileWindow).SmileIdentity!({
         token: session.token, product: session.verification.product || 'biometric_kyc', environment: session.environment, callback_url: session.callbackUrl,
@@ -117,7 +120,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
           setError(failure?.errorCode === 'CONSENT_DENIED' ? 'Verification was cancelled.' : 'Verification could not open. Please try again.')
         },
       })
-    } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false) } }
+    } catch (reason) { if (mounted.current) { setError(reason instanceof Error ? reason.message : 'Verification could not open.'); setBusy(false); setAutoRetry((reason as {retryable?:boolean})?.retryable !== false); if(country==='UG')void refresh() } }
   }
   useEffect(()=>{if(state?.jobId && (state.verification?.country==='NG'||state.verification?.country==='UG'))setCountry(state.verification.country)},[state?.jobId,state?.verification?.country])
   const basicPassed=Boolean(state?.workflow?.basicPassed ?? state?.workflow?.bvnPassed)
@@ -134,12 +137,12 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   return <section className="mt-6 space-y-5">
     {!state && !error && <div role="status" aria-label="Loading verification" className="h-44 animate-pulse rounded-3xl bg-gray-200/70 dark:bg-white/10" />}
     {state && <>
-      {state.environment === 'sandbox' && <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600 dark:bg-[#121212] dark:text-gray-300">Sandbox test. Real BVN/NIN records are not checked here. Use Smile ID test details and a matching test photo. This does not verify your real identity.</p>}
-      {!state.jobId && <div><p className="mb-2 text-xs text-gray-500">Identity document country</p><PocketSelect value={country} options={[{value:'NG',label:'Nigeria'},{value:'UG',label:'Uganda'}]} onChange={value=>{setCountry(value as 'NG'|'UG');setConsent(false);setError('');setSelectedLevel('basic')}} disabled={busy} ariaLabel="Identity document country" /></div>}
+      {state.environment === 'sandbox' && <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600 dark:bg-[#121212] dark:text-gray-300">{country==='UG'?'Sandbox test. Use Smile ID test details. This does not verify your real identity.':'Sandbox test. Real BVN/NIN records are not checked here. Use Smile ID test details and a matching test photo. This does not verify your real identity.'}</p>}
+      {!state.jobId && <div><p className="mb-2 text-xs text-gray-500">Identity document country</p><PocketSelect value={country} options={[{value:'NG',label:'Nigeria'},{value:'UG',label:'Uganda'}]} onChange={value=>{setCountry(value as 'NG'|'UG');setUgandaIdentity({idNumber:'',cardNumber:'',dob:''});setConsent(false);setError('');setSelectedLevel('basic')}} disabled={busy} ariaLabel="Identity document country" /></div>}
       <div aria-label="Verification levels" className="space-y-3">
         <button type="button" onClick={()=>setSelectedLevel('basic')} className={`w-full rounded-2xl border p-4 text-left ${selectedLevel==='basic'?'border-gray-900 dark:border-white':'border-gray-200 dark:border-[#262626]'}`}>
           <span className="flex items-center justify-between text-sm font-semibold"><span>Basic</span>{basicPassed&&<Check aria-label="Basic complete" className="h-4 w-4 text-green-600"/>}</span>
-          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{country==='UG'?'Government ID + selfie':'BVN + selfie'} · {limitDisplay.usdc(50_000)} daily{limitDisplay.secondary(50_000) && <small className="mt-1 block">{limitDisplay.secondary(50_000)}</small>}</span>
+          <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{country==='UG'?'National ID details':'BVN + selfie'} · {limitDisplay.usdc(50_000)} daily{limitDisplay.secondary(50_000) && <small className="mt-1 block">{limitDisplay.secondary(50_000)}</small>}</span>
         </button>
         {country==='NG' && <button type="button" disabled={!basicPassed} onClick={()=>setSelectedLevel('advanced')} className={`w-full rounded-2xl border p-4 text-left disabled:opacity-50 ${selectedLevel==='advanced'?'border-gray-900 dark:border-white':'border-gray-200 dark:border-[#262626]'}`}>
           <span className="flex items-center justify-between text-sm font-semibold"><span>Advanced</span>{complete&&<Check aria-label="Advanced complete" className="h-4 w-4 text-green-600"/>}</span>
@@ -156,9 +159,13 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         </label>)}
       </fieldset>}
       {retryable && <>
-        <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">Use your names exactly as shown on your ID. Given names means your first and middle names. Last name means your surname.</p>
-        <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />I agree to share my identity details and selfie with Smile ID for verification.</label>
-        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className="pocket-cta-primary w-full px-4 py-3.5">{busy ? 'Opening verification...' : state.canCorrectNames ? 'Correct names' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Verify Basic'}</button>
+        {country==='UG' && <div className="space-y-4">
+          <p className="text-xs text-gray-500">Checks your National ID details. No selfie is required.</p>
+          {([{key:'idNumber',label:'National ID number',type:'text',max:14},{key:'cardNumber',label:'Card number',type:'text',max:40},{key:'dob',label:'Date of birth',type:'date',max:10}] as const).map(field=><label key={field.key} className="block text-sm">{field.label}<input type={field.type} maxLength={field.max} autoComplete="off" disabled={busy} value={ugandaIdentity[field.key]} onChange={e=>setUgandaIdentity(value=>({...value,[field.key]:e.target.value}))} className="mt-2 block w-full rounded-xl border border-gray-200 bg-transparent px-4 py-3 dark:border-white/15" /></label>)}
+        </div>}
+        {country==='NG' && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">Use your names exactly as shown on your ID. Given names means your first and middle names. Last name means your surname.</p>}
+        <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />{country==='UG'?'I agree to share my National ID details with Smile ID for verification.':'I agree to share my identity details and selfie with Smile ID for verification.'}</label>
+        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className="pocket-cta-primary w-full px-4 py-3.5">{busy ? country==='UG'?'Submitting verification...':'Opening verification...' : state.canCorrectNames ? 'Correct names' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Verify Basic'}</button>
       </>}
       {(guidance?.action === 'support') && <a href={POCKET_BASE_PATH + POCKET_ROUTES.assistant} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
     </>}

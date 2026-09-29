@@ -1,6 +1,6 @@
 import {pocketTransferAllowance} from './transfer-allowance.js'
 import { smileIdentityMatchKey } from './smile-v3.js'
-import pocketKycV3, { pocketKycV3Callback, requireV3ProductionKyc } from './kyc-v3.js'
+import pocketKycV3, { pocketKycV3Callback, pocketUgandaBasicCallback, requireV3ProductionKyc } from './kyc-v3.js'
 import { startKycPolicy, storedKycPolicy, matchesKycPolicy, type PocketKycContext } from './kyc-policy.js'
 import type { Request, Response } from 'express'
 import { createHash, createHmac, randomUUID } from 'node:crypto'
@@ -230,6 +230,7 @@ export default async function pocketKyc(req: Request, res: Response) {
   return pocketKycV3(req, res)
 }
 export async function pocketKycCallback(req: Request,res: Response) {
+  if(req.query?.ug_basic)return pocketUgandaBasicCallback(req,res)
   if (req.headers['response-signature'] || req.query?.reference) return pocketKycV3Callback(req,res)
   return pocketLegacyKycCallback(req,res)
 }

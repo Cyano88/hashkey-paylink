@@ -36,3 +36,9 @@ console.log('PASS production-only tiers, prerequisite and identity matching, ato
 assert.equal(api.kycLevelFromJobs([{...basic,country:'UG',method:'government_id'}]).level,'basic')
 assert.equal(api.kycLevelFromJobs([{...basic,country:'UG',method:'bvn'}]).level,'none')
 assert.equal(api.kycLevelFromJobs([{...basic,country:'UG',method:'government_id'}],true).level,'none')
+
+const ugBasic={...basic,country:'UG',method:'national_id',legalName:undefined,resultCode:'1020'}
+assert.equal(api.kycLevelFromJobs([ugBasic]).level,'basic')
+for(const patch of [{environment:'sandbox'},{status:'pending'},{status:'review'},{resultCode:'1021'},{identityMatch:undefined},{country:'NG'}])assert.equal(api.kycLevelFromJobs([{...ugBasic,...patch}]).level,'none')
+assert.equal(api.kycLevelFromJobs([ugBasic],true).level,'none')
+console.log('PASS Uganda Basic exact-result tier, no invented legal name, no sandbox/partial/legacy approval.')

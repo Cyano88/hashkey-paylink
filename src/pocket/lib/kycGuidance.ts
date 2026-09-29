@@ -4,6 +4,7 @@ export function kycGuidance(state: State) {
   if (state.status === 'pending') return { title: 'Verification submitted', message: 'Your submission was received. We are waiting for the verification result. You can leave this screen.', action: 'wait' as const }
   if (state.status === 'review' && state.canCorrectNames && state.failureReason === 'submitted_name_mismatch') return { title: 'Check your names', message: 'The names you entered did not match your BVN record. Enter your first and middle names under Given names, and your surname under Last name. A new verification is required.', action: 'correct' as const }
   if (state.status === 'review') {
+    if(state.failureReason==='uganda_partial_match')return {title:'Check your ID details',message:'Your card number or date of birth did not match exactly. Contact support to review the result before submitting again.',action:'support' as const}
     const message = state.failureReason === 'identity_mismatch'
       ? 'Your additional ID details did not match your verified BVN. Contact support to check the mismatch before trying again.'
       : state.failureReason === 'provider_fraud_review'

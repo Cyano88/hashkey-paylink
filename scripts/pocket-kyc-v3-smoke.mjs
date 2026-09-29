@@ -78,3 +78,36 @@ globalThis.fetch=previousFetch
 console.log('PASS Uganda entitlement denial, document intersection, country-bound token, Basic-only approval and wrong-country rejection.')
 
 const ugStatus=await request('uganda-allowed',{action:'status'});assert.equal(ugStatus.body.workflow.basicPassed,true);assert.equal(ugStatus.body.workflow.bvnPassed,false)
+
+// Uganda Basic uses the documented V2 REST contract, never the hosted selfie flow.
+const baseFetch=globalThis.fetch
+let ugResult=null,ugSubmitCount=0,ugTimeout=false
+const signed=value=>{const timestamp=new Date().toISOString();return {...value,timestamp,signature:createHmac('sha256',process.env.SMILE_API_KEY).update(timestamp).update('fixture').update('sid_request').digest('base64')}}
+globalThis.fetch=async(url,init)=>{
+ if(url.endsWith('/v3/services/config'))return new Response(JSON.stringify({idSelection:{basic_kyc:{UG:['NATIONAL_ID_NO_PHOTO']}}}))
+ if(url.endsWith('/v2/verify_async')){ugSubmitCount++;const body=JSON.parse(init.body);assert.equal(body.country,'UG');assert.equal(body.id_type,'NATIONAL_ID_NO_PHOTO');assert.equal(body.secondary_id_number,'123456789');assert.equal(body.dob,'1990-02-03');assert.equal(body.first_name,undefined);if(ugTimeout)throw Error('timeout after accepted');return new Response(JSON.stringify({success:true}))}
+ if(url.endsWith('/v1/job_status'))return new Response(JSON.stringify(signed(ugResult||{job_found:true,job_complete:false})))
+ return baseFetch(url,init)
+}
+const ugInput={idNumber:'CM123456789012',cardNumber:'123456789',dob:'1990-02-03'}
+assert.equal(ugInput.idNumber.length,14)
+assert.equal((await request('ug-invalid',{action:'start',country:'UG',consent:true,identity:{...ugInput,idNumber:'bad'}})).code,400)
+const basic=await request('ug-basic',{action:'start',country:'UG',consent:true,identity:ugInput})
+assert.equal(basic.code,200);assert.equal(basic.body.verification.method,'national_id');assert.equal(basic.body.token,undefined);assert.equal(basic.body.canResume,false)
+assert.equal((await request('ug-basic',{action:'start',country:'UG',consent:true,identity:ugInput})).code,409);assert.equal(ugSubmitCount,1)
+const setUgResult=(j,code='1020',changes={})=>{ugResult={job_found:true,job_complete:true,job_success:true,result:{SmileJobID:'fixture-ug',PartnerParams:{job_id:j.id,user_id:j.userId,job_type:5},ResultCode:code,Actions:{Verify_ID_Number:'Verified',DOB:'Exact Match',Secondary_ID_Number:'Exact Match',...changes}}}}
+setUgResult(job(basic.body.jobId));assert.equal((await request('ug-basic',{action:'status'})).body.level,'basic');assert.equal(job(basic.body.jobId).legalName,undefined)
+const partial=await request('ug-partial',{action:'start',country:'UG',consent:true,identity:ugInput});setUgResult(job(partial.body.jobId),'1021',{DOB:'No Match'});assert.equal((await request('ug-partial',{action:'status'})).body.level,'none');assert.equal(job(partial.body.jobId).failureReason,'uganda_partial_match')
+const inconsistent=await request('ug-inconsistent',{action:'start',country:'UG',consent:true,identity:ugInput});setUgResult(job(inconsistent.body.jobId),'1020',{Secondary_ID_Number:'No Match'});assert.equal((await request('ug-inconsistent',{action:'status'})).body.level,'none')
+const wrong=await request('ug-wrong-binding',{action:'start',country:'UG',consent:true,identity:ugInput});setUgResult(job(wrong.body.jobId));ugResult.result.PartnerParams.user_id='foreign';assert.equal((await request('ug-wrong-binding',{action:'status'})).code,502)
+ugTimeout=true;assert.equal((await request('ug-timeout',{action:'start',country:'UG',consent:true,identity:ugInput})).code,503);const count=ugSubmitCount;assert.equal((await request('ug-timeout',{action:'start',country:'UG',consent:true,identity:ugInput})).code,409);assert.equal(ugSubmitCount,count)
+const persisted=JSON.stringify([...state.values.values()]);for(const secret of Object.values(ugInput))assert.equal(persisted.includes(secret),false,'Raw identity details must not persist')
+ugTimeout=false;ugResult=null
+const callbackStart=await request('ug-callback',{action:'start',country:'UG',consent:true,identity:ugInput});const cj=job(callbackStart.body.jobId)
+const cb=async proof=>{const res={code:200,status(code){this.code=code;return this},json(body){this.body=body;return this}};await m.pocketUgandaBasicCallback({query:{ug_basic:cj.id,proof},body:{ResultCode:'1020'}},res);return res}
+assert.equal((await cb('0'.repeat(64))).code,401)
+assert.equal((await cb(cj.callbackProof)).code,200);assert.equal(job(cj.id).status,'pending','Forged callback success cannot approve')
+assert.equal((await cb(cj.callbackProof)).code,503,'Throttled callback must request redelivery')
+job(cj.id).checkedAt=0;setUgResult(cj);assert.equal((await cb(cj.callbackProof)).code,200);assert.equal(job(cj.id).status,'passed')
+globalThis.fetch=baseFetch
+console.log('PASS Uganda Basic input validation, exact-match-only approval, no fabricated name, partial match review, result binding, duplicate/timeout guard and private fields excluded from storage.')

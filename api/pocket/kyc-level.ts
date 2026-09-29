@@ -9,7 +9,7 @@ export function advancedDailyNgn() {
 }
 export function kycLevelFromJobs(jobs:any[],legacy=false):{level:PocketKycLevel;legalName?:string;firstName?:string;lastName?:string;reference?:string} {
  const method=(j:any)=>{try{return legacy?storedKycPolicy(j).method:j.method}catch{return undefined}}
- const basic=jobs.find(j=>j.environment==='production'&&j.status==='passed'&&(method(j)==='bvn'&&(j.country===undefined||j.country==='NG')||!legacy&&j.country==='UG'&&method(j)==='government_id')&&j.identityMatch&&j.legalName)
+ const basic=jobs.find(j=>j.environment==='production'&&j.status==='passed'&&(method(j)==='bvn'&&(j.country===undefined||j.country==='NG')||!legacy&&j.country==='UG'&&method(j)==='government_id')&&j.identityMatch&&j.legalName || !legacy&&j.environment==='production'&&j.country==='UG'&&method(j)==='national_id'&&j.status==='passed'&&j.resultCode==='1020'&&j.identityMatch)
  if(!basic)return {level:'none'}
  const advanced=jobs.find(j=>j.environment==='production'&&j.status==='passed'&&j.country!=='UG'&&['nin','government_id'].includes(method(j))&&j.identityMatch&&jobs.some(b=>b.id===j.bvnJobId&&b.environment==='production'&&b.status==='passed'&&method(b)==='bvn'&&b.identityMatch===j.identityMatch))
  return {level:advanced?'advanced':'basic',legalName:basic.legalName,firstName:basic.firstName,lastName:basic.lastName,reference:basic.providerJobId||basic.id}
