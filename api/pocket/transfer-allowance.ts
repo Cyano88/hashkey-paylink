@@ -33,13 +33,13 @@ async function refreshReleases(owner:string) {
  if(release.length)await mutateDurableJson<Ledger>(key(owner),r=>({charges:(r?.charges||[]).map(c=>release.some(old=>old.id===c.id&&old.createdAt===c.createdAt&&old.providerOrderId===c.providerOrderId)?{...c,state:'released' as const}:c)}))
 }
 export async function pocketTransferAllowance(owner:string) {
- const {level}=await readPocketKycLevel(owner);await refreshReleases(owner)
+ const verification=await readPocketKycLevel(owner),level=verification.paymentLevel||verification.level;await refreshReleases(owner)
  const ledger=await readDurableJson<Ledger>(key(owner)),day=nigeriaDay(Date.now()),limit=cap(level)
  const used=(ledger?.charges||[]).filter(c=>c.day===day&&c.state==='reserved').reduce((n,c)=>n+c.amount,0)/100
- return {level,dailyLimitNgn:limit,remainingNgn:Math.max(0,limit-used),advancedDailyLimitNgn:advancedDailyNgn(),resetsAt:new Date(Date.parse(day+'T00:00:00Z')+86400000-3600000).toISOString()}
+ return {level:verification.level,paymentLevel:level,dailyLimitNgn:limit,remainingNgn:Math.max(0,limit-used),advancedDailyLimitNgn:advancedDailyNgn(),resetsAt:new Date(Date.parse(day+'T00:00:00Z')+86400000-3600000).toISOString()}
 }
 export async function reservePocketBankAllowance(owner:string,input:{id:string;amount:string;currency:string;usdc?:string;providerOrderId?:string},checkOnly=false) {
- const {level}=await readPocketKycLevel(owner)
+ const verification=await readPocketKycLevel(owner),level=verification.paymentLevel||verification.level
  if(level==='none')throw failure('KYC_BASIC_REQUIRED','Complete Basic verification to use bank transfers.')
  await refreshReleases(owner)
  const existing=(await readDurableJson<Ledger>(key(owner)))?.charges.find(c=>c.id===input.id&&c.state==='reserved')

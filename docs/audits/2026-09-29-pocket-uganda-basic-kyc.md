@@ -26,3 +26,11 @@ Uganda requires NIN (14 alphanumeric characters), card number and date of birth.
 KYC V3 regression and Uganda Basic tests pass: input validation, exact/partial/inconsistent result handling, owner binding, duplicate prevention, ambiguous timeout and raw-identity exclusion. Transfer tier tests include sandbox/pending/partial/legacy exclusion.
 
 No real applicant, paid submission, production deploy or Pixel installation performed. A consented live test is still required to verify V2 account permission and provider result shape before claiming end-to-end readiness.
+
+## Single verification flow - subsequent product decision
+
+User authorized a successful Uganda Basic check to cover the higher payment flow. Verification evidence remains Basic/no-photo; separate paymentLevel grants access to the existing configured Advanced payment allowance. Uganda UI shows one Identity verification option and no Advanced upgrade CTA. Nigeria retains its two-step flow. Over-limit Uganda payments return daily-limit reached, not a request for an unavailable second check.
+
+Production configuration read on this change: POCKET_ADVANCED_DAILY_LIMIT_NGN is unset. Until the daily amount is selected and configured, the conservative existing 50,000 NGN-equivalent fallback still applies. No unlimited payments or invented new limit. Asked user to select the daily USDC amount; no currency conversion/config change applied.
+
+Added regression coverage for Uganda above-Basic allowance, exact cap, missing configuration, evidence-vs-payment distinction and unchanged Nigeria limits. Local only; no deploy or device installation.

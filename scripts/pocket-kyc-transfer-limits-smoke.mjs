@@ -42,3 +42,18 @@ assert.equal(api.kycLevelFromJobs([ugBasic]).level,'basic')
 for(const patch of [{environment:'sandbox'},{status:'pending'},{status:'review'},{resultCode:'1021'},{identityMatch:undefined},{country:'NG'}])assert.equal(api.kycLevelFromJobs([{...ugBasic,...patch}]).level,'none')
 assert.equal(api.kycLevelFromJobs([ugBasic],true).level,'none')
 console.log('PASS Uganda Basic exact-result tier, no invented legal name, no sandbox/partial/legacy approval.')
+
+// Uganda has one verification step; payment access uses the configured higher cap.
+assert.equal(api.kycLevelFromJobs([ugBasic]).paymentLevel,'advanced')
+assert.equal(api.kycLevelFromJobs([basic]).paymentLevel,'basic')
+const ugOwner='uganda-single';state.values.set('hashpaylink:pocket-kyc:v3:production:'+createHash('sha256').update(ugOwner).digest('hex'),{jobs:[ugBasic]})
+assert.equal((await api.pocketTransferAllowance(ugOwner)).dailyLimitNgn,50000,'Missing higher cap must not mean unlimited')
+process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN='100000'
+await api.reservePocketBankAllowance(ugOwner,{id:'ug-high',amount:'60000',currency:'NGN'})
+const ugAllowance=await api.pocketTransferAllowance(ugOwner)
+assert.equal(ugAllowance.level,'basic','Do not mislabel the actual evidence')
+assert.equal(ugAllowance.paymentLevel,'advanced');assert.equal(ugAllowance.remainingNgn,40000)
+await assert.rejects(api.reservePocketBankAllowance(ugOwner,{id:'ug-over',amount:'40000.01',currency:'NGN'}),e=>e.code==='KYC_DAILY_LIMIT','No second verification prompt for Uganda')
+await assert.rejects(api.reservePocketBankAllowance(owner,{id:'ng-still-basic',amount:'60000',currency:'NGN'}),e=>e.code==='KYC_ADVANCED_REQUIRED')
+delete process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN
+console.log('PASS Uganda single-check higher payment access, bounded cap, no upgrade prompt and unchanged Nigeria limits.')
