@@ -17,21 +17,23 @@ const CATEGORIES: Array<{ value: PocketDataBundleCategory | 'popular'; label: st
   { value: 'monthly', label: 'Monthly' },
 ]
 
-function formatNaira(value: number) {
+function formatNaira(value: number, currency: string) {
   return new Intl.NumberFormat('en-NG', {
     style: 'currency',
-    currency: 'NGN',
+    currency,
     maximumFractionDigits: 0,
   }).format(value)
 }
 
 export default function PocketDataBundlePicker({
+  currency='NGN',
   serviceId,
   variations,
   value,
   disabled,
   onChange,
 }: {
+  currency?:'NGN'|'UGX'
   serviceId: string
   variations: PocketDataVariation[]
   value: string
@@ -96,7 +98,7 @@ export default function PocketDataBundlePicker({
               {selected && <span className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-white"><Check className="h-2.5 w-2.5 stroke-[3]" /></span>}
               <span className="block text-[13px] font-black leading-tight tracking-[-0.03em] text-gray-950 dark:text-white">{bundle.dataAmount}</span>
               <span className="mt-0.5 block truncate text-[9px] font-semibold text-gray-500 dark:text-gray-400">{bundle.validity}</span>
-              <span className="mt-2 block text-[10px] font-black tabular-nums text-gray-800 dark:text-gray-100">{formatNaira(bundle.price)}</span>
+              <span className="mt-2 block text-[10px] font-black tabular-nums text-gray-800 dark:text-gray-100">{formatNaira(bundle.price,currency)}</span>
             </button>
           )
         })}

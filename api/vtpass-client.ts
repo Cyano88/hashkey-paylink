@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto'
+import { assertInternationalBill, internationalVariations, type InternationalBill } from './vtpass-international.js'
+import { normalizeUgandaPhone } from '../src/pocket/lib/pocketBillCountry.js'
 import type { VtpassPhase0Config } from './vtpass-config.js'
 
 export type VtpassTransactionStatus = 'delivered' | 'pending' | 'failed' | 'reversed'
@@ -379,6 +381,36 @@ export function createVtpassClient(options: VtpassClientOptions) {
     }
   }
 
+  async function listUgandaOperators(productTypeId: '1' | '4') {
+    const { body } = await requestJson(`/api/get-international-airtime-operators?code=UG&product_type_id=${productTypeId}`, 'GET')
+    const content = record(body).content
+    if (!Array.isArray(content)) throw new VtpassClientError({code:'VTPASS_INVALID_RESPONSE',message:'Uganda providers are temporarily unavailable.',status:503})
+    return content.flatMap(item => {
+      const v = record(item), id = text(v.operator_id), name = text(v.name)
+      return /^\d{1,8}$/.test(id) && name ? [{ serviceId:`ug-${id}`, name, imageUrl: text(v.operator_image), minimumAmount:null, maximumAmount:null, convenienceFee:'', productType:productTypeId }] : []
+    })
+  }
+  async function listUgandaVariations(operatorId: string, productTypeId: '1' | '4') {
+    if (!/^\d{1,8}$/.test(operatorId)) throw new VtpassClientError({code:'VTPASS_INVALID_SERVICE',message:'Choose an available network.',status:400})
+    const {body} = await requestJson(`/api/service-variations?serviceID=foreign-airtime&operator_id=${operatorId}&product_type_id=${productTypeId}`, 'GET')
+    return internationalVariations(record(body).content, productTypeId)
+  }
+  async function purchaseInternational(input: { international: InternationalBill; variationCode:string; phone:string; requestId:string; email:string }) {
+    assertPurchaseAllowed(config)
+    assertInternationalBill(input.international,input.phone)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) throw new VtpassClientError({code:'VTPASS_INVALID_EMAIL',message:'A verified contact email is required for this purchase.',status:400})
+    const requestId=normalizeRequestId(input.requestId)
+    assertPurchaseRequestIdDate(requestId,now())
+    const phone=normalizeUgandaPhone(input.phone)
+    const {body}=await requestJson('/api/pay','POST',{
+      request_id:requestId,serviceID:'foreign-airtime',billersCode:phone,phone,
+      variation_code:normalizeVariationCode(input.variationCode),country_code:'UG',
+      operator_id:input.international.operatorId,product_type_id:input.international.productTypeId,
+      amount:Number(input.international.deliveryAmount),email:input.email,
+    },true)
+    return normalizeVtpassTransaction(body,requestId)
+  }
+
   async function getWalletBalance() {
     const { body } = await requestJson('/api/balance', 'GET')
     const balance = finiteNumber(record(record(body).contents).balance)
@@ -598,6 +630,7 @@ export function createVtpassClient(options: VtpassClientOptions) {
   }
 
   return {
+    listUgandaOperators, listUgandaVariations, purchaseInternational,
     getWalletBalance,
     listServiceCategories,
     listAirtimeServices,

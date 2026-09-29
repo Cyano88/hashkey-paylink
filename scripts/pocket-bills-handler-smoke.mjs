@@ -494,3 +494,29 @@ assert.ok(list.body.data.intents.length >= 5)
 assert.ok(list.body.data.intents.every(intent => !('ownerId' in intent)))
 
 console.log('Pocket Bills handler smoke test passed: auth, quotes, reserve, exact payment verification, atomic vending, idempotency, reconciliation, and refund routing are deterministic.')
+
+// Uganda delivery value must never be mistaken for the provider's NGN charge.
+now += 61_000
+const ugProvider={...provider,
+ listUgandaOperators:async()=>[{serviceId:'ug-246',name:'Uganda Airtel',minimumAmount:null,maximumAmount:null,imageUrl:'https://vtpass.com/resources/images/operators/6.png'}],
+ listUgandaVariations:async(_operator,type)=>[{variationCode:type==='1'?'3028':'5200',name:type==='1'?'Enter flexible amount':'Daily 30MB Mobile Data',fixedPrice:type==='4',amount:250,minimum:50,maximum:500000,rate:0.3962,chargedAmount:99.03}],
+ purchaseInternational:async input=>{ugPurchases++;assert.equal(input.international.deliveryAmount,'1000.00');assert.equal(input.phone,'256700000000');assert.equal(input.email,'owner@example.com');return{...providerResult(input,'delivered'),recipient:input.phone,amountNgn:396.2}}
+}
+let ugPurchases=0
+const ugDeps={...dependencies,provider:ugProvider,config:{...config,environment:'live'}}
+const ugQuote=createPocketBillsQuoteHandler(ugDeps),ugCatalog=createPocketBillsCatalogHandler(ugDeps)
+const ugInput={country:'UG',category:'airtime',service_id:'ug-246',phone:'0700000000',amount_local:'1000',amount_ngn:'0.01',payer_wallet:'0x2222222222222222222222222222222222222222'}
+const ug=await request(ugQuote,ugInput,{idempotencyKey:'bill:uganda:quote:0001'})
+assert.equal(ug.statusCode,200,JSON.stringify(ug.body));const ugIntent=ug.body.data.intent
+assert.equal(ugIntent.amountNgn,'396.2');assert.equal(ugIntent.international.deliveryAmount,'1000.00');assert.equal(ugIntent.international.deliveryCurrency,'UGX');assert.equal('providerEmail' in ugIntent,false)
+assert.ok(Number(ugIntent.platformFeeUsdc)>0)
+const ugWrong=await request(ugQuote,{...ugInput,phone:'08100000000'},{idempotencyKey:'bill:uganda:phone:0001'});assert.equal(ugWrong.statusCode,400)
+const ugTv=await request(ugCatalog,{}, {method:'GET',query:{category:'tv',country:'UG'}});assert.equal(ugTv.statusCode,400)
+const ugWrongOperator=await request(ugQuote,{...ugInput,service_id:'ug-999'},{idempotencyKey:'bill:uganda:operator:1'});assert.equal(ugWrongOperator.statusCode,400)
+const ugData=await request(ugQuote,{...ugInput,category:'data',variation_code:'5200'},{idempotencyKey:'bill:uganda:data:0001'});assert.equal(ugData.statusCode,200);assert.equal(ugData.body.data.intent.amountNgn,'99.03');assert.equal(ugData.body.data.intent.international.deliveryAmount,'250.00')
+await request(createPocketBillsPayHandler(ugDeps),{action:'prepare',intent_id:ugIntent.id})
+verifyMode='confirmed';const ugTx='0x'+'7a'.repeat(32)
+await confirmPocketBillPayment(ugDeps,'did:privy:owner-1',ugIntent.id,ugTx)
+await confirmPocketBillPayment(ugDeps,'did:privy:owner-1',ugIntent.id,ugTx)
+assert.equal(ugPurchases,1);assert.equal((await store.getOwnedIntent('did:privy:owner-1',ugIntent.id)).state,'delivered')
+console.log('PASS Uganda destination isolation, canonical phone, server pricing, platform fee, private provider email, data face value, and exactly-once delivery.')

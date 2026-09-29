@@ -1,3 +1,4 @@
+import {assertInternationalBill, type InternationalBill} from '../vtpass-international.js'
 import { formatUnits, isAddress, parseUnits } from 'viem'
 import { paymentFeeBreakdown } from '../../src/lib/platformFees.js'
 import { rankPocketDataPlans } from './bills-popularity.js'
@@ -28,6 +29,8 @@ export type PocketBillsIntentState =
 
 export type PocketBillsIntent = {
   id: string
+  international?: InternationalBill
+  providerEmail?: string
   ownerId: string
   idempotencyKey: string
   requestFingerprint: string
@@ -79,6 +82,7 @@ export type PocketBillsIntent = {
 
 export type PublicPocketBillsIntent = Omit<
   PocketBillsIntent,
+  | 'providerEmail'
   | 'ownerId'
   | 'idempotencyKey'
   | 'requestFingerprint'
@@ -248,6 +252,7 @@ function assertState(intent: PocketBillsIntent, allowed: PocketBillsIntentState[
 
 function publicIntent(intent: PocketBillsIntent): PublicPocketBillsIntent {
   const {
+    providerEmail: _providerEmail,
     ownerId: _ownerId,
     idempotencyKey: _idempotencyKey,
     requestFingerprint: _requestFingerprint,
@@ -333,6 +338,8 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
   }
 
   async function createQuote(input: {
+    international?: InternationalBill
+    providerEmail?: string
     ownerId: string
     idempotencyKey: string
     category?: 'airtime' | 'data' | 'tv' | 'electricity'
@@ -378,12 +385,17 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     if (!IDEMPOTENCY_PATTERN.test(idempotencyKey)) throw new PocketBillsStoreError('BILLS_INVALID_IDEMPOTENCY_KEY', 'A valid idempotency key is required.')
     // Data IDs are accepted only after the authenticated request handler has
     // matched them against VTpass's current provider catalog.
-    const supportedService = category === 'airtime' ? AIRTIME_SERVICE_IDS.has(serviceId) : DATA_SERVICE_ID_PATTERN.test(serviceId)
+    const international = input.international
+    if (international) {
+      assertInternationalBill(international,phone)
+      if (!['airtime','data'].includes(category) || serviceId !== `ug-${international.operatorId}` || international.productTypeId !== (category==='data'?'4':'1') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.providerEmail || '')) throw new PocketBillsStoreError('BILLS_INVALID_DESTINATION','Invalid Uganda purchase.')
+    }
+    const supportedService = international ? /^ug-\d+$/.test(serviceId) : category === 'airtime' ? AIRTIME_SERVICE_IDS.has(serviceId) : DATA_SERVICE_ID_PATTERN.test(serviceId)
     if (!supportedService || !serviceName) throw new PocketBillsStoreError('BILLS_INVALID_SERVICE', `A supported ${category} provider is required.`)
-    if (category !== 'airtime' && (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode) || !variationName)) {
+    if ((international || category !== 'airtime') && (!/^[a-zA-Z0-9._-]{1,100}$/.test(variationCode) || !variationName)) {
       throw new PocketBillsStoreError('BILLS_INVALID_VARIATION', `A valid ${category === 'electricity' ? 'meter type' : 'plan'} is required.`)
     }
-    const validRecipient = category === 'airtime' ? /^0\d{10}$/.test(phone) : category === 'data' ? /^\d{10,12}$/.test(phone) : /^\d{8,15}$/.test(phone)
+    const validRecipient = international ? /^2567\d{8}$/.test(phone) : category === 'airtime' ? /^0\d{10}$/.test(phone) : category === 'data' ? /^\d{10,12}$/.test(phone) : /^\d{8,15}$/.test(phone)
     if (!validRecipient) {
       throw new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'tv' ? 'Enter a valid smartcard number.' : category === 'electricity' ? 'Enter a valid meter number.' : category === 'data' ? 'Enter a valid Data recipient.' : 'Enter a valid Nigerian phone number.')
     }
@@ -406,7 +418,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     // Idempotency follows the user's semantic request. Server-generated quote
     // values and expiry may drift between retries, but the original stored quote
     // must be replayed instead of producing a conflict or a second intent.
-    const fingerprint = JSON.stringify({ category, serviceId, variationCode, phone, contactPhone, amountNgn, payerWallet: payerWallet.toLowerCase() })
+    const fingerprint = JSON.stringify({ ...(international ? {international} : {}), category, serviceId, variationCode, phone, contactPhone, amountNgn, payerWallet: payerWallet.toLowerCase() })
     return mutate(store => {
       const index = idempotencyIndex(ownerId, idempotencyKey)
       const existingId = store.idempotency[index]
@@ -444,6 +456,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
         requestFingerprint: fingerprint,
         requestId,
         state: 'quoted',
+        ...(international ? {international: structuredClone(international), providerEmail:input.providerEmail} : {}),
         category,
         serviceId,
         serviceName,
@@ -498,7 +511,7 @@ export function createPocketBillsStore(options: BillsStoreOptions) {
     const cooldownMs = Math.max(5_000, Math.min(Number(input.cooldownMs) || 15_000, 5 * 60_000))
     const leaseMs = Math.max(15_000, Math.min(Number(input.leaseMs) || 60_000, 5 * 60_000))
     return mutate(store => {
-      let intentId = store.providerRequests[requestId]
+      let intentId: string | undefined = store.providerRequests[requestId]
       let intent = intentId ? store.intents[intentId] : undefined
       if (!intent) {
         intent = Object.values(store.intents).find(item => item.requestId === requestId)

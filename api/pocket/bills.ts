@@ -1,3 +1,5 @@
+import {billDestination,normalizeUgandaPhone} from '../../src/pocket/lib/pocketBillCountry.js'
+import {internationalOperator,priceInternationalBill,type InternationalBill} from '../vtpass-international.js'
 import { randomUUID } from 'node:crypto'
 import type { Request, Response } from 'express'
 import { circleLinkKey, readCircleLink, verifiedPrivyUser, type VerifiedLinkUser } from '../privy-circle-link.js'
@@ -79,7 +81,11 @@ function normalizeBillerCode(value: unknown, category: 'tv' | 'electricity') {
   return /^\d{8,15}$/.test(code) ? code : ''
 }
 
-async function servicesForCategory(provider: VtpassClient, category: BillsCategory) {
+async function servicesForCategory(provider: VtpassClient, category: BillsCategory, country = 'NG') {
+  if (country === 'UG') {
+    if (category !== 'airtime' && category !== 'data') throw new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE','This service is available for Nigerian accounts only.',400)
+    return provider.listUgandaOperators(category === 'data' ? '4' : '1')
+  }
   if (category === 'data') {
     const services = await provider.listDataServices()
     return services.filter(service => SUPPORTED_DATA_SERVICE_IDS.has(service.serviceId.toLowerCase()))
@@ -303,24 +309,24 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       const identity = await dependencies.verifyUser(req)
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'quote', windowMs: 60_000, max: 12 })
       const category = normalizeCategory(req.body?.category)
+      const country = billDestination(req.body?.country)
+      if (country === 'UG' && !['airtime','data'].includes(category)) throw new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE','This service is available for Nigerian accounts only.')
       if (!dependencies.config.liveCategories.includes(category)) {
         return respond.fail(new PocketBillsStoreError('BILLS_CATEGORY_DISABLED', `${categoryLabel(category)} is not enabled for this VTpass account.`, 503))
       }
       const serviceId = cleanText(req.body?.service_id, 40).toLowerCase()
-      const phone = category === 'data' ? normalizeDataRecipient(req.body?.phone, serviceId, dependencies.config.environment)
+      const phone = country === 'UG' ? normalizeUgandaPhone(String(req.body?.phone || '')) : category === 'data' ? normalizeDataRecipient(req.body?.phone, serviceId, dependencies.config.environment)
         : category === 'tv' || category === 'electricity' ? normalizeBillerCode(req.body?.phone, category)
           : normalizeNigerianPhone(req.body?.phone)
       const contactPhone = category === 'tv' || category === 'electricity' ? normalizeNigerianPhone(req.body?.contact_phone) : ''
       let amountNgn = canonicalNgn(req.body?.amount_ngn)
       const payerWallet = cleanText(req.body?.payer_wallet, 80)
-      if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'tv' ? 'Enter a valid smartcard number.' : category === 'electricity' ? 'Enter a valid meter number.' : category === 'data' ? 'Use the VTpass sandbox test account for this provider.' : 'Enter a valid Nigerian phone number.'), 'phone')
+      if (!phone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', category === 'tv' ? 'Enter a valid smartcard number.' : category === 'electricity' ? 'Enter a valid meter number.' : country === 'UG' ? 'Enter a valid Ugandan mobile number.' : category === 'data' ? 'Enter a valid Nigerian phone number.' : 'Enter a valid Nigerian phone number.'), 'phone')
       if ((category === 'tv' || category === 'electricity') && !contactPhone) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_PHONE', 'Enter a valid Nigerian contact phone number.'), 'contactPhone')
-      if (dependencies.config.environment === 'sandbox' && category === 'airtime' && phone !== '08011111111') {
+      if (country === 'NG' && dependencies.config.environment === 'sandbox' && category === 'airtime' && phone !== '08011111111') {
         return respond.fail(new PocketBillsStoreError(
           'BILLS_SANDBOX_PHONE_REQUIRED',
-          category === 'data'
-            ? 'VTpass sandbox Data uses the test number 08011111111. No real Data bundle is delivered.'
-            : 'VTpass sandbox Airtime uses the test number 08011111111. No real Airtime is delivered.',
+          'VTpass sandbox Airtime uses the test number 08011111111. No real Airtime is delivered.',
         ), 'phone')
       }
       const linkedPayerWallet = await dependencies.readPayerWallet(identity.userId)
@@ -328,14 +334,24 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
         return respond.fail(new PocketBillsStoreError('BILLS_WALLET_NOT_LINKED', 'Open your linked Base Circle wallet first.', 409), 'payerWallet')
       }
 
-      const services = await servicesForCategory(dependencies.provider, category)
+      const services = await servicesForCategory(dependencies.provider, category, country)
       const service = services.find(item => item.serviceId === serviceId)
       if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${categoryLabel(category)} provider.`), 'serviceId')
       let variationCode = ''
       let variationName = ''
       let customerName = ''
       let customerAddress = ''
-      if (category === 'data' || category === 'tv') {
+      let international: InternationalBill | undefined
+      if (country === 'UG') {
+        if (!identity.email) throw new PocketBillsStoreError('BILLS_EMAIL_REQUIRED','Sign in with your verified email before purchasing.')
+        const operatorId=internationalOperator(serviceId),productTypeId=category==='data'?'4':'1'
+        const variations=await dependencies.provider.listUgandaVariations(operatorId,productTypeId)
+        const variation=category==='airtime'?variations.find(v=>!v.fixedPrice):variations.find(v=>v.variationCode===req.body?.variation_code)
+        if(!variation) throw new PocketBillsStoreError('BILLS_INVALID_VARIATION','Select an available Uganda product.')
+        const priced=priceInternationalBill(variation,req.body?.amount_local)
+        amountNgn=priced.amountNgn;variationCode=variation.variationCode;variationName=variation.name
+        international={country:'UG',operatorId,productTypeId,deliveryCurrency:'UGX',deliveryAmount:priced.deliveryAmount}
+      } else if (category === 'data' || category === 'tv') {
         variationCode = cleanText(req.body?.variation_code, 100)
         const variations = await dependencies.provider.listServiceVariations(serviceId)
         const variation = variations.find(item => item.variationCode === variationCode)
@@ -369,6 +385,7 @@ export function createPocketBillsQuoteHandler(dependencies: BillsDependencies) {
       const created = await dependencies.store.createQuote({
         ownerId: identity.userId,
         idempotencyKey,
+        ...(international ? {international,providerEmail:identity.email} : {}),
         category,
         serviceId: service.serviceId,
         serviceName: service.name,
@@ -442,7 +459,7 @@ export async function confirmPocketBillPayment(dependencies: BillsDependencies, 
   const claim = await dependencies.store.claimVending(ownerId, intentId)
   if (!claim.claimed) return claim.intent
   try {
-    const result = claim.intent.category === 'data' ? await dependencies.provider.purchaseData({
+    const result = claim.intent.international ? await dependencies.provider.purchaseInternational({international:claim.intent.international,variationCode:claim.intent.variationCode,phone:claim.intent.phone,requestId:claim.intent.requestId,email:claim.intent.providerEmail || ''}) : claim.intent.category === 'data' ? await dependencies.provider.purchaseData({
           serviceId: claim.intent.serviceId,
           variationCode: claim.intent.variationCode,
           phone: claim.intent.phone,
@@ -556,16 +573,21 @@ export function createPocketBillsCatalogHandler(dependencies: BillsDependencies)
     try {
       const identity = await dependencies.verifyUser(req)
       const category = normalizeCategory(req.query?.category || 'data')
-      if (category === 'airtime') return respond.fail(new PocketBillsStoreError('BILLS_INVALID_CATEGORY', 'Select Data, TV, or Electricity.'))
+      const country = billDestination(req.query?.country)
       if (!dependencies.config.liveCategories.includes(category)) return respond.fail(new PocketBillsStoreError('BILLS_CATEGORY_DISABLED', `${categoryLabel(category)} is not enabled for this VTpass account.`, 503))
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: `catalog:${category}`, windowMs: 60_000, max: 20 })
       const serviceId = cleanText(req.query?.service_id, 40).toLowerCase()
-      const services = await servicesForCategory(dependencies.provider, category)
+      const services = await servicesForCategory(dependencies.provider, category, country)
       if (!serviceId) {
-        return respond.success({ services: services.map(service => ({ serviceId: service.serviceId, name: service.name })) })
+        return respond.success({ services: services.map(service => ({ serviceId: service.serviceId, name: service.name, ...(service.imageUrl?{imageUrl:service.imageUrl}:{}) })) })
       }
       const service = services.find(item => item.serviceId === serviceId)
       if (!service) return respond.fail(new PocketBillsStoreError('BILLS_INVALID_SERVICE', `Select a supported ${categoryLabel(category)} provider.`), 'serviceId')
+      if (country === 'UG') {
+        const plans=await dependencies.provider.listUgandaVariations(internationalOperator(serviceId),category==='data'?'4':'1')
+        return respond.success({variations:plans.map(v=>({variationCode:v.variationCode,name:v.name,amountNgn:v.fixedPrice?v.chargedAmount.toFixed(2):'0',amountLocal:v.fixedPrice?v.amount.toFixed(2):'0',currency:'UGX',minimum:v.minimum,maximum:v.maximum,available:true}))})
+      }
+      if (category === 'airtime') return respond.success({variations:[]})
       if (category === 'electricity') return respond.success({ service: { serviceId: service.serviceId, name: service.name }, variations: [] })
       const popular = category === 'data' ? await dependencies.store.popularDataPlans(serviceId).catch(() => []) : []
       const popularityRanks = new Map(popular.map((code, index) => [code, index + 1]))
@@ -592,6 +614,7 @@ export function createPocketBillsVerifyHandler(dependencies: BillsDependencies) 
     if (req.method !== 'POST') return respond.fail(new PocketBillsStoreError('BILLS_METHOD_NOT_ALLOWED', 'Method not allowed.', 405))
     if (!dependencies.config.canVend) return respond.fail(new PocketBillsStoreError('BILLS_VERIFY_DISABLED', 'Customer verification is not enabled.', 503))
     try {
+      if (billDestination(req.body?.country) !== 'NG') throw new PocketBillsStoreError('BILLS_COUNTRY_UNAVAILABLE','This service is available for Nigerian accounts only.')
       const identity = await dependencies.verifyUser(req)
       await dependencies.store.consumeMutationLimit({ ownerId: identity.userId, action: 'verify', windowMs: 60_000, max: 12 })
       const category = normalizeCategory(req.body?.category)

@@ -44,16 +44,19 @@ export async function smileV3Replay(config:SmileConfig,jobId:string,binding:{ref
  const response=await fetch(host(config)+'/v3/replay/'+encodeURIComponent(jobId),{method:'POST',body,headers:{'SmileID-Token':token,'SmileID-Partner-ID':config.partnerId,Accept:'application/json'},signal:AbortSignal.timeout(15000)})
  return json(response)
 }
-export async function assertSmileV3Policy(config:SmileConfig,policy:{product:string;idSelection:{NG:string[]}}):Promise<string[]>{
+export async function assertSmileV3Policy(config:SmileConfig,policy:{country?:string;product:string;idSelection:Record<string,string[]>}):Promise<string[]>{
+ const country=policy.country || 'NG'
+ if(!['NG','UG'].includes(country))throw v3Failure('Unsupported verification country.',400)
+ const requested=policy.idSelection[country] || []
  const token=await smileV3Token(config)
  const [response,documents]=await Promise.all([
   fetch(host(config)+'/v3/services/config',{headers:{'SmileID-Token':token,'SmileID-Partner-ID':config.partnerId,'SmileID-Source-SDK':'hosted_web','SmileID-Source-SDK-Version':'12.0.4',Accept:'application/json'},signal:AbortSignal.timeout(15000)}).then(json),
-  policy.product==='doc_verification'?fetch(host(config)+'/v3/services/supported_documents?country_code=NG',{headers:{Accept:'application/json'},signal:AbortSignal.timeout(15000)}).then(json):Promise.resolve(null),
+  policy.product==='doc_verification'?fetch(host(config)+'/v3/services/supported_documents?country_code='+country,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(15000)}).then(json):Promise.resolve(null),
  ])
- const allowed=response.idSelection?.[policy.product]?.NG
- const documentTypes=documents?.valid_documents?.find((item:{country?:{code?:string}})=>item.country?.code==='NG')?.id_types?.map((item:{code?:string})=>item.code)
- const selected=policy.idSelection.NG.filter(id=>Array.isArray(allowed)&&allowed.includes(id)&&(!documents||Array.isArray(documentTypes)&&documentTypes.includes(id)))
- if(!selected.length||policy.product!=='doc_verification'&&selected.length!==policy.idSelection.NG.length)throw v3Failure('This verification is not available yet. Please contact Pocket support.',503,'KYC_METHOD_UNAVAILABLE',false)
+ const allowed=response.idSelection?.[policy.product]?.[country]
+ const documentTypes=documents?.valid_documents?.find((item:{country?:{code?:string}})=>item.country?.code===country)?.id_types?.map((item:{code?:string})=>item.code)
+ const selected=requested.filter(id=>Array.isArray(allowed)&&allowed.includes(id)&&(!documents||Array.isArray(documentTypes)&&documentTypes.includes(id)))
+ if(!selected.length||policy.product!=='doc_verification'&&selected.length!==requested.length)throw v3Failure(country==='UG'?'Uganda identity verification is not available yet. Please try again once it is enabled.':'This verification is not available yet. Please contact Pocket support.',503,'KYC_METHOD_UNAVAILABLE',false)
  return selected
 }
 export function smileIdentityMatchKey(config:SmileConfig){

@@ -32,3 +32,7 @@ await api.reservePocketBankAllowance(owner,{id:'generation',amount:'1000',curren
 await reserve('decimal','1.10');assert.equal((await api.pocketTransferAllowance(owner)).remainingNgn,49998.90)
 assert.equal(api.advancedDailyNgn(),null);process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN='100000';assert.equal(api.advancedDailyNgn(),100000);delete process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN
 console.log('PASS production-only tiers, prerequisite and identity matching, atomic cross-payout concurrency, exact cap, idempotency, refund/cancel release and ambiguous expiry held, ambiguous failure held, Lagos midnight, UGX equivalent, and fail-closed Advanced configuration.')
+
+assert.equal(api.kycLevelFromJobs([{...basic,country:'UG',method:'government_id'}]).level,'basic')
+assert.equal(api.kycLevelFromJobs([{...basic,country:'UG',method:'bvn'}]).level,'none')
+assert.equal(api.kycLevelFromJobs([{...basic,country:'UG',method:'government_id'}],true).level,'none')

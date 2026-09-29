@@ -59,3 +59,22 @@ const held=await start('legacy-advisory');const heldEvent=event(held,{fraud:true
 process.env.SMILE_ENVIRONMENT='production';assert.equal((await start('production')).code,503);process.env.SMILE_PRODUCTION_ENABLED='true';delete process.env.POCKET_KYC_IDENTITY_MATCH_KEY;assert.equal((await start('missing-match-key')).body.code,'KYC_MATCH_KEY_REQUIRED');process.env.POCKET_KYC_IDENTITY_MATCH_KEY='fixture-secret';assert.equal((await request('alice',{action:'status'})).body.status,'not_started');const prod=await start('production');await deliver(event(prod));process.env.SMILE_API_KEY='rotated-provider-key';const prodDoc=await start('production','government_id');await deliver(event(prodDoc));assert.equal((await request('production',{action:'status'})).body.verified,true);assert.equal(await m.requireV3ProductionKyc('production'),'Test Person')
 const raw=JSON.stringify([...state.values.values()]);assert.equal(raw.includes('1990-02-03'),false);assert.equal(raw.includes('id_number'),false)
 console.log('PASS method entitlement preflight, durable consent, stable identity match after provider key rotation, missing-callback replay, untrusted hint isolation, permanent errors, and V3 auth, bound token policy and callback proof, owner isolation, duplicate prevention, recovery, signed callback plus provider truth, replay, two-step identity matching, sandbox isolation, billing errors, and no raw ID/DOB persistence.')
+
+const ugUnavailable=await request('uganda-no-access',{action:'start',country:'UG',method:'government_id',consent:true})
+assert.equal(ugUnavailable.body.code,'KYC_METHOD_UNAVAILABLE');assert.equal(ugUnavailable.body.retryable,false)
+assert.equal([...state.values.values()].some(v=>v.jobs?.some(j=>j.country==='UG')),false)
+const previousFetch=globalThis.fetch
+globalThis.fetch=async(url,init)=>{
+ if(url.endsWith('/v3/services/config'))return new Response(JSON.stringify({idSelection:{doc_verification:{UG:['IDENTITY_CARD']}}}))
+ if(url.includes('/v3/services/supported_documents')){assert.ok(url.endsWith('country_code=UG'));return new Response(JSON.stringify({valid_documents:[{country:{code:'UG'},id_types:[{code:'IDENTITY_CARD'}]}]}))}
+ return previousFetch(url,init)
+}
+const ugStart=await request('uganda-allowed',{action:'start',country:'UG',method:'government_id',consent:true});assert.equal(ugStart.code,200);assert.deepEqual(ugStart.body.verification.idSelection,{UG:['IDENTITY_CARD']})
+const ugBound=state.calls.filter(c=>c.url.endsWith('/v3/token')&&c.init.body?.get('product')).at(-1);assert.equal(JSON.parse(ugBound.init.body.get('payload')).country,'UG')
+const ugEvent=event(ugStart,{fields:{country:'UG',id_type:'IDENTITY_CARD'}});await deliver(ugEvent);assert.equal((await request('uganda-allowed',{action:'status'})).body.level,'basic')
+assert.equal((await request('uganda-allowed',{action:'start',country:'NG',method:'bvn',consent:true})).code,409)
+const wrongUg=await request('uganda-wrong-doc',{action:'start',country:'UG',method:'government_id',consent:true});await deliver(event(wrongUg,{fields:{country:'NG',id_type:'IDENTITY_CARD'}}));assert.notEqual((await request('uganda-wrong-doc',{action:'status'})).body.level,'basic')
+globalThis.fetch=previousFetch
+console.log('PASS Uganda entitlement denial, document intersection, country-bound token, Basic-only approval and wrong-country rejection.')
+
+const ugStatus=await request('uganda-allowed',{action:'status'});assert.equal(ugStatus.body.workflow.basicPassed,true);assert.equal(ugStatus.body.workflow.bvnPassed,false)

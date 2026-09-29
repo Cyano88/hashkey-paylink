@@ -1,4 +1,4 @@
-export type PocketKycCountry = 'NG' | 'KE' | 'RW'
+export type PocketKycCountry = 'NG' | 'UG' | 'KE' | 'RW'
 export type PocketKycMethod = 'bvn' | 'nin' | 'government_id'
 export type PocketKycProvider = 'smile' | 'sumsub'
 export type PocketKycContext = { country?: string; provider?: string; policyVersion?: string }
@@ -7,6 +7,7 @@ export type PocketKycContext = { country?: string; provider?: string; policyVers
 // explicitly configured policy can create sessions or grant eligibility.
 export const POCKET_KYC_MARKETS = {
   NG: { name: 'Nigeria', identityStatus: 'configured', limitUpgradeStatus: 'planned' },
+  UG: { name: 'Uganda', identityStatus: 'planned', limitUpgradeStatus: 'planned' },
   KE: { name: 'Kenya', identityStatus: 'planned', limitUpgradeStatus: 'planned' },
   RW: { name: 'Rwanda', identityStatus: 'planned', limitUpgradeStatus: 'planned' },
 } as const

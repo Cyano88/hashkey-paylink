@@ -1,3 +1,4 @@
+import type {PocketBillCountry} from '../lib/pocketBillCountry'
 import { pocketApiUrl } from '../lib/pocketRoutes'
 import { POCKET_API, createPocketIdempotencyKey } from '../lib/pocketSchemas'
 
@@ -18,6 +19,7 @@ export type PocketBillIntentState =
   | 'needs_review'
 
 export type PocketBillIntent = {
+  international?: {country:'UG';deliveryCurrency:'UGX';deliveryAmount:string}
   id: string
   requestId: string
   state: PocketBillIntentState
@@ -97,6 +99,7 @@ export function parsePocketBillIntent(value: unknown): PocketBillIntent {
     throw new PocketBillsApiError('Bill-payment response was invalid.')
   }
   return {
+    ...(record(intent.international).country === 'UG' && record(intent.international).deliveryCurrency === 'UGX' ? {international:{country:'UG' as const,deliveryCurrency:'UGX' as const,deliveryAmount:text(record(intent.international).deliveryAmount)}} : {}),
     id: text(intent.id),
     requestId: text(intent.requestId),
     state: intent.state,
@@ -237,6 +240,7 @@ export async function readPocketBillsLimitUsage(input: { accessToken: string; fe
 }
 
 export async function quotePocketAirtime(input: {
+  country?: PocketBillCountry
   accessToken: string
   serviceId: string
   phone: string
@@ -250,23 +254,24 @@ export async function quotePocketAirtime(input: {
     accessToken: input.accessToken,
     idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('airtime-quote'),
     fetcher: input.fetcher,
-    body: { service_id: input.serviceId, phone: input.phone, amount_ngn: input.amountNgn, payer_wallet: input.payerWallet },
+    body: { ...(input.country==='UG'?{country:'UG',amount_local:input.amountNgn}:{}), service_id: input.serviceId, phone: input.phone, amount_ngn: input.amountNgn, payer_wallet: input.payerWallet },
   })
   return { intent: parsePocketBillIntent(data.intent), replayed: data.replayed === true }
 }
 
-export type PocketDataService = { serviceId: string; name: string }
-export type PocketDataVariation = { variationCode: string; name: string; amountNgn: string; available: boolean; popularityRank?: number }
+export type PocketDataService = { serviceId: string; name: string; imageUrl?:string }
+export type PocketDataVariation = { amountLocal?:string; currency?:'NGN'|'UGX'; minimum?:number; maximum?:number; variationCode: string; name: string; amountNgn: string; available: boolean; popularityRank?: number }
 export type PocketBillService = PocketDataService
 export type PocketBillVariation = PocketDataVariation
 
 export async function readPocketDataCatalog(input: {
+  country?:PocketBillCountry
   accessToken: string
   serviceId?: string
-  category?: 'data' | 'tv' | 'electricity'
+  category?: 'airtime' | 'data' | 'tv' | 'electricity'
   fetcher?: typeof fetch
 }) {
-  const params = new URLSearchParams({ category: input.category ?? 'data' })
+  const params = new URLSearchParams({ ...(input.country==='UG'?{country:'UG'}:{}), category: input.category ?? 'data' })
   if (input.serviceId) params.set('service_id', input.serviceId)
   const query = `?${params.toString()}`
   const response = await (input.fetcher ?? fetch)(`${POCKET_API.billsCatalog}${query}`, {
@@ -278,12 +283,12 @@ export async function readPocketDataCatalog(input: {
   const data = record(record(body).data)
   const services = Array.isArray(data.services) ? data.services.flatMap(value => {
     const item = record(value)
-    return text(item.serviceId) && text(item.name) ? [{ serviceId: text(item.serviceId), name: text(item.name) }] : []
+    return text(item.serviceId) && text(item.name) ? [{ serviceId: text(item.serviceId), name: text(item.name), ...(text(item.imageUrl)?{imageUrl:text(item.imageUrl)}:{}) }] : []
   }) : []
   const variations = Array.isArray(data.variations) ? data.variations.flatMap(value => {
     const item = record(value)
     return text(item.variationCode) && text(item.name) && text(item.amountNgn)
-      ? [{ variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false, ...(Number.isSafeInteger(item.popularityRank) && Number(item.popularityRank) > 0 ? { popularityRank: Number(item.popularityRank) } : {}) }]
+      ? [{ ...(item.currency==='UGX'?{amountLocal:text(item.amountLocal),currency:'UGX' as const,minimum:Number(item.minimum),maximum:Number(item.maximum)}:{}), variationCode: text(item.variationCode), name: text(item.name), amountNgn: text(item.amountNgn), available: item.available !== false, ...(Number.isSafeInteger(item.popularityRank) && Number(item.popularityRank) > 0 ? { popularityRank: Number(item.popularityRank) } : {}) }]
       : []
   }) : []
   if (input.serviceId ? input.category !== 'electricity' && !variations.length : !services.length) {
@@ -332,6 +337,7 @@ export async function verifyPocketBillCustomer(input: {
 }
 
 export async function quotePocketData(input: {
+  country?: PocketBillCountry
   accessToken: string
   serviceId: string
   variationCode: string
@@ -345,7 +351,7 @@ export async function quotePocketData(input: {
     accessToken: input.accessToken,
     idempotencyKey: input.idempotencyKey ?? createPocketIdempotencyKey('data-quote'),
     fetcher: input.fetcher,
-    body: { category: 'data', service_id: input.serviceId, variation_code: input.variationCode, phone: input.phone, payer_wallet: input.payerWallet },
+    body: { ...(input.country==='UG'?{country:'UG'}:{}), category: 'data', service_id: input.serviceId, variation_code: input.variationCode, phone: input.phone, payer_wallet: input.payerWallet },
   })
   return { intent: parsePocketBillIntent(data.intent), replayed: data.replayed === true }
 }

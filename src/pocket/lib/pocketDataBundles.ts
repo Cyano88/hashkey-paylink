@@ -73,7 +73,7 @@ function dataAmountInGb(dataAmount: string) {
 }
 
 export function isPocketBroadbandService(serviceId: string) {
-  return Boolean(serviceId) && !MOBILE_DATA_SERVICE_IDS.has(serviceId.toLowerCase())
+  return Boolean(serviceId) && !/^ug-\d+$/.test(serviceId) && !MOBILE_DATA_SERVICE_IDS.has(serviceId.toLowerCase())
 }
 
 export function parsePocketDataBundle(variation: PocketDataVariation, serviceId: string): PocketDataBundle {
@@ -102,7 +102,7 @@ export function parsePocketDataBundle(variation: PocketDataVariation, serviceId:
     ...variation,
     dataAmount,
     validity,
-    price: Number(variation.amountNgn),
+    price: Number(variation.amountLocal || variation.amountNgn),
     category,
   }
 }
