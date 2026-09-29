@@ -63,8 +63,10 @@ let persistedOrder = processingOrder
 let refreshedOrder = processingOrder
 let historyReads = 0
 let handlerNow = 2
+let allowanceBlocked=false;const allowances=[]
 const handler = createPocketBankWithdrawHandler({
   executions,
+  reserveAllowance: async (owner,input) => {if(allowanceBlocked)throw Object.assign(Error('Daily allowance reached.'),{status:403,code:'KYC_ADVANCED_REQUIRED',remainingNgn:0,dailyLimitNgn:50000});allowances.push({owner,input})},
   now: () => handlerNow,
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   authorizeBankAccount: async () => ({ verification: { account_name: 'ADA LOVELACE' } }),
@@ -153,6 +155,7 @@ assert.equal(authorized.body.data.validUntil, processingOrder.valid_until)
 assert.equal(calls.at(-1).body.action, 'createOfframpOrder')
 assert.equal(calls.at(-1).body.ensure_payable, true)
 
+assert.equal(allowances.length,1);assert.equal(allowances[0].input.amount,'1600.00');allowanceBlocked=true;const limitedAuthorization=await request(handler,{action:'authorize',intent_id:processingOrder.intent_id,wallet_address:prepareBody.wallet_address,payer_name:'Ada Lovelace'});assert.equal(limitedAuthorization.statusCode,403);assert.equal(limitedAuthorization.body.code,'KYC_ADVANCED_REQUIRED');assert.equal(limitedAuthorization.body.remainingNgn,0);allowanceBlocked=false;
 const unsafeWindowHandler = createPocketBankWithdrawHandler({
   executions,
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
@@ -286,6 +289,7 @@ const expiryNow = Date.parse('2026-08-16T09:00:00.000Z')
 const expiredPendingOrder = { ...processingOrder, status: 'pending', valid_until: new Date(expiryNow - 1).toISOString(), tx_hash: '' }
 const expiryHandler = createPocketBankWithdrawHandler({
   executions: expiryExecutions,
+  reserveAllowance: async () => {},
   now: () => expiryNow,
   verifyUser: async () => ({ userId: 'privy-user-1', email: 'ada@example.com' }),
   authorizeBankAccount: async () => ({ verification: { account_name: 'ADA LOVELACE' } }),

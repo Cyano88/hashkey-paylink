@@ -65,9 +65,9 @@ export function createXPayBankHandler(overrides:Partial<typeof defaults>={}){
    const snapshot=await d.service.snapshot(owner,id)
    return res.json({ok:true,payment:publicXPayBankPayment(snapshot.payment,snapshot.bridge),transaction,quote,bridgePlan,challengeId})
   }catch(reason){
-   const error=reason as Error&{status?:number;code?:string}
+   const error=reason as Error&{status?:number;code?:string;remainingNgn?:number;dailyLimitNgn?:number}
    const status=error.status&&[400,401,403,404,409,429].includes(error.status)?error.status:503
-   return res.status(status).json({ok:false,error:status<500?error.message:'XPay is temporarily unavailable. Your submitted payment can be checked again.',code:['INSUFFICIENT_OKB','PAYOUT_REVIEW_REQUIRED','ATTESTATION_EXPIRED'].includes(error.code||'')?error.code:undefined})
+   return res.status(status).json({ok:false,error:status<500?error.message:'XPay is temporarily unavailable. Your submitted payment can be checked again.',remainingNgn:error.remainingNgn,dailyLimitNgn:error.dailyLimitNgn,code:error.code?.startsWith('KYC_')?error.code:['INSUFFICIENT_OKB','PAYOUT_REVIEW_REQUIRED','ATTESTATION_EXPIRED'].includes(error.code||'')?error.code:undefined})
   }
  }
 }

@@ -1,3 +1,4 @@
+import {notifyPocketKycRequirement} from '../pocket/lib/pocketKycAccess'
 import { installCircleApprovalSurface } from './circleApprovalSurface'
 import type { PaymentFeeQuote } from '../../api/payment-fee-quotes'
 import { executeRecoverableCircleApproval } from './circleRecoverableApproval'
@@ -381,6 +382,7 @@ async function circleWalletApi<T>(
       [400, 401, 403, 404, 422, 429].includes(res.status)
       || (res.status === 409 && String(data.code) === 'PAYMENT_QUOTE_REQUIRED')
     )
+    notifyPocketKycRequirement(data)
     throw Object.assign(new Error(data.code === 'INSUFFICIENT_PAYMENT_BALANCE' && data.error ? data.error : `Circle email wallet ${label} failed: ${apiError(data, res.status, action)}`), {
       status: res.status, code: data.code, submissionRejected,
     })

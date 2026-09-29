@@ -1,3 +1,4 @@
+import {BASIC_DAILY_NGN,advancedDailyNgn} from './kyc-level.js'
 import type {Request,Response} from 'express'
 import {createHash,createHmac,randomBytes,randomUUID,timingSafeEqual} from 'node:crypto'
 import {verifiedPrivyUser} from '../local-currency-profile.js'
@@ -14,7 +15,7 @@ function jobPolicy(j?:Job){const policy=v3Policy(j?.method||'bvn');if(j?.idTypes
 const bvn=(jobs:Job[])=>jobs.find(j=>j.method==='bvn'&&j.status==='passed'&&j.identityMatch)
 const complete=(jobs:Job[])=>jobs.find(j=>j.method!=='bvn'&&j.status==='passed'&&j.identityMatch&&jobs.some(b=>b.id===j.bvnJobId&&b.method==='bvn'&&b.status==='passed'&&b.identityMatch===j.identityMatch))
 const resumable=(j?:Job)=>!!j&&!j.providerJobId&&!j.uploadReportedAt&&['pending','review'].includes(j.status)
-function publicFlow(jobs:Job[],environment:SmileEnvironment){const j=jobs.at(-1),first=bvn(jobs),done=complete(jobs);return{environment,apiVersion:3,status:j?.status||'not_started',jobId:j?.id||null,verification:jobPolicy(j),verified:environment==='production'&&!!done,canResume:resumable(j),uploadReported:!!j?.uploadReportedAt,failureReason:j?.failureReason||null,workflow:{bvnPassed:!!first,complete:!!done,needsAdditional:!!first&&!done&&(!j||j.method==='bvn'||j.status==='failed'),methods:['nin','government_id']}}}
+function publicFlow(jobs:Job[],environment:SmileEnvironment){const j=jobs.at(-1),first=bvn(jobs),done=complete(jobs);return{environment,apiVersion:3,basicDailyLimitNgn:BASIC_DAILY_NGN,advancedDailyLimitNgn:advancedDailyNgn(),level:environment==='production'?(done?'advanced':first?'basic':'none'):'none',status:j?.status||'not_started',jobId:j?.id||null,verification:jobPolicy(j),verified:environment==='production'&&!!done,canResume:resumable(j),uploadReported:!!j?.uploadReportedAt,failureReason:j?.failureReason||null,workflow:{bvnPassed:!!first,complete:!!done,needsAdditional:!!first&&!done&&(!j||j.method==='bvn'||j.status==='failed'),methods:['nin','government_id']}}}
 export async function requireV3ProductionKyc(owner:string){const r=await readDurableJson<Store>(key(owner,'production'));const j=complete(r?.jobs||[]);if(!j?.legalName)throw fail('Complete identity verification before setting up your POS.',403);return j.legalName}
 function evidence(config:SmileConfig,fields:Record<string,unknown>){
  const legalName=String(fields.full_name||[fields.first_name,fields.other_names,fields.last_name].filter(x=>typeof x==='string').join(' ')).replace(/\s+/g,' ').trim().slice(0,160)

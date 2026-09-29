@@ -4,6 +4,7 @@ import { Keyboard } from '@capacitor/keyboard'
 import { useLocation } from 'react-router-dom'
 import PocketBottomNav, { type PocketNavTab } from './PocketBottomNav'
 import { Loader2 } from './PocketIcons'
+import PocketKycPrompt from './PocketKycPrompt'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { refreshPocketData } from '../lib/pocketRefresh'
 
@@ -225,6 +226,7 @@ export default function PocketRouteShell({
             </div>
           </div>
 
+          <PocketKycPrompt />
           {!hideNavigation && <PocketBottomNav rail={rail} active={active} disabled={navigationDisabled} keyboardOpen={keyboardOpen || inputFocused} onSelect={onSelect} />}
       </div>
     </div>

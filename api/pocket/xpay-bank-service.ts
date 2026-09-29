@@ -66,14 +66,14 @@ export function createXPayBankService(overrides:Partial<typeof defaults>={}){
   async approve(owner:string,id:string,approval:string){
    const r=await record(owner,id)
    if(r.state!=='quoted')fail('This payment already started. Check its status.')
-   await d.choice(r.checkoutId,r.merchantId,r.symbol);await d.checkPayout(r.payout)
+   await d.choice(r.checkoutId,r.merchantId,r.symbol);await d.checkPayout(r.payout,owner)
    if(!await d.consumeApproval(approval,owner))fail('Confirm with your Pocket PIN or fingerprint.',403)
    return d.store.approve(owner,id)
   },
   async authorizeSwap(owner:string,id:string){
    const r=await record(owner,id)
    if(r.state!=='approved'||!r.swap)fail('Check the existing conversion before retrying.')
-   await d.owns(owner,r.source);await d.choice(r.checkoutId,r.merchantId,r.symbol);await d.checkPayout(r.payout)
+   await d.owns(owner,r.source);await d.choice(r.checkoutId,r.merchantId,r.symbol);await d.checkPayout(r.payout,owner)
    if(await d.source.getChainId()!==196)fail('X Layer could not be verified.',503)
    const fresh=await d.swapQuote({owner:getAddress(r.source),tokenIn:r.token,tokenOut:stockUsdc.address,amount:r.amount})
    d.validateSwap(fresh,getAddress(r.source))
@@ -132,7 +132,7 @@ export function createXPayBankService(overrides:Partial<typeof defaults>={}){
    if(!['approved','swap_confirmed','bridging'].includes(r.state))fail('Confirm the stock conversion before bridging.')
    if(r.replacementPayout)fail('Confirm the updated bank quote before bridging.')
    // Never start a burn for a known-expired payout; preserve converted USDC.
-   await d.checkPayout(r.payout)
+   await d.checkPayout(r.payout,owner)
    if(r.state!=='bridging')r=await d.store.startBridge(owner,id)
    const action=await d.bridge.authorizeBurn(owner,r.bridgeId)
    return {...action,payment:r}
@@ -146,7 +146,7 @@ export function createXPayBankService(overrides:Partial<typeof defaults>={}){
    if(r.state==='payout_submitted'&&r.challengeId)return {record:r,challengeId:r.challengeId}
    if(!['payout_ready','payout_requested'].includes(r.state))fail('Wait for your verified Base balance.')
    // A lost response must recover the same request even after quote expiration.
-   if(r.state==='payout_ready')await d.checkPayout(r.payout)
+   if(r.state==='payout_ready')await d.checkPayout(r.payout,owner)
    r=await d.store.claimPayout(owner,id)
    const c=await d.challenge({chain:'base',userToken:session,walletId:r.payout.walletId,walletAddress:r.payout.wallet,callData:xpayPayoutCall(r.payout),idempotencyKey:r.payoutKey!,refId:'pocket:xpay:payout:'+r.id})
    if(!c.challengeId)fail('Payment approval is awaiting confirmation. Retry to recover the same request.',503)
@@ -161,14 +161,14 @@ export function createXPayBankService(overrides:Partial<typeof defaults>={}){
   async acceptPayout(owner:string,id:string,intentId:string,approval:string){
    const r=await record(owner,id)
    if(!r.replacementPayout||r.replacementPayout.intentId!==intentId)fail('Review the updated bank quote first.')
-   await d.choice(r.checkoutId,r.merchantId,r.symbol);await d.checkPayout(r.replacementPayout)
+   await d.choice(r.checkoutId,r.merchantId,r.symbol);await d.checkPayout(r.replacementPayout,owner)
    if(!await d.consumeApproval(approval,owner))fail('Confirm the updated quote with your Pocket PIN or fingerprint.',403)
    return d.store.acceptPayout(owner,id,intentId)
   },
   async retry(owner:string,id:string){
    const r=await record(owner,id)
    if(r.state!=='failed')fail('Check the existing submission before retrying.')
-   await d.checkPayout(r.payout)
+   await d.checkPayout(r.payout,owner)
    if(r.failureStage==='swap')return d.store.retrySwap(owner,id)
    if(r.failureStage==='payment')return d.store.retryPayment(owner,id)
    if(r.failureStage==='bridge'){

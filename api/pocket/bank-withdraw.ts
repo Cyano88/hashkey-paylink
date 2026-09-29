@@ -1,3 +1,4 @@
+import {reservePocketBankAllowance} from './transfer-allowance.js'
 import { normalizePayoutAccount, pocketFiatCurrency } from '../../src/pocket/lib/pocketFiatCorridors.js'
 import type { Request, Response } from 'express'
 import { createHash } from 'node:crypto'
@@ -25,6 +26,7 @@ type BankWithdrawDependencies = {
   executions: PaymentExecutionRepository
   authorizeBankAccount: typeof verifyBankPayoutBeneficiary
   readBridgeStatus: typeof readCircleBridgeStatus
+  reserveAllowance: typeof reservePocketBankAllowance
   now: () => number
 }
 
@@ -244,6 +246,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
     executions: paymentExecutionRepository,
     authorizeBankAccount: verifyBankPayoutBeneficiary,
     readBridgeStatus: readCircleBridgeStatus,
+    reserveAllowance: reservePocketBankAllowance,
     now: Date.now,
     ...overrides,
   }
@@ -346,7 +349,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           payer_name: `${text(req.body?.owner_first_name)} ${text(req.body?.owner_last_name)}`.trim(),
           ensure_payable: true,
         })
-        if (prepared.status !== 200 || !prepared.body?.order) throw Object.assign(new Error(prepared.body?.error || 'Could not prepare bank payout.'), { status: prepared.status })
+        if (prepared.status !== 200 || !prepared.body?.order) throw Object.assign(new Error(prepared.body?.error || 'Could not prepare bank payout.'), { status: prepared.status,code:prepared.body?.code,remainingNgn:prepared.body?.remainingNgn,dailyLimitNgn:prepared.body?.dailyLimitNgn })
         const execution = await dependencies.executions.create({
           ownerId: identity.userId, idempotencyKey, kind: 'bank_payout', amount: text(prepared.body.order.amount_usdc),
           sourceNetwork: 'base', settlementNetwork: 'base', destinationType: 'verified_bank_account',
@@ -385,7 +388,7 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
           payer_name: text(req.body?.payer_name),
           ensure_payable: true,
         })
-        if (payable.status !== 200 || !payable.body?.order) throw Object.assign(new Error(payable.body?.error || 'Could not open a current payout window.'), { status: payable.status })
+        if (payable.status !== 200 || !payable.body?.order) throw Object.assign(new Error(payable.body?.error || 'Could not open a current payout window.'), { status: payable.status,code:payable.body?.code,remainingNgn:payable.body?.remainingNgn,dailyLimitNgn:payable.body?.dailyLimitNgn })
         const validUntil = Date.parse(payable.body.order.valid_until || '')
         if (!Number.isFinite(validUntil) || validUntil <= dependencies.now() + 60_000) {
           throw Object.assign(new Error('The payout window is too close to expiry. Start the payment again.'), { status: 409 })
@@ -394,6 +397,8 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
         if (execution?.state === 'expired') {
           return res.status(409).json({ ok: false, error: 'This payout window expired. Start a new payout.' })
         }
+        const payoutOrder=payable.body.order
+        await dependencies.reserveAllowance(identity.userId,{id:payoutOrder.intent_id,amount:payoutOrder.amount_ngn,currency:payoutOrder.fiat_currency||'NGN',usdc:payoutOrder.amount_usdc,providerOrderId:payoutOrder.paycrest_order_id})
         const route = routeRecord(await syncOwnedRoute(identity, text(payable.body.order.intent_id), dependencies))
         return res.json({ ok: true, data: publicOrder(payable.body.order, execution, route) })
       }
@@ -554,11 +559,11 @@ export function createPocketBankWithdrawHandler(overrides: Partial<BankWithdrawD
 
       return res.status(400).json({ ok: false, error: 'Unknown bank payout action.' })
     } catch (reason) {
-      const error = reason as Error & { status?: number }
+      const error = reason as Error & { status?: number;code?:string;remainingNgn?:number;dailyLimitNgn?:number }
       const message = /no provider available|provider.*amount|conversion with amount/i.test(error.message || '')
         ? (req.body?.country === 'UG' ? 'This Uganda shilling amount is unavailable right now. Try another amount.' : 'This Naira amount is unavailable right now. Try another amount.')
         : error.message || 'Bank payout failed.'
-      return res.status(error.status ?? 500).json({ ok: false, error: message })
+      return res.status(error.status ?? 500).json({ ok: false, error: message,...(error.code?.startsWith('KYC_')?{code:error.code,remainingNgn:error.remainingNgn,dailyLimitNgn:error.dailyLimitNgn}:{}) })
     }
   }
 }

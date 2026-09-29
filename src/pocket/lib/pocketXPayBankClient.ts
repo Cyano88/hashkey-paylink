@@ -1,3 +1,4 @@
+import {notifyPocketKycRequirement} from './pocketKycAccess'
 import {decodeFunctionData,getAddress,parseAbi,type Hex} from 'viem'
 import {pocketApiUrl} from './pocketRoutes'
 import {validateStockSwap,type StockSwapQuote} from './pocketXStocksSwap'
@@ -11,6 +12,7 @@ export async function xpayBankRequest(getToken:()=>Promise<string|null>,body:Rec
  const token=approval?.authorization||'Bearer '+await getToken()
  const response=await fetch(pocketApiUrl('/api/pocket/xpay/bank'),{method:'POST',headers:{'content-type':'application/json',authorization:token,...(approval?{'X-Pocket-Payment-Approval':approval.token}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(30000)})
  const data=await response.json().catch(()=>null)
+ if(!response.ok||!data?.ok)notifyPocketKycRequirement(data)
  if(!response.ok||!data?.ok)throw Object.assign(new Error(data?.error||'XPay is temporarily unavailable. Check your payment before trying again.'),{code:data?.code})
  return data
 }

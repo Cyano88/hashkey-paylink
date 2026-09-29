@@ -25,7 +25,7 @@ export function assertXPayPayoutPayable(order:PaycrestOrderRecord,quote?:XPayPay
  if(quote)assertXPayPayoutBinding(order,quote)
  return expires
 }
-async function invoke(req:Request,body:Record<string,unknown>){let status=200,result:any;const res={setHeader(){},status(s:number){status=s;return this},json(b:unknown){result=b;return this}} as unknown as Response;await ngPosHandler(Object.assign(Object.create(req),{body,method:'POST'}) as Request,res);if(status>=400||!result?.ok)fail(result?.error||'Bank payout is temporarily unavailable.',status>=400?status:503);return result}
+async function invoke(req:Request,body:Record<string,unknown>){let status=200,result:any;const res={setHeader(){},status(s:number){status=s;return this},json(b:unknown){result=b;return this}} as unknown as Response;await ngPosHandler(Object.assign(Object.create(req),{body,method:'POST'}) as Request,res);if(status>=400||!result?.ok){throw Object.assign(Error(result?.error||'Bank payout is temporarily unavailable.'),{status:status>=400?status:503,code:result?.code,remainingNgn:result?.remainingNgn,dailyLimitNgn:result?.dailyLimitNgn})};return result}
 export async function validateXPayBankChoice(checkoutId:string,merchantId:string,symbol:string){
  const checkout=await assertUnifiedXPayDestination(checkoutId,merchantId)
  const available=(await Promise.all([listPocketXPayPosDestinations(checkout.owner),listPocketXPayStockDestinations(checkout.owner)])).flat()
@@ -48,7 +48,7 @@ export async function prepareXPayBankPayout(req:Request,identity:VerifiedLinkUse
  assertXPaySenderFee(order.raw)
  return {intentId:order.intent_id,merchantId:bank.id,merchantName:bank.name,currency:bank.currency as 'NGN'|'UGX',fiatAmount:order.amount_ngn,fundingUnits:String(parseUnits(order.amount_usdc,6)),recipient:getAddress(order.receive_address),wallet:getAddress(link.circleWalletAddress),walletId:link.circleWalletId,expiresAt,providerOrderId:order.paycrest_order_id,bankName:order.bank_name,bankLast4:order.bank_last4}
 }
-export async function checkXPayPayout(quote:XPayPayoutQuote){const order=await getPaycrestPosOrder(quote.intentId);if(!order)fail('Bank order is unavailable.');assertXPayPayoutPayable(order,quote);return order}
+export async function checkXPayPayout(quote:XPayPayoutQuote,owner?:string){const order=await getPaycrestPosOrder(quote.intentId);if(!order)fail('Bank order is unavailable.');assertXPayPayoutPayable(order,quote);if(owner){const {reservePocketBankAllowance}=await import('./transfer-allowance.js');await reservePocketBankAllowance(owner,{id:order.intent_id,amount:order.amount_ngn,currency:order.fiat_currency||'NGN',usdc:order.amount_usdc,providerOrderId:order.paycrest_order_id})};return order}
 export function xpayPayoutCall(quote:XPayPayoutQuote){return encodeFunctionData({abi:batchAbi,functionName:'executeBatch',args:[[{target:'0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',value:0n,data:encodeFunctionData({abi:transferAbi,functionName:'transfer',args:[quote.recipient,BigInt(quote.fundingUnits)]})}]]})}
 export async function confirmXPayPayout(quote:XPayPayoutQuote,hash:string){
  const order=await getPaycrestPosOrder(quote.intentId)

@@ -148,7 +148,7 @@ async function circleJson<T extends Record<string, unknown> = Record<string, unk
 }
 
 function circleError(res: Response, err: unknown) {
-  const e = err as Error & { status?: number; code?: number; body?: CircleResponse }
+  const e = err as Error & { status?: number; code?: number | string; remainingNgn?:number; dailyLimitNgn?:number; body?: CircleResponse }
   if (e.message === 'CIRCLE_API_KEY not configured' || e.message === 'Arc Mainnet email wallet is not configured') {
     return res.status(503).json({ ok: false, error: e.message })
   }
@@ -164,6 +164,7 @@ function circleError(res: Response, err: unknown) {
     code: e.code ?? e.body?.code,
     error: e.body?.message ?? e.body?.error ?? e.message ?? 'Circle request failed',
     detail,
+    ...(String(e.code).startsWith('KYC_')?{remainingNgn:e.remainingNgn,dailyLimitNgn:e.dailyLimitNgn}:{}),
   })
 }
 
@@ -360,7 +361,7 @@ function paymentCallData(chain: keyof typeof EVM_CHAINS, recipient: string, reci
   if (treasuryUnits > 0n) calls.push({ target, value: 0n, data: encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [EVM_TREASURY as `0x${string}`, treasuryUnits] }) })
   return encodeFunctionData({ abi: SMART_WALLET_BATCH_ABI, functionName: 'executeBatch', args: [calls] })
 }
-async function verifiedPayoutExemption(params: Record<string, string>) {
+async function verifiedPayoutExemption(params: Record<string, string>, checkOnly = true) {
   if (String(params.feeBps ?? '') !== '0') return false
   if (!params.payoutIntentId || params.chain !== 'base') throw Object.assign(new Error('A verified payout is required for a fee exemption.'), { status: 400 })
   const { getPaycrestPosOrder } = await import('./paycrest-pos.js')
@@ -370,6 +371,12 @@ async function verifiedPayoutExemption(params: Record<string, string>) {
     || order.receive_address.toLowerCase() !== params.recipient.toLowerCase()
     || order.refund_address.toLowerCase() !== params.walletAddress.toLowerCase()
     || parseUnits(order.amount_usdc, 6).toString() !== params.totalUnits) throw Object.assign(new Error('Payout fee exemption does not match this payment.'), { status: 400 })
+  if(['bank-withdraw','bank-receive','ngpos'].includes(order.source||'')){
+    const link=await findPaymentCircleLinkByWallet(params.walletId,params.walletAddress)
+    if(!link?.privyUserId)throw Object.assign(Error('Sign in to continue.'),{status:401})
+    const {reservePocketBankAllowance}=await import('./pocket/transfer-allowance.js')
+    await reservePocketBankAllowance(link.privyUserId,{id:order.intent_id,amount:order.amount_ngn,currency:order.fiat_currency||'NGN',usdc:order.amount_usdc,providerOrderId:order.paycrest_order_id},checkOnly)
+  }
   return true
 }
 
@@ -732,7 +739,7 @@ export default async function handler(req: Request, res: Response) {
       let quote
       try { quote = verifyPaymentFeeQuote(params.feeQuoteToken, { chain, walletId, walletAddress, recipient, amountUnits: totalUnits, mode }) }
       catch (error) { return res.status(409).json({ ok: false, code: 'PAYMENT_QUOTE_REQUIRED', error: error instanceof Error ? error.message : 'Refresh the payment quote.' }) }
-      if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' })
+      if (quote.exemption === 'verified-payout') await verifiedPayoutExemption({ ...params, feeBps: '0' },false)
       const rawBalance = await readEvmRpc(chain, 'eth_call', [{ to: EVM_CHAINS[chain].tokenAddress, data: '0x70a08231' + walletAddress.slice(2).padStart(64, '0') }, 'latest'])
       if (typeof rawBalance !== 'string' || !/^0x[0-9a-f]{64}$/i.test(rawBalance)) throw new Error('Balance could not be verified. Try again.')
       if (BigInt(rawBalance) < BigInt(quote.totalUnits)) return res.status(400).json({ ok: false, error: 'Insufficient USDC to cover the amount and fees. Try a lower amount.' })

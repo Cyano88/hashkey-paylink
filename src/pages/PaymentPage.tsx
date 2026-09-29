@@ -1,3 +1,5 @@
+import PocketKycPrompt from '../pocket/components/PocketKycPrompt'
+import {notifyPocketKycRequirement} from '../pocket/lib/pocketKycAccess'
 import usePocketSlowConfirmation from '../pocket/hooks/usePocketSlowConfirmation'
 import PocketTransactionSheet from '../pocket/components/PocketTransactionSheet'
 import { readCirclePaymentFeeQuote, type CirclePaymentFeeQuote } from '../lib/circleEvmEmailWallet'
@@ -2768,9 +2770,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         }
         settlementIntentId = quoteData.quote.intent_id
       }
+      const payerAccessToken = await getAccessToken()
       const response = await fetch('/api/ng-pos', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...(payerAccessToken ? {authorization:'Bearer '+payerAccessToken} : {}) },
         body: JSON.stringify({
           action: 'createOfframpOrder',
           ...(pocketScan ? { ensure_payable: true } : {}),
@@ -2782,7 +2785,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         }),
       })
       const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string }
-      if (!response.ok || !data.ok || !data.order) throw new Error(data.error || 'Could not prepare payout.')
+      if (!response.ok || !data.ok || !data.order) {notifyPocketKycRequirement(data);throw new Error(data.error || 'Could not prepare payout.')}
       if (pocketScan) assertPocketScanPayoutPayable(data.order)
       const needsReview = !!pocketScan && pocketScanPayoutNeedsReview(paycrestOrder, data.order)
       setPaycrestOrder(data.order)
@@ -4324,6 +4327,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
+      <PocketKycPrompt />
       {!pocketScan && <HashPayLinkCheckoutBrand />}
       <div
         className="overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"

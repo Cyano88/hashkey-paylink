@@ -1,3 +1,4 @@
+import PocketBankKycBoundary from '../components/PocketBankKycBoundary'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
 import { formatPocketPaymentAmount } from '../lib/pocketMoney'
 import PocketPayoutCountry from '../components/PocketPayoutCountry'
@@ -42,7 +43,8 @@ import usePocketWallets from '../hooks/usePocketWallets'
 import { pocketActivityReceipt } from '../lib/pocketReceipt'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 
-export default function PocketMoveBankPage() {
+export default function PocketMoveBankPage(){return <PocketBankKycBoundary><PocketMoveBankContent/></PocketBankKycBoundary>}
+function PocketMoveBankContent() {
   const navigate = useNavigate()
   const { search, state: locationState } = useLocation()
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
@@ -57,6 +59,7 @@ export default function PocketMoveBankPage() {
   const recipients = usePocketBankRecipients({email,enabled:authenticated && mode==='withdraw',getAccessToken})
   const closeDirectory = () => locationState?.bankRecipientDirectory ? navigate(-1) : navigate(POCKET_BASE_PATH + POCKET_ROUTES.bank + '?mode=withdraw', {replace:true})
   const [reviewOpen, setReviewOpen] = useState(false)
+  useEffect(() => { const close=()=>setReviewOpen(false);window.addEventListener('pocket:kyc-required',close);return()=>window.removeEventListener('pocket:kyc-required',close) }, [])
   const reviewFx = usePocketFxQuote(1, reviewOpen)
   const [approvalBusy, setApprovalBusy] = useState(false)
   const [payoutToast, setPayoutToast] = useState('')

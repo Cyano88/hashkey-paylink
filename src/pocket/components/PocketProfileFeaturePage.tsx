@@ -1,3 +1,4 @@
+import PocketTransferAllowanceView from './PocketTransferAllowanceView'
 import PocketKycPanel from './PocketKycPanel'
 import PocketFlowHeader from './PocketFlowHeader'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
@@ -75,7 +76,7 @@ function LimitsPanel({ usage, bank, busy, error, onRefresh }: { usage: PocketBil
         <p className='text-[10px] font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400'>Bank payout</p>
         <p className='mt-2 text-2xl font-black'>{new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(bank.maxUsdc)} USDC</p>
         <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>About {ngn(bank.ngnEquivalent)} currently</p>
-        <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Current available limit. Rechecked before payout.</p>
+        <p className='mt-3 text-[11px] leading-5 text-gray-500 dark:text-gray-400'>Provider capacity per payout. Your verification allowance also applies.</p>
       </article>}
       <LimitProgress title='Airtime' used={airtime.usedTodayNgn} limit={airtime.dailyLimitNgn} detail={`Up to ${ngn(airtime.perPaymentNgn)} per payment`} />
       <LimitProgress title='Other Bills' used={otherBills.usedTodayNgn} limit={otherBills.dailyLimitNgn} detail='Data, TV, and electricity combined' />
@@ -239,6 +240,7 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
       {feature === 'kyc' && <PocketKycPanel getAccessToken={getAccessToken} />}
       {feature === 'wallet-setup' && <PocketWalletPreparation key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={setCurrency} />}
+      {feature === 'limits' && <PocketTransferAllowanceView getAccessToken={getAccessToken} />}
       {feature === 'limits' && <LimitsPanel usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
       {feature === 'notifications' && <NotificationsPanel enabled={pushEnabled} onChange={enabled => { setPocketPushEnabled(enabled); setPushEnabled(enabled) }} />}
       {feature === 'security' && <SecurityPanel stocks={stocks} email={email} getAccessToken={getAccessToken} onResetPin={onResetPin} />}

@@ -45,6 +45,7 @@ export default function PocketProfilePage() {
     if (stocks && requested !== 'security' && requested !== 'kyc') return null
     return requested === 'rates' || requested === 'limits' || requested === 'notifications' || requested === 'security' || requested === 'wallet-setup' || requested === 'kyc' ? requested : null
   })
+  useEffect(() => { if (new URLSearchParams(location.search).get('feature') === 'kyc') setFeature('kyc') }, [location.search])
   const quickApprovalAvailable = false
   const quickApprovalBusy = false
   const quickApprovalEnabled = false

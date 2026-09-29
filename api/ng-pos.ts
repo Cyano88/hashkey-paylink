@@ -1,3 +1,5 @@
+import {requirePocketBasicKyc} from './pocket/kyc-level.js'
+import {reservePocketBankAllowance} from './pocket/transfer-allowance.js'
 import {readPosRetirements,isPosRetired} from './pocket/pos-retirement.js'
 import {hasXPayBankFunding} from './pocket/xpay-bank-history.js'
 import {legacyXPayTerminal,assertUnifiedXPayDestination} from './pocket/unified-xpay-store.js'
@@ -750,6 +752,7 @@ export async function createNgPosMerchant(req: Request, body: Record<string, unk
   const preference = body.payout_preference === 'INSTANT_FIAT' ? 'INSTANT_FIAT' : 'KEEP_CRYPTO'
   const session = await verifiedPrivyUser(req)
   const ownerId = session.userId
+  if(preference==='INSTANT_FIAT')await requirePocketBasicKyc(ownerId)
   const idempotencyKey = creationIdempotencyKey(req, body)
   if (!idempotencyKey) throw ngPosRequestError(400, 'Missing or invalid idempotency key.')
   const store = await readStore()
@@ -860,6 +863,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
   const currency = pocketFiatCurrency(country)
   const session = await verifiedPrivyUser(req)
   const ownerId = session.userId
+  await requirePocketBasicKyc(ownerId)
   const idempotencyKey = creationIdempotencyKey(req, body)
   if (!idempotencyKey) throw ngPosRequestError(400, 'Missing or invalid idempotency key.')
   const store = await readStore()
@@ -1321,6 +1325,9 @@ export default async function handler(req: Request, res: Response) {
       const intent = store.intents?.[intentId]
       const merchant = intent ? store.merchants[intent.merchant_id] : undefined
       if(intent?.xpay_checkout_id&&!existing?.tx_hash)await assertUnifiedXPayDestination(intent.xpay_checkout_id,intent.merchant_id,merchant?.updated_at || '',true)
+      const payerIdentity=await verifiedPrivyUser(req)
+      await requirePocketBasicKyc(payerIdentity.userId)
+      if(intent)await reservePocketBankAllowance(payerIdentity.userId,{id:intentId,amount:intent.amount_ngn,currency:pocketFiatCurrency(merchant?.country),usdc:intent.estimated_amount_usdc},true)
       if (existing && !ensurePayable) {
         const execution = await syncOwnedPosExecution(existing)
         return res.json({ ok: true, order: existing, payment_execution: execution ? { id: execution.id, state: execution.state } : undefined })
@@ -1473,10 +1480,10 @@ export default async function handler(req: Request, res: Response) {
 
     return res.status(400).json({ ok: false, error: 'Unknown action.' })
   } catch (err) {
-    const error = err as Error & { status?: number }
+    const error = err as Error & { status?: number;code?:string;remainingNgn?:number;dailyLimitNgn?:number }
     const providerUnavailable = isPaycrestAmountUnavailable(error)
     const message = providerUnavailable ? 'Bank payout is temporarily unavailable. Your money has not moved.' : error.message || 'Nigerian POS request failed'
-    return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220) })
+    return res.status(providerUnavailable ? 503 : error.status ?? 500).json({ ok: false, error: message.slice(0, 220), ...(error.code?.startsWith('KYC_')?{code:error.code,remainingNgn:error.remainingNgn,dailyLimitNgn:error.dailyLimitNgn}:{}) })
   }
 }
 
