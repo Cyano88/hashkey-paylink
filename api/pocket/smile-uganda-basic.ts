@@ -4,11 +4,13 @@ import {v3Failure} from './smile-v3.js'
 export function ugandaBasicInput(value:any) {
  const idNumber=typeof value?.idNumber==='string'?value.idNumber.trim().toUpperCase():''
  const cardNumber=typeof value?.cardNumber==='string'?value.cardNumber.trim():''
+ const fullName=typeof value?.fullName==='string'?value.fullName.replace(/\s+/g,' ').trim():''
+ if(fullName.length<2||fullName.length>160)throw v3Failure('Enter your full name for payment records.',400)
  const dob=typeof value?.dob==='string'?value.dob:''
  if(!/^[A-Z0-9]{14}$/.test(idNumber))throw v3Failure('Enter your 14-character National ID number.',400)
  if(!/^[A-Za-z0-9-]{1,40}$/.test(cardNumber))throw v3Failure('Enter the card number printed on your ID.',400)
  if(!/^\d{4}-\d{2}-\d{2}$/.test(dob)||!Number.isFinite(Date.parse(dob))||new Date(dob).toISOString().slice(0,10)!==dob||Date.parse(dob)>Date.now())throw v3Failure('Enter a valid date of birth.',400)
- return {idNumber,cardNumber,dob}
+ return {idNumber,cardNumber,dob,fullName}
 }
 export async function submitUgandaBasic(config:SmileConfig,input:ReturnType<typeof ugandaBasicInput>,binding:{jobId:string;userId:string;callbackUrl:string}) {
  const timestamp=new Date().toISOString()

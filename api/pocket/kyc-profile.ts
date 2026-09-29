@@ -5,8 +5,9 @@ export function withPocketKycIdentity(repository:ProfileRepository,readIdentity=
   if(!profile)return profile
   const identity=await readIdentity(profile.privyUserId)
   const name=identity.level!=='none'?identity.legalName||'':''
+  const paymentName=name||identity.declaredName||''
   // Legacy bank names remain historical data only. Never confer identity rights.
-  return {...profile,firstName:name?(identity.firstName||name.split(/\s+/).slice(0,-1).join(' ')||name):'',lastName:name?(identity.lastName||name.split(/\s+/).at(-1)||''):'',resolvedName:name,nameStatus:name?'kyc_verified' as const:'unverified' as const}
+  return {...profile,kycLevel:identity.level,kycCountry:identity.country,declaredName:identity.declaredName,firstName:paymentName?(identity.firstName||paymentName.split(/\s+/).slice(0,-1).join(' ')||paymentName):'',lastName:paymentName?(identity.lastName||paymentName.split(/\s+/).at(-1)||''):'',resolvedName:name,nameStatus:name?'kyc_verified' as const:'unverified' as const}
  }
  return {...repository,
   get:async id=>attach(await repository.get(id)),

@@ -41,9 +41,11 @@ export async function prepareXPayBankPayout(req:Request,identity:VerifiedLinkUse
  const bank=await validateXPayBankChoice(input.checkoutId,input.merchantId,input.symbol)
  const [link,payer]=await Promise.all([readCircleLink(circleLinkKey(identity.userId,'base')),localCurrencyProfileRepository.ensure({...identity,email:identity.email})])
  if(!link||link.circleBlockchain!=='BASE')fail('Open your Base wallet in Pocket before paying.')
- if(payer.profile.nameStatus!=='kyc_verified'||!payer.profile.resolvedName)fail('Complete Basic identity verification in Pocket before paying.')
+ if(!['basic','advanced'].includes(payer.profile.kycLevel||'')&&payer.profile.nameStatus!=='kyc_verified')fail('Complete identity verification in Pocket before paying.')
+ const payerName=payer.profile.resolvedName||payer.profile.declaredName
+ if(!payerName)fail('Add your full name for payment records before paying.')
  const q=await invoke(req,{action:'quote',merchant_id:bank.id,settlement_type:'INSTANT_FIAT',network:'base',amount_currency:bank.currency,amount:input.fiatAmount,xpay_checkout_id:input.checkoutId})
- const data=await invoke(req,{action:'createOfframpOrder',intent_id:q.quote.intent_id,ensure_payable:true,refund_address:link.circleWalletAddress,payer_wallet:link.circleWalletAddress,payer_email:identity.email,payer_name:payer.profile.resolvedName})
+ const data=await invoke(req,{action:'createOfframpOrder',intent_id:q.quote.intent_id,ensure_payable:true,refund_address:link.circleWalletAddress,payer_wallet:link.circleWalletAddress,payer_email:identity.email,payer_name:payerName})
  const order=data.order as PaycrestOrderRecord,expiresAt=assertXPayPayoutPayable(order)
  assertXPaySenderFee(order.raw)
  return {intentId:order.intent_id,merchantId:bank.id,merchantName:bank.name,currency:bank.currency as 'NGN'|'UGX',fiatAmount:order.amount_ngn,fundingUnits:String(parseUnits(order.amount_usdc,6)),recipient:getAddress(order.receive_address),wallet:getAddress(link.circleWalletAddress),walletId:link.circleWalletId,expiresAt,providerOrderId:order.paycrest_order_id,bankName:order.bank_name,bankLast4:order.bank_last4}

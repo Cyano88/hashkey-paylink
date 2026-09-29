@@ -56,9 +56,9 @@ export default function usePocketBankReceiveController({
 
   const amountDirty = amount.length > 0
   const amountValid = amountDirty && /^(?:\d+|\d*\.\d+)$/.test(amount) && Number(amount) > 0
-  const profileReady = Boolean(profile?.resolvedName && (profile.email || email))
+  const profileReady = Boolean((profile?.resolvedName || allowThirdPartyAccount&&profile?.declaredName) && (profile?.email || email))
   const normalizeName = (value: string) => value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).filter(Boolean).sort().join(' ')
-  const profileVerified = profile?.nameStatus === 'kyc_verified' && Boolean(profile.resolvedName)
+  const profileVerified = profile?.nameStatus === 'kyc_verified' && Boolean(profile.resolvedName) || allowThirdPartyAccount&&['basic','advanced'].includes(profile?.kycLevel||'')
   const staleOwnerNameRejection = /different verified name/i.test(error)
   const beneficiaryVerified = (verified && (!nameRequired || (accountName.trim().length >= 2 && accountName.trim().toUpperCase() !== 'OK'))) || (allowThirdPartyAccount && staleOwnerNameRejection && Boolean(accountName))
   const displayedError = allowThirdPartyAccount && staleOwnerNameRejection ? '' : error

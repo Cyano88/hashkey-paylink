@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { assertBankAccountMatchesPocketName } from '../api/pocket/verified-bank-name.ts';
+import { assertBankAccountMatchesPocketName, verifyBankPayoutBeneficiary } from '../api/pocket/verified-bank-name.ts';
 let resolved=0;
 const deps={verifyUser:async()=>({userId:'fixture-owner',email:'fixture@example.invalid'}),profiles:{get:async()=>({nameStatus:'kyc_verified',resolvedName:'Ada Lovelace'})},verifyAccount:async()=>{resolved++;return {account_name:'ADA LOVELACE',bank_code:'001'}}};
 const result=await assertBankAccountMatchesPocketName({}, {bank_code:'001',account_number:'0123456789',account_name:'Forged Name'},deps);
@@ -12,3 +12,8 @@ console.log('PASS KYC-verified POS owner accepted; mismatched name, unenrolled p
 
 await assertBankAccountMatchesPocketName({}, {}, {...deps,verifyAccount:async()=>({account_name:'LOVELACE ADA',bank_code:'001'})});
 await assert.rejects(()=>assertBankAccountMatchesPocketName({}, {}, {...deps,profiles:{get:async()=>({nameStatus:'bank_resolved',resolvedName:'Ada Lovelace'})}}),e=>e.status===403);
+
+const ugDeps={...deps,profiles:{get:async()=>({nameStatus:'unverified',resolvedName:'',kycLevel:'basic',kycCountry:'UG',declaredName:'UGANDA USER'})}}
+await verifyBankPayoutBeneficiary({}, {},ugDeps)
+await assert.rejects(()=>assertBankAccountMatchesPocketName({}, {},ugDeps),e=>e.status===403)
+console.log('PASS verified Uganda user can resolve outgoing beneficiary; no unverified account-ownership claim.')

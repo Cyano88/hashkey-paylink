@@ -57,3 +57,15 @@ await assert.rejects(api.reservePocketBankAllowance(ugOwner,{id:'ug-over',amount
 await assert.rejects(api.reservePocketBankAllowance(owner,{id:'ng-still-basic',amount:'60000',currency:'NGN'}),e=>e.code==='KYC_ADVANCED_REQUIRED')
 delete process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN
 console.log('PASS Uganda single-check higher payment access, bounded cap, no upgrade prompt and unchanged Nigeria limits.')
+
+// Same budget across both destinations at the current Nigeria cap.
+const sharedOwner='uganda-both-countries';state.values.set('hashpaylink:pocket-kyc:v3:production:'+createHash('sha256').update(sharedOwner).digest('hex'),{jobs:[ugBasic]})
+assert.equal((await api.pocketTransferAllowance(sharedOwner)).country,'UG')
+assert.equal((await api.pocketTransferAllowance(sharedOwner)).dailyLimitNgn,50000)
+await api.reservePocketBankAllowance(sharedOwner,{id:'ng-destination',amount:'20000',currency:'NGN'})
+await api.reservePocketBankAllowance(sharedOwner,{id:'ug-destination',amount:'74000',currency:'UGX',usdc:'20'})
+assert.equal((await api.pocketTransferAllowance(sharedOwner)).remainingNgn,0,'20 USDC at fixture NGN 1500 consumes the remaining 30000')
+await api.reservePocketBankAllowance(sharedOwner,{id:'ug-destination',amount:'74000',currency:'UGX',usdc:'21'})
+assert.equal((await api.pocketTransferAllowance(sharedOwner)).remainingNgn,0,'Retries retain original conversion')
+await assert.rejects(api.reservePocketBankAllowance(sharedOwner,{id:'extra-ug',amount:'1',currency:'UGX',usdc:'0.01'}),e=>e.code==='KYC_DAILY_LIMIT')
+console.log('PASS shared Nigeria/Uganda cap, USDC conversion, no country reset, no retry double count.')

@@ -12,3 +12,8 @@ assert.equal(old.nameStatus,'bank_resolved');await assert.rejects(()=>wrapped.bi
 for(const key of ['bvn','id_number','fullName','legal_name','email','phone_number','date_of_birth','selfie_image','kycReference','callbackProof'])assert.equal(containsPrivateIdentity({metadata:{nested:[{[key]:'fixture'}]}}),true)
 assert.equal(containsPrivateIdentity({source:'pocket-support',metadata:{type:'pocket_support_case_commitment',commitment:'a'.repeat(64),privacy:'non_correlatable_content_hash_only'}}),false)
 console.log('PASS KYC-only identity authority, private references, retired enrollment and recursive 0G identity guard')
+
+identity={level:'basic',country:'UG',declaredName:'UGANDA TEST USER'}
+const ug=await wrapped.get('fixture');assert.equal(ug.kycLevel,'basic');assert.equal(ug.kycCountry,'UG');assert.equal(ug.nameStatus,'unverified');assert.equal(ug.resolvedName,'');assert.equal(ug.declaredName,'UGANDA TEST USER');assert.equal(ug.firstName,'UGANDA TEST');assert.equal(ug.lastName,'USER')
+assert.equal(containsPrivateIdentity({declaredName:'UGANDA TEST USER'}),true)
+console.log('PASS Uganda verification badge independent from name verification; declared payer name remains private.')

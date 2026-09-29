@@ -1,3 +1,5 @@
+import {readPocketCountry,savePocketCountry,currencyForPocketCountry} from '../lib/pocketCountryPreference'
+import {pocketApiUrl} from '../lib/pocketRoutes'
 import PocketAmountShimmer from './PocketAmountShimmer'
 import type { ReactNode } from 'react'
 import usePocketLimitDisplay from '../hooks/usePocketLimitDisplay'
@@ -186,7 +188,28 @@ function SecurityPanel({ email, getAccessToken, onResetPin, stocks }: { stocks: 
 }
 
 export default function PocketProfileFeaturePage({ feature, onBack, getAccessToken, email = '', onResetPin = async () => undefined, stocks = false }: { stocks?: boolean; feature: PocketProfileFeature; onBack(): void; getAccessToken(): Promise<string | null>; email?: string; onResetPin?(): Promise<void> }) {
-  const [currency, setCurrency] = useState('NGN')
+  const [currency, setCurrency] = useState<string>(()=>currencyForPocketCountry(readPocketCountry(email)))
+  const currencyChosen=useRef(false)
+  const countryToken=useRef(getAccessToken);countryToken.current=getAccessToken
+  useEffect(()=>{
+    currencyChosen.current=false
+    setCurrency(currencyForPocketCountry(readPocketCountry(email)))
+    if(feature!=='rates')return
+    let active=true
+    const controller=new AbortController()
+    const timer=setTimeout(()=>controller.abort(),15000)
+    void(async()=>{try{
+      const token=await countryToken.current();if(!token||!active)return
+      const response=await fetch(pocketApiUrl('/api/pocket/kyc'),{method:'POST',headers:{authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({action:'status'}),signal:controller.signal})
+      const result=await response.json()
+      const country=result.verification?.country
+      if(active&&response.ok&&result.ok&&result.jobId&&(country==='NG'||country==='UG')){
+        savePocketCountry(email,country)
+        if(!currencyChosen.current)setCurrency(currencyForPocketCountry(country))
+      }
+    }catch{/* Keep the locally selected default and the manual country switch. */}finally{clearTimeout(timer)}})()
+    return()=>{active=false;controller.abort();clearTimeout(timer)}
+  },[feature,email])
   const fx = usePocketFxQuote(10, feature === 'rates', currency === 'UGX' ? 'UGX' : 'NGN')
   const [pushEnabled, setPushEnabled] = useState(pocketPushEnabled)
   const [limits, setLimits] = useState<PocketBillsLimitUsage | null>(null)
@@ -238,9 +261,9 @@ export default function PocketProfileFeaturePage({ feature, onBack, getAccessTok
   return <div className='fixed inset-0 z-[60] overflow-y-auto bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white'>
     <main className='mx-auto min-h-full w-full max-w-[462px] px-4 pb-[max(2.5rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]'>
       <PocketFlowHeader title={title} onBack={onBack} centered />
-      {feature === 'kyc' && <PocketKycPanel getAccessToken={getAccessToken} />}
+      {feature === 'kyc' && <PocketKycPanel key={email} email={email} getAccessToken={getAccessToken} />}
       {feature === 'wallet-setup' && <PocketWalletPreparation key={email} email={email} getAccessToken={getAccessToken} />}
-      {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={setCurrency} />}
+      {feature === 'rates' && <RatesPanel fx={fx} currency={currency} onCurrency={value=>{currencyChosen.current=true;setCurrency(value)}} />}
       {feature === 'limits' && <PocketTransferAllowanceView getAccessToken={getAccessToken} />}
       {feature === 'limits' && <LimitsPanel usage={limits} bank={bankLimit} busy={limitsBusy} error={limitsError} onRefresh={() => void refreshLimits()} />}
       {feature === 'notifications' && <NotificationsPanel enabled={pushEnabled} onChange={enabled => { setPocketPushEnabled(enabled); setPushEnabled(enabled) }} />}

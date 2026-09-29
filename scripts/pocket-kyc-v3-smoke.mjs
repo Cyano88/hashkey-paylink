@@ -89,7 +89,7 @@ globalThis.fetch=async(url,init)=>{
  if(url.endsWith('/v1/job_status'))return new Response(JSON.stringify(signed(ugResult||{job_found:true,job_complete:false})))
  return baseFetch(url,init)
 }
-const ugInput={idNumber:'CM123456789012',cardNumber:'123456789',dob:'1990-02-03'}
+const ugInput={fullName:'Uganda Test User',idNumber:'CM123456789012',cardNumber:'123456789',dob:'1990-02-03'}
 assert.equal(ugInput.idNumber.length,14)
 assert.equal((await request('ug-invalid',{action:'start',country:'UG',consent:true,identity:{...ugInput,idNumber:'bad'}})).code,400)
 const basic=await request('ug-basic',{action:'start',country:'UG',consent:true,identity:ugInput})
@@ -101,7 +101,7 @@ const partial=await request('ug-partial',{action:'start',country:'UG',consent:tr
 const inconsistent=await request('ug-inconsistent',{action:'start',country:'UG',consent:true,identity:ugInput});setUgResult(job(inconsistent.body.jobId),'1020',{Secondary_ID_Number:'No Match'});assert.equal((await request('ug-inconsistent',{action:'status'})).body.level,'none')
 const wrong=await request('ug-wrong-binding',{action:'start',country:'UG',consent:true,identity:ugInput});setUgResult(job(wrong.body.jobId));ugResult.result.PartnerParams.user_id='foreign';assert.equal((await request('ug-wrong-binding',{action:'status'})).code,502)
 ugTimeout=true;assert.equal((await request('ug-timeout',{action:'start',country:'UG',consent:true,identity:ugInput})).code,503);const count=ugSubmitCount;assert.equal((await request('ug-timeout',{action:'start',country:'UG',consent:true,identity:ugInput})).code,409);assert.equal(ugSubmitCount,count)
-const persisted=JSON.stringify([...state.values.values()]);for(const secret of Object.values(ugInput))assert.equal(persisted.includes(secret),false,'Raw identity details must not persist')
+const persisted=JSON.stringify([...state.values.values()]);for(const secret of [ugInput.idNumber,ugInput.cardNumber,ugInput.dob])assert.equal(persisted.includes(secret),false,'Raw identity details must not persist')
 ugTimeout=false;ugResult=null
 const callbackStart=await request('ug-callback',{action:'start',country:'UG',consent:true,identity:ugInput});const cj=job(callbackStart.body.jobId)
 const cb=async proof=>{const res={code:200,status(code){this.code=code;return this},json(body){this.body=body;return this}};await m.pocketUgandaBasicCallback({query:{ug_basic:cj.id,proof},body:{ResultCode:'1020'}},res);return res}

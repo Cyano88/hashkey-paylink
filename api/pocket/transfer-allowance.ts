@@ -36,7 +36,7 @@ export async function pocketTransferAllowance(owner:string) {
  const verification=await readPocketKycLevel(owner),level=verification.paymentLevel||verification.level;await refreshReleases(owner)
  const ledger=await readDurableJson<Ledger>(key(owner)),day=nigeriaDay(Date.now()),limit=cap(level)
  const used=(ledger?.charges||[]).filter(c=>c.day===day&&c.state==='reserved').reduce((n,c)=>n+c.amount,0)/100
- return {level:verification.level,paymentLevel:level,dailyLimitNgn:limit,remainingNgn:Math.max(0,limit-used),advancedDailyLimitNgn:advancedDailyNgn(),resetsAt:new Date(Date.parse(day+'T00:00:00Z')+86400000-3600000).toISOString()}
+ return {level:verification.level,country:verification.country,paymentLevel:level,dailyLimitNgn:limit,remainingNgn:Math.max(0,limit-used),advancedDailyLimitNgn:advancedDailyNgn(),resetsAt:new Date(Date.parse(day+'T00:00:00Z')+86400000-3600000).toISOString()}
 }
 export async function reservePocketBankAllowance(owner:string,input:{id:string;amount:string;currency:string;usdc?:string;providerOrderId?:string},checkOnly=false) {
  const verification=await readPocketKycLevel(owner),level=verification.paymentLevel||verification.level

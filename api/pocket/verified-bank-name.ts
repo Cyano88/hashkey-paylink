@@ -20,7 +20,7 @@ async function verifyPocketBankAccount(
 ) {
   const identity = await dependencies.verifyUser(req)
   const profile = await dependencies.profiles.get(identity.userId)
-  if (profile?.nameStatus !== 'kyc_verified' || !profile.resolvedName) {
+  if (!profile || !(profile.kycLevel==='basic'||profile.kycLevel==='advanced'||profile.nameStatus==='kyc_verified'&&profile.resolvedName)) {
     throw Object.assign(new Error('Complete Basic identity verification in Pocket first.'), { status: 403 })
   }
   const verification = await dependencies.verifyAccount(body)
@@ -54,6 +54,7 @@ export async function assertBankAccountMatchesPocketName(
   dependencies: VerifiedBankNameDependencies = defaultDependencies,
 ) {
   const { identity, profile, verification } = await verifyPocketBankAccount(req, body, dependencies)
+  if(profile.nameStatus!=='kyc_verified'||!profile.resolvedName)throw Object.assign(new Error('Verified account ownership is required for this receiving setup. Contact Pocket support.'),{status:403})
   if (verification.name_required) throw Object.assign(new Error('This provider does not verify account ownership. Use an account that returns your registered name.'), { status: 403 })
   if (normalizeBankLegalName(verification.account_name) !== normalizeBankLegalName(profile.resolvedName)) {
     throw Object.assign(new Error('This account belongs to a different verified name. Use an account in your verified name.'), { status: 403 })

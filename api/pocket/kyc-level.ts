@@ -7,12 +7,12 @@ export function advancedDailyNgn() {
  const value=Number(process.env.POCKET_ADVANCED_DAILY_LIMIT_NGN)
  return Number.isSafeInteger(value*100)&&value>BASIC_DAILY_NGN?value:null
 }
-export function kycLevelFromJobs(jobs:any[],legacy=false):{level:PocketKycLevel;paymentLevel?:PocketKycLevel;legalName?:string;firstName?:string;lastName?:string;reference?:string} {
+export function kycLevelFromJobs(jobs:any[],legacy=false):{level:PocketKycLevel;country?:'NG'|'UG';paymentLevel?:PocketKycLevel;legalName?:string;declaredName?:string;firstName?:string;lastName?:string;reference?:string} {
  const method=(j:any)=>{try{return legacy?storedKycPolicy(j).method:j.method}catch{return undefined}}
  const basic=jobs.find(j=>j.environment==='production'&&j.status==='passed'&&(method(j)==='bvn'&&(j.country===undefined||j.country==='NG')||!legacy&&j.country==='UG'&&method(j)==='government_id')&&j.identityMatch&&j.legalName || !legacy&&j.environment==='production'&&j.country==='UG'&&method(j)==='national_id'&&j.status==='passed'&&j.resultCode==='1020'&&j.identityMatch)
  if(!basic)return {level:'none'}
  const advanced=jobs.find(j=>j.environment==='production'&&j.status==='passed'&&j.country!=='UG'&&['nin','government_id'].includes(method(j))&&j.identityMatch&&jobs.some(b=>b.id===j.bvnJobId&&b.environment==='production'&&b.status==='passed'&&method(b)==='bvn'&&b.identityMatch===j.identityMatch))
- return {level:advanced?'advanced':'basic',paymentLevel:advanced||basic.country==='UG'?'advanced':'basic',legalName:basic.legalName,firstName:basic.firstName,lastName:basic.lastName,reference:basic.providerJobId||basic.id}
+ return {level:advanced?'advanced':'basic',country:basic.country==='UG'?'UG':'NG',paymentLevel:advanced||basic.country==='UG'?'advanced':'basic',legalName:basic.legalName,declaredName:basic.country==='UG'?basic.declaredName:undefined,firstName:basic.firstName,lastName:basic.lastName,reference:basic.providerJobId||basic.id}
 }
 export async function readPocketKycLevel(owner:string) {
  const hash=createHash('sha256').update(owner).digest('hex')
