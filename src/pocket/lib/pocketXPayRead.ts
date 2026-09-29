@@ -1,3 +1,4 @@
+import {notifyPocketKycRequirement} from './pocketKycAccess'
 import type {XPayCheckout,XPayDestination} from './pocketUnifiedXPay'
 type Mine={standaloneIds?:string[];checkouts:XPayCheckout[];destinations:XPayDestination[]}
 let cached:{owner:string;data:Mine}|undefined
@@ -10,6 +11,7 @@ export async function readXPayJson(url:string,init:RequestInit={},retry=false){
   try{
    const r=await fetch(url,{...init,signal:init.signal?AbortSignal.any([init.signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)})
    const body=await r.json().catch(()=>null)
+   if(!r.ok||!body?.ok)notifyPocketKycRequirement(body)
    if(!r.ok||!body?.ok)throw Object.assign(Error(body?.error||(r.status===404?'This QR is no longer available.':'XPay is temporarily unavailable. Please try again.')),{retryable:[408,502,503,504].includes(r.status)})
    return body
   }catch(e){

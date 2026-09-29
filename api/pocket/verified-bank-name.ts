@@ -4,7 +4,7 @@ import { verifyNgPosBankAccount } from '../ng-pos.js'
 import { isPocketBankVerifyData } from '../../src/pocket/lib/pocketSchemas.js'
 
 export function normalizeBankLegalName(value: unknown) {
-  return String(value ?? '').toLocaleLowerCase().replace(/[^a-z0-9]/g, '')
+  return String(value ?? '').normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).filter(Boolean).sort().join(' ')
 }
 
 export type VerifiedBankNameDependencies = {
@@ -20,8 +20,8 @@ async function verifyPocketBankAccount(
 ) {
   const identity = await dependencies.verifyUser(req)
   const profile = await dependencies.profiles.get(identity.userId)
-  if (profile?.nameStatus !== 'bank_resolved' || !profile.resolvedName) {
-    throw Object.assign(new Error('Link your bank-verified name from Profile first.'), { status: 403 })
+  if (profile?.nameStatus !== 'kyc_verified' || !profile.resolvedName) {
+    throw Object.assign(new Error('Complete Basic identity verification in Pocket first.'), { status: 403 })
   }
   const verification = await dependencies.verifyAccount(body)
   if (!isPocketBankVerifyData(verification)) {

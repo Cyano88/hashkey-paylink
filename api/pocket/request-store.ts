@@ -136,7 +136,7 @@ export function createPocketRequestRepository(options: Options = {}) {
         const destination = clean(input.destination, 20)
         const amount = clean(input.amount, 30)
         const networks = new Set(['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'])
-        if (!networks.has(source) || !networks.has(destination) || source === destination || destination !== request.network) {
+        if (source === 'ethereum' || !networks.has(source) || !networks.has(destination) || source === destination || destination !== request.network) {
           throw Object.assign(new Error('Pocket payment route is invalid.'), { status: 400 })
         }
         if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0 || Number(amount) > Number(request.amount)) {

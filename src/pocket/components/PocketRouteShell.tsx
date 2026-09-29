@@ -4,6 +4,8 @@ import { Keyboard } from '@capacitor/keyboard'
 import { useLocation } from 'react-router-dom'
 import PocketBottomNav, { type PocketNavTab } from './PocketBottomNav'
 import { Loader2 } from './PocketIcons'
+import PocketKycPrompt from './PocketKycPrompt'
+import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { refreshPocketData } from '../lib/pocketRefresh'
 
 export default function PocketRouteShell({
@@ -26,6 +28,8 @@ export default function PocketRouteShell({
   refreshEnabled?: boolean
 }) {
   const { pathname, state, key: locationKey } = useLocation()
+  const path = pathname.slice(POCKET_BASE_PATH.length)
+  const hideNavigation = [POCKET_ROUTES.transfer, POCKET_ROUTES.send, POCKET_ROUTES.receive, POCKET_ROUTES.deposit, POCKET_ROUTES.swap, POCKET_ROUTES.usdc, POCKET_ROUTES.bank, '/xstocks/send', '/xstocks/receive'].includes(path) || path === POCKET_ROUTES.bills || path.startsWith(POCKET_ROUTES.bills + '/')
   const scrollPath=pathname+(scrollKey?':'+scrollKey:'')
   const [keyboardOpen, setKeyboardOpen] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
@@ -198,7 +202,7 @@ export default function PocketRouteShell({
               overflowY: fixedPage ? 'hidden' : undefined,
               top: headerHeight > 0 ? headerHeight : 'var(--pocket-safe-top)',
               scrollPaddingTop: 16,
-              scrollPaddingBottom: 'calc(7.5rem + var(--pocket-safe-bottom))',
+              scrollPaddingBottom: hideNavigation ? 'max(1.5rem, calc(0.75rem + var(--pocket-safe-bottom)))' : 'calc(7.5rem + var(--pocket-safe-bottom))',
             }}
           >
             <div role="status" aria-label={refreshing ? 'Refreshing Pocket' : pullDistance >= 66 ? 'Release to refresh' : 'Pull to refresh'} aria-hidden={pullDistance <= 4 && !refreshing} className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${pullDistance - 48}px)` }}>
@@ -213,7 +217,7 @@ export default function PocketRouteShell({
                 display: fixedPage ? 'flex' : undefined,
                 flexDirection: fixedPage ? 'column' : undefined,
                 gap: fixedPage ? 12 : undefined,
-                paddingBottom: fixedPage ? (keyboardOpen || inputFocused ? 12 : 'calc(5rem + var(--pocket-safe-bottom))') : undefined,
+                paddingBottom: hideNavigation ? (keyboardOpen || inputFocused ? 12 : 'max(1.5rem, calc(0.75rem + var(--pocket-safe-bottom)))') : fixedPage ? (keyboardOpen || inputFocused ? 12 : 'calc(5rem + var(--pocket-safe-bottom))') : undefined,
                 paddingTop: 16,
               }}
             >
@@ -222,7 +226,8 @@ export default function PocketRouteShell({
             </div>
           </div>
 
-          <PocketBottomNav rail={rail} active={active} disabled={navigationDisabled} keyboardOpen={keyboardOpen || inputFocused} onSelect={onSelect} />
+          <PocketKycPrompt />
+          {!hideNavigation && <PocketBottomNav rail={rail} active={active} disabled={navigationDisabled} keyboardOpen={keyboardOpen || inputFocused} onSelect={onSelect} />}
       </div>
     </div>
   )

@@ -1,3 +1,4 @@
+import {readPocketKycLevel} from './kyc-level.js'
 import { submitSupportConversation } from './support-conversation.js'
 import { pocketActivityStore } from './activity-store.js'
 import { activityFeedKey } from './activity-feed.js'
@@ -25,7 +26,7 @@ type SupportCase = {
   reference?: string
   assignedTo?: string
   humanSupport?: boolean
-  customer?: { fullName: string; email: string; pocketId: string }
+  customer?: { fullName: string; email: string; pocketId: string; kycReference?:string; kycLevel?:string }
   messages: SupportMessage[]
   proof?: { rootHash: string; ogTxHash: string; ogExplorer: string }
   createdAt: number
@@ -100,7 +101,8 @@ async function privateCustomerIdentity(identity: Awaited<ReturnType<typeof resol
   const profile = await localCurrencyProfileRepository.get(identity.subject)
   if (!profile) return undefined
   const fullName = clean(profile.resolvedName || [profile.firstName, profile.lastName].filter(Boolean).join(' '), 160)
-  return { fullName, email: clean(profile.email, 240).toLowerCase(), pocketId: clean(profile.pocketId || profile.pocketNumber, 20) }
+  const kyc=await readPocketKycLevel(identity.subject)
+  return { fullName, kycReference:kyc.reference,kycLevel:kyc.level,email: clean(profile.email, 240).toLowerCase(), pocketId: clean(profile.pocketId || profile.pocketNumber, 20) }
 }
 
 export default async function pocketSupportCasesHandler(req: Request, res: Response) {

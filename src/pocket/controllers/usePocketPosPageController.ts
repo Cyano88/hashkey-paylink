@@ -53,7 +53,7 @@ export default function usePocketPosPageController({
   const [copied, setCopied] = useState(false)
   const creationIdempotencyKey = useRef('')
   const lastVerificationKey = useRef('')
-  const normalizeName = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '')
+  const normalizeName = (value: string) => value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).filter(Boolean).sort().join(' ')
   const profileVerified = Boolean(verifiedIdentityName)
   const identityMatches = profileVerified && bankVerified && normalizeName(bankAccountName) === normalizeName(verifiedIdentityName)
 

@@ -15,7 +15,7 @@ const maskedEmail = (email: string) => {
   if (!local || !domain) return 'Pocket user'
   return `${local.slice(0, 2)}...${local.slice(-2)}@${domain}`
 }
-const profileName = (profile: Awaited<ReturnType<ProfileRepository['getByPocketId']>>) => profile?.nameStatus === 'bank_resolved' && profile.resolvedName ? profile.resolvedName : maskedEmail(profile?.email || '')
+const profileName = (profile: Awaited<ReturnType<ProfileRepository['getByPocketId']>>) => profile?.nameStatus === 'kyc_verified' && profile.resolvedName ? profile.resolvedName : maskedEmail(profile?.email || '')
 const publicRequest = (item: Awaited<ReturnType<PocketRequestRepository['listFor']>>[number], userId: string) => ({ id: item.id, eventId: item.eventId, direction: item.recipientId === userId ? 'incoming' : 'outgoing', senderPocketId: item.senderPocketId, senderName: item.senderName, recipientPocketId: item.recipientPocketId, recipientName: item.recipientName || `Pocket ${item.recipientPocketId}`, title: item.title, amount: item.amount, flexibleAmount: item.flexibleAmount, network: item.network, paymentPath: item.paymentPath || '', status: item.status, transactionHash: item.transactionHash || '', createdAt: item.createdAt, updatedAt: item.updatedAt })
 
 export function createPocketRequestsHandler(deps: Dependencies) {
@@ -77,7 +77,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         if (pocketId === sender.profile.pocketId) return fail(res, 400, 'You cannot request money from yourself.')
         const recipient = await deps.profiles.getByPocketId(pocketId)
         if (!recipient) return fail(res, 404, 'Pocket user was not found.')
-        return res.json({ ok: true, user: { pocketId: recipient.pocketId, displayName: profileName(recipient), verified: recipient.nameStatus === 'bank_resolved' } })
+        return res.json({ ok: true, user: { pocketId: recipient.pocketId, displayName: profileName(recipient), verified: recipient.nameStatus === 'kyc_verified' } })
       }
       if (req.method === 'POST' && req.body?.action === 'resolve-recipient') {
         const pocketId = String(req.body?.pocketId ?? '').trim()

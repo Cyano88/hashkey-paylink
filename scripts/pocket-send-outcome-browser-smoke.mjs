@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {build} from 'esbuild'
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE??'playwright')
 const mocks={
- circleEvmEmailWallet:`export const readCirclePaymentFeeQuote=async()=>{};export const reconcileCircleEvmEmailWithdraw=()=>new Promise(r=>window.confirmTransfer=r)`,
+ circleEvmEmailWallet:`export const resumeCircleEvmEmailWithdraw=(...args)=>reconcileCircleEvmEmailWithdraw(...args);export const readCirclePaymentFeeQuote=async()=>{};export const reconcileCircleEvmEmailWithdraw=()=>new Promise(r=>window.confirmTransfer=r)`,
  circleSolanaEmailWallet:`export const reconcileCircleSolanaTransfer=()=>new Promise(()=>{});export const sendCircleSolanaTransfer=async()=>{throw Error('unexpected Solana')}`,
  solanaPaymentFees:`export const readSolanaPaymentQuote=async()=>{};export const sendQuotedSolanaPayment=async()=>{throw Error('unexpected Solana')}`,
  pocketEvmTransferClient:`export const executePocketEvmTransfer=async(o)=>{window.confirmRequested=o.confirm;o.onChallenge({challengeId:'challenge',transactionId:'transaction'});if(window.mode==='timeout')throw Error('Connection timed out');if(window.mode==='reverted')throw Error('Withdrawal transaction reverted on-chain.');o.onAccepted({challengeId:'challenge',transactionId:'transaction'});return window.mode==='confirmed'?{txHash:'0x'+'a'.repeat(64),status:'confirmed'}:{txHash:'',status:'submitted'}}`,

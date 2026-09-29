@@ -68,6 +68,7 @@ export default function PocketMobileNumberInput({
   options,
   disabled = false,
   loading = false,
+  validationMessage,
   onChange,
 }: {
   category: 'airtime' | 'data'
@@ -76,6 +77,7 @@ export default function PocketMobileNumberInput({
   options: MobileNetworkOption[]
   disabled?: boolean
   loading?: boolean
+  validationMessage?: string
   onChange: (value: MobileNumberChange) => void
 }) {
   const [networkOpen, setNetworkOpen] = useState(false)
@@ -155,7 +157,7 @@ export default function PocketMobileNumberInput({
             onChange={event => updatePhone(event.target.value)}
             onBlur={event => updatePhone(event.target.value)}
             placeholder="0801 234 5678"
-            aria-invalid={invalidNumber}
+            aria-invalid={invalidNumber || Boolean(validationMessage)}
             className="h-11 w-full min-w-0 bg-transparent text-[15px] font-semibold tabular-nums tracking-[0.01em] text-gray-950 outline-none placeholder:text-gray-300 disabled:opacity-60 dark:text-white dark:placeholder:text-gray-600"
           />
         </label>
@@ -173,9 +175,10 @@ export default function PocketMobileNumberInput({
         )}
       </div>
 
-      {invalidNumber && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">Enter a valid 11-digit Nigerian number.</p>}
-      {!invalidNumber && contactError && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{contactError}</p>}
-      {!invalidNumber && !contactError && detectedNetworkFromPhone(phoneNumber) && (
+      {validationMessage && <p role="alert" className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{validationMessage}</p>}
+      {!validationMessage && invalidNumber && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">Enter a valid 11-digit Nigerian number.</p>}
+      {!validationMessage && !invalidNumber && contactError && <p className="mt-1.5 px-1 text-[10px] font-semibold text-red-500">{contactError}</p>}
+      {!validationMessage && !invalidNumber && !contactError && detectedNetworkFromPhone(phoneNumber) && (
         <p className="mt-1.5 px-1 text-[10px] font-medium text-gray-500 dark:text-gray-400">Network detected. You can change it for a ported number.</p>
       )}
     </div>

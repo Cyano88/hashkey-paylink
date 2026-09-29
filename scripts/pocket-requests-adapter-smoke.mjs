@@ -9,8 +9,8 @@ const root = await mkdtemp(join(tmpdir(), 'pocket-requests-'))
 let requestNow = 100
 const repository = createPocketRequestRepository({ durable: false, isRender: false, storePath: join(root, 'requests.json'), now: () => ++requestNow, approvalTimeoutMs: 5 * 60_000 })
 const profiles = {
-  async ensure(identity) { return { profile: identity.userId === 'sender' ? { privyUserId: 'sender', pocketId: '11111111', resolvedName: 'Ada Sender', nameStatus: 'bank_resolved', email: 'ada@example.com' } : { privyUserId: 'recipient', pocketId: '22222222', resolvedName: '', nameStatus: 'unverified', email: 'grace@example.com' }, unchanged: true } },
-  async getByPocketId(id) { return id === '22222222' ? { privyUserId: 'recipient', pocketId: '22222222', resolvedName: '', nameStatus: 'unverified', email: 'grace@example.com' } : id === '11111111' ? { privyUserId: 'sender', pocketId: '11111111', resolvedName: 'Ada Sender', nameStatus: 'bank_resolved', email: 'ada@example.com' } : undefined },
+  async ensure(identity) { return { profile: identity.userId === 'sender' ? { privyUserId: 'sender', pocketId: '11111111', resolvedName: 'Ada Sender', nameStatus: 'kyc_verified', email: 'ada@example.com' } : { privyUserId: 'recipient', pocketId: '22222222', resolvedName: '', nameStatus: 'unverified', email: 'grace@example.com' }, unchanged: true } },
+  async getByPocketId(id) { return id === '22222222' ? { privyUserId: 'recipient', pocketId: '22222222', resolvedName: '', nameStatus: 'unverified', email: 'grace@example.com' } : id === '11111111' ? { privyUserId: 'sender', pocketId: '11111111', resolvedName: 'Ada Sender', nameStatus: 'kyc_verified', email: 'ada@example.com' } : undefined },
 }
 const response = () => ({ statusCode: 200, body: undefined, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } })
 async function call(handler, method, body = {}) { const res = response(); await handler({ method, body, headers: {} }, res); return res }
@@ -70,6 +70,8 @@ try {
   assert.equal(invalidRoute.statusCode, 400)
   const excessiveRoute = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '6' })
   assert.equal(excessiveRoute.statusCode, 400)
+  const excludedRoute = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'ethereum', destination: 'base', amount: '4' })
+  assert.equal(excludedRoute.statusCode, 400)
   const routeStarted = await call(handler, 'POST', { action: 'route-start', id: incoming.body.requests[0].id, source: 'arbitrum', destination: 'base', amount: '4' })
   assert.equal(routeStarted.statusCode, 200, JSON.stringify(routeStarted.body))
   assert.equal(routeStarted.body.route.phase, 'started')

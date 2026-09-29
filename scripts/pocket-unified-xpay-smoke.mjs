@@ -3,6 +3,7 @@ fs.mkdirSync('.codex-temp',{recursive:true})
 const bank={id:'bank-1',name:'Fixture',kind:'bank',currency:'NGN',assets:['USDC'],revision:'1'}, stocks={id:'stocks-1',name:'Fixture',kind:'xstocks',currency:'USD',assets:['NVDAx','AAPLx'],revision:'1'}
 globalThis.fixture={owner:'merchant',destinations:[bank,stocks],approval:false}
 const mocks={
+'./kyc-level.js':`export const requirePocketBasicKyc=async()=>{if(!fixture.kyc)throw Object.assign(Error('Complete Basic verification.'),{status:403,code:'KYC_BASIC_REQUIRED'})}`,
 '../privy-circle-link.js':`export const verifiedPrivyUser=async()=>{if(!fixture.owner)throw Object.assign(Error('Sign in'),{status:401});return{userId:fixture.owner}}`,
 '../render-durable-store.js':`const stores=new Map();export const readDurableJson=async(k)=>structuredClone(stores.get(k));export const mutateDurableJson=async(k,fn)=>{const store=fn(structuredClone(stores.get(k)));stores.set(k,store);return structuredClone(store)}`,
 '../ng-pos.js':`export const ownedPosSetupKeys=async()=>fixture.keys||{};export const ownedPosSetupKey=async(owner,id)=>fixture.keys?.[id];export const ownsPocketPosQr=async(owner,id)=>owner==='merchant'&&id==='bank-1';export const listPocketUnifiedXPayPosPayments=async(owner,id)=>fixture.payments?.filter(p=>p.owner===owner&&(!id||p.checkoutId===id)).map(({owner,checkoutId,...p})=>p)||[];export const listPocketXPayPosDestinations=async owner=>owner==='merchant'?fixture.destinations.filter(d=>d.kind==='bank'):[]`,
@@ -16,6 +17,7 @@ await call({...input,destinationIds:['bank-1','stocks-1']},400)
 const a=(await call(input)).checkout;assert.equal(a.destinations.length,0);assert.equal((await call(input)).checkout.id,a.id)
 await call({...input,name:'Changed'},409);await call({id:a.id},409,true)
 const b=(await call({...input,key:'fixture-key-00000002',name:'Shop B'})).checkout
+const gatedSetup=await call({action:'begin-setup',id:a.id,kind:'bank'},403);assert.equal(gatedSetup.code,'KYC_BASIC_REQUIRED');await call({action:'begin-setup',id:b.id,kind:'wallet'});fixture.kyc=true;
 const setupA=await call({action:'begin-setup',id:a.id,kind:'bank'}),setupB=await call({action:'begin-setup',id:b.id,kind:'wallet'})
 fixture.keys={'bank-1':setupA.key,'stocks-1':setupB.key}
 const config=(id,version,destinationIds)=>({action:'configure',id,version,destinationIds})

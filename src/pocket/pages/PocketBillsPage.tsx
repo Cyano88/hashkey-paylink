@@ -25,8 +25,8 @@ export default function PocketBillsPage({ view }: { view: PocketBillView | 'over
   const navigate = useNavigate()
   if (view !== 'overview') return <PocketBillFlow key={view} view={view} />
   const selectNav = (tab: PocketNavTab) => navigate(POCKET_BASE_PATH + pocketPathFor(tab === 'bills' ? { section: 'bills', view: 'overview' } : tab === 'profile' ? { section: 'profile', view: 'details' } : tab === 'activity' ? { section: 'activity', view: 'all' } : { section: 'home', view: 'overview' }))
-  return <PocketRouteShell active="bills" onSelect={selectNav}>
-    <h1 className="py-3 text-center text-base font-black tracking-tight text-gray-950 dark:text-white">Bills</h1>
+  return <PocketRouteShell active="home" onSelect={selectNav}>
+    <PocketFlowHeader centered title="Bills" onBack={() => navigate(POCKET_BASE_PATH + '/home')} />
     <section aria-label="Bill services" className="divide-y divide-gray-100 dark:divide-[#262626]">
       {BILL_ACTIONS.map(({ view, label, Icon }) => <button key={view} type="button" onClick={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'bills', view }))} className="flex min-h-20 w-full items-center gap-4 px-1 py-4 text-left transition active:scale-[0.99]">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-700 dark:bg-[#121212] dark:text-gray-200"><Icon className="h-5 w-5" /></span>
@@ -73,7 +73,9 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
   })
   const paymentLiquidity = usePocketPaymentLiquidityController({
     enabled: authenticated && bills.status === 'ready',
-    amount: bills.intent?.amountUsdc ?? '',
+    // Bills use the same non-Ethereum funding sources as bank payouts.
+    bankPayout: true,
+    amount: bills.intent?.paymentAmountUsdc || bills.intent?.amountUsdc || '',
     destination: 'base',
     getAccessToken,
     ensureWallet: walletController.ensureWallet,
@@ -121,13 +123,13 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
 
   const flowHeader = <PocketFlowHeader centered title={BILL_ACTIONS.find(action => action.view === view)!.label} onBack={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'bills', view: 'overview' }))} />
 
-  if (authenticated && !wallets.resolved) return <PocketRouteShell active="bills" onSelect={selectNav}>{flowHeader}<PocketBillsSkeleton /></PocketRouteShell>
+  if (authenticated && !wallets.resolved) return <PocketRouteShell active="home" onSelect={selectNav}>{flowHeader}<PocketBillsSkeleton /></PocketRouteShell>
 
-  if (authenticated && wallets.error && !wallets.wallets.base?.address) return <PocketRouteShell active="bills" onSelect={selectNav}>{flowHeader}<div role="alert" className="mt-6 space-y-3 text-sm text-gray-500 dark:text-gray-400"><p>Bills could not load. Please try again.</p><button type="button" onClick={() => void wallets.refreshBalances()} className="font-semibold underline">Try again</button></div></PocketRouteShell>
+  if (authenticated && wallets.error && !wallets.wallets.base?.address) return <PocketRouteShell active="home" onSelect={selectNav}>{flowHeader}<div role="alert" className="mt-6 space-y-3 text-sm text-gray-500 dark:text-gray-400"><p>Bills could not load. Please try again.</p><button type="button" onClick={() => void wallets.refreshBalances()} className="font-semibold underline">Try again</button></div></PocketRouteShell>
 
   const baseBalance = wallets.rows.find(row => row.key === 'base')?.balance ?? 0
   return (
-    <PocketRouteShell active="bills" fixedPage refreshEnabled={false} onSelect={selectNav}>
+    <PocketRouteShell active="home" fixedPage refreshEnabled={false} onSelect={selectNav}>
       {flowHeader}
       <PocketBillsPanel
         view={view}

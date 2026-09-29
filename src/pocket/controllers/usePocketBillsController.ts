@@ -194,6 +194,8 @@ export default function usePocketBillsController({
   const displayedAttempt=useRef('')
   const terminalAttempts = useRef(new Set<string>())
   const billPayInFlight=useRef(false)
+  const quoteInFlight=useRef(false)
+  const quoteGeneration=useRef(0)
   const [confirming,setConfirming]=useState(false)
   const [refundBusy, setRefundBusy] = useState(false)
   const refundInFlight = useRef(false)
@@ -202,6 +204,7 @@ export default function usePocketBillsController({
   useEffect(() => { dismiss() }, [owner, dismiss])
   const resetResult = useCallback(() => {
     if (['paying', 'confirming', 'processing'].includes(status)) return
+    quoteGeneration.current += 1
     setIntent(null)
     setStatus('idle')
     setError('')
@@ -505,9 +508,17 @@ export default function usePocketBillsController({
     return () => window.clearTimeout(timer)
   }, [authenticated, category, phone, serviceId, variationCode, verification, verifyBusy, verifyCustomer])
 
-  const review = useCallback(async () => {
-    if (availability !== 'enabled' || !authenticated || status === 'quoting') return
+  const review = useCallback(async (selectedBundle?: string) => {
+    if (availability !== 'enabled' || !authenticated || status === 'quoting' || quoteInFlight.current) return
+    const quoteVariation = category === 'data' && selectedBundle ? selectedBundle : variationCode
+    if (category === 'data' && selectedBundle) {
+      const plan = dataVariations.find(item => item.variationCode === selectedBundle && item.available)
+      if (!plan || !/^0\d{10}$/.test(normalizeNigerianMobileNumber(phone))) return
+      setVariationCode(selectedBundle)
+    }
+    quoteInFlight.current = true
     const reviewScope=billScope.current
+    const generation=++quoteGeneration.current
     setStatus('quoting')
     setError('')
     setErrorCode('')
@@ -516,21 +527,21 @@ export default function usePocketBillsController({
       const wallet = baseWallet ?? await ensureBaseWallet()
       if (!wallet) throw new Error('Base wallet setup was cancelled.')
       const accessToken = await token()
-      const result = category === 'data' ? await quotePocketData({ accessToken, serviceId, variationCode, phone, payerWallet: wallet.address })
+      const result = category === 'data' ? await quotePocketData({ accessToken, serviceId, variationCode: quoteVariation, phone, payerWallet: wallet.address })
         : category === 'tv' ? await quotePocketTv({ accessToken, serviceId, variationCode, smartcard: phone, contactPhone: tvRequiresCustomerVerification(serviceId) ? contactPhone : phone, payerWallet: wallet.address })
           : category === 'electricity' ? await quotePocketElectricity({ accessToken, serviceId, meterType: variationCode as 'prepaid' | 'postpaid', meterNumber: phone, contactPhone, amountNgn, payerWallet: wallet.address })
             : await quotePocketAirtime({ accessToken, serviceId, phone, amountNgn, payerWallet: wallet.address })
-      if(!mounted.current||billScope.current!==reviewScope)return
+      if(!mounted.current||billScope.current!==reviewScope||quoteGeneration.current!==generation)return
       if (result.intent.quoteExpiresAt <= Date.now()) throw new PocketBillsApiError(`The ${billLabel(category)} quote expired. Review it again.`, { code: 'BILLS_QUOTE_EXPIRED', status: 409 })
       setIntent(result.intent)
       setStatus('ready')
     } catch (reason) {
-      if(!mounted.current||billScope.current!==reviewScope)return
+      if(!mounted.current||billScope.current!==reviewScope||quoteGeneration.current!==generation)return
       setStatus('error')
       setErrorCode(reason instanceof PocketBillsApiError ? reason.code : '')
       setError(reason instanceof Error ? reason.message : `Could not prepare the ${billLabel(category)} payment.`)
-    }
-  }, [amountNgn, authenticated, availability, baseWallet, category, contactPhone, ensureBaseWallet, phone, serviceId, status, token, variationCode])
+    } finally { quoteInFlight.current = false }
+  }, [amountNgn, authenticated, availability, baseWallet, category, contactPhone, dataVariations, ensureBaseWallet, phone, serviceId, setVariationCode, status, token, variationCode])
 
   const pay = useCallback(async () => {
     if (!intent || status !== 'ready' || billPayInFlight.current) return

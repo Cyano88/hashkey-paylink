@@ -1,3 +1,4 @@
+import PocketBankKycBoundary from '../components/PocketBankKycBoundary'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
 import { formatPocketPaymentAmount } from '../lib/pocketMoney'
 import PocketPayoutCountry from '../components/PocketPayoutCountry'
@@ -16,7 +17,7 @@ import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
 import { formatNgnAmount } from '../../lib/utils'
-import PocketVerifiedNameGate, { PocketVerifiedNameBadge } from '../components/PocketVerifiedNameGate'
+import PocketIdentityGate, { PocketIdentityBadge } from '../components/PocketIdentityGate'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -42,7 +43,8 @@ import usePocketWallets from '../hooks/usePocketWallets'
 import { pocketActivityReceipt } from '../lib/pocketReceipt'
 import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRoutes'
 
-export default function PocketMoveBankPage() {
+export default function PocketMoveBankPage(){return <PocketBankKycBoundary><PocketMoveBankContent/></PocketBankKycBoundary>}
+function PocketMoveBankContent() {
   const navigate = useNavigate()
   const { search, state: locationState } = useLocation()
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
@@ -57,6 +59,7 @@ export default function PocketMoveBankPage() {
   const recipients = usePocketBankRecipients({email,enabled:authenticated && mode==='withdraw',getAccessToken})
   const closeDirectory = () => locationState?.bankRecipientDirectory ? navigate(-1) : navigate(POCKET_BASE_PATH + POCKET_ROUTES.bank + '?mode=withdraw', {replace:true})
   const [reviewOpen, setReviewOpen] = useState(false)
+  useEffect(() => { const close=()=>setReviewOpen(false);window.addEventListener('pocket:kyc-required',close);return()=>window.removeEventListener('pocket:kyc-required',close) }, [])
   const reviewFx = usePocketFxQuote(1, reviewOpen)
   const [approvalBusy, setApprovalBusy] = useState(false)
   const [payoutToast, setPayoutToast] = useState('')
@@ -239,7 +242,7 @@ export default function PocketMoveBankPage() {
         </div>
       )}
       <PocketFlowHeader centered title={routeMode === 'request' ? 'Request' : recipientStep ? 'Enter amount' : 'Bank transfer'} onBack={() => recipientStep ? setRecipientStep(false) : navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
-      <div className={mode === "withdraw" && recipientStep ? "flex min-h-0 flex-1 flex-col" : "space-y-3.5"}>
+      <div className={mode === "withdraw" && recipientStep ? "flex min-h-0 min-w-0 w-full flex-1 flex-col" : "min-w-0 w-full space-y-3.5"}>
         {routeMode === 'request' && <>
           <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
             <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc)} className="min-h-10 rounded-full px-3 text-xs font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Request</button>
@@ -281,10 +284,10 @@ export default function PocketMoveBankPage() {
             </div>
           )}
 
-          {authenticated && !bank.profileVerified && <PocketVerifiedNameGate />}
+          {authenticated && !bank.profileVerified && <PocketIdentityGate />}
 
-          {authenticated && bank.profileVerified && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className={mode === "withdraw" && recipientStep ? "flex min-h-0 flex-1 flex-col" : "space-y-3.5"}>
-            {mode === 'request' && <PocketVerifiedNameBadge name={profile.profile?.resolvedName ?? ''} />}
+          {authenticated && bank.profileVerified && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className={mode === "withdraw" && recipientStep ? "flex min-h-0 min-w-0 w-full flex-1 flex-col" : "min-w-0 w-full space-y-3.5"}>
+            {mode === 'request' && <PocketIdentityBadge name={profile.profile?.resolvedName ?? ''} />}
 
             <div hidden={mode === 'withdraw' && recipientStep} className="space-y-3">{mode === 'withdraw' && <PocketPayoutCountry value={bank.country} onChange={value=>{bank.setCountry(value);direct.setAmount('');setReviewOpen(false)}} />}<PocketVerifiedBankFields
               recipientEntry={mode === 'withdraw'}

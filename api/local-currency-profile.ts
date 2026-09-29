@@ -1,3 +1,4 @@
+import {withPocketKycIdentity} from './pocket/kyc-profile.js'
 import type { Request, Response } from 'express'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
@@ -15,7 +16,7 @@ export type LocalCurrencyProfile = {
   firstName: string
   lastName: string
   resolvedName: string
-  nameStatus: 'unverified' | 'bank_resolved'
+  nameStatus: 'unverified' | 'bank_resolved' | 'kyc_verified'
   email: string
   pocketNumber: string
   pocketId: string
@@ -414,5 +415,5 @@ export function createLocalCurrencyProfileHandler(dependencies: HandlerDependenc
   }
 }
 
-export const localCurrencyProfileRepository = createLocalCurrencyProfileRepository()
+export const localCurrencyProfileRepository = withPocketKycIdentity(createLocalCurrencyProfileRepository())
 export default createLocalCurrencyProfileHandler({ verifyUser: verifiedPrivyUser, repository: localCurrencyProfileRepository })

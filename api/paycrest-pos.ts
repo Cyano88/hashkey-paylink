@@ -540,6 +540,14 @@ export async function getPaycrestPosOrder(id: string) {
   return store.orders[id] ?? null
 }
 
+// Allowance release requires durable provider state; a stale file fallback must
+// never restore spending capacity. Read the store once for all current charges.
+export async function getDurablePaycrestPosOrders(ids: string[]) {
+  if (!ids.length) return []
+  const store = await readDurableJson<Partial<PaycrestStore>>(STORE_KEY)
+  return ids.flatMap(id => store?.orders?.[id] ? [store.orders[id]] : [])
+}
+
 export async function listPaycrestPosOrdersForMerchants(merchantIds: string[]) {
   const wanted = new Set(merchantIds.map(id => id.trim()).filter(Boolean))
   if (!wanted.size) return []

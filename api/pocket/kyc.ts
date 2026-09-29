@@ -1,3 +1,4 @@
+import {pocketTransferAllowance} from './transfer-allowance.js'
 import { smileIdentityMatchKey } from './smile-v3.js'
 import pocketKycV3, { pocketKycV3Callback, requireV3ProductionKyc } from './kyc-v3.js'
 import { startKycPolicy, storedKycPolicy, matchesKycPolicy, type PocketKycContext } from './kyc-policy.js'
@@ -203,6 +204,11 @@ export async function pocketLegacyKycCallback(req: Request, res: Response) {
 }
 
 export default async function pocketKyc(req: Request, res: Response) {
+  if(req.method==='POST'&&req.body?.action==='limits'){
+    res.setHeader('Cache-Control','no-store')
+    try{const identity=await verifiedPrivyUser(req);return res.json({ok:true,...await pocketTransferAllowance(identity.userId)})}
+    catch(error){return res.status((error as any).status||503).json({ok:false,error:'Verification status could not load. Try again.'})}
+  }
   // Emergency pause preserves records, results and callback reconciliation.
   if (process.env.POCKET_KYC_ENROLLMENT_PAUSED === 'true' && req.method === 'POST' && ['start', 'resume'].includes(req.body?.action)) {
     res.setHeader('Cache-Control', 'no-store')

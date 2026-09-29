@@ -46,7 +46,7 @@ assert.deepEqual(selectPocketCheckoutRoute({ destination: 'solana', amountUnits:
 
 console.log('Pocket checkout routing smoke tests passed.')
 
-for (const network of ['arc','ethereum','polygon','arbitrum','solana']) {
+for (const network of ['arc','polygon','arbitrum','solana']) {
  const rows=[{network:'base',units:usdc(1),available:true},{network,units:usdc(100),available:true}];
  assert.equal(selectPocketCheckoutRoute({destination:'base',amountUnits:usdc(100),balances:rows}).source,network);
  assert.equal(selectPocketCheckoutRoute({destination:'base',amountUnits:usdc(100),balances:rows,bridgeTotals:{[network]:usdc(100.01)}}).kind,'insufficient');
@@ -54,4 +54,10 @@ for (const network of ['arc','ethereum','polygon','arbitrum','solana']) {
  rows[1].available=false;
  assert.equal(selectPocketCheckoutRoute({destination:'base',amountUnits:usdc(100),balances:rows}).kind,'insufficient');
 }
-console.log('PASS: all five source networks cover Base shortfalls only when balances also cover quoted fees; unavailable balances cannot fund a payout.');
+console.log('PASS: all four eligible source networks cover Base shortfalls only when balances also cover quoted fees; unavailable balances cannot fund a payout.');
+
+const excluded = [{network:'base',units:usdc(1),available:true},{network:'ethereum',units:usdc(100),available:true}];
+assert.deepEqual(selectPocketCheckoutRoute({destination:'base',amountUnits:usdc(2),balances:excluded,bridgeTotals:{ethereum:usdc(1)}}),{kind:'insufficient',destination:'base',amountUnits:usdc(2),availableUnits:usdc(1)});
+assert.equal(selectPocketCheckoutRoute({destination:'base',amountUnits:usdc(2),balances:[...excluded,{network:'polygon',units:usdc(5),available:true}]}).source,'polygon');
+assert.equal(selectPocketCheckoutRoute({destination:'ethereum',amountUnits:usdc(2),balances:excluded}).kind,'direct');
+console.log('PASS Ethereum cannot automatically fund checkout, does not inflate eligible balance, and remains usable for explicit direct payments.');

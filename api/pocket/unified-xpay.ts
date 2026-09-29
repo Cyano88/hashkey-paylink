@@ -1,3 +1,4 @@
+import {requirePocketBasicKyc} from './kyc-level.js'
 import {retirePosQr} from './pos-retirement.js'
 import {UNIFIED_XPAY_KEY as KEY,readUnifiedXPayStore as read,type UnifiedXPayRecord as Record,type UnifiedXPayStore as Store} from './unified-xpay-store.js'
 import type {Request,Response} from 'express'
@@ -69,6 +70,7 @@ export default async function handler(req:Request,res:Response){
    return res.json({ok:true,checkout:{id:checkout!.id,name:checkout!.name,createdAt:checkout!.createdAt,version:checkout!.version||0,destinations:checkout!.destinationIds.flatMap(id=>active.filter(d=>d.id===id))}})
   }
   if(b.action==='begin-setup'){
+   if(b.kind==='bank')await requirePocketBasicKyc(owner)
    if(!['bank','wallet'].includes(b.kind))return res.status(400).json({ok:false,error:'Choose a receiving option.'})
    let key=''
    await mutateDurableJson<Store>(KEY,current=>{
@@ -110,5 +112,5 @@ export default async function handler(req:Request,res:Response){
    return res.json({ok:true})
   }
   return res.status(400).json({ok:false,error:'Unsupported XPay action.'})
- }catch(e){const error=e as Error&{status?:number};return res.status(error.status||503).json({ok:false,error:error.status&&error.status<500?error.message:'XPay is temporarily unavailable.'})}
+ }catch(e){const error=e as Error&{status?:number;code?:string};return res.status(error.status||503).json({ok:false,code:error.code?.startsWith('KYC_')?error.code:undefined,error:error.status&&error.status<500?error.message:'XPay is temporarily unavailable.'})}
 }

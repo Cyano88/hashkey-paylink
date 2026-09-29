@@ -1,3 +1,4 @@
+import PocketKycPrompt from '../components/PocketKycPrompt'
 import PocketActivityPanel from '../features/activity/PocketActivityPanel'
 import {PlusIcon} from '@heroicons/react/24/outline'
 import {readXPayJson,readXPayMineCache,cacheXPayMine,clearXPayMineCache} from '../lib/pocketXPayRead'
@@ -128,5 +129,5 @@ export default function PocketUnifiedXPayPage({publicCheckout=false}:{publicChec
   {error&&<p role="alert" className="text-xs text-red-500">{error}</p>}{error&&!busy&&!selected&&!creating&&!setup&&<button className="min-h-11 w-full text-xs font-semibold" onClick={()=>setReload(n=>n+1)}>Try again</button>}
   {deleting&&<PocketBottomSheet title="Delete QR" showCloseButton dismissOnBackdrop={false} dismissible={!busy} onClose={()=>setDeleting(false)}><h2 className="text-lg font-semibold">Delete this QR?</h2><p className="my-4 text-sm text-gray-500">New scans will stop working. Existing payments and receipts remain available.</p><button className={cta} disabled={busy} onClick={()=>void remove()}>{busy?'Confirming\u2026':'Delete QR'}</button></PocketBottomSheet>}
  </>
- return publicCheckout?<main className="mx-auto max-w-md space-y-5 px-4 py-8 text-gray-950 dark:text-white"><p className="mb-6 flex items-center justify-center gap-2 text-sm font-semibold"><CPurseIcon size={26} title=""/>Pocket</p>{content}</main>:<PocketRouteShell refreshEnabled={refreshEnabled} navigationDisabled={busy} rail={origin} scrollKey={stepKey} fixedPage={setup==='wallet'||creating} active="home" onSelect={tab=>navigate(POCKET_BASE_PATH+(tab==='home'?POCKET_ROUTES.home:tab==='bills'?POCKET_ROUTES.bills:tab==='profile'?POCKET_ROUTES.profile:POCKET_ROUTES.activity))}>{content}</PocketRouteShell>
+ return publicCheckout?<main className="mx-auto max-w-md space-y-5 px-4 py-8 text-gray-950 dark:text-white"><p className="mb-6 flex items-center justify-center gap-2 text-sm font-semibold"><CPurseIcon size={26} title=""/>Pocket</p>{content}<PocketKycPrompt/></main>:<PocketRouteShell refreshEnabled={refreshEnabled} navigationDisabled={busy} rail={origin} scrollKey={stepKey} fixedPage={setup==='wallet'||creating} active={origin === 'stablecoins' ? 'xpay' : 'home'} onSelect={tab=>navigate(POCKET_BASE_PATH+(tab==='home'?POCKET_ROUTES.home:tab==='bills'?POCKET_ROUTES.bills:tab==='profile'?POCKET_ROUTES.profile:POCKET_ROUTES.activity))}>{content}</PocketRouteShell>
 }

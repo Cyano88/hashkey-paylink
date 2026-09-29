@@ -82,6 +82,7 @@ export default function PocketDataBundlePicker({
               role="option"
               aria-selected={selected}
               disabled={disabled || !bundle.available}
+              onMouseDown={event => event.preventDefault()}
               onClick={() => onChange(bundle.variationCode)}
               title={!bundle.available ? 'Outside the current Bills payment limit' : bundle.name}
               className={cn(

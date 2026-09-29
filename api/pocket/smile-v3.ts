@@ -33,12 +33,15 @@ export function validV3Signature(config:SmileConfig,headers:Record<string,unknow
  const actual=Buffer.from(signature,'base64');return actual.length===expected.length&&timingSafeEqual(actual,expected)
 }
 
-// Use only the callback URL already stored by Smile. A browser hint cannot select
-// a callback destination or approve a job; it can only request authenticated replay.
-export async function smileV3Replay(config:SmileConfig,jobId:string){
+// The replay destination is constructed only from backend configuration and the
+// stored session proof. Browser input must never choose a callback destination.
+export async function smileV3Replay(config:SmileConfig,jobId:string,binding:{reference:string;proof:string}){
  if(!/^job_[0-9a-hjkmnp-tv-z]{26}$/.test(jobId))throw v3Failure('Invalid provider reference.',400)
  const token=await smileV3Token(config)
- const response=await fetch(host(config)+'/v3/replay/'+encodeURIComponent(jobId),{method:'POST',headers:{'SmileID-Token':token,'SmileID-Partner-ID':config.partnerId,Accept:'application/json'},signal:AbortSignal.timeout(15000)})
+ if(!/^pkyc_[a-f0-9]{32}$/.test(binding.reference)||!/^[a-f0-9]{64}$/.test(binding.proof))throw v3Failure('Invalid callback binding.',400)
+ const callback=new URL(config.callbackUrl);callback.searchParams.set('reference',binding.reference);callback.searchParams.set('proof',binding.proof)
+ const body=new FormData();body.set('callback_url',callback.toString())
+ const response=await fetch(host(config)+'/v3/replay/'+encodeURIComponent(jobId),{method:'POST',body,headers:{'SmileID-Token':token,'SmileID-Partner-ID':config.partnerId,Accept:'application/json'},signal:AbortSignal.timeout(15000)})
  return json(response)
 }
 export async function assertSmileV3Policy(config:SmileConfig,policy:{product:string;idSelection:{NG:string[]}}):Promise<string[]>{

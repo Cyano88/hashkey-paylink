@@ -1,3 +1,5 @@
+import PocketKycPrompt from '../pocket/components/PocketKycPrompt'
+import {notifyPocketKycRequirement} from '../pocket/lib/pocketKycAccess'
 import usePocketSlowConfirmation from '../pocket/hooks/usePocketSlowConfirmation'
 import PocketTransactionSheet from '../pocket/components/PocketTransactionSheet'
 import { readCirclePaymentFeeQuote, type CirclePaymentFeeQuote } from '../lib/circleEvmEmailWallet'
@@ -77,7 +79,7 @@ import { PocketPillMark } from '../pocket/components/CPurseIcon'
 import PocketStatusCheck from '../pocket/components/PocketStatusCheck'
 import PocketSelect from '../pocket/components/PocketSelect'
 import { linkPocketWallet, readPocketWallet } from '../pocket/api/pocketWalletLinkClient'
-import { readPocketBalances, readPocketLinkedWallets } from '../pocket/api/pocketReadClient'
+import { readPocketBankRoutingLiquidity, readPocketDestinationLiquidity } from '../pocket/api/pocketReadClient'
 import { readPocketBridgeQuote, readPocketBridgeStatus, recordPocketBridge } from '../pocket/api/pocketBridgeClient'
 import { bridgeCircleSolanaWallet } from '../pocket/lib/pocketSolanaBridge'
 import { selectPocketCheckoutRoute, type PocketCheckoutNetwork, type PocketCheckoutRoute } from '../lib/pocketCheckoutRouting'
@@ -1293,10 +1295,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
       try {
         const accessToken = await getAccessToken()
         if (!accessToken) throw new Error('Sign in again to check Pocket balances.')
-        const [snapshot, wallets] = await Promise.all([
-          readPocketBalances({ accessToken }),
-          readPocketLinkedWallets({ accessToken }),
-        ])
+        const snapshot = await readPocketBankRoutingLiquidity(accessToken)
+        const wallets = snapshot.wallets
         if (cancelled) return
         setPocketCheckoutWallets(wallets)
         const balances = (['base', 'arbitrum', 'solana'] as PocketCheckoutNetwork[]).map(network => {
@@ -2503,6 +2503,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
             accessToken,
           })
         : await bridgeCircleEvmEmailWallet({
+            privyAccessToken: accessToken,
             session: {
               userToken: credentials.userToken,
               encryptionKey: credentials.encryptionKey,
@@ -2529,9 +2530,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         .catch(() => undefined)
       let arrived = false
       for (let attempt = 0; attempt < 20 && !arrived; attempt += 1) {
-        const snapshot = await readPocketBalances({ accessToken })
-        const destination = snapshot.rows.find(row => row.key === route.destination)
-        const destinationUnits = destination?.status === 'ok' ? parseUnits(destination.balance.toFixed(6), 6) : 0n
+        const destination = await readPocketDestinationLiquidity(accessToken, route.destination)
+        const destinationUnits = parseUnits(destination.balance.toFixed(6), 6)
         arrived = destinationUnits >= circleRequiredUnits
         if (!arrived) await new Promise(resolve => window.setTimeout(resolve, 3_000))
       }
@@ -2770,9 +2770,10 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         }
         settlementIntentId = quoteData.quote.intent_id
       }
+      const payerAccessToken = await getAccessToken()
       const response = await fetch('/api/ng-pos', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...(payerAccessToken ? {authorization:'Bearer '+payerAccessToken} : {}) },
         body: JSON.stringify({
           action: 'createOfframpOrder',
           ...(pocketScan ? { ensure_payable: true } : {}),
@@ -2784,7 +2785,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
         }),
       })
       const data = await response.json().catch(() => ({})) as { ok?: boolean; order?: PaycrestCheckoutOrder; error?: string }
-      if (!response.ok || !data.ok || !data.order) throw new Error(data.error || 'Could not prepare payout.')
+      if (!response.ok || !data.ok || !data.order) {notifyPocketKycRequirement(data);throw new Error(data.error || 'Could not prepare payout.')}
       if (pocketScan) assertPocketScanPayoutPayable(data.order)
       const needsReview = !!pocketScan && pocketScanPayoutNeedsReview(paycrestOrder, data.order)
       setPaycrestOrder(data.order)
@@ -4326,6 +4327,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   // ────────────────────────────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-md animate-slide-up">
+      <PocketKycPrompt />
       {!pocketScan && <HashPayLinkCheckoutBrand />}
       <div
         className="overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"

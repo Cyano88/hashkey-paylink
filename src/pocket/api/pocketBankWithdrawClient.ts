@@ -1,3 +1,4 @@
+import {notifyPocketKycRequirement} from '../lib/pocketKycAccess'
 import { POCKET_API, createPocketIdempotencyKey } from '../lib/pocketSchemas'
 
 export type PocketBankWithdrawData = {
@@ -73,6 +74,7 @@ async function mutate({ accessToken, body, idempotencyKey, fetcher = fetch }: { 
     throw new Error('Pocket could not reach the bank payout service. Check your connection and try again.')
   }
   const data = await response.json().catch(() => undefined)
+  if (!response.ok) notifyPocketKycRequirement(data)
   if (!response.ok) throw new Error(typeof (data as any)?.error === 'string' ? (data as any).error : 'Bank payout failed.')
   return parseData(data)
 }

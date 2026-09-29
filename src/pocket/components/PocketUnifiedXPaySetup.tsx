@@ -5,7 +5,7 @@ import usePocketProfile from '../hooks/usePocketProfile'
 import usePocketStockWallet from '../hooks/usePocketStockWallet'
 import usePocketPosPageController from '../controllers/usePocketPosPageController'
 import {PocketPosSetupPanel} from '../features/move/PocketPosPanels'
-import PocketVerifiedNameGate from './PocketVerifiedNameGate'
+import PocketIdentityGate from './PocketIdentityGate'
 import PocketRecentActivitySkeleton from './PocketRecentActivitySkeleton'
 import {stockAssets,stockUsdc} from '../lib/pocketXStocksWallet'
 import {xpayRequest} from '../api/pocketXPayClient'
@@ -13,7 +13,7 @@ import {xpayRequest} from '../api/pocketXPayClient'
 type Props={setupKey?:string;name:string;onCreated:(id:string)=>void|Promise<void>}
 export function XPayBankSetup({name,onCreated,setupKey}:Props){
  const identity=usePocketIdentity(),profile=usePocketProfile(identity)
- const verifiedName=profile.profile?.nameStatus==='bank_resolved'?profile.profile.resolvedName:''
+ const verifiedName=profile.profile?.nameStatus==='kyc_verified'?profile.profile.resolvedName:''
  const step=useCallback(()=>{},[])
  const pos=usePocketPosPageController({...identity,setupKey,profile:profile.profile,profileReady:Boolean(verifiedName&&identity.email),verifiedIdentityName:verifiedName,routeStep:'setup',onStepChange:step})
  const initialized=useRef(false),reported=useRef(''),callback=useRef(onCreated);callback.current=onCreated
@@ -23,7 +23,7 @@ export function XPayBankSetup({name,onCreated,setupKey}:Props){
  useEffect(()=>{const id=pos.merchant?.merchant_id;if(id&&reported.current!==id){reported.current=id;void finish(id)}},[pos.merchant?.merchant_id])
  if(pos.merchant?.merchant_id)return <div className="space-y-4"><p className="text-xs text-gray-500">{linkError||'Adding receiving account...'}</p>{linkError&&<button className="pocket-cta-primary w-full shrink-0" disabled={linkBusy} onClick={()=>void finish(pos.merchant!.merchant_id)}>Try again</button>}</div>
  if(!profile.loaded&&!profile.profile)return <PocketRecentActivitySkeleton/>
- if(!verifiedName)return <PocketVerifiedNameGate/>
+ if(!verifiedName)return <PocketIdentityGate/>
  return <PocketPosSetupPanel controller={pos.controller} showName={false} networkOptions={[{key:'base',label:'Base'}]} instantBankPayout bankInstitutions={pos.institutions} bankInstitutionsBusy={pos.institutionsBusy} bankCode={pos.bankCode} bankAccount={pos.bankAccount} bankAccountName={pos.bankAccountName} bankVerified={pos.bankVerified} bankVerifyBusy={pos.bankVerifyBusy} error={pos.error}/>
 }
 export function XPayWalletSetup({name,onCreated,setupKey,reservedAssets=[],initialAssets=[]}:Props&{reservedAssets?:string[];initialAssets?:string[]}){

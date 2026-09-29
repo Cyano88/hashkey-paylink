@@ -1,3 +1,4 @@
+import {notifyPocketKycRequirement} from '../pocket/lib/pocketKycAccess'
 import { installCircleApprovalSurface } from './circleApprovalSurface'
 import type { PaymentFeeQuote } from '../../api/payment-fee-quotes'
 import { executeRecoverableCircleApproval } from './circleRecoverableApproval'
@@ -381,6 +382,7 @@ async function circleWalletApi<T>(
       [400, 401, 403, 404, 422, 429].includes(res.status)
       || (res.status === 409 && String(data.code) === 'PAYMENT_QUOTE_REQUIRED')
     )
+    notifyPocketKycRequirement(data)
     throw Object.assign(new Error(data.code === 'INSUFFICIENT_PAYMENT_BALANCE' && data.error ? data.error : `Circle email wallet ${label} failed: ${apiError(data, res.status, action)}`), {
       status: res.status, code: data.code, submissionRejected,
     })
@@ -467,6 +469,7 @@ function authenticatedSdk(session: CircleEvmEmailSession) {
 }
 
 function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
+  totalAmount?: string
   amount?: string
   asset?: string
   recipient?: string
@@ -514,36 +517,40 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
     },
     emailOtp: {
       title: 'Enter Circle code',
-      subtitle: 'Use the newest code from your email. If it fails, resend for a clean code.',
+      subtitle: 'Enter the code sent to your email.',
       resendHint: 'Code not working?',
       resend: 'Resend code',
     },
     transactionRequest: {
       title: 'Confirm payment',
       subtitle: amount
-        ? `Approve ${amount} ${asset} on ${chainLabel}.`
-        : `Approve this ${asset} payment on ${chainLabel}.`,
+        ? `${amount} ${asset} on ${chainLabel}`
+        : `${asset} on ${chainLabel}`,
       fromLabel: 'Paying from',
       toLabel: 'Recipient',
       to: shortRecipient ? [shortRecipient] : undefined,
       totalLabel: 'Total',
-      rawTxDescription: 'Secure payment authorization',
-      rawTx: 'Circle protects this final approval before funds move.',
+      mainCurrency: amount ? { amount, symbol: asset } : undefined,
+      total: context?.totalAmount ? [context.totalAmount + ' ' + asset] : undefined,
+      rawTxDescription: 'Payment details',
+      rawTx: 'Approve payment',
     },
     contractInteraction: {
       title: 'Confirm payment',
       subtitle: amount
-        ? `Approve ${amount} ${asset} on ${chainLabel}.`
-        : `Approve this ${asset} payment on ${chainLabel}.`,
+        ? `${amount} ${asset} on ${chainLabel}`
+        : `${asset} on ${chainLabel}`,
       fromLabel: 'Smart wallet',
       contractAddressLabel: 'Payment contract',
-      contractInfo: ['Hash PayLink payment approval'],
+      contractInfo: ['Hash PayLink'],
       totalLabel: 'Total',
+      mainCurrency: amount ? { amount, symbol: asset } : undefined,
+      total: context?.totalAmount ? [context.totalAmount + ' ' + asset] : undefined,
       dataDetails: {
         dataDetailsLabel: 'Authorization details',
         callData: {
           callDataLabel: 'Secure call data',
-          data: 'Payment is prepared by Hash PayLink and approved through Circle.',
+          data: 'Payment authorization',
         },
         abiInfo: {
           functionNameLabel: 'Action',
@@ -562,10 +569,10 @@ function applyHashPayLinkCircleUi(sdk: W3SSdk, context?: {
       contractName: 'Hash PayLink',
       contractUrl: 'https://hashpaylink.com',
       subtitle: amount
-        ? `Approve ${amount} ${asset} on ${chainLabel}.`
-        : `Approve this ${asset} payment on ${chainLabel}.`,
+        ? `${amount} ${asset} on ${chainLabel}`
+        : `${asset} on ${chainLabel}`,
       descriptionLabel: 'Request',
-      description: 'Final Circle security confirmation for your Hash PayLink payment.',
+      description: 'Approve payment.',
     },
   })
 }
@@ -923,6 +930,7 @@ export async function sendCircleEvmEmailPayment(params: {
   })
   const totalUnits = parseUnits(params.amount || '0', CHAIN_META[params.session.chain].decimals)
   const challenge = await circleWalletApi<{
+    approval?: { amount: string; total: string; asset: string }
     challengeId?: string
     id?: string
     transactionId?: string
@@ -942,6 +950,7 @@ export async function sendCircleEvmEmailPayment(params: {
     payoutIntentId: params.payoutIntentId,
   }, { privyAccessToken: params.privyAccessToken })
   if (!challenge.challengeId) throw new Error('Circle did not return an EVM payment challenge.')
+  applyHashPayLinkCircleUi(sdk, { amount: challenge.approval?.amount ?? params.amount, totalAmount: challenge.approval?.total ?? (!params.feeQuoteToken ? params.amount : undefined), asset: CHAIN_META[params.session.chain].asset, recipient: params.recipient, chainLabel: CHAIN_META[params.session.chain].label })
   const result = await executeChallengeWithTimeout(
     sdk,
     challenge.challengeId,
@@ -1000,6 +1009,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
   })
   const totalUnits = parseUnits(params.amount || '0', CHAIN_META[params.session.chain].decimals)
   const challenge = await circleWalletApi<{
+    approval?: { amount: string; total: string; asset: string }
     challengeId?: string
     id?: string
     transactionId?: string
@@ -1017,6 +1027,7 @@ export async function sendCircleEvmEmailWithdraw(params: {
     idempotencyKey: params.idempotencyKey,
   })
   if (!challenge.challengeId) throw new Error('Circle did not return a withdraw challenge.')
+  applyHashPayLinkCircleUi(sdk, { amount: challenge.approval?.amount ?? params.amount, totalAmount: challenge.approval?.total ?? (!params.feeQuoteToken ? params.amount : undefined), asset: CHAIN_META[params.session.chain].asset, recipient: params.recipient, chainLabel: CHAIN_META[params.session.chain].label })
   params.onChallenge?.({ challengeId: challenge.challengeId, transactionId: findTransactionId(challenge) ?? '' })
   let observedTransactionId = findTransactionId(challenge) ?? ''
   let confirmedHash: Hex | null = null
@@ -1068,6 +1079,31 @@ export async function sendCircleEvmEmailWithdraw(params: {
     }
   }
   return null
+}
+
+// Only explicit user retries may reopen an unsigned challenge. Background
+// reconciliation remains read-only, and an accepted challenge is never resubmitted.
+export async function resumeCircleEvmEmailWithdraw(params: {
+  session: CircleEvmEmailSession
+  challengeId: string
+  transactionId?: string
+  timeoutMs?: number
+}) {
+  const detail = await circleWalletApi<{ challenge?: Record<string, unknown> }>({
+    action: 'getChallenge', userToken: params.session.userToken,
+    chain: params.session.chain, challengeId: params.challengeId,
+  })
+  if (!detail.challenge) throw new Error('Could not check the saved approval. Please try again.')
+  const state = transactionState(detail.challenge)
+  if (['FAILED', 'EXPIRED', 'CANCELLED', 'CANCELED'].includes(state)) {
+    throw Object.assign(new Error('The previous approval expired or was cancelled. Review your transfer again.'), { terminalFailure: true })
+  }
+  if (state === 'PENDING') {
+    // Use the existing immutable challenge and Circle's own decoded amounts.
+    // A newly fetched fee quote must not relabel this earlier authorization.
+    await executeChallenge(authenticatedSdk(params.session), params.challengeId)
+  }
+  return reconcileCircleEvmEmailWithdraw({ ...params, transactionId: challengeCorrelationId(detail.challenge) ?? params.transactionId })
 }
 
 export async function reconcileCircleEvmEmailWithdraw(params: {
