@@ -27,7 +27,7 @@ function evidence(config:SmileConfig,fields:Record<string,unknown>){
 }
 async function refresh(config:SmileConfig,owner:string,j:Job){
  const providerJobId=j.providerJobId||j.submissionHint?.jobId,providerUserId=j.providerUserId||j.submissionHint?.userId
- if(!providerJobId||j.status==='review'&&!!j.failureReason||['passed','failed'].includes(j.status)||Date.now()-(j.checkedAt||0)<30000)return
+ if(!providerJobId||j.status==='review'&&!!j.failureReason&&!['provider_fraud_review','submitted_name_mismatch'].includes(j.failureReason)||['passed','failed'].includes(j.status)||Date.now()-(j.checkedAt||0)<30000)return
  let claimed=false
  await mutateDurableJson<Store>(key(owner,config.environment),r=>{const v=r?.jobs.find(x=>x.id===j.id);if(v&&!['passed','failed'].includes(v.status)&&Date.now()-(v.checkedAt||0)>=30000){v.checkedAt=Date.now();claimed=true}return r||{jobs:[]}})
  if(!claimed)return
@@ -39,7 +39,7 @@ async function refresh(config:SmileConfig,owner:string,j:Job){
   if(v&&!['passed','failed'].includes(v.status)){
    // An untrusted browser reference must never assign the identity or a verdict.
    if(v.providerJobId===providerJobId){v.providerStatus=result.status;if(result.status==='block'||result.status==='error'){v.status='failed';v.failureReason=result.status==='error'?'provider_error':'provider_rejected'}else if(['clear','attention','not_found'].includes(result.status))v.status='review'}
-   if(v.replayBindingVersion!==1){v.replayAttempts=0;v.replayedAt=0;v.replayBindingVersion=1}
+   if(v.replayBindingVersion!==2){v.replayAttempts=0;v.replayedAt=0;v.replayBindingVersion=2}
    if(['clear','block','attention','error'].includes(result.status)&&(v.replayAttempts||0)<3&&Date.now()-(v.replayedAt||0)>=300000){v.replayedAt=Date.now();v.replayAttempts=(v.replayAttempts||0)+1;replay=true}
   }
   return r||{jobs:[]}
@@ -114,7 +114,9 @@ export async function pocketKycV3Callback(req:Request,res:Response){
   if(!['clear','block','attention','error'].includes(body.status))return reject(409,'terminal_status')
   const fields=body.id_fields&&typeof body.id_fields==='object'?body.id_fields:{},identity=evidence(config,fields)
   const typeMatches=selected.method!=='government_id'||fields.country==='NG'&&jobPolicy(selected).idSelection.NG.includes(fields.id_type)
-  const approved=body.status==='clear'&&typeMatches&&!!identity.identityMatch&&body.antifraud?.summary?.fraud_detected!==true
+  // Smile's authenticated final verdict controls approval. Risk signals are advisory;
+  // they must not override a clear result with a second Pocket risk decision.
+  const approved=body.status==='clear'&&typeMatches&&!!identity.identityMatch
   await mutateDurableJson<Store>(k,current=>{const j=current?.jobs.find(x=>x.id===reference);if(!j)throw fail('Unknown verification.',404)
    if(j.providerJobId&&j.providerJobId!==providerJobId)throw fail('Verification reference changed.',409)
    if(['passed','failed'].includes(j.status)&&j.providerJobId)return current!
@@ -127,13 +129,7 @@ export async function pocketKycV3Callback(req:Request,res:Response){
    if(approved&&!pairMatches)j.failureReason='identity_mismatch'
    else if(body.status==='block')j.failureReason='provider_rejected'
    else if(body.status==='error')j.failureReason='provider_error'
-   else if(body.status==='clear'&&!approved)j.failureReason=!typeMatches?'document_type_mismatch':body.antifraud?.summary?.fraud_detected===true?'provider_fraud_review':!identity.legalName?'identity_name_missing':'identity_birth_date_missing_or_invalid'
-   // Only authenticated, low-risk name discrepancies offer a fresh correction.
-   // This never approves the old job or bypasses the next identity check.
-   const stated=body.user_provided_info,normal=(v:unknown)=>typeof v==='string'?v.normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase():''
-   const last=normal(fields.last_name),given=normal(fields.first_name),statedLast=normal(stated?.last_name),statedGiven=normal(stated?.given_names)
-   const risk=body.antifraud?.fraud_risk,secure=body.antifraud?.smile_secure,sources=body.antifraud?.summary?.fraud_sources
-   if(j.status==='review'&&j.method==='bvn'&&body.status==='clear'&&identity.identityMatch&&risk?.risk_level==='low'&&typeof risk.risk_score==='number'&&risk.risk_score>=0&&risk.risk_score<=100&&secure?.status==='clear'&&Array.isArray(sources)&&sources.length===1&&sources[0]==='fraud_risk'&&last&&given&&statedLast&&statedGiven&&last!==statedLast&&!statedGiven.split(' ').includes(given))j.failureReason='submitted_name_mismatch'
+   else if(body.status==='clear'&&!approved)j.failureReason=!typeMatches?'document_type_mismatch':!identity.legalName?'identity_name_missing':'identity_birth_date_missing_or_invalid'
    if(j.status==='review')console.warn('[pocket-kyc-callback]',JSON.stringify({reason:j.failureReason||'provider_review',fieldNames:Object.keys(fields),hasName:!!identity.legalName,hasIdentityMatch:!!identity.identityMatch,dateType:typeof fields.date_of_birth,dateFormat:typeof fields.date_of_birth==='string'?fields.date_of_birth.replace(/[0-9]/g,'0').replace(/[a-zA-Z]/g,'x'):null}))
    return current!
   });return res.json({ok:true})
