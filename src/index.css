@@ -1159,3 +1159,25 @@ html[data-pocket-runtime='native'] #root { background-color: #F5F5F7; }
 html[data-pocket-runtime='native'].dark:not([data-pocket-light-surface='true']),
 html[data-pocket-runtime='native'].dark:not([data-pocket-light-surface='true']) body,
 html[data-pocket-runtime='native'].dark:not([data-pocket-light-surface='true']) #root { background-color: #000; }
+
+/* Pocket portals live outside the route canvas. Own their dark surfaces here,
+   including selectors and shared XPay sheets, without recoloring status icons,
+   token artwork, selected PIN cells or primary actions. */
+html.dark body [data-pocket-sheet].pocket-sheet-surface {
+  --pocket-sheet-panel: #0d0d0d;
+  background-color: #000;
+  border-color: #262626;
+  color: #fff;
+  color-scheme: dark;
+}
+html.dark body [data-pocket-sheet].pocket-sheet-surface :is(
+  [class~="dark:bg-[#121212]"],
+  [class~="dark:bg-[#171717]"],
+  [class~="dark:bg-[#111216]"],
+  [class~="dark:bg-[#0D0D0D]"],
+  [class~="dark:bg-white/5"],
+  [class~="dark:bg-white/[0.05]"]
+) { background-color: var(--pocket-sheet-panel); }
+
+html.dark body [data-pocket-receipt] { background-color: #000; }
+html.dark body [data-pocket-receipt] [data-receipt-paper] { background-color: #0d0d0d; }
