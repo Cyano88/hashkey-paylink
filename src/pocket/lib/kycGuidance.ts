@@ -1,7 +1,8 @@
-type State = { status: string; canResume?: boolean; failureReason?: string | null }
+type State = { status: string; canResume?: boolean; canCorrectNames?: boolean; failureReason?: string | null }
 export function kycGuidance(state: State) {
   if (state.canResume) return { title: 'Finish verification', message: 'Your last session was not submitted. Continue to finish your verification.', action: 'resume' as const }
   if (state.status === 'pending') return { title: 'Verification submitted', message: 'Your submission was received. We are waiting for the verification result. You can leave this screen.', action: 'wait' as const }
+  if (state.status === 'review' && state.canCorrectNames && state.failureReason === 'submitted_name_mismatch') return { title: 'Check your names', message: 'The names you entered did not match your BVN record. Enter your first and middle names under Given names, and your surname under Last name. A new verification is required.', action: 'correct' as const }
   if (state.status === 'review') {
     const message = state.failureReason === 'identity_mismatch'
       ? 'Your additional ID details did not match your verified BVN. Contact support to check the mismatch before trying again.'

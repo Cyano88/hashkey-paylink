@@ -9,7 +9,7 @@ import { pocketApiUrl, POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRout
 
 type VerificationMethod = 'bvn' | 'nin' | 'government_id'
 type VerificationPolicy = { method?: VerificationMethod; product?: string; country: string; countryName: string; provider: string; idSelection: Record<string, string[]>; consentRequired: Record<string, string[]>; previewBVNMFA: boolean }
-type KycState = {level?:'none'|'basic'|'advanced';basicDailyLimitNgn?:number;advancedDailyLimitNgn?:number|null; workflow?: { bvnPassed: boolean; complete: boolean; needsAdditional: boolean; methods: string[] }; environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; uploadReported?: boolean; failureReason?: string | null; verification?: VerificationPolicy; jobId?: string }
+type KycState = {level?:'none'|'basic'|'advanced';basicDailyLimitNgn?:number;advancedDailyLimitNgn?:number|null; workflow?: { bvnPassed: boolean; complete: boolean; needsAdditional: boolean; methods: string[] }; environment: 'sandbox' | 'production'; status: 'not_started' | 'pending' | 'passed' | 'failed' | 'review'; verified: boolean; canResume?: boolean; canCorrectNames?: boolean; uploadReported?: boolean; failureReason?: string | null; verification?: VerificationPolicy; jobId?: string }
 type Session = KycState & { token: string; partnerId: string; callbackUrl: string; partnerParams?: Record<string,string> }
 type SmileWindow = Window & { SmileIdentity?: (config: Record<string, unknown>) => void }
 const TEMPORARY_ERROR = 'Verification is temporarily unavailable. We will retry automatically.'
@@ -34,7 +34,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   const tokenReader = useRef(getAccessToken); tokenReader.current = getAccessToken
   const retryNotBefore = useRef(0)
   const [retryAt, setRetryAt] = useState(0)
-  const api = useCallback(async (action: 'status' | 'start' | 'resume' | 'uploaded', jobId?: string, method?: VerificationMethod, submission?: {jobId:string;userId:string}) => {
+  const api = useCallback(async (action: 'status' | 'start' | 'resume' | 'uploaded' | 'correct_names', jobId?: string, method?: VerificationMethod, submission?: {jobId:string;userId:string}) => {
     if (Date.now() < retryNotBefore.current) throw Object.assign(new Error('Verification is busy. Please wait a moment.'), {retryable:true})
     const token = await tokenReader.current()
     if (!token) throw Object.assign(new Error('Sign in again to continue.'), {retryable:false})
@@ -83,7 +83,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
     try {
       await loadSmile()
       if (!mounted.current) return
-      const session = await api(state?.canResume ? 'resume' : 'start', undefined, state?.canResume ? state.verification?.method : state?.workflow?.bvnPassed && selectedLevel==='advanced' ? additionalMethod : 'bvn')
+      const session = await api(state?.canCorrectNames ? 'correct_names' : state?.canResume ? 'resume' : 'start', state?.canCorrectNames ? state.jobId : undefined, state?.canResume ? state.verification?.method : state?.workflow?.bvnPassed && selectedLevel==='advanced' ? additionalMethod : 'bvn')
       if (!mounted.current) return
       if (!session.verification || session.verification.provider !== 'smile') throw new Error(TEMPORARY_ERROR)
       setState(session)
@@ -124,7 +124,7 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
   const passed = state?.status === 'passed'
   const resultTitle = basicPassed && passed && state?.environment==='production' && !state?.workflow?.complete ? 'Basic verification complete' : guidance?.title ? guidance.title : passed ? state.verified ? 'Verification complete' : 'Sandbox test completed' : 'Verification submitted'
   const resultText = basicPassed && passed && state?.environment==='production' && !complete ? 'You can now transfer up to ₦50,000 daily. Advanced verification is optional.' : guidance?.message ? guidance.message : passed ? state.verified ? 'Your identity check passed. You can continue to Pocket.' : 'Your sandbox identity check passed. This is a test result, not a production identity verification.' : 'Your submission has been received. We are checking the result with Smile ID. You can stay here for the update or continue while it processes.'
-  const retryable = !complete && guidance?.action !== 'support' && (selectedLevel==='advanced' ? basicPassed && (needsAdditional || state?.canResume === true || state?.status==='failed') : !basicPassed && (state?.status === 'not_started' || state?.status === 'failed' || state?.canResume === true))
+  const retryable = !complete && guidance?.action !== 'support' && (selectedLevel==='advanced' ? basicPassed && (needsAdditional || state?.canResume === true || state?.status==='failed') : !basicPassed && (state?.canCorrectNames === true || state?.status === 'not_started' || state?.status === 'failed' || state?.canResume === true))
   return <section className="mt-6 space-y-5">
     {!state && !error && <div role="status" aria-label="Loading verification" className="h-44 animate-pulse rounded-3xl bg-gray-200/70 dark:bg-white/10" />}
     {state && <>
@@ -149,8 +149,9 @@ export default function PocketKycPanel({ getAccessToken }: { getAccessToken: () 
         </label>)}
       </fieldset>}
       {retryable && <>
+        <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">Use your names exactly as shown on your ID. Given names means your first and middle names. Last name means your surname.</p>
         <label className="flex items-start gap-3 text-sm leading-6 text-gray-600 dark:text-gray-300"><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} className="mt-1 h-4 w-4 shrink-0" />I agree to share my identity details and selfie with Smile ID for verification.</label>
-        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className="pocket-cta-primary w-full px-4 py-3.5">{busy ? 'Opening verification...' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Verify Basic'}</button>
+        <button type="button" disabled={!consent || busy || retryAt > 0} onClick={() => void start()} className="pocket-cta-primary w-full px-4 py-3.5">{busy ? 'Opening verification...' : state.canCorrectNames ? 'Correct names' : state.canResume ? 'Continue verification' : needsAdditional ? additionalMethod === 'nin' ? 'Verify NIN' : 'Verify government ID' : failed ? 'Try verification again' : state.environment === 'sandbox' ? 'Start sandbox verification' : 'Verify Basic'}</button>
       </>}
       {(guidance?.action === 'support') && <a href={POCKET_BASE_PATH + POCKET_ROUTES.assistant} className="block w-full py-3 text-center text-sm font-semibold">Contact support</a>}
     </>}

@@ -9,3 +9,6 @@ for(const reason of ['provider_rejected','face_mismatch',undefined]) assert.equa
 for(const reason of ['session_failed','provider_error']) assert.equal(kycGuidance({status:'failed',failureReason:reason}).action,'retry')
 assert.equal(kycGuidance({status:'passed'}),null)
 console.log('PASS actionable KYC guidance, unknown-reason fallback, retry boundaries, and no invented correction instructions')
+
+assert.equal(kycGuidance({status:'review',failureReason:'submitted_name_mismatch',canCorrectNames:true}).action,'correct')
+assert.equal(kycGuidance({status:'review',failureReason:'submitted_name_mismatch',canCorrectNames:false}).action,'support')
