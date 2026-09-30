@@ -11,6 +11,7 @@ try{
  mode='hold';await page.evaluate(()=>{window.currency='UGX';window.mount()});await page.waitForFunction(()=>window.fx.loading)
  assert.equal(await page.evaluate(()=>window.fx.quote),null)
  while(!held)await page.waitForTimeout(10);mode='ok';held();await page.waitForFunction(()=>window.fx.quote?.currency==='UGX')
+ assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('pocket:fx:v1:UGX:1')).rate),3700,'Valid rates persist for restart')
  // Expire only the short refresh cache, not the 60s provider validity window.
  await page.evaluate(()=>{const now=Date.now;Date.now=()=>now()+31000});mode='error';await page.evaluate(()=>window.fx.refresh());await page.waitForFunction(()=>window.fx.error&&!window.fx.busy)
  assert.equal(await page.evaluate(()=>window.fx.quote.currency),'UGX','Failed refresh retains an unexpired quote')

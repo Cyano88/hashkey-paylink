@@ -1,13 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
-import { readPocketFxQuote, type PocketFxQuote } from '../api/pocketFxClient'
+import { readPocketFxQuote, parsePocketFxQuote, type PocketFxQuote } from '../api/pocketFxClient'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
 const cache = new Map<string, PocketFxQuote>()
 const pending = new Map<string, Promise<PocketFxQuote>>()
+function cachedQuote(key: string): PocketFxQuote | undefined {
+  const memory = cache.get(key)
+  if (memory && !memory.stale && memory.expiresAt > Date.now()) return memory
+  try {
+    const raw = localStorage.getItem('pocket:fx:v1:' + key)
+    if (!raw) return undefined
+    const quote = parsePocketFxQuote({ ok: true, quote: JSON.parse(raw) })
+    if (quote.currency + ':' + quote.amount !== key || quote.stale || quote.expiresAt <= Date.now()) return undefined
+    cache.set(key, quote)
+    return quote
+  } catch { return undefined }
+}
 export default function usePocketFxQuote(balance: number, enabled = true, currency: 'NGN' | 'UGX' = 'NGN') {
   const amount = Number.isFinite(balance) && balance > 0 ? balance.toFixed(6).replace(/\.?0+$/, '') : '1'
   const key = currency + ':' + amount
-  const [quote, setQuote] = useState<PocketFxQuote | null>(() => cache.get(key) ?? null)
+  const [quote, setQuote] = useState<PocketFxQuote | null>(() => cachedQuote(key) ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [revision, setRevision] = useState(0)
@@ -16,9 +28,9 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
     if (!enabled) return
     let active = true
     setError('')
-    setQuote(cache.get(key) ?? null)
+    setQuote(cachedQuote(key) ?? null)
     const update = async () => {
-      const saved = cache.get(key)
+      const saved = cachedQuote(key)
       if (saved && !saved.stale && saved.expiresAt > Date.now() && Date.now() - saved.quotedAt < 30_000) {
         setQuote(saved); setBusy(false); setError(''); return
       }
@@ -27,7 +39,7 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
       try {
         let request = pending.get(key)
         if (!request) {
-          request = readPocketFxQuote(amount, fetch, currency).then(value => { cache.set(key, value); return value }).finally(() => pending.delete(key))
+          request = readPocketFxQuote(amount, fetch, currency).then(value => { cache.set(key, value); try { if (!value.stale) localStorage.setItem('pocket:fx:v1:' + key, JSON.stringify(value)) } catch { /* Optional display cache. */ } return value }).finally(() => pending.delete(key))
           pending.set(key, request)
         }
         const value = await request
