@@ -1,3 +1,4 @@
+import {useTheme} from '../../lib/ThemeContext'
 import { pocketScanDestination } from '../lib/pocketScanCode'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -21,6 +22,7 @@ function nativePocketDestination(rawUrl: string) {
 
 type PocketNativeInsets = { top: number; bottom: number; topPx?: number; bottomPx?: number; density?: number }
 const PocketInsets = registerPlugin<{
+  setPocketTheme(options: {dark:boolean}): Promise<void>
   getInsets(): Promise<PocketNativeInsets>
   setSystemBarAppearance(options: { darkIcons: boolean; navigationDarkIcons?: boolean; backgroundColor: string }): Promise<void>
 }>('PocketInsets')
@@ -35,6 +37,8 @@ function nativeInsetCssPixels(value: number | undefined, pixels: number | undefi
 }
 
 export default function PocketNativeBridge() {
+  const {theme}=useTheme()
+  useEffect(()=>{if(isPocketNativeRuntime())void PocketInsets.setPocketTheme({dark:theme==='dark'}).catch(()=>undefined)},[theme])
   const navigate = useNavigate()
   const [online, setOnline] = useState(true)
 

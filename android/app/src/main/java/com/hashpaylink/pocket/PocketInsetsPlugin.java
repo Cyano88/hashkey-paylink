@@ -16,6 +16,19 @@ import com.getcapacitor.PluginMethod;
 @CapacitorPlugin(name = \u0022PocketInsets\u0022)
 public class PocketInsetsPlugin extends Plugin {
     @PluginMethod
+    public void setPocketTheme(PluginCall call) {
+        boolean dark = Boolean.TRUE.equals(call.getBoolean("dark", false));
+        getContext().getSharedPreferences("pocket-appearance", android.content.Context.MODE_PRIVATE).edit().putBoolean("dark", dark).apply();
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            getActivity().runOnUiThread(() -> {
+                android.app.UiModeManager manager = (android.app.UiModeManager) getContext().getSystemService(android.content.Context.UI_MODE_SERVICE);
+                manager.setApplicationNightMode(dark ? android.app.UiModeManager.MODE_NIGHT_YES : android.app.UiModeManager.MODE_NIGHT_NO);
+                call.resolve();
+            });
+        } else { call.resolve(); }
+    }
+
+    @PluginMethod
     public void setSystemBarAppearance(PluginCall call) {
         boolean darkIcons = Boolean.TRUE.equals(call.getBoolean(\u0022darkIcons\u0022, true));
         boolean navigationDarkIcons = Boolean.TRUE.equals(call.getBoolean("navigationDarkIcons", darkIcons));

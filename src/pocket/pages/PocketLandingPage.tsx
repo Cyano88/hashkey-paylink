@@ -7,12 +7,10 @@ import usePocketIdentity from '../hooks/usePocketIdentity'
 import usePocketProfile from '../hooks/usePocketProfile'
 import type { PocketSplashState } from '../hooks/usePocketSessionSplash'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
-import usePocketLightSurface from '../hooks/usePocketLightSurface'
 
 type LogoTarget = { top: number; left: number; width: number; height: number }
 
 export default function PocketLandingPage({ splashState = 'idle' }: { splashState?: PocketSplashState }) {
-  usePocketLightSurface()
   const navigate = useNavigate()
   const { ready, authenticated, email, getAccessToken } = usePocketIdentity()
   const profile = usePocketProfile({ authenticated, email, getAccessToken })
@@ -62,12 +60,12 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
 
   if (authenticated) {
     return (
-      <main className="fixed inset-0 z-40 bg-[#F5F5F7]" aria-hidden="true" />
+      <main data-pocket-auth="true" data-pocket-auth-surface className="fixed inset-0 z-40 bg-[#F5F5F7]" aria-hidden="true" />
     )
   }
 
   return (
-    <div className="fixed inset-0 z-40 overflow-y-auto bg-[#F5F5F7] text-gray-950">
+    <div data-pocket-auth="true" data-pocket-auth-surface className="fixed inset-0 z-40 overflow-y-auto bg-[#F5F5F7] text-gray-950">
       <div aria-hidden="true" className="pointer-events-none fixed inset-x-[-20%] top-[-24rem] h-[40rem] rounded-full bg-black/[0.035] blur-3xl" />
       <main className="relative mx-auto flex min-h-[100dvh] w-full max-w-[560px] flex-col justify-center px-6 pb-[max(1.75rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] sm:px-10">
         {checkingProfile || profileLoadFailed ? (
@@ -102,7 +100,7 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
           <section className="flex flex-col items-center py-4 text-center sm:py-6">
             <div className={`transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '100ms' : '0ms' }}>
               <PocketAuthBrand markRef={heroLogoRef} />
-              <h1 className="mx-auto mt-9 max-w-sm text-3xl font-bold leading-[1.2] tracking-normal sm:text-4xl">
+              <h1 className="mx-auto mt-9 max-w-sm text-[26px] font-bold leading-[1.25] tracking-normal sm:text-4xl">
                 Your money and stocks,<br />in one Pocket.
               </h1>
               <p className="mx-auto mt-5 max-w-sm text-sm font-medium leading-6 text-gray-500">
@@ -153,7 +151,7 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
         <>
           <div
             aria-hidden="true"
-            className={`pointer-events-none fixed inset-0 z-20 bg-[#F5F5F7] transition-opacity duration-700 ease-out motion-reduce:hidden ${splashLaunching ? 'opacity-0' : 'opacity-100'}`}
+            className={`pointer-events-none fixed inset-0 z-20 bg-[#F5F5F7] dark:bg-black transition-opacity duration-700 ease-out motion-reduce:hidden ${splashLaunching ? 'opacity-0' : 'opacity-100'}`}
           />
           <div
             aria-hidden="true"

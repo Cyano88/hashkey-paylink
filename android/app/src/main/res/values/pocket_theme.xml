@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+ <color name="pocket_launch_background">#F5F5F7</color>
+ <color name="pocket_launch_foreground">#030712</color>
+ <bool name="pocket_light_system_bars">true</bool>
+</resources>

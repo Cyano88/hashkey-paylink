@@ -71,3 +71,24 @@ html.dark [data-pocket-sheet] { background-color: #121212; color: #fff; }
 .pocket-mode-content { animation:none; }
 [data-pocket-app-frame='true'] nav[aria-label='Pocket navigation'] { z-index:50; }
 @media(prefers-reduced-motion:reduce) { .pocket-mode-curtain { display:none; } .pocket-mode-content { animation:none; } .pocket-mode-thumb,.pocket-mode-pill button { transition:none; } }
+
+/* Pocket authentication uses the same font and black canvas as the app. */
+[data-pocket-auth='true'] { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important; }
+html.dark [data-pocket-auth-surface] { background-color: #000 !important; color: #fff !important; }
+html.dark [data-pocket-auth='true'] .text-gray-950 { color: #fff !important; }
+html.dark [data-pocket-auth='true'] .text-gray-500,
+html.dark [data-pocket-auth='true'] .text-gray-600 { color: #9ca3af !important; }
+html.dark [data-pocket-auth='true'] .bg-white { background-color: #121212 !important; }
+html.dark [data-pocket-auth='true'] .border-gray-200,
+html.dark [data-pocket-auth='true'] .border-gray-300 { border-color: #262626 !important; }
+html.dark [data-pocket-auth='true'] .text-red-600 { color: #f87171 !important; }
+html.dark [data-pocket-auth='true'] .text-blue-600 { color: #60a5fa !important; }
+html.dark [data-pocket-auth='true'] .bg-gray-950 { background-color: #fff !important; color: #030712 !important; }
+html.dark [data-pocket-auth='true'] .border-gray-950 { border-color: #fff !important; }
+html.dark [data-pocket-auth='true'] .border-t-gray-950 { border-top-color: #fff !important; }
+html.dark [data-pocket-auth='true'] [class~='bg-white/10'] { background-color: rgb(0 0 0 / .08) !important; }
+html.dark [data-pocket-auth='true'] input::placeholder { color: #9ca3af !important; }
+html.dark [data-pocket-auth='true'] button[aria-label='Back to email'] { background-color: #121212 !important; color: #fff !important; }
+html.dark [data-pocket-auth='true'] a:hover { color: #fff !important; }
+html.dark [data-pocket-auth='true'] img[src='/privy-mark-logo.png'] { filter: invert(1) !important; }
+html.dark [data-pocket-auth='true'] [class~='border-white/35'] { border-color: rgb(0 0 0 / .35); border-top-color: #030712; }

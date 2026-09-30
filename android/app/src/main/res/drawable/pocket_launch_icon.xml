@@ -8,7 +8,7 @@
     android:viewportHeight="624">
     <group android:translateX="56" android:translateY="56">
         <clip-path android:pathData="M256,48 A208,208 0,1 1,256,464 A208,208 0,1 1,256,48 Z" />
-        <path android:fillColor="#030712"
+        <path android:fillColor="@color/pocket_launch_foreground"
             android:pathData="M48,48 H300 V464 H48 Z M320,48 H344 V464 H320 Z M364,48 H464 V464 H364 Z" />
     </group>
 </vector>

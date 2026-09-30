@@ -28,7 +28,6 @@ import { preparePocketWalletsAfterSignIn, reconnectPocketBaseWallet, restorePock
 import { Lock } from './components/PocketIcons'
 import PocketPaymentSecurityGate from './components/PocketPaymentSecurityGate'
 import PocketProgressDots from './components/PocketProgressDots'
-import usePocketLightSurface from './hooks/usePocketLightSurface'
 
 const PocketActivityPage = lazy(() => import('./pages/PocketActivityPage'))
 const PocketAssistantPage = lazy(() => import('./pages/PocketAssistantPage'))
@@ -55,7 +54,7 @@ function PocketPageBoundary({ active, children }: { active: PocketNavTab; childr
 }
 
 function PocketWalletUnlockScreen({ error, onRetry }: { error: string; onRetry: () => void }) {
-  return <main className='fixed inset-0 z-[60] flex items-center justify-center bg-[#F5F5F7] px-6 overflow-y-auto pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-[max(1.5rem,var(--pocket-safe-top))] text-gray-950 dark:bg-black dark:text-white'>
+  return <main data-pocket-auth="true" data-pocket-auth-surface className='fixed inset-0 z-[60] flex items-center justify-center bg-[#F5F5F7] px-6 overflow-y-auto pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-[max(1.5rem,var(--pocket-safe-top))] text-gray-950 dark:bg-black dark:text-white'>
     <section className='w-full max-w-[390px] rounded-[28px] border border-gray-200 bg-white p-6 text-center shadow-xl dark:border-[#262626] dark:bg-[#121212]'>
       <span className='mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-xl dark:bg-blue-400/10'>â—Ž</span>
       <h1 className='mt-4 text-xl font-black tracking-tight'>{error ? 'Unlock your Pocket wallets' : 'Opening your Pocket wallets'}</h1>
@@ -66,8 +65,7 @@ function PocketWalletUnlockScreen({ error, onRetry }: { error: string; onRetry: 
 }
 
 function PocketWalletAccessScreen({ error, busy, onRetry }: { error: string; busy: boolean; onRetry: () => void }) {
-  usePocketLightSurface()
-  return <main className='fixed inset-0 z-[60] flex items-center justify-center bg-[#F5F5F7] px-6 pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-[max(1.5rem,var(--pocket-safe-top))] text-gray-950'>
+  return <main data-pocket-auth="true" data-pocket-auth-surface className='fixed inset-0 z-[60] flex items-center justify-center bg-[#F5F5F7] px-6 pb-[max(1.5rem,var(--pocket-safe-bottom))] pt-[max(1.5rem,var(--pocket-safe-top))] text-gray-950'>
     <section className='w-full max-w-[390px] text-center'>
       <span className='mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-gray-200 bg-white text-blue-600 shadow-sm'><Lock className='h-6 w-6' /></span>
       <p className='mt-6 text-[10px] font-black uppercase tracking-[0.22em] text-gray-400'>One final step</p>

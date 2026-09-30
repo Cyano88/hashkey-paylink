@@ -122,13 +122,13 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
   if (step === 'code') {
     const inline = context === 'developer'
     const verification = (
-    <div role={inline ? 'region' : 'dialog'} aria-modal={inline ? undefined : true} aria-label="Verify your email" className={inline ? 'w-full min-w-0 text-gray-950 dark:text-white' : 'fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950'}>
+    <div data-pocket-auth={context==='pocket'?'true':undefined} data-pocket-auth-surface={context==='pocket'?true:undefined} role={inline ? 'region' : 'dialog'} aria-modal={inline ? undefined : true} aria-label="Verify your email" className={inline ? 'w-full min-w-0 text-gray-950 dark:text-white' : 'fixed inset-0 z-[150] overflow-y-auto bg-[#F5F5F7] px-6 pb-[max(1.25rem,var(--pocket-safe-bottom))] pt-[max(1.25rem,var(--pocket-safe-top))] text-gray-950'}>
       {!inline && <button type="button" disabled={busy} onClick={returnToEmail} aria-label="Back to email" className="fixed left-4 top-[calc(var(--pocket-safe-top)+0.75rem)] z-10 flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 !bg-white !text-gray-950 shadow-sm transition active:scale-95 disabled:opacity-50">
         <ArrowLeftIcon className="h-5 w-5" />
       </button>}
       <div className={inline ? 'w-full min-w-0' : 'mx-auto flex min-h-[calc(100dvh-var(--pocket-safe-top)-var(--pocket-safe-bottom)-2.5rem)] w-full max-w-[430px] flex-col justify-center py-4'}>
         <div className="text-center">
-          <h2 className={inline ? 'text-xl font-semibold tracking-tight' : 'text-3xl font-black tracking-[-0.045em]'}>Check your email</h2>
+          <h2 className={inline ? 'text-xl font-semibold tracking-tight' : 'text-3xl font-bold leading-tight tracking-normal'}>Check your email</h2>
           <p className="mt-3 text-sm font-medium leading-6 text-gray-500">
             Enter the code sent to
             <strong className={inline ? "mx-auto mt-1.5 block max-w-full break-all text-base font-extrabold leading-6 text-gray-950 dark:text-white" : "mx-auto mt-1.5 block max-w-full break-all text-base font-extrabold leading-6 text-gray-950"}>{email}</strong>
@@ -187,7 +187,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
   }
 
   return (
-    <form onSubmit={requestCode} className="space-y-2.5">
+    <form data-pocket-auth={context==='pocket'?'true':undefined} onSubmit={requestCode} className="space-y-2.5">
       <label className="sr-only" htmlFor={emailInputId}>Email address</label>
       <div className="relative">
         <EnvelopeIcon className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />

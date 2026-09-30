@@ -4,7 +4,6 @@ import { SplashScreen } from '@capacitor/splash-screen'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { CPurseIcon } from './CPurseIcon'
 import type { PocketSplashState } from '../hooks/usePocketSessionSplash'
-import usePocketLightSurface from '../hooks/usePocketLightSurface'
 
 export default function PocketSessionSplash({
   state,
@@ -15,7 +14,6 @@ export default function PocketSessionSplash({
   const markVisible = nativeRuntime || state !== 'entering'
   const assembled = state === 'assembling' || state === 'holding' || state === 'launching'
   const launching = state === 'launching'
-  usePocketLightSurface(state !== 'idle')
 
   useEffect(() => {
     if (!nativeRuntime) return
@@ -36,7 +34,7 @@ export default function PocketSessionSplash({
   useEffect(() => {
     if (!nativeRuntime) return
     const lightSurface = document.documentElement.dataset.pocketLightSurface === 'true'
-    const style = state === 'idle' && !lightSurface && document.documentElement.classList.contains('dark')
+    const style = !lightSurface && document.documentElement.classList.contains('dark')
       ? Style.Dark
       : Style.Light
     void StatusBar.setStyle({ style }).catch(() => undefined)
@@ -45,7 +43,7 @@ export default function PocketSessionSplash({
   if (state === 'idle') return null
 
   return (
-    <div
+    <div data-pocket-auth="true" data-pocket-auth-surface
       className={`fixed inset-0 z-[120] bg-[#F5F5F7] text-gray-950 transition-opacity duration-300 ease-out ${launching ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
       aria-busy="true"
       aria-label="Opening Pocket"
