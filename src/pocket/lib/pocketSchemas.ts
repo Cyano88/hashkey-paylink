@@ -641,7 +641,10 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
 
 export function isPocketActivityReadData(value: unknown): value is PocketActivityReadData {
   return isRecord(value)
-    && (value.groupedTransactionHashes === undefined || Array.isArray(value.groupedTransactionHashes) && value.groupedTransactionHashes.every(hash=>typeof hash==='string' && /^0x[0-9a-f]{64}$/i.test(hash)))
+    // These are case-folded Activity deduplication keys, not signing inputs.
+    // Solana signatures also occur here; lowercasing a valid base58 signature
+    // can introduce "l" (from "L"), so a raw base58 validator is insufficient.
+    && (value.groupedTransactionHashes === undefined || Array.isArray(value.groupedTransactionHashes) && value.groupedTransactionHashes.every(hash=>typeof hash==='string' && (/^0x[0-9a-f]{64}$/i.test(hash) || /^[1-9a-z]{64,88}$/i.test(hash))))
     && (value.archivedKeys === undefined || Array.isArray(value.archivedKeys) && value.archivedKeys.length<=1000 && value.archivedKeys.every(key=>typeof key==='string' && key.length<=600))
     && Array.isArray(value.payments)
     && value.payments.every(isPocketActivityRow)

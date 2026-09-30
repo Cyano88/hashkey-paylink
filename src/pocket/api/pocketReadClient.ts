@@ -41,6 +41,7 @@ export type PocketLocalCurrencyProfileReadResult = {
 }
 
 export type PocketActivityReadResult = {
+  groupedTransactionHashes?: string[]
   archivedKeys?: string[]
   complete?: boolean
   partial?: boolean
@@ -131,6 +132,7 @@ export function parsePocketActivityRead(value: unknown): PocketActivityReadResul
     throw new Error('Circle Pocket activity response was invalid.')
   }
   return { payments: value.payments, merchants: value.merchants, collections: value.collections, archivedKeys:value.archivedKeys || [],
+    groupedTransactionHashes: value.groupedTransactionHashes,
     ...(typeof value.complete === 'boolean' ? { complete: value.complete } : {}),
     ...(typeof value.partial === 'boolean' ? { partial: value.partial } : {}),
     ...(typeof value.refreshing === 'boolean' ? { refreshing: value.refreshing } : {}),
