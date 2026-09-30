@@ -48,13 +48,10 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
   const [selected,setSelected] = useState<PocketActivityRow|null>(null)
   const [searchParams,setSearchParams]=useSearchParams()
   const receiptReference=searchParams.get('receipt')
-  useEffect(()=>{
-    if(!receiptReference)return
-    const row=rows.find(r=>[r.eventId,r.providerReference,r.bankOrderId,r.txHash].includes(receiptReference))
-    if(!row)return
-    setSelected(row)
-    const next=new URLSearchParams(searchParams);next.delete('receipt');setSearchParams(next,{replace:true})
-  },[receiptReference,rows,searchParams,setSearchParams])
+  const closeReceipt=()=>{
+    setSelected(null)
+    if(receiptReference){const next=new URLSearchParams(searchParams);next.delete('receipt');setSearchParams(next,{replace:true})}
+  }
 
   useEffect(()=>{setCategory(initialCategory(view))},[view])
   const transactions=(collectionId?rows:incomingPos?rows.filter(isIncomingPosPayment):personalPocketActivity(rows)).slice().sort((a,b)=>b.ts-a.ts)
@@ -84,7 +81,7 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
     const last=groups[groups.length-1]
     if(last?.key===key)last.rows.push(row);else groups.push({key,label,rows:[row]})
   }
-  const selectedRow=currentPocketActivityRow(selected, rows)
+  const selectedRow=currentPocketActivityRow(selected || (receiptReference ? rows.find(row=>[row.eventId,row.providerReference,row.bankOrderId,row.txHash].includes(receiptReference)) || null : null), rows)
   if(!authenticated)return <>{renderHeader?.(null)}<p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">Sign in to view your transactions.</p></>
   const actions=<div className="flex items-center">
     <button type="button" aria-label="Filter transactions" aria-expanded={filterOpen} onClick={openFilters} className="relative flex h-11 w-11 items-center justify-center rounded-full"><Filter className="h-5 w-5"/>{activeFilters&&<span aria-label="Filters active" className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-500"/>}</button>
@@ -129,6 +126,6 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
         </button>
       })}</div></section>)}
     </div>}
-    {selectedRow&&<PocketActivityReceipt row={selectedRow} onClose={()=>setSelected(null)} onRefund={onRefund}>{selectedRow.bridge&&<PocketBridgeActivityDetails bridge={selectedRow.bridge} checking={bridgeChecking?.(selectedRow.bridge.id)||false} message={bridgeMessages?.[selectedRow.bridge.id]||''} onCheck={()=>{if(selectedRow.bridge)void onBridgeCheck?.(selectedRow.bridge)}} onNewBridge={selectedRow.paymentFunding?.length ? undefined : onNewBridge}/>}</PocketActivityReceipt>}
+    {selectedRow&&<PocketActivityReceipt row={selectedRow} onClose={closeReceipt} onRefund={onRefund}>{selectedRow.bridge&&<PocketBridgeActivityDetails bridge={selectedRow.bridge} checking={bridgeChecking?.(selectedRow.bridge.id)||false} message={bridgeMessages?.[selectedRow.bridge.id]||''} onCheck={()=>{if(selectedRow.bridge)void onBridgeCheck?.(selectedRow.bridge)}} onNewBridge={selectedRow.paymentFunding?.length ? undefined : onNewBridge}/>}</PocketActivityReceipt>}
   </div>
 }
