@@ -7,7 +7,7 @@ export default function PocketIncomingRequestSheet({title,amount,sender,canDecli
   {error&&<p role="alert" className="mt-4 text-xs text-red-600 dark:text-red-400">{error}</p>}
   <div className={'mt-6 grid gap-3 '+(canDecline?'grid-cols-2':'grid-cols-1')}>
    {canDecline&&<button disabled={busy} onClick={onDecline} className="min-h-12 rounded-full border border-gray-200 text-sm font-semibold dark:border-[#262626]">Decline</button>}
-   <button disabled={busy} onClick={onPay} className="pocket-cta-primary min-h-12">{busy?'Please wait?':'Pay'}</button>
+   <button disabled={busy} onClick={onPay} className="pocket-cta-primary min-h-12">{busy?'Please wait?':canDecline?'Accept':'Pay'}</button>
   </div>
  </PocketBottomSheet>
 }

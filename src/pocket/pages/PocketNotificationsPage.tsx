@@ -135,11 +135,12 @@ export default function PocketNotificationsPage() {
     try {
       const token=await tokenRef.current()
       if(!token)throw Error('Sign in again to respond.')
-      // Pay records acceptance, then opens the existing secured payment flow.
+      // Acceptance is a separate step; only a later Pay tap opens payment.
       const next=selected.status==='pending'?await decidePocketRequest(token,selected.id,decision==='pay'?'accept':'decline'):selected
       if(generation!==scope.current)return
       setItems(current=>current.map(item=>item.id===next.id?next:item))
       if(decision==='decline'){setSelectedId('');return}
+      if(selected.status==='pending')return
       if(!next.paymentPath?.startsWith('/home/send?request='))throw Error('The payment route is unavailable. Please try again.')
       setSelectedId('');navigate(POCKET_BASE_PATH+next.paymentPath)
     } catch(reason) {if(generation===scope.current)setActionError(reason instanceof Error?reason.message:'Could not respond. Try again.')}

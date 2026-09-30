@@ -21,7 +21,10 @@ export default function PocketStockNotifications({history=false}:{history?:boole
  const respond=async(action:'pay'|'decline')=>{
   if(!selected||actionBusy)return;setActionBusy(selected.id);setActionError('')
   try {
-   if(selected.status==='pending')await stockNotificationsRequest(getAccessToken,{action:action==='pay'?'accept':'decline',id:selected.id})
+   if(selected.status==='pending'){
+    await stockNotificationsRequest(getAccessToken,{action:action==='pay'?'accept':'decline',id:selected.id})
+    if(action==='pay'){setInbox(current=>current?{...current,requests:current.requests.map(r=>r.id===selected.id?{...r,status:'accepted'}:r)}:current);return}
+   }
    if(action==='pay'){setSelectedId('');navigate(xStockPath('send')+'?'+new URLSearchParams({recipient:selected.address,amount:selected.amount,asset:selected.symbol}).toString());return}
    setInbox(current=>current?{...current,requests:current.requests.map(r=>r.id===selected.id?{...r,status:'declined'}:r)}:current);setSelectedId('')
   }catch(e){setActionError(e instanceof Error?e.message:'Could not respond. Try again.')}finally{setActionBusy('')}
