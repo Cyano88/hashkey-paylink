@@ -22,6 +22,7 @@ type Props = {
   requests: PocketRequestItem[]
   busy: boolean
   error: string
+  requestsError?: string
 }
 
 type ActivityResource = {
@@ -62,7 +63,7 @@ function totalLabel(input: PocketActivityRow[]) {
   return `${formatPocketDisplayAmount(usdc)} USDC`
 }
 
-export default function PocketResourceActivityPanel({ view, rows, merchants, collections, requests, busy, error }: Props) {
+export default function PocketResourceActivityPanel({ view, rows, merchants, collections, requests, busy, error, requestsError = '' }: Props) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [copiedId, setCopiedId] = useState('')
   const [selectedPayment, setSelectedPayment] = useState<PocketActivityRow | null>(null)
@@ -95,7 +96,9 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
   }
 
   if (selected) {
-    const payments = resourceRows(selected.id).sort((a, b) => b.ts - a.ts)
+    const declined = selected.request?.status === 'declined'
+    const payments = declined ? [] : resourceRows(selected.id).sort((a, b) => b.ts - a.ts)
+    const visibleError = selected.request ? requestsError || (declined ? '' : error) : error
     return (
       <div className="space-y-4">
         <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D]">
@@ -119,8 +122,8 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
         </div>
 
         {selectedPayment && <PocketActivityReceipt row={(currentPocketActivityRow(selectedPayment, rows) || selectedPayment)} onClose={() => setSelectedPayment(null)} />}
-        {error && !payments.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-[#121212] dark:text-gray-300">{error}</p> : null}
-        {payments.length ? (
+        {visibleError && !payments.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-[#121212] dark:text-gray-300">{visibleError}</p> : null}
+        {declined ? <p className="px-1 text-xs text-gray-500 dark:text-gray-400">No payment was made.</p> : payments.length ? (
           <div className="space-y-2">
             {payments.map((row, index) => {
               const paymentId = `${row.txHash}-${row.ts}-${index}`
@@ -142,8 +145,8 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
           </div>
         ) : busy ? <PocketRecentActivitySkeleton /> : !busy ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center dark:border-[#262626] dark:bg-[#0D0D0D]">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{selected.request ? selected.request.status === 'declined' ? 'No payment was made' : selected.request.status === 'paid' ? 'Payment is syncing' : 'No payment yet' : 'No payments yet'}</p>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{selected.request ? selected.request.status === 'declined' ? 'This request was declined.' : selected.request.status === 'paid' ? 'The confirmed transfer will appear here when Activity finishes syncing.' : selected.request.direction === 'incoming' && selected.request.status === 'accepted' ? 'Open Notifications when you are ready to pay.' : 'Pocket will update this request when its status changes.' : 'Share the collection link when you are ready to receive.'}</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{selected.request ? selected.request.status === 'paid' ? 'Payment is syncing' : 'No payment yet' : 'No payments yet'}</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{selected.request ? selected.request.status === 'paid' ? 'The confirmed transfer will appear here when Activity finishes syncing.' : selected.request.direction === 'incoming' && selected.request.status === 'accepted' ? 'Open Notifications when you are ready to pay.' : 'Pocket will update this request when its status changes.' : 'Share the collection link when you are ready to receive.'}</p>
           </div>
         ) : null}
       </div>
@@ -152,7 +155,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
 
   return (
     <div className="space-y-4">
-      {error && !resources.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-[#121212] dark:text-gray-300">{error}</p> : null}
+      {(requestsError || error) && !resources.length ? <p className="rounded-2xl bg-gray-100 px-4 py-3 text-xs font-semibold text-gray-500 dark:bg-[#121212] dark:text-gray-300">{requestsError || error}</p> : null}
       {resources.length ? (
         <div className="space-y-2">
           {resources.map(resource => {
