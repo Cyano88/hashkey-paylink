@@ -1,3 +1,4 @@
+import { requestActivityRows } from '../lib/pocketRequestActivity'
 import PocketResourceActivityPanel from '../features/activity/PocketResourceActivityPanel'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
@@ -16,28 +17,7 @@ import { POCKET_REQUESTS_UPDATED_EVENT, readPocketRequests, type PocketRequestIt
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 import type { PocketActivityRow } from '../models/pocketActivity'
 
-function requestActivityRows(rows: PocketActivityRow[], requests: PocketRequestItem[]) {
-  const paidHashes = new Set(requests.filter(request => request.status === 'paid' && request.transactionHash).map(request => request.transactionHash.toLowerCase()))
-  const activityRows = rows.filter(row => !row.txHash || !paidHashes.has(row.txHash.toLowerCase()))
-  const requestRows = requests.map<PocketActivityRow>(request => ({
-    eventId: request.id,
-    txHash: request.transactionHash,
-    chain: request.network,
-    payer: request.direction === 'incoming' ? request.senderName : request.recipientName,
-    memo: request.title,
-    amount: request.amount,
-    ts: request.createdAt,
-    source: 'request',
-    settlementType: 'pocket_request',
-    activityLabel: request.title,
-    contextLabel: `${request.direction === 'incoming' ? `From ${request.senderName}` : `To ${request.recipientName}`} · ${request.status === 'pending' ? 'Awaiting response' : request.status.charAt(0).toUpperCase() + request.status.slice(1)}`,
-    paycrestStatus: request.status === 'pending' ? 'awaiting response' : request.status,
-    direction: request.direction === 'incoming' ? 'out' : 'in',
-    recipient: request.direction === 'incoming' ? request.senderName : request.recipientName,
-    supportReference: request.id,
-  }))
-  return [...activityRows, ...requestRows]
-}
+
 export default function PocketActivityPage({ view }: { view: PocketActivityView }) {
   const location = useLocation()
   if (view === 'pos') return <Navigate replace to={POCKET_BASE_PATH + POCKET_ROUTES.posManage + location.search} />
