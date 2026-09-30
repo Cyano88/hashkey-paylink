@@ -24,3 +24,8 @@ contracts/typechain-types/
 !/src/lib/xstocksAgreement/xStocksRanking.json
 !/scripts/fixtures/xstocks-agreement-binding.json
 !/scripts/fixtures/xstocks-agreement-factory-runtime.json
+
+# Isolated gift contract test outputs
+contracts/typechain-gifts/
+contracts/artifacts-gifts/
+contracts/cache-gifts/

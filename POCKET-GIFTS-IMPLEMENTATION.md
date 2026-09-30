@@ -42,3 +42,35 @@ Preview controls are outside the product design. They let reviewers inspect stat
 - Visual inspection: gift page and claim sheet; fixed local shared-node_modules font loading and legacy dark palette bleed by using Pocket's colour scope.
 
 This checkpoint is a UI/domain foundation, not a live gift service. No production deployment or Pixel installation was performed for gifts.
+
+## Funding checkpoint — 2026-10-01
+
+Implemented locally:
+
+- `contracts/contracts/gifts/PocketGiftEscrow.sol`: dedicated non-upgradeable, single-recipient EVM draft. Atomic exact USDC funding, separately collected 25-bps fee, recipient-bound EIP712 redemption and permissionless execution of refunds to the original sender after expiry. No owner, upgrade or admin withdrawal. Tokens sent manually do not create gifts.
+- Gift IDs are scoped to the sender and salt to prevent another sender reserving the same ID. Contract status enforces one final disposition: claimed or refunded.
+- Fee rounding matches `paymentFeeBreakdown`: integer floor. A 100 USDC gift requires 100.25 USDC before any network costs. The recipient gets 100 USDC; an expired gift refunds 100 USDC principal. Creation fee is not refunded by this draft and must be disclosed before approval.
+- Capability key signs chain-, contract-, gift-, recipient- and deadline-bound typed data locally. Only the signature and bound claim parameters need to reach a relayer. A copied signature cannot redirect the payout; it can only execute the authorized payout.
+- `pocketGiftFunding.ts`: exact-allowance ERC20 approval and gift funding calldata using the shared fee helper. This is not a final network fee quote and is not connected to production wallet execution.
+- `pocketGiftSigning.ts`: capability generation and canonical parsing, typed-data construction and local signature generation. No network calls, logging or persistence.
+
+Validation:
+
+- 19 local Hardhat tests pass: atomic funding, fee accounting, sender-scoped IDs, forwarded claims, duplicate claims, recipient substitution, wrong key/domain/gift/deadline, expiry, refunds, fee-on-transfer rejection, blocked treasury/recipient/sender recovery, competing claims in one block, aggregate outstanding principal.
+- `node --import tsx scripts/pocket-gift-signing-smoke.mjs` passes signature binding, invalid code rejection, cross-library typed-data agreement, exact approval/funding calldata and shared fee rounding.
+- TypeScript checks for gift files: zero diagnostics.
+- Test command (from `contracts`): `npx hardhat test --config hardhat.gifts.config.ts test/PocketGiftEscrow.test.ts`.
+- Tests use an isolated Hardhat network and local solc 0.8.26/Cancun. No production env, deployer keys, mainnet RPCs or real funds are used. Deployment must separately verify chain/EVM compatibility and canonical USDC.
+
+Still required:
+
+- Independent security review and validated deployment config, including token and treasury ownership. Local tests are not a security certification.
+- The bearer credential can be used by any holder, including the creator. Keep the existing bearer warning; do not promise an exclusive recipient before claim.
+- Public drops are not implemented by this single-recipient contract. Do not reuse one authorization key to present a multi-recipient campaign as protected from duplicate identities.
+- Authenticated, rate-limited backend; canonical gift metadata and onchain reconciliation; sponsored claim submission/retries with idempotency; receipt/activity integration; real wallet approval and recovery.
+- Secure onboarding continuation and store-install recovery. No automatic install restoration is claimed.
+- Stablecoin issuer freezes or transfer restrictions can block a claim/refund. Tests confirm failed transfers leave the gift recoverable, but the app must show the actual reason and wait for resolution.
+
+Design references checked: OpenZeppelin EIP712/ECDSA and SafeERC20 documentation (https://docs.openzeppelin.com/contracts/5.x/api/utils/cryptography and https://docs.openzeppelin.com/contracts/5.x/api/token/erc20). Installed dependency version is pinned by the existing contracts lockfile. New gift code does not activate or reuse legacy payment vaults.
+
+No production deployment or Pixel installation was performed for this checkpoint.
