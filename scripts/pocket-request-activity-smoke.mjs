@@ -7,3 +7,6 @@ assert.equal(rows.length,1);assert.equal(rows[0].paycrestStatus,'processing');as
 rows=requestActivityRows([funding,{source:'wallet-withdrawal',eventId:'raw',txHash:'0xpaid',chain:'base'}, {source:'wallet-deposit',eventId:'other',txHash:'0xother',chain:'base'}],[{...request,status:'paid',transactionHash:'0xpaid'}])
 assert.equal(rows.length,2);assert.equal(rows.find(r=>r.source==='request').paycrestStatus,'paid');assert.equal(rows.find(r=>r.source==='request').paymentFunding.length,1);assert.ok(rows.find(r=>r.eventId==='other'))
 console.log('PASS request history keeps one payment and its funding details before and after confirmation')
+
+rows=requestActivityRows([funding],[{...request,status:'declined'}])
+assert.equal(rows[0].paycrestStatus,'declined','Declined must override a stale funding status')

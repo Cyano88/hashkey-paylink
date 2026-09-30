@@ -21,7 +21,7 @@ export function requestActivityRows(rows: PocketActivityRow[], requests: PocketR
     settlementType: 'pocket_request',
     activityLabel: request.title,
     contextLabel: `${request.direction === 'incoming' ? `From ${request.senderName}` : `To ${request.recipientName}`} · ${request.status === 'pending' ? 'Awaiting response' : request.status.charAt(0).toUpperCase() + request.status.slice(1)}`,
-    paycrestStatus: request.status === 'paid' ? 'paid' : funding?.paycrestStatus || (request.status === 'pending' ? 'awaiting response' : request.status),
+    paycrestStatus: request.status === 'paid' ? 'paid' : request.status === 'declined' ? 'declined' : funding?.paycrestStatus || (request.status === 'pending' ? 'awaiting response' : request.status),
     direction: request.direction === 'incoming' ? 'out' : 'in',
     recipient: request.direction === 'incoming' ? request.senderName : request.recipientName,
     supportReference: request.id,

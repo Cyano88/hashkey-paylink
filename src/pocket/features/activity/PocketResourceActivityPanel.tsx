@@ -85,7 +85,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
   const resourceRows = (resourceId: string) => rows.filter(row => view === 'pos'
     ? isIncomingPosPayment(row) && row.merchantId === resourceId
     : resourceId.startsWith('preq_')
-      ? rowSource(row) === 'request' && (row.eventId === resourceId || row.eventId === resources.find(resource => resource.id === resourceId)?.request?.eventId)
+      ? rowSource(row) === 'request' && !['declined','accepted','pending','awaiting response'].includes(pocketActivityStatus(row)) && (row.eventId === resourceId || row.eventId === resources.find(resource => resource.id === resourceId)?.request?.eventId)
       : rowSource(row) === 'collection' && row.eventId === resourceId)
 
   const copyLink = async (id: string, paymentUrl: string) => {
@@ -142,8 +142,8 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
           </div>
         ) : busy ? <PocketRecentActivitySkeleton /> : !busy ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-5 py-12 text-center dark:border-[#262626] dark:bg-[#0D0D0D]">
-            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{selected.request ? selected.request.status === 'paid' ? 'Payment is syncing' : 'No payment yet' : 'No payments yet'}</p>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{selected.request ? selected.request.status === 'paid' ? 'The confirmed transfer will appear here when Activity finishes syncing.' : selected.request.direction === 'incoming' && selected.request.status === 'accepted' ? 'Open Notifications when you are ready to pay.' : 'Pocket will update this request when its status changes.' : 'Share the collection link when you are ready to receive.'}</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{selected.request ? selected.request.status === 'declined' ? 'No payment was made' : selected.request.status === 'paid' ? 'Payment is syncing' : 'No payment yet' : 'No payments yet'}</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{selected.request ? selected.request.status === 'declined' ? 'This request was declined.' : selected.request.status === 'paid' ? 'The confirmed transfer will appear here when Activity finishes syncing.' : selected.request.direction === 'incoming' && selected.request.status === 'accepted' ? 'Open Notifications when you are ready to pay.' : 'Pocket will update this request when its status changes.' : 'Share the collection link when you are ready to receive.'}</p>
           </div>
         ) : null}
       </div>

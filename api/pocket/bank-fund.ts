@@ -1,3 +1,4 @@
+import { forwardPocketRequest } from './forward-request.js'
 import type { Request, Response } from 'express'
 import { createNgPosBankSend, listNgPosHistoryForOwner } from '../ng-pos.js'
 import { getPaycrestPosOrder, listPaycrestPosOrdersForMerchants, refreshPaycrestOrderStatus } from '../paycrest-pos.js'
@@ -22,7 +23,7 @@ async function createOrderThroughNgPos(req: Request, body: Record<string, unknow
   let responseBody: any
   const response = { status(code: number) { status = code; return this }, json(value: unknown) { responseBody = value; return this } } as unknown as Response
   const ngPos = (await import('../ng-pos.js')).default
-  await ngPos({ ...req, body } as Request, response)
+  await ngPos(forwardPocketRequest(req, body), response)
   return { status, body: responseBody }
 }
 

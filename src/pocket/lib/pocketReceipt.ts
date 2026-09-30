@@ -93,6 +93,7 @@ export function pocketBillTitle(category?: string): string {
 export function pocketMovementTitle(row: PocketActivityRow): string {
   const kind = pocketReceiptKind(row)
   if (normalizedSource(row) === 'xpay' && row.direction === 'in') return 'Incoming'
+  if (normalizedSource(row) === 'request' && !kind) return 'USDC request'
   if (normalizedSource(row) === 'request' || normalizedSource(row) === 'collection') return 'Request payment'
   if (normalizedSource(row).startsWith('bank-')) return 'Bank transfer'
   if (kind === 'bill_purchase') return pocketBillTitle(row.billCategory)

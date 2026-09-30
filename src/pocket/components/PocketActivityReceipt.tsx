@@ -29,7 +29,7 @@ export default function PocketActivityReceipt({ row, onClose, onRefund, children
     ['Date', new Date(row.ts).toLocaleString()],
   ]
   return <PocketTransactionSheet title={pocketMovementTitle(row)} state={state} statusLabel={outcome.label} receipt={receipt} detailsRows={detailsRows} amount={pocketActivityAmount(row)} onDone={onClose}
-    detail={row.xpayCheckoutId&&outcome.label.startsWith('Refund') ? (pocketActivityStatus(row)==='refunded'?'Bank refund returned as USDC on Base.':'Bank refund returns as USDC on Base.') : state === 'pending' && !outcome.label.startsWith('Refund') ? 'Waiting for confirmation. You can check Activity for updates.' : undefined}>
+    detail={row.source === 'request' && pocketActivityStatus(row) === 'declined' ? 'No payment was made.' : row.xpayCheckoutId&&outcome.label.startsWith('Refund') ? (pocketActivityStatus(row)==='refunded'?'Bank refund returned as USDC on Base.':'Bank refund returns as USDC on Base.') : state === 'pending' && outcome.label === 'Processing' ? 'Waiting for confirmation. You can check Activity for updates.' : undefined}>
 
     {actions}
   </PocketTransactionSheet>

@@ -128,7 +128,7 @@ assert.equal(pocketReceiptAvailability(unknown), 'none')
 console.log('Pocket receipt policy smoke checks passed')
 
 for (const status of ['pending', 'processing', 'refund available', 'refund pending', 'refunding', 'unknown']) assert.equal(paymentReceiptOutcome({status}).label, 'Processing')
-assert.equal(paymentReceiptOutcome({status:'refunded'}).label,'Reversed')
+assert.equal(paymentReceiptOutcome({status:'refunded'}).label,'Refunded')
 assert.equal(paymentReceiptOutcome({status:'failed'}).label,'Failed')
 assert.equal(paymentReceiptOutcome({status:'confirmed'}).label,'Successful')
 
@@ -162,3 +162,11 @@ for (const [chain,label] of [['base','Base'],['ethereum','Ethereum'],['polygon',
  assert.equal(view.rows.find(r=>r.label==='Type').value,'Incoming')
 }
 console.log('PASS: Base, Ethereum, Polygon and X Layer receipts preserve network and movement type')
+
+assert.equal(paymentReceiptOutcome({source:'request',status:'declined'}).label,'Declined')
+assert.equal(paymentReceiptOutcome({source:'request',status:'declined'}).state,'failed')
+assert.equal(paymentReceiptOutcome({source:'request',status:'accepted'}).label,'Awaiting payment')
+assert.equal(paymentReceiptOutcome({source:'request',status:'awaiting response'}).label,'Awaiting response')
+assert.equal(paymentReceiptOutcome({source:'request',status:'processing'}).label,'Processing')
+assert.equal(paymentReceiptOutcome({status:'refunded'}).label,'Refunded')
+assert.equal(paymentReceiptOutcome({status:'expired'}).state,'failed')

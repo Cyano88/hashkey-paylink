@@ -9,6 +9,6 @@ export default function PocketPaymentSuccess({ receipt, onDone, children, inline
   const actual = paymentReceiptOutcome(receipt)
   const state = actual.state
   const kind = receipt.source === 'bank-withdraw' ? 'Bank transfer' : title || receipt.title || 'Payment'
-  return <PocketTransactionSheet title={kind} state={state} statusLabel={actual.label} amount={receipt.source === 'bills' ? pocketActivityAmount({ source: 'bills', amount: receipt.amount, amountNgn: receipt.amountNgn }) : `${receipt.amount} ${receipt.asset || 'USDC'}`} receipt={receipt} onDone={onDone} inline={inline}
+  return <PocketTransactionSheet statusAction={children} title={kind} state={state} statusLabel={actual.label} amount={receipt.source === 'bills' ? pocketActivityAmount({ source: 'bills', amount: receipt.amount, amountNgn: receipt.amountNgn }) : `${receipt.amount} ${receipt.asset || 'USDC'}`} receipt={receipt} onDone={onDone} inline={inline}
     detail={state === 'pending' && !actual.label.startsWith('Refund') ? 'Waiting for confirmation. You can check Activity for updates.' : undefined}>{children}</PocketTransactionSheet>
 }

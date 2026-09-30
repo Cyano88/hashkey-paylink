@@ -1,3 +1,4 @@
+import { forwardPocketRequest } from './forward-request.js'
 import type { Request, Response } from 'express'
 import {
   buildSolanaTx,
@@ -37,7 +38,7 @@ async function invokeLegacy(handler: LegacyHandler, req: Request, body: Record<s
     status(code: number) { status = code; return this },
     json(value: unknown) { responseBody = value; return this },
   } as unknown as Response
-  await handler({ ...req, body } as Request, response)
+  await handler(forwardPocketRequest(req, body), response)
   if (responseBody === undefined) throw Object.assign(new Error('Solana relay returned no response.'), { status: 502 })
   return { status, body: responseBody }
 }

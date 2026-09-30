@@ -1,7 +1,7 @@
 import PocketLocalEquivalent from './PocketLocalEquivalent'
 import PocketTransactionDetails from './PocketTransactionDetails'
 import { formatPocketPaymentAmount } from '../lib/pocketMoney'
-import { useState, type ReactNode } from 'react'
+import { Children, useState, type ReactNode } from 'react'
 import { FullScreenReceiptSurface } from '../../components/UnifiedReceipt'
 import { type PaylinkReceipt } from '../../lib/paymentReceiptPdf'
 import PocketBottomSheet from './PocketBottomSheet'
@@ -9,10 +9,13 @@ import PocketGetApp from './PocketGetApp'
 import { Check, Clock3, X, Undo2 } from './PocketIcons'
 
 export type PocketTransactionState = 'successful' | 'pending' | 'failed' | 'reversed'
-export default function PocketTransactionSheet({ title, state, statusLabel, amount, detail, receipt, onDone, inline = false, children, detailsRows }: {
-  detailsRows?: Array<[string, ReactNode]>; statusLabel?: string; title: string; state: PocketTransactionState; amount?: string; detail?: string; receipt?: PaylinkReceipt | null; onDone: () => void; inline?: boolean; children?: ReactNode
+export default function PocketTransactionSheet({ title, state, statusLabel, amount, detail, receipt, onDone, inline = false, children, detailsRows, statusAction }: {
+  statusAction?: ReactNode; detailsRows?: Array<[string, ReactNode]>; statusLabel?: string; title: string; state: PocketTransactionState; amount?: string; detail?: string; receipt?: PaylinkReceipt | null; onDone: () => void; inline?: boolean; children?: ReactNode
 }) {
   const [viewReceipt, setViewReceipt] = useState(false)
+  const [viewDetails, setViewDetails] = useState(false)
+  const hasAction = state !== 'successful' && Children.toArray(statusAction).length > 0
+  const canViewDetails = !receipt && Boolean(detailsRows?.length || Children.toArray(children).length)
   const canViewReceipt = Boolean(receipt)
   const localAmount = receipt?.amountNgn && Number.isFinite(Number(receipt.amountNgn)) && (!receipt.asset || receipt.asset === 'USDC')
     ? `${receipt.fiatCurrency || 'NGN'} ${Number(receipt.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })}` : undefined
@@ -21,28 +24,22 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
   const label = statusLabel || (state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing')
   const Icon = label.toLowerCase().startsWith('refund') ? Undo2 : state === 'failed' ? X : state === 'reversed' ? Undo2 : Clock3
   if (viewReceipt && receipt) return <FullScreenReceiptSurface receipt={receipt} surface="receipt" onClose={() => setViewReceipt(false)} extraActions={children} />
-  const rows: Array<[string, ReactNode]> = detailsRows ?? (receipt ? [
-    ...(localAmount ? [['Local amount', localAmount] as [string, ReactNode]] : []),
-    ...(receipt.providerName ? [['Provider', receipt.providerName] as [string, ReactNode]] : []),
-    ...(receipt.targetLabel && receipt.targetValue ? [[receipt.targetLabel, receipt.targetValue] as [string, ReactNode]] : []),
-    ...(receipt.recipient ? [['To', receipt.recipient] as [string, ReactNode]] : []),
-    ...(receipt.destination ? [['Destination', receipt.destination] as [string, ReactNode]] : []),
-    ...(receipt.chain ? [['Network', <span className="capitalize">{receipt.chain}</span>] as [string, ReactNode]] : []),
-    ...(Number.isFinite(receipt.createdAt) && receipt.createdAt > 0 ? [['Date', new Date(receipt.createdAt).toLocaleString()] as [string, ReactNode]] : []),
-  ] : [])
+  if (viewDetails) return <PocketBottomSheet title={title} onClose={() => setViewDetails(false)} dismissOnBackdrop={false}><h2 className="mb-5 text-base font-bold">{title}</h2><PocketTransactionDetails rows={detailsRows || []} />{detail && <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">{detail}</p>}{children}</PocketBottomSheet>
   const content = <>
     {inline && <p className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400">{title}</p>}
-    <div className="pb-4 pt-1 text-center" role="status" aria-live="polite">
-      {state === 'successful' ? <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" strokeWidth={2.5} className="h-8 w-8" /></span> : <span className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${state === 'failed' ? 'bg-red-50 text-red-500 dark:bg-red-400/10' : 'bg-blue-50 text-blue-500 dark:bg-blue-400/10'}`}><Icon aria-hidden="true" className="h-9 w-9" /></span>}
+    <div data-pocket-status-core className="flex h-48 shrink-0 flex-col items-center pt-1 text-center" role="status" aria-live="polite">
+      {state === 'successful' ? <span className="mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-green-600 text-white"><Check aria-hidden="true" strokeWidth={2.5} className="h-8 w-8" /></span> : <span className={`mx-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${state === 'failed' ? 'bg-red-50 text-red-500 dark:bg-red-400/10' : 'bg-blue-50 text-blue-500 dark:bg-blue-400/10'}`}><Icon aria-hidden="true" className="h-9 w-9" /></span>}
       <h1 className="mt-3 text-xl font-bold tracking-tight">{label}</h1>
       {(usdcEquivalent || amount || localAmount) && <p className="mt-2 text-lg font-semibold tabular-nums">{localAmount || usdcEquivalent || amount}</p>}
-      {usdcEquivalent && receipt && (localAmount ? <p className="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">{usdcEquivalent}</p> : <PocketLocalEquivalent amount={Number(receipt.amount)} />)}
-      {state !== 'successful' && detail && <p className="mx-auto mt-3 max-w-sm text-xs leading-5 text-gray-500 dark:text-gray-400">{detail}</p>}
+      <div className="mt-1 h-8 w-full shrink-0 overflow-y-auto text-xs leading-4 text-gray-500 dark:text-gray-400">
+        {usdcEquivalent && receipt && (localAmount ? <p>{usdcEquivalent}</p> : <PocketLocalEquivalent amount={Number(receipt.amount)} className="text-xs leading-4 text-gray-500 dark:text-gray-400" />)}
+        {state !== 'successful' && detail && <p className="mx-auto max-w-sm">{detail}</p>}
+      </div>
     </div>
-    {state !== 'successful' && <PocketTransactionDetails rows={rows} />}
-    {state !== 'successful' && children}
-    <div className={`mt-4 grid gap-3 ${canViewReceipt && !inline ? 'grid-cols-2' : 'grid-cols-1'}`}>
+    <div data-pocket-status-actions className={`mt-4 grid h-12 items-stretch gap-3 [&>button]:h-12 [&>button]:min-w-0 [&>button]:px-2 [&>button]:py-1 ${hasAction && !inline ? 'grid-cols-3' : (canViewReceipt || canViewDetails) && !inline ? 'grid-cols-2' : 'grid-cols-1'}`}>
       {canViewReceipt && <button type="button" onClick={() => setViewReceipt(true)} className="pocket-cta-secondary">View receipt</button>}
+      {canViewDetails && <button type="button" onClick={() => setViewDetails(true)} className="pocket-cta-secondary">View details</button>}
+      {hasAction && statusAction}
       {!inline && <button type="button" onClick={onDone} className="pocket-cta-primary ">Done</button>}
     </div>
     {inline && state === 'successful' && <PocketGetApp />}

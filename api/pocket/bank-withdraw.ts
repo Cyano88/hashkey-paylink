@@ -1,3 +1,4 @@
+import { forwardPocketRequest } from './forward-request.js'
 import {reservePocketBankAllowance} from './transfer-allowance.js'
 import { normalizePayoutAccount, pocketFiatCurrency } from '../../src/pocket/lib/pocketFiatCorridors.js'
 import type { Request, Response } from 'express'
@@ -37,7 +38,7 @@ async function invokeNgPos(req: Request, body: Record<string, unknown>): Promise
     status(code: number) { status = code; return this },
     json(value: unknown) { responseBody = value; return this },
   } as unknown as Response
-  await ngPosHandler({ ...req, body } as Request, response)
+  await ngPosHandler(forwardPocketRequest(req, body), response)
   if (responseBody === undefined) throw Object.assign(new Error('Bank payout provider returned no response.'), { status: 502 })
   return { status, body: responseBody }
 }
