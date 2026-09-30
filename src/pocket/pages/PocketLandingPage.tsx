@@ -102,11 +102,11 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
           <section className="flex flex-col items-center py-4 text-center sm:py-6">
             <div className={`transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '100ms' : '0ms' }}>
               <PocketAuthBrand markRef={heroLogoRef} />
-              <h1 className="mt-9 max-w-md text-4xl font-black leading-[0.98] tracking-[-0.055em] sm:text-5xl">
-                Your money and stocks, in one Pocket.
+              <h1 className="mx-auto mt-9 max-w-sm text-3xl font-bold leading-[1.2] tracking-normal sm:text-4xl">
+                Your money and stocks,<br />in one Pocket.
               </h1>
               <p className="mx-auto mt-5 max-w-sm text-sm font-medium leading-6 text-gray-500">
-                Send, receive and pay with USDC. Explore and trade tokenized stocks.
+                Send, receive and pay with USDC or supported tokenized stocks. Buy, sell and swap stocks.
               </p>
             </div>
           </section>
