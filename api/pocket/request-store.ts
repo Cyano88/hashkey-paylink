@@ -114,6 +114,21 @@ export function createPocketRequestRepository(options: Options = {}) {
         return updated
       })
     },
+    async preparePayment(userId: string, id: string, senderAddress: string) {
+      return mutate(store => {
+        const request = store.requests[clean(id, 160)]
+        if (!request) throw Object.assign(new Error('Payment request was not found.'), {status:404})
+        if (request.recipientId !== userId) throw Object.assign(new Error('Only the requested Pocket user can pay.'), {status:403})
+        if (request.status !== 'accepted') throw Object.assign(new Error('This request is not awaiting payment.'), {status:409})
+        if (request.senderAddress) return request
+        if (request.route || request.transactionHash) throw Object.assign(new Error('This request needs review before payment.'), {status:409})
+        const valid = request.network === 'solana' ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(senderAddress) : /^0x[a-fA-F0-9]{40}$/.test(senderAddress)
+        if (!valid || request.network === 'multi') throw Object.assign(new Error('The requested wallet is unavailable.'), {status:409})
+        const updated = {...request, senderAddress, paymentPath:'/home/send?request='+encodeURIComponent(request.id), updatedAt:now()}
+        store.requests[id] = updated
+        return updated
+      })
+    },
     async markPaid(userId: string, id: string, transactionHash: string) {
       return mutate(store => {
         const request = store.requests[clean(id, 160)]

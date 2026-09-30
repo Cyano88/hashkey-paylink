@@ -1,3 +1,4 @@
+import {pocketRequestPaymentPath} from '../../src/pocket/lib/pocketRequestPaymentPath.js'
 import type { Request, Response } from 'express'
 import { Connection } from '@solana/web3.js'
 import { localCurrencyProfileRepository, verifiedPrivyUser, type ProfileRepository } from '../local-currency-profile.js'
@@ -16,7 +17,7 @@ const maskedEmail = (email: string) => {
   return `${local.slice(0, 2)}...${local.slice(-2)}@${domain}`
 }
 const profileName = (profile: Awaited<ReturnType<ProfileRepository['getByPocketId']>>) => profile?.nameStatus === 'kyc_verified' && profile.resolvedName ? profile.resolvedName : maskedEmail(profile?.email || '')
-const publicRequest = (item: Awaited<ReturnType<PocketRequestRepository['listFor']>>[number], userId: string) => ({ id: item.id, eventId: item.eventId, direction: item.recipientId === userId ? 'incoming' : 'outgoing', senderPocketId: item.senderPocketId, senderName: item.senderName, recipientPocketId: item.recipientPocketId, recipientName: item.recipientName || `Pocket ${item.recipientPocketId}`, title: item.title, amount: item.amount, flexibleAmount: item.flexibleAmount, network: item.network, paymentPath: item.paymentPath || '', status: item.status, transactionHash: item.transactionHash || '', createdAt: item.createdAt, updatedAt: item.updatedAt })
+const publicRequest = (item: Awaited<ReturnType<PocketRequestRepository['listFor']>>[number], userId: string) => ({ id: item.id, eventId: item.eventId, direction: item.recipientId === userId ? 'incoming' : 'outgoing', senderPocketId: item.senderPocketId, senderName: item.senderName, recipientPocketId: item.recipientPocketId, recipientName: item.recipientName || `Pocket ${item.recipientPocketId}`, title: item.title, amount: item.amount, flexibleAmount: item.flexibleAmount, network: item.network, paymentPath: pocketRequestPaymentPath(item.id), recipientAddress: item.senderAddress || '', status: item.status, transactionHash: item.transactionHash || '', createdAt: item.createdAt, updatedAt: item.updatedAt })
 
 export function createPocketRequestsHandler(deps: Dependencies) {
   const notifyPaid = (request: Awaited<ReturnType<PocketRequestRepository['getFor']>>) => {
@@ -106,6 +107,16 @@ export function createPocketRequestsHandler(deps: Dependencies) {
           tag: 'pocket-request:' + saved.request.id,
         }).catch(() => undefined)
         return res.status(saved.replayed ? 200 : 201).json({ ok: true, request: publicRequest(saved.request, identity.userId) })
+      }
+      if (req.method === 'POST' && req.body?.action === 'prepare-payment') {
+        const request = await deps.repository.getFor(identity.userId, String(req.body.id || ''))
+        if (request.recipientId !== identity.userId || request.status !== 'accepted') return fail(res, 409, 'This request is not awaiting your payment.')
+        if (request.senderAddress) return res.json({ok:true,request:publicRequest(request,identity.userId)})
+        if (!deps.readWallet || request.network === 'multi') return fail(res,409,'This older request needs a new request from the sender.')
+        const wallet = await deps.readWallet(circleLinkKey(request.senderId,request.network))
+        if (!wallet?.circleWalletAddress) return fail(res,409,'The sender needs to open their Pocket wallet on this network before you can pay.')
+        const prepared = await deps.repository.preparePayment(identity.userId,request.id,wallet.circleWalletAddress)
+        return res.json({ok:true,request:publicRequest(prepared,identity.userId)})
       }
       if (req.method === 'POST' && req.body?.action === 'cancel') {
         const request = await deps.repository.cancel(identity.userId, req.body?.id)

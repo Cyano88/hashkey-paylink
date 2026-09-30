@@ -1,3 +1,4 @@
+import {pocketRequestPaymentPath} from '../lib/pocketRequestPaymentPath'
 import PocketIncomingRequestSheet from '../components/PocketIncomingRequestSheet'
 import {isIncomingPocketRequest} from '../lib/pocketInboxPolicy'
 import { readPocketNotifications,markPocketNotificationsRead,type PocketNotice } from '../api/pocketNotificationsClient'
@@ -141,8 +142,7 @@ export default function PocketNotificationsPage() {
       setItems(current=>current.map(item=>item.id===next.id?next:item))
       if(decision==='decline'){setSelectedId('');return}
       if(selected.status==='pending')return
-      if(!next.paymentPath?.startsWith('/home/send?request='))throw Error('The payment route is unavailable. Please try again.')
-      setSelectedId('');navigate(POCKET_BASE_PATH+next.paymentPath)
+      setSelectedId('');navigate(POCKET_BASE_PATH+pocketRequestPaymentPath(next.id))
     } catch(reason) {if(generation===scope.current)setActionError(reason instanceof Error?reason.message:'Could not respond. Try again.')}
     finally {if(generation===scope.current)setActing('')}
   }

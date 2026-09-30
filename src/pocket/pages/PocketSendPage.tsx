@@ -1,3 +1,4 @@
+import {preparePocketRequestPayment} from '../api/pocketRequestsClient'
 import PocketLocalEquivalent from '../components/PocketLocalEquivalent'
 import PocketConfirmationDetails from '../components/PocketConfirmationDetails'
 import PocketBottomSheet from '../components/PocketBottomSheet'
@@ -99,7 +100,9 @@ export default function PocketSendPage() {
         if (item.status === 'declined') throw new Error('You declined this request.')
         if (item.status === 'pending') throw new Error('Accept this request from Notifications before paying.')
         if (item.status === 'paid') { setPaymentRequest(item); setRequestConfirmed(true); setRequestAccepted(true); return }
-        setPaymentRequest(item)
+        const prepared=await preparePocketRequestPayment(token,item.id)
+        if(cancelled)return
+        setPaymentRequest(prepared)
         setNetwork(item.network === 'multi' ? 'base' : item.network)
         setMode('pocket')
         setPocketId(item.senderPocketId)
@@ -111,6 +114,11 @@ export default function PocketSendPage() {
 
   useEffect(() => {
     if (mode !== 'pocket' || !/^\d{6,12}$/.test(pocketId)) { setResolved(null); if (mode === 'pocket') send.setAddress(''); return }
+    if(requestId&&paymentRequest?.recipientAddress){
+      const address=paymentRequest.recipientAddress
+      setResolved({pocketId:paymentRequest.senderPocketId,name:paymentRequest.senderName,network,address});send.setAddress(address);setResolving(false);setResolveError('');return
+    }
+    if(requestId)return
     let cancelled = false
     const timer = window.setTimeout(async () => {
       setResolving(true); setResolveError(''); setResolved(null); send.setAddress('')
@@ -119,7 +127,7 @@ export default function PocketSendPage() {
       finally { if (!cancelled) setResolving(false) }
     }, 350)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [getAccessToken, mode, network, pocketId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [getAccessToken, mode, network, pocketId, requestId, paymentRequest]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!paymentRequest || paymentRequest.status !== 'accepted') return
