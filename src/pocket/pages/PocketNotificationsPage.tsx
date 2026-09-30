@@ -52,10 +52,12 @@ export default function PocketNotificationsPage() {
         const token = await tokenRef.current()
         if (!current()) return
         if (!token) throw new Error('Sign in again to read requests.')
-        const savedRequests=cachedPocketRequestInbox(token), savedNotices=cachedPocketNotifications(token)
-        if(savedRequests){setItems(savedRequests.requests);loaded.current=true}
-        if(savedNotices){setNotices(savedNotices.notices);loaded.current=true}
-        if(savedRequests&&savedNotices)setBusy(false)
+        if (!loaded.current) {
+          const savedRequests=cachedPocketRequestInbox(token), savedNotices=cachedPocketNotifications(token)
+          if(savedRequests){setItems(savedRequests.requests);loaded.current=true}
+          if(savedNotices){setNotices(savedNotices.notices);loaded.current=true}
+          if(savedRequests&&savedNotices)setBusy(false)
+        }
         // Paint each feed as it arrives; a slow notices API must not hide requests.
         const [requestsResult,noticeResult]=await Promise.allSettled([
           readPocketRequestInbox(token).then(inbox => {
