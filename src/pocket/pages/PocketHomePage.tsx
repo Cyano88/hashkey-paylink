@@ -57,7 +57,7 @@ export default function PocketHomePage() {
   const activity = usePocketActivity({ authenticated, email, enabled: true, recent: true, getAccessToken })
   const currency = usePocketDisplayCurrency()
   const showNgn = currency !== 'USDC'
-  const fx = usePocketFxQuote(1, showNgn, currency === 'UGX' ? 'UGX' : 'NGN')
+  const fx = usePocketFxQuote(1, showNgn, currency === 'UGX' ? 'UGX' : 'NGN', true)
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
   const [selectedActivity, setSelectedActivity] = useState<PocketActivityRow | null>(null)
   const [networkPage, setNetworkPage] = useState(() => ['polygon', 'ethereum'].includes(initialNetwork()) ? 1 : 0)

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {build} from 'esbuild'
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright')
-const bundle=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import useFx from './src/pocket/hooks/usePocketFxQuote';window.currency='NGN';function App(){const fx=useFx(1,true,window.currency);window.fx=fx;return <output>{JSON.stringify(fx)}</output>}const root=createRoot(document.getElementById('app'));window.mount=()=>root.render(<App/>);window.mount()`,loader:'jsx',resolveDir:process.cwd()},bundle:true,write:false,format:'iife',jsx:'automatic'})
+const bundle=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import useFx from './src/pocket/hooks/usePocketFxQuote';window.currency='NGN';function App(){const fx=useFx(1,true,window.currency);window.fx=fx;window.displayFx=useFx(1,true,window.currency,true);return <output>{JSON.stringify(fx)}</output>}const root=createRoot(document.getElementById('app'));window.mount=()=>root.render(<App/>);window.mount()`,loader:'jsx',resolveDir:process.cwd()},bundle:true,write:false,format:'iife',jsx:'automatic'})
 const browser=await chromium.launch({headless:true,channel:'chrome'})
 try{
  const page=await browser.newPage();let mode='error',held
@@ -17,5 +17,6 @@ try{
  assert.equal(await page.evaluate(()=>window.fx.quote.currency),'UGX','Failed refresh retains an unexpired quote')
  assert.equal(await page.evaluate(()=>window.fx.loading),false)
  await page.evaluate(()=>{const now=Date.now;Date.now=()=>now()+31000;window.mount()});assert.equal(await page.evaluate(()=>window.fx.quote),null,'Expired quote is never shown as live')
+ assert.equal(await page.evaluate(()=>window.displayFx.quote.rate),3700,'Display estimate survives expiry and failed refresh'); assert.equal(await page.evaluate(()=>window.displayFx.loading),false,'Cached estimate does not shimmer during refresh');
  console.log('PASS FX retry shimmer, currency isolation, valid quote retention and expired quote rejection.')
 }finally{await browser.close()}

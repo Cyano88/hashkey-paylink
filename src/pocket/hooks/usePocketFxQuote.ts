@@ -6,17 +6,17 @@ const cache = new Map<string, PocketFxQuote>()
 const pending = new Map<string, Promise<PocketFxQuote>>()
 function cachedQuote(key: string): PocketFxQuote | undefined {
   const memory = cache.get(key)
-  if (memory && !memory.stale && memory.expiresAt > Date.now()) return memory
+  if (memory) return memory
   try {
     const raw = localStorage.getItem('pocket:fx:v1:' + key)
     if (!raw) return undefined
     const quote = parsePocketFxQuote({ ok: true, quote: JSON.parse(raw) })
-    if (quote.currency + ':' + quote.amount !== key || quote.stale || quote.expiresAt <= Date.now()) return undefined
+    if (quote.currency + ':' + quote.amount !== key) return undefined
     cache.set(key, quote)
     return quote
   } catch { return undefined }
 }
-export default function usePocketFxQuote(balance: number, enabled = true, currency: 'NGN' | 'UGX' = 'NGN') {
+export default function usePocketFxQuote(balance: number, enabled = true, currency: 'NGN' | 'UGX' = 'NGN', retainDisplayEstimate = false) {
   const amount = Number.isFinite(balance) && balance > 0 ? balance.toFixed(6).replace(/\.?0+$/, '') : '1'
   const key = currency + ':' + amount
   const [quote, setQuote] = useState<PocketFxQuote | null>(() => cachedQuote(key) ?? null)
@@ -58,10 +58,10 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
   useEffect(() => enabled ? registerPocketRefreshHandler(refresh) : undefined, [enabled, refresh])
   useEffect(() => {
     if (!quote || quote.expiresAt <= Date.now()) return
-    const timer = window.setTimeout(() => { setQuote(null); void refresh() }, quote.expiresAt - Date.now())
+    const timer = window.setTimeout(() => { if (!retainDisplayEstimate) setQuote(null); void refresh() }, quote.expiresAt - Date.now())
     return () => window.clearTimeout(timer)
-  }, [quote, refresh])
-  const visibleQuote = enabled && quote?.currency === currency && quote.amount === amount && !quote.stale && quote.expiresAt > Date.now() ? quote : null
+  }, [quote, refresh, retainDisplayEstimate])
+  const visibleQuote = enabled && quote?.currency === currency && quote.amount === amount && (retainDisplayEstimate || (!quote.stale && quote.expiresAt > Date.now())) ? quote : null
   const loading = enabled && !visibleQuote && (busy || !error)
   return { quote: visibleQuote, loading, busy, error, refresh }
 }
