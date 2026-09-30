@@ -65,7 +65,7 @@ export async function updatePocketRequestRoute(accessToken: string, id: string, 
 
 export type PocketRequestUser = { pocketId: string; displayName: string; verified: boolean }
 export async function resolvePocketRequestUser(accessToken: string, pocketId: string) {
-  const response = await fetch(POCKET_API.requests, { method: 'POST', headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'resolve-request-user', pocketId }) })
+  const response = await fetch(POCKET_API.requests, { signal: AbortSignal.timeout(12_000), method: 'POST', headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'resolve-request-user', pocketId }) })
   const data = await response.json().catch(() => undefined) as { ok?: boolean; user?: PocketRequestUser } | undefined
   if (!response.ok || !data?.ok || !data.user) throw new Error(message(data, 'Pocket user could not be resolved.'))
   return data.user
@@ -73,7 +73,7 @@ export async function resolvePocketRequestUser(accessToken: string, pocketId: st
 
 export type PocketResolvedRecipient = { pocketId: string; name: string; network: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'; address: string }
 export async function resolvePocketRecipient(accessToken: string, pocketId: string, network: PocketResolvedRecipient['network']) {
-  const response = await fetch(POCKET_API.requests, { method: 'POST', headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'resolve-recipient', pocketId, network }) })
+  const response = await fetch(POCKET_API.requests, { signal: AbortSignal.timeout(12_000), method: 'POST', headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'resolve-recipient', pocketId, network }) })
   const data = await response.json().catch(() => undefined) as { ok?: boolean; recipient?: PocketResolvedRecipient } | undefined
   if (!response.ok || !data?.ok || !data.recipient) throw new Error(message(data, 'Pocket user could not be resolved.'))
   return data.recipient

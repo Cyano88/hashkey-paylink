@@ -1,7 +1,6 @@
 import PocketLocalEquivalent from '../../components/PocketLocalEquivalent'
 import PocketFiatUsdcEstimate from '../../components/PocketFiatUsdcEstimate'
-import { ArrowRight as PaymentArrowRight } from 'lucide-react'
-import { Coins, Info, Landmark, Link2, Loader2, Sliders, Tag } from '../../components/PocketIcons'
+import { Coins, Info, Landmark, Loader2, Sliders, Tag } from '../../components/PocketIcons'
 import { cn } from '../../../lib/utils'
 
 export type PocketPayLinkLane = 'usdc' | 'bank' | 'bank-send'
@@ -61,7 +60,7 @@ export function PocketPaymentAmountField({ lane, flexible, amount, dirty, valid,
           </div>
           {valid && Number(amount) > 0 && (naira ? <PocketFiatUsdcEstimate amount={Number(amount)} /> : <PocketLocalEquivalent amount={Number(amount)} />)}
           {dirty && !valid && <p className="flex items-center gap-1 text-xs text-red-500"><Info className="h-3 w-3" /> Enter a valid amount greater than 0</p>}
-          {!dirty && <p className="text-[11px] text-gray-400 dark:text-gray-500">{helperText}</p>}
+          {!dirty && helperText && <p className="text-[11px] text-gray-400 dark:text-gray-500">{helperText}</p>}
         </fieldset>
       )}
     </>
@@ -107,6 +106,8 @@ export function PocketFlexibleAmountToggle({ lane, enabled, onToggle }: PocketFl
     <button
       type="button"
       onClick={onToggle}
+      role="switch"
+      aria-checked={enabled}
       className={cn(
         'w-full rounded-xl border p-3 text-left transition-all',
         enabled
@@ -119,7 +120,7 @@ export function PocketFlexibleAmountToggle({ lane, enabled, onToggle }: PocketFl
           <span className={cn(
             'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all',
             enabled
-              ? 'border-gray-900 bg-gray-950 text-white dark:border-white/20 dark:bg-gray-900 dark:text-white'
+              ? 'border-gray-900 bg-gray-950 text-white dark:border-white/20 dark:bg-black dark:text-white'
               : 'border-gray-200 bg-white text-gray-400 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-500',
           )}><Sliders className="h-3.5 w-3.5" /></span>
           <span className="min-w-0">
@@ -147,23 +148,17 @@ type PocketPayLinkSubmitPanelProps = {
 }
 
 export function PocketPayLinkSubmitPanel({ lane, shellActive, idle, canSubmit, submitting, error, addressGuidance, onSubmit }: PocketPayLinkSubmitPanelProps) {
-  const bankLane = usesNaira(lane)
-  const label = lane === 'bank' ? 'Create Collection' : lane === 'bank-send' ? 'Create Bank-to-USDC PayLink' : 'Create Collection'
+  const label = lane === 'bank' ? 'Create collection' : lane === 'bank-send' ? 'Create Bank-to-USDC PayLink' : 'Create collection'
   return (
     <div className={cn('space-y-2', shellActive ? 'w-full' : 'p-3 sm:p-4')}>
       {idle && (
         <button
           onClick={onSubmit}
           disabled={!canSubmit || submitting}
-          className={cn("pocket-cta-primary w-full", shellActive && "group relative px-16") }
+          className="pocket-cta-primary w-full"
         >
-          {bankLane && submitting
-            ? <Loader2 className={cn('h-4 w-4 shrink-0 animate-spin', shellActive && 'absolute left-5')} />
-            : <Link2 className={cn('h-4 w-4 shrink-0', shellActive && 'absolute left-5')} />}
+          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
           <span>{label}</span>
-          {canSubmit && !submitting && (shellActive
-            ? <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-transform group-hover:translate-x-0.5"><PaymentArrowRight className="h-4 w-4" /></span>
-            : <PaymentArrowRight className="h-4 w-4 shrink-0" />)}
         </button>
       )}
 

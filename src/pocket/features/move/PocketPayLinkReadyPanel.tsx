@@ -1,8 +1,9 @@
-import type { RefObject } from 'react'
+import { Link } from 'react-router-dom'
+import { useState, type RefObject } from 'react'
 import { CheckCheck, Download, LayoutDashboard, Share2, Sliders } from '../../components/PocketIcons'
 import { ArrowTopRightOnSquareIcon as ExternalLink } from '@heroicons/react/24/outline'
 import { QRCodeCanvas } from 'qrcode.react'
-import { cn, truncateAddress } from '../../../lib/utils'
+import { cn } from '../../../lib/utils'
 
 type PocketPayLinkReadyPanelProps = {
   url: string
@@ -20,7 +21,7 @@ type PocketPayLinkReadyPanelProps = {
   qrRef: RefObject<HTMLDivElement>
   qrHiResRef: RefObject<HTMLDivElement>
   onReset: () => void
-  onDownloadQr: () => void
+  onDownloadQr: () => void | Promise<void>
   onShare: () => void
 }
 
@@ -31,11 +32,8 @@ export function PocketPayLinkReadyPanel({
   localCurrency,
   amountLabel,
   networkLabel,
-  evmAddress,
-  solanaAddress,
   memo,
   eventMode,
-  accessMode,
   dashboardUrl,
   qrRef,
   qrHiResRef,
@@ -43,49 +41,34 @@ export function PocketPayLinkReadyPanel({
   onDownloadQr,
   onShare,
 }: PocketPayLinkReadyPanelProps) {
+  const [downloadError, setDownloadError] = useState('')
+  const [downloading, setDownloading] = useState(false)
   return (
-    <div className="animate-slide-up space-y-4 border-t border-gray-100 bg-gray-50/70 p-3 dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none sm:p-4">
+    <div className="animate-slide-up space-y-4 bg-white dark:bg-black">
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-900 bg-gray-950 text-white dark:border-white dark:bg-white dark:text-gray-950">
               <CheckCheck className="h-3.5 w-3.5" />
             </span>
-            Link Ready
+            {eventMode ? 'Collection ready' : 'Link ready'}
           </p>
           <button onClick={onReset} className="text-xs font-medium text-gray-500 dark:text-gray-400 transition-colors hover:text-gray-700 dark:hover:text-gray-200">
-            Start over
+            Create another
           </button>
         </div>
 
         <div className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-[#262626] dark:bg-[#121212]">
           <div className="min-w-0 flex-1 space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Preview</p>
+
             <div className="flex items-baseline gap-1.5">
               {flexible
                 ? <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-sm font-semibold text-gray-800 dark:border-[#262626] dark:bg-[#121212] dark:text-gray-100"><Sliders className="h-3.5 w-3.5" />{localCurrency ? 'Flexible NGN' : 'Flexible'}</span>
                 : <><span className="text-2xl font-bold text-gray-900 dark:text-white">{amountLabel}</span><span className="text-sm font-medium text-gray-500 dark:text-gray-400">{localCurrency ? 'NGN' : 'USDC'}</span></>
               }
             </div>
-            <div className="space-y-1">
-              {evmAddress && (
-                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span>{networkLabel}:</span>
-                  <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(evmAddress, 8)}</span>
-                </div>
-              )}
-              {solanaAddress && (
-                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span>Solana:</span>
-                  <span className="font-mono text-gray-700 dark:text-gray-200">{truncateAddress(solanaAddress, 8)}</span>
-                </div>
-              )}
-              {memo && (
-                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span>Payment note: <span className="font-medium text-gray-700 dark:text-gray-200">"{memo}"</span></span>
-                </div>
-              )}
-            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{networkLabel}</p>
+            {memo && <p className="text-sm font-medium text-gray-900 dark:text-white">{memo}</p>}
           </div>
 
           <div className="relative shrink-0">
@@ -100,15 +83,17 @@ export function PocketPayLinkReadyPanel({
                 </a>
               </div>
               <button
-                onClick={onDownloadQr}
+                disabled={downloading}
+                onClick={async () => { setDownloading(true);setDownloadError('');try {await onDownloadQr()} catch (error) {if (!(error instanceof DOMException && error.name === 'AbortError')) setDownloadError('Could not save QR code. Try again.')} finally {setDownloading(false)} }}
                 aria-label="Download QR code"
-                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-all hover:text-gray-800 active:scale-[0.96] dark:text-gray-400"
+                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-all hover:text-gray-800 active:scale-[0.96] dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200"
               >
                 <Download className="h-3.5 w-3.5" />
               </button>
             </div>
         </div>
 
+        {downloadError && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{downloadError}</p>}
         <div className="grid gap-2.5 sm:grid-cols-2">
           <button
             onClick={onShare}
@@ -127,39 +112,7 @@ export function PocketPayLinkReadyPanel({
           </a>
         </div>
 
-        {!eventMode && (
-          <a
-            href={dashboardUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            View payments
-          </a>
-        )}
-
-        {eventMode && (
-          <div className="grid gap-2">
-            <a
-              href={dashboardUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] dark:border-[#262626] dark:bg-[#121212] dark:text-gray-200 dark:hover:border-white/20 dark:hover:bg-white/[0.07]"
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              View payments
-            </a>
-          </div>
-        )}
-
-        {eventMode && (
-          <p className="text-[11px] text-gray-500 dark:text-gray-400">
-            {accessMode
-              ? 'Each payer enters their name — used to generate their personal access link after payment.'
-              : 'Each payer must enter their name before paying — their entry will appear live in the dashboard.'}
-          </p>
-        )}
+        {dashboardUrl.startsWith('/') ? <Link to={dashboardUrl} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 text-sm font-semibold dark:border-[#262626]"><LayoutDashboard className="h-4 w-4" />View payments</Link> : <a href={dashboardUrl} target="_blank" rel="noopener noreferrer" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 text-sm font-semibold dark:border-[#262626]"><LayoutDashboard className="h-4 w-4" />View payments</a>}
 
         <div ref={qrHiResRef} aria-hidden="true"
           style={{ position: 'absolute', left: '-9999px', visibility: 'hidden' }}>

@@ -1,3 +1,5 @@
+import PocketResourceActivityPanel from '../features/activity/PocketResourceActivityPanel'
+import PocketFlowHeader from '../components/PocketFlowHeader'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PocketNavTab } from '../components/PocketBottomNav'
@@ -42,6 +44,7 @@ export default function PocketActivityPage({ view }: { view: PocketActivityView 
   return <PocketTransactionsPage view={view} />
 }
 function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
+  const location = useLocation()
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const activity = usePocketActivity({ authenticated, email, enabled: true, getAccessToken })
@@ -54,12 +57,14 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
   const [requestsScope, setRequestsScope] = useState(requestScope)
   const [requests, setRequests] = useState<PocketRequestItem[]>([])
   const [requestsError, setRequestsError] = useState('')
+  const [requestsBusy, setRequestsBusy] = useState(authenticated)
   const rowsWithRequests = useMemo(() => requestActivityRows(bridges.rows, requestsScope === requestScope ? requests : []), [bridges.rows, requests, requestsScope, requestScope])
 
   const refreshRequests = useCallback(async () => {
     const sequence = ++requestSequence.current
     const valid = () => activeRequestScope.current === requestScope && sequence === requestSequence.current
-    if (!authenticated) { setRequests([]); return }
+    if (!authenticated) { setRequests([]); setRequestsBusy(false); return }
+    setRequestsBusy(true)
     try {
       const accessToken = await getAccessToken()
       if (!accessToken) throw new Error('Sign in again to load requests.')
@@ -71,7 +76,7 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
     } catch (reason) {
       if (!valid()) return
       setRequestsError(reason instanceof Error ? reason.message : 'Requests could not load.')
-    }
+    } finally { if (valid()) setRequestsBusy(false) }
   }, [authenticated, getAccessToken, requestScope])
 
   useEffect(() => {
@@ -84,8 +89,12 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
     if (!authenticated) return
     const refresh = () => { void refreshRequests() }
     const unregister = registerPocketRefreshHandler(refreshRequests)
+    const refreshVisible = () => { if (document.visibilityState === 'visible') refresh() }
+    const timer = window.setInterval(refreshVisible, 30_000)
     window.addEventListener(POCKET_REQUESTS_UPDATED_EVENT, refresh)
-    return () => { unregister(); window.removeEventListener(POCKET_REQUESTS_UPDATED_EVENT, refresh) }
+    window.addEventListener('focus', refreshVisible)
+    document.addEventListener('visibilitychange', refreshVisible)
+    return () => { unregister(); window.clearInterval(timer); window.removeEventListener(POCKET_REQUESTS_UPDATED_EVENT, refresh); window.removeEventListener('focus', refreshVisible); document.removeEventListener('visibilitychange', refreshVisible) }
   }, [authenticated, refreshRequests])
 
   const handleBillsRefund = useCallback(async (intentId: string) => {
@@ -119,7 +128,10 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
 
   return (
     <PocketRouteShell active="activity" onSelect={selectNav}>
-      <PocketActivityPanel
+      {view === 'collections' ? <>
+        <PocketFlowHeader centered title="Requests and collections" onBack={() => location.search.includes('collection=') ? navigate(POCKET_BASE_PATH + '/activity/collections', {replace:true}) : navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc)} />
+        <PocketResourceActivityPanel view="collections" rows={rowsWithRequests} merchants={activity.merchants} collections={activity.collections} requests={requestsScope === requestScope ? requests : []} busy={activity.busy || requestsBusy} error={activity.error || requestsError} />
+      </> : <PocketActivityPanel
         view={view}
         rows={rowsWithRequests}
         archivedKeys={activity.archivedKeys}
@@ -131,7 +143,7 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
         bridgeChecking={bridges.isChecking}
         bridgeMessages={bridges.messages}
         onNewBridge={() => navigate(POCKET_BASE_PATH + pocketPathFor({ section: 'home', view: 'swap' }))}
-      />
+      />}
     </PocketRouteShell>
   )
 }

@@ -13,6 +13,7 @@ function message(value: unknown, fallback: string) {
 export async function savePocketCollection({ accessToken, eventId, title, paymentUrl }: { accessToken: string; eventId: string; title: string; paymentUrl: string }): Promise<PocketCollectionResource> {
   const response = await fetch(POCKET_API.paylinks, {
     method: 'POST',
+    signal: AbortSignal.timeout(12_000),
     headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ eventId, title, paymentUrl }),
   })

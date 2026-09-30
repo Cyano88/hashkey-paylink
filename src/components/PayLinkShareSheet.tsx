@@ -1,7 +1,9 @@
-import { CheckCheck, Copy, Mail, MessageCircle, Send, X } from 'lucide-react'
+import PocketBottomSheet from '../pocket/components/PocketBottomSheet'
+import { CheckCheck, Copy, Mail, MessageCircle, Send, X } from '../pocket/components/PocketIcons'
 import { cn } from '../lib/utils'
 
 type PayLinkShareSheetProps = {
+  pocket?: boolean
   open: boolean
   url: string
   copied: boolean
@@ -14,6 +16,7 @@ type PayLinkShareSheetProps = {
 }
 
 export default function PayLinkShareSheet({
+  pocket = false,
   open,
   url,
   copied,
@@ -34,28 +37,24 @@ export default function PayLinkShareSheet({
   const encodedShareText = encodeURIComponent(shareText.split('\n')[0] || 'Hash PayLink payment request')
   const encodedShareMessage = encodeURIComponent(shareMessage)
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-4 pb-5 sm:items-center sm:pb-0"
-      onClick={onClose}
-    >
+  const content = (
       <div
-        className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl"
+        className={pocket ? "pt-2" : "w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl"}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-gray-900">{title}</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">{title}</p>
             <p className="text-xs text-gray-400">{subtitle}</p>
           </div>
-          <button
+          {!pocket && <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+            className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-white"
             aria-label="Close share options"
           >
             <X className="h-4 w-4" />
-          </button>
+          </button>}
         </div>
 
         <button
@@ -65,7 +64,7 @@ export default function PayLinkShareSheet({
             'mb-2 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all active:scale-[0.98]',
             copied
               ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
-              : 'bg-black text-white hover:bg-gray-800',
+              : 'bg-black text-white hover:bg-gray-800 dark:bg-white dark:text-black',
           )}
         >
           {copied ? <><CheckCheck className="h-4 w-4" /> Copied!</> : <><Copy className="h-4 w-4" /> Copy link</>}
@@ -76,7 +75,7 @@ export default function PayLinkShareSheet({
             href={`https://wa.me/?text=${encodedShareMessage}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-[#262626] dark:bg-[#0d0d0d] dark:text-gray-200 dark:hover:bg-[#121212]"
           >
             <MessageCircle className="h-4 w-4" />
             WhatsApp
@@ -85,7 +84,7 @@ export default function PayLinkShareSheet({
             href={`https://t.me/share/url?url=${encodedShareUrl}&text=${encodedShareText}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-[#262626] dark:bg-[#0d0d0d] dark:text-gray-200 dark:hover:bg-[#121212]"
           >
             <Send className="h-4 w-4" />
             Telegram
@@ -94,24 +93,24 @@ export default function PayLinkShareSheet({
             href={`https://x.com/messages/compose?text=${encodedShareMessage}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-[#262626] dark:bg-[#0d0d0d] dark:text-gray-200 dark:hover:bg-[#121212]"
           >
             <X className="h-4 w-4" />
             X DM
           </a>
           <a
             href={`mailto:?subject=${encodeURIComponent(emailSubject)}&body=${encodedShareMessage}`}
-            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50"
+            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-[#262626] dark:bg-[#0d0d0d] dark:text-gray-200 dark:hover:bg-[#121212]"
           >
             <Mail className="h-4 w-4" />
             Email
           </a>
         </div>
 
-        <p className="mt-5 text-center text-[11px] font-medium text-gray-400">
+        {!pocket && <p className="mt-5 text-center text-[11px] font-medium text-gray-400">
           Powered by Hash PayLink
-        </p>
+        </p>}
       </div>
-    </div>
   )
+  return pocket ? <PocketBottomSheet title={title} onClose={onClose}>{content}</PocketBottomSheet> : <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-4 pb-5 sm:items-center sm:pb-0" onClick={onClose}>{content}</div>
 }

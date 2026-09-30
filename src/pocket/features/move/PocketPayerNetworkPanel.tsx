@@ -1,5 +1,7 @@
 import { cn } from '../../../lib/utils'
-import PocketSelect from '../../components/PocketSelect'
+import { useState } from 'react'
+import PocketBottomSheet from '../../components/PocketBottomSheet'
+import { ChevronDown } from '../../components/PocketIcons'
 
 type NetworkOption = {
   value: string
@@ -33,6 +35,7 @@ export function PocketPayerNetworkPanel({
   managedNetworkRouting = false,
   embedded = false,
 }: PocketPayerNetworkPanelProps) {
+  const [open, setOpen] = useState(false)
   return (
     <>
       {showSelector && <div className={cn(
@@ -43,37 +46,26 @@ export function PocketPayerNetworkPanel({
       )}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Payer network</p>
-            <p className="mt-0.5 text-xs font-medium text-gray-700 dark:text-gray-200">
-              {multiChain ? 'Payer chooses at checkout' : selectedNetworkLabel}
-            </p>
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Network</p>
+
           </div>
-          <PocketSelect
-            value={multiChain ? 'multi' : selectedNetwork}
-            options={multiChain ? [{ value: 'multi', label: 'Any supported' }] : options}
-            disabled={multiChain}
-            onChange={onNetworkSelect}
-            ariaLabel="Payer network"
-            className="w-[142px] shrink-0"
-            buttonClassName="min-h-9 rounded-lg py-1.5 text-xs"
-          />
+          <button type="button" aria-label="Select payment network" aria-haspopup="dialog" aria-expanded={open} disabled={multiChain} onClick={() => setOpen(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm font-semibold disabled:opacity-60 dark:border-[#262626]">
+            {multiChain ? 'Supported networks' : selectedNetworkLabel}<ChevronDown className="h-4 w-4" />
+          </button>
+          {open && <PocketBottomSheet title="Select network" onClose={() => setOpen(false)}><h2 className="mb-3 text-sm font-bold">Select network</h2><div role="listbox" aria-label="Payment network">{options.map(option => <button key={option.value} type="button" role="option" aria-selected={option.value === selectedNetwork} onClick={() => {onNetworkSelect(option.value);setOpen(false)}} className="flex min-h-14 w-full items-center justify-between gap-3 text-left text-sm font-semibold"><span>{option.label}</span><span aria-hidden="true" className={cn('h-4 w-4 rounded-full border',option.value === selectedNetwork ? 'border-4 border-gray-950 dark:border-white' : 'border-gray-300 dark:border-gray-600')} /></button>)}</div></PocketBottomSheet>}
         </div>
 
         {showMultiChainToggle && <button
           type="button"
           onClick={onMultiChainToggle}
+          role="switch"
+          aria-checked={multiChain}
           disabled={emailReceive}
           className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left transition-all hover:border-gray-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-70 dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none dark:hover:border-white/20"
         >
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">Let payer choose network</span>
-            <span className="block text-[11px] font-medium text-gray-400 dark:text-gray-500">
-              {emailReceive
-                ? 'Pocket uses the selected network.'
-                : multiChain
-                  ? managedNetworkRouting ? 'Pocket uses your linked wallets.' : 'Add addresses per network.'
-                  : 'Use one selected network.'}
-            </span>
+
           </span>
           <span className={cn(
             'relative h-6 w-10 shrink-0 rounded-full p-0.5 transition-all',

@@ -1,3 +1,4 @@
+import { downloadPocketQr } from '../lib/pocketQrDownload'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { copyToClipboard, formatAmount } from '../../lib/utils'
 import { buildPocketPayLink } from '../lib/pocketPayLinkBuilder'
@@ -108,10 +109,11 @@ export default function usePocketUsdcDraftController(network: PocketNetwork) {
 
   const shareText = useMemo(() => {
     const cleanedMemo = memo.trim()
+    if (flexibleAmount) return cleanedMemo ? `Contribute to ${cleanedMemo}` : 'Choose an amount to contribute'
     return cleanedMemo
       ? `Pay ${formatAmount(amount, 6)} USDC for ${cleanedMemo}`
       : `Pay ${formatAmount(amount, 6)} USDC with Hash PayLink`
-  }, [amount, memo])
+  }, [amount, memo, flexibleAmount])
 
   const share = useCallback(async () => {
     if (!generatedLink) return
@@ -139,31 +141,11 @@ export default function usePocketUsdcDraftController(network: PocketNetwork) {
     return `${hashPayLinkAppOriginForOrigin(pocketRuntimeOrigin())}/dashboard?${params.toString()}`
   }, [evmAddress, multiChain, network, solanaAddress, validation.evmValid, validation.solanaValid])
 
-  const downloadQr = useCallback(() => {
+  const downloadQr = useCallback(async () => {
     const canvas = qrHiResRef.current?.querySelector('canvas')
-    if (!canvas) return
-    const output = document.createElement('canvas')
-    output.width = canvas.width
-    output.height = canvas.height
-    const context = output.getContext('2d')
-    if (!context) return
-    context.drawImage(canvas, 0, 0)
-    const logo = new Image()
-    logo.onload = () => {
-      const size = Math.round(canvas.width * 0.15)
-      const x = Math.round((canvas.width - size) / 2)
-      const y = Math.round((canvas.height - size) / 2)
-      const padding = 10
-      context.fillStyle = '#ffffff'
-      context.fillRect(x - padding, y - padding, size + padding * 2, size + padding * 2)
-      context.drawImage(logo, x, y, size, size)
-      const anchor = document.createElement('a')
-      anchor.href = output.toDataURL('image/png')
-      anchor.download = `${(memo.trim() || 'payment-link').replace(/\s+/g, '-')}-qr.png`
-      anchor.click()
-    }
-    logo.src = '/hash-logo.png'
-  }, [memo])
+    if (!canvas) throw new Error('QR code is not ready. Try again.')
+    await downloadPocketQr(canvas)
+  }, [])
 
   return {
     evmAddress,

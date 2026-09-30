@@ -244,27 +244,13 @@ function PocketMoveBankContent() {
           {payoutToast}
         </div>
       )}
-      <PocketFlowHeader centered title={routeMode === 'request' ? 'Request' : recipientStep ? 'Enter amount' : 'Bank transfer'} onBack={() => recipientStep ? setRecipientStep(false) : navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
+      <PocketFlowHeader centered title={routeMode === 'request' ? 'Create collection' : recipientStep ? 'Enter amount' : 'Bank transfer'} onBack={() => recipientStep ? setRecipientStep(false) : navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
       <div className={mode === "withdraw" && recipientStep ? "flex min-h-0 min-w-0 w-full flex-1 flex-col" : "min-w-0 w-full space-y-3.5"}>
-        {routeMode === 'request' && <>
-          <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
-            <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc)} className="min-h-10 rounded-full px-3 text-xs font-semibold text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">Request</button>
-            <button type="button" className="min-h-10 rounded-full bg-gray-950 px-3 text-xs font-semibold text-white shadow-sm dark:bg-white dark:text-gray-950">Collection</button>
-          </div>
-          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-100 p-1 dark:bg-[#0D0D0D] dark:shadow-none">
-            <button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc + '?flow=collection')} className="min-h-10 rounded-xl text-xs font-bold text-gray-500 dark:text-gray-400">USDC</button>
-            <button type="button" className="min-h-10 rounded-xl bg-white text-xs font-bold text-gray-950 shadow-sm dark:bg-white/[0.1] dark:text-white">Local currency</button>
-          </div>
-          <section className="space-y-2 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
-            <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Collection country</p>
-            <div className="flex min-h-14 items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 dark:border-blue-400/20 dark:bg-blue-400/10"><span><span className="block text-sm font-bold">Nigeria</span><span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">Collect in NGN</span></span><span className="rounded-full bg-blue-600 px-2.5 py-1 text-[9px] font-black uppercase text-white">Selected</span></div>
-            <p className="px-2 pt-1 text-center text-[11px] leading-5 text-gray-400 dark:text-gray-500">Nigeria is available now. Ghana and Kenya will unlock when their local payment rails are ready.</p>
-          </section>
-        </>}
+        {routeMode === 'request' && <div className="flex items-center gap-3 py-2"><img src="/brand/countries/ng.svg" alt="" className="h-[21px] w-7 rounded-sm" /><div><p className="text-sm font-semibold">Nigeria</p><p className="text-xs text-gray-500 dark:text-gray-400">Receive NGN in your bank account</p></div></div>}
 
 
         <div className={mode === "withdraw" && recipientStep ? "flex min-h-0 flex-1 flex-col" : "space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none"}>
-          {mode === 'request' && <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">Local-currency collection</p>}
+
 
           {!authenticated && (
             <div className="overflow-hidden rounded-[22px] bg-[#F5F5F7]/95 p-2 dark:bg-[#121212]/95">

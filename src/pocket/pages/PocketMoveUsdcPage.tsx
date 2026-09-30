@@ -1,7 +1,7 @@
+import { activityScope, refreshPocketActivity } from '../lib/pocketActivityCache'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useOutletContext } from 'react-router-dom'
-import { ArrowRight, Check, Loader2, Mail, Send } from '../components/PocketIcons'
-import { useAccount, useDisconnect } from 'wagmi'
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
+import { Check, Loader2, ChevronRight, RequestMoney, Users, Coins, Landmark } from '../components/PocketIcons'
 import type { LayoutOutletContext } from '../../Layout'
 import PayLinkShareSheet from '../../components/PayLinkShareSheet'
 import { PRIVY_AUTH_ENABLED } from '../../lib/authMode'
@@ -9,7 +9,6 @@ import { canUseCircleEvmEmailWallet } from '../../lib/circleEvmEmailWallet'
 import { canUseCircleSolanaEmailWallet } from '../../lib/circleSolanaEmailWallet'
 import { CHAIN_META, type ChainKey } from '../../lib/chains'
 import { PrivyConnectButton } from '../../lib/PrivyConnectButton'
-import { useSolana } from '../../lib/SolanaContext'
 import { formatAmount } from '../../lib/utils'
 import type { PocketNavTab } from '../components/PocketBottomNav'
 import PocketRouteShell from '../components/PocketRouteShell'
@@ -27,19 +26,16 @@ import { createPocketUserRequest, resolvePocketRequestUser, type PocketRequestUs
 
 const POCKET_NETWORKS: ChainKey[] = ['base', 'solana', 'arbitrum', 'ethereum', 'polygon']
 type ReceiveMode = 'idle' | 'paste' | 'email' | 'bank'
-type ReceiveFlow = 'request' | 'collection'
-type CollectionRail = 'usdc' | 'local'
+type ReceiveFlow = 'request' | 'collection' | 'menu'
 
 export default function PocketMoveUsdcPage() {
   const navigate = useNavigate()
   const { selectedNet, onNetworkSelect } = useOutletContext<LayoutOutletContext>()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const { address: connectedEvm } = useAccount()
-  const { disconnect: disconnectEvm } = useDisconnect()
-  const { address: connectedSolana, disconnect: disconnectSolana } = useSolana()
-  const [flow, setFlow] = useState<ReceiveFlow>(() => new URLSearchParams(window.location.search).get('flow') === 'collection' ? 'collection' : 'request')
-  const [collectionRail, setCollectionRail] = useState<CollectionRail>('usdc')
+  const [params, setParams] = useSearchParams()
+  const flow: ReceiveFlow = params.get('flow') === 'request' ? 'request' : params.get('flow') === 'collection' ? 'collection' : 'menu'
+  const collectionRail = params.get('rail') === 'usdc' ? 'usdc' : null
   const [receiveMode, setReceiveMode] = useState<ReceiveMode>('email')
   const [collectionId, setCollectionId] = useState('')
   const [payerPocketId, setPayerPocketId] = useState('')
@@ -48,11 +44,11 @@ export default function PocketMoveUsdcPage() {
   const [requestBusy, setRequestBusy] = useState(false)
   const [formError, setFormError] = useState('')
   const [requestNotice, setRequestNotice] = useState('')
+  const submittingRef = useRef(false)
+  const attemptRef = useRef({ key: '', eventId: '' })
+  const attemptId = (key: string) => { if (attemptRef.current.key !== key) attemptRef.current = {key, eventId: window.crypto.randomUUID().replace(/-/g, '')}; return attemptRef.current.eventId }
   const chainSwitchMounted = useRef(false)
-  const manualEvmAddress = useRef('')
-  const manualSolanaAddress = useRef('')
   const draft = usePocketUsdcDraftController(selectedNet)
-  const isEvmNetwork = selectedNet !== 'solana'
   const canReceiveWithEmail = !draft.multiChain && PRIVY_AUTH_ENABLED && (selectedNet === 'solana' ? canUseCircleSolanaEmailWallet() : canUseCircleEvmEmailWallet(selectedNet))
 
   const recipient = usePocketRecipient({
@@ -63,36 +59,17 @@ export default function PocketMoveUsdcPage() {
     invalidateResult: draft.invalidateResult,
   })
 
-  useEffect(() => { if (!POCKET_NETWORKS.includes(selectedNet) || (flow === 'collection' && (selectedNet === 'ethereum' || selectedNet === 'polygon'))) onNetworkSelect('base') }, [onNetworkSelect, selectedNet, flow])
-  useEffect(() => {
-    if (receiveMode !== 'email' && connectedEvm && !draft.evmAddress && (isEvmNetwork || draft.multiChain)) {
-      manualEvmAddress.current = connectedEvm
-      draft.setEvmAddress(connectedEvm)
-    }
-  }, [connectedEvm, draft.evmAddress, draft.multiChain, draft.setEvmAddress, isEvmNetwork, receiveMode])
-  useEffect(() => {
-    if (receiveMode !== 'email' && connectedSolana && !draft.solanaAddress && (selectedNet === 'solana' || draft.multiChain)) {
-      manualSolanaAddress.current = connectedSolana
-      draft.setSolanaAddress(connectedSolana)
-    }
-  }, [connectedSolana, draft.multiChain, draft.setSolanaAddress, draft.solanaAddress, receiveMode, selectedNet])
-  useEffect(() => {
-    if (selectedNet !== 'solana' && !draft.multiChain && connectedSolana) {
-      disconnectSolana()
-      draft.setSolanaAddress('')
-    }
-  }, [connectedSolana, disconnectSolana, draft.multiChain, draft.setSolanaAddress, selectedNet])
+  useEffect(() => { if (flow !== 'menu' && (!POCKET_NETWORKS.includes(selectedNet) || (flow === 'collection' && (selectedNet === 'ethereum' || selectedNet === 'polygon')))) onNetworkSelect('base') }, [onNetworkSelect, selectedNet, flow])
   useEffect(() => {
     if (!chainSwitchMounted.current) { chainSwitchMounted.current = true; return }
     if (!draft.multiChain) {
-      manualEvmAddress.current = ''
-      manualSolanaAddress.current = ''
       draft.clearAddresses()
     }
   }, [selectedNet]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setResolvedPayer(null)
+    setResolvingPayer(false)
     setFormError('')
     if (flow !== 'request' || !authenticated || !/^\d{6,12}$/.test(payerPocketId)) return
     let cancelled = false
@@ -115,8 +92,8 @@ export default function PocketMoveUsdcPage() {
   const toggleMultiChain = useCallback(() => {
     const enabled = !draft.multiChain
     if (enabled) {
-      const pocketEvmAddress = wallets.wallets.base?.address || wallets.wallets.arbitrum?.address || draft.evmAddress
-      const pocketSolanaAddress = wallets.wallets.solana?.address || draft.solanaAddress
+      const pocketEvmAddress = wallets.wallets.base?.address || wallets.wallets.arbitrum?.address || ''
+      const pocketSolanaAddress = wallets.wallets.solana?.address || ''
       setReceiveMode('paste')
       draft.setEvmAddress(pocketEvmAddress)
       draft.setSolanaAddress(pocketSolanaAddress)
@@ -132,12 +109,16 @@ export default function PocketMoveUsdcPage() {
   }, [authenticated, draft, selectedNet, wallets.wallets])
 
   useEffect(() => {
-    if (flow !== 'collection' || !draft.multiChain) return
+    if (flow !== 'collection' || !draft.multiChain || draft.generatedLink) return
     const pocketEvmAddress = wallets.wallets.base?.address || wallets.wallets.arbitrum?.address || ''
     const pocketSolanaAddress = wallets.wallets.solana?.address || ''
     if (pocketEvmAddress && pocketEvmAddress !== draft.evmAddress) draft.setEvmAddress(pocketEvmAddress)
     if (pocketSolanaAddress && pocketSolanaAddress !== draft.solanaAddress) draft.setSolanaAddress(pocketSolanaAddress)
   }, [draft, flow, wallets.wallets])
+
+  useEffect(() => {
+    if (flow === 'request') { draft.setFlexibleAmount(false); draft.setMultiChain(false); setReceiveMode('email') }
+  }, [flow, draft.setFlexibleAmount, draft.setMultiChain])
 
   const selectNav = (tab: PocketNavTab) => {
     const path = tab === 'home' ? pocketPathFor({ section: 'home', view: 'overview' })
@@ -148,23 +129,26 @@ export default function PocketMoveUsdcPage() {
   }
 
   const createRequest = useCallback(async () => {
+    if (submittingRef.current) return
     setFormError('')
     setRequestNotice('')
     if (!authenticated) { setFormError('Sign in to send a Pocket request.'); return }
-    if (!resolvedPayer) { setFormError('Enter and confirm the payer Pocket ID.'); return }
+    if (!resolvedPayer || resolvedPayer.pocketId !== payerPocketId) { setFormError('Enter and confirm the payer Pocket ID.'); return }
     if (!draft.validation.amountValid || draft.flexibleAmount) { setFormError('Enter the exact USDC amount to request.'); return }
-    const accessToken = await getAccessToken()
-    if (!accessToken) { setFormError('Sign in again to send this request.'); return }
+    submittingRef.current = true
     setRequestBusy(true)
     try {
+      const accessToken = await getAccessToken()
+      if (!accessToken) throw new Error('Sign in again to send this request.')
       await createPocketUserRequest({
         accessToken,
         recipientPocketId: resolvedPayer.pocketId,
-        eventId: window.crypto.randomUUID().replace(/-/g, ''),
+        eventId: attemptId(JSON.stringify(['request', resolvedPayer.pocketId, draft.amount, draft.memo, selectedNet])),
         title: draft.memo.trim() || 'USDC request',
         amount: draft.amount,
         network: selectedNet === 'ethereum' || selectedNet === 'polygon' || selectedNet === 'solana' || selectedNet === 'arbitrum' ? selectedNet : 'base',
       })
+      attemptRef.current = {key:'',eventId:''}
       setRequestNotice(`Request sent to ${resolvedPayer.displayName}.`)
       setPayerPocketId('')
       setResolvedPayer(null)
@@ -172,83 +156,76 @@ export default function PocketMoveUsdcPage() {
       draft.setMemo('')
     } catch (reason) {
       setFormError(reason instanceof Error ? reason.message : 'Pocket could not send this request.')
-    } finally { setRequestBusy(false) }
-  }, [authenticated, draft, getAccessToken, resolvedPayer, selectedNet])
+    } finally { submittingRef.current = false; setRequestBusy(false) }
+  }, [authenticated, draft, getAccessToken, resolvedPayer, selectedNet, payerPocketId])
 
   const createCollection = useCallback(async () => {
     setFormError('')
     if (!authenticated) { setFormError('Sign in to save this collection in Activity.'); return }
     if (!draft.memo.trim()) { setFormError('Enter a collection name, such as Shy\'s wedding.'); return }
-    const accessToken = await getAccessToken()
-    if (!accessToken) { setFormError('Sign in again to create this collection.'); return }
-    const eventId = window.crypto.randomUUID().replace(/-/g, '')
-    const paymentUrl = draft.generate({ eventId })
-    if (!paymentUrl) return
+    if (submittingRef.current || !draft.validation.canGenerate) return
+    submittingRef.current = true
     setRequestBusy(true)
     try {
+      const accessToken = await getAccessToken()
+      if (!accessToken) throw new Error('Sign in again to create this collection.')
+      const eventId = attemptId(JSON.stringify(['collection', draft.memo, draft.amount, draft.flexibleAmount, draft.multiChain, selectedNet, draft.evmAddress, draft.solanaAddress]))
+      const paymentUrl = draft.generate({eventId})
+      if (!paymentUrl) throw new Error('Check your collection details and try again.')
       await savePocketCollection({ accessToken, eventId, title: draft.memo.trim(), paymentUrl })
+      void refreshPocketActivity(activityScope(email), getAccessToken, false, () => true, true).catch(() => undefined)
       setCollectionId(eventId)
+      attemptRef.current = {key:'',eventId:''}
     } catch (reason) {
       draft.invalidateResult()
       setFormError(reason instanceof Error ? reason.message : 'Pocket could not create this collection.')
-    } finally { setRequestBusy(false) }
-  }, [authenticated, draft, getAccessToken])
+    } finally { submittingRef.current = false; setRequestBusy(false) }
+  }, [authenticated, draft, getAccessToken, selectedNet, email])
 
-  const amountHelperText = draft.multiChain ? 'Contributors can pay USDC on Base, Arbitrum, or Solana.' : `USDC on ${CHAIN_META[selectedNet].label}`
-  const showSignIn = receiveMode === 'email' && !authenticated
-  const requestCanSubmit = authenticated && Boolean(resolvedPayer) && draft.validation.amountValid && !draft.flexibleAmount
+  const showSignIn = !authenticated
+  const requestCanSubmit = authenticated && Boolean(resolvedPayer && resolvedPayer.pocketId === payerPocketId) && draft.validation.amountValid && !draft.flexibleAmount
 
-  return <PocketRouteShell active="home" onSelect={selectNav}>
-    <PocketFlowHeader centered title="Request USDC" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.receive)} />
-    <div className="space-y-3.5">
-      <div className="grid grid-cols-2 gap-1 rounded-full bg-gray-200/70 p-1 dark:bg-white/[0.07]">
-        {(['request', 'collection'] as ReceiveFlow[]).map(value => <button key={value} type="button" onClick={() => { setFlow(value); setFormError(''); setRequestNotice(''); if (value === 'request' && draft.multiChain) draft.setMultiChain(false) }} className={`min-h-10 rounded-full px-3 text-xs font-semibold transition ${flow === value ? 'bg-gray-950 text-white shadow-sm dark:bg-white dark:text-gray-950' : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'}`}>{value === 'request' ? 'Request' : 'Collection'}</button>)}
-      </div>
-
-      <section className="space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.07)] dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">{flow === 'request' ? 'Pocket request' : 'Group collection'}</p>
-          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{flow === 'request' ? 'Request USDC from one Pocket user. Payment stays inside Pocket.' : 'Create one link and QR code for multiple contributors.'}</p>
-        </div>
-
-        {showSignIn ? <div className="overflow-hidden rounded-[22px] bg-[#F5F5F7]/95 p-2 dark:bg-[#121212]/95">
-          <PrivyConnectButton debugLabel="create-pocket-receive" loginOptions={{ loginMethods: ['email'] }} logoutOnAuthenticated={false} onBeforeLogin={recipient.rememberSignInIntent} className="pocket-cta-primary group relative flex w-full items-center justify-center px-16 py-1.5">
-            <Mail className="absolute left-5 h-4 w-4" /><span>Sign in to Pocket</span><span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10"><ArrowRight className="h-4 w-4" /></span>
-          </PrivyConnectButton>
-          <p className="px-3 pb-1 pt-2 text-center text-[11px] text-gray-400 dark:text-gray-500">Sign in to keep requests, collections, payments, and receipts together.</p>
-        </div> : <>
-          {flow === 'collection' && <div className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-100 p-1 dark:bg-[#121212]">
-            <button type="button" onClick={() => setCollectionRail('usdc')} className={`min-h-10 rounded-xl text-xs font-bold ${collectionRail === 'usdc' ? 'bg-white text-gray-950 shadow-sm dark:bg-white/[0.1] dark:text-white' : 'text-gray-500'}`}>USDC</button>
-            <button type="button" onClick={() => setCollectionRail('local')} className={`min-h-10 rounded-xl text-xs font-bold ${collectionRail === 'local' ? 'bg-white text-gray-950 shadow-sm dark:bg-white/[0.1] dark:text-white' : 'text-gray-500'}`}>Local currency</button>
-          </div>}
-
-          {flow === 'collection' && collectionRail === 'local' ? <div className="space-y-2">
-            <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Collection country</p>
-            <button type="button" onClick={() => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.bank}?mode=request`)} className="flex min-h-14 w-full items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 text-left dark:border-blue-400/20 dark:bg-blue-400/10"><span><span className="block text-sm font-bold">Nigeria</span><span className="mt-0.5 block text-[11px] text-gray-500 dark:text-gray-400">NGN local-currency collection</span></span><span className="rounded-full bg-blue-600 px-2.5 py-1 text-[9px] font-black uppercase text-white">Available</span></button>
-            <p className="px-2 pt-1 text-center text-[11px] leading-5 text-gray-400 dark:text-gray-500">Nigeria is available now. Ghana and Kenya will become selectable when their local payment rails are ready.</p>
-          </div> : <>
-            <PocketPayerNetworkPanel showSelector selectedNetwork={selectedNet} selectedNetworkLabel={CHAIN_META[selectedNet].label} options={POCKET_NETWORKS.filter(network => flow === 'request' || (network !== 'ethereum' && network !== 'polygon')).map(network => ({ value: network, label: CHAIN_META[network].label }))} multiChain={flow === 'collection' && draft.multiChain} emailReceive={flow !== 'collection' && receiveMode === 'email'} onNetworkSelect={network => onNetworkSelect(network as ChainKey)} onMultiChainToggle={toggleMultiChain} showMultiChainToggle={flow === 'collection'} managedNetworkRouting={flow === 'collection'} embedded />
-
-            {flow === 'request' ? <>
-              <label className="block space-y-1.5"><span className="text-sm font-medium text-gray-700 dark:text-gray-200">Payer Pocket ID</span><span className="relative block"><input type="text" inputMode="numeric" value={payerPocketId} onChange={event => setPayerPocketId(event.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="Enter 6 to 12 digits" className="w-full rounded-xl border border-gray-200 bg-gray-50/60 px-3.5 py-3 pr-11 text-sm font-semibold tabular-nums outline-none focus:border-blue-400 dark:border-[#262626] dark:bg-[#121212]" />{resolvingPayer ? <span className="absolute right-4 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-gray-500 dark:text-gray-400"><Loader2 className="h-4 w-4" /></span> : resolvedPayer ? <Check className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" /> : null}</span><span className="block text-[11px] leading-5 text-gray-500 dark:text-gray-400">Only this Pocket user will receive the request. No public link or QR code is created.</span></label>
-              {resolvedPayer && <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold dark:bg-blue-400/10"><Check className="h-3.5 w-3.5 text-blue-500" /><span className="truncate">{resolvedPayer.displayName}</span><span className="ml-auto text-[9px] font-black uppercase text-gray-500 dark:text-gray-400">{resolvedPayer.verified ? 'Verified' : 'Pocket user'}</span></div>}
-              <PocketPaymentAmountField lane="usdc" flexible={false} amount={draft.amount} dirty={draft.validation.amountDirty} valid={draft.validation.amountValid} helperText={`Exact USDC amount on ${CHAIN_META[selectedNet].label}.`} onAmountChange={draft.setAmount} />
-              <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} label="Payment note" placeholder="Dinner, tickets, shared expense..." />
-              <button type="button" disabled={!requestCanSubmit || requestBusy} onClick={() => void createRequest()} className="pocket-cta-primary group relative flex w-full items-center justify-center px-16"><span className="absolute left-5">{requestBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}</span>Send request{requestCanSubmit && !requestBusy && <span className="absolute right-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-white/10"><ArrowRight className="h-4 w-4" /></span>}</button>
-            </> : <>
-              <PocketPaymentAmountField lane="usdc" flexible={draft.flexibleAmount} amount={draft.amount} dirty={draft.validation.amountDirty} valid={draft.validation.amountValid} helperText={amountHelperText} onAmountChange={draft.setAmount} />
-              <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} label="Collection name" placeholder="Wedding, team dues, donations..." optional={false} />
-              <PocketFlexibleAmountToggle lane="usdc" enabled={draft.flexibleAmount} onToggle={() => draft.setFlexibleAmount(!draft.flexibleAmount)} />
-              <PocketPayLinkSubmitPanel lane="usdc" shellActive idle={!draft.generatedLink} canSubmit={draft.validation.canGenerate && authenticated && Boolean(draft.memo.trim())} submitting={requestBusy} addressGuidance={draft.validation.addressGuidance ? (wallets.resolved ? 'Pocket could not prepare your receiving wallet. Try again.' : 'Pocket is preparing your collection.') : undefined} onSubmit={() => void createCollection()} />
-            </>}
+  const openFlow = (next: 'request' | 'collection') => {
+    setFormError(''); setRequestNotice(''); draft.invalidateResult(); setCollectionId('')
+    if (next === 'request') { draft.setMultiChain(false); draft.setFlexibleAmount(false); setReceiveMode('email') }
+    setParams({flow:next})
+  }
+  const ready = flow === 'collection' && Boolean(collectionId && draft.generatedLink) && !requestBusy
+  const listRow = (title: string, detail: string, Icon: typeof Coins, onClick: () => void) => <button key={title} type="button" onClick={onClick} className="flex min-h-20 w-full items-center gap-4 py-4 text-left">
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-[#121212]"><Icon className="h-5 w-5" /></span>
+    <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">{detail}</span></span><ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+  </button>
+  return <PocketRouteShell active="home" onSelect={selectNav} refreshEnabled={false} scrollKey={flow + ':' + collectionRail}>
+    <PocketFlowHeader centered title={flow === 'menu' ? 'Request' : flow === 'request' ? 'Request USDC' : 'Create collection'} onBack={() => { if (requestBusy) return; if (flow === 'menu') navigate(POCKET_BASE_PATH + POCKET_ROUTES.receive); else if (collectionRail) setParams({flow:'collection'}); else setParams({}) }} />
+    {flow === 'menu' ? <section aria-label="Request options" className="divide-y divide-gray-100 dark:divide-[#262626]">
+      {listRow('Request USDC', 'Request from a Pocket user', RequestMoney, () => openFlow('request'))}
+      {listRow('Create collection', 'One link for multiple contributors', Users, () => openFlow('collection'))}
+      <button type="button" onClick={() => navigate(POCKET_BASE_PATH + '/activity/collections')} className="min-h-12 w-full text-left text-sm font-medium text-gray-500 dark:text-gray-400">View requests and collections</button>
+    </section> : flow === 'collection' && !collectionRail ? <section aria-label="Collection options" className="divide-y divide-gray-100 dark:divide-[#262626]">
+      {listRow('Receive USDC', 'Collect into your Pocket wallet', Coins, () => setParams({flow:'collection',rail:'usdc'}))}
+      {listRow('Receive in a bank account', 'Collect NGN in Nigeria', Landmark, () => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.bank}?mode=request`))}
+    </section> : <>
+      {!ready && <fieldset disabled={requestBusy} aria-busy={requestBusy} className="space-y-5">
+        {showSignIn ? <PrivyConnectButton debugLabel="create-pocket-receive" loginOptions={{ loginMethods: ['email'] }} logoutOnAuthenticated={false} onBeforeLogin={recipient.rememberSignInIntent} className="pocket-cta-primary w-full">Sign in to Pocket</PrivyConnectButton> : <>
+          <PocketPayerNetworkPanel showSelector selectedNetwork={selectedNet} selectedNetworkLabel={CHAIN_META[selectedNet].label} options={POCKET_NETWORKS.filter(network => flow === 'request' || (network !== 'ethereum' && network !== 'polygon')).map(network => ({ value: network, label: CHAIN_META[network].label }))} multiChain={flow === 'collection' && draft.multiChain} emailReceive={flow === 'request'} onNetworkSelect={network => onNetworkSelect(network as ChainKey)} onMultiChainToggle={toggleMultiChain} showMultiChainToggle={flow === 'collection'} managedNetworkRouting embedded />
+          {flow === 'request' ? <>
+            <label className="block space-y-1.5"><span className="text-sm font-medium">Pocket ID</span><span className="relative block"><input type="text" inputMode="numeric" value={payerPocketId} onChange={event => setPayerPocketId(event.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="Enter Pocket ID" className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 pr-11 text-sm tabular-nums outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212]" />{resolvingPayer && <Loader2 aria-label="Finding Pocket user" className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-500" />}</span></label>
+            {resolvedPayer && <p className="flex items-center gap-2 text-xs font-medium"><Check className="h-4 w-4 text-emerald-500" />{resolvedPayer.displayName}</p>}
+            <PocketPaymentAmountField lane="usdc" flexible={false} amount={draft.amount} dirty={draft.validation.amountDirty} valid={draft.validation.amountValid} helperText="" onAmountChange={draft.setAmount} />
+            <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} label="Note" placeholder="What is this for?" />
+            <button type="button" disabled={!requestCanSubmit || requestBusy} onClick={() => void createRequest()} className="pocket-cta-primary w-full">{requestBusy && <Loader2 className="h-4 w-4 animate-spin" />}Send request</button>
+          </> : <>
+            <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} label="Collection name" placeholder="Wedding, team dues, donations" optional={false} />
+            <PocketPaymentAmountField lane="usdc" flexible={draft.flexibleAmount} amount={draft.amount} dirty={draft.validation.amountDirty} valid={draft.validation.amountValid} helperText="" onAmountChange={draft.setAmount} />
+            <PocketFlexibleAmountToggle lane="usdc" enabled={draft.flexibleAmount} onToggle={() => draft.setFlexibleAmount(!draft.flexibleAmount)} />
+            <PocketPayLinkSubmitPanel lane="usdc" shellActive idle canSubmit={draft.validation.canGenerate && authenticated && Boolean(draft.memo.trim())} submitting={requestBusy} addressGuidance={draft.validation.addressGuidance ? (wallets.resolved ? 'Your receiving wallet is unavailable. Try again.' : 'Preparing your receiving wallet.') : undefined} onSubmit={() => void createCollection()} />
           </>}
         </>}
-        {formError && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{formError}</p>}
-        {requestNotice && <p className="rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 dark:bg-blue-400/10 dark:text-blue-200">{requestNotice}</p>}
-      </section>
-    </div>
-
-    {flow === 'collection' && draft.generatedLink && <PocketPayLinkReadyPanel url={draft.generatedLink} copied={draft.copied} flexible={draft.flexibleAmount} localCurrency={false} amountLabel={formatAmount(draft.amount, 6)} networkLabel={draft.multiChain ? 'Base, Arbitrum, Solana' : CHAIN_META[selectedNet].label} evmAddress={draft.validation.evmValid ? draft.evmAddress : undefined} solanaAddress={draft.validation.solanaValid ? draft.solanaAddress : undefined} memo={draft.memo} eventMode={Boolean(collectionId)} accessMode={false} dashboardUrl={collectionId ? `${POCKET_BASE_PATH}/activity/collections?collection=${encodeURIComponent(collectionId)}` : draft.dashboardUrl} qrRef={draft.qrRef} qrHiResRef={draft.qrHiResRef} onReset={() => { setCollectionId(''); draft.reset() }} onDownloadQr={draft.downloadQr} onShare={() => void draft.share()} />}
-    <PayLinkShareSheet open={draft.shareOpen} url={draft.generatedLink} copied={draft.copied} shareText={draft.shareText} onCopy={draft.copy} onClose={draft.closeShare} />
+        {formError && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{formError}</p>}
+        {requestNotice && <p role="status" className="text-xs text-emerald-700 dark:text-emerald-400">{requestNotice}</p>}
+      </fieldset>}
+      {ready && <PocketPayLinkReadyPanel url={draft.generatedLink} copied={draft.copied} flexible={draft.flexibleAmount} localCurrency={false} amountLabel={formatAmount(draft.amount, 6)} networkLabel={draft.multiChain ? 'Base, Arbitrum, Solana' : CHAIN_META[selectedNet].label} memo={draft.memo} eventMode accessMode={false} dashboardUrl={`${POCKET_BASE_PATH}/activity/collections?collection=${encodeURIComponent(collectionId)}`} qrRef={draft.qrRef} qrHiResRef={draft.qrHiResRef} onReset={() => { setCollectionId(''); draft.reset(); setReceiveMode('email') }} onDownloadQr={draft.downloadQr} onShare={() => void draft.share()} />}
+    </>}
+    <PayLinkShareSheet pocket open={draft.shareOpen && ready} url={draft.generatedLink} copied={draft.copied} shareText={draft.shareText} onCopy={draft.copy} onClose={draft.closeShare} />
   </PocketRouteShell>
 }
