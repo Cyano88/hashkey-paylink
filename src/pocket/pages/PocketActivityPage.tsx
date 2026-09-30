@@ -1,3 +1,4 @@
+import PocketCollectionsPage from './PocketCollectionsPage'
 import { requestActivityRows } from '../lib/pocketRequestActivity'
 import PocketResourceActivityPanel from '../features/activity/PocketResourceActivityPanel'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -21,6 +22,7 @@ import type { PocketActivityRow } from '../models/pocketActivity'
 export default function PocketActivityPage({ view }: { view: PocketActivityView }) {
   const location = useLocation()
   if (view === 'pos') return <Navigate replace to={POCKET_BASE_PATH + POCKET_ROUTES.posManage + location.search} />
+  if (view === 'collections' && new URLSearchParams(location.search).get('kind') !== 'requests') return <PocketCollectionsPage />
   return <PocketTransactionsPage view={view} />
 }
 function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
@@ -109,8 +111,8 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
   return (
     <PocketRouteShell active="activity" onSelect={selectNav}>
       {view === 'collections' ? <>
-        <PocketFlowHeader centered title="Requests and collections" onBack={() => location.search.includes('collection=') ? navigate(POCKET_BASE_PATH + '/activity/collections', {replace:true}) : navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc)} />
-        <PocketResourceActivityPanel view="collections" rows={rowsWithRequests} merchants={activity.merchants} collections={activity.collections} requests={requestsScope === requestScope ? requests : []} busy={activity.busy || requestsBusy} error={activity.error || requestsError} />
+        <PocketFlowHeader centered title="Requests" onBack={() => location.search.includes('collection=') ? navigate(POCKET_BASE_PATH + '/activity/collections?kind=requests', {replace:true}) : navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc + '?flow=request')} />
+        <PocketResourceActivityPanel view="collections" rows={rowsWithRequests} merchants={activity.merchants} collections={[]} requests={requestsScope === requestScope ? requests : []} busy={activity.busy || requestsBusy} error={activity.error || requestsError} />
       </> : <PocketActivityPanel
         view={view}
         rows={rowsWithRequests}

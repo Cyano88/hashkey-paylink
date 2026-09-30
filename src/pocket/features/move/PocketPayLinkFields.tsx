@@ -125,7 +125,6 @@ export function PocketFlexibleAmountToggle({ lane, enabled, onToggle }: PocketFl
           )}><Sliders className="h-3.5 w-3.5" /></span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold leading-tight text-gray-800 dark:text-gray-100">Let payer enter amount</span>
-            <span className="block text-[11px] font-medium leading-snug text-gray-400 dark:text-gray-500">{usesNaira(lane) ? 'Payer enters the Naira amount.' : 'Payer enters the amount.'}</span>
           </span>
         </div>
         <span className={cn('relative h-6 w-10 shrink-0 rounded-full p-0.5 transition-all sm:h-7 sm:w-12', enabled ? 'bg-gray-950 shadow-inner dark:bg-white' : 'bg-gray-200 dark:bg-white/10')}>
@@ -165,7 +164,6 @@ export function PocketPayLinkSubmitPanel({ lane, shellActive, idle, canSubmit, s
       {lane === 'bank' && idle && (
         <div className="space-y-1 px-2 text-center text-xs leading-snug">
           {error && <p className="font-medium text-red-500">{error}</p>}
-          {!canSubmit && !error && <p className="text-gray-400 dark:text-gray-500">Choose your verified Nigerian bank account and enter the collection amount.</p>}
         </div>
       )}
       {lane === 'bank-send' && idle && <div className="space-y-1 px-2 text-center text-xs leading-snug"><p className="text-gray-400 dark:text-gray-500">Payer checkout will collect refund bank details before creating the bank transfer order.</p></div>}

@@ -582,6 +582,19 @@ export async function listNgPosResourcesForOwner(privyUserId: string) {
   }))
 }
 
+// Only bank collection resources owned by this account; no payout or terminal mixing.
+export async function listPocketBankCollections(owner: string) {
+ const [store,retired] = await Promise.all([readStore(),readPosRetirements()])
+ return Object.values(store.merchants || {}).filter(m=>m.owner_id===owner&&m.source==='bank-receive').flatMap(m=>{
+  const link = (m.creation_response as any)?.link
+  if (!link?.payment_url) return []
+  const url = new URL(link.payment_url)
+  // Every contributor receives a new quote and payout intent.
+  url.searchParams.delete('intent')
+  return [{eventId:m.merchant_id,title:m.display_name,paymentUrl:url.toString(),kind:'bank' as const,createdAt:Date.parse(m.created_at),updatedAt:Date.parse(m.updated_at),deletedAt:retired[m.merchant_id]?.deletedAt ? Date.parse(retired[m.merchant_id].deletedAt) : undefined}]
+ })
+}
+
 export async function ownsPocketPosQr(owner:string,id:string){
  const merchant=(await readStore()).merchants[id]
  return !!merchant&&merchant.owner_id===owner&&(!merchant.source||merchant.source==='pos')
@@ -994,7 +1007,7 @@ export async function createNgPosBankReceive(req: Request, body: Record<string, 
       expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
     }
   }
-  const pay_url = buildPayUrl(req, merchant, 'base', amountUsdcText, amountNgnText, 'INSTANT_FIAT', body.client_origin, intentId || undefined, 'bank-receive')
+  const pay_url = buildPayUrl(req, merchant, 'base', amountUsdcText, amountNgnText, 'INSTANT_FIAT', body.client_origin, merchantSource === 'bank-withdraw' ? intentId || undefined : undefined, 'bank-receive')
   const response = {
     ok: true,
     link: {
@@ -1325,6 +1338,7 @@ export default async function handler(req: Request, res: Response) {
       const intent = store.intents?.[intentId]
       const merchant = intent ? store.merchants[intent.merchant_id] : undefined
       if(intent?.xpay_checkout_id&&!existing?.tx_hash)await assertUnifiedXPayDestination(intent.xpay_checkout_id,intent.merchant_id,merchant?.updated_at || '',true)
+      if (!existing && merchant && await isPosRetired(merchant.merchant_id)) return res.status(410).json({ok:false,error:'This collection is closed.'})
       const payerIdentity=await verifiedPrivyUser(req)
       await requirePocketBasicKyc(payerIdentity.userId)
       if(intent)await reservePocketBankAllowance(payerIdentity.userId,{id:intentId,amount:intent.amount_ngn,currency:pocketFiatCurrency(merchant?.country),usdc:intent.estimated_amount_usdc},true)

@@ -9,6 +9,7 @@ export type PocketCollectionLink = {
   paymentUrl: string
   createdAt: number
   updatedAt: number
+  deletedAt?: number
 }
 
 type Store = { links: Record<string, PocketCollectionLink> }
@@ -117,6 +118,7 @@ export function createPocketPaylinkRepository(options: Options = {}) {
         if (existing && existing.ownerId !== ownerId) {
           throw new PocketPaylinkConflictError('This collection is already connected to another Pocket account.')
         }
+        if (existing?.deletedAt) throw new PocketPaylinkConflictError('This collection is closed. Create a new collection.')
         const timestamp = now()
         const link: PocketCollectionLink = {
           eventId,
@@ -135,6 +137,19 @@ export function createPocketPaylinkRepository(options: Options = {}) {
       return Object.values((await readStore()).links)
         .filter(link => link.ownerId === cleanOwnerId)
         .sort((a, b) => b.updatedAt - a.updatedAt)
+    },
+    async isActive(eventId: string) {
+      const link = (await readStore()).links[clean(eventId, 120)]
+      return !link?.deletedAt
+    },
+    async retireOwned(ownerId: string, eventId: string) {
+      return mutate(store => {
+        const link = store.links[clean(eventId, 120)]
+        if (!link || link.ownerId !== clean(ownerId, 180)) throw Object.assign(new Error('Collection not found.'), {status:404})
+        link.deletedAt ||= now()
+        link.updatedAt = now()
+        return link
+      })
     },
     async getOwned(ownerId: string, eventId: string) {
       const link = (await readStore()).links[clean(eventId, 120)]

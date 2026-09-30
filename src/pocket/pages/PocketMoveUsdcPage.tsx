@@ -1,3 +1,4 @@
+import { InboxArrowDownIcon, RectangleStackIcon } from '@heroicons/react/24/outline'
 import { activityScope, refreshPocketActivity } from '../lib/pocketActivityCache'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
@@ -24,7 +25,7 @@ import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRou
 import { savePocketCollection } from '../api/pocketPaylinksClient'
 import { createPocketUserRequest, resolvePocketRequestUser, type PocketRequestUser } from '../api/pocketRequestsClient'
 
-const POCKET_NETWORKS: ChainKey[] = ['base', 'solana', 'arbitrum', 'ethereum', 'polygon']
+const POCKET_NETWORKS: ChainKey[] = ['base', 'arbitrum', 'solana', 'arc', 'ethereum', 'polygon']
 type ReceiveMode = 'idle' | 'paste' | 'email' | 'bank'
 type ReceiveFlow = 'request' | 'collection' | 'menu'
 
@@ -146,7 +147,7 @@ export default function PocketMoveUsdcPage() {
         eventId: attemptId(JSON.stringify(['request', resolvedPayer.pocketId, draft.amount, draft.memo, selectedNet])),
         title: draft.memo.trim() || 'USDC request',
         amount: draft.amount,
-        network: selectedNet === 'ethereum' || selectedNet === 'polygon' || selectedNet === 'solana' || selectedNet === 'arbitrum' ? selectedNet : 'base',
+        network: selectedNet === 'arc' || selectedNet === 'ethereum' || selectedNet === 'polygon' || selectedNet === 'solana' || selectedNet === 'arbitrum' ? selectedNet : 'base',
       })
       attemptRef.current = {key:'',eventId:''}
       setRequestNotice(`Request sent to ${resolvedPayer.displayName}.`)
@@ -196,11 +197,10 @@ export default function PocketMoveUsdcPage() {
     <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-[11px] text-gray-500 dark:text-gray-400">{detail}</span></span><ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" />
   </button>
   return <PocketRouteShell active="home" onSelect={selectNav} refreshEnabled={false} scrollKey={flow + ':' + collectionRail}>
-    <PocketFlowHeader centered title={flow === 'menu' ? 'Request' : flow === 'request' ? 'Request USDC' : 'Create collection'} onBack={() => { if (requestBusy) return; if (flow === 'menu') navigate(POCKET_BASE_PATH + POCKET_ROUTES.receive); else if (collectionRail) setParams({flow:'collection'}); else setParams({}) }} />
+    <PocketFlowHeader centered rightAction={flow !== 'menu' ? <button type="button" disabled={requestBusy} aria-label={flow === 'request' ? 'View requests' : 'View collections'} className="flex h-10 w-10 items-center justify-center" onClick={() => navigate(POCKET_BASE_PATH + '/activity/collections?kind=' + (flow === 'request' ? 'requests' : 'collections'))}>{flow === 'request' ? <InboxArrowDownIcon className="h-5 w-5" /> : <RectangleStackIcon className="h-5 w-5" />}</button> : undefined} title={flow === 'menu' ? 'Request' : flow === 'request' ? 'Request USDC' : 'Create collection'} onBack={() => { if (requestBusy) return; if (flow === 'menu') navigate(POCKET_BASE_PATH + POCKET_ROUTES.receive); else if (collectionRail) setParams({flow:'collection'}); else setParams({}) }} />
     {flow === 'menu' ? <section aria-label="Request options" className="divide-y divide-gray-100 dark:divide-[#262626]">
       {listRow('Request USDC', 'Request from a Pocket user', RequestMoney, () => openFlow('request'))}
       {listRow('Create collection', 'One link for multiple contributors', Users, () => openFlow('collection'))}
-      <button type="button" onClick={() => navigate(POCKET_BASE_PATH + '/activity/collections')} className="min-h-12 w-full text-left text-sm font-medium text-gray-500 dark:text-gray-400">View requests and collections</button>
     </section> : flow === 'collection' && !collectionRail ? <section aria-label="Collection options" className="divide-y divide-gray-100 dark:divide-[#262626]">
       {listRow('Receive USDC', 'Collect into your Pocket wallet', Coins, () => setParams({flow:'collection',rail:'usdc'}))}
       {listRow('Receive in a bank account', 'Collect NGN in Nigeria', Landmark, () => navigate(`${POCKET_BASE_PATH}${POCKET_ROUTES.bank}?mode=request`))}
@@ -224,7 +224,7 @@ export default function PocketMoveUsdcPage() {
         {formError && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{formError}</p>}
         {requestNotice && <p role="status" className="text-xs text-emerald-700 dark:text-emerald-400">{requestNotice}</p>}
       </fieldset>}
-      {ready && <PocketPayLinkReadyPanel url={draft.generatedLink} copied={draft.copied} flexible={draft.flexibleAmount} localCurrency={false} amountLabel={formatAmount(draft.amount, 6)} networkLabel={draft.multiChain ? 'Base, Arbitrum, Solana' : CHAIN_META[selectedNet].label} memo={draft.memo} eventMode accessMode={false} dashboardUrl={`${POCKET_BASE_PATH}/activity/collections?collection=${encodeURIComponent(collectionId)}`} qrRef={draft.qrRef} qrHiResRef={draft.qrHiResRef} onReset={() => { setCollectionId(''); draft.reset(); setReceiveMode('email') }} onDownloadQr={draft.downloadQr} onShare={() => void draft.share()} />}
+      {ready && <PocketPayLinkReadyPanel url={draft.generatedLink} copied={draft.copied} flexible={draft.flexibleAmount} localCurrency={false} amountLabel={formatAmount(draft.amount, 6)} networkLabel={draft.multiChain ? 'Base, Arbitrum, Solana' : CHAIN_META[selectedNet].label} memo={draft.memo} eventMode accessMode={false} dashboardUrl={`${POCKET_BASE_PATH}/activity/collections?kind=collections&collection=${encodeURIComponent(collectionId)}`} qrRef={draft.qrRef} qrHiResRef={draft.qrHiResRef} onReset={() => { setCollectionId(''); draft.reset(); setReceiveMode('email') }} onDownloadQr={draft.downloadQr} onShare={() => void draft.share()} />}
     </>}
     <PayLinkShareSheet pocket open={draft.shareOpen && ready} url={draft.generatedLink} copied={draft.copied} shareText={draft.shareText} onCopy={draft.copy} onClose={draft.closeShare} />
   </PocketRouteShell>

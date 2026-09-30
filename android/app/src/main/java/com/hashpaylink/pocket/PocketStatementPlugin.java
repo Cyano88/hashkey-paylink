@@ -49,6 +49,37 @@ public class PocketStatementPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void savePdf(PluginCall call) {
+        String encoded = call.getString("base64", "");
+        String name = call.getString("name", "pocket-statement.pdf");
+        try {
+            if (encoded.length() > 20_000_000 || !name.matches("pocket-statement(?:-[0-9-]+)?\\.pdf")) throw new IllegalArgumentException();
+            byte[] pdf = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT);
+            if (pdf.length < 5 || pdf[0] != 37 || pdf[1] != 80 || pdf[2] != 68 || pdf[3] != 70 || pdf[4] != 45) throw new IllegalArgumentException();
+        } catch (Exception error) { call.reject("Statement could not be prepared."); return; }
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/pdf");
+        intent.putExtra(Intent.EXTRA_TITLE, name);
+        startActivityForResult(call, intent, "pdfSaved");
+    }
+
+    @ActivityCallback
+    private void pdfSaved(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        if (result.getResultCode() != Activity.RESULT_OK) {
+            JSObject response = new JSObject(); response.put("cancelled", true); call.resolve(response); return;
+        }
+        Uri uri = result.getData() == null ? null : result.getData().getData();
+        if (uri == null) { call.reject("Statement could not be saved."); return; }
+        try (OutputStream stream = getContext().getContentResolver().openOutputStream(uri, "wt")) {
+            if (stream == null) throw new java.io.IOException();
+            stream.write(android.util.Base64.decode(call.getString("base64", ""), android.util.Base64.DEFAULT));
+            call.resolve();
+        } catch (Exception error) { call.reject("Statement could not be saved."); }
+    }
+
+    @PluginMethod
     public void saveCsv(PluginCall call) {
         String name = call.getString("name", "pocket-statement.csv");
         String content = call.getString("content");

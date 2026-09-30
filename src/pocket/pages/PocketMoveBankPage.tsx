@@ -1,3 +1,4 @@
+import { RectangleStackIcon } from '@heroicons/react/24/outline'
 import PocketFiatUsdcEstimate from '../components/PocketFiatUsdcEstimate'
 import PocketBankKycBoundary from '../components/PocketBankKycBoundary'
 import usePocketFxQuote from '../hooks/usePocketFxQuote'
@@ -244,12 +245,12 @@ function PocketMoveBankContent() {
           {payoutToast}
         </div>
       )}
-      <PocketFlowHeader centered title={routeMode === 'request' ? 'Create collection' : recipientStep ? 'Enter amount' : 'Bank transfer'} onBack={() => recipientStep ? setRecipientStep(false) : navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
+      <PocketFlowHeader centered rightAction={routeMode === 'request' ? <button type="button" aria-label="View collections" className="flex h-10 w-10 items-center justify-center" onClick={() => navigate(POCKET_BASE_PATH + '/activity/collections?kind=collections')}><RectangleStackIcon className="h-5 w-5" /></button> : undefined} title={routeMode === 'request' ? 'Create collection' : recipientStep ? 'Enter amount' : 'Bank transfer'} onBack={() => recipientStep ? setRecipientStep(false) : navigate(routeMode === 'request' ? `${POCKET_BASE_PATH}${POCKET_ROUTES.usdc}?flow=collection` : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
       <div className={mode === "withdraw" && recipientStep ? "flex min-h-0 min-w-0 w-full flex-1 flex-col" : "min-w-0 w-full space-y-3.5"}>
-        {routeMode === 'request' && <div className="flex items-center gap-3 py-2"><img src="/brand/countries/ng.svg" alt="" className="h-[21px] w-7 rounded-sm" /><div><p className="text-sm font-semibold">Nigeria</p><p className="text-xs text-gray-500 dark:text-gray-400">Receive NGN in your bank account</p></div></div>}
+        {routeMode === 'request' && !bank.generatedLink && <div className="flex items-center gap-3 py-2"><img src="/brand/countries/ng.svg" alt="" className="h-[21px] w-7 rounded-sm" /><div><p className="text-sm font-semibold">Nigeria</p><p className="text-xs text-gray-500 dark:text-gray-400">Receive NGN in your bank account</p></div></div>}
 
 
-        <div className={mode === "withdraw" && recipientStep ? "flex min-h-0 flex-1 flex-col" : "space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none"}>
+        <div className={mode === "withdraw" && recipientStep ? "flex min-h-0 flex-1 flex-col" : mode === "request" ? "space-y-5" : "space-y-3.5 rounded-[24px] border border-gray-200/80 bg-white p-4 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none"}>
 
 
           {!authenticated && (
@@ -274,11 +275,11 @@ function PocketMoveBankContent() {
 
           {authenticated && !bank.profileVerified && <PocketIdentityGate />}
 
-          {authenticated && bank.profileVerified && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className={mode === "withdraw" && recipientStep ? "flex min-h-0 min-w-0 w-full flex-1 flex-col" : "min-w-0 w-full space-y-3.5"}>
-            {mode === 'request' && <PocketIdentityBadge name={profile.profile?.resolvedName ?? ''} />}
+          {authenticated && bank.profileVerified && !(mode === 'request' && bank.generatedLink) && <fieldset disabled={mode === 'withdraw' && directLocked} aria-busy={mode === 'withdraw' && directLocked} onFocusCapture={() => { if (direct.status === 'sent') direct.resetResult() }} className={mode === "withdraw" && recipientStep ? "flex min-h-0 min-w-0 w-full flex-1 flex-col" : "min-w-0 w-full space-y-3.5"}>
+
 
             <div hidden={mode === 'withdraw' && recipientStep} className="space-y-3">{mode === 'withdraw' && <PocketPayoutCountry value={bank.country} onChange={value=>{bank.setCountry(value);direct.setAmount('');setReviewOpen(false)}} />}<PocketVerifiedBankFields
-              recipientEntry={mode === 'withdraw'}
+              recipientEntry
               country={bank.country}
               institutions={bank.institutions}
               institutionsBusy={bank.institutionsBusy}
@@ -300,29 +301,18 @@ function PocketMoveBankContent() {
             {mode==='withdraw' && !recipientStep && <button type="button" disabled={!bank.verified || bank.verifying || directLocked} onClick={()=>setRecipientStep(true)} className="pocket-cta-primary w-full">Continue</button>}
 
             {mode === 'request' && <>
+              <PocketPaymentNoteField value={bank.memo} onChange={bank.setMemo} label="Collection name" placeholder="What are you collecting for?" optional={false} />
               <PocketPaymentAmountField
                 lane="bank"
                 flexible={bank.flexibleAmount}
                 amount={bank.amount}
                 dirty={bank.amountDirty}
                 valid={bank.amountValid}
-                helperText="Enter the NGN amount for this collection."
+                helperText=""
                 onAmountChange={bank.setAmount}
               />
 
-              <div className="border-y border-gray-100 py-3 dark:border-[#262626]">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Payer network</p>
-                    <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">Nigeria collections currently use Base USDC checkout.</p>
-                  </div>
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-gray-900 bg-gray-950 px-3 py-2 text-xs font-bold text-white dark:border-white dark:bg-white dark:text-gray-950">
-                    Base
-                  </span>
-                </div>
-              </div>
-
-              <PocketPaymentNoteField value={bank.memo} onChange={bank.setMemo} />
+              <p className="text-xs text-gray-500 dark:text-gray-400">Paid with USDC on Base. Received as NGN.</p>
 
               <PocketFlexibleAmountToggle
                 lane="bank"
@@ -334,7 +324,7 @@ function PocketMoveBankContent() {
                 lane="bank"
                 shellActive
                 idle={!bank.generatedLink}
-                canSubmit={bank.canSubmit}
+                canSubmit={bank.canSubmit && Boolean(bank.memo.trim())}
                 submitting={bank.busy}
                 error={bank.error}
                 onSubmit={() => void bank.submit()}
@@ -383,7 +373,7 @@ function PocketMoveBankContent() {
         />
       )}
 
-      <PayLinkShareSheet
+      <PayLinkShareSheet pocket
         open={bank.shareOpen}
         url={bank.generatedLink}
         copied={bank.copied}

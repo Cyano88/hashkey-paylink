@@ -31,6 +31,9 @@ try {
   assert.equal(created.body.link.title, "Shy's wedding")
   assert.equal(JSON.stringify(created.body).includes('did:privy'), false)
 
+  const unavailableDelete = await request(handler, 'POST', {action:'delete',eventId})
+  assert.equal(unavailableDelete.statusCode,403)
+  assert.equal(await repository.isActive(eventId),true)
   const listed = await request(handler, 'GET')
   assert.equal(listed.statusCode, 200)
   assert.equal(listed.body.links.length, 1)
@@ -51,6 +54,18 @@ try {
   })
   const conflict = await request(foreign, 'POST', { eventId, title: 'Hijack', paymentUrl })
   assert.equal(conflict.statusCode, 409)
+  const foreignDelete = await request(foreign,'POST',{action:'delete',eventId})
+  assert.equal(foreignDelete.statusCode,404)
+  await assert.rejects(repository.retireOwned('did:privy:owner-2',eventId),{status:404})
+  await repository.retireOwned('did:privy:owner-1',eventId)
+  assert.equal(await repository.isActive(eventId),false)
+  assert.equal((await repository.listOwned('did:privy:owner-1')).length,1,'Keep history after closure')
+  await assert.rejects(repository.save({ownerId:'did:privy:owner-1',eventId,title:'Reopen',paymentUrl}),{status:409})
+  const statusResponse=responseRecorder();statusResponse.setHeader=()=>statusResponse
+  await handler({method:'GET',query:{action:'status',eventId},headers:{}},statusResponse)
+  assert.deepEqual(statusResponse.body,{ok:true,active:false})
+  const afterDelete = await request(handler,'GET')
+  assert.equal(afterDelete.body.payments.length,1,'Closed collection retains paid receipt')
 } finally {
   await rm(root, { recursive: true, force: true })
 }

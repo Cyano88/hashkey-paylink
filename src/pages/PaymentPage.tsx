@@ -544,6 +544,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const [initParams] = useState(() => new URLSearchParams(pocketScan?.params ?? window.location.search))
   const isEventMode      = hasPaylinkFlag(initParams, 'event', 'v')
   const eventId          = initParams.get('id') ?? ''
+  const [collectionError,setCollectionError] = useState('')
   const agentUrl         = getPaylinkParam(initParams, 'agent', 'g')
   const hostedCheckoutId = getPaylinkParam(initParams, 'checkout', 'checkout')
   const hostedAttemptId  = getPaylinkParam(initParams, 'attempt', 'attempt')
@@ -603,7 +604,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   const ngPosSettlement  = (initParams.get('settlement') ?? '').trim()
   const ngPosAmountNgn   = (initParams.get('ngn') ?? '').trim()
   const ngPosOfframpProvider = (initParams.get('offramp') ?? '').trim()
-  const ngPosPaycrestIntentId = (initParams.get('intent') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
+  const ngPosPaycrestIntentId = isBankReceivePayment ? '' : (initParams.get('intent') ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '')
   const ngPosBankName = (initParams.get('bank') ?? '').trim()
   const ngPosBankAccount = (initParams.get('acct') ?? '').trim()
   const ngPosBankAccountName = (initParams.get('acctName') ?? '').trim()
@@ -2295,7 +2296,19 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     return SMART_WALLET_AMOUNT_ERROR
   }
 
+  async function checkCollectionAvailable() {
+    if (!isEventMode || !/^[a-zA-Z0-9:_-]{8,120}$/.test(eventId)) return true
+    try {
+      const response = await fetch('/api/pocket/paylinks?action=status&eventId='+encodeURIComponent(eventId), {cache:'no-store',signal:AbortSignal.timeout(12000)})
+      const data = await response.json()
+      if (!response.ok || !data.ok) throw new Error('Could not check this collection. Please try again.')
+      if (!data.active) throw new Error('This collection is closed. Ask the recipient for a new link.')
+      setCollectionError('')
+      return true
+    } catch (error) { setCollectionError(error instanceof Error ? error.message : 'Could not check this collection.'); return false }
+  }
   async function lockHostedCheckoutNetwork() {
+    if (!await checkCollectionAvailable()) return false
     if (!isHostedCheckout) return true
     try {
       const response = await fetch(`/api/v2/checkouts?id=${encodeURIComponent(hostedCheckoutId)}&attempt=${encodeURIComponent(hostedAttemptId)}&action=select-network`, {
@@ -2468,6 +2481,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   }
 
   async function handlePocketMoveAndPay() {
+    if (!await checkCollectionAvailable()) return
     if (pocketMovePayRetryBlocked) return
     const route = pocketCheckoutRoute
     if (!route || route.kind === 'insufficient') return
@@ -2742,8 +2756,8 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
     setPaycrestStatusText('Preparing payout...')
     try {
       if (!settlementIntentId) {
-        const amountNgn = localAmt.trim()
-        if (!isFlex || !ngPosMerchantId || !amountNgn || Number.parseFloat(amountNgn) <= 0) {
+        const amountNgn = isFlex ? localAmt.trim() : ngPosAmountNgn.trim()
+        if (!ngPosMerchantId || !amountNgn || Number.parseFloat(amountNgn) <= 0) {
           throw new Error('Enter the local amount before preparing payout.')
         }
         const quoteResponse = await fetch('/api/ng-pos', {
@@ -4328,6 +4342,7 @@ function ActivePaymentPage({ pocketScan }: { pocketScan?: { params: string; onBa
   return (
     <div className="mx-auto max-w-md animate-slide-up">
       <PocketKycPrompt />
+      {collectionError && <p role="alert" className="mb-4 rounded-2xl bg-gray-100 p-4 text-sm dark:bg-black">{collectionError}</p>}
       {!pocketScan && <HashPayLinkCheckoutBrand />}
       <div
         className="overflow-visible rounded-[1.35rem] border border-gray-200/80 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.42)] transition-all duration-300 dark:border-white/10 dark:bg-[#101114]"

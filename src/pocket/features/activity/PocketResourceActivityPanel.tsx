@@ -159,7 +159,7 @@ export default function PocketResourceActivityPanel({ view, rows, merchants, col
             const payments = resourceRows(resource.id)
             return (
               <div key={resource.id} className="flex w-full items-center gap-2 py-2">
-                <button type="button" onClick={() => setSearchParams({ [key]: resource.id })} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1.5 text-left">
+                <button type="button" onClick={() => setSearchParams({ kind: searchParams.get('kind') || 'requests', [key]: resource.id })} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1.5 text-left">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-[#121212] dark:text-gray-300">{view === 'pos' ? <Store className="h-4 w-4" /> : <Users className="h-4 w-4" />}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{resourceTitle(resource)}</span>

@@ -1,9 +1,10 @@
+import { downloadPocketQr } from '../lib/pocketQrDownload'
 import { normalizePayoutAccount, pocketFiatCurrency } from '../lib/pocketFiatCorridors'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { copyToClipboard, formatAmount } from '../../lib/utils'
 import { readCachedPocketBankInstitutions, readPocketBankInstitutions, verifyPocketBankAccount } from '../api/pocketBankClient'
 import { createPocketBankReceive } from '../api/pocketBankReceiveClient'
-import { hashPayLinkAppOriginForOrigin, pocketRuntimeOrigin } from '../lib/pocketRoutes'
+import { POCKET_BASE_PATH, hashPayLinkAppOriginForOrigin, pocketRuntimeOrigin } from '../lib/pocketRoutes'
 import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 import { readablePocketBankPayoutError } from './pocketBankErrors'
 import { normalizePocketAmountInput } from './pocketUsdcDraftValidation'
@@ -225,7 +226,7 @@ export default function usePocketBankReceiveController({
       })
       idempotencyKey.current = ''
       const paymentUrl = data.link.payment_url
-      const nextDashboardUrl = data.link.dashboard_url || `${hashPayLinkAppOriginForOrigin(pocketRuntimeOrigin())}/dashboard?n=base`
+      const nextDashboardUrl = `${POCKET_BASE_PATH}/activity/collections?kind=collections&collection=${encodeURIComponent(data.link.merchant_id)}`
       setGeneratedLink(paymentUrl)
       setDashboardUrl(nextDashboardUrl)
     } catch (reason) {
@@ -264,29 +265,10 @@ export default function usePocketBankReceiveController({
 
   const downloadQr = useCallback(() => {
     const canvas = qrHiResRef.current?.querySelector('canvas')
-    if (!canvas) return
-    const output = document.createElement('canvas')
-    output.width = canvas.width
-    output.height = canvas.height
-    const context = output.getContext('2d')
-    if (!context) return
-    context.drawImage(canvas, 0, 0)
-    const logo = new Image()
-    logo.onload = () => {
-      const size = Math.round(canvas.width * 0.15)
-      const x = Math.round((canvas.width - size) / 2)
-      const y = Math.round((canvas.height - size) / 2)
-      const padding = 10
-      context.fillStyle = '#ffffff'
-      context.fillRect(x - padding, y - padding, size + padding * 2, size + padding * 2)
-      context.drawImage(logo, x, y, size, size)
-      const anchor = document.createElement('a')
-      anchor.href = output.toDataURL('image/png')
-      anchor.download = `${(memo.trim() || 'payment-link').replace(/\s+/g, '-')}-qr.png`
-      anchor.click()
-    }
-    logo.src = '/hash-logo.png'
-  }, [memo])
+    if (canvas) void downloadPocketQr(canvas).catch(reason => {
+      if (!(reason instanceof DOMException && reason.name === 'AbortError')) setError('QR could not be saved. Try again.')
+    })
+  }, [])
 
   const reset = useCallback(() => {
     idempotencyKey.current = ''
