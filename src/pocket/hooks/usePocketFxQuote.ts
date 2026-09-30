@@ -15,12 +15,15 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
   useEffect(() => {
     if (!enabled) return
     let active = true
+    setError('')
+    setQuote(cache.get(key) ?? null)
     const update = async () => {
       const saved = cache.get(key)
       if (saved && !saved.stale && saved.expiresAt > Date.now() && Date.now() - saved.quotedAt < 30_000) {
         setQuote(saved); setBusy(false); setError(''); return
       }
       setBusy(true)
+      setError('')
       try {
         let request = pending.get(key)
         if (!request) {
@@ -30,7 +33,7 @@ export default function usePocketFxQuote(balance: number, enabled = true, curren
         const value = await request
         if (active) { setQuote(value); setError(value.stale ? 'Live FX rate is unavailable.' : '') }
       } catch (reason) {
-        if (active) { setError(reason instanceof Error ? reason.message : 'Live rate is unavailable.'); setQuote(null) }
+        if (active) { setError(reason instanceof Error ? reason.message : 'Live rate is unavailable.') }
       } finally { if (active) setBusy(false) }
     }
     void update()

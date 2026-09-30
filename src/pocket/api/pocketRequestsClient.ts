@@ -53,6 +53,7 @@ async function readInbox(accessToken: string) {
   }).finally(() => { state.pending = undefined })
   return state.pending
 }
+export function cachedPocketRequestInbox(accessToken: string) { const data=inboxReads.get(accessToken)?.data; return data ? {requests:data.requests ?? [],unreadCount:data.unreadCount ?? 0} : undefined }
 export async function readPocketRequests(accessToken: string) { return (await readPocketRequestInbox(accessToken)).requests }
 export async function readPocketRequestInbox(accessToken: string) { const data = await readInbox(accessToken); return { requests: data.requests ?? [], unreadCount: Number.isSafeInteger(data.unreadCount) ? data.unreadCount! : 0 } }
 export async function markPocketRequestsRead(accessToken: string) { await call(accessToken, { action: 'mark-read' }); announcePocketRequestsUpdated() }

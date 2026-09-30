@@ -45,10 +45,12 @@ export function createPocketFxQuoteReader({
     if (!/^\d+(?:\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) throw new Error('Enter a valid USDC quote amount.')
     if (!durableLoaded) {
       durableLoaded = true
-      const saved = await readLastKnown().catch(() => undefined)
-      if (saved?.currency === currency && saved?.source === 'paycrest' && Number.isFinite(saved.rate) && saved.rate > 0) cached = saved
+      void readLastKnown().then(saved => {
+        if (saved?.currency === currency && saved.source === 'paycrest' && Number.isFinite(saved.rate) && saved.rate > 0
+          && (!cached || saved.quotedAt > cached.quotedAt)) cached = saved
+      }).catch(() => undefined)
     }
-    if (cached?.amount === amount && currentTime - cached.quotedAt < PAYCREST_QUOTE_CACHE_MS) return cached
+    if (cached?.amount === amount && !cached.stale && cached.expiresAt > currentTime && currentTime - cached.quotedAt < PAYCREST_QUOTE_CACHE_MS) return cached
     if (inFlight?.amount === amount) return inFlight.promise
 
     const promise = (async () => {
@@ -82,7 +84,8 @@ export function createPocketFxQuoteReader({
         expiresAt: quotedAt + PAYCREST_QUOTE_VALIDITY_MS,
         stale: false,
       }
-      await writeLastKnown(cached).catch(() => undefined)
+      // Persistence must not delay delivery of a fresh provider rate.
+      void writeLastKnown(cached).catch(() => undefined)
       return cached
     })().finally(() => {
       if (inFlight?.promise === promise) inFlight = null

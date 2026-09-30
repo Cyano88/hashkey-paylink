@@ -37,3 +37,16 @@ assert.equal(view.amount,'1.25 USDC')
 assert.ok(view.rows.some(row=>row.label==='Local amount'&&row.value.includes('1,700')), 'Keep recorded delivery amount on receipt')
 assert.equal(paymentReceiptView({...receipt,asset:'NVDAx',amountNgn:undefined,source:'xstocks'}).amount,'1.25 NVDAx')
 console.log('PASS: isolated Paycrest currencies, quote deduplication, strict response matching, legacy preference migration, USDC-first receipts and recorded local amounts.')
+
+// A slow durable store cannot hold a fresh quote response hostage.
+let finishRead, finishWrite
+const noStorageDelay = createPocketFxQuoteReader({...base,
+ readLastKnown:()=>new Promise(resolve=>finishRead=resolve),
+ writeLastKnown:()=>new Promise(resolve=>finishWrite=resolve),
+})
+const fresh = await Promise.race([noStorageDelay(),new Promise((_,reject)=>setTimeout(()=>reject(Error('Storage delayed FX response')),500))])
+assert.equal(fresh.rate,1400)
+finishRead({...fresh,rate:1,quotedAt:fresh.quotedAt-10000});finishWrite()
+await new Promise(resolve=>setImmediate(resolve))
+assert.equal((await noStorageDelay()).rate,1400,'late saved rate never overwrites newer live quote')
+console.log('PASS live quote delivery independent of durable read/write latency.')

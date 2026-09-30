@@ -11,7 +11,7 @@ assert.equal(circleAmount(provider('2.500001'), 'Base'), 2.500001)
 for (const value of [undefined, '', '-1', 'NaN', '1junk', 'Infinity']) assert.throws(() => circleAmount(provider(value), 'Base'))
 assert.throws(() => circleAmount({ breakdown: [] }, 'Base'))
 assert.throws(() => circleAmount(provider('3'), 'Arbitrum'))
-const networks = ['base', 'arbitrum', 'arc', 'solana']
+const networks = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon']
 const wallets = { base: { address: '0x' + 'a'.repeat(40), walletId: 'base-fixture', updatedAt: 100 } }
 const revisions = Object.fromEntries(await Promise.all(networks.map(async network => [network, await pocketBalanceRevision(network, wallets[network])])))
 const result = { total: 7, totalComplete: true, unavailableNetworks: [], rows: networks.map(key => ({ key, label: key, balance: key === 'base' ? 7 : 0, status: 'ok', walletRevision: revisions[key], observedAt: 1000 })) }

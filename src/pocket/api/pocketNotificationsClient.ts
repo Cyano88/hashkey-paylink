@@ -3,6 +3,7 @@ import {pocketApiUrl} from '../lib/pocketRoutes'
 export type PocketNotice={category?:PocketNoticeCategory;id:string;eventId:string;title:string;body:string;path:string;createdAt:number;updatedAt:number;readAt?:number}
 type Inbox={notices:PocketNotice[];unreadCount:number}
 const cache=new Map<string,{value?:Inbox;at:number;retryAt?:number;error?:Error;pending?:Promise<Inbox>}>()
+export function cachedPocketNotifications(token:string){return cache.get(token)?.value}
 export async function readPocketNotifications(token:string){
  let entry=cache.get(token)
  if(entry?.pending)return entry.pending

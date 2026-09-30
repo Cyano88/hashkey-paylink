@@ -29,7 +29,7 @@ try {
  const resolve=async(amount,{failure=false,replacement=false,oldRevision=false}={})=>page.evaluate(async({amount,failure,replacement,oldRevision})=>{
   const old={address:'0x'+'a'.repeat(40),walletId:'fixture-base',updatedAt:100}
   const wallet=replacement?{...old,address:'0x'+'b'.repeat(40),updatedAt:101}:old
-  const rows=await Promise.all(['base','arbitrum','arc','solana'].map(async key=>({key,label:key,balance:key==='base'?amount:0,status:failure&&key==='base'?'error':'ok',walletRevision:await window.revision(key,key==='base'?(oldRevision?old:wallet):undefined),observedAt:Date.now()})))
+  const rows=await Promise.all(['base','arbitrum','arc','solana','ethereum','polygon'].map(async key=>({key,label:key,balance:key==='base'?amount:0,status:failure&&key==='base'?'error':'ok',walletRevision:await window.revision(key,key==='base'?(oldRevision?old:wallet):undefined),observedAt:Date.now()})))
   const calls=window.calls.filter(call=>!call.done);for(const call of calls){call.done=true;call.resolve(call.kind==='wallets'?{base:wallet}:{total:amount,totalComplete:!failure,unavailableNetworks:failure?['base']:[],rows})}
  },{amount,failure,replacement,oldRevision})
  await boot();await mount('a@fixture.invalid');await page.waitForFunction(()=>window.calls.length===2)
@@ -44,10 +44,10 @@ try {
   for(const [type,y] of [['touchstart',100],['touchmove',180],['touchend',180]]){const event=new Event(type,{bubbles:true});Object.defineProperty(event,'touches',{value:type==='touchend'?[]:[{clientY:y}]});el.dispatchEvent(event)}
  })
  await page.waitForTimeout(100);assert.equal(await count(),1,'80px drag must not refresh')
- // Pull past threshold starts before touchend. Hold >3s to catch the old fake completion.
+ // Pull past the current threshold, then release. Wait for the real refresh.
  await page.locator('[data-pocket-scroller]').evaluate(el=>{
   el.scrollTop=0
-  for(const [type,y] of [['touchstart',100],['touchmove',210],['touchmove',230]]){const event=new Event(type,{bubbles:true});Object.defineProperty(event,'touches',{value:[{clientY:y}]});el.dispatchEvent(event)}
+  for(const [type,y] of [['touchstart',100],['touchmove',210],['touchmove',250],['touchend',250]]){const event=new Event(type,{bubbles:true});Object.defineProperty(event,'touches',{value:type==='touchend'?[]:[{clientY:y,clientX:100}]});el.dispatchEvent(event)}
  })
  await page.getByRole('status',{name:'Refreshing Pocket',exact:true}).waitFor();await page.waitForFunction(()=>window.calls.length===4)
  assert.equal(await count(),2)

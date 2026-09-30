@@ -1,7 +1,7 @@
 import {pocketRequestPaymentPath} from '../lib/pocketRequestPaymentPath'
 import PocketIncomingRequestSheet from '../components/PocketIncomingRequestSheet'
 import {isIncomingPocketRequest} from '../lib/pocketInboxPolicy'
-import { readPocketNotifications,markPocketNotificationsRead,type PocketNotice } from '../api/pocketNotificationsClient'
+import { cachedPocketNotifications, readPocketNotifications,markPocketNotificationsRead,type PocketNotice } from '../api/pocketNotificationsClient'
 import { pocketNotificationPath } from '../lib/pocketNotificationPath'
 import { PocketNotificationsSkeleton } from '../components/PocketContentSkeletons'
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react'
@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import { AlertCircle, Bell, Loader2, Lock, CheckCircle2, MessageCircle, RequestMoney } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import { decidePocketRequest, markPocketRequestsRead, POCKET_REQUESTS_UPDATED_EVENT, readPocketRequestInbox, type PocketRequestItem } from '../api/pocketRequestsClient'
+import { cachedPocketRequestInbox, decidePocketRequest, markPocketRequestsRead, POCKET_REQUESTS_UPDATED_EVENT, readPocketRequestInbox, type PocketRequestItem } from '../api/pocketRequestsClient'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
@@ -37,7 +37,7 @@ export default function PocketNotificationsPage() {
   const pendingLoad = useRef<Promise<void> | null>(null)
   useEffect(() => {
     scope.current += 1; pendingLoad.current = null; loaded.current = false
-    setItems([]); setNotices([]); setSelectedId(''); setActionError(''); setError('')
+    setItems([]); setNotices([]); setActing(''); setSelectedId(''); setActionError(''); setError('')
     return () => { scope.current += 1; pendingLoad.current = null }
   }, [authenticated, email])
 
@@ -52,18 +52,24 @@ export default function PocketNotificationsPage() {
         const token = await tokenRef.current()
         if (!current()) return
         if (!token) throw new Error('Sign in again to read requests.')
-        const [requestsResult,noticeResult]=await Promise.allSettled([readPocketRequestInbox(token),readPocketNotifications(token)])
+        const savedRequests=cachedPocketRequestInbox(token), savedNotices=cachedPocketNotifications(token)
+        if(savedRequests){setItems(savedRequests.requests);loaded.current=true}
+        if(savedNotices){setNotices(savedNotices.notices);loaded.current=true}
+        if(savedRequests&&savedNotices)setBusy(false)
+        // Paint each feed as it arrives; a slow notices API must not hide requests.
+        const [requestsResult,noticeResult]=await Promise.allSettled([
+          readPocketRequestInbox(token).then(inbox => {
+            if (!current()) return
+            setItems(inbox.requests); loaded.current=true
+            if(markRead&&inbox.unreadCount>0)void markPocketRequestsRead(token).catch(()=>undefined)
+          }),
+          readPocketNotifications(token).then(inbox => {
+            if (!current()) return
+            setNotices(inbox.notices); loaded.current=true
+            if(markRead&&inbox.unreadCount>0)void markPocketNotificationsRead(token,inbox.notices.filter(n=>!n.readAt).map(n=>n.eventId)).catch(()=>undefined)
+          }),
+        ])
         if (!current()) return
-        if(requestsResult.status==='fulfilled') {
-          const inbox=requestsResult.value
-          setItems(inbox.requests); loaded.current=true
-          if(markRead&&inbox.unreadCount>0)void markPocketRequestsRead(token).catch(()=>undefined)
-        }
-        if(noticeResult.status==='fulfilled') {
-          const notices=noticeResult.value
-          setNotices(notices.notices)
-          if(markRead&&notices.unreadCount>0)void markPocketNotificationsRead(token,notices.notices.filter(n=>!n.readAt).map(n=>n.eventId)).catch(()=>undefined)
-        }
         const failed=requestsResult.status==='rejected'||noticeResult.status==='rejected'
         if(failed&&(!loaded.current||markRead))setError('Some notifications could not refresh. Try again.')
         else if(!failed)setError('')

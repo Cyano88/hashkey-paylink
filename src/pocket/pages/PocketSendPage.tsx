@@ -1,3 +1,4 @@
+import PocketAmountShimmer from '../components/PocketAmountShimmer'
 import {preparePocketRequestPayment} from '../api/pocketRequestsClient'
 import PocketLocalEquivalent from '../components/PocketLocalEquivalent'
 import PocketConfirmationDetails from '../components/PocketConfirmationDetails'
@@ -61,6 +62,9 @@ export default function PocketSendPage() {
   const onWalletReady = useCallback((key: PocketNetwork, wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => wallets.setWallets(current => ({ ...current, [key]: wallet })), [wallets.setWallets])
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
   const balance = wallets.rows.find(row => row.key === network)?.balance ?? 0
+  const displayBalance = wallets.displayRows?.find(row => row.key === network)
+  const balanceKnown = Boolean(displayBalance?.known)
+  const shownBalance = displayBalance?.balance ?? 0
   const send = usePocketWithdrawalController({ owner: email, chargeFees: mode === 'address' && !requestId, network, networkLabel: networkLabel(network), wallet: wallets.wallets[network], balance, resetKey: `${network}:${mode}:${requestId || 'direct'}`, restoreOperations: Boolean(requestId) || mode === 'address', operationContext: requestId ? `request:${requestId}` : 'send', allowLegacyOperation: Boolean(requestId && requestAccepted), ensureWallet: walletController.ensureWallet, getEvmSession: walletController.getEvmSession, getSolanaSession: walletController.getSolanaSession, getAccessToken, refreshBalances: wallets.refreshBalances, clearExternalError: () => { wallets.setError(''); setResolveError('') }, onActivity: () => void activity.refresh() })  // Agent Hash task preparation is applied once; later edits belong to the user.
   useEffect(() => {
     if (requestId) return
@@ -113,13 +117,15 @@ export default function PocketSendPage() {
   }, [authenticated, getAccessToken, requestId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (mode !== 'pocket' || !/^\d{6,12}$/.test(pocketId)) { setResolved(null); if (mode === 'pocket') send.setAddress(''); return }
+    if (mode !== 'pocket' || !/^\d{6,12}$/.test(pocketId)) { setResolved(null); setResolving(false); setResolveError(''); if (mode === 'pocket') send.setAddress(''); return }
     if(requestId&&paymentRequest?.recipientAddress){
       const address=paymentRequest.recipientAddress
       setResolved({pocketId:paymentRequest.senderPocketId,name:paymentRequest.senderName,network,address});send.setAddress(address);setResolving(false);setResolveError('');return
     }
     if(requestId)return
     let cancelled = false
+    // Clear the previous recipient before waiting for the next lookup.
+    setResolved(null); send.setAddress(''); setResolving(true); setResolveError('')
     const timer = window.setTimeout(async () => {
       setResolving(true); setResolveError(''); setResolved(null); send.setAddress('')
       try { const token = await getAccessToken(); if (!token) throw new Error('Sign in again to resolve this Pocket ID.'); const recipient = await resolvePocketRecipient(token, pocketId, network); if (!cancelled) { setResolved(recipient); send.setAddress(recipient.address) } }
@@ -210,8 +216,8 @@ export default function PocketSendPage() {
   const resultOpen = !resultDismissed && !requestChecking && (send.status === 'submitted' || send.status === 'successful' || requestConfirmed || requestAccepted || Boolean(paymentTxHash) || Boolean(attemptedAt && send.error))
   const resultReceipt = (send.reference || paymentRequest?.transactionHash) ? pocketActivityReceipt({paymentFunding: requestLiquidity.paymentFunding,eventId: requestId || send.reference, txHash: paymentRequest?.transactionHash || send.txHash, chain: network, payer: wallets.wallets[network]?.address || '', recipient: send.address || resolved?.address || '', memo: paymentRequest ? 'Request payment' : 'USDC sent', amount: paymentRequest?.amount || send.amount, ts: attemptedAt || paymentRequest?.updatedAt || Date.now(), source: paymentRequest ? 'request' : 'wallet-withdrawal', settlementType: 'wallet_transfer', direction: 'out', paycrestStatus: transactionState === 'successful' ? (paymentRequest ? 'paid' : 'confirmed') : transactionState === 'failed' ? 'failed' : 'submitted'}, { allowPending: true }) : null
 
-  if (authenticated && (!wallets.resolved || requestLoading && !paymentRequest)) return <PocketLoadingState active="home" />
-  const recipientReady = mode === 'pocket' ? Boolean(resolved) : Boolean(send.address.trim())
+  if (authenticated && requestLoading && !paymentRequest) return <PocketLoadingState active="home" />
+  const recipientReady = mode === 'pocket' ? Boolean(resolved && resolved.pocketId === pocketId && resolved.network === network) : Boolean(send.address.trim())
   return <PocketRouteShell active="home" fixedPage refreshEnabled={false} onSelect={tab => navigate(POCKET_BASE_PATH + navPath(tab))}>
     <PocketFlowHeader centered title={paymentRequest ? 'Pay request' : mode === 'pocket' ? 'Pocket ID' : 'Send USDC'} onBack={() => navigate(requestId ? POCKET_BASE_PATH + POCKET_ROUTES.notifications : POCKET_BASE_PATH + POCKET_ROUTES.transfer)} />
     {requestError && !paymentRequest ? <section className="rounded-[26px] border border-gray-100 bg-white p-6 text-center shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none"><p className="text-sm font-bold">Request unavailable</p><p className="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{requestError}</p><button type="button" onClick={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.notifications)} className="pocket-cta-primary mt-5 px-6">Back to notifications</button></section> :
@@ -219,7 +225,7 @@ export default function PocketSendPage() {
       <div className="pocket-form-fields min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain">
       {paymentRequest && <div><p className="text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Request from {paymentRequest.senderName}</p><p className="mt-1 text-sm font-bold">{paymentRequest.title}</p><p className="mt-1 text-[10px] font-medium text-gray-500 dark:text-gray-400">Sent {new Date(paymentRequest.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })} at {new Date(paymentRequest.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p></div>}
       <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Network</p><PocketSelect value={network} options={(['base','arbitrum','arc','solana','ethereum','polygon'] as SendNetwork[]).map(value => ({ value, label: networkLabel(value) }))} onChange={value => setNetwork(value as SendNetwork)} disabled={Boolean(paymentRequest)} ariaLabel="Select send network" /></div>
-      <div className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 dark:bg-[#121212]"><span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available</span><span className="text-sm font-black tabular-nums">{formatPocketDisplayAmount(balance)} USDC<PocketLocalEquivalent amount={balance} className="mt-1 block text-right text-xs font-normal text-gray-500 dark:text-gray-400" /></span></div>
+      <div className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 dark:bg-[#121212]"><span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available</span><span className="text-sm font-black tabular-nums">{balanceKnown ? <>{formatPocketDisplayAmount(shownBalance)} USDC<PocketLocalEquivalent amount={shownBalance} className="mt-1 block text-right text-xs font-normal text-gray-500 dark:text-gray-400" /></> : !wallets.resolved || wallets.balanceBusy ? <PocketAmountShimmer label="Loading available balance" /> : <span className="text-xs font-medium text-gray-500">Unavailable</span>}</span></div>
       {mode === 'pocket' ? <label className="block"><span className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Recipient Pocket ID</span><span className="relative mt-2 block"><input type="text" inputMode="numeric" value={pocketId} readOnly={Boolean(paymentRequest)} onChange={event => setPocketId(event.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="Enter 6 to 12 digits" className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 pr-11 text-base font-bold tabular-nums outline-none focus:border-blue-400 read-only:bg-gray-50 dark:border-[#262626] dark:bg-[#121212] dark:read-only:bg-white/[0.025]" />{resolving ? <span className="absolute right-4 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-gray-500 dark:text-gray-400"><Loader2 className="h-4 w-4 animate-spin" /></span> : resolved ? <Check className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-500" /> : null}</span></label> : <label className="block"><span className="text-[11px] font-bold text-gray-500 dark:text-gray-400">Recipient wallet address</span><input type="text" value={send.address} onChange={event => send.setAddress(event.target.value.trim())} placeholder={network === 'solana' ? 'Solana wallet address' : '0x... wallet address'} className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-4 text-sm font-semibold outline-none focus:border-blue-400 dark:border-[#262626] dark:bg-[#121212]" /></label>}
       {resolved && <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-xs font-semibold text-gray-900 dark:bg-blue-400/10 dark:text-white"><Check className="h-3.5 w-3.5 text-blue-500" /><span className="truncate">{resolved.name}</span><span className="ml-auto text-[10px] text-gray-500 dark:text-gray-400">Pocket {resolved.pocketId}</span></div>}
       {resolveError && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">{resolveError}</p>}
