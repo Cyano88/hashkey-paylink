@@ -191,7 +191,7 @@ export default function PocketEmailLogin({ context = 'pocket', onStepChange }: P
       <label className="sr-only" htmlFor={emailInputId}>Email address</label>
       <div className="relative">
         <EnvelopeIcon className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-        <input id={emailInputId} type="email" inputMode="email" autoComplete="email" spellCheck={false} required value={email} disabled={busy} onChange={event => { setEmail(event.target.value); setError('') }} placeholder="Email address" className="min-h-14 w-full rounded-full border border-gray-200 bg-white px-12 text-sm font-semibold text-gray-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 disabled:opacity-60" />
+        <input id={emailInputId} type="email" inputMode="email" autoComplete="email" spellCheck={false} required value={email} disabled={busy} onChange={event => { setEmail(event.target.value); setError('') }} placeholder="you@example.com" className="min-h-14 w-full rounded-full border border-gray-200 bg-white px-12 text-sm font-semibold text-gray-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 disabled:opacity-60" />
       </div>
       {error && <p role="alert" className="px-3 text-center text-xs font-semibold text-red-600">{error}</p>}
       <button type="submit" disabled={busy || !email.trim()} className="group relative flex min-h-14 w-full items-center justify-center rounded-full bg-gray-950 px-16 py-1.5 text-center text-sm font-semibold text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45">

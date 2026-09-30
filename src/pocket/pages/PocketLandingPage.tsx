@@ -1,5 +1,4 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Lock } from '../components/PocketIcons'
 import { Link, useNavigate } from 'react-router-dom'
 import { CPurseIcon } from '../components/CPurseIcon'
 import PocketEmailLogin from '../components/PocketEmailLogin'
@@ -104,10 +103,10 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
             <div className={`transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${revealClass}`} style={{ transitionDelay: splashLaunching ? '100ms' : '0ms' }}>
               <PocketAuthBrand markRef={heroLogoRef} />
               <h1 className="mt-9 max-w-md text-4xl font-black leading-[0.98] tracking-[-0.055em] sm:text-5xl">
-                One pocket for digital dollars.
+                Your money and stocks, in one Pocket.
               </h1>
               <p className="mx-auto mt-5 max-w-sm text-sm font-medium leading-6 text-gray-500">
-                Receive, manage, and move USDC across the ways you get paid.
+                Send, receive and pay with USDC. Explore and trade tokenized stocks.
               </p>
             </div>
           </section>
@@ -139,10 +138,6 @@ export default function PocketLandingPage({ splashState = 'idle' }: { splashStat
             <PocketEmailLogin />
           )}
 
-          <p className="flex items-center justify-center gap-1.5 text-[10px] font-semibold text-gray-400">
-            <Lock className="h-3.5 w-3.5" strokeWidth={2} />
-            Secure payments powered by Circle
-          </p>
 
           <footer className="pt-4 text-center">
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] font-semibold text-gray-500">
