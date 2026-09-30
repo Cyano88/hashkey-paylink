@@ -1,3 +1,4 @@
+import {localCurrencyAmount} from '../lib/pocketDisplayCurrency'
 import PocketLocalEquivalent from './PocketLocalEquivalent'
 import PocketTransactionDetails from './PocketTransactionDetails'
 import { formatPocketPaymentAmount } from '../lib/pocketMoney'
@@ -18,7 +19,7 @@ export default function PocketTransactionSheet({ title, state, statusLabel, amou
   const canViewDetails = !receipt && Boolean(detailsRows?.length || Children.toArray(children).length)
   const canViewReceipt = Boolean(receipt)
   const localAmount = receipt?.amountNgn && Number.isFinite(Number(receipt.amountNgn)) && (!receipt.asset || receipt.asset === 'USDC')
-    ? `${receipt.fiatCurrency || 'NGN'} ${Number(receipt.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })}` : undefined
+    ? localCurrencyAmount(Number(receipt.amountNgn),receipt.fiatCurrency === 'UGX' ? 'UGX' : 'NGN') : undefined
   const usdcEquivalent = receipt && (!receipt.asset || receipt.asset === 'USDC') && receipt.amount !== '' && Number.isFinite(Number(receipt.amount))
     ? `${formatPocketPaymentAmount(Number(receipt.amount))} USDC` : undefined
   const label = statusLabel || (state === 'successful' ? 'Successful' : state === 'failed' ? 'Failed' : state === 'reversed' ? 'Reversed' : 'Processing')

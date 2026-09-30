@@ -1,3 +1,4 @@
+import {localCurrencyAmount} from './pocketDisplayCurrency'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { formatPocketDisplayAmount } from './pocketMoney'
 import { formatStockQuantity } from './pocketStockDisplay'
@@ -5,7 +6,7 @@ import { formatStockQuantity } from './pocketStockDisplay'
 /** USDC remains primary; the recorded local delivery amount stays in details. */
 export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'amountNgn' | 'fiatCurrency' | 'amount' | 'assetSymbol'>): string {
   if (row.source === 'wallet-swap') return 'Swap'
-  if ((!row.amount || !Number.isFinite(Number(row.amount))) && row.amountNgn && Number.isFinite(Number(row.amountNgn))) return (row.fiatCurrency === 'UGX' ? 'UGX ' : 'NGN ') + Number(row.amountNgn).toLocaleString('en-NG', { maximumFractionDigits: 2 })
+  if ((!row.amount || !Number.isFinite(Number(row.amount))) && row.amountNgn && Number.isFinite(Number(row.amountNgn))) return localCurrencyAmount(Number(row.amountNgn), row.fiatCurrency === 'UGX' ? 'UGX' : 'NGN')
   return (row.assetSymbol ? formatStockQuantity(row.amount) : formatPocketDisplayAmount(Number(row.amount))) + ' ' + (row.assetSymbol || 'USDC')
 }
 

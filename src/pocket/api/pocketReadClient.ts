@@ -1,3 +1,4 @@
+import { isPocketId, normalizePocketId } from '../lib/pocketId'
 import { parsePocketWalletUpdateNotice } from '../lib/pocketWalletUpdate'
 import type { LocalCurrencyProfile } from '../models/localCurrencyProfile'
 import type { PocketActivityRow } from '../models/pocketActivity'
@@ -100,7 +101,7 @@ function isLocalCurrencyProfile(value: unknown): value is CompatibleLocalCurrenc
     && typeof value.pocketNumber === 'string'
     && /^\d{6,12}$/.test(value.pocketNumber)
     && typeof value.pocketId === 'string'
-    && /^\d{6,12}$/.test(value.pocketId)
+    && isPocketId(value.pocketId)
     && Number.isInteger(value.avatarId)
     && Number(value.avatarId) >= 1
     && Number(value.avatarId) <= 4
@@ -151,11 +152,31 @@ export function parsePocketLocalCurrencyProfileSave(value: unknown): PocketProfi
   return value.data
 }
 
+function profileConnectionError(reason: unknown) {
+  const message = reason instanceof Error ? reason.message : ''
+  return /connection|network|fetch|abort|timeout|timed out|socket/i.test(message)
+}
+async function profileFetch(fetcher: typeof fetch, init: RequestInit): Promise<Response> {
+  const attempts = init.method === 'GET' ? 2 : 1
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const response = await fetcher(POCKET_API.profile, {...init, cache:'no-store', signal:AbortSignal.timeout(12000)})
+      if (response.status >= 500) throw new Error('Profile connection is temporarily unavailable.')
+      return response
+    } catch (reason) {
+      if (!profileConnectionError(reason)) throw reason
+      if (attempt + 1 === attempts) throw new Error(init.method === 'GET' ? 'Could not refresh your profile. Please try again.' : 'We could not confirm your profile update. Your edits are still here. Please try again.')
+      await new Promise(resolve => setTimeout(resolve, 300))
+    }
+  }
+  throw new Error('Profile is temporarily unavailable.')
+}
+
 export async function readPocketLocalCurrencyProfile({
   accessToken,
   fetcher = fetch,
 }: PocketLocalCurrencyProfileReadInput): Promise<PocketLocalCurrencyProfileReadResult> {
-  const response = await fetcher(POCKET_API.profile, {
+  const response = await profileFetch(fetcher, {
     method: 'GET',
     headers: {
       authorization: `Bearer ${accessToken}`,
@@ -177,7 +198,8 @@ export async function savePocketLocalCurrencyProfile({
   idempotencyKey = createPocketIdempotencyKey('profile-save'),
   fetcher = fetch,
 }: PocketLocalCurrencyProfileSaveInput): Promise<PocketProfileUpsertData> {
-  const response = await fetcher(POCKET_API.profile, {
+  let response: Response
+  try { response = await profileFetch(fetcher, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -191,6 +213,15 @@ export async function savePocketLocalCurrencyProfile({
       ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
     }),
   })
+  } catch (reason) {
+    try {
+      const current = await readPocketLocalCurrencyProfile({accessToken,fetcher})
+      if (current.profile?.updatedAt && current.profile.pocketId === normalizePocketId(pocketId)
+        && (avatarId === undefined || current.profile.avatarId === avatarId)
+        && (displayCurrency === undefined || current.profile.displayCurrency === displayCurrency)) return {profile:{...current.profile,updatedAt:current.profile.updatedAt},unchanged:true}
+    } catch { /* Retain the edit and original recovery message. */ }
+    throw reason
+  }
   const data = await response.json().catch(() => undefined)
   if (!response.ok) {
     throw new Error(pocketErrorMessage(data, 'Profile request failed.'))

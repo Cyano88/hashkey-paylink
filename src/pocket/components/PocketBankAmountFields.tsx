@@ -7,7 +7,7 @@ type Props = {
   onChangeRecipient: () => void; onAmountChange: (value: string) => void; onMemoChange: (value: string) => void
 }
 export default function PocketBankAmountFields({currency = 'NGN',accountName,bankName,accountNumber,amount,memo,disabled,onChangeRecipient,onAmountChange,onMemoChange}: Props) {
-  const symbol = currency === 'UGX' ? 'UGX' : '\u20a6'
+  const symbol = currency === 'UGX' ? 'USh' : '\u20a6'
   return <div className="pocket-bank-amount-fields space-y-5">
     <section aria-label="Recipient">
       <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">Transfer to</p>

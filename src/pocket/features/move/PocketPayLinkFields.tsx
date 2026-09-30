@@ -56,7 +56,7 @@ export function PocketPaymentAmountField({ lane, flexible, amount, dirty, valid,
                   : 'border-gray-200 focus:border-[#0071E3]/40 focus:ring-[#0071E3]/15 dark:border-[#262626] dark:text-gray-100 dark:focus:border-blue-400/40 dark:focus:ring-blue-400/10',
               )}
             />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-[11px] font-semibold text-gray-500 dark:text-gray-400">{naira ? 'NGN' : 'USDC'}</span>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 whitespace-nowrap text-[11px] font-semibold text-gray-500 dark:text-gray-400">{naira ? '\u20a6' : 'USDC'}</span>
           </div>
           {valid && Number(amount) > 0 && (naira ? <PocketFiatUsdcEstimate amount={Number(amount)} /> : <PocketLocalEquivalent amount={Number(amount)} />)}
           {dirty && !valid && <p className="flex items-center gap-1 text-xs text-red-500"><Info className="h-3 w-3" /> Enter a valid amount greater than 0</p>}

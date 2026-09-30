@@ -1,3 +1,4 @@
+import { isPocketId, pocketIdInput } from '../lib/pocketId'
 import { InboxArrowDownIcon, RectangleStackIcon } from '@heroicons/react/24/outline'
 import { activityScope, refreshPocketActivity } from '../lib/pocketActivityCache'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -72,7 +73,7 @@ export default function PocketMoveUsdcPage() {
     setResolvedPayer(null)
     setResolvingPayer(false)
     setFormError('')
-    if (flow !== 'request' || !authenticated || !/^\d{6,12}$/.test(payerPocketId)) return
+    if (flow !== 'request' || !authenticated || !isPocketId(payerPocketId)) return
     let cancelled = false
     const timer = window.setTimeout(async () => {
       setResolvingPayer(true)
@@ -80,7 +81,7 @@ export default function PocketMoveUsdcPage() {
         const accessToken = await getAccessToken()
         if (!accessToken) throw new Error('Sign in again to find this Pocket user.')
         const user = await resolvePocketRequestUser(accessToken, payerPocketId)
-        if (!cancelled) setResolvedPayer(user)
+        if (!cancelled) setResolvedPayer({...user,pocketId:payerPocketId})
       } catch (reason) {
         if (!cancelled) setFormError(reason instanceof Error ? reason.message : 'Pocket user could not be found.')
       } finally {
@@ -209,7 +210,7 @@ export default function PocketMoveUsdcPage() {
         {showSignIn ? <PrivyConnectButton debugLabel="create-pocket-receive" loginOptions={{ loginMethods: ['email'] }} logoutOnAuthenticated={false} onBeforeLogin={recipient.rememberSignInIntent} className="pocket-cta-primary w-full">Sign in to Pocket</PrivyConnectButton> : <>
           <PocketPayerNetworkPanel showSelector selectedNetwork={selectedNet} selectedNetworkLabel={CHAIN_META[selectedNet].label} options={POCKET_NETWORKS.filter(network => flow === 'request' || (network !== 'ethereum' && network !== 'polygon')).map(network => ({ value: network, label: CHAIN_META[network].label }))} multiChain={flow === 'collection' && draft.multiChain} emailReceive={flow === 'request'} onNetworkSelect={network => onNetworkSelect(network as ChainKey)} onMultiChainToggle={toggleMultiChain} showMultiChainToggle={flow === 'collection'} managedNetworkRouting embedded />
           {flow === 'request' ? <>
-            <label className="block space-y-1.5"><span className="text-sm font-medium">Pocket ID</span><span className="relative block"><input type="text" inputMode="numeric" value={payerPocketId} onChange={event => setPayerPocketId(event.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="Enter Pocket ID" className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 pr-11 text-sm tabular-nums outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212]" />{resolvingPayer && <Loader2 aria-label="Finding Pocket user" className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-500" />}</span></label>
+            <label className="block space-y-1.5"><span className="text-sm font-medium">Pocket ID</span><span className="relative block"><input type="text" inputMode="text" autoCapitalize="none" autoCorrect="off" value={payerPocketId} onChange={event => setPayerPocketId(pocketIdInput(event.target.value))} placeholder="Enter Pocket ID" className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-3 pr-11 text-sm tabular-nums outline-none focus:border-gray-400 dark:border-[#262626] dark:bg-[#121212]" />{resolvingPayer && <Loader2 aria-label="Finding Pocket user" className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-500" />}</span></label>
             {resolvedPayer && <p className="flex items-center gap-2 text-xs font-medium"><Check className="h-4 w-4 text-emerald-500" />{resolvedPayer.displayName}</p>}
             <PocketPaymentAmountField lane="usdc" flexible={false} amount={draft.amount} dirty={draft.validation.amountDirty} valid={draft.validation.amountValid} helperText="" onAmountChange={draft.setAmount} />
             <PocketPaymentNoteField value={draft.memo} onChange={draft.setMemo} label="Note" placeholder="What is this for?" />

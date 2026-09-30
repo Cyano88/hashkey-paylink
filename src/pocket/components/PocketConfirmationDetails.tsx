@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 
 /** The same amount and details layout used by Pocket's bank confirmation. */
 export default function PocketConfirmationDetails({ amount, equivalent, rows }: { amount: string; equivalent?: string; rows: Array<[string, ReactNode]> }) {
-  const fiatFirst = /^(NGN|UGX|\u20a6)\s?/.test(amount) && /USDC$/.test(equivalent || '')
+  const fiatFirst = /^(NGN|UGX|USh|\u20a6)\s?/.test(amount) && /USDC$/.test(equivalent || '')
   const primary = fiatFirst ? equivalent! : amount
   const usdc = /USDC$/.test(primary) ? Number(primary.replace(/[^0-9.]/g, '')) : NaN
   return <>

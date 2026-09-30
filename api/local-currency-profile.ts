@@ -1,3 +1,4 @@
+import { isPocketId, normalizePocketId } from '../src/pocket/lib/pocketId.js'
 import {withPocketKycIdentity} from './pocket/kyc-profile.js'
 import type { Request, Response } from 'express'
 import { mkdir, readFile, writeFile } from 'fs/promises'
@@ -131,8 +132,8 @@ export async function verifiedPrivyUser(req: Request) {
 }
 
 function normalizedPocketId(value: unknown) {
-  const pocketId = String(value ?? '').trim()
-  return /^\d{6,12}$/.test(pocketId) ? pocketId : ''
+  const pocketId = normalizePocketId(value)
+  return isPocketId(pocketId) ? pocketId : ''
 }
 
 function requiredIdentity(identity: VerifiedProfileUser) {
@@ -317,7 +318,7 @@ export function createLocalCurrencyProfileRepository(options: RepositoryOptions 
     },
     async updateProfile(userId, pocketId, avatarId, expectedUpdatedAt, requestedDisplayCurrency) {
       const cleanPocketId = normalizedPocketId(pocketId)
-      if (!cleanPocketId) throw Object.assign(new Error('Pocket ID must contain 6 to 12 digits.'), { status: 400 })
+      if (!cleanPocketId) throw Object.assign(new Error('Use 3-20 letters or numbers, or 6-12 digits for a numeric Pocket ID.'), { status: 400 })
       if (!Number.isInteger(avatarId) || avatarId < 1 || avatarId > 4) throw Object.assign(new Error('Choose a valid Pocket avatar.'), { status: 400 })
       const requestedCurrency = requestedDisplayCurrency === undefined ? undefined : normalizedDisplayCurrency(requestedDisplayCurrency)
       return mutateStore(store => {
@@ -399,7 +400,7 @@ export function createLocalCurrencyProfileHandler(dependencies: HandlerDependenc
 
       if (action === 'save') {
         const pocketId = normalizedPocketId(req.body?.pocket_id)
-        if (!pocketId) return res.status(400).json({ ok: false, error: 'Pocket ID must contain 6 to 12 digits.' })
+        if (!pocketId) return res.status(400).json({ ok: false, error: 'Use 3-20 letters or numbers, or 6-12 digits for a numeric Pocket ID.' })
         const expectedUpdatedAt = String(req.body?.expected_updated_at ?? '').trim() || undefined
         if (expectedUpdatedAt && !Number.isFinite(Date.parse(expectedUpdatedAt))) {
           return res.status(400).json({ ok: false, error: 'Profile version must be a valid timestamp.' })

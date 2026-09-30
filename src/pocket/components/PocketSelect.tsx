@@ -1,3 +1,5 @@
+import PocketBottomSheet from './PocketBottomSheet'
+import PocketNetworkMark from './PocketNetworkMark'
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, Search } from './PocketIcons'
 import { cn } from '../../lib/utils'
@@ -44,7 +46,7 @@ export default function PocketSelect({
   useEffect(() => {
     if (!open) return
     const close = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false)
     }
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false)
@@ -64,6 +66,14 @@ export default function PocketSelect({
   useEffect(() => {
     if (!open) setQuery('')
   }, [open])
+
+  const networkOptions = /network/i.test(ariaLabel) && options.length > 0 && options.every(option => ['base','arbitrum','arc','solana','ethereum','polygon','xlayer'].includes(option.value))
+  if (networkOptions) return <div className={className}>
+    <button type="button" aria-label={ariaLabel} aria-haspopup="dialog" aria-expanded={open} disabled={unavailable} onClick={()=>setOpen(true)} className={cn('flex min-h-11 w-full items-center gap-2 rounded-xl border border-gray-200 px-3 text-sm font-semibold disabled:opacity-60 dark:border-[#262626]',buttonClassName)}>
+      {selected && <PocketNetworkMark network={selected.value}/>}<span className="flex-1 text-left">{selected?.label ?? placeholder}</span><ChevronDown className="h-4 w-4"/>
+    </button>
+    {open && <PocketBottomSheet title="Select network" onClose={()=>setOpen(false)}><h2 className="mb-3 text-sm font-bold">Select network</h2><div role="listbox" aria-label={ariaLabel}>{options.map(option=><button key={option.value} type="button" role="option" aria-selected={option.value===value} disabled={option.disabled} onClick={()=>{onChange(option.value);setOpen(false)}} className="flex min-h-14 w-full items-center gap-3 text-left text-sm font-semibold disabled:opacity-50"><PocketNetworkMark network={option.value}/><span className="flex-1">{option.label}</span><span aria-hidden="true" className={cn('h-4 w-4 rounded-full border',option.value===value?'border-4 border-gray-950 dark:border-white':'border-gray-300 dark:border-gray-600')}/></button>)}</div></PocketBottomSheet>}
+  </div>
 
   return (
     <div ref={rootRef} className={cn('relative', className)}>

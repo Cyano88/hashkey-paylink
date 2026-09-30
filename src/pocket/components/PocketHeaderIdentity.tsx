@@ -1,3 +1,4 @@
+import { isPocketId } from '../lib/pocketId'
 import { useEffect, useState } from 'react'
 import { copyToClipboard } from '../../lib/utils'
 import { Check } from './PocketIcons'
@@ -15,9 +16,9 @@ export default function PocketHeaderIdentity() {
   const liveId = authenticated ? currentProfile?.pocketId || '' : ''
   let cachedId = ''
   try { if (authenticated && cacheKey) cachedId = localStorage.getItem(cacheKey) || '' } catch { /* Storage is optional. */ }
-  const pocketId = /^\d{6,12}$/.test(liveId) ? liveId : /^\d{6,12}$/.test(cachedId) ? cachedId : ''
+  const pocketId = isPocketId(liveId) ? liveId : isPocketId(cachedId) ? cachedId : ''
   useEffect(() => {
-    if (!authenticated || !cacheKey || !/^\d{6,12}$/.test(liveId)) return
+    if (!authenticated || !cacheKey || !isPocketId(liveId)) return
     try { localStorage.setItem(cacheKey, liveId) } catch { /* Display-only cache. */ }
   }, [authenticated, cacheKey, liveId])
   const loadingId = !pocketId && (ready === false || (authenticated && !profile.loaded))

@@ -1,3 +1,4 @@
+import { isPocketId, normalizePocketId } from '../../src/pocket/lib/pocketId.js'
 import {pocketRequestPaymentPath} from '../../src/pocket/lib/pocketRequestPaymentPath.js'
 import type { Request, Response } from 'express'
 import { Connection } from '@solana/web3.js'
@@ -73,20 +74,22 @@ export function createPocketRequestsHandler(deps: Dependencies) {
       const identity = await deps.verifyUser(req)
       const sender = await deps.profiles.ensure(identity)
       if (req.method === 'POST' && req.body?.action === 'resolve-request-user') {
-        const pocketId = String(req.body?.pocketId ?? '').trim()
-        if (!/^\d{6,12}$/.test(pocketId)) return fail(res, 400, 'Enter a valid Pocket ID.')
+        const pocketId = normalizePocketId(req.body?.pocketId)
+        if (!isPocketId(pocketId)) return fail(res, 400, 'Enter a valid Pocket ID.')
         if (pocketId === sender.profile.pocketId) return fail(res, 400, 'You cannot request money from yourself.')
         const recipient = await deps.profiles.getByPocketId(pocketId)
         if (!recipient) return fail(res, 404, 'Pocket user was not found.')
+        if (recipient.privyUserId === identity.userId) return fail(res, 400, 'Choose another Pocket user.')
         return res.json({ ok: true, user: { pocketId: recipient.pocketId, displayName: profileName(recipient), verified: recipient.nameStatus === 'kyc_verified' } })
       }
       if (req.method === 'POST' && req.body?.action === 'resolve-recipient') {
-        const pocketId = String(req.body?.pocketId ?? '').trim()
+        const pocketId = normalizePocketId(req.body?.pocketId)
         const network = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'].includes(req.body?.network) ? req.body.network as 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon' : null
-        if (!/^\d{6,12}$/.test(pocketId) || !network) return fail(res, 400, 'Enter a valid Pocket ID and network.')
+        if (!isPocketId(pocketId) || !network) return fail(res, 400, 'Enter a valid Pocket ID and network.')
         if (pocketId === sender.profile.pocketId) return fail(res, 400, 'You cannot send to your own Pocket ID.')
         const recipient = await deps.profiles.getByPocketId(pocketId)
         if (!recipient) return fail(res, 404, 'Pocket user was not found.')
+        if (recipient.privyUserId === identity.userId) return fail(res, 400, 'Choose another Pocket user.')
         if (!deps.readWallet) return fail(res, 503, 'Pocket recipient lookup is unavailable.')
         const wallet = await deps.readWallet(circleLinkKey(recipient.privyUserId, network))
         if (!wallet?.circleWalletAddress) return fail(res, 409, `This Pocket user has not opened a ${network === 'ethereum' ? 'Ethereum' : network === 'polygon' ? 'Polygon' : network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : 'Base'} wallet yet.`)
@@ -95,6 +98,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
       if (req.method === 'POST' && req.body?.action === 'create') {
         const recipient = await deps.profiles.getByPocketId(String(req.body?.recipientPocketId ?? ''))
         if (!recipient) return fail(res, 404, 'Pocket user was not found.')
+        if (recipient.privyUserId === identity.userId) return fail(res, 400, 'Choose another Pocket user.')
         const network = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon'].includes(req.body?.network) ? req.body.network as 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon' : 'base'
         if (!deps.readWallet) return fail(res, 503, 'Pocket wallet lookup is unavailable.')
         const wallet = await deps.readWallet(circleLinkKey(identity.userId, network))

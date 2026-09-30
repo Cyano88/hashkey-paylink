@@ -1,4 +1,5 @@
-﻿import type { Request, Response } from 'express'
+import { isPocketId } from '../../src/pocket/lib/pocketId.js'
+import type { Request, Response } from 'express'
 import { PrivyClient } from '@privy-io/server-auth'
 import { getAddress, isAddress } from 'viem'
 import { verifiedPrivyUser, localCurrencyProfileRepository } from '../local-currency-profile.js'
@@ -27,7 +28,7 @@ export default async function handler(req:Request,res:Response){
   else if(action==='accept'||action==='decline'){await mutateStockNotices(s=>decideStockRequest(s,owner,String(req.body.id||''),action))}
   else if(action==='create-request'){
    const pocketId=String(req.body.pocketId||''),eventId=String(req.body.eventId||'')
-   if(!/^\d{6,12}$/.test(pocketId)||!/^[\w-]{16,80}$/.test(eventId))return res.status(400).json({ok:false,error:'Enter a valid Pocket ID.'})
+   if(!isPocketId(pocketId)||!/^[\w-]{16,80}$/.test(eventId))return res.status(400).json({ok:false,error:'Enter a valid Pocket ID.'})
    const [sender,recipient,asset]=await Promise.all([localCurrencyProfileRepository.ensure(identity),localCurrencyProfileRepository.getByPocketId(pocketId),stockNoticeAsset(String(req.body.token||''))])
    if(!recipient)return res.status(404).json({ok:false,error:'Pocket user not found.'})
    const amount=String(req.body.amount||'').trim(),units=stockAmountUnits(amount,asset.decimals)

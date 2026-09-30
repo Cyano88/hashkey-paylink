@@ -1,3 +1,4 @@
+import {isPocketId} from '../../src/pocket/lib/pocketId.js'
 export type CirclePocketCapability =
   | 'wallet-overview'
   | 'send-usdc'
@@ -109,10 +110,10 @@ function sendRoute(question: string) {
   const route = result('send-usdc')
   const amount = question.match(/\b(\d+(?:\.\d+)?)\s*USDC\b/i)?.[1] ?? ''
   const evmAddress = question.match(/\b0x[a-fA-F0-9]{40}\b/)?.[0] ?? ''
-  const recipientToken = question.match(/\bto\s+([1-9A-HJ-NP-Za-km-z]{32,44}|\d{6,12})\b/i)?.[1] ?? ''
+  const recipientToken = question.match(/\bto\s+([1-9A-HJ-NP-Za-km-z]{32,44}|[a-z0-9]{3,20})\b/i)?.[1] ?? ''
   const recipient = evmAddress || recipientToken
   if (!recipient) return route
-  const mode = /^\d{6,12}$/.test(recipient) ? 'pocket' : 'address'
+  const mode = isPocketId(recipient) ? 'pocket' : 'address'
   const explicitNetwork = question.match(/\b(base|arbitrum|solana)\b/i)?.[1]?.toLowerCase()
   const network = explicitNetwork || (mode === 'address' && !recipient.startsWith('0x') ? 'solana' : '')
   const params = [

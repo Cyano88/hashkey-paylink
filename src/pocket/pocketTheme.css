@@ -92,3 +92,11 @@ html.dark [data-pocket-auth='true'] button[aria-label='Back to email'] { backgro
 html.dark [data-pocket-auth='true'] a:hover { color: #fff !important; }
 html.dark [data-pocket-auth='true'] img[src='/privy-mark-logo.png'] { filter: invert(1) !important; }
 html.dark [data-pocket-auth='true'] [class~='border-white/35'] { border-color: rgb(0 0 0 / .35); border-top-color: #030712; }
+
+/* Currency-only override: retain Jakarta text, render the two-stroke Naira. */
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/pocket-naira.woff2') format('woff2'); unicode-range: U+20A6; }
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/pocket-naira.woff2') format('woff2'); unicode-range: U+20A6; }
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/pocket-naira.woff2') format('woff2'); unicode-range: U+20A6; }
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/pocket-naira.woff2') format('woff2'); unicode-range: U+20A6; }
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 800; font-display: swap; src: url('/fonts/pocket-naira.woff2') format('woff2'); unicode-range: U+20A6; }
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 900; font-display: swap; src: url('/fonts/pocket-naira.woff2') format('woff2'); unicode-range: U+20A6; }

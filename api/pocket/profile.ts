@@ -1,3 +1,4 @@
+import { isPocketId } from '../../src/pocket/lib/pocketId.js'
 import type { Request, Response } from 'express'
 import {
   PocketIdUnavailableError,
@@ -74,7 +75,7 @@ export function createPocketProfileHandler(dependencies: PocketProfileHandlerDep
         return fail(400, 'VALIDATION_FAILED', 'A valid Idempotency-Key header is required.', false, 'idempotencyKey')
       }
       if (!isPocketProfileUpsertRequest(req.body)) {
-        return fail(400, 'VALIDATION_FAILED', 'Pocket ID must contain 6 to 12 digits.', false, 'pocketId')
+        return fail(400, 'VALIDATION_FAILED', 'Use 3-20 letters or numbers, or 6-12 digits for a numeric Pocket ID.', false, 'pocketId')
       }
 
       const current = await dependencies.repository.ensure(identity)

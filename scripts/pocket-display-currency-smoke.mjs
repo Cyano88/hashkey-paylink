@@ -30,7 +30,7 @@ for(const currency of ['GHS','KES','USD']) {assert.equal(normalizePocketDisplayC
 const profile={firstName:'',lastName:'',resolvedName:'',nameStatus:'unverified',email:'fixture@example.com',pocketNumber:'12345678',pocketId:'12345678',avatarId:1}
 assert.equal(parsePocketLocalCurrencyProfileRead({ok:true,profile:{...profile,displayCurrency:'GHS'}}).profile.displayCurrency,'USDC')
 assert.equal(parsePocketLocalCurrencyProfileRead({ok:true,profile:{...profile,displayCurrency:'UGX'}}).profile.displayCurrency,'UGX')
-assert.match(localCurrencyAmount(3700,'UGX'),/^UGX /)
+assert.match(localCurrencyAmount(3700,'UGX'),/^USh /)
 const receipt={type:'test',receiptId:'fixture',receiptHash:'',title:'Bank transfer',status:'confirmed',eventId:'fixture',txHash:'',chain:'base',payer:'',memo:'',amount:'1.25',asset:'USDC',createdAt:0,source:'bank-withdraw',amountNgn:'1700',fiatCurrency:'NGN',brandKind:'pocket'}
 const view=paymentReceiptView(receipt)
 assert.equal(view.amount,'1.25 USDC')

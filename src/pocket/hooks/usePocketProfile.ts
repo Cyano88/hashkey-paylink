@@ -88,7 +88,7 @@ export default function usePocketProfile({
       setError(message)
       setLoadError(message)
       setDraft(current => ({ ...current, email: email || current.email }))
-      setEditing(true)
+      setEditing(immediate === undefined || immediate === null)
       setLoaded(true)
     } finally {
       if (isCurrent()) setBusy(false)

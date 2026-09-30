@@ -10,5 +10,5 @@ export function publishPocketDisplayCurrency(email: string, value: unknown) {
 }
 export function subscribePocketDisplayCurrency(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } }
 export function localCurrencyAmount(value: number, currency: 'NGN' | 'UGX') {
-  return currency + ' ' + value.toLocaleString(currency === 'NGN' ? 'en-NG' : 'en-UG', { maximumFractionDigits: 2 })
+  return (currency === 'NGN' ? '\u20a6' : 'USh ') + value.toLocaleString(currency === 'NGN' ? 'en-NG' : 'en-UG', { maximumFractionDigits: 2 })
 }

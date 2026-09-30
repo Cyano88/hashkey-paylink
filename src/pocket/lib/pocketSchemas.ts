@@ -1,3 +1,4 @@
+import { isPocketId } from './pocketId'
 import type { PocketPaymentFunding } from './pocketPaymentFunding'
 import { normalizePayoutAccount, validPayoutCurrency } from './pocketFiatCorridors'
 import { pocketApiUrl } from './pocketRoutes'
@@ -477,7 +478,7 @@ export function isPocketIdempotencyKey(value: unknown): value is string {
 
 export function isPocketProfileUpsertRequest(value: unknown): value is PocketProfileUpsertRequest {
   if (!isRecord(value)) return false
-  if (typeof value.pocketId !== 'string' || !/^\d{6,12}$/.test(value.pocketId)) return false
+  if (typeof value.pocketId !== 'string' || !isPocketId(value.pocketId)) return false
   if (value.avatarId !== undefined && (!Number.isInteger(value.avatarId) || Number(value.avatarId) < 1 || Number(value.avatarId) > 4)) return false
   if (value.displayCurrency !== undefined && !['USDC', 'NGN', 'UGX'].includes(String(value.displayCurrency))) return false
   return value.expectedUpdatedAt === undefined
