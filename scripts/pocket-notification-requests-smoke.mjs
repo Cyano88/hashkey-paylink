@@ -27,6 +27,7 @@ try {
   now += 60_000; mode='ok'; await readPocketRequests('owner-a'); assert.equal(calls,before+1)
   await markPocketRequestsRead('owner-a'); await readPocketRequests('owner-a')
   assert.equal(calls,before+3,'successful mutations invalidate the read cache')
+  now += 4000; mode='rate'; await assert.rejects(markPocketRequestsRead('owner-a'),/Too many/);mode='ok';await readPocketRequests('owner-a')
   const server=readFileSync(new URL('../server.ts',import.meta.url),'utf8')
   assert.match(server,/app\.get\('\/api\/pocket\/requests',\s+readLimiter, pocketRequestsHandler\)/)
   assert.match(server,/app\.all\('\/api\/pocket\/requests',\s+strictLimiter, pocketRequestsHandler\)/)

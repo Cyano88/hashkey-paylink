@@ -28,7 +28,7 @@ async function call(accessToken: string, body?: Record<string, unknown>) {
   const data = await response.json().catch(() => undefined) as { ok?: boolean; request?: PocketRequestItem; requests?: PocketRequestItem[]; unreadCount?: number; route?: PocketPaymentLiquidityCheckpoint } | undefined
   if (!response.ok || !data?.ok) {
     const error = new Error(message(data, 'Requests are temporarily unavailable. Try again shortly.'))
-    if (response.status === 429) {
+    if (response.status === 429 && !body) {
       const value = response.headers.get('Retry-After') || '60'
       const seconds = Number(value)
       const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now()

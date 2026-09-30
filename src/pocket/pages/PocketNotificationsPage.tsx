@@ -1,3 +1,4 @@
+import PocketIncomingRequestSheet from '../components/PocketIncomingRequestSheet'
 import {isIncomingPocketRequest} from '../lib/pocketInboxPolicy'
 import { readPocketNotifications,markPocketNotificationsRead,type PocketNotice } from '../api/pocketNotificationsClient'
 import { pocketNotificationPath } from '../lib/pocketNotificationPath'
@@ -7,7 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import { AlertCircle, Bell, Loader2, Lock, CheckCircle2, MessageCircle, RequestMoney } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
-import { decidePocketRequest, markPocketRequestsRead, POCKET_REQUESTS_UPDATED_EVENT, readPocketRequestInbox, reconcilePocketRequest, type PocketRequestItem } from '../api/pocketRequestsClient'
+import { decidePocketRequest, markPocketRequestsRead, POCKET_REQUESTS_UPDATED_EVENT, readPocketRequestInbox, type PocketRequestItem } from '../api/pocketRequestsClient'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
@@ -20,20 +21,22 @@ export default function PocketNotificationsPage() {
   const [busy, setBusy] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [pullDistance, setPullDistance] = useState(0)
+  const [selectedId,setSelectedId]=useState('')
+  const [actionError,setActionError]=useState('')
+  const loaded=useRef(false)
   const [acting, setActing] = useState('')
   const [error, setError] = useState('')
   const scrollerRef = useRef<HTMLDivElement>(null)
   const pullStartY = useRef<number | null>(null)
   const pullDistanceRef = useRef(0)
   const refreshTriggered = useRef(false)
-  const lastReconcileAt = useRef(0)
   const tokenRef = useRef(getAccessToken)
   tokenRef.current = getAccessToken
   const scope = useRef(0)
   const pendingLoad = useRef<Promise<void> | null>(null)
   useEffect(() => {
-    scope.current += 1; pendingLoad.current = null; lastReconcileAt.current = 0
-    setItems([]); setNotices([]); setError('')
+    scope.current += 1; pendingLoad.current = null; loaded.current = false
+    setItems([]); setNotices([]); setSelectedId(''); setActionError(''); setError('')
     return () => { scope.current += 1; pendingLoad.current = null }
   }, [authenticated, email])
 
@@ -48,23 +51,24 @@ export default function PocketNotificationsPage() {
         const token = await tokenRef.current()
         if (!current()) return
         if (!token) throw new Error('Sign in again to read requests.')
-        const [inbox,money]=await Promise.all([readPocketRequestInbox(token),readPocketNotifications(token)])
+        const [requestsResult,noticeResult]=await Promise.allSettled([readPocketRequestInbox(token),readPocketNotifications(token)])
         if (!current()) return
-        setItems(inbox.requests); setNotices(money.notices); setError('')
-        if(markRead&&money.unreadCount)await markPocketNotificationsRead(token,money.notices.filter(n=>!n.readAt).map(n=>n.eventId)).catch(()=>undefined)
-        // A read-receipt failure must not turn a successfully loaded inbox into an error.
-        if (markRead && inbox.unreadCount > 0) await markPocketRequestsRead(token).catch(() => undefined)
-        if (!current()) return
-        const accepted = inbox.requests.filter(item => item.status === 'accepted').slice(0, 4)
-        if (accepted.length && Date.now() - lastReconcileAt.current >= 30_000) {
-          lastReconcileAt.current = Date.now()
-          const updates = await Promise.all(accepted.map(item => reconcilePocketRequest(token, item.id).catch(() => item)))
-          if (!current()) return
-          const byId = new Map(updates.map(item => [item.id, item]))
-          setItems(inbox.requests.map(item => byId.get(item.id) ?? item))
+        if(requestsResult.status==='fulfilled') {
+          const inbox=requestsResult.value
+          setItems(inbox.requests); loaded.current=true
+          if(markRead&&inbox.unreadCount>0)void markPocketRequestsRead(token).catch(()=>undefined)
         }
+        if(noticeResult.status==='fulfilled') {
+          const notices=noticeResult.value
+          setNotices(notices.notices)
+          if(markRead&&notices.unreadCount>0)void markPocketNotificationsRead(token,notices.notices.filter(n=>!n.readAt).map(n=>n.eventId)).catch(()=>undefined)
+        }
+        const failed=requestsResult.status==='rejected'||noticeResult.status==='rejected'
+        if(failed&&(!loaded.current||markRead))setError('Some notifications could not refresh. Try again.')
+        else if(!failed)setError('')
+
       } catch (reason) {
-        if (current()) setError(reason instanceof Error ? reason.message : 'Could not load requests.')
+        if (current()&&(!loaded.current||markRead)) setError(reason instanceof Error ? reason.message : 'Could not load requests.')
       } finally {
         if (current()) { pendingLoad.current = null; setBusy(false) }
       }
@@ -89,7 +93,7 @@ export default function PocketNotificationsPage() {
     if (!authenticated) return
     const update = () => document.visibilityState === 'visible' ? load() : Promise.resolve()
     const visibility = () => { if (document.visibilityState === 'visible') update() }
-    const interval = window.setInterval(update, 15_000)
+    const interval = window.setInterval(update, 30_000)
     const unregister = registerPocketRefreshHandler(update)
     window.addEventListener(POCKET_REQUESTS_UPDATED_EVENT, update)
     window.addEventListener('focus', update)
@@ -123,19 +127,23 @@ export default function PocketNotificationsPage() {
     else { pullDistanceRef.current = 0; setPullDistance(0) }
   }
 
-  const decide = async (id: string, decision: 'accept' | 'decline') => {
-    setActing(id + decision); setError('')
+  const selected=items.find(item=>item.id===selectedId&&isIncomingPocketRequest(item))
+  const respond = async (decision:'pay'|'decline') => {
+    if(!selected||acting)return
+    const generation=scope.current
+    setActing(selected.id);setActionError('')
     try {
-      const token = await getAccessToken()
-      if (!token) throw new Error('Sign in again to respond.')
-      const next = await decidePocketRequest(token, id, decision)
-      setItems(current => current.map(item => item.id === id ? next : item))
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not respond to this request.') }
-    finally { setActing('') }
-  }
-  const openPayment = (item: PocketRequestItem) => {
-    if (!item.paymentPath) { setError('This request is missing its Pocket payment route. Ask the sender to create it again.'); return }
-    navigate(POCKET_BASE_PATH + item.paymentPath)
+      const token=await tokenRef.current()
+      if(!token)throw Error('Sign in again to respond.')
+      // Pay records acceptance, then opens the existing secured payment flow.
+      const next=selected.status==='pending'?await decidePocketRequest(token,selected.id,decision==='pay'?'accept':'decline'):selected
+      if(generation!==scope.current)return
+      setItems(current=>current.map(item=>item.id===next.id?next:item))
+      if(decision==='decline'){setSelectedId('');return}
+      if(!next.paymentPath?.startsWith('/home/send?request='))throw Error('The payment route is unavailable. Please try again.')
+      setSelectedId('');navigate(POCKET_BASE_PATH+next.paymentPath)
+    } catch(reason) {if(generation===scope.current)setActionError(reason instanceof Error?reason.message:'Could not respond. Try again.')}
+    finally {if(generation===scope.current)setActing('')}
   }
 
   const timeline: Array<{key:string;at:number;notice?:PocketNotice;request?:PocketRequestItem}>=[...notices.map(notice=>({key:'notice:'+notice.id,at:notice.updatedAt,notice})),...items.filter(isIncomingPocketRequest).map(request=>({key:'request:'+request.id,at:request.updatedAt||request.createdAt,request}))].sort((a,b)=>b.at-a.at)
@@ -147,12 +155,12 @@ export default function PocketNotificationsPage() {
         const item=entry.request,notice=entry.notice,Icon=notice?noticeIcon(notice.category):RequestMoney
         const title=notice?.title||item!.title
         const body=notice?.body||`${item!.amount} USDC ${item!.direction==='incoming'?'from '+item!.senderName:'to '+item!.recipientName} \u00b7 ${item!.status==='pending'?'Awaiting response':item!.status}`
-        const open=()=>{if(notice){const path=pocketNotificationPath(notice.path);if(path)navigate(POCKET_BASE_PATH+path)}else if(item?.status==='paid')navigate(POCKET_BASE_PATH+'/activity?receipt='+encodeURIComponent(item.eventId))}
-        return <div key={entry.key}>{(!index||dateLabel(entry.at)!==dateLabel(timeline[index-1].at))&&<p className="pb-2 pt-4 text-[11px] font-semibold text-gray-500">{dateLabel(entry.at)}</p>}<article className="py-3"><button type="button" onClick={open} disabled={Boolean(item&&item.status!=='paid')} className="flex w-full items-start gap-3 text-left"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/[0.04] dark:bg-white/[0.08]"><Icon className="h-4 w-4"/></span><span className="min-w-0 flex-1"><span className="block text-xs font-bold">{title}</span><span className="mt-1 block text-[11px] leading-5 text-gray-500 dark:text-gray-400">{body}</span></span>{notice&&!notice.readAt&&<span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"/>}</button>
-        {item?.direction==='incoming'&&item.status==='pending'&&<div className="ml-12 mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={()=>void decide(item.id,'decline')} disabled={Boolean(acting)} className="min-h-10 rounded-full border border-gray-200 text-xs font-bold dark:border-[#262626]">Decline</button><button type="button" onClick={()=>void decide(item.id,'accept')} disabled={Boolean(acting)} className="pocket-cta-primary">Accept</button></div>}
-        {item?.direction==='incoming'&&item.status==='accepted'&&<button type="button" onClick={()=>openPayment(item)} className="pocket-cta-primary ml-12 mt-3 px-6">Pay request</button>}</article></div>
+        const open=()=>{if(notice){const path=pocketNotificationPath(notice.path);if(path)navigate(POCKET_BASE_PATH+path)}else if(item){setActionError('');setSelectedId(item.id)}}
+        return <div key={entry.key}>{(!index||dateLabel(entry.at)!==dateLabel(timeline[index-1].at))&&<p className="pb-2 pt-4 text-[11px] font-semibold text-gray-500">{dateLabel(entry.at)}</p>}<article className="py-3"><button type="button" onClick={open} className="flex w-full items-start gap-3 text-left"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/[0.04] dark:bg-white/[0.08]"><Icon className="h-4 w-4"/></span><span className="min-w-0 flex-1"><span className="block text-xs font-bold">{title}</span><span className="mt-1 block text-[11px] leading-5 text-gray-500 dark:text-gray-400">{body}</span></span>{notice&&!notice.readAt&&<span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"/>}</button>
+</article></div>
       })}</section>:<section className="mt-20 text-center"><Bell className="mx-auto h-7 w-7 text-gray-300"/><p className="mt-4 text-sm font-black">No notifications yet</p><p className="mt-2 text-xs text-gray-500">Incoming requests and Pocket updates will appear here.</p></section>}
       {error && (items.length > 0 || notices.length > 0) && <p role="alert" className="mt-4 rounded-2xl bg-red-50 p-3 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">Could not refresh notifications. Pull down to try again.</p>}
     </main>
+    {selected&&<PocketIncomingRequestSheet title={selected.title} amount={selected.amount+' USDC'} sender={selected.senderName} canDecline={selected.status==='pending'} busy={Boolean(acting)} error={actionError} onPay={()=>void respond('pay')} onDecline={()=>void respond('decline')} onClose={()=>setSelectedId('')}/>}
   </div>
 }
