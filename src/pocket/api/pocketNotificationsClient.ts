@@ -1,5 +1,6 @@
+import {isPocketInboxNotice,type PocketNoticeCategory} from '../lib/pocketInboxPolicy'
 import {pocketApiUrl} from '../lib/pocketRoutes'
-export type PocketNotice={id:string;eventId:string;title:string;body:string;path:string;createdAt:number;updatedAt:number;readAt?:number}
+export type PocketNotice={category?:PocketNoticeCategory;id:string;eventId:string;title:string;body:string;path:string;createdAt:number;updatedAt:number;readAt?:number}
 type Inbox={notices:PocketNotice[];unreadCount:number}
 const cache=new Map<string,{value?:Inbox;at:number;pending?:Promise<Inbox>}>()
 export async function readPocketNotifications(token:string){
@@ -11,7 +12,7 @@ export async function readPocketNotifications(token:string){
  current.pending=(async()=>{
  const r=await fetch(pocketApiUrl('/api/pocket/notifications'),{headers:{Authorization:'Bearer '+token},signal:AbortSignal.timeout(15000),cache:'no-store'})
  const b=await r.json();if(!r.ok||!b.ok||!Array.isArray(b.notices))throw Error('Notifications could not refresh.')
- const inbox=b as Inbox;current.value=inbox;current.at=Date.now();return inbox
+ const notices=(b.notices as PocketNotice[]).filter(isPocketInboxNotice);const inbox:Inbox={notices,unreadCount:notices.filter(n=>!n.readAt).length};current.value=inbox;current.at=Date.now();return inbox
  })().finally(()=>{current.pending=undefined})
  return current.pending
 }

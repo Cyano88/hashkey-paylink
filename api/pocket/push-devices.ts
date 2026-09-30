@@ -1,3 +1,4 @@
+import {isPocketInboxNotice,type PocketNoticeCategory} from '../../src/pocket/lib/pocketInboxPolicy.js'
 import { savePocketNotice } from './notification-store.js'
 import type { Request, Response } from 'express'
 import { createSign } from 'node:crypto'
@@ -193,8 +194,8 @@ async function sendApplePushWithEnvironmentFallback(
   return sendApplePush('https://api.sandbox.push.apple.com', credentials, deviceToken, eventId, input)
 }
 
-export async function sendPocketPush(ownerId: string, eventId: string, input: { title: string; body: string; path: string; tag?: string; occurredAt?: number }) {
-  if (!eventId.startsWith('request-') && !eventId.startsWith('xstocks:')) await savePocketNotice(ownerId,eventId,input)
+export async function sendPocketPush(ownerId: string, eventId: string, input: { category?: PocketNoticeCategory; title: string; body: string; path: string; tag?: string; occurredAt?: number }) {
+  if (isPocketInboxNotice(input)) await savePocketNotice(ownerId,eventId,input)
   const serviceAccount = firebaseServiceAccount()
   const appleCredentials = applePushCredentials()
   if (!serviceAccount && !appleCredentials) return false

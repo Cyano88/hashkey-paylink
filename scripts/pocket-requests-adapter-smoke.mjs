@@ -56,6 +56,9 @@ try {
   const replay = await call(handler, 'POST', { action: 'create', recipientPocketId: '22222222', eventId, title: 'Dinner', amount: '5', network: 'base' })
   assert.equal(replay.statusCode, 200)
 
+  const outgoingInbox = await call(handler, 'GET')
+  assert.equal(outgoingInbox.body.unreadCount, 0, 'outgoing requests do not light the bell')
+  assert.equal(outgoingInbox.body.requests.length, 1, 'outgoing history is retained')
   identity.current = 'recipient'
   const incoming = await call(handler, 'GET')
   assert.equal(incoming.body.unreadCount, 1)

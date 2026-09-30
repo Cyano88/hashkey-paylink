@@ -120,7 +120,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         void sendPocketPush(decided.senderId, 'request-' + decided.status + ':' + decided.id, {
           title: decided.status === 'accepted' ? 'Request accepted' : 'Request declined',
           body: decided.status === 'accepted' ? 'Your request is ready for payment.' : 'Your request was declined.',
-          path: '/notifications',
+          path: '/activity/collections?kind=requests',
           tag: 'pocket-request:' + decided.id,
         }).catch(() => undefined)
         return res.json({ ok: true, request: publicRequest(decided, identity.userId) })
@@ -193,7 +193,7 @@ export function createPocketRequestsHandler(deps: Dependencies) {
       const requests = await deps.repository.listFor(identity.userId)
       const notifications = requests.map(item => publicRequest(item, identity.userId))
       const lastRead = await deps.repository.lastRead(identity.userId)
-      return res.json({ ok: true, unreadCount: notifications.filter(item => item.updatedAt > lastRead).length, requests: notifications })
+      return res.json({ ok: true, unreadCount: notifications.filter(item => item.direction === 'incoming' && ['pending', 'accepted'].includes(item.status) && item.updatedAt > lastRead).length, requests: notifications })
     } catch (reason) {
       const error = reason as Error & { status?: number }
       return fail(res, error.status && error.status < 500 ? error.status : 503, error.message || 'Pocket requests are temporarily unavailable.')

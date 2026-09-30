@@ -9,10 +9,10 @@ try{
  page.on('pageerror',e=>errors.push(e.message))
  await page.route('**/*',async route=>{
   if(route.request().resourceType()==='document')return route.fulfill({contentType:'text/html',body:'<div id="root"></div>'})
-  if(route.request().url().includes('/api/pocket/notifications'))return route.fulfill({json:{ok:true,unreadCount:0,notices:[]}})
+  if(route.request().url().includes('/api/pocket/notifications'))return route.fulfill({json:{ok:true,unreadCount:0,notices:[{id:'old-payment',title:'Bank transfer successful',body:'Legacy payment',eventId:'payment:old'}]}})
   if(route.request().method()==='POST'){posts++;return route.fulfill({status:429,json:{ok:false,error:'Too many requests.'},headers:{'Retry-After':'60'}})}
   gets++
-  await route.fulfill({json:{ok:true,unreadCount:mode==='unread'?1:0,requests:mode==='empty'?[]:[{id:'fixture',title:'Fixture notification',direction:'incoming',senderName:'Fixture',amount:'1',status:'pending',createdAt:1}]}})
+  await route.fulfill({json:{ok:true,unreadCount:mode==='unread'?1:0,requests:mode==='empty'?[]:[{id:'fixture',title:'Fixture notification',direction:'incoming',senderName:'Fixture',amount:'1',status:'pending',createdAt:1},{id:'outgoing',title:'Outgoing hidden',direction:'outgoing',status:'pending',createdAt:1},{id:'paid',title:'Paid hidden',direction:'incoming',status:'paid',createdAt:1}]}})
  })
  await page.goto('https://fixture.invalid');await page.addScriptTag({content:bundle.outputFiles[0].text})
  await page.getByText('No notifications yet',{exact:true}).waitFor();assert.equal(gets,1);assert.equal(posts,0)
@@ -22,5 +22,5 @@ try{
  await page.getByText('Fixture notification',{exact:true}).waitFor();await page.waitForTimeout(300)
  assert.equal(gets,2);assert.equal(posts,1);assert.equal(await page.getByText('Notifications could not load',{exact:true}).count(),0,'mark-read 429 must not hide loaded items')
  await page.evaluate(()=>{for(let i=0;i<10;i++)window.dispatchEvent(new Event('focus'))});await page.waitForTimeout(200);assert.equal(gets,2,'server cooldown is respected')
- assert.deepEqual(errors,[]);console.log('PASS notification StrictMode, render/event deduplication, empty inbox without writes, account switch and read-receipt failure.')
+ assert.equal(await page.getByText('Bank transfer successful',{exact:true}).count(),0);assert.equal(await page.getByText('Outgoing hidden',{exact:true}).count(),0);assert.equal(await page.getByText('Paid hidden',{exact:true}).count(),0);assert.deepEqual(errors,[]);console.log('PASS notification StrictMode, render/event deduplication, empty inbox without writes, account switch and read-receipt failure.')
 }finally{await browser.close()}

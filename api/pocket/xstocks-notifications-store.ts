@@ -93,8 +93,9 @@ async function runStockNotifications(){
 export async function deliverStockNotices(){
  if(!pocketPushConfigured())return
  const pushOwners=new Set(await listPocketPushOwners())
- const pending=Object.values((await readStockNotices()).notices).filter(n=>!n.delivered&&pushOwners.has(n.owner)).sort((a,b)=>b.at-a.at).slice(0,100)
- for(const n of pending){const delivered=await sendPocketPush(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await mutateStockNotices(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
+ const snapshot=await readStockNotices()
+ const pending=Object.values(snapshot.notices).filter(n=>!n.delivered&&pushOwners.has(n.owner)).sort((a,b)=>b.at-a.at).slice(0,100)
+ for(const n of pending){const delivered=await sendPocketPush(n.owner,'xstocks:'+n.id,{title:n.title,body:n.body,path:n.hash?'/xstocks/activity?receipt='+encodeURIComponent(n.requestId||n.hash):n.requestId&&snapshot.requests[n.requestId]?.payer!==n.owner?'/xstocks/request':'/xstocks/notifications',tag:'pocket-xstocks:'+n.id});if(delivered)await mutateStockNotices(s=>{if(s.notices[n.id])s.notices[n.id].delivered=true})}
 }
 
 const activityAttempts=new Map<string,number>()

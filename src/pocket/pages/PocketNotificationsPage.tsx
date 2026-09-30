@@ -1,16 +1,17 @@
+import {isIncomingPocketRequest} from '../lib/pocketInboxPolicy'
 import { readPocketNotifications,markPocketNotificationsRead,type PocketNotice } from '../api/pocketNotificationsClient'
 import { pocketNotificationPath } from '../lib/pocketNotificationPath'
 import { PocketNotificationsSkeleton } from '../components/PocketContentSkeletons'
 import { useCallback, useEffect, useRef, useState, type TouchEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PocketFlowHeader from '../components/PocketFlowHeader'
-import { AlertCircle, Bell, Check, Loader2, XCircle, Landmark, Undo2, Phone, Wifi, Lightbulb, Tv, QrCode, ArrowLeftRight, Receipt, RequestMoney } from '../components/PocketIcons'
+import { AlertCircle, Bell, Loader2, Lock, CheckCircle2, MessageCircle, RequestMoney } from '../components/PocketIcons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { decidePocketRequest, markPocketRequestsRead, POCKET_REQUESTS_UPDATED_EVENT, readPocketRequestInbox, reconcilePocketRequest, type PocketRequestItem } from '../api/pocketRequestsClient'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 
-function noticeIcon(title:string){return /refund/i.test(title)?Undo2:/bank transfer/i.test(title)?Landmark:/airtime/i.test(title)?Phone:/data/i.test(title)?Wifi:/electricity/i.test(title)?Lightbulb:/TV/.test(title)?Tv:/XPay/.test(title)?QrCode:/move/.test(title)?ArrowLeftRight:Receipt}
+function noticeIcon(category:PocketNotice['category']){return category==='security'?Lock:category==='verification'?CheckCircle2:category==='support'?MessageCircle:Bell}
 export default function PocketNotificationsPage() {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
@@ -137,20 +138,20 @@ export default function PocketNotificationsPage() {
     navigate(POCKET_BASE_PATH + item.paymentPath)
   }
 
-  const timeline: Array<{key:string;at:number;notice?:PocketNotice;request?:PocketRequestItem}>=[...notices.map(notice=>({key:'notice:'+notice.id,at:notice.updatedAt,notice})),...items.filter(item=>item.status!=='cancelled').map(request=>({key:'request:'+request.id,at:request.updatedAt||request.createdAt,request}))].sort((a,b)=>b.at-a.at)
+  const timeline: Array<{key:string;at:number;notice?:PocketNotice;request?:PocketRequestItem}>=[...notices.map(notice=>({key:'notice:'+notice.id,at:notice.updatedAt,notice})),...items.filter(isIncomingPocketRequest).map(request=>({key:'request:'+request.id,at:request.updatedAt||request.createdAt,request}))].sort((a,b)=>b.at-a.at)
   const dateLabel=(at:number)=>new Date(at).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})
   return <div ref={scrollerRef} onTouchStart={startPull} onTouchMove={movePull} onTouchEnd={finishPull} onTouchCancel={() => { pullStartY.current = null; if (!refreshing) { pullDistanceRef.current = 0; setPullDistance(0) } }} className="fixed inset-0 z-[45] overflow-y-auto overscroll-y-contain bg-[#F5F5F7] text-gray-950 dark:bg-black dark:text-white">
     <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-[max(.5rem,var(--pocket-safe-top))] z-[60] flex justify-center transition-opacity duration-150" style={{ opacity: pullDistance > 4 || refreshing ? 1 : 0, transform: `translateY(${Math.max(0, pullDistance - 30)}px)` }}><span className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200/70 dark:bg-[#121212] dark:text-gray-300 dark:ring-white/10"><Loader2 className="h-6 w-6 animate-spin" style={{ animationPlayState: refreshing ? 'running' : 'paused' }} /></span></div>
     <main className="mx-auto min-h-full w-full max-w-[462px] px-4 pb-[max(2rem,var(--pocket-safe-bottom))] pt-[calc(var(--pocket-safe-top)+1rem)]"><PocketFlowHeader title="Notifications" onBack={() => navigate(POCKET_BASE_PATH + POCKET_ROUTES.home)} />
       {busy&&!timeline.length?<PocketNotificationsSkeleton/>:error&&!timeline.length?<section className="mt-20 text-center"><AlertCircle className="mx-auto h-7 w-7 text-gray-300"/><p className="mt-4 text-sm font-bold">Notifications could not load</p><p className="mt-2 text-xs text-gray-500">{error}</p><button type="button" onClick={()=>void load({showBusy:true,markRead:true})} className="pocket-cta-primary mt-5 px-6">Try again</button></section>:timeline.length?<section className="mt-5">{timeline.map((entry,index)=>{
-        const item=entry.request,notice=entry.notice,Icon=notice?noticeIcon(notice.title):RequestMoney
+        const item=entry.request,notice=entry.notice,Icon=notice?noticeIcon(notice.category):RequestMoney
         const title=notice?.title||item!.title
         const body=notice?.body||`${item!.amount} USDC ${item!.direction==='incoming'?'from '+item!.senderName:'to '+item!.recipientName} \u00b7 ${item!.status==='pending'?'Awaiting response':item!.status}`
         const open=()=>{if(notice){const path=pocketNotificationPath(notice.path);if(path)navigate(POCKET_BASE_PATH+path)}else if(item?.status==='paid')navigate(POCKET_BASE_PATH+'/activity?receipt='+encodeURIComponent(item.eventId))}
         return <div key={entry.key}>{(!index||dateLabel(entry.at)!==dateLabel(timeline[index-1].at))&&<p className="pb-2 pt-4 text-[11px] font-semibold text-gray-500">{dateLabel(entry.at)}</p>}<article className="py-3"><button type="button" onClick={open} disabled={Boolean(item&&item.status!=='paid')} className="flex w-full items-start gap-3 text-left"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/[0.04] dark:bg-white/[0.08]"><Icon className="h-4 w-4"/></span><span className="min-w-0 flex-1"><span className="block text-xs font-bold">{title}</span><span className="mt-1 block text-[11px] leading-5 text-gray-500 dark:text-gray-400">{body}</span></span>{notice&&!notice.readAt&&<span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500"/>}</button>
         {item?.direction==='incoming'&&item.status==='pending'&&<div className="ml-12 mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={()=>void decide(item.id,'decline')} disabled={Boolean(acting)} className="min-h-10 rounded-full border border-gray-200 text-xs font-bold dark:border-[#262626]">Decline</button><button type="button" onClick={()=>void decide(item.id,'accept')} disabled={Boolean(acting)} className="pocket-cta-primary">Accept</button></div>}
         {item?.direction==='incoming'&&item.status==='accepted'&&<button type="button" onClick={()=>openPayment(item)} className="pocket-cta-primary ml-12 mt-3 px-6">Pay request</button>}</article></div>
-      })}</section>:<section className="mt-20 text-center"><Bell className="mx-auto h-7 w-7 text-gray-300"/><p className="mt-4 text-sm font-black">No notifications yet</p><p className="mt-2 text-xs text-gray-500">Payments, requests and Pocket updates will appear here.</p></section>}
+      })}</section>:<section className="mt-20 text-center"><Bell className="mx-auto h-7 w-7 text-gray-300"/><p className="mt-4 text-sm font-black">No notifications yet</p><p className="mt-2 text-xs text-gray-500">Incoming requests and Pocket updates will appear here.</p></section>}
       {error && (items.length > 0 || notices.length > 0) && <p role="alert" className="mt-4 rounded-2xl bg-red-50 p-3 text-xs font-semibold text-red-700 dark:bg-red-400/10 dark:text-red-200">Could not refresh notifications. Pull down to try again.</p>}
     </main>
   </div>

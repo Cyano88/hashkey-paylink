@@ -13,3 +13,6 @@ let items=upsertPocketNotice([],n.eventId,n,3000);items[0].readAt=3001;assert.eq
 const refund=notice({...row,bankSettlementStatus:'refunded',statusUpdatedAt:5000});items=upsertPocketNotice(items,refund.eventId,refund,5001);assert.equal(items.length,1);assert.equal(items[0].readAt,undefined);assert.equal(upsertPocketNotice(items,n.eventId,n,6000),items,'late delivery cannot overwrite refund')
 assert.equal(pocketNotificationPath(n.path),n.path);for(const path of ['https://evil.test/activity','//evil.test/activity','/activity/../../evil','/admin','/\\evil.test'])assert.equal(pocketNotificationPath(path),null)
 console.log('PASS: NGN/UGX/bill wording, actual provider settlement, silent funding, standalone moves, versioned unread replacement and safe receipt links')
+
+assert.equal(pocketNotificationPath('/activity/collections?kind=requests'),'/activity/collections?kind=requests')
+assert.equal(pocketNotificationPath('/activity/collections?kind=anything'),null)
