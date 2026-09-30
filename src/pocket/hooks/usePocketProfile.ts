@@ -20,6 +20,13 @@ const emptyProfile: LocalCurrencyProfile = {
   displayCurrency: 'USDC',
 }
 const pocketProfileCache = new Map<string, LocalCurrencyProfile | null>()
+const profileListeners = new Map<string, Set<() => void>>()
+const profileSaveVersions = new Map<string, number>()
+function publishProfile(email: string, profile: LocalCurrencyProfile | null, saved = false) {
+  pocketProfileCache.set(email, profile)
+  if (saved) profileSaveVersions.set(email, (profileSaveVersions.get(email) ?? 0) + 1)
+  profileListeners.get(email)?.forEach(notify => notify())
+}
 
 export default function usePocketProfile({
   authenticated,
@@ -50,6 +57,7 @@ export default function usePocketProfile({
       setLoadError('')
       return
     }
+    const saveVersion = profileSaveVersions.get(email) ?? 0
     const immediate = pocketProfileCache.get(email)
     if (immediate !== undefined) {
       setProfile(immediate)
@@ -65,8 +73,10 @@ export default function usePocketProfile({
       if (!token) throw new Error('Sign in again to save local currency profile.')
       const data = await readPocketLocalCurrencyProfile({ accessToken: token })
       if (!isCurrent()) return
+      // A GET started before a save must not restore the previous ID.
+      if ((profileSaveVersions.get(email) ?? 0) !== saveVersion) return
       const nextProfile = data.profile ?? null
-      pocketProfileCache.set(email, nextProfile)
+      publishProfile(email, nextProfile)
       publishPocketDisplayCurrency(email, nextProfile?.displayCurrency)
       setProfile(nextProfile)
       setDraft({
@@ -110,7 +120,7 @@ export default function usePocketProfile({
       })
       setProfile(data.profile)
       setDraft(data.profile)
-      pocketProfileCache.set(email, data.profile)
+      publishProfile(email, data.profile, true)
       publishPocketDisplayCurrency(email, data.profile.displayCurrency)
       setEditing(false)
       return data.profile
@@ -138,7 +148,7 @@ export default function usePocketProfile({
       })
       setProfile(data.profile)
       setDraft(data.profile)
-      pocketProfileCache.set(email, data.profile)
+      publishProfile(email, data.profile, true)
       publishPocketDisplayCurrency(email, data.profile.displayCurrency)
       return data.profile
     } catch (reason) {
@@ -162,6 +172,17 @@ export default function usePocketProfile({
     setError('')
     setEditing(false)
   }, [profile])
+
+  useEffect(() => {
+    if (!authenticated || !email) return
+    const notify = () => {
+      setProfile(pocketProfileCache.get(email) ?? null)
+      setLoaded(true)
+    }
+    const listeners = profileListeners.get(email) ?? new Set<() => void>()
+    listeners.add(notify); profileListeners.set(email, listeners)
+    return () => { listeners.delete(notify); if (!listeners.size) profileListeners.delete(email) }
+  }, [authenticated, email])
 
   useEffect(() => {
     let current = true
