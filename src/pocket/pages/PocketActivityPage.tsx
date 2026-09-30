@@ -1,6 +1,6 @@
 import PocketCollectionsPage from './PocketCollectionsPage'
 import { requestActivityRows } from '../lib/pocketRequestActivity'
-import PocketResourceActivityPanel from '../features/activity/PocketResourceActivityPanel'
+import PocketRequestHistory from '../features/activity/PocketRequestHistory'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -112,7 +112,7 @@ function PocketTransactionsPage({ view }: { view: PocketActivityView }) {
     <PocketRouteShell active="activity" onSelect={selectNav}>
       {view === 'collections' ? <>
         <PocketFlowHeader centered title="Requests" onBack={() => location.search.includes('collection=') ? navigate(POCKET_BASE_PATH + '/activity/collections?kind=requests', {replace:true}) : navigate(POCKET_BASE_PATH + POCKET_ROUTES.usdc + '?flow=request')} />
-        <PocketResourceActivityPanel view="collections" rows={rowsWithRequests} merchants={activity.merchants} collections={[]} requests={requestsScope === requestScope ? requests : []} busy={activity.busy || requestsBusy} error={activity.error} requestsError={requestsError} />
+        <PocketRequestHistory key={requestScope} rows={rowsWithRequests} requests={requestsScope === requestScope ? requests : []} busy={requestsBusy} error={requestsError} onRefresh={refreshRequests} />
       </> : <PocketActivityPanel
         view={view}
         rows={rowsWithRequests}

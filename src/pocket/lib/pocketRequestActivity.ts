@@ -5,7 +5,7 @@ export function requestActivityRows(rows: PocketActivityRow[], requests: PocketR
   const paidHashes = new Set(requests.filter(request => request.status === 'paid' && request.transactionHash).map(request => request.transactionHash.toLowerCase()))
   const requestIds = new Set(requests.flatMap(request => [request.id, request.eventId]))
   const activityRows = rows.filter(row => !(row.source === 'request' && requestIds.has(row.eventId)) && (!row.txHash || !paidHashes.has(row.txHash.toLowerCase())))
-  const requestRows = requests.map<PocketActivityRow>(request => {
+  const requestRows = requests.filter(request => request.status !== 'cancelled').map<PocketActivityRow>(request => {
     const funding = rows.find(row => row.source === 'request' && (row.eventId === request.id || row.eventId === request.eventId))
     return ({
     ...(funding || {}),
@@ -13,10 +13,10 @@ export function requestActivityRows(rows: PocketActivityRow[], requests: PocketR
     txHash: request.transactionHash || funding?.txHash || '',
     fundingOnly: request.status === 'paid' ? false : funding?.fundingOnly,
     chain: request.network,
-    payer: request.direction === 'incoming' ? request.senderName : request.recipientName,
+    payer: request.recipientName,
     memo: request.title,
     amount: request.amount,
-    ts: request.createdAt,
+    ts: request.status === 'paid' ? request.updatedAt || request.createdAt : request.createdAt,
     source: 'request',
     settlementType: 'pocket_request',
     activityLabel: request.title,

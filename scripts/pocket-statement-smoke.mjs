@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { pocketStatementCsv } from '../src/pocket/lib/pocketStatement.ts'
+import { pocketStatementCsv, statementRows } from '../src/pocket/lib/pocketStatement.ts'
 const base={eventId:'fixture',txHash:'',chain:'base',payer:'',memo:'',amount:'2.25',ts:Date.UTC(2026,8,21),source:'wallet-withdrawal',direction:'out',paycrestStatus:'pending'}
 const csv=pocketStatementCsv([{...base,activityLabel:'=HYPERLINK("example")'}, {...base,eventId:'hidden',source:'pos',direction:'in'}, {...base,activityLabel:'Comma, quote " and\nnewline',paycrestStatus:'failed'}])
 assert.ok(csv.startsWith('\uFEFF'))
@@ -9,3 +9,11 @@ assert.ok(!csv.includes('"hidden"'))
 assert.ok(csv.includes('"pending"')&&csv.includes('"failed"'))
 assert.ok(csv.includes('"2.25"'))
 console.log('PASS CSV escaping, formula protection, status preservation and incoming POS exclusion.')
+
+const dated=day=>({...base,ts:new Date(2026,8,day,23,59,59).getTime()})
+assert.equal(statementRows([dated(20),dated(21),dated(22)],{from:'2026-09-21',to:'2026-09-21'}).length,1)
+assert.throws(()=>statementRows([],{from:'2026-09-22',to:'2026-09-21'}))
+const isolated=pocketStatementCsv([{...base,eventId:'collection-private',source:'collection',txHash:'same'}, {...base,eventId:'raw-private',source:'wallet-deposit',txHash:'same'},base])
+assert.ok(!isolated.includes('collection-private')&&!isolated.includes('raw-private'))
+assert.ok(pocketStatementCsv([{...base,amountNgn:'20',fiatCurrency:'UGX'}]).includes('UGX'))
+console.log('PASS inclusive local-date boundaries, reversed range validation, collection isolation and local currencies')

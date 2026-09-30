@@ -64,7 +64,7 @@ export function pocketReceiptKind(row: PocketActivityRow): PocketReceiptKind | n
   if (source === 'purchase' || source === 'app-pay' || settlement === 'app_pay' || settlement === 'hosted_checkout' || settlement === 'service_funding') return 'app_purchase'
   if (source === 'wallet-deposit') return 'money_in'
   if (source === 'collection') return 'money_in'
-  if (source === 'request' && (row.txHash || ['paid', 'processing', 'submitted', 'failed'].includes(String(row.paycrestStatus)))) return row.direction === 'in' ? 'money_in' : 'money_out'
+  if (source === 'request') return row.direction === 'in' ? 'money_in' : 'money_out'
   if (source === 'wallet-withdrawal') return 'money_out'
   if (source === 'bank-withdraw') return 'money_out'
   if (source === 'bank-send' || source === 'bank-receive' || source === 'ngpos' || source === 'pos') return 'money_in'
@@ -81,6 +81,7 @@ export function pocketReceiptAvailability(row: PocketActivityRow): PocketReceipt
   if (kind === 'money_out' && source === 'wallet-withdrawal' && !String(row.recipient || '').trim()) return 'none'
   if (kind === 'money_in' && source === 'wallet-deposit' && row.chain === 'solana' && (!row.payer || row.payer === 'Solana wallet')) return 'none'
   const status = pocketActivityStatus(row)
+  if (source === 'request' && ['awaiting response', 'accepted', 'declined', 'cancelled'].includes(status)) return 'pending'
   if (FINAL_STATUSES.has(status)) return 'ready'
   if (PENDING_STATUSES.has(status) || status === 'reversing' || ['failed', 'cancelled', 'canceled', 'rejected', 'expired'].includes(status)) return 'pending'
   return 'none'
@@ -93,7 +94,7 @@ export function pocketBillTitle(category?: string): string {
 export function pocketMovementTitle(row: PocketActivityRow): string {
   const kind = pocketReceiptKind(row)
   if (normalizedSource(row) === 'xpay' && row.direction === 'in') return 'Incoming'
-  if (normalizedSource(row) === 'request' && !kind) return 'USDC request'
+  if (normalizedSource(row) === 'request' && ['pending', 'awaiting response', 'accepted', 'declined', 'cancelled'].includes(pocketActivityStatus(row))) return 'USDC request'
   if (normalizedSource(row) === 'request' || normalizedSource(row) === 'collection') return 'Request payment'
   if (normalizedSource(row).startsWith('bank-')) return 'Bank transfer'
   if (kind === 'bill_purchase') return pocketBillTitle(row.billCategory)
@@ -142,7 +143,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
     destination,
     targetLabel: kind === 'bill_purchase' ? category === 'electricity' ? 'Meter Number' : category === 'tv' ? 'Smartcard Number' : 'Phone Number' : undefined,
     targetValue: kind === 'bill_purchase' ? row.billTarget || row.contextLabel || '-' : undefined,
-    narration: row.memo,
+    narration: source === 'request' && ['pending', 'awaiting response', 'accepted', 'declined', 'cancelled'].includes(pocketActivityStatus(row)) ? 'No payment made.' : row.memo,
     referenceId: reference,
     billToken: kind === 'bill_purchase' ? row.billToken : undefined,
     brandName: 'Pocket',

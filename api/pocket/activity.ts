@@ -1,7 +1,7 @@
 import { groupPocketPaymentFunding } from '../../src/pocket/lib/pocketPaymentFunding.js'
 import { mergePocketActivityRows } from '../../src/pocket/lib/pocketActivitySnapshot.js'
 import {readXPayConversionHashes} from './xpay-bank-store.js'
-import { isIncomingPosPayment } from '../../src/pocket/lib/pocketPurchaseKind.js'
+import { isIncomingPosPayment, personalPocketActivity } from '../../src/pocket/lib/pocketPurchaseKind.js'
 import { createDurablePocketActivityHandler } from './activity-feed.js'
 import type { Request, Response } from 'express'
 import { listNgPosHistoryForOwner, listNgPosResourcesForOwner } from '../ng-pos.js'
@@ -306,7 +306,7 @@ async function readActivitySnapshot(dependencies: PocketActivityHandlerDependenc
       candidate.source === row.source && (!['wallet-deposit','wallet-withdrawal'].includes(row.source || '') || candidate.eventId === row.eventId) || candidate.source === 'wallet-bridge' || row.source === 'wallet-bridge'
     )) === index)
     .sort((a, b) => b.ts - a.ts)
-  const payments = options.recent ? allPayments.filter(row => !isIncomingPosPayment(row)).slice(0, options.limit) : allPayments
+  const payments = options.recent ? personalPocketActivity(allPayments).slice(0, options.limit) : allPayments
   return {
     ok: true,
     payments,

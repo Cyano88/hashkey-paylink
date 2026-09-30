@@ -107,6 +107,10 @@ export function createPocketRequestsHandler(deps: Dependencies) {
         }).catch(() => undefined)
         return res.status(saved.replayed ? 200 : 201).json({ ok: true, request: publicRequest(saved.request, identity.userId) })
       }
+      if (req.method === 'POST' && req.body?.action === 'cancel') {
+        const request = await deps.repository.cancel(identity.userId, req.body?.id)
+        return res.json({ ok: true, request: publicRequest(request, identity.userId) })
+      }
       if (req.method === 'POST' && req.body?.action === 'mark-read') {
         await deps.repository.markRead(identity.userId)
         return res.json({ ok: true })

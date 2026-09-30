@@ -494,7 +494,7 @@ function drawContainedImage(ctx: CanvasRenderingContext2D, image: HTMLImageEleme
   ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight)
 }
 
-function drawPocketMark(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
+export function drawPocketMark(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
   ctx.save()
   ctx.beginPath()
   ctx.arc(x + size / 2, y + size / 2, size * 0.40625, 0, Math.PI * 2)

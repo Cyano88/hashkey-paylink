@@ -1,5 +1,4 @@
-import { pocketActivityAmount } from '../lib/pocketActivityPresentation'
-import { pocketActivityIcon, pocketActivityShortDate } from '../components/pocketActivityIcon'
+import PocketActivityPanel from '../features/activity/PocketActivityPanel'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { QRCodeCanvas } from 'qrcode.react'
@@ -8,15 +7,13 @@ import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketBottomSheet from '../components/PocketBottomSheet'
 import PocketRecentActivitySkeleton from '../components/PocketRecentActivitySkeleton'
-import PocketActivityReceipt from '../components/PocketActivityReceipt'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import { POCKET_BASE_PATH, POCKET_ROUTES } from '../lib/pocketRoutes'
 import { registerPocketRefreshHandler } from '../lib/pocketRefresh'
 import { requestPocketPaymentApproval, takePocketPaymentApproval } from '../lib/pocketPaymentApproval'
-import { collectionPayments, downloadCollectionStatement, type CollectionRecord } from '../lib/pocketCollectionStatement'
+import { collectionPayments, type CollectionRecord } from '../lib/pocketCollectionStatement'
 import { downloadPocketQr } from '../lib/pocketQrDownload'
 import { copyToClipboard } from '../../lib/utils'
-import { pocketActivityStatus } from '../lib/pocketReceipt'
 import type { PocketActivityRow } from '../models/pocketActivity'
 
 const iconButton='flex h-11 w-11 shrink-0 items-center justify-center rounded-full'
@@ -26,8 +23,7 @@ export default function PocketCollectionsPage() {
  const {authenticated,email,getAccessToken}=usePocketIdentity()
  const [data,setData]=useState<{scope:string;links:CollectionRecord[];payments:PocketActivityRow[]}>({scope:'',links:[],payments:[]})
  const [busy,setBusy]=useState(true),[error,setError]=useState(''),[actionBusy,setActionBusy]=useState(false)
- const [copied,setCopied]=useState(''),[qr,setQr]=useState<CollectionRecord|null>(null),[sheet,setSheet]=useState<'export'|'delete'|null>(null)
- const [receipt,setReceipt]=useState<PocketActivityRow|null>(null)
+ const [copied,setCopied]=useState(''),[qr,setQr]=useState<CollectionRecord|null>(null),[sheet,setSheet]=useState<'delete'|null>(null)
  const qrRoot=useRef<HTMLDivElement>(null),sequence=useRef(0),inflight=useRef(false)
  const scope=authenticated?email.trim().toLowerCase():''
  const scopeRef=useRef(scope);scopeRef.current=scope
@@ -47,7 +43,7 @@ export default function PocketCollectionsPage() {
  const links=data.scope===scope?data.links:[],rows=data.scope===scope?data.payments:[]
  const selected=links.find(link=>link.eventId===params.get('collection'))
  const payments=selected?collectionPayments(selected,rows):[]
- useEffect(()=>{setReceipt(null);setSheet(null);setQr(null)},[params.get('collection'),scope])
+ useEffect(()=>{setSheet(null);setQr(null)},[params.get('collection'),scope])
  const act=async(fn:()=>Promise<void>)=>{
   if(inflight.current)return
   inflight.current=true;setActionBusy(true);setError('')
@@ -73,19 +69,16 @@ export default function PocketCollectionsPage() {
   navigate(historyPath,{replace:true})
  })
  return <PocketRouteShell active="home" onSelect={tab=>navigate(POCKET_BASE_PATH+(tab==='home'?'':tab==='profile'?'/profile':'/'+tab))} scrollKey={selected?.eventId||'collections'}>
-  <PocketFlowHeader centered title={selected?'Payment history':'Collections'} onBack={()=>navigate(params.has('collection')?historyPath:POCKET_BASE_PATH+POCKET_ROUTES.usdc+'?flow=collection')} rightAction={selected?<button type="button" aria-label="Download collection statement" disabled={busy||actionBusy} className={iconButton} onClick={()=>setSheet('export')}><ArrowDownTrayIcon className="h-5 w-5" /></button>:<button type="button" aria-label="Create collection" className={iconButton} onClick={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.usdc+'?flow=collection')}><PlusIcon className="h-5 w-5" /></button>} />
+  {!selected&&<PocketFlowHeader centered title="Collections" onBack={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.usdc+'?flow=collection')} rightAction={<button type="button" aria-label="Create collection" className={iconButton} onClick={()=>navigate(POCKET_BASE_PATH+POCKET_ROUTES.usdc+'?flow=collection')}><PlusIcon className="h-5 w-5"/></button>}/>}
   {error&&<div role="alert" className="text-sm text-red-500">{error}<button type="button" disabled={busy||actionBusy} onClick={()=>void refresh()} className="ml-2 underline">Try again</button></div>}
   {selected?<>
-   <div className="flex items-center gap-3 py-3"><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-bold">{selected.title}</h2><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{selected.deletedAt?'Closed collection':selected.kind==='bank'?'Bank collection':'USDC collection'}</p></div>{!selected.deletedAt&&<button type="button" aria-label="Delete collection" disabled={actionBusy} onClick={()=>setSheet('delete')} className={iconButton}><TrashIcon className="h-5 w-5" /></button>}</div>
-   <div>{payments.map((row,index)=>{const Icon=pocketActivityIcon(row);return <button key={row.eventId+'-'+row.txHash+'-'+index} type="button" onClick={()=>setReceipt(row)} className="flex w-full items-center gap-3 py-4 text-left"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-[#121212] dark:text-gray-200"><Icon className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{row.payer||'Payment'}</span><span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{pocketActivityShortDate(row.ts)}</span></span><span className="shrink-0 text-right"><span className="block text-xs font-semibold">{pocketActivityAmount(row)}</span>{row.amountNgn&&<span className="mt-1 block text-[10px] text-gray-500 dark:text-gray-400">{row.fiatCurrency||'NGN'} {Number(row.amountNgn).toLocaleString()}</span>}<span className="mt-1 block text-[10px] capitalize text-gray-500 dark:text-gray-400">{pocketActivityStatus(row)}</span></span></button>})}</div>
-   {!payments.length&&<p className="py-12 text-center text-sm text-gray-500">No payments yet.</p>}
+   <PocketActivityPanel key={selected.eventId} collectionId={selected.eventId} collectionTitle={selected.title} view="all" rows={payments} authenticated={authenticated} busy={busy} error={error} onRefund={async()=>''} renderHeader={actions=><><PocketFlowHeader centered title="Payment history" onBack={()=>navigate(historyPath)} rightAction={actions}/><div className="flex items-center gap-3 py-3"><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-bold">{selected.title}</h2><p className="mt-1 text-xs text-gray-500">{selected.deletedAt?'Closed collection':selected.kind==='bank'?'Bank collection':'USDC collection'}</p></div>{!selected.deletedAt&&<button type="button" aria-label="Delete collection" disabled={actionBusy} onClick={()=>setSheet('delete')} className={iconButton}><TrashIcon className="h-5 w-5"/></button>}</div></>}/>
   </>:busy&&data.scope!==scope?<PocketRecentActivitySkeleton />:params.has('collection')?<p className="py-12 text-center text-sm text-gray-500">Collection not found.</p>:<>
    <div>{links.filter(link=>!link.deletedAt).sort((a,b)=>b.createdAt-a.createdAt).map(link=><div key={link.eventId} className="flex items-center py-2.5"><button type="button" className="flex min-w-0 flex-1 items-center gap-3 py-2 text-left" onClick={()=>navigate(historyPath+'&collection='+encodeURIComponent(link.eventId))}><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 dark:bg-[#0d0d0d]"><RectangleStackIcon className="h-5 w-5" /></span><span className="min-w-0"><span className="block truncate text-sm font-semibold">{link.title}</span><span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{link.kind==='bank'?'Bank collection':'USDC collection'}</span></span></button><button type="button" aria-label={'Download QR for '+link.title} disabled={actionBusy||!!qr} className={iconButton} onClick={()=>setQr(link)}><ArrowDownTrayIcon className="h-5 w-5" /></button><button type="button" aria-label={'Copy '+link.title+' link'} disabled={actionBusy} className={iconButton} onClick={()=>void act(async()=>{await copyToClipboard(link.paymentUrl);setCopied(link.eventId);setTimeout(()=>setCopied(''),1800)})}>{copied===link.eventId?<CheckIcon className="h-5 w-5" />:<ClipboardDocumentIcon className="h-5 w-5" />}</button></div>)}</div>
    {!links.some(link=>!link.deletedAt)&&!busy&&<p className="py-12 text-center text-sm text-gray-500">No active collections.</p>}
   </>}
   {qr&&<div ref={qrRoot} className="hidden" aria-hidden="true"><QRCodeCanvas value={qr.paymentUrl} size={1024} marginSize={4} level="M" /></div>}
-  {receipt&&<PocketActivityReceipt row={payments.find(row=>row.eventId===receipt.eventId&&row.txHash===receipt.txHash)||receipt} onClose={()=>setReceipt(null)} />}
-  {sheet==='export'&&selected&&<PocketBottomSheet title="Download statement" onClose={()=>setSheet(null)}><h2 className="mb-3 text-base font-bold">Download statement</h2>{(['csv','pdf'] as const).map(format=><button type="button" key={format} disabled={actionBusy} className="flex min-h-14 w-full items-center gap-3 text-sm font-semibold" onClick={()=>void act(async()=>{await downloadCollectionStatement(selected,rows,format);setSheet(null)})}><ArrowDownTrayIcon className="h-5 w-5" />{format.toUpperCase()} statement</button>)}</PocketBottomSheet>}
+
   {sheet==='delete'&&selected&&<PocketBottomSheet title="Delete collection" dismissOnBackdrop={false} onClose={()=>setSheet(null)}><h2 className="text-base font-bold">Delete collection?</h2><p className="my-4 text-sm text-gray-500 dark:text-gray-400">This closes the link to new payments. Your payment records are kept.</p><button type="button" disabled={actionBusy} className="pocket-cta-primary w-full" onClick={remove}>Continue</button></PocketBottomSheet>}
  </PocketRouteShell>
 }

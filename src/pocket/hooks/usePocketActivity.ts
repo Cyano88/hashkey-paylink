@@ -1,3 +1,4 @@
+import { personalPocketActivity } from '../lib/pocketPurchaseKind'
 import {readSendAttempts,mergeSendActivity,POCKET_SENDS_UPDATED} from '../lib/pocketSendAttempts'
 import { pocketActivityArchiveKey } from '../lib/pocketActivityArchive'
 import { isIncomingPosPayment } from '../lib/pocketPurchaseKind'
@@ -66,7 +67,7 @@ export default function usePocketActivity({ authenticated, email, enabled, recen
   const scoped = state.scope === scope ? state : { busy: false, error: '', attempted: false }
   const hasContent = Boolean(rows.length || snapshot?.merchants.length || snapshot?.collections.length)
   return {
-    rows: recent ? rows.filter(row=>!isIncomingPosPayment(row)&&!snapshot?.archivedKeys?.includes(pocketActivityArchiveKey(row))).slice(0,4):rows,
+    rows: recent ? personalPocketActivity(rows).filter(row=>!isIncomingPosPayment(row)&&!snapshot?.archivedKeys?.includes(pocketActivityArchiveKey(row))).slice(0,4):rows,
     archivedKeys: snapshot?.archivedKeys ?? [],
     merchants: snapshot?.merchants ?? [], collections: snapshot?.collections ?? [],
     busy: scoped.busy && !hasContent,

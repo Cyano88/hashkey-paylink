@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path'
 import { hasRenderDurableStore, mutateDurableJson, readDurableJson } from '../render-durable-store.js'
 import { paymentApprovalTimeoutMs, unsignedApprovalExpired } from './payment-timeouts.js'
 
-export type PocketRequestStatus = 'pending' | 'accepted' | 'declined' | 'paid'
+export type PocketRequestStatus = 'pending' | 'accepted' | 'declined' | 'paid' | 'cancelled'
 export type PocketRequestRoute = {
   phase: 'started' | 'submitted' | 'completed' | 'failed'
   source: 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
@@ -74,7 +74,7 @@ export function createPocketRequestRepository(options: Options = {}) {
         return { request, replayed: false }
       })
     },
-    async listFor(userId: string) { return Object.values((await readStore()).requests).filter(item => item.senderId === userId || item.recipientId === userId).sort((a, b) => b.updatedAt - a.updatedAt) },
+    async listFor(userId: string) { return Object.values((await readStore()).requests).filter(item => item.status !== 'cancelled' && (item.senderId === userId || item.recipientId === userId)).sort((a, b) => b.updatedAt - a.updatedAt) },
     async getFor(userId: string, id: string) {
       const request = (await readStore()).requests[clean(id, 160)]
       if (!request) throw Object.assign(new Error('Payment request was not found.'), { status: 404 })
@@ -84,10 +84,22 @@ export function createPocketRequestRepository(options: Options = {}) {
     async unreadCount(userId: string) {
       const store = await readStore()
       const lastRead = store.notificationReads[userId] ?? 0
-      return Object.values(store.requests).filter(item => (item.senderId === userId || item.recipientId === userId) && item.updatedAt > lastRead).length
+      return Object.values(store.requests).filter(item => item.status !== 'cancelled' && (item.senderId === userId || item.recipientId === userId) && item.updatedAt > lastRead).length
     },
     async lastRead(userId: string) { return (await readStore()).notificationReads[userId] ?? 0 },
     async markRead(userId: string) { return mutate(store => { store.notificationReads[userId] = now(); return store.notificationReads[userId] }) },
+    async cancel(userId: string, id: string) {
+      return mutate(store => {
+        const request = store.requests[clean(id, 160)]
+        if (!request) throw Object.assign(new Error('Payment request was not found.'), { status: 404 })
+        if (request.senderId !== userId) throw Object.assign(new Error('Only the request creator can cancel it.'), { status: 403 })
+        if (request.status === 'cancelled') return request
+        if (request.status !== 'pending' || request.route || request.transactionHash) throw Object.assign(new Error('This request has already been answered or payment has started. Refresh to see its status.'), { status: 409 })
+        const updated: PocketMoneyRequest = { ...request, status: 'cancelled', updatedAt: now() }
+        store.requests[request.id] = updated
+        return updated
+      })
+    },
     async decide(userId: string, id: string, decision: 'accept' | 'decline') {
       return mutate(store => {
         const request = store.requests[clean(id, 160)]

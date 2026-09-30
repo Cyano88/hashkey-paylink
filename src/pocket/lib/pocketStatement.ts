@@ -1,47 +1,36 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { pocketActivityStatus } from './pocketReceipt'
-import { isIncomingPosPayment, pocketBankRecipientLabel } from './pocketPurchaseKind'
-
-// Quote every field and neutralize spreadsheet formulas in external descriptions.
-function cell(value: unknown) {
-  const text = String(value ?? '').replace(/[\r\n]+/g, ' ')
-  const safe = /^[\s]*[=+@-]/.test(text) || /^[\t\r]/.test(text) ? "'" + text : text
-  return '"' + safe.replace(/"/g, '""') + '"'
+import { personalPocketActivity, pocketBankRecipientLabel } from './pocketPurchaseKind'
+import { statementPdf } from './pocketStatementPdf'
+export type StatementOptions = { title?: string; scope?: string; from?: string; to?: string; includeBusiness?: boolean }
+export function statementRows(rows: PocketActivityRow[], options: StatementOptions = {}) {
+ if(options.from && options.to && options.from > options.to) throw new Error('Choose an end date on or after the start date.')
+ return (options.includeBusiness ? rows : personalPocketActivity(rows)).filter(row=>{
+  const date=new Date(row.ts);if(!Number.isFinite(date.getTime()))return false
+  const day=date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0')
+  return (!options.from||day>=options.from)&&(!options.to||day<=options.to)
+ }).sort((a,b)=>b.ts-a.ts)
 }
-export function pocketStatementCsv(rows: PocketActivityRow[]) {
-  const stocks=rows.some(row=>!!row.assetSymbol)
-  const table = [
-    ['Pocket transaction statement'],
-    ['Scope', 'Currently loaded activity matching selected filters. Incoming POS excluded.'],
-    ['Generated at (UTC)', new Date().toISOString()],
-    [],
-    ['Date (UTC)', 'Description', 'Direction', 'Status', stocks?'Token amount':'USDC amount', stocks?'Asset':'NGN amount', 'Network', 'Reference', 'Transaction hash'],
-    ...rows.filter(row => !isIncomingPosPayment(row)).map(row => [
-      Number.isFinite(new Date(row.ts).getTime()) ? new Date(row.ts).toISOString() : '',
-      pocketBankRecipientLabel(row) || row.activityLabel || row.memo || 'Transaction',
-      row.direction || '', pocketActivityStatus(row), row.amount, stocks?row.assetSymbol||'USDC':row.amountNgn || '',
-      row.chain, row.eventId, row.txHash,
-    ]),
-  ]
-  return '\uFEFF' + table.map(row => row.map(cell).join(',')).join('\r\n') + '\r\n'
+function cell(value:unknown) { const text=String(value??'').replace(/[\r\n]+/g,' ');return '"'+(/^[\s]*[=+@-]/.test(text)?"'"+text:text).replace(/"/g,'""')+'"' }
+export function pocketStatementCsv(input:PocketActivityRow[],options:StatementOptions={}) {
+ const rows=statementRows(input,options)
+ return '\uFEFF'+[
+ [options.title||'Pocket transaction statement'],['Scope',options.scope||'Pocket personal activity'],
+ ['Period (local dates)',options.from||'Earliest available',options.to||'Latest available'],
+ ['Coverage','Available recorded activity only. Not a certified account balance statement.'],
+ ['Generated at (UTC)',new Date().toISOString()],[],
+ ['Date (UTC)','Description','Direction','Status','Token amount','Asset','Local amount','Local currency','Network','Reference','Transaction hash'],
+ ...rows.map(row=>[new Date(row.ts).toISOString(),(options.title==='Collection statement'?row.payer:undefined)||pocketBankRecipientLabel(row)||row.activityLabel||row.memo||row.payer||'Transaction',row.direction||'',pocketActivityStatus(row),row.amount,row.assetSymbol||'USDC',row.amountNgn||'',row.amountNgn?row.fiatCurrency||'NGN':'',row.chain,row.providerReference||row.eventId,row.txHash])
+ ].map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n'
 }
-const nativeStatement = registerPlugin<{ saveCsv(options: { name: string; content: string }): Promise<{ cancelled?: boolean }> }>('PocketStatement')
-export async function downloadPocketStatement(rows: PocketActivityRow[]) {
-  const name = `pocket-statement-${new Date().toISOString().slice(0, 10)}.csv`
-  const content = pocketStatementCsv(rows)
-  if (Capacitor.getPlatform() === 'android') {
-    const result = await nativeStatement.saveCsv({ name, content })
-    if (result.cancelled) throw new DOMException('Save cancelled', 'AbortError')
-    return
-  }
-  const file = new File([content], name, { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(file)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+const native=registerPlugin<{saveCsv(o:{name:string;content:string}):Promise<{cancelled?:boolean}>;savePdf(o:{name:string;base64:string}):Promise<{cancelled?:boolean}>}>('PocketStatement')
+export async function downloadPocketStatement(input:PocketActivityRow[],format:'csv'|'pdf'='csv',options:StatementOptions={}) {
+ const rows=statementRows(input,options),name=`pocket-statement-${options.from||'available'}-${options.to||new Date().toISOString().slice(0,10)}.${format}`
+ const content=format==='csv'?pocketStatementCsv(rows,{...options,includeBusiness:true}):''
+ const blob=format==='pdf'?await statementPdf(rows,options):new Blob([content],{type:'text/csv;charset=utf-8'})
+ if(Capacitor.getPlatform()==='android') {
+  const result=format==='csv'?await native.saveCsv({name,content}):await native.savePdf({name,base64:await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(blob)})})
+  if(result?.cancelled)throw new DOMException('Save cancelled','AbortError')
+ }else{const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}
 }
