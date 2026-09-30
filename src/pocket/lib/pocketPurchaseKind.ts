@@ -23,5 +23,5 @@ export function pocketBankRecipientLabel(row: PocketActivityRow): string {
 export function personalPocketActivity(rows: PocketActivityRow[]) {
   const business = (row: PocketActivityRow) => row.source === 'collection' || (row.source === 'bank-receive' && row.direction !== 'out') || isIncomingPosPayment(row)
   const hashes = new Set(rows.filter(business).filter(row=>row.txHash).map(row=>row.chain+':'+row.txHash.toLowerCase()))
-  return rows.filter(row=>!business(row) && !(row.source === 'request' && ['pending','awaiting response','accepted','declined','cancelled'].includes(String(row.paycrestStatus))) && !(row.source?.startsWith('wallet-') && row.txHash && hashes.has(row.chain+':'+row.txHash.toLowerCase())))
+  return rows.filter(row=>!business(row) && !(row.source === 'request' && !row.txHash && !row.paymentFunding?.length && ['pending','awaiting response','accepted','declined','cancelled'].includes(String(row.paycrestStatus))) && !(row.source?.startsWith('wallet-') && row.txHash && hashes.has(row.chain+':'+row.txHash.toLowerCase())))
 }

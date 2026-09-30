@@ -17,3 +17,6 @@ const isolated=pocketStatementCsv([{...base,eventId:'collection-private',source:
 assert.ok(!isolated.includes('collection-private')&&!isolated.includes('raw-private'))
 assert.ok(pocketStatementCsv([{...base,amountNgn:'20',fiatCurrency:'UGX'}]).includes('UGX'))
 console.log('PASS inclusive local-date boundaries, reversed range validation, collection isolation and local currencies')
+
+assert.equal(statementRows([{...base,source:'request',paycrestStatus:'pending',txHash:'submitted-hash'}]).length,1)
+assert.equal(statementRows([{...base,source:'request',paycrestStatus:'awaiting response',txHash:''}]).length,0)
