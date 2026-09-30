@@ -187,7 +187,8 @@ let localOrderWrites: Promise<unknown> = Promise.resolve()
 async function persistPaycrestOrder(record: PaycrestOrderRecord, allowReplacement = false): Promise<PaycrestOrderRecord> {
   if (HAS_DURABLE_STORE) {
     const saved = await mutateDurableJson<PaycrestStore>(STORE_KEY, current => updatePaycrestOrderStore(current,record,allowReplacement))
-    return saved.orders[record.paycrest_order_id]
+    // Downstream execution/receipt updates must follow the active quote, even when an old provider order reports late.
+    return saved.orders[record.intent_id]
   }
   if (IS_RENDER) throw new Error('Durable Paycrest storage is unavailable.')
   const task = localOrderWrites.then(async () => {
@@ -195,7 +196,8 @@ async function persistPaycrestOrder(record: PaycrestOrderRecord, allowReplacemen
     const path=resolve(STORE_PATH)
     await mkdir(dirname(path),{recursive:true})
     await writeFile(path,JSON.stringify(saved,null,2)+'\n','utf8')
-    return saved.orders[record.paycrest_order_id]
+    // Downstream execution/receipt updates must follow the active quote, even when an old provider order reports late.
+    return saved.orders[record.intent_id]
   })
   localOrderWrites=task.catch(()=>undefined)
   return task
