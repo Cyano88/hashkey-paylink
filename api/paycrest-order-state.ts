@@ -6,7 +6,8 @@ export function mergePaycrestOrder(current: PaycrestOrderRecord | undefined, inc
  const old=current.status.toLowerCase(),next=incoming.status.toLowerCase()
  const stale=Date.parse(incoming.updated_at)<Date.parse(current.updated_at)
  const regresses=(progress[old]!==undefined && progress[next]!==undefined && progress[next]<progress[old]) || (['failed','expired','cancelled','canceled'].includes(old) && (progress[next]??99)<1)
- const preserve=stale||regresses
+ const terminalRegression=(old==='settled' && !['settled','refunding','refunded'].includes(next)) || (old==='refunded' && next!=='refunded')
+ const preserve=stale||regresses||terminalRegression
  const merged=preserve?{...incoming,...current}:{...current,...incoming}
  for(const key of ['tx_hash','payer_email','payer_wallet','provider_amount_paid','provider_amount_returned','provider_percent_settled'] as const){
   if(!merged[key])merged[key]=current[key]||incoming[key]

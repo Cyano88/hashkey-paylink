@@ -22,3 +22,6 @@ assert.equal(replacement.orders.a.paycrest_order_id,'new')
 assert.equal(replacement.orders.pa.status,'expired')
 assert.throws(()=>updatePaycrestOrderStore(store,fresh,true),/Funded/)
 console.log('PASS expired quotes can be replaced; late old-order updates cannot replace the active payout')
+
+assert.equal(mergePaycrestOrder(settled,{...late,status:'failed'}).status,'settled')
+assert.equal(mergePaycrestOrder({...settled,status:'refunded'},{...late,status:'failed'}).status,'refunded')
