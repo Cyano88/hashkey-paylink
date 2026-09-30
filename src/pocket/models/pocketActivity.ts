@@ -1,6 +1,11 @@
+import type { PocketPaymentFunding } from '../lib/pocketPaymentFunding'
 import type { PocketPendingBridge } from '../lib/pocketPendingBridge'
 
 export type PocketActivityRow = {
+  fundingOnly?: boolean
+  paymentFunding?: PocketPaymentFunding[]
+  fundingParent?: string
+  fundingPayment?: PocketActivityRow
   xpayCheckoutId?: string
   assetSymbol?: string
   bridge?: PocketPendingBridge

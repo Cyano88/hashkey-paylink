@@ -1,3 +1,4 @@
+import type { PocketPaymentFunding } from '../../lib/pocketPaymentFunding'
 import {BILL_COUNTRIES,normalizeUgandaPhone,type PocketBillCountry} from '../../lib/pocketBillCountry'
 import PocketFiatUsdcEstimate from '../../components/PocketFiatUsdcEstimate'
 import { normalizeNigerianMobileNumber } from '../../lib/nigerianMobileNetwork'
@@ -27,7 +28,7 @@ type PocketBillsPanelProps = {
   view: PocketBillView
   authenticated: boolean
   preview?: boolean
-  bills: PocketBillsController
+  bills: PocketBillsController & { paymentFunding?: PocketPaymentFunding[] }
   baseAddress: string
   baseBalance: number
   walletBusy: boolean
@@ -104,6 +105,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
   const isVerifiedBill = view === 'electricity' || (view === 'tv' && bills.tvVerificationRequired)
   const isDirectTv = view === 'tv' && !bills.tvVerificationRequired
   const billReceipt: PaylinkReceipt | null = bills.intent ? {
+    paymentFunding: bills.paymentFunding,
     type: bills.intent.category,
     receiptId: bills.intent.requestId,
     receiptHash: bills.intent.txHash || bills.intent.requestId,

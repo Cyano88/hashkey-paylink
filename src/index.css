@@ -1180,4 +1180,5 @@ html.dark body [data-pocket-sheet].pocket-sheet-surface :is(
 ) { background-color: var(--pocket-sheet-panel); }
 
 html.dark body [data-pocket-receipt] { background-color: #000; }
-html.dark body [data-pocket-receipt] [data-receipt-paper] { background-color: #0d0d0d; }
+html.dark body [data-pocket-receipt] [data-receipt-paper],
+html.dark body [data-pocket-receipt] [data-receipt-paper] article { background-color: #0d0d0d; }

@@ -25,18 +25,24 @@ export function mergePocketActivityRows(previous: PocketActivityRow[], incoming:
       const sameBill = row.source === 'bills' && candidate.source === 'bills' && row.chain === candidate.chain && row.eventId === candidate.eventId
       if(alias || sameOrder || sameBill){if(!old || candidate.ts<old.ts)old=candidate;rows.delete(key)}
     }
+    if (row.fundingOnly && old && !old.fundingOnly) { rows.set(rowKey(old), {...old,paymentFunding:row.paymentFunding || old.paymentFunding}); continue }
     // The current source owns mutable fields, including removal of refund actions.
     const bank = String(row.source || '').replace(/_/g, '-').startsWith('bank-')
       || row.settlementType?.toLowerCase() === 'instant_fiat'
     // A partial bank response is not evidence that a previously observed status vanished.
     const savedStatus = bank && !row.paycrestStatus?.trim() && old?.paycrestStatus
       ? { paycrestStatus: old.paycrestStatus } : {}
+    const oldSettlement = old?.bankSettlementStatus || old?.paycrestStatus
+    const nextSettlement = row.bankSettlementStatus || row.paycrestStatus
+    const earlierStage = !nextSettlement || ['created','initiated','pending','processing','submitted','deposited','fulfilling','fulfilled','settling'].includes(nextSettlement)
+    const retainedSettlement = bank && old && ['settled','refunded'].includes(oldSettlement || '') && earlierStage
+      ? {paycrestStatus:old.paycrestStatus,bankSettlementStatus:old.bankSettlementStatus || oldSettlement} : {}
     const receiptIdentity=bank && old?.eventId.startsWith('ngpos-') && !row.eventId.startsWith('ngpos-') ? {eventId:old.eventId,txHash:old.txHash} : {}
-    const retainedDetails = Object.fromEntries(['accountName','bankName','bankLast4','recipient','amountNgn','fiatCurrency','feeAmount'].flatMap(field => {
+    const retainedDetails = Object.fromEntries(['accountName','bankName','bankLast4','recipient','amountNgn','fiatCurrency','feeAmount','paymentFunding'].flatMap(field => {
       const key = field as keyof PocketActivityRow
       return !row[key] && old?.[key] ? [[field, old[key]]] : []
     }))
-    rows.set(rowKey(row), { ...row, ...retainedDetails, ...savedStatus, ...receiptIdentity, ...(bank && row.handoffVerified === undefined && old?.handoffVerified ? {handoffVerified:true} : {}), ...(bank && !row.bankSettlementStatus && !row.paycrestStatus?.trim() && old?.bankSettlementStatus ? {bankSettlementStatus:old.bankSettlementStatus} : {}), ts: old?.ts || row.ts })
+    rows.set(rowKey(row), { ...row, ...retainedDetails, ...savedStatus, ...retainedSettlement, ...receiptIdentity, ...(bank && row.handoffVerified === undefined && old?.handoffVerified ? {handoffVerified:true} : {}), ...(bank && !row.bankSettlementStatus && !row.paycrestStatus?.trim() && old?.bankSettlementStatus ? {bankSettlementStatus:old.bankSettlementStatus} : {}), ts: old?.ts || row.ts })
   }
   // Fees are a second USDC log in the same payment batch, not a second send.
   // A standalone transfer to treasury, a different sender/chain, or an ambiguous

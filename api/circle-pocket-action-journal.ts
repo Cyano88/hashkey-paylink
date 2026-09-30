@@ -147,7 +147,13 @@ export async function recordCirclePocketAction(input: {
       if (existing.metadata?.source !== input.metadata?.source || existing.metadata?.destination !== input.metadata?.destination || existing.metadata?.amount !== input.metadata?.amount) {
         throw new Error('Bridge details do not match the saved transfer.')
       }
+      if (existing.metadata?.fundingParent && input.metadata?.fundingParent && existing.metadata.fundingParent !== input.metadata.fundingParent) throw new Error('Bridge is already linked to another payment.')
+      if (input.metadata?.fundingParent && !existing.metadata?.fundingParent) {
+        existing.metadata = { ...existing.metadata, fundingParent: input.metadata.fundingParent, fundingPayment: input.metadata.fundingPayment }
+      }
       if (existing.status === 'completed' || existing.status === 'failed' || existing.status === input.status) return existing
+      input.metadata = { ...existing.metadata, ...input.metadata }
+
     }
     const now = Date.now()
     const record: CirclePocketActionRecord = {

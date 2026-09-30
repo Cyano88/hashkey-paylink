@@ -72,6 +72,7 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
     refreshBalances: wallets.refreshBalances,
   })
   const paymentLiquidity = usePocketPaymentLiquidityController({
+    funding: bills.intent ? {kind:'bills',id:bills.intent.id} : undefined,
     enabled: authenticated && bills.status === 'ready',
     // Bills use the same non-Ethereum funding sources as bank payouts.
     bankPayout: true,
@@ -85,6 +86,7 @@ function PocketBillFlow({ view }: { view: PocketBillView }) {
   })
   const routedBills = {
     ...bills,
+    paymentFunding: paymentLiquidity.paymentFunding,
     processing: bills.processing || paymentLiquidity.busy,
     error: paymentLiquidity.error || bills.error,
     pay: async () => {

@@ -113,6 +113,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
   const destination = row.destination || bankDestination || row.contextLabel || `${row.chain || 'Base'} ${row.assetSymbol || 'USDC'} wallet`
 
   return {
+    paymentFunding: row.paymentFunding,
     type: kind === 'bill_purchase' ? category : kind,
     receiptId: row.receiptId || row.billReference || row.eventId,
     receiptHash: row.txHash || reference,

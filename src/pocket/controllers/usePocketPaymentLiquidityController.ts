@@ -1,3 +1,4 @@
+import type { PocketPaymentFunding, PocketFundingReference } from '../lib/pocketPaymentFunding'
 import { cachedPocketDirectLiquidity } from '../lib/pocketDirectLiquidity'
 import type { PocketBalanceSnapshot } from '../lib/pocketBalanceCache'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -97,6 +98,7 @@ async function inspectLiquidity(input: {
 }
 
 export default function usePocketPaymentLiquidityController(input: {
+  funding?: PocketFundingReference
   enabled: boolean
   bankPayout?: boolean
   amount: string
@@ -116,6 +118,8 @@ export default function usePocketPaymentLiquidityController(input: {
       return 0n
     }
   }, [input.amount])
+  const [fundingState, setFundingState] = useState<{key:string;items:PocketPaymentFunding[]}>({key:'',items:[]})
+  const fundingKey = input.funding ? input.funding.kind + ':' + input.funding.id : ''
   const [route, setRoute] = useState<PocketCheckoutRoute | null>(null)
   const [wallets, setWallets] = useState<CirclePocketWallets>({})
   const [status, setStatus] = useState<LiquidityStatus>('idle')
@@ -191,6 +195,7 @@ export default function usePocketPaymentLiquidityController(input: {
         ?? await input.ensureWallet(currentRoute.destination)
       if (!destinationWallet) throw new Error('Open the destination Pocket wallet before paying.')
       if (checkpoint?.phase === 'completed') {
+        setFundingState({key:fundingKey,items:[{source:checkpoint.source,destination:checkpoint.destination,amount:checkpoint.amount,txHash:checkpoint.txHash,status:'completed'}]})
         void input.refreshBalances().catch(() => undefined)
         setStatus('arrived')
         return destinationWallet
@@ -264,7 +269,9 @@ export default function usePocketPaymentLiquidityController(input: {
         }
         await input.persistence?.update(inspected.accessToken, { phase: 'submitted', txHash })
       }
+      setFundingState({key:fundingKey,items:[{source:currentRoute.source,destination:currentRoute.destination,amount,txHash,status:'submitted'}]})
       await recordPocketBridge({
+        funding: input.funding,
         accessToken: inspected.accessToken,
         source: currentRoute.source,
         destination: currentRoute.destination,
@@ -273,6 +280,7 @@ export default function usePocketPaymentLiquidityController(input: {
         status: 'submitted',
       }).catch(() => undefined)
       setStatus('waiting')
+      let destinationTxHash: string | undefined
       for (let attempt = 0; attempt < 12 && !complete; attempt += 1) {
         if (attempt) await wait(pocketBridgePollDelay(attempt))
         const next = await readPocketBridgeStatus({
@@ -280,11 +288,14 @@ export default function usePocketPaymentLiquidityController(input: {
           source: currentRoute.source,
           txHash,
         }).catch(() => null)
+        destinationTxHash = next?.destinationTxHash || destinationTxHash
         complete = next?.status === 'confirmed' || next?.status === 'complete'
       }
       if (!complete) throw new Error('USDC move submitted. Pocket will continue automatically.')
       await input.persistence?.update(inspected.accessToken, { phase: 'completed', txHash })
+      setFundingState({key:fundingKey,items:[{source:currentRoute.source,destination:currentRoute.destination,amount,txHash,destinationTxHash,status:'completed'}]})
       void recordPocketBridge({
+        funding: input.funding,
         accessToken: inspected.accessToken,
         source: currentRoute.source,
         destination: currentRoute.destination,
@@ -305,7 +316,7 @@ export default function usePocketPaymentLiquidityController(input: {
       setError(message)
       throw reason
     }
-  }, [amountUnits, input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, input.refreshBalances, inspect])
+  }, [amountUnits, fundingKey, input.funding?.kind, input.funding?.id, input.ensureWallet, input.getEvmSession, input.getSolanaSession, input.persistence, input.refreshBalances, inspect])
 
   const prepareLiquidity = useCallback(async () => {
     const inspected = await inspect()
@@ -338,6 +349,7 @@ export default function usePocketPaymentLiquidityController(input: {
                 : '')
 
   return {
+    paymentFunding: fundingState.key === fundingKey ? fundingState.items : [],
     route,
     wallets,
     status,

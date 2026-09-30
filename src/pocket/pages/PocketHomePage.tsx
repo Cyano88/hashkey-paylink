@@ -1,3 +1,4 @@
+import usePocketDisplayCurrency from '../hooks/usePocketDisplayCurrency'
 import PocketLocalEquivalent from '../components/PocketLocalEquivalent'
 import PocketActivityStatusIcon from '../components/PocketActivityStatusIcon'
 import { pocketActivityIcon, pocketActivityShortDate } from '../components/pocketActivityIcon'
@@ -51,9 +52,9 @@ export default function PocketHomePage() {
   const navigate = useNavigate()
   const { authenticated, email, getAccessToken } = usePocketIdentity()
   const wallets = usePocketWallets({ authenticated, email, getAccessToken })
-  const profile = usePocketProfile({ authenticated, email, getAccessToken })
+  usePocketProfile({ authenticated, email, getAccessToken })
   const activity = usePocketActivity({ authenticated, email, enabled: true, recent: true, getAccessToken })
-  const currency = profile.profile?.displayCurrency ?? 'USDC'
+  const currency = usePocketDisplayCurrency()
   const showNgn = currency !== 'USDC'
   const fx = usePocketFxQuote(1, showNgn, currency === 'UGX' ? 'UGX' : 'NGN')
   const [selected, setSelectedState] = useState<HomeNetwork>(initialNetwork)
@@ -89,7 +90,9 @@ export default function PocketHomePage() {
           <div className="mt-1.5">
             {balancesVisible ? <p className="min-w-0 text-[clamp(1.75rem,9vw,2.5rem)] font-bold tabular-nums tracking-tight">{balanceVisible ? formatPocketDisplayAmount(displayTotal) : hidden} <span className="text-xs font-medium tracking-normal opacity-50">USDC</span></p> : <span role="status" aria-label="Loading balances" className="block h-10 w-44 animate-pulse rounded-xl bg-white/15 dark:bg-gray-950/10" />}
           </div>
-          {showNgn && balancesVisible && (fx.quote ? <p className="mt-1 text-xs font-semibold tabular-nums text-white/55 dark:text-gray-500">{balanceVisible ? '~ ' + currency + ' ' + Math.round(displayTotal * fx.quote.rate).toLocaleString('en-NG') : currency + ' ' + hidden}</p> : fx.loading ? <span aria-label="Loading local equivalent" className="mt-2 block h-3 w-24 animate-pulse rounded bg-white/10 dark:bg-gray-950/[0.08]" /> : null)}
+          {<div className="mt-1 flex h-4 items-center text-xs font-semibold tabular-nums leading-4 text-white/55 dark:text-gray-500">
+            {!showNgn ? null : !balanceVisible ? currency + ' ' + hidden : balancesVisible && fx.quote ? '~ ' + currency + ' ' + Math.round(displayTotal * fx.quote.rate).toLocaleString('en-NG') : !balancesVisible || fx.loading ? <span role="status" aria-label="Loading local equivalent" className="block h-3 w-24 animate-pulse rounded bg-white/10 motion-reduce:animate-none dark:bg-gray-950/[0.08]" /> : <span aria-label="Local equivalent temporarily unavailable">{currency} {'\u2014'}</span>}
+          </div>}
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => open(POCKET_ROUTES.scan)} className="flex min-w-12 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-white/70 transition hover:bg-white/10 hover:text-white dark:text-gray-500 dark:hover:bg-gray-950/[0.06] dark:hover:text-gray-950"><QrCode className="h-5 w-5" /><span className="text-[9px] font-black uppercase tracking-wide">Scan</span></button>

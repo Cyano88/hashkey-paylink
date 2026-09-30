@@ -1,3 +1,4 @@
+import { resolvePocketFundingPayment } from './payment-funding.js'
 import { verifyPocketBridgeRecord } from './bridge-proof.js'
 import type { Request, Response } from 'express'
 import { circleLinkKey, readCircleLink } from '../privy-circle-link.js'
@@ -8,6 +9,7 @@ import { appendPocketMoneyLedgerEvent } from './money-ledger.js'
 import { listCirclePocketActions, recordCirclePocketAction } from '../circle-pocket-action-journal.js'
 
 type Dependencies = {
+  resolveFunding: typeof resolvePocketFundingPayment
   verifyRecord: typeof verifyPocketBridgeRecord
   verifyUser(req: Request): Promise<VerifiedLinkUser>
   readLink(key: string): ReturnType<typeof readCircleLink>
@@ -25,7 +27,7 @@ function network(value: unknown): PocketBridgeNetwork {
 }
 
 export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {}) {
-  const dependencies: Dependencies = { verifyRecord: verifyPocketBridgeRecord, verifyUser: verifiedPrivyUser, readLink: readCircleLink, quote: readCctpForwardQuote, readSolanaRecipient: solanaRecipient, listActions: listCirclePocketActions, record: recordCirclePocketAction, fetcher: fetch, appendLedger: appendPocketMoneyLedgerEvent, ...overrides }
+  const dependencies: Dependencies = { resolveFunding: resolvePocketFundingPayment, verifyRecord: verifyPocketBridgeRecord, verifyUser: verifiedPrivyUser, readLink: readCircleLink, quote: readCctpForwardQuote, readSolanaRecipient: solanaRecipient, listActions: listCirclePocketActions, record: recordCirclePocketAction, fetcher: fetch, appendLedger: appendPocketMoneyLedgerEvent, ...overrides }
   return async function pocketBridgeHandler(req: Request, res: Response) {
     if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ ok: false, error: { code: 'VALIDATION_FAILED', message: 'Method not allowed.', retryable: false } })
     try {
@@ -33,7 +35,7 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
       const action = String(req.method === 'GET' ? req.query.action ?? 'status' : req.body?.action ?? 'quote')
       if (action === 'pending' && req.method === 'GET') {
         const actions = await dependencies.listActions(identity.userId, 500, 'wallet.bridge', true)
-        return res.json({ ok: true, pending: actions.filter(item => item.ownerId === identity.userId && item.action === 'wallet.bridge' && (item.status === 'started' || item.status === 'submitted')).map(item => ({
+        return res.json({ ok: true, pending: actions.filter(item => item.ownerId === identity.userId && item.action === 'wallet.bridge' && !item.metadata?.fundingParent && (item.status === 'started' || item.status === 'submitted')).map(item => ({
           id: item.id, source: item.metadata?.source, destination: item.metadata?.destination,
           amount: item.metadata?.amount, txHash: item.metadata?.txHash, createdAt: item.createdAt,
         })) })
@@ -72,13 +74,14 @@ export function createPocketBridgeHandler(overrides: Partial<Dependencies> = {})
         ])
         if (!sourceLink || !destinationLink) throw Object.assign(new Error('Link both Pocket wallets before recording a bridge.'), { status: 403 })
         await dependencies.verifyRecord({ source, destination, sourceAddress: sourceLink.circleWalletAddress, destinationAddress: destinationLink.circleWalletAddress, amount, txHash }, dependencies.fetcher)
+        const funding = await dependencies.resolveFunding(identity.userId, req.body?.funding)
         const record = await dependencies.record({
           ownerId: identity.userId,
           idempotencyKey: `pocket:bridge:${source}:${txHash}`,
           action: 'wallet.bridge',
           status: complete ? 'completed' : 'submitted',
           resourceId: txHash,
-          metadata: { source, destination, amount, paymentState: complete ? 'confirmed' : 'submitted', txHash, ...(destinationTxHash ? { destinationTxHash } : {}) },
+          metadata: { ...(funding ? {fundingParent:funding.key,fundingPayment:JSON.stringify(funding.payment)} : {}), source, destination, amount, paymentState: complete ? 'confirmed' : 'submitted', txHash, ...(destinationTxHash ? { destinationTxHash } : {}) },
         })
         await dependencies.appendLedger({
           eventKey: `wallet-bridge:${record.id}:${record.status}:${record.updatedAt}`,

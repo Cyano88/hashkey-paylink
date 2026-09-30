@@ -1,10 +1,11 @@
+import { updatePaycrestOrderStore } from './paycrest-order-state.js'
 import type { Request, Response } from 'express'
 import { xpaySenderFee, assertXPaySenderFee } from './pocket/xpay-fee.js'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, resolve } from 'path'
 import { isAddress } from 'viem'
-import { hasRenderDurableStore, readDurableJson, writeDurableJson } from './render-durable-store.js'
+import { hasRenderDurableStore, readDurableJson, mutateDurableJson } from './render-durable-store.js'
 import { syncPosSettlementExecutionByResource } from './pocket/pos-payment-executions.js'
 
 const STORE_PATH = process.env.PAYCREST_POS_STORE ?? './data/paycrest-pos-orders.json'
@@ -173,38 +174,31 @@ async function paycrestFetch<T>(path: string, init: RequestInit = {}): Promise<T
 }
 
 async function readStore(): Promise<PaycrestStore> {
-  try {
+  if (HAS_DURABLE_STORE) {
     const remote = await readDurableJson<Partial<PaycrestStore>>(STORE_KEY)
-    if (remote) return { orders: remote.orders ?? {} }
-  } catch (error) {
-    console.warn('[paycrest-pos] durable load failed; using file fallback.', error instanceof Error ? error.message : String(error))
+    return { orders: remote?.orders ?? {} }
   }
-
-  try {
-    const raw = await readFile(resolve(STORE_PATH), 'utf8')
-    const parsed = JSON.parse(raw) as Partial<PaycrestStore>
-    return { orders: parsed.orders ?? {} }
-  } catch {
-    return { orders: {} }
-  }
+  if (IS_RENDER) throw new Error('Durable Paycrest storage is unavailable.')
+  try { return { orders: (JSON.parse(await readFile(resolve(STORE_PATH), 'utf8')) as Partial<PaycrestStore>).orders ?? {} } }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {orders:{}}; throw error }
 }
 
-async function writeStore(store: PaycrestStore) {
-  const normalized = { orders: store.orders ?? {} }
-  const path = resolve(STORE_PATH)
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8')
-
-  if (IS_RENDER && !HAS_DURABLE_STORE) {
-    throw new Error('Durable Paycrest POS storage is not configured. Add DATABASE_URL on Render.')
+let localOrderWrites: Promise<unknown> = Promise.resolve()
+async function persistPaycrestOrder(record: PaycrestOrderRecord, allowReplacement = false): Promise<PaycrestOrderRecord> {
+  if (HAS_DURABLE_STORE) {
+    const saved = await mutateDurableJson<PaycrestStore>(STORE_KEY, current => updatePaycrestOrderStore(current,record,allowReplacement))
+    return saved.orders[record.paycrest_order_id]
   }
-
-  try {
-    await writeDurableJson(STORE_KEY, normalized)
-  } catch (error) {
-    if (IS_RENDER) throw new Error('Durable Paycrest POS storage failed. Check DATABASE_URL on Render.')
-    console.warn('[paycrest-pos] durable save failed; file fallback was saved.', error instanceof Error ? error.message : String(error))
-  }
+  if (IS_RENDER) throw new Error('Durable Paycrest storage is unavailable.')
+  const task = localOrderWrites.then(async () => {
+    const saved = updatePaycrestOrderStore(await readStore(),record,allowReplacement)
+    const path=resolve(STORE_PATH)
+    await mkdir(dirname(path),{recursive:true})
+    await writeFile(path,JSON.stringify(saved,null,2)+'\n','utf8')
+    return saved.orders[record.paycrest_order_id]
+  })
+  localOrderWrites=task.catch(()=>undefined)
+  return task
 }
 
 export async function verifyPaycrestAccount(input: { institution: string; accountIdentifier: string; currency?: 'NGN' | 'UGX' }) {
@@ -428,10 +422,7 @@ export async function createPaycrestOfframpOrder(input: {
   }
   if (!record.paycrest_order_id) throw new Error('Paycrest did not return an order id.')
 
-  const store = await readStore()
-  store.orders[record.intent_id] = record
-  store.orders[record.paycrest_order_id] = record
-  await writeStore(store)
+  Object.assign(record, await persistPaycrestOrder(record, true))
   await syncPosSettlementExecutionByResource(record)
   return record
 }
@@ -528,10 +519,7 @@ export async function createPaycrestOnrampOrder(input: {
   }
   if (!record.paycrest_order_id) throw new Error('Paycrest did not return an order id.')
 
-  const store = await readStore()
-  store.orders[record.intent_id] = record
-  store.orders[record.paycrest_order_id] = record
-  await writeStore(store)
+  Object.assign(record, await persistPaycrestOrder(record, true))
   return record
 }
 
@@ -575,9 +563,7 @@ export async function markPaycrestPosPayment(input: { id: string; txHash: string
     payer_wallet: input.payerWallet || record.payer_wallet,
     updated_at: new Date().toISOString(),
   }
-  store.orders[updated.intent_id] = updated
-  store.orders[updated.paycrest_order_id] = updated
-  await writeStore(store)
+  Object.assign(updated, await persistPaycrestOrder(updated))
   await syncPosSettlementExecutionByResource(updated)
   if (updated.source === 'hosted-checkout') {
     const { markHostedCheckoutNairaPayout } = await import('./hosted-checkouts.js')
@@ -606,7 +592,6 @@ export async function refreshPaycrestOrderStatus(id: string) {
     data?.payment?.tx_hash,
     record.tx_hash,
   )
-  const store = await readStore()
   const updated = {
     ...record,
     status,
@@ -617,9 +602,7 @@ export async function refreshPaycrestOrderStatus(id: string) {
     raw: data,
     updated_at: new Date().toISOString(),
   }
-  store.orders[updated.intent_id] = updated
-  store.orders[updated.paycrest_order_id] = updated
-  await writeStore(store)
+  Object.assign(updated, await persistPaycrestOrder(updated))
   await syncPosSettlementExecutionByResource(updated)
   if (updated.source === 'hosted-checkout') {
     const { markHostedCheckoutNairaPayout } = await import('./hosted-checkouts.js')
@@ -677,9 +660,7 @@ export async function paycrestWebhookHandler(req: Request, res: Response) {
     raw: payload,
     updated_at: new Date().toISOString(),
   }
-  store.orders[updated.intent_id] = updated
-  store.orders[updated.paycrest_order_id] = updated
-  await writeStore(store)
+  Object.assign(updated, await persistPaycrestOrder(updated))
   await syncPosSettlementExecutionByResource(updated)
   let receipt: unknown
   if (updated.source !== 'hosted-checkout' && /^0x[a-fA-F0-9]{64}$/.test(updated.tx_hash || '')) {

@@ -1,6 +1,8 @@
+import { pocketFundingRoute, type PocketPaymentFunding } from '../pocket/lib/pocketPaymentFunding'
 import { CHAIN_META, type ChainKey } from './chains'
 
 export type PaylinkReceipt = {
+  paymentFunding?: PocketPaymentFunding[]
   type: string
   receiptId: string
   receiptHash: string
@@ -293,6 +295,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
       timestamp: fmtTime(receipt.createdAt),
       rows: [
         { label: 'Type', value: type },
+        ...(receipt.paymentFunding?.length ? [{ label: 'Payment funding', value: pocketFundingRoute(receipt.paymentFunding) }] : []),
         ...(isElectricity && receipt.providerName ? [{ label: 'Provider', value: receipt.providerName }] : []),
         { label: targetLabel, value: receipt.targetValue || receipt.recipient || '-' },
         { label: 'Amount', value: amount },
@@ -316,6 +319,7 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
     timestamp: fmtTime(receipt.createdAt),
     rows: [
       { label: 'Type', value: type },
+        ...(receipt.paymentFunding?.length ? [{ label: 'Payment funding', value: pocketFundingRoute(receipt.paymentFunding) }] : []),
       { label: 'Network', value: network },
       { label: 'From', value: receipt.payer || '-', mono: true },
       { label: 'To', value: recipient, mono: /^0x/.test(recipient) },

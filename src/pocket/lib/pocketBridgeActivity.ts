@@ -4,7 +4,7 @@ import { bridgeProgressLabel, type PocketPendingBridge, type PocketBridgeProgres
 export function bridgeFromActivityRow(row: PocketActivityRow): PocketPendingBridge | null {
   if (row.bridge) return row.bridge
   if (row.source !== 'wallet-bridge' && row.settlementType !== 'wallet_bridge') return null
-  const networks = ['base', 'arbitrum', 'arc', 'solana']
+  const networks = ['base', 'arbitrum', 'arc', 'solana', 'ethereum', 'polygon']
   if (!networks.includes(row.chain) || !networks.includes(row.destination || row.recipient || '')) return null
   const status = String(row.paycrestStatus).toLowerCase()
   const progress: PocketBridgeProgress = status === 'completed' ? 'completed' : status === 'failed' || status === 'needs_review' ? 'needs_attention' : 'submitted'
@@ -27,5 +27,6 @@ export function mergePocketBridgeActivity(rows: PocketActivityRow[], transfers: 
     else merged[index] = row
   }
   const bridgeHashes = new Set(merged.filter(row => row.bridge && row.txHash).map(row => row.chain + ':' + row.txHash))
-  return merged.filter(row => row.source !== 'wallet-withdrawal' || !bridgeHashes.has(row.chain + ':' + row.txHash))
+  const fundingHashes = new Set(merged.flatMap(row => (row.paymentFunding || []).flatMap(item => [item.source + ':' + item.txHash.toLowerCase(), ...(item.destinationTxHash ? [item.destination + ':' + item.destinationTxHash.toLowerCase()] : [])])))
+  return merged.filter(row => (row.source !== 'wallet-withdrawal' || !bridgeHashes.has(row.chain + ':' + row.txHash)) && (!['wallet-bridge','wallet-withdrawal','wallet-deposit'].includes(row.source || '') || !fundingHashes.has(row.chain + ':' + row.txHash.toLowerCase())))
 }

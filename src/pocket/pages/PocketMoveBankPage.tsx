@@ -130,6 +130,7 @@ function PocketMoveBankContent() {
   }, [direct.result?.intentId])
   const readRoutingSnapshot = useCallback(() => readCachedPocketBalance(balanceOwner(email)), [email])
   const bankLiquidity = usePocketPaymentLiquidityController({
+    funding: direct.result?.intentId ? {kind:'bank-withdraw',id:direct.result.intentId} : undefined,
     bankPayout: true,
     readRoutingSnapshot,
     enabled: direct.status === 'routing' && Boolean(direct.result?.amountUsdc),
@@ -189,6 +190,7 @@ function PocketMoveBankContent() {
   const slowConfirmation=usePocketSlowConfirmation(['pending','processing'].includes(direct.status),direct.result?.intentId||'',60_000,direct.confirming)
   const bankTerminal=direct.result?.handoffVerified===true||['failed','refunded','sent'].includes(direct.result?.state||'')
   const bankReceipt = useMemo(() => (reviewOpen && (bankTerminal || slowConfirmation)) && direct.result ? pocketActivityReceipt({
+    paymentFunding: bankLiquidity.paymentFunding,
     eventId: `bank-withdraw:${direct.result.intentId}`,
     txHash: direct.result.txHash,
     chain: 'base',
@@ -212,7 +214,7 @@ function PocketMoveBankContent() {
     bankLast4: direct.result.bankLast4,
     accountName: direct.result.accountName,
     providerReference: direct.result.orderId,
-  }, { allowPending: true }) : null, [direct.result, direct.status, email, wallets.wallets.base?.address, reviewOpen, bankTerminal, slowConfirmation])
+  }, { allowPending: true }) : null, [direct.result, bankLiquidity.paymentFunding, direct.status, email, wallets.wallets.base?.address, reviewOpen, bankTerminal, slowConfirmation])
 
   useEffect(() => {
     if (selectedNet !== 'base') onNetworkSelect('base')

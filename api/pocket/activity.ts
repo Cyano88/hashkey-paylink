@@ -1,3 +1,4 @@
+import { groupPocketPaymentFunding } from '../../src/pocket/lib/pocketPaymentFunding.js'
 import { mergePocketActivityRows } from '../../src/pocket/lib/pocketActivitySnapshot.js'
 import {readXPayConversionHashes} from './xpay-bank-store.js'
 import { isIncomingPosPayment } from '../../src/pocket/lib/pocketPurchaseKind.js'
@@ -58,6 +59,7 @@ function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow 
   const source = record.metadata.source || 'USDC'
   const destination = record.metadata.destination || 'destination'
   return {
+    ...(record.metadata.fundingParent && record.metadata.fundingPayment ? {fundingParent:record.metadata.fundingParent,fundingPayment:JSON.parse(record.metadata.fundingPayment) as PocketActivityRow} : {}),
     eventId: `pocket-bridge:${record.id}`,
     txHash: record.metadata.txHash,
     chain: source,
@@ -404,9 +406,20 @@ export default createDurablePocketActivityHandler({
   transformSnapshot: async (owner, snapshot) => {
     // Read persisted bank context before publishing wallet logs. This does not
     // poll Paycrest or wait for bank settlement; the workers own that work.
-    const [hashes, history] = await Promise.all([readXPayConversionHashes(owner), listNgPosHistoryForOwner(owner, { repair: false })])
+    const [hashes, history, bankRoutes] = await Promise.all([readXPayConversionHashes(owner), listNgPosHistoryForOwner(owner, { repair: false }), listCirclePocketActions(owner, 500, 'bank-withdraw.route')])
     const bankRows = history.payments.map(sanitizedActivityRow)
-    return { ...snapshot, groupedTransactionHashes: [...hashes], payments: mergePocketActivityRows(snapshot.payments, bankRows).filter(row => !row.txHash || !hashes.has(row.txHash.toLowerCase())) }
+    const linkedRows = snapshot.payments.map(row => {
+      if (row.source !== 'wallet-bridge' || row.fundingParent) return row
+      const route = bankRoutes.find(item => item.metadata?.txHash?.toLowerCase() === row.txHash.toLowerCase() && item.metadata?.source === row.chain)
+      const parent = route?.metadata?.intentId && bankRows.find(item => item.source === 'bank-withdraw' && item.providerReference === route.metadata!.intentId)
+      return parent ? {...row,fundingParent:'bank-withdraw:'+route!.metadata!.intentId,fundingPayment:parent} : row
+    })
+    const payments = groupPocketPaymentFunding(mergePocketActivityRows(linkedRows, bankRows))
+    for (const row of payments) for (const funding of row.paymentFunding || []) {
+      hashes.add(funding.txHash.toLowerCase())
+      if (funding.destinationTxHash) hashes.add(funding.destinationTxHash.toLowerCase())
+    }
+    return { ...snapshot, groupedTransactionHashes: [...hashes], payments: payments.filter(row => !row.txHash || !hashes.has(row.txHash.toLowerCase())) }
   },
   sources: Object.fromEntries(Object.entries(sourceGroups).map(([name, group]) => [name, async (userId: string) =>
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),

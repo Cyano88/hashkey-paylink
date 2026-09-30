@@ -117,6 +117,15 @@ function ReceiptDocument({ receipt }: { receipt: PaylinkReceipt }) {
         ))}
       </dl>
 
+      {receipt.paymentFunding?.length ? <details className="mt-2 border-t border-gray-100 pt-2 text-xs dark:border-white/10">
+        <summary className="cursor-pointer font-medium text-gray-500 dark:text-gray-400">Funding details</summary>
+        {receipt.paymentFunding.map(item => <dl key={item.source+item.txHash} className="mt-3 space-y-2 break-all text-[11px]">
+          <div><dt className="text-gray-500">Source amount</dt><dd>{item.amount} USDC on <span className="capitalize">{item.source}</span></dd></div>
+          <div><dt className="text-gray-500">Funding status</dt><dd className="capitalize">{item.status}</dd></div>
+          <div><dt className="text-gray-500">Source transaction</dt><dd className="font-mono">{item.txHash}</dd></div>
+          {item.destinationTxHash && <div><dt className="text-gray-500">Destination transaction</dt><dd className="font-mono">{item.destinationTxHash}</dd></div>}
+        </dl>)}
+      </details> : null}
       <div className="mt-1.5 border-t border-gray-100 pt-2 dark:border-white/10">
         <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">Reference ID</p>
         <p className="mt-1 break-all font-mono text-[10px] font-semibold leading-5 text-gray-600 dark:text-gray-300">{view.reference}</p>

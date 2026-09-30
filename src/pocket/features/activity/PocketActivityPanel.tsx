@@ -113,6 +113,6 @@ export default function PocketActivityPanel({renderHeader,incomingPos=false,rail
         </button>
       })}</div></section>)}
     </div>}
-    {selectedRow&&<PocketActivityReceipt row={selectedRow} onClose={()=>setSelected(null)} onRefund={onRefund}>{selectedRow.bridge&&<PocketBridgeActivityDetails bridge={selectedRow.bridge} checking={bridgeChecking?.(selectedRow.bridge.id)||false} message={bridgeMessages?.[selectedRow.bridge.id]||''} onCheck={()=>{if(selectedRow.bridge)void onBridgeCheck?.(selectedRow.bridge)}} onNewBridge={onNewBridge}/>}</PocketActivityReceipt>}
+    {selectedRow&&<PocketActivityReceipt row={selectedRow} onClose={()=>setSelected(null)} onRefund={onRefund}>{selectedRow.bridge&&<PocketBridgeActivityDetails bridge={selectedRow.bridge} checking={bridgeChecking?.(selectedRow.bridge.id)||false} message={bridgeMessages?.[selectedRow.bridge.id]||''} onCheck={()=>{if(selectedRow.bridge)void onBridgeCheck?.(selectedRow.bridge)}} onNewBridge={selectedRow.paymentFunding?.length ? undefined : onNewBridge}/>}</PocketActivityReceipt>}
   </div>
 }

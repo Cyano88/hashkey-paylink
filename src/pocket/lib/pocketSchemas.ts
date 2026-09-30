@@ -1,3 +1,4 @@
+import type { PocketPaymentFunding } from './pocketPaymentFunding'
 import { normalizePayoutAccount, validPayoutCurrency } from './pocketFiatCorridors'
 import { pocketApiUrl } from './pocketRoutes'
 
@@ -167,6 +168,10 @@ export type PocketX402ActivationData = {
 }
 
 export type PocketActivityRow = {
+  fundingOnly?: boolean
+  paymentFunding?: PocketPaymentFunding[]
+  fundingParent?: string
+  fundingPayment?: PocketActivityRow
   assetSymbol?: string
   xpayCheckoutId?: string
   eventId: string
@@ -592,7 +597,9 @@ function isOptionalBoundedString(value: unknown, max: number) {
 export function isPocketActivityRow(value: unknown): value is PocketActivityRow {
   if (!isRecord(value)) return false
   return isNonEmptyString(value.eventId, 256)
-    && isNonEmptyString(value.txHash, 256)
+    && (isNonEmptyString(value.txHash, 256) || value.fundingOnly === true && value.txHash === '' && Array.isArray(value.paymentFunding) && value.paymentFunding.length > 0)
+    && (value.fundingOnly === undefined || typeof value.fundingOnly === 'boolean')
+    && (value.paymentFunding === undefined || Array.isArray(value.paymentFunding) && value.paymentFunding.length <= 100 && value.paymentFunding.every(item => isRecord(item) && isNonEmptyString(item.source, 32) && isNonEmptyString(item.destination, 32) && isNonEmptyString(item.amount, 80) && isNonEmptyString(item.txHash, 256) && isNonEmptyString(item.status, 80) && isOptionalBoundedString(item.destinationTxHash, 256)))
     && isNonEmptyString(value.chain, 64)
     && isNonEmptyString(value.payer, 320)
     && isNonEmptyString(value.memo, 500)

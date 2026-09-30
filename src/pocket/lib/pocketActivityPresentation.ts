@@ -12,6 +12,11 @@ export function pocketActivityAmount(row: Pick<PocketActivityRow, 'source' | 'am
 /** A bill keeps its identity when its transaction/provider reference arrives. */
 export function currentPocketActivityRow(selected: PocketActivityRow | null, rows: PocketActivityRow[]): PocketActivityRow | null {
   if (!selected) return null
-  return rows.find(row => row.eventId === selected.eventId && row.source === selected.source && row.chain === selected.chain
-    && (row.source === 'bills' || row.txHash === selected.txHash)) ?? selected
+  return rows.find(row => {
+    if (row.source !== selected.source || row.chain !== selected.chain) return false
+    const bank = row.source?.startsWith('bank-') || row.settlementType?.toLowerCase() === 'instant_fiat'
+    const refs = [selected.providerReference, selected.bankOrderId].filter(Boolean)
+    if (bank && refs.some(ref => ref === row.providerReference || ref === row.bankOrderId)) return true
+    return row.eventId === selected.eventId && (['bills', 'request', 'xpay'].includes(row.source || '') || row.txHash === selected.txHash)
+  }) ?? selected
 }

@@ -1,3 +1,4 @@
+import type { PocketFundingReference } from '../lib/pocketPaymentFunding'
 import { POCKET_API } from '../lib/pocketSchemas'
 
 export type PocketBridgeNetwork = 'base' | 'arbitrum' | 'arc' | 'solana' | 'ethereum' | 'polygon'
@@ -35,11 +36,11 @@ export async function readPocketBridgeStatus(input: { accessToken: string; sourc
   return data
 }
 
-export async function recordPocketBridge(input: { accessToken: string; source: PocketBridgeNetwork; destination: PocketBridgeNetwork; amount: string; txHash: string; status: 'submitted' | 'completed'; fetcher?: typeof fetch }) {
+export async function recordPocketBridge(input: { funding?: PocketFundingReference; accessToken: string; source: PocketBridgeNetwork; destination: PocketBridgeNetwork; amount: string; txHash: string; status: 'submitted' | 'completed'; fetcher?: typeof fetch }) {
   const response = await (input.fetcher ?? fetch)(POCKET_API.bridge, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${input.accessToken}` },
-    body: JSON.stringify({ action: 'record', source: input.source, destination: input.destination, amount: input.amount, txHash: input.txHash, status: input.status }),
+    body: JSON.stringify({ action: 'record', funding: input.funding, source: input.source, destination: input.destination, amount: input.amount, txHash: input.txHash, status: input.status }),
   })
   const data = await response.json().catch(() => ({})) as { ok?: boolean; error?: unknown }
   if (!response.ok || data.ok !== true) throw new Error(message(data))

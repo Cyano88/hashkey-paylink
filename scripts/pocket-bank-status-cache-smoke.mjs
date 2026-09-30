@@ -6,3 +6,6 @@ assert.equal(mergePocketActivityRows([row],[missing])[0].paycrestStatus,'settled
 assert.equal(mergePocketActivityRows([row],[{...row,paycrestStatus:'refunded'}])[0].paycrestStatus,'refunded')
 assert.equal(mergePocketActivityRows([{...row,paycrestStatus:'successful'}],[{...row,paycrestStatus:'pending'}])[0].paycrestStatus,'pending')
 console.log('PASS missing status preserves last observation; explicit provider updates replace it.')
+
+assert.equal(mergePocketActivityRows([row],[{...row,paycrestStatus:'settling'}])[0].paycrestStatus,'settled')
+assert.equal(mergePocketActivityRows([{...row,paycrestStatus:'refunded'}],[{...row,paycrestStatus:'pending'}])[0].paycrestStatus,'refunded')
