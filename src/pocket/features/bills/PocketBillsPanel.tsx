@@ -1,3 +1,4 @@
+import PocketCountrySelect from '../../components/PocketCountrySelect'
 import type { PocketPaymentFunding } from '../../lib/pocketPaymentFunding'
 import {BILL_COUNTRIES,normalizeUgandaPhone,type PocketBillCountry} from '../../lib/pocketBillCountry'
 import PocketFiatUsdcEstimate from '../../components/PocketFiatUsdcEstimate'
@@ -200,7 +201,7 @@ export default function PocketBillsPanel({ view, authenticated, preview = false,
 
           <div className="pocket-form-fields pocket-bill-fields min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-1">
             {bills.environment === 'sandbox' && <p className="text-center text-[10px] font-medium text-gray-400 dark:text-gray-500">Test mode · USDC payment is real · no live service is delivered</p>}
-            {isMobileBill ? <div><p className="mb-1 text-[11px] font-semibold text-gray-500">Pay bill in</p><PocketSelect value={bills.country} options={[...BILL_COUNTRIES]} onChange={value=>bills.setDestinationCountry(value as PocketBillCountry)} disabled={locked || bills.processing} ariaLabel="Pay bill in" /></div> : <p className="text-[11px] text-gray-500">Pay bill in ? Nigeria</p>}
+            {isMobileBill ? <div><p className="mb-1 text-[11px] font-semibold text-gray-500">Pay bill in</p><PocketCountrySelect value={bills.country} options={[...BILL_COUNTRIES]} onChange={value=>bills.setDestinationCountry(value as PocketBillCountry)} disabled={locked || bills.processing} ariaLabel="Pay bill in" /></div> : <p className="text-[11px] text-gray-500">Pay bill in ? Nigeria</p>}
             {isMobileBill ? (
               <div data-pocket-data-phone={isData || undefined}>
                 {(isData || bills.country==='UG') && bills.catalogBusy && !networks.length ? <PocketLoadingField label="Loading networks" /> : <PocketMobileNumberInput
