@@ -9,6 +9,7 @@ try{
  page.on('pageerror',e=>errors.push(e.message))
  await page.route('**/*',async route=>{
   if(route.request().resourceType()==='document')return route.fulfill({contentType:'text/html',body:'<div id="root"></div>'})
+  if(route.request().url().includes('/api/pocket/notifications'))return route.fulfill({json:{ok:true,unreadCount:0,notices:[]}})
   if(route.request().method()==='POST'){posts++;return route.fulfill({status:429,json:{ok:false,error:'Too many requests.'},headers:{'Retry-After':'60'}})}
   gets++
   await route.fulfill({json:{ok:true,unreadCount:mode==='unread'?1:0,requests:mode==='empty'?[]:[{id:'fixture',title:'Fixture notification',direction:'incoming',senderName:'Fixture',amount:'1',status:'pending',createdAt:1}]}})

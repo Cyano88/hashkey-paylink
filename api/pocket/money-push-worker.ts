@@ -1,3 +1,6 @@
+import { readPocketNotificationActivity } from './activity.js'
+import { pocketMoneyNotification } from '../../src/pocket/lib/pocketMoneyNotification.js'
+import { mergePocketActivityRows } from '../../src/pocket/lib/pocketActivitySnapshot.js'
 import { listCirclePocketActions } from '../circle-pocket-action-journal.js'
 import { findEvmUsdcTransfer, normalizeEvmUsdcChain } from '../usdc-transfer-verify.js'
 import { pocketRequestRepository } from './request-store.js'
@@ -20,6 +23,7 @@ type Dependencies = {
   findEvm: typeof findEvmUsdcTransfer
   findSolana: typeof findSolanaUsdcTransfer
   sendPush: typeof sendPocketPush
+  readContext: typeof readPocketNotificationActivity
   now: () => number
 }
 
@@ -45,6 +49,7 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
     findEvm: findEvmUsdcTransfer,
     findSolana: findSolanaUsdcTransfer,
     sendPush: sendPocketPush,
+    readContext: readPocketNotificationActivity,
     now: Date.now,
     ...overrides,
   }
@@ -56,15 +61,24 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
   let errors = 0
   for (const ownerId of owners) {
     try {
-      const [rows, wallets, actions, requests] = await Promise.all([
+      const [rawRows, wallets, actions, requests, context] = await Promise.all([
         dependencies.readActivity(ownerId, { timeoutMs: 8_000, limit: 100 }),
         dependencies.readWallets(ownerId),
         dependencies.listActions(ownerId, 500),
         dependencies.listRequests(ownerId),
+        dependencies.readContext(ownerId),
       ])
+      const rows = mergePocketActivityRows([],rawRows)
       const ownWallets = new Set(wallets.map(item => item.walletAddress.toLowerCase()))
       const ignoredHashes = actionHashes(actions)
       const cutoff = dependencies.now() - lookbackMs
+      // Provider records own payment wording. Suppress the debit, fee logs,
+      // refund deposit and every attached funding leg even before delivery.
+      for (const row of context) {
+        for (const hash of [row.txHash,row.refundTxHash,row.destinationTxHash,...(row.paymentFunding||[]).flatMap(f=>[f.txHash,f.destinationTxHash])]) if(hash) ignoredHashes.add(hash.toLowerCase())
+        const notice=pocketMoneyNotification(row)
+        if(notice && notice.occurredAt>=cutoff){await dependencies.sendPush(ownerId,notice.eventId,notice);notifications++}
+      }
       const isConfirmedMoney = (row: (typeof rows)[number]) => {
         const source = String(row.source ?? '').toLowerCase()
         return (source === 'wallet-deposit' || source === 'wallet-withdrawal')
@@ -88,8 +102,8 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
         reconciledRequestIds.add(request.id)
         ignoredHashes.add(row.txHash.toLowerCase())
         await Promise.allSettled([
-          dependencies.sendPush(paid.senderId, `request-paid-received:${paid.id}`, { title: 'Payment received', body: `${paid.amount} USDC received.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
-          dependencies.sendPush(paid.recipientId, `request-paid-sent:${paid.id}`, { title: 'Payment sent', body: `${paid.amount} USDC sent successfully.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
+          dependencies.sendPush(paid.senderId, `request-paid-received:${paid.id}`, { title: 'Request paid', body: `${paid.amount} USDC received for ${paid.title||'your request'}.`, path: '/activity?receipt='+encodeURIComponent(paid.eventId), tag: `pocket-request:${paid.id}` }),
+          dependencies.sendPush(paid.recipientId, `request-paid-sent:${paid.id}`, { title: 'Request paid', body: `Your ${paid.amount} USDC request payment was successful.`, path: '/activity?receipt='+encodeURIComponent(paid.eventId), tag: `pocket-request:${paid.id}` }),
         ])
         notifications += 2
       }
@@ -122,8 +136,8 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
           reconciledRequestIds.add(request.id)
           acceptedRecoveryAttemptAt.delete(recoveryKey)
           await Promise.allSettled([
-            dependencies.sendPush(paid.senderId, `request-paid-received:${paid.id}`, { title: 'Payment received', body: `${paid.amount} USDC received.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
-            dependencies.sendPush(paid.recipientId, `request-paid-sent:${paid.id}`, { title: 'Payment sent', body: `${paid.amount} USDC sent successfully.`, path: '/activity', tag: `pocket-request:${paid.id}` }),
+            dependencies.sendPush(paid.senderId, `request-paid-received:${paid.id}`, { title: 'Request paid', body: `${paid.amount} USDC received for ${paid.title||'your request'}.`, path: '/activity?receipt='+encodeURIComponent(paid.eventId), tag: `pocket-request:${paid.id}` }),
+            dependencies.sendPush(paid.recipientId, `request-paid-sent:${paid.id}`, { title: 'Request paid', body: `Your ${paid.amount} USDC request payment was successful.`, path: '/activity?receipt='+encodeURIComponent(paid.eventId), tag: `pocket-request:${paid.id}` }),
           ])
           notifications += 2
         } catch (error) {
@@ -133,19 +147,16 @@ export async function runPocketMoneyPushWorker(overrides: Partial<Dependencies> 
       requests.filter(item => item.status === 'paid' && item.transactionHash).forEach(item => ignoredHashes.add(item.transactionHash!.toLowerCase()))
       const confirmed = rows.filter(row => {
         if (!isConfirmedMoney(row) || !row.txHash) return false
+        // Allow durable purchase registration to catch up with chain indexing.
+        if(row.direction==='out' && dependencies.now()-row.ts<30_000)return false
         if (ignoredHashes.has(row.txHash.toLowerCase()) || matchingAcceptedRequest(row)) return false
         const counterparty = row.direction === 'in' ? row.payer : row.recipient
         return !counterparty || !ownWallets.has(counterparty.toLowerCase())
       })
       for (const row of confirmed) {
-        const incoming = row.direction === 'in'
-        const network = NETWORK_LABELS[String(row.chain).toLowerCase()] || String(row.chain || 'Pocket')
-        await dependencies.sendPush(ownerId, `wallet-money:${incoming ? 'in' : 'out'}:${row.txHash.toLowerCase()}`, {
-          title: incoming ? 'USDC received' : 'USDC sent',
-          body: `${row.amount} USDC ${incoming ? 'received' : 'sent'} on ${network}.`,
-          path: '/activity',
-          tag: `pocket-money:${row.txHash.toLowerCase()}`,
-        })
+        const notice=pocketMoneyNotification(row)
+        if(!notice)continue
+        await dependencies.sendPush(ownerId,notice.eventId,notice)
         notifications += 1
       }
     } catch (error) {

@@ -220,6 +220,7 @@ function sanitizedActivityRow(value: unknown): PocketActivityRow {
     amount: value.amount,
     ...(value.feeAmount !== undefined ? { feeAmount: value.feeAmount } : {}),
     ts: value.ts,
+    ...(value.statusUpdatedAt !== undefined ? {statusUpdatedAt:value.statusUpdatedAt} : {}),
     ...(value.source !== undefined ? { source: value.source } : {}),
     ...(value.merchantId !== undefined ? { merchantId: value.merchantId } : {}),
     ...(value.contextLabel !== undefined ? { contextLabel: value.contextLabel } : {}),
@@ -425,3 +426,11 @@ export default createDurablePocketActivityHandler({
     readActivitySnapshot({ verifyUser: verifiedPrivyUser, readHistory: async () => ({ payments: [] }), ...group }, { userId } as VerifiedLinkUser, { recent: false, limit: 100 }),
   ])),
 })
+
+/** Persisted purchase truth only: no wallet RPC scans or provider polling. */
+export async function readPocketNotificationActivity(owner:string) {
+ const {readWalletHistory,readCollections,readCollectionPayments,...dependencies}=activityDependencies
+ const rows=(await readActivitySnapshot(dependencies,{userId:owner} as VerifiedLinkUser,{recent:false,limit:100})).payments
+ const routes=await listCirclePocketActions(owner,500,'bank-withdraw.route')
+ return mergePocketActivityRows([],rows).map(row=>row.source==='wallet-bridge'&&routes.some(r=>r.metadata?.source===row.chain&&r.metadata?.txHash?.toLowerCase()===row.txHash.toLowerCase())?{...row,fundingParent:row.fundingParent||'bank-withdraw:linked'}:row)
+}

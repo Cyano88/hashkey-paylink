@@ -666,6 +666,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
         // Provider status refreshes must not move an older payment to the top.
         // A registered receipt keeps its confirmation time in mergeRegisteredPaycrestActivity.
         ts: paycrestActivityTimestamp(order),
+        statusUpdatedAt: Date.parse(order.updated_at || order.created_at) || paycrestActivityTimestamp(order),
         providerReference: order.intent_id,
         bankOrderId: order.paycrest_order_id,
         source: isBankSendOrder ? 'bank-send' : isBankWithdrawOrder ? 'bank-withdraw' : isBankReceiveOrder ? 'bank-receive' : 'ngpos',
@@ -693,6 +694,7 @@ export async function listNgPosHistoryForOwner(privyUserId: string, options: { r
         bankName: isBankSendOrder ? order.provider_institution : order.bank_name,
         bankLast4: isBankSendOrder ? (order.provider_account_identifier || '').slice(-4) : order.bank_last4,
         accountName: order.bank_account_name,
+        ...(!isBankSendOrder&&!isBankWithdrawOrder&&!isBankReceiveOrder&&merchant?.display_name?{activityLabel:merchant.display_name}:{}),
       }
     })
   const enrichedPayments = mergeRegisteredPaycrestActivity(payments, allPaycrestRows)

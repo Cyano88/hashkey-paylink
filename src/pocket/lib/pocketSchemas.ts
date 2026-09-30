@@ -182,6 +182,7 @@ export type PocketActivityRow = {
   feeAmount?: string
   amount: string
   ts: number
+  statusUpdatedAt?: number
   source?: string
   merchantId?: string
   contextLabel?: string
@@ -607,6 +608,7 @@ export function isPocketActivityRow(value: unknown): value is PocketActivityRow 
     && typeof value.ts === 'number'
     && Number.isFinite(value.ts)
     && value.ts >= 0
+    && (value.statusUpdatedAt === undefined || typeof value.statusUpdatedAt === 'number' && Number.isFinite(value.statusUpdatedAt) && value.statusUpdatedAt >= 0)
     && isOptionalBoundedString(value.source, 80)
     && isOptionalBoundedString(value.merchantId, 256)
     && isOptionalBoundedString(value.contextLabel, 500)

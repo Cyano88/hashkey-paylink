@@ -97,6 +97,7 @@ import pocketActivityHandler from './api/pocket/activity.js'
 import pocketLedgerHandler from './api/pocket/ledger.js'
 import pocketPaylinksHandler from './api/pocket/paylinks.js'
 import pocketRequestsHandler from './api/pocket/requests.js'
+import pocketNotificationsHandler from './api/pocket/notifications.js'
 import pocketPushDevicesHandler from './api/pocket/push-devices.js'
 import pocketBridgeHandler from './api/pocket/bridge.js'
 import pocketXPayBankHandler from './api/pocket/xpay-bank.js'
@@ -407,6 +408,8 @@ app.all('/api/pocket/activity',          readLimiter, pocketActivityHandler)
 app.get('/api/pocket/ledger',            readLimiter, pocketLedgerHandler)
 app.all('/api/pocket/paylink-requests',  strictLimiter, pocketPaylinkRequestsHandler)
 app.all('/api/pocket/paylinks',          strictLimiter, pocketPaylinksHandler)
+app.get('/api/pocket/notifications', readLimiter, pocketNotificationsHandler)
+app.post('/api/pocket/notifications', strictLimiter, pocketNotificationsHandler)
 app.get('/api/pocket/requests',          readLimiter, pocketRequestsHandler)
 app.all('/api/pocket/requests',          strictLimiter, pocketRequestsHandler)
 app.all('/api/pocket/push-devices',      strictLimiter, pocketPushDevicesHandler)

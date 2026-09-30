@@ -1,3 +1,4 @@
+import { readPocketNotifications } from '../api/pocketNotificationsClient';
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { isXStocksPath, xStockPath } from "../lib/pocketRail";
@@ -32,7 +33,7 @@ export default function PocketNotificationButton() {
       try {
         const token = await tokenRef.current();
         if (!token || cancelled || document.visibilityState !== 'visible') return;
-        const inbox = stocks ? { unreadCount: (await stockNotificationsRequest(() => Promise.resolve(token))).unread } : await readPocketRequestInbox(token);
+        const inbox = stocks ? { unreadCount: (await stockNotificationsRequest(() => Promise.resolve(token))).unread } : await Promise.all([readPocketRequestInbox(token),readPocketNotifications(token)]).then(([requests,notices])=>({unreadCount:requests.unreadCount+notices.unreadCount}));
         if (!cancelled) setUnread(inbox.unreadCount);
       } catch { /* Keep the last count when the session or inbox is unavailable. */ }
       finally { inFlight = false; }

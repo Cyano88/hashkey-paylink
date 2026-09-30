@@ -17,6 +17,7 @@ export type PocketActivityRow = {
   feeAmount?: string
   amount: string
   ts: number
+  statusUpdatedAt?: number
   source?: string
   merchantId?: string
   contextLabel?: string

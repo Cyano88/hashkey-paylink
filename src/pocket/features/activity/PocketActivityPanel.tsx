@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import PocketDateField from '../../components/PocketDateField'
 import PocketLocalEquivalent from '../../components/PocketLocalEquivalent'
 import { pocketActivityIcon } from '../../components/pocketActivityIcon'
@@ -45,6 +46,16 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
   const [exportError,setExportError] = useState('')
   const [filterOpen,setFilterOpen] = useState(false)
   const [selected,setSelected] = useState<PocketActivityRow|null>(null)
+  const [searchParams,setSearchParams]=useSearchParams()
+  const receiptReference=searchParams.get('receipt')
+  useEffect(()=>{
+    if(!receiptReference)return
+    const row=rows.find(r=>[r.eventId,r.providerReference,r.bankOrderId,r.txHash].includes(receiptReference))
+    if(!row)return
+    setSelected(row)
+    const next=new URLSearchParams(searchParams);next.delete('receipt');setSearchParams(next,{replace:true})
+  },[receiptReference,rows,searchParams,setSearchParams])
+
   useEffect(()=>{setCategory(initialCategory(view))},[view])
   const transactions=(collectionId?rows:incomingPos?rows.filter(isIncomingPosPayment):personalPocketActivity(rows)).slice().sort((a,b)=>b.ts-a.ts)
   const visible=transactions.filter(row=>{

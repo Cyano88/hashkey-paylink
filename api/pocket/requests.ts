@@ -22,15 +22,15 @@ export function createPocketRequestsHandler(deps: Dependencies) {
   const notifyPaid = (request: Awaited<ReturnType<PocketRequestRepository['getFor']>>) => {
     void Promise.allSettled([
       sendPocketPush(request.senderId, 'request-paid-received:' + request.id, {
-        title: 'Payment received',
-        body: `${request.amount} USDC received.`,
-        path: '/activity',
+        title: 'Request paid',
+        body: `${request.amount} USDC received for ${request.title}.`,
+        path: '/activity?receipt='+encodeURIComponent(request.eventId),
         tag: 'pocket-request:' + request.id,
       }),
       sendPocketPush(request.recipientId, 'request-paid-sent:' + request.id, {
-        title: 'Payment sent',
-        body: `${request.amount} USDC sent successfully.`,
-        path: '/activity',
+        title: 'Request paid',
+        body: `Your ${request.amount} USDC payment for ${request.title} was successful.`,
+        path: '/activity?receipt='+encodeURIComponent(request.eventId),
         tag: 'pocket-request:' + request.id,
       }),
     ])

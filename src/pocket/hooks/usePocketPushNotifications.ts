@@ -1,3 +1,4 @@
+import { pocketNotificationPath } from '../lib/pocketNotificationPath'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { PushNotifications } from '@capacitor/push-notifications'
@@ -12,12 +13,7 @@ import { pocketPushEnabled, POCKET_PUSH_PREFERENCE_EVENT, rememberPocketPushToke
 // native plugin thread, which JavaScript error handling cannot recover from.
 const POCKET_PUSH_ENABLED = import.meta.env.VITE_POCKET_PUSH_ENABLED === 'true'
 
-const ALLOWED_PATHS = new Set<string>([
-  '/xstocks/home', '/xstocks/activity', '/xstocks/notifications',
-  POCKET_ROUTES.home,
-  POCKET_ROUTES.activity,
-  POCKET_ROUTES.notifications,
-])
+
 
 export default function usePocketPushNotifications(input: {
   authenticated: boolean
@@ -58,8 +54,8 @@ export default function usePocketPushNotifications(input: {
         void refreshPocketData()
       }))
       handles.push(await PushNotifications.addListener('pushNotificationActionPerformed', action => {
-        const path = String(action.notification.data?.path ?? '')
-        if (ALLOWED_PATHS.has(path)) input.navigate(POCKET_BASE_PATH + path)
+        const path = pocketNotificationPath(action.notification.data?.path)
+        if (path) input.navigate(POCKET_BASE_PATH + path)
         void refreshPocketData()
       }))
       await PushNotifications.createChannel({
