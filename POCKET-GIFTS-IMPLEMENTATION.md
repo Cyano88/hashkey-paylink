@@ -294,3 +294,10 @@ Remaining: production route/native deep-link binding, secure creator capability 
 - Backend regression verifies claimed response without capability; browser checks cover formatting, pasted link preservation, claimed gift details and Done navigation. TypeScript diagnostics zero. APK/live deployment pending.
 - Release 6ae7ade9f is live on Render dep-dav6pfn0ik1s73bl6g40. Final Vite/Gradle passed and Pixel install -r succeeded preserving data. First build attempt stopped on deployment-time public-config HTTP 502; retried only after HTTP 200.
 - Actual Pixel verified lowercase incremental code entry inserts hyphen after four characters. Existing already-claimed gift opened its gift-box view with claimed message, centered heading, Done, no Back and no redemption action. Done returned /home. No new claim/funding/signing occurred. Generated tracked build files restored; unrelated XPay edits preserved.
+
+## Public Base gift enablement - 2026-10-01
+- User explicitly requested removing test limits for production. Live diagnosis first confirmed the configured pilot allowed 0.01 USDC and rejected 0.1 USDC before gift creation/funding.
+- Removed pilot membership and 0.01 cap from the active Base rollout gate, enabled public Base funding, and removed runtime dependency on POCKET_GIFT_PILOT_USER_IDS. Existing amount precision/positive validation, native-wallet ownership, 25-bps fee, approvals, idempotency, rate limits and onchain single-claim/refund enforcement remain. Other gift networks remain disabled.
+- Backend tests passed for non-pilot accounts, 0.1 and larger values, unsupported network rejection and explicit rollout rollback. Funding persistence/recovery and code security suites passed; TypeScript diagnostics zero.
+- Re-verified deployed Base bytecode, canonical USDC, pinned treasury, decimals and 25-bps fee through the server RPC: verified=true. Prior live sponsored funding/claim/refund evidence and installed-app claim/receipt tests recorded above. No new payment or gift funding initiated for this change.
+- Backend deployment pending. Saved 0.1 draft should be retried, not recreated, after live enablement.
