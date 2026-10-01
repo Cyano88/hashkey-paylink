@@ -190,3 +190,6 @@ Remaining: production route/native deep-link binding, secure creator capability 
 - Gift menus and sender page now read authenticated configuration. Account changes clear previous eligibility. No bearer gift capability enters this configuration request.
 - Backend, funding, claim-controller and deployment smoke checks passed, including pilot access, cap, network and revocation tests. Focused ES2022 TypeScript diagnostics: zero. Mobile Vite build completed successfully.
 - Live end-user PIN/Circle approval, persisted receipt and installed-app redemption remain untested. Account selection is pending; no pilot account has been enabled in this checkpoint.
+
+- Release result: d4187da31 is live on Render (dep-dav29dm0tbcc73eaoqa0). Readiness API returns HTTP 200 JSON with sendEnabled=false and claimEnabled=true. A transient 502 during instance replacement cleared after rollout; no unresolved outage observed in the final check.
+- Android Gradle build succeeded; Pixel 5A160DLCH006VM install -r returned Success, preserving app data. Restored only generated tracked dist/Gradle files; unrelated XPay changes remain untouched. Pilot account selection and user approval are still pending; no additional money moved in this release.
