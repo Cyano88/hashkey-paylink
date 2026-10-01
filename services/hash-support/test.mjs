@@ -31,6 +31,7 @@ test('real PostgreSQL engine and HTTP isolation',async()=>{
   assert.equal((await call('/v1/integration-state',b.apiKey)).body.value,null)
   assert.deepEqual((await call('/v1/integration-state',a.apiKey)).body.value,state)
   assert.equal((await query('SELECT * FROM hash_integration_state')).rows.length,0)
+  await query('BEGIN');await query("SELECT set_config('hash.workspace_id',$1,true),set_config('hash.customer_id',$2,true)",[a.workspaceId,'customer-1']);assert.equal((await query('SELECT * FROM hash_integration_state')).rows.length,0);await query('ROLLBACK')
   const ca=await call('/v1/conversations',sa,'POST');assert.equal(ca.status,201);const id=ca.body.conversation.id
   const message={requestId:'test-message-00000001',message:'Synthetic test message'}
   const first=await call('/v1/conversations/'+id+'/messages',sa,'POST',message);assert.equal(first.status,201)

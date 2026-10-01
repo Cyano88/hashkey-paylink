@@ -38,4 +38,4 @@ CREATE TABLE IF NOT EXISTS hash_integration_state (
 ALTER TABLE hash_integration_state ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hash_integration_state FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS hash_integration_scope ON hash_integration_state;
-CREATE POLICY hash_integration_scope ON hash_integration_state USING (workspace_id::text=current_setting('hash.workspace_id',true)) WITH CHECK (workspace_id::text=current_setting('hash.workspace_id',true));
+CREATE POLICY hash_integration_scope ON hash_integration_state USING (workspace_id::text=current_setting('hash.workspace_id',true) AND current_setting('hash.customer_id',true)='') WITH CHECK (workspace_id::text=current_setting('hash.workspace_id',true) AND current_setting('hash.customer_id',true)='');
