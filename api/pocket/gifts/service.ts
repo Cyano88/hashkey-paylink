@@ -9,6 +9,8 @@ export type GiftDependencies={
  store:GiftStore;now?:()=>number;fundingEnabled?(network:GiftNetwork):boolean;
  deployment(network:GiftNetwork):GiftDeployment|undefined;
  wallet(userId:string,network:GiftNetwork):Promise<{address:Address;id:string}|undefined>;
+ readFundingAttempt?(input:{record:GiftRecord;userToken:string}):Promise<{status:'failed'|'pending';txHash?:Hex}>;
+ publishReceipts?(record:GiftRecord):Promise<void>;
  observe(record:GiftRecord,receiptHint?:Hex):Promise<GiftObservation>;
  challenge(input:{record:GiftRecord;kind:'funding'|'claim'|'refund';attempt:GiftAttempt;userToken:string;walletId:string}):Promise<{challengeId:string;transactionId:string}>;
 }
@@ -18,13 +20,15 @@ export function createGiftService(deps:GiftDependencies){
  const linked=async(userId:string,network:GiftNetwork)=>{const wallet=await deps.wallet(userId,network);if(!wallet||!isAddress(wallet.address)||!wallet.id)throw new GiftError(409,'Finish setting up your Pocket wallet first.');return {...wallet,address:getAddress(wallet.address)}}
  const refresh=async(id:string,receiptHint?:Hex)=>{
   const before=await get(id),observation=await deps.observe(before,receiptHint)
-  return deps.store.update(id,current=>{
+  const saved=await deps.store.update(id,current=>{
    if(!current)throw new GiftError(404,'Gift not found.')
    if(current.observedBlock&&observation.blockNumber<BigInt(current.observedBlock))return current
    if(current.observedBlock===String(observation.blockNumber)&&current.observedBlockHash&&current.observedBlockHash!==observation.blockHash)throw new GiftError(503,'Gift confirmation changed. Try again shortly.')
    if((current.state==='claimed'||current.state==='refunded')&&current.state!==observation.state)throw new GiftError(503,'Gift confirmation needs reconciliation.')
-   return {...current,state:observation.state,claimRecipient:observation.claimRecipient??current.claimRecipient,settlementHash:observation.settlementHash??current.settlementHash,observedBlock:String(observation.blockNumber),observedTimestamp:String(observation.timestamp),observedBlockHash:observation.blockHash,updatedAt:now()}
+   return {...current,fundingHash:observation.fundingHash??current.fundingHash,fundingAt:observation.fundingAt??current.fundingAt,refundHash:observation.refundHash??current.refundHash,refundAt:observation.refundAt??current.refundAt,settlementAt:observation.settlementAt??current.settlementAt,state:observation.state,claimRecipient:observation.claimRecipient??current.claimRecipient,settlementHash:observation.settlementHash??current.settlementHash,observedBlock:String(observation.blockNumber),observedTimestamp:String(observation.timestamp),observedBlockHash:observation.blockHash,updatedAt:now()}
   })
+  await deps.publishReceipts?.(saved)
+  return saved
  }
  const authorize=async(identity:GiftIdentity,id:string,kind:'funding'|'claim'|'refund',userToken:string,claim?:{signature:Hex;deadline:string})=>{
   const existing=await get(id)
@@ -46,7 +50,7 @@ export function createGiftService(deps:GiftDependencies){
    if(!current)throw new GiftError(404,'Gift not found.')
    if(kind==='funding'?current.state!=='unfunded':current.state!=='available')throw new GiftError(409,'This gift is no longer available.')
    const existing=current[kind]
-   if(existing&&!(kind==='claim'&&existing.deadline&&BigInt(current.observedTimestamp??'0')>BigInt(existing.deadline))){
+   if(existing&&existing.phase!=='failed'&&!(kind==='claim'&&existing.deadline&&BigInt(current.observedTimestamp??'0')>BigInt(existing.deadline))){
     if(existing.userId!==identity.userId||existing.walletAddress.toLowerCase()!==wallet.address.toLowerCase())throw new GiftError(409,'A gift claim is already awaiting confirmation.')
     if(existing.phase!=='authorization_unknown'&&!(existing.phase==='authorizing'&&now()-existing.startedAt>=30000))return current
     // Retry only the same provider request and bound payload. Never rotate the idempotency key after a timeout.
@@ -69,6 +73,24 @@ export function createGiftService(deps:GiftDependencies){
   }
  }
  return {
+  async recoverFunding(identity:GiftIdentity,id:string,userToken:string){
+   const before=await get(id)
+   if(before.ownerId!==identity.userId)throw new GiftError(403,'This gift belongs to another account.')
+   const wallet=await linked(identity.userId,before.deployment.network)
+   if(wallet.id!==before.walletId||wallet.address.toLowerCase()!==before.senderAddress.toLowerCase())throw new GiftError(403,'Open the original gift wallet.')
+   if(!before.funding?.challengeId||!deps.readFundingAttempt)return {retryAllowed:false,gift:publicGift(await refresh(id),now())}
+   const provider=await deps.readFundingAttempt({record:before,userToken})
+   const record=await refresh(id,provider.txHash)
+   if(provider.status!=='failed'||provider.txHash||record.state!=='unfunded'||BigInt(record.expiresAt)<=seconds())return {retryAllowed:false,gift:publicGift(record,now())}
+   let retryAllowed=false
+   const saved=await deps.store.update(id,current=>{
+    if(!current)throw new GiftError(404,'Gift not found.')
+    if(current.state!=='unfunded'||current.funding?.id!==before.funding!.id)return current
+    retryAllowed=true
+    return {...current,funding:{...current.funding,phase:'failed'},updatedAt:now()}
+   })
+   return {retryAllowed,gift:publicGift(saved,now())}
+  },
   configuration(){return {sendEnabled:Boolean(deps.deployment('base'))&&(deps.fundingEnabled?.('base')??true),claimEnabled:Boolean(deps.deployment('base')),network:'base' as const}},
   async ownerStatus(identity:GiftIdentity,id:string){const before=await get(id);if(before.ownerId!==identity.userId)throw new GiftError(403,'This gift belongs to another account.');const record=await refresh(id);return {gift:publicGift(record,now()),funding:{principal:record.amountUnits,platformFee:record.feeUnits,totalDebit:String(BigInt(record.amountUnits)+BigInt(record.feeUnits))}}},
   async create(identity:GiftIdentity,input:{requestId:string;network:GiftNetwork;amount:string;claimSigner:Address;expiresAt:string;message?:string}){

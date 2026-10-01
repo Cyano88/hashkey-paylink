@@ -25,3 +25,13 @@ await recovery.fund();assert.equal(approved,1,'unknown result cannot fund again'
 status='available';await recovery.recheck();assert.equal(recovery.state.phase,'available')
 const mismatched=createGiftFundingFlow({...deps,create:async()=>({id:'g_'+'a'.repeat(22),principal:'1',platformFee:'0',totalDebit:'1'})});await mismatched.review();assert.equal(mismatched.state.phase,'draft')
 console.log('PASS secure gift persistence, account isolation, read-back verification, exact fees, duplicate taps and interrupted funding recovery.')
+
+status='funding'
+let retryAllowed=false
+const retry=createGiftFundingFlow({...deps,draft:{...draft,giftId:'g_'+'a'.repeat(22),approvalStarted:true},recoverFunding:async()=>({retryAllowed})})
+await retry.review();assert.equal(retry.state.phase,'unconfirmed')
+await retry.recheck();assert.equal(retry.state.phase,'unconfirmed')
+retryAllowed=true;await retry.recheck();assert.equal(retry.state.phase,'review')
+assert.equal((await vault.load(draft.requestId)).approvalStarted,false)
+status='available';await retry.fund();assert.equal(retry.state.phase,'available')
+console.log('PASS verified funding retry resets the durable marker only after server authorization.')

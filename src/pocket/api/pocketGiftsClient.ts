@@ -77,3 +77,9 @@ export async function createPocketGift(input:Options&{draft:import('../features/
  if(!/^g_[A-Za-z0-9_-]{22}$/.test(data.gift?.id||'')||!data.funding||![data.funding.principal,data.funding.platformFee,data.funding.totalDebit].every(x=>typeof x==='string'&&/^\d+$/.test(x)))throw Error('Gift funding details are unavailable.')
  return {id:data.gift.id,...data.funding} as import('../features/gifts/giftFundingController').GiftFundingReview
 }
+
+export async function recoverPocketGiftFunding(input:Options&{id:string;session:CircleEvmEmailSession}){
+ const result=await postGift({action:'recover-funding',id:input.id,userToken:input.session.userToken},input)
+ if(result.gift?.id!==input.id||result.gift?.network!==input.session.chain||typeof result.retryAllowed!=='boolean')throw Error('Gift recovery could not be verified.')
+ return {retryAllowed:result.retryAllowed}
+}

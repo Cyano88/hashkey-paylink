@@ -1,3 +1,4 @@
+import {giftActivityRow} from './gifts/receipts.js'
 import { collapsePocketAssetMoves } from '../../src/pocket/lib/pocketAssetMoveActivity.js'
 import { groupPocketPaymentFunding } from '../../src/pocket/lib/pocketPaymentFunding.js'
 import { mergePocketActivityRows } from '../../src/pocket/lib/pocketActivitySnapshot.js'
@@ -50,6 +51,7 @@ type PocketActivityHandlerDependencies = {
 type PocketActivityReadOptions = { recent: boolean; limit: number }
 
 function bridgeActivityRow(record: CirclePocketActionRecord): PocketActivityRow | undefined {
+  if(record.action.startsWith('gift.'))return giftActivityRow(record)
   if (record.action === 'wallet.swap' && record.metadata?.txHash) return {
     eventId: 'pocket-swap:' + record.id, txHash: record.metadata.txHash, chain: 'arc', payer: record.metadata.walletAddress || 'Pocket wallet',
     memo: record.metadata.tokenIn + ' to ' + record.metadata.tokenOut, amount: '0', ts: record.updatedAt,

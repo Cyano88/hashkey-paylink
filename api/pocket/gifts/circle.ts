@@ -23,3 +23,10 @@ export async function giftCircleChallenge(input:{record:GiftRecord;kind:'funding
  if(!data.challengeId)throw new GiftError(503,'Wallet approval is not available yet. Try again.')
  return {challengeId:data.challengeId,transactionId:data.transactionId||data.id||''}
 }
+
+export async function readGiftFundingAttempt(input:{record:GiftRecord;userToken:string}){
+ if(!input.record.funding?.challengeId)throw new GiftError(409,'Gift approval needs reconciliation.')
+ const {readCircleEvmChallenge}=await import('../../circle-solana-email.js')
+ const result=await readCircleEvmChallenge({chain:input.record.deployment.network,userToken:input.userToken,walletId:input.record.walletId,walletAddress:input.record.senderAddress,challengeId:input.record.funding.challengeId})
+ return {...result,txHash:result.txHash as Hex|undefined}
+}

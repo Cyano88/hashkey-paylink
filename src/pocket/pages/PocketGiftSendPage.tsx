@@ -10,7 +10,7 @@ import {createGiftFundingFlow,giftUsdc,type GiftFundingState} from '../features/
 import {giftLink,type GiftDraft} from '../features/gifts/pocketGift'
 import type {SavedGiftDraft} from '../features/gifts/giftDraftVault'
 import {nativeGiftDraftVault} from '../lib/pocketGiftVault'
-import {approvePocketGift,createPocketGift,preparePocketGiftFunding,preparePocketGiftRefund,readPocketGiftConfig,readPocketGiftOwner} from '../api/pocketGiftsClient'
+import {approvePocketGift,createPocketGift,recoverPocketGiftFunding,preparePocketGiftFunding,preparePocketGiftRefund,readPocketGiftConfig,readPocketGiftOwner} from '../api/pocketGiftsClient'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketBottomSheet from '../components/PocketBottomSheet'
 import PocketConfirmationDetails from '../components/PocketConfirmationDetails'
@@ -38,6 +38,7 @@ function Sender({owner,email,getAccessToken}:{owner:string;email:string;getAcces
   let session:CircleEvmEmailSession|undefined
   const token=async()=>{const value=await callbacks.current.getAccessToken();if(!value)throw Error('Sign in to continue.');return value}
   const controller=createGiftFundingFlow({draft,save:vault.save,create:async value=>{if(!value.giftId)await callbacks.current.wallet.ensureWallet('base');return createPocketGift({draft:value,accessToken:await token()})},status:async id=>(await readPocketGiftOwner({id,accessToken:await token()})).gift.status,security:requestPocketPaymentApproval,
+   recoverFunding:async id=>{const account=await callbacks.current.wallet.ensureWallet('base');if(!account)throw Error('Open your Base wallet.');const recoverySession=await callbacks.current.wallet.getEvmSession('base',account.address);return recoverPocketGiftFunding({id,session:recoverySession,accessToken:await token()})},
    prepare:async id=>{const account=await callbacks.current.wallet.ensureWallet('base');if(!account)throw Error('Open your Base wallet.');session=await callbacks.current.wallet.getEvmSession('base',account.address);return preparePocketGiftFunding({id,session,accessToken:await token()})},prepareRefund:async id=>{const account=await callbacks.current.wallet.ensureWallet('base');if(!account)throw Error('Open your Base wallet.');session=await callbacks.current.wallet.getEvmSession('base',account.address);return preparePocketGiftRefund({id,session,accessToken:await token()})},approve:approval=>approvePocketGift({approval,session:session!}),changed:setState})
   flow.current=controller;void controller.review()
   return()=>controller.dispose()

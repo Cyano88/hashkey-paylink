@@ -51,7 +51,7 @@ async function claim(f,who,id){const details=await f.service.claimDetails(who,id
 {
  const f=setup(),{gift}=await f.service.create(f.alice,f.input),record=await f.store.read(gift.id)
  let wrong=false,reorg=false
- const rpc={getChainId:async()=>8453,getBlockNumber:async()=>101n,getBlock:async()=>({hash:hash(reorg?2:1),timestamp:1n}),getCode:async()=>wrong?'0x6001':'0x6000',readContract:async input=>input.functionName==='usdc'?deployment.token:input.functionName==='treasury'?deployment.treasury:input.functionName==='PLATFORM_FEE_BPS'?25n:[record.senderAddress,record.claimSigner,100000000n,BigInt(record.expiresAt),1]}
+ const rpc={getLogs:async()=>[],getChainId:async()=>8453,getBlockNumber:async()=>101n,getBlock:async()=>({hash:hash(reorg?2:1),timestamp:1n}),getCode:async()=>wrong?'0x6001':'0x6000',readContract:async input=>input.functionName==='usdc'?deployment.token:input.functionName==='treasury'?deployment.treasury:input.functionName==='PLATFORM_FEE_BPS'?25n:[record.senderAddress,record.claimSigner,100000000n,BigInt(record.expiresAt),1]}
  assert.equal((await observeGift(rpc,record)).state,'available');wrong=true;await assert.rejects(observeGift(rpc,record),/contract verification failed/);wrong=false
  const before=rpc.getBlock;let reads=0;rpc.getBlock=async()=>({hash:hash(++reads===1?1:2),timestamp:1n});await assert.rejects(observeGift(rpc,record),/confirmation changed/)
 }
@@ -86,3 +86,47 @@ console.log('PASS wallet claim adapter: local signing, no bearer credential tran
  const second=f.service.authorize(f.alice,gift.id,'funding','token');while(count<2)await new Promise(r=>setTimeout(r,1));resolveFirst();await first;resolveSecond();await second
  assert.equal((await f.store.read(gift.id)).funding.phase,'awaiting_approval');console.log('PASS late retry failure cannot overwrite an already recovered wallet approval.')
 }
+// Only provider-confirmed terminal failures can reopen a funding approval.
+{
+ const f=setup(),{gift}=await f.service.create(f.alice,f.input)
+ let provider={status:'pending'},reads=0
+ f.deps.readFundingAttempt=async()=>{reads++;return provider}
+ await f.service.authorize(f.alice,gift.id,'funding','token')
+ const first=(await f.store.read(gift.id)).funding.id
+ await assert.rejects(f.service.recoverFunding(f.bob,gift.id,'token'),e=>e.status===403)
+ assert.equal(reads,0)
+ assert.equal((await f.service.recoverFunding(f.alice,gift.id,'token')).retryAllowed,false)
+ await f.service.authorize(f.alice,gift.id,'funding','token');assert.equal(f.calls.length,1)
+ provider={status:'failed',txHash:hash(7)}
+ assert.equal((await f.service.recoverFunding(f.alice,gift.id,'token')).retryAllowed,false)
+ provider={status:'failed'}
+ assert.equal((await f.service.recoverFunding(f.alice,gift.id,'token')).retryAllowed,true)
+ await Promise.all([f.service.authorize(f.alice,gift.id,'funding','token'),f.service.authorize(f.alice,gift.id,'funding','token')])
+ assert.equal(f.calls.length,2)
+ assert.notEqual((await f.store.read(gift.id)).funding.id,first)
+ f.setState('available')
+ assert.equal((await f.service.recoverFunding(f.alice,gift.id,'token')).retryAllowed,false)
+}
+{
+ const f=setup(),{gift}=await f.service.create(f.alice,f.input)
+ await f.service.authorize(f.alice,gift.id,'funding','token')
+ let release
+ f.deps.readFundingAttempt=()=>new Promise(r=>release=r)
+ const recovery=f.service.recoverFunding(f.alice,gift.id,'token')
+ while(!release)await new Promise(r=>setTimeout(r,1))
+ await f.store.update(gift.id,r=>({...r,funding:{...r.funding,id:randomUUID()}}))
+ release({status:'failed'})
+ assert.equal((await recovery).retryAllowed,false,'late failure must not reset a newer attempt')
+}
+console.log('PASS funding recovery: owner-only, provider failure plus unfunded contract, no hash-only retries, concurrent retry and stale response guards.')
+
+{
+ const f=setup(),{gift}=await f.service.create(f.alice,f.input),record=await f.store.read(gift.id)
+ let status=1,bad=false,removed=false
+ const rpc={getChainId:async()=>8453,getBlockNumber:async()=>101n,getBlock:async()=>({hash:hash(1),timestamp:123n}),getCode:async()=> '0x6000',readContract:async input=>input.functionName==='usdc'?deployment.token:input.functionName==='treasury'?deployment.treasury:input.functionName==='PLATFORM_FEE_BPS'?25n:[record.senderAddress,record.claimSigner,100000000n,BigInt(record.expiresAt),status],getLogs:async({event})=>[{removed,blockNumber:100n,blockHash:hash(1),transactionHash:event.name==='GiftFunded'?hash(2):hash(3),args:{giftId:record.giftId,sender:record.senderAddress,claimSigner:record.claimSigner,amount:bad?1n:100000000n,platformFee:250000n,expiresAt:BigInt(record.expiresAt)}}]}
+ let result=await observeGift(rpc,record);assert.equal(result.fundingHash,hash(2));assert.equal(result.fundingAt,123000)
+ bad=true;result=await observeGift(rpc,record);assert.equal(result.fundingHash,undefined)
+ bad=false;removed=true;result=await observeGift(rpc,record);assert.equal(result.fundingHash,undefined)
+ removed=false;status=3;result=await observeGift(rpc,record);assert.equal(result.refundHash,hash(3));assert.equal(result.refundAt,123000)
+}
+console.log('PASS funding/refund receipt evidence checks exact principal/fee/expiry, canonical block and removed logs.')
