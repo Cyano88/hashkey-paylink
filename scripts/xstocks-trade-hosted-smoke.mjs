@@ -39,8 +39,16 @@ assert.equal((await call(h.participant,{agreementId:a.id,action:'prepare',operat
 assert.equal((await call(h.developer,{},'GET',{idempotencyKey:'trade_fixture_00001'})).statusCode,200)
 console.log('Hosted Trade passed: exact totals, separate binding, delivery deadlines, project isolation, idempotent lookup, exact participant consent and paused recovery.')
 
+const settlement={nonce:'3',buyerAmount:'625000000000000000',evidence:'0x'+'bb'.repeat(32)};
+planStatus={enabled:true,actions:['proposeSettlement'],state:5,observedBlock:'101'};
+let proposed=await call(h.participant,{agreementId:a.id,action:'prepare',operation:'proposeSettlement',settlement,evidence:'Return half the held stock shares'});
+assert.equal(proposed.statusCode,200);assert.deepEqual(lastPlan.settlement,settlement);assert.ok(proposed.body.agreement.evidence.some(note=>note.body==='Return half the held stock shares'));
+const callsBeforeInvalid=planCalls;
+assert.equal((await call(h.participant,{agreementId:a.id,action:'prepare',operation:'proposeSettlement',settlement,evidence:'short'})).statusCode,400);assert.equal(planCalls,callsBeforeInvalid);
+assert.equal((await call(h.developer,{action:'prepare',operation:'acceptSettlement',settlement})).statusCode,400);
+console.log('Participant settlement forwarding, durable proposal note, invalid note rejection and developer write boundary passed.');
 const refreshQuery={id:a.id,reconcile:'true'};
-planStatus={enabled:true,actions:['release'],state:6,observedBlock:'101',transaction:{unexpected:true}};
+planStatus={enabled:true,actions:['release'],state:6,observedBlock:'102',transaction:{unexpected:true}};
 let fresh=await call(h.developer,{},'GET',refreshQuery);
 assert.equal(fresh.statusCode,200);assert.equal(fresh.body.agreement.observed.state,6);
 assert.equal(lastPlan.action,undefined);assert.equal(lastPlan.account,buyer);

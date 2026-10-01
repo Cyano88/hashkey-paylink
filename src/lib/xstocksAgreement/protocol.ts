@@ -11,6 +11,8 @@ export const TRADE_FACTORY_ABI = parseAbi([
  'function create((bytes32 offerId,bytes32 termsHash,address buyer,address seller,address arbiter,address token,uint256 amount,uint64 fundBy,uint32 dispatchWindow,uint32 deliveryWindow,uint32 inspectionWindow) terms) returns(address)',
 ]);
 export const TRADE_ESCROW_ABI = parseAbi([
+ 'function settlementNonce() view returns(uint256)', 'function settlementProposer() view returns(address)', 'function proposedBuyerAmount() view returns(uint256)', 'function settlementEvidence() view returns(bytes32)',
+ 'function proposeSettlement(uint256,bytes32)', 'function withdrawSettlement(uint256)', 'function acceptSettlement(uint256,uint256,bytes32)',
  'function fundedShares() view returns(uint256)', 'function buyerSettledShares() view returns(uint256)', 'function sellerSettledShares() view returns(uint256)',
  'function buyerUnderlyingAtSettlement() view returns(uint256)', 'function sellerUnderlyingAtSettlement() view returns(uint256)',
  'function offerId() view returns(bytes32)', 'function termsHash() view returns(bytes32)',
@@ -23,7 +25,8 @@ export const TRADE_ESCROW_ABI = parseAbi([
  'function refundUndispatched()', 'function refundBySeller(bytes32)', 'function openDispute(bytes32)',
 ]);
 export const TRADE_TOKEN_ABI = parseAbi(['function allowance(address,address) view returns(uint256)', 'function balanceOf(address) view returns(uint256)', 'function approve(address,uint256) returns(bool)', 'function decimals() view returns(uint8)']);
-export const TRADE_ACTION_LABELS = { create:'Prepare escrow', accept:'Confirm escrow terms', approve:'Approve payment', fund:'Pay into escrow', cancel:'Cancel unpaid escrow', dispatch:'Mark dispatched', receipt:'Confirm received', release:'Release payment', refund:'Refund buyer', missedDispatch:'Claim refund', dispute:'Open dispute', inspectionRelease:'Claim payment' } as const;
+export const TRADE_ACTION_LABELS = { proposeSettlement:'Propose a split', withdrawSettlement:'Withdraw proposal', acceptSettlement:'Accept split', create:'Prepare escrow', accept:'Confirm escrow terms', approve:'Approve payment', fund:'Pay into escrow', cancel:'Cancel unpaid escrow', dispatch:'Mark dispatched', receipt:'Confirm received', release:'Release payment', refund:'Refund buyer', missedDispatch:'Claim refund', dispute:'Open dispute', inspectionRelease:'Claim payment' } as const;
 export type TradeXLayerAction = keyof typeof TRADE_ACTION_LABELS;
 export type TradeXLayerTransaction = { to: `0x${string}`; data: `0x${string}`; chainId: 196; value: '0'; account: `0x${string}` };
-export type TradeXLayerStatus = { fundingExpired?: boolean; stockReceipt?: {policy:typeof SHARE_CUSTODY_POLICY;fundedShares:string;currentUnderlyingUnits:string;buyerSettledShares:string;sellerSettledShares:string;buyerUnderlyingAtSettlement:string;sellerUnderlyingAtSettlement:string;observedBlock:string}; fundingIssue?: string; observedBlock?: string; enabled: boolean; state?: number; escrow?: `0x${string}`; amount?: string; token?: `0x${string}`; decimals?: number; actions: TradeXLayerAction[]; pending?: boolean; transaction?: TradeXLayerTransaction };
+export type SettlementReview = {nonce:string;buyerAmount:string;evidence:`0x${string}`};
+export type TradeXLayerStatus = { settlement?:SettlementReview & {proposer:`0x${string}`}; fundingExpired?: boolean; stockReceipt?: {policy:typeof SHARE_CUSTODY_POLICY;fundedShares:string;currentUnderlyingUnits:string;buyerSettledShares:string;sellerSettledShares:string;buyerUnderlyingAtSettlement:string;sellerUnderlyingAtSettlement:string;observedBlock:string}; fundingIssue?: string; observedBlock?: string; enabled: boolean; state?: number; escrow?: `0x${string}`; amount?: string; token?: `0x${string}`; decimals?: number; actions: TradeXLayerAction[]; pending?: boolean; transaction?: TradeXLayerTransaction };

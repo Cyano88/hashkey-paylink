@@ -36,7 +36,7 @@ export function prepareWorkBinding(id:string,terms:WorkTermsForBinding,buyer:str
 }
 export type WorkEscrowRecord={wallets:Partial<Record<'customer'|'provider',string>>;binding?:ReturnType<typeof prepareWorkBinding>;state?:number;observedBlock?:string;escrow?:string;observedAt?:string;evidence?:Array<{hash:string;body:string;actor:'customer'|'provider';createdAt:string}>};
 export async function workPaymentAssets(env:NodeJS.ProcessEnv){return tradeXLayerAssets({...env,HASHPAYLINK_XSTOCKS_AGREEMENT_PLANNER_ENABLED:workXLayerEnabled(env)?'true':'false'});}
-export async function prepareWorkAction(input:{env:NodeJS.ProcessEnv;binding:ReturnType<typeof prepareWorkBinding>;account:Address;action?:TradeXLayerAction;evidence?:unknown}, planner=prepareTradeXLayerAction){
+export async function prepareWorkAction(input:{env:NodeJS.ProcessEnv;binding:ReturnType<typeof prepareWorkBinding>;account:Address;action?:TradeXLayerAction;evidence?:unknown;settlement?:unknown}, planner=prepareTradeXLayerAction){
   // Pausing new work payments must preserve existing refund/release/dispute access.
   const starts=['create','accept','approve','fund'];
   if(!workXLayerEnabled(input.env)&&input.action&&starts.includes(input.action))throw Error('New work payments are paused.');

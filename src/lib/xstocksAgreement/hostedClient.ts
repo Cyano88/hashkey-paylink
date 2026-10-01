@@ -26,7 +26,7 @@ export function createHostedWorkRequest(initial:HostedReply,post:(payload:Record
     else{
       if(payload.action!=='work_xlayer_status')throw Error('Unsupported checkout operation.')
       if(!latest.agreement.binding)await send({action:'read'})
-      reply=latest.agreement.binding?await send({action:'prepare',operation:payload.operation,evidence:payload.evidence}):latest
+      reply=latest.agreement.binding?await send({action:'prepare',operation:payload.operation,evidence:payload.evidence,settlement:payload.settlement}):latest
     }
     const a=reply.agreement
     return {enabled:reply.fundingEnabled===true,actions:[],...reply.status,wallet:a.accepted[reply.role]??null,

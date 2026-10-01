@@ -77,7 +77,7 @@ const startActions = new Set(['create', 'accept', 'approve', 'fund'])
 export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
   const d = { ...defaults, ...overrides }
   // Coalesce concurrent read-only chain checks for one project-owned record.
-  const observations = new Map<string, Promise<{record:XStocksAgreementRecord;pending:boolean}>>()
+  const observations = new Map<string, Promise<{record:XStocksAgreementRecord;pending:boolean;expiry?:{fundingExpired:true;escrow:string;observedBlock:string}}>>()
   async function observeTrade(record:XStocksAgreementRecord) {
     const existing = observations.get(record.id)
     if (existing) return existing
@@ -108,7 +108,10 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
             }
             return current
           })
-          return {record:next,pending:!!status.pending}
+          const expiry = !status.pending && status.fundingExpired === true && status.state === undefined && next.observed?.state === undefined
+            && status.escrow === '0x0000000000000000000000000000000000000000' && /^[1-9][0-9]*$/.test(status.observedBlock || '')
+            ? {fundingExpired:true as const,escrow:status.escrow,observedBlock:status.observedBlock!} : undefined
+          return {record:next,pending:!!status.pending,expiry}
         } catch(error) { if ((error as {code?:string}).code!=='STALE_CHAIN_OBSERVATION'||attempt>=2) throw error }
       }
     })()
@@ -135,7 +138,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
         if (req.query.reconcile !== undefined && req.query.reconcile !== 'true') fail(400,'Choose a valid refresh option.')
         if (req.query.reconcile === 'true') {
           const next = await observeTrade(record!)
-          return res.json({ok:true,agreement:view(next.record),observation:{pending:next.pending,checkedAt:d.now().toISOString()}})
+          return res.json({ok:true,agreement:view(next.record),observation:{pending:next.pending,checkedAt:d.now().toISOString(),...next.expiry}})
         }
         return res.json({ ok: true, agreement: view(record!) })
       }
@@ -218,7 +221,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       if (!record!.binding || !record!.accepted[role]) fail(409, 'Both participants must accept the terms first.')
       const operation = req.body?.operation as TradeXLayerAction | undefined
       if (operation !== undefined && (typeof operation !== 'string' || !Object.prototype.hasOwnProperty.call(TRADE_ACTION_LABELS, operation))) fail(400, 'Unsupported escrow operation.')
-      if (operation && ['dispatch', 'refund', 'dispute'].includes(operation)) {
+      if (operation && ['dispatch', 'refund', 'dispute', 'proposeSettlement'].includes(operation)) {
         const note = req.body?.evidence;
         if (typeof note !== 'string' || note.trim().length < 10 || note.length > 2000) fail(400, 'Add a note of 10 to 2000 characters before continuing.');
       }
@@ -229,7 +232,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       // reading. Never return signing data from a rejected chain observation.
       let status: Awaited<ReturnType<Deps['plan']>>
       for (let attempt = 0; ; attempt++) {
-        status = await d.plan({ env, binding: record!.binding!, account: wallet.address, action: operation, evidence: req.body?.evidence })
+        status = await d.plan({ env, binding: record!.binding!, account: wallet.address, action: operation, evidence: req.body?.evidence, settlement:req.body?.settlement })
         try {
           // Persist evidence and monotonic confirmed state before returning any signing data.
           record = await d.mutate(key(agreementId), current => {
@@ -239,7 +242,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
             if (!status.pending && current!.observed?.state !== undefined && status.state === undefined) {
               fail(409, 'The known escrow is missing from the confirmed chain view. Refresh.')
             }
-            if (operation && ['dispatch', 'refund', 'dispute'].includes(operation)) {
+            if (operation && ['dispatch', 'refund', 'dispute', 'proposeSettlement'].includes(operation)) {
               const body = field(req.body?.evidence, 'evidence', 2000)
               if (body.length < 10) fail(400, 'Add evidence of at least 10 characters.')
               const digest = keccak256(stringToHex(body))

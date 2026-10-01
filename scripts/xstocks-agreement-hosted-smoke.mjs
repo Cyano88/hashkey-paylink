@@ -13,6 +13,7 @@ assert.equal(calls.at(-1).action,'accept_terms');assert.equal(calls.at(-1).conse
 reply.agreement.accepted.provider={address:worker};reply.agreement.binding={contractTerms:{fundBy:2000}};reply.status={enabled:true,actions:['fund'],token:worker,amount:'1',decimals:18};
 status=await request(base);assert.equal(calls.at(-1).action,'prepare');assert.equal(status.providerReady,true);assert.equal(status.workerAddress,worker);
 await request({...base,operation:'fund'});assert.equal(calls.at(-1).operation,'fund');
+const settlement={nonce:'4',buyerAmount:'5',evidence:'0x'+'aa'.repeat(32)};await request({...base,operation:'acceptSettlement',settlement});assert.deepEqual(calls.at(-1).settlement,settlement);
 assert.ok(calls.every(call=>!('userId'in call)&&!('walletAppId'in call)),'No user or app impersonation fields sent');
 await assert.rejects(()=>request({...base,version:2}),/version changed/);
 reply.agreement.walletAppId='other-app';await assert.rejects(()=>request(base),/identity changed/);reply.agreement.walletAppId=app;

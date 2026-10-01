@@ -10,7 +10,7 @@ const React=require('react'),{act,create}=require('react-test-renderer');
 const output=new URL('../.codex-temp/recovery-ui.mjs',import.meta.url);
 const account=privateKeyToAccount('0x'+'11'.repeat(32)),to='0x'+'22'.repeat(20),data='0x7d94ad98';
 const raw=await account.signTransaction({chainId:196,to,data,value:0n,nonce:4,gas:50000n,gasPrice:1000000000n});
-const hash=keccak256(raw),storage=new Map();let signingFails=true,available=false,signCalls=0,broadcasts=[],otherTab=false;
+const hash=keccak256(raw),storage=new Map();let signingFails=true,available=false,signCalls=0,broadcasts=[],otherTab=false,recoveryStatus;
 globalThis.window=new EventTarget();globalThis.document=new EventTarget();document.visibilityState='visible';
 Object.defineProperty(globalThis,'navigator',{value:{locks:{request:async(_k,_o,cb)=>cb(otherTab?null:{})}},configurable:true});
 globalThis.localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)};
@@ -29,7 +29,7 @@ await build({entryPoints:['src/components/xstocksAgreement/HostedWorkCheckout.ts
 try{
  const {default:Checkout}=await import(output.href);
  const item={id:'recovery',activeVersion:1,role:'customer',terms:[{version:1,kind:'trade',amount:'1',xlayerPayment:{token:to,amountUnits:'1',decimals:18,reviewHours:48}}]};
- const request=async()=>({enabled:true,state:3,actions:['receipt'],wallet:{address:account.address},customerReady:true,providerReady:true,token:to,amount:'1',decimals:18,transaction:{account:account.address,to,data,chainId:196,value:'0'}});
+ const request=async()=>recoveryStatus??({enabled:true,state:3,actions:['receipt'],wallet:{address:account.address},customerReady:true,providerReady:true,token:to,amount:'1',decimals:18,transaction:{account:account.address,to,data,chainId:196,value:'0'}});
  let tree;const mount=async()=>act(async()=>{tree=create(React.createElement(Checkout,{item,request,onUpdated(){}}))});
  const button=name=>tree.root.findAllByType('button').find(b=>b.children.join('')===name);
  await mount();
@@ -46,5 +46,12 @@ try{
  assert.equal(storage.size,0,'provably invalid zero-gas transaction is safely retired');
  assert.equal(broadcasts.length,2,'invalid recovery does not send');
  assert.ok(button('Confirm received'),'action becomes available again');
+ await act(async()=>tree.unmount());
+ available=false;
+ const reviewed={nonce:'3',buyerAmount:'0',evidence:'0x'+'bb'.repeat(32)};
+ const saved={transaction:{account:account.address,to,data,chainId:196,value:'0'},serialized:raw,hash,operation:'acceptSettlement',settlement:reviewed};
+ recoveryStatus={enabled:true,state:5,observedBlock:'102',pending:true,actions:[],settlement:{...reviewed,nonce:'4',proposer:to},wallet:{address:account.address},customerReady:true,providerReady:true};
+ storage.set(pendingKey,JSON.stringify(saved));await mount();await act(async()=>{await button('Check pending transaction').props.onClick()});assert.ok(storage.has(pendingKey),'Pending proposal observation cannot retire saved action');assert.equal(broadcasts.length,2);
+ recoveryStatus={...recoveryStatus,pending:false};await act(async()=>{await button('Check pending transaction').props.onClick()});assert.equal(storage.has(pendingKey),false);assert.ok(storage.has(pendingKey+':obsolete'));assert.equal(broadcasts.length,2,'Obsolete acceptance is never rebroadcast');assert.equal(button('Check pending transaction'),undefined);
  await act(async()=>tree.unmount());console.log('Recovery UI passed: failed signing, persist before broadcast, lost response, reload, other-tab exclusion, exact-byte resume and confirmed cleanup.');
 }finally{await unlink(output)}

@@ -4,7 +4,7 @@ import {createXStocksAgreementHandlers} from '../api/xstocks-agreement/http.ts';
 import {cliRequestScope} from '../api/developer-cli-grants.ts';
 const stock=JSON.parse(readFileSync('src/lib/xstocksAgreement/xStocksCatalog.json','utf8')).assets[0];
 const buyer='0x'+'11'.repeat(20),seller='0x'+'22'.repeat(20),store=new Map();
-let who='did:privy:customer',project='project-one',enabled=true,projectEnabled=true,capability=true,failWrite=false,walletOverride,state=1,block='10',lastPlan,planBlocks=[],planCalls=0;
+let who='did:privy:customer',project='project-one',enabled=true,projectEnabled=true,capability=true,failWrite=false,walletOverride,state=1,block='10',lastPlan,planBlocks=[],planCalls=0,expiryPlan;
 const handlers=createXStocksAgreementHandlers({
  env:()=>({PRIVY_APP_ID:'fixture-app-id',PRIVY_APP_SECRET:'fixture-only',HASHPAYLINK_AGREEMENT_XSTOCKS_ENABLED:enabled?'true':'false',HASHPAYLINK_AGREEMENT_XSTOCKS_ASSETS_JSON:JSON.stringify([{address:stock.address,decimals:18}])}),
  assets:async()=>({enabled,assets:enabled?[stock]:[]}),
@@ -15,7 +15,7 @@ const handlers=createXStocksAgreementHandlers({
  wallet:async()=>({address:walletOverride||(who==='did:privy:customer'?buyer:seller),chainId:196}),
  read:async key=>structuredClone(store.get(key)),
  mutate:async(key,update)=>{if(failWrite)throw Error('Storage unavailable');const next=update(structuredClone(store.get(key)));store.set(key,structuredClone(next));return next;},
- plan:async input=>{lastPlan=input;planCalls++;return {enabled:true,observedBlock:planBlocks.length?planBlocks.shift():block,state,escrow:'0x'+'44'.repeat(20),actions:['refund'],...(input.action?{transaction:{account:input.account,to:'0x'+'44'.repeat(20),data:'0x1234',chainId:196,value:'0'}}:{})};},
+ plan:async input=>{lastPlan=input;planCalls++;return expiryPlan || {enabled:true,observedBlock:planBlocks.length?planBlocks.shift():block,state,escrow:'0x'+'44'.repeat(20),actions:['refund'],...(input.action?{transaction:{account:input.account,to:'0x'+'44'.repeat(20),data:'0x1234',chainId:196,value:'0'}}:{})};},
 });
 async function call(handler,body={},method='POST',headers={},query={}){const res={statusCode:200,setHeader(){},status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;}};await handler({method,headers,query,body},res);return res;}
 const draft={title:'Design work',description:'Deliver the agreed design and source files.',amount:'0.125',durationSeconds:86400,paymentToken:stock.address,reviewHours:48,customerUserId:'did:privy:customer',providerUserId:'did:privy:provider'};
@@ -78,3 +78,16 @@ const mismatchedHandlers=createXStocksAgreementHandlers({
 })
 assert.equal((await call(mismatchedHandlers.participant,{agreementId,action:'read'})).statusCode,409)
 console.log('Persisted wallet authority blocks silent Privy app replacement.')
+
+// Developer expiry evidence is derived from a fresh planner read, never request fields.
+const expiryKey=[...store.keys()].find(k=>store.get(k).id===agreementId),expiryRecord=structuredClone(store.get(expiryKey));
+expiryRecord.terms.kind='trade';delete expiryRecord.observed;store.set(expiryKey,expiryRecord);
+const observe=()=>call(handlers.developer,{},'GET',{}, {id:agreementId,reconcile:'true'});
+expiryPlan={enabled:true,actions:[],fundingExpired:true,escrow:'0x'+'00'.repeat(20),observedBlock:'100'};
+assert.equal((await observe()).body.observation.fundingExpired,true);
+for(const patch of [{pending:true},{fundingExpired:false},{escrow:'0x'+'44'.repeat(20)},{observedBlock:undefined}]){
+ const saved=expiryPlan;expiryPlan={...saved,...patch};assert.equal((await observe()).body.observation.fundingExpired,undefined);expiryPlan=saved;
+}
+const observed=structuredClone(store.get(expiryKey));observed.observed={state:2,observedBlock:'99'};store.set(expiryKey,observed);
+assert.equal((await observe()).statusCode,409,'A previously observed escrow can never be closed as absent');
+console.log('Developer expiry proof passed: confirmed absent escrow only, pending and missing evidence rejected.');
