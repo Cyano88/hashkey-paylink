@@ -35,6 +35,8 @@ test('real PostgreSQL engine and HTTP isolation',async()=>{
   assert.equal((await query('SELECT * FROM hash_conversations')).rows.length,0)
   assert.equal((await query('SELECT * FROM hash_messages')).rows.length,0)
   await query('BEGIN');await query("SELECT set_config('hash.workspace_id',$1,true),set_config('hash.customer_id',$2,true)",[b.workspaceId,'customer-1']);assert.equal((await query('SELECT * FROM hash_conversations')).rows.length,0);await query('ROLLBACK')
+  await query('BEGIN');await query("SELECT set_config('hash.workspace_id',$1,true),set_config('hash.customer_id',$2,true)",[b.workspaceId,'customer-1']);await assert.rejects(query('INSERT INTO hash_messages(id,workspace_id,conversation_id,request_id,content) VALUES($1,$2,$3,$4,$5)',['11111111-1111-4111-8111-111111111111',a.workspaceId,id,'cross-business-write','Denied']),e=>e.code==='42501');await query('ROLLBACK')
+  assert.equal((await call('/v1/conversations/'+id+'/messages',sa,'POST',{requestId:'test-oversized-0001',message:'x'.repeat(20000)})).status,413)
   assert.equal((await call('/v1/conversations',sa+'x','POST')).status,401)
   now+=301000;assert.equal((await call('/v1/conversations/'+id,sa)).status,401)
   const fresh=await session(a.apiKey,'customer-1');assert.equal((await call('/v1/conversations/'+id,fresh,'DELETE')).status,200);assert.equal((await call('/v1/conversations/'+id,fresh)).status,404)

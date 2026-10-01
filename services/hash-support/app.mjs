@@ -9,7 +9,7 @@ export function createApp({store,adminSecret,sessionSecret,now=Date.now}){
  const windows=new Map();const limit=(key,max)=>{const time=now();if(windows.size>2048)for(const [id,w]of windows)if(w.until<=time)windows.delete(id);let w=windows.get(key);if(!w||w.until<=time){if(windows.size>=4096&&!windows.has(key))fail('Please try again shortly.',429);w={n:0,until:time+60000};windows.set(key,w)}if(++w.n>max)fail('Please try again shortly.',429)}
  return async(req,res)=>{
   const requestId=randomUUID();res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Request-ID',requestId)
-  const send=(status,value)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value))}
+  const send=(status,value)=>{if(res.destroyed||res.writableEnded)return;res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value))}
   try{
    const path=new URL(req.url,'http://localhost').pathname
    if(req.method==='GET'&&path==='/healthz'){await store.health();return send(200,{ok:true,service:'hash-support',version:'0.1.0',inferenceEnabled:false})}
