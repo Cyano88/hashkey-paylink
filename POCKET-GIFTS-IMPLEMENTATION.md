@@ -193,3 +193,10 @@ Remaining: production route/native deep-link binding, secure creator capability 
 
 - Release result: d4187da31 is live on Render (dep-dav29dm0tbcc73eaoqa0). Readiness API returns HTTP 200 JSON with sendEnabled=false and claimEnabled=true. A transient 502 during instance replacement cleared after rollout; no unresolved outage observed in the final check.
 - Android Gradle build succeeded; Pixel 5A160DLCH006VM install -r returned Success, preserving app data. Restored only generated tracked dist/Gradle files; unrelated XPay changes remain untouched. Pilot account selection and user approval are still pending; no additional money moved in this release.
+
+## Pixel pilot: persisted deployment comparison fix - 2026-10-01
+
+- User confirmed @shy. Resolved its immutable authenticated account ID and Base wallet link; configured only that ID in POCKET_GIFT_PILOT_USER_IDS. Live rollout dep-dav2k5l9fdbs73b06nj0 verifies pilot sendEnabled=true and public sendEnabled=false.
+- Pixel Send menu exposes Send a gift. Created one 0.01 USDC draft, g_BcdIOxjXfyy13-rgIpuULT. Review shows fee 0.000025 USDC and total 0.010025 USDC. No Circle challenge or funding hash exists; no money moved.
+- Actual-device review exposed a backend defect: owner-status rejected a valid deployment because PostgreSQL JSONB reordered object keys. Live diagnosis proved all eight pinned field values equal while JSON.stringify comparison failed, returning Gift network is not enabled.
+- Replaced serialized-object comparison with explicit equality of all eight pinned deployment fields. Regression covers reordered keys and rejection of each changed field. Resume the existing draft after rollout; do not create/fund another gift. Real end-user approval and redemption remain pending.

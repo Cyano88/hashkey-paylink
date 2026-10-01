@@ -15,3 +15,11 @@ export async function verifyBaseGiftDeployment(client:PublicClient,value:GiftDep
  if(!code||keccak256(code)!==d.runtimeHash||getAddress(token)!==getAddress(d.token)||getAddress(treasury)!==getAddress(d.treasury)||fee!==25n||decimals!==6)throw Error('Deployed gift contract does not match the reviewed manifest')
  return {network:'base',chainId:8453,escrow:d.escrow,treasury:d.treasury,feeBps:25,verified:true as const}
 }
+
+// JSONB preserves field values, not JavaScript insertion order. Compare every
+// pinned execution field explicitly; serialized object order is not identity.
+export function sameGiftDeployment(expected:GiftDeployment,stored:GiftDeployment){
+ if(!expected||!stored)return false
+ const fields=['network','chainId','escrow','token','treasury','runtimeHash','deploymentBlock','confirmations'] as const
+ return fields.every(field=>expected[field]===stored[field])
+}

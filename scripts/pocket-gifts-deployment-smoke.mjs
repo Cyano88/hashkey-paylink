@@ -10,3 +10,14 @@ await assert.rejects(verifyBaseGiftDeployment({...client,getCode:async()=> '0x60
 await assert.rejects(verifyBaseGiftDeployment({...client,getChainId:async()=>1},d))
 await assert.rejects(verifyBaseGiftDeployment({...client,getBlockNumber:async()=>100n},d))
 console.log('PASS Base gift manifest and read-only deployment checks: network, native USDC, treasury, code hash, fee, decimals and confirmation depth.')
+
+{
+ const {sameGiftDeployment}=await import('../api/pocket/gifts/deployment.ts')
+ const jsonbRoundtrip=Object.fromEntries(Object.entries(d).reverse())
+ assert.notEqual(JSON.stringify(d),JSON.stringify(jsonbRoundtrip))
+ assert.equal(sameGiftDeployment(d,jsonbRoundtrip),true,'Database field ordering must not disable a valid gift')
+ const mutations={network:'polygon',chainId:137,escrow:'0x'+'3'.repeat(40),token:'0x'+'4'.repeat(40),treasury:'0x'+'5'.repeat(40),runtimeHash:keccak256('0x6001'),deploymentBlock:'101',confirmations:1}
+ for(const [key,value] of Object.entries(mutations))assert.equal(sameGiftDeployment(d,{...jsonbRoundtrip,[key]:value}),false,'Reject changed deployment '+key)
+ assert.equal(sameGiftDeployment(d,undefined),false)
+ console.log('PASS persisted deployment matching ignores JSON key order and rejects every changed pinned execution field.')
+}
