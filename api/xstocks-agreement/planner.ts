@@ -23,7 +23,7 @@ export function tradeLifecycleActions(state: number, buyer: boolean, now: bigint
   if (state === 5) return buyer ? [] : ['refund'];
   return [];
 }
-export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; binding: any; account: Address; action?: TradeXLayerAction; evidence?: unknown }, client = tradeXLayerClient(input.env)): Promise<TradeXLayerStatus> {
+export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; binding: any; account: Address; action?: TradeXLayerAction; evidence?: unknown; settlement?: unknown }, client = tradeXLayerClient(input.env)): Promise<TradeXLayerStatus> {
   if (!tradeXLayerEnabled(input.env)) return { enabled:false, actions:[] };
   const b = input.binding, t = b.contractTerms;
   const shares=b.custody===SHARE_CUSTODY_POLICY;
@@ -67,6 +67,15 @@ export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; 
     if (state !== currentState) return {...result, pending:true};
     const [dispatchBy, deliveryBy, inspectUntil] = await Promise.all((['dispatchBy','deliveryBy','inspectUntil'] as const).map(functionName => client.readContract({ address:escrow, abi:escrowAbi, functionName, blockNumber })));
     result.actions = tradeLifecycleActions(state, buyer, block.timestamp, {fundBy:BigInt(t.fundBy),dispatchBy,deliveryBy,inspectUntil});
+    if (shares && state === 5) {
+      const fields = ['settlementNonce','proposedBuyerAmount','settlementEvidence','settlementProposer'] as const;
+      const readProposal = async (at?:bigint) => Promise.all(fields.map(functionName=>client.readContract({address:escrow,abi:escrowAbi,functionName,blockNumber:at})));
+      const saved = await readProposal(blockNumber), latest = await readProposal();
+      if (saved.some((value,index)=>String(value).toLowerCase()!==String(latest[index]).toLowerCase())) return {...result,actions:[],pending:true};
+      result.settlement={nonce:String(saved[0]),buyerAmount:String(saved[1]),evidence:saved[2] as Hex,proposer:saved[3] as Address};
+      result.actions.push('proposeSettlement');
+      if (getAddress(result.settlement.proposer)!==zeroAddress) result.actions.push(getAddress(result.settlement.proposer)===getAddress(input.account)?'withdrawSettlement':'acceptSettlement');
+    }
     if (result.actions.includes('fund')) {
       if (!approved) result.actions = result.actions.filter(a => a !== 'fund');
       else {
@@ -75,7 +84,19 @@ export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; 
       }
     }
     const action = input.action;
-    if (action === 'approve') {
+    if (action && ['proposeSettlement','withdrawSettlement','acceptSettlement'].includes(action)) {
+      if (!result.actions.includes(action) || !result.settlement) throw Error('This proposal is no longer available. Refresh the trade.');
+      const reviewed=input.settlement as {nonce?:unknown;buyerAmount?:unknown;evidence?:unknown}|undefined;
+      if (!reviewed || reviewed.nonce!==result.settlement.nonce) throw Error('The proposal changed. Review it again.');
+      if (action==='proposeSettlement') {
+        if(typeof reviewed.buyerAmount!=='string'||!/^(0|[1-9][0-9]{0,77})$/.test(reviewed.buyerAmount)||BigInt(reviewed.buyerAmount)>BigInt(t.amount))throw Error('Enter a buyer amount between zero and the agreed payment.');
+        if(typeof input.evidence!=='string'||input.evidence.trim().length<10||input.evidence.length>2000)throw Error('Add a note of 10 to 2000 characters.');
+        data=encodeFunctionData({abi:escrowAbi,functionName:'proposeSettlement',args:[BigInt(reviewed.buyerAmount),keccak256(stringToHex(input.evidence.trim()))]});
+      } else {
+        if(reviewed.buyerAmount!==result.settlement.buyerAmount||reviewed.evidence!==result.settlement.evidence)throw Error('The proposal changed. Review it again.');
+        data=action==='withdrawSettlement'?encodeFunctionData({abi:escrowAbi,functionName:'withdrawSettlement',args:[BigInt(reviewed.nonce as string)]}):encodeFunctionData({abi:escrowAbi,functionName:'acceptSettlement',args:[BigInt(reviewed.nonce as string),BigInt(reviewed.buyerAmount as string),reviewed.evidence as Hex]});
+      }
+    } else if (action === 'approve') {
       // Exact allowance only; clear a nonzero insufficient allowance first for restrictive ERC20s.
       const allowance = await client.readContract({ address:t.token, abi:tokenAbi, functionName:'allowance', args:[input.account,escrow] });
       to = t.token;

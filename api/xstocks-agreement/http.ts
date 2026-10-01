@@ -221,7 +221,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       if (!record!.binding || !record!.accepted[role]) fail(409, 'Both participants must accept the terms first.')
       const operation = req.body?.operation as TradeXLayerAction | undefined
       if (operation !== undefined && (typeof operation !== 'string' || !Object.prototype.hasOwnProperty.call(TRADE_ACTION_LABELS, operation))) fail(400, 'Unsupported escrow operation.')
-      if (operation && ['dispatch', 'refund', 'dispute'].includes(operation)) {
+      if (operation && ['dispatch', 'refund', 'dispute', 'proposeSettlement'].includes(operation)) {
         const note = req.body?.evidence;
         if (typeof note !== 'string' || note.trim().length < 10 || note.length > 2000) fail(400, 'Add a note of 10 to 2000 characters before continuing.');
       }
@@ -232,7 +232,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
       // reading. Never return signing data from a rejected chain observation.
       let status: Awaited<ReturnType<Deps['plan']>>
       for (let attempt = 0; ; attempt++) {
-        status = await d.plan({ env, binding: record!.binding!, account: wallet.address, action: operation, evidence: req.body?.evidence })
+        status = await d.plan({ env, binding: record!.binding!, account: wallet.address, action: operation, evidence: req.body?.evidence, settlement:req.body?.settlement })
         try {
           // Persist evidence and monotonic confirmed state before returning any signing data.
           record = await d.mutate(key(agreementId), current => {
@@ -242,7 +242,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
             if (!status.pending && current!.observed?.state !== undefined && status.state === undefined) {
               fail(409, 'The known escrow is missing from the confirmed chain view. Refresh.')
             }
-            if (operation && ['dispatch', 'refund', 'dispute'].includes(operation)) {
+            if (operation && ['dispatch', 'refund', 'dispute', 'proposeSettlement'].includes(operation)) {
               const body = field(req.body?.evidence, 'evidence', 2000)
               if (body.length < 10) fail(400, 'Add evidence of at least 10 characters.')
               const digest = keccak256(stringToHex(body))

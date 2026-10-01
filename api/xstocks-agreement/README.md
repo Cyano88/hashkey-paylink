@@ -157,3 +157,29 @@ a fresh agreement. An old token allowance cannot authorize the new escrow.
 - No new production transaction, deployment or authenticated browser E2E is claimed by these changes.
 
 Hosted Trade checkout also accepts a narrowly validated first-party returnTo navigation hint for the matching Hash PayStream conversation. It is never payment evidence; generic project-configured return destinations are not implemented by this patch. Focused API and UI TypeScript checks and the production source build passed. Full-repository UI TypeScript did not complete and remains separate from those focused checks.
+
+
+### Mutual Trade dispute settlement
+
+Share-custody Trade escrows in disputed state expose participant operations
+`proposeSettlement`, `withdrawSettlement` and `acceptSettlement` through the existing
+participant `prepare` endpoint. Developer keys remain draft/read only.
+
+Status includes `settlement: {nonce, buyerAmount, evidence, proposer}`. Quantities
+are decimal strings of token base units, never floating-point numbers. The buyer
+allocation sets the proportion of funded shares; the seller receives the rest,
+including fractional-share rounding. The displayed underlying quantity can change.
+
+Send `settlement` with the reviewed nonce, buyerAmount and evidence hash. For a new
+proposal supply an exact buyerAmount from zero through the agreed amount and a
+10?2000 character `evidence` note. Both participants can propose; only its author
+can withdraw and only the other participant can accept. Acceptance releases funds.
+The planner compares confirmed and latest proposal fields and refuses stale reviewed
+values. Acceptance calldata pins nonce, amount and evidence; withdrawal pins nonce.
+A proposal does not release funds. Signed recovery retains this exact reviewed input
+and only rebroadcasts identical validated transaction bytes.
+
+Final state 8 renders actual buyer and seller settlement quantities and exact share
+records. The reviewer-only arbitration operation is not exposed to participants.
+Local regression coverage is not a claim that the funded dispute path has passed
+on mainnet; that controlled two-account test remains required.
