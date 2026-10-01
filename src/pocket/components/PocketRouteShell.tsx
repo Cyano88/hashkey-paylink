@@ -154,16 +154,21 @@ export default function PocketRouteShell({
     if (Capacitor.isNativePlatform()) {
       let disposed = false
       const handles: Array<{ remove(): Promise<void> }> = []
-      void Promise.all([
+      const subscriptions = [
         Keyboard.addListener('keyboardWillShow', () => { if (!disposed) setKeyboardOpen(true) }),
         Keyboard.addListener('keyboardDidShow', () => { if (!disposed) setKeyboardOpen(true) }),
         Keyboard.addListener('keyboardWillHide', () => { /* Keep navigation hidden until the keyboard is fully closed. */ }),
         Keyboard.addListener('keyboardDidHide', () => { if (!disposed) { setKeyboardOpen(false); setInputFocused(false) } }),
-      ]).then(next => handles.push(...next))
+      ]
+      subscriptions.forEach(pending => {
+        void pending.then(handle => {
+          if (disposed) void handle.remove().catch(() => undefined)
+          else handles.push(handle)
+        }).catch(() => undefined)
+      })
       return () => {
         disposed = true
-        setKeyboardOpen(false)
-        handles.forEach(handle => { void handle.remove() })
+        handles.forEach(handle => { void handle.remove().catch(() => undefined) })
       }
     }
     if (!window.matchMedia('(max-width: 767px)').matches) {

@@ -1,39 +1,41 @@
 import type { PocketActivityRow } from '../models/pocketActivity'
 import type { StatementOptions } from './pocketStatement'
-import { pocketActivityStatus } from './pocketReceipt'
-import { pocketBankRecipientLabel } from './pocketPurchaseKind'
+import { statementDate, statementDescription, statementStatus, statementSignedAmount, statementLocalAmount } from './pocketStatementPresentation'
 import { drawPocketMark } from '../../lib/paymentReceiptPdf'
 export async function statementPdf(rows:PocketActivityRow[],options:StatementOptions={}) {
  await document.fonts.ready
- const images:string[]=[],pages=Math.max(1,Math.ceil(rows.length/7)),font=getComputedStyle(document.body).fontFamily
+ const images:string[]=[],perPage=8,pages=Math.max(1,Math.ceil(rows.length/perPage)),font=getComputedStyle(document.body).fontFamily
+ await Promise.all([400,600].map(weight=>document.fonts.load(`${weight} 23px ${font}`, 'Pocket \u20a6 USh + -')))
  for(let page=0;page<pages;page++) {
   const canvas=document.createElement('canvas');canvas.width=1240;canvas.height=1754
   const ctx=canvas.getContext('2d');if(!ctx)throw new Error('PDF could not be prepared.')
   ctx.fillStyle='#fff';ctx.fillRect(0,0,1240,1754)
-  const line=(text:string,x:number,y:number,size=22,bold=false,width=1100)=>{ctx.fillStyle='#111';ctx.font=`${bold?700:400} ${size}px ${font}`;let value=text;while(ctx.measureText(value).width>width&&value.length>1)value=value.slice(0,-2);ctx.fillText(value===text?value:value+'...',x,y)}
-  drawPocketMark(ctx,70,75,64);line('Pocket',152,122,36,true)
-  ctx.textAlign='right';line('Transaction statement',1170,109,30,true,650);line('By Hash PayLink',1170,145,19,false,600);ctx.textAlign='left'
-  line(options.title||'Pocket activity',70,235,28,true)
-  line((options.from||'Earliest available')+' / '+(options.to||'Latest available')+' / Local dates',70,277,20)
-  ctx.fillStyle='#f5f5f5';ctx.fillRect(70,309,1100,119)
-  line(options.scope||'Personal transactions',94,348,22,true,1050)
-  line(rows.length+' records / Generated '+new Date().toISOString().slice(0,10)+' UTC',94,386,19)
-  rows.slice(page*7,page*7+7).forEach((row,index)=>{
-   const y=480+index*148
-   const description=(options.title==='Collection statement'?row.payer:undefined)||pocketBankRecipientLabel(row)||row.activityLabel||row.memo||row.payer||'Transaction'
-   line(description,70,y,23,true,750)
-   ctx.textAlign='right';line(row.amount+' '+(row.assetSymbol||'USDC'),1170,y,23,true,320);ctx.textAlign='left'
-   line(new Date(row.ts).toISOString().replace('T',' ').slice(0,19)+' UTC / '+(row.direction==='in'?'Incoming':row.direction==='out'?'Outgoing':'Transfer'),70,y+32,18)
-   ctx.textAlign='right';line(pocketActivityStatus(row),1170,y+32,18,false,310);ctx.textAlign='left'
-   line((row.amountNgn?(row.fiatCurrency||'NGN')+' '+row.amountNgn+' / ':'')+row.chain+' / '+(row.providerReference||row.eventId),70,y+62,18)
-   line(row.txHash||'No confirmed transaction hash',70,y+91,16)
-   ctx.strokeStyle='#ececec';ctx.beginPath();ctx.moveTo(70,y+112);ctx.lineTo(1170,y+112);ctx.stroke()
+  const line=(text:string,x:number,y:number,size=22,bold=false,width=1100,muted=false)=>{ctx.fillStyle=muted?'#666':'#111';ctx.font=`${bold?600:400} ${size}px ${font}`;let value=text;while(ctx.measureText(value+(value===text?'':'...')).width>width&&value.length>1)value=value.slice(0,-1);ctx.fillText(value===text?value:value+'...',x,y)}
+  drawPocketMark(ctx,70,70,60);line('Pocket',148,114,34,true)
+  ctx.textAlign='right';line(options.title||'Pocket statement',1170,111,27,true,640);ctx.textAlign='left'
+  line(options.scope||'All activity',70,220,28,true)
+  line((options.from?statementDate(options.from):'First available')+' to '+(options.to?statementDate(options.to):'Latest available'),70,263,21,false,1100,true)
+  line(rows.length+' transactions',70,310,19,false,500,true)
+  ctx.textAlign='right';line('Generated '+statementDate(Date.now()),1170,310,19,false,500,true);ctx.textAlign='left'
+  ctx.fillStyle='#f5f5f5';ctx.fillRect(70,352,1100,54)
+  line('Date',88,386,19,true,170);line('Details',280,386,19,true,540);ctx.textAlign='right';line('Amount',1152,386,19,true,290);ctx.textAlign='left'
+  rows.slice(page*perPage,page*perPage+perPage).forEach((row,index)=>{
+   const y=454+index*132
+   line(statementDate(row.ts),88,y,20,false,170,true)
+   const description=statementDescription(row,options.title==='Collection statement'),words=description.split(/\s+/),lines:string[]=[]
+   ctx.font=`600 23px ${font}`;let part=''
+   for(const word of words){const next=part?part+' '+word:word;if(part&&ctx.measureText(next).width>540){lines.push(part);part=word}else part=next}if(part)lines.push(part)
+   line(lines[0]||'',280,y,23,true,540)
+   if(lines.length>1)line(lines.slice(1).join(' '),280,y+28,23,true,540)
+   line(statementStatus(row),280,y+(lines.length>1?58:35),19,false,540,true)
+   ctx.textAlign='right';ctx.fillStyle='#111';ctx.font=`600 23px ${font}`;ctx.fillText(statementSignedAmount(row)+' '+(row.assetSymbol||'USDC'),1152,y,290)
+   const local=statementLocalAmount(row);if(local)line(local,1152,y+35,19,false,290,true)
+   ctx.textAlign='left';ctx.strokeStyle='#ececec';ctx.beginPath();ctx.moveTo(70,y+88);ctx.lineTo(1170,y+88);ctx.stroke()
   })
   if(!rows.length)line('No transactions in this date range.',70,490)
-  line('Available recorded activity. Only successful records confirm completion.',70,1580,18)
-  line('This export is not a certified account balance statement.',70,1610,18)
-  line('pocket.hashpaylink.com',70,1690,18)
-  ctx.textAlign='right';line(`Page ${page+1} of ${pages}`,1170,1690,18,false,300);ctx.textAlign='left'
+  line('Available activity. Pending and failed entries do not confirm payment.',70,1607,17,false,1100,true)
+  line('pocket.hashpaylink.com',70,1680,18,false,750,true)
+  ctx.textAlign='right';line(`Page ${page+1} of ${pages}`,1170,1680,18,false,300,true);ctx.textAlign='left'
   images.push(canvas.toDataURL('image/jpeg',0.92).split(',')[1])
  }
  const enc=new TextEncoder(),chunks:Uint8Array[]=[],offsets=[0];let size=0

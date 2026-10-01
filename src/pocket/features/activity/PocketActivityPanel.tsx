@@ -42,6 +42,7 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
   const [statementOpen,setStatementOpen] = useState(false)
   const [exporting,setExporting] = useState(false)
   const [statementPeriod,setStatementPeriod]=useState({from:'',to:''})
+  const [statementKind,setStatementKind]=useState<'all'|'local'>('all')
   const [statementFormat,setStatementFormat]=useState<'pdf'|'csv'>('pdf')
   const [exportError,setExportError] = useState('')
   const [filterOpen,setFilterOpen] = useState(false)
@@ -67,7 +68,7 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
   const exportStatement=async()=>{
     if(exporting)return
     setExporting(true);setExportError('')
-    try{await downloadPocketStatement(visible,statementFormat,{...statementPeriod,includeBusiness:!!collectionId||incomingPos,title:collectionId?'Collection statement':incomingPos?'XPay statement':rail==='xstocks'?'XStocks statement':'Pocket statement',scope:collectionId?collectionTitle+' / '+collectionId:incomingPos?'XPay payments':rail==='xstocks'?'XStocks activity':'Personal activity'});setStatementOpen(false)}
+    try{await downloadPocketStatement(transactions,statementFormat,{...statementPeriod,kind:statementKind,includeBusiness:!!collectionId||incomingPos,title:collectionId?'Collection statement':incomingPos?'XPay statement':rail==='xstocks'?'XStocks statement':'Pocket statement',scope:collectionId?collectionTitle||'Collection payments':incomingPos?'XPay payments':rail==='xstocks'?'XStocks activity':statementKind==='local'?'Bank transfers & bills':'All activity'});setStatementOpen(false)}
     catch(reason){if(!(reason instanceof Error&&reason.name==='AbortError'))setExportError('Your statement could not be saved. Please try again.')}
     finally{setExporting(false)}
   }
@@ -85,7 +86,7 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
   if(!authenticated)return <>{renderHeader?.(null)}<p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">Sign in to view your transactions.</p></>
   const actions=<div className="flex items-center">
     <button type="button" aria-label="Filter transactions" aria-expanded={filterOpen} onClick={openFilters} className="relative flex h-11 w-11 items-center justify-center rounded-full"><Filter className="h-5 w-5"/>{activeFilters&&<span aria-label="Filters active" className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-emerald-500"/>}</button>
-    <button type="button" aria-label="Download statement" onClick={()=>{setExportError('');setStatementPeriod(period);setStatementOpen(true)}} className="flex h-11 w-11 items-center justify-center rounded-full"><Deposit className="h-5 w-5"/></button>
+    <button type="button" aria-label="Download statement" onClick={()=>{setExportError('');setStatementPeriod({from:'',to:''});setStatementKind('all');setStatementFormat('pdf');setStatementOpen(true)}} className="flex h-11 w-11 items-center justify-center rounded-full"><Deposit className="h-5 w-5"/></button>
   </div>
   return <div className="space-y-4">
     {renderHeader?renderHeader(actions):<header className="relative flex min-h-14 items-center justify-center">
@@ -105,12 +106,13 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
     </PocketBottomSheet>}
     {statementOpen&&<PocketBottomSheet title="Download statement" onClose={()=>setStatementOpen(false)} dismissible={!exporting}>
       <h2 className="mb-4 text-center text-base font-bold">Download statement</h2>
+      {!collectionId&&!incomingPos&&rail==='stablecoins'&&<fieldset className="mb-5"><legend className="mb-2 text-xs text-gray-500">Include</legend><div className="flex gap-2">{(['all','local'] as const).map(kind=><button key={kind} type="button" disabled={exporting} aria-pressed={statementKind===kind} onClick={()=>setStatementKind(kind)} className={'min-h-11 flex-1 rounded-xl px-3 text-xs font-semibold '+(statementKind===kind?'bg-black text-white dark:bg-white dark:text-black':'bg-gray-100 dark:bg-[#222]')}>{kind==='all'?'All activity':'Bank transfers & bills'}</button>)}</div></fieldset>}
       <div className="grid grid-cols-2 gap-3">{(['from','to'] as const).map(key=><PocketDateField key={key} label={key==='from'?'From':'To'} value={statementPeriod[key]} onChange={date=>setStatementPeriod(value=>({...value,[key]:date}))}/>)}</div>
       <div className="my-5 flex gap-3">{(['pdf','csv'] as const).map(format=><button key={format} type="button" aria-pressed={statementFormat===format} onClick={()=>setStatementFormat(format)} className={'h-11 flex-1 rounded-full text-sm font-semibold '+(statementFormat===format?'bg-black text-white dark:bg-white dark:text-black':'bg-gray-100 dark:bg-[#222]')}>{format.toUpperCase()}</button>)}</div>
-      <p className="text-xs text-gray-500 dark:text-gray-400">Exports available records in this date range and your current filters. {collectionId?'Only this collection is included.':incomingPos?'Only XPay payments are included.':'Collection and merchant receiving history are separate.'}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">{collectionId?'Payments for this collection only.':incomingPos?'XPay payments only.':rail==='xstocks'?'XStocks activity only.':'Available records for the dates you choose.'}</p>
       {!!statementPeriod.from&&!!statementPeriod.to&&statementPeriod.from>statementPeriod.to&&<p role="alert" className="mt-3 text-xs text-red-500">End date must be on or after start date.</p>}
       {exportError&&<p role="alert" className="mt-4 text-center text-xs text-red-500">{exportError}</p>}
-      <button type="button" disabled={!visible.length||busy||exporting||!!statementPeriod.from&&!!statementPeriod.to&&statementPeriod.from>statementPeriod.to} onClick={()=>void exportStatement()} className="pocket-cta-primary mt-6 w-full">{exporting?'Preparing statement...':'Download '+statementFormat.toUpperCase()}</button>
+      <button type="button" disabled={!transactions.length||busy||exporting||!!statementPeriod.from&&!!statementPeriod.to&&statementPeriod.from>statementPeriod.to} onClick={()=>void exportStatement()} className="pocket-cta-primary mt-6 w-full">{exporting?'Preparing statement...':'Download '+statementFormat.toUpperCase()}</button>
     </PocketBottomSheet>}
     {busy&&!transactions.length?<PocketRecentActivitySkeleton/>:!visible.length?<p className="py-12 text-center text-xs text-gray-500 dark:text-gray-400">{error&&!transactions.length?error:'No transactions to show.'}</p>:<div aria-label="Transactions">
       {groups.map(group=><section key={group.key} data-pocket-activity-day className="mb-5"><h2 className="mb-2 px-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{group.label}</h2><div className="rounded-2xl bg-gray-50 px-3 dark:bg-[#141414]">{group.rows.map(row=>{
