@@ -1,0 +1,31 @@
+﻿# Standalone Hash pilot. Does not replace Pocket's live support service.
+services:
+  - type: web
+    name: hash-support
+    runtime: node
+    region: oregon
+    plan: starter
+    rootDir: services/hash-support
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hash-support-db
+          property: connectionString
+      - key: HASH_ADMIN_SECRET
+        generateValue: true
+      - key: HASH_SESSION_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+
+databases:
+  - name: hash-support-db
+    region: oregon
+    plan: basic-256mb
+    databaseName: hash_support
+    user: hash_support
+    ipAllowList: []
