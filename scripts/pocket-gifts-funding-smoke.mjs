@@ -41,3 +41,9 @@ await expired.review();assert.equal(expired.state.phase,'expired_unfunded')
 status='expired_unfunded';const expiredSaved=createGiftFundingFlow({...deps,draft:{...draft,giftId:'g_'+'a'.repeat(22)}});await expiredSaved.review();assert.equal(expiredSaved.state.phase,'expired_unfunded')
 let refundCalls=0;const noRefund=createGiftFundingFlow({...deps,prepareRefund:async()=>{refundCalls++;return {}}});await noRefund.review();await noRefund.refund();assert.equal(refundCalls,0)
 console.log('PASS expired unfunded drafts: no funding or refund approval available.')
+
+status='funding';let quietApprovals=0,quietReads=0;const quietStates=[]
+const automatic=createGiftFundingFlow({...deps,draft:{...draft,giftId:'g_'+'a'.repeat(22),approvalStarted:true},status:async()=>{quietReads++;return status},approve:async()=>{quietApprovals++},changed:s=>quietStates.push(s)})
+await automatic.review();quietStates.length=0;status='available';await Promise.all([automatic.refresh(),automatic.refresh()]);assert.equal(automatic.state.phase,'available');assert.equal(quietApprovals,0);assert(!quietStates.some(s=>s.phase==='checking'),'Quiet updates must not flicker into a loading state')
+automatic.dispose();await automatic.refresh();assert.equal(quietApprovals,0)
+console.log('PASS automatic funding confirmation updates quietly without replaying approval.')

@@ -14,9 +14,9 @@ export function createGiftClaimFlow<Approval>(deps: {
   let active = true, running = false
   let state: GiftClaimProgress = { phase: 'ready', message: '' }
   const publish = (next: GiftClaimProgress) => { if (active) { state = next; deps.changed(next) } }
-  async function check() {
+  async function check(quiet = false) {
     if (!active) return
-    publish({ ...state, phase: 'checking', message: 'Checking your claim.' })
+    if (!quiet) publish({ ...state, phase: 'checking', message: 'Checking your claim.' })
     try {
       const result = await deps.status(state.transactionHash)
       if (result.status === 'confirmed' && /^0x[0-9a-fA-F]{64}$/.test(result.transactionHash || '')) {
@@ -26,10 +26,10 @@ export function createGiftClaimFlow<Approval>(deps: {
       } else if (result.status === 'available' && result.retryAllowed === true) {
         publish({ phase: 'ready', message: 'Your previous approval expired. You can claim again.' })
       } else {
-        publish({ ...state, phase: 'unconfirmed', message: 'Your claim is not confirmed yet. Check its status before continuing.' })
+        publish({ ...state, phase: 'unconfirmed', message: 'Confirmation pending. This updates automatically.' })
       }
     } catch {
-      publish({ ...state, phase: 'unconfirmed', message: 'We could not confirm your claim. Check again shortly.' })
+      publish({ ...state, phase: 'unconfirmed', message: 'Reconnecting to confirm your gift automatically.' })
     }
   }
   return {
@@ -53,6 +53,11 @@ export function createGiftClaimFlow<Approval>(deps: {
         if (approvalStarted) await check()
         else publish({ phase: 'ready', message: 'Could not prepare your claim. Please try again.' })
       } finally { running = false }
+    },
+    async refresh() {
+      if (!active || running || state.phase !== 'unconfirmed') return
+      running = true
+      try { await check(true) } finally { running = false }
     },
     async recheck() {
       if (!active || running || state.phase === 'confirmed' || state.phase === 'unavailable') return

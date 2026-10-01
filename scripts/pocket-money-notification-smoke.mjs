@@ -16,3 +16,10 @@ console.log('PASS: NGN/UGX/bill wording, actual provider settlement, silent fund
 
 assert.equal(pocketNotificationPath('/activity/collections?kind=requests'),'/activity/collections?kind=requests')
 assert.equal(pocketNotificationPath('/activity/collections?kind=anything'),null)
+
+const giftNotice=notice({...row,eventId:'gift-1',source:'gift',amount:'0.1',direction:'out',bankSettlementStatus:undefined,paycrestStatus:'completed',feeAmount:'0.00025'})
+assert.equal(giftNotice.title,'Gift funded');assert.equal(giftNotice.body,'Your 0.1 USDC gift is ready to share.');assert(!giftNotice.body.includes('0.00025'))
+assert.equal(notice({...row,source:'gift',amount:'0.1',direction:'in',bankSettlementStatus:undefined,paycrestStatus:'completed'}).title,'Gift received')
+assert.equal(notice({...row,source:'gift',amount:'0.1',bankSettlementStatus:undefined,paycrestStatus:'refunded'}).title,'Gift refunded')
+assert.equal(notice({...row,source:'gift',bankSettlementStatus:undefined,paycrestStatus:'processing'}),null)
+console.log('PASS gift pushes describe funded, received and refunded principal only; no pending or fee announcement.')

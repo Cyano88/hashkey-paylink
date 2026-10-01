@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react'
+import {useGiftAutoRefresh} from './useGiftAutoRefresh'
 import {CheckCircleIcon} from '@heroicons/react/24/solid'
 import type {CircleEvmEmailSession} from '../../../lib/circleEvmEmailWallet'
 import {approvePocketGift,preparePocketGiftClaim,readPocketGiftClaimStatus,type GiftApproval} from '../../api/pocketGiftsClient'
@@ -34,6 +35,7 @@ function Claim({link,gift,identityKey,getAccessToken,getSession,onDone}:Props){
   try{if(sessionStorage.getItem(key))void controller.recheck()}catch{}
   return()=>controller.dispose()
  },[link,identityKey])
+ useGiftAutoRefresh(progress.phase==='unconfirmed',async()=>{await flow?.refresh()})
  const busy=['preparing','approval','checking'].includes(progress.phase)
  const terminal=progress.phase==='confirmed'||progress.phase==='unavailable'
  return <PocketBottomSheet title={progress.phase==='confirmed'?'Successful':'Claim gift'} onClose={onDone} dismissOnBackdrop={false} dismissible={!busy}>
@@ -42,8 +44,8 @@ function Claim({link,gift,identityKey,getAccessToken,getSession,onDone}:Props){
    <p className="mt-5 text-2xl font-bold">{gift.amount} USDC</p>
    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">From {gift.sender}</p>
    {progress.message&&<p role="status" className="mt-4 text-sm text-gray-500 dark:text-gray-400">{progress.message}</p>}
-   <button type="button" disabled={busy||(!flow&&!terminal)} className="pocket-cta-primary mt-6 w-full disabled:opacity-50" onClick={()=>terminal?onDone():progress.phase==='unconfirmed'?void flow?.recheck():void flow?.claim()}>
-    {terminal?'Done':progress.phase==='unconfirmed'?'Check status':busy?progress.phase==='approval'?'Confirm in wallet':progress.phase==='checking'?'Checking':'Preparing':'Claim gift'}
+   <button type="button" disabled={busy||(!flow&&!terminal)} className="pocket-cta-primary mt-6 w-full disabled:opacity-50" onClick={()=>terminal?onDone():progress.phase==='unconfirmed'?onDone():void flow?.claim()}>
+    {terminal?'Done':progress.phase==='unconfirmed'?'Done':busy?progress.phase==='approval'?'Confirm in wallet':progress.phase==='checking'?'Checking':'Preparing':'Claim gift'}
    </button>
   </section>
  </PocketBottomSheet>

@@ -203,3 +203,11 @@ Remaining: production route/native deep-link binding, secure creator capability 
 
 - Fix verified live on Render dep-dav2p5bncjis73d54et0 (abdd6aaba). Existing gift lookup now returns HTTP 200. On Pixel, retrying the same draft replaced Check status with Fund gift and preserved the 0.010025 USDC total.
 - Tapped Fund gift once for the authorized test. Pixel is now at Enter your PIN to approve; no PIN entered by automation. Awaiting the user's on-device approval, then Circle approval and confirmed funding/claim verification. Do not create another draft or submit a backend substitute transaction.
+
+## Automatic gift confirmation and scoped pushes - 2026-10-01
+
+- Pixel funding succeeded after the user's approval: 0.01 USDC gift g_BcdIOxjXfyy13-rgIpuULT is available, confirmed funding hash 0x716559b68370222522d4c28208678803e459cdd935d2c51ebab2884d23f06859. The manual status check revealed the ready-to-share QR; the delay was frontend refresh, not a missing payment. Claim remains untested.
+- Funding and claim sheets now refresh pending outcomes automatically using single-flight read-only checks with 2.5s initial delay and up to 15s backoff. Quiet reads preserve the sheet without loading flicker. Visibility/offline pause, focus/online resume and disposal prevent redundant checks. No automatic wallet approval or transaction resubmission. Pending CTA is Done; backend reconciliation continues when the sheet closes.
+- Funding retry can reopen only after the server verifies a terminal failed approval with an unfunded contract. Quiet recovery uses an already available Circle session and cannot summon a wallet-login popup.
+- Confirmed gift pushes now say Gift funded / Your [amount] USDC gift is ready to share. Received and refunded gifts have their own wording. Gift principal, fee and refund transfer hashes suppress duplicate generic money pushes, including when activity context lags behind the action journal. Normal USDC send fee-grouping regression verifies one principal-only push.
+- Auto-refresh lifecycle, funding/claim controllers, scoped push worker and notification wording tests passed. Changed-file ES2022 TypeScript diagnostics zero. Mobile update and deployment in progress at this checkpoint.

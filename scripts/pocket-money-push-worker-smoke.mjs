@@ -104,3 +104,15 @@ await runPocketMoneyPushWorker({configured:()=>true,listOwners:async()=>['moves'
  {...row({txHash:billHash,direction:'out'}),source:'wallet-swap',chain:'arc',contextLabel:'1 USDC to 1 token',paycrestStatus:'completed'}],sendPush:async(owner,event,input)=>movePushes.push(input),now:()=>now})
 assert.deepEqual(movePushes.map(n=>n.title).sort(),['Swap completed','USDC bridged'])
 console.log('PASS standalone bridge and swap each send one scoped push; all underlying sends and receipts remain silent.')
+
+const giftPushes=[],giftHash='0x'+'f'.repeat(64)
+const giftDeps={configured:()=>true,listOwners:async()=>['gift-owner'],readWallets:async()=>[],listActions:async()=>[{action:'gift.sent',metadata:{txHash:giftHash}}],listRequests:async()=>[],readActivity:async()=>[row({txHash:giftHash,direction:'out',amount:'0.1',recipient:'escrow'}),row({txHash:giftHash,eventId:'gift-fee',direction:'out',amount:'0.00025',recipient:'treasury'})],readContext:async()=>[{...row({txHash:giftHash,direction:'out',amount:'0.1'}),eventId:'gift-parent',source:'gift',paycrestStatus:'completed',feeAmount:'0.00025'}],sendPush:async(owner,event,input)=>giftPushes.push(input),now:()=>now}
+await runPocketMoneyPushWorker(giftDeps)
+assert.equal(giftPushes.length,1);assert.equal(giftPushes[0].title,'Gift funded');assert.equal(giftPushes[0].body,'Your 0.1 USDC gift is ready to share.')
+giftPushes.length=0;await runPocketMoneyPushWorker({...giftDeps,readContext:async()=>[]});assert.equal(giftPushes.length,0,'Gift action suppresses raw debit/fee even while context catches up')
+const {EVM_PLATFORM_TREASURY}=await import('../src/lib/platformFees.ts')
+console.log('PASS gift funding emits one scoped push; underlying principal and fee transfers stay silent even during context delay.')
+const feePushes=[]
+await runPocketMoneyPushWorker({...giftDeps,listActions:async()=>[],readContext:async()=>[],readActivity:async()=>[row({txHash:outgoingHash,payer:'0xpayer',direction:'out',recipient:'0xrecipient',amount:'1'}),row({txHash:outgoingHash,payer:'0xpayer',eventId:'ordinary-fee',direction:'out',recipient:EVM_PLATFORM_TREASURY,amount:'0.0025'})],sendPush:async(owner,event,input)=>feePushes.push(input)})
+assert.equal(feePushes.length,1);assert.equal(feePushes[0].body,'1 USDC sent on Base.');assert(!JSON.stringify(feePushes).includes('0.0025'))
+console.log('PASS normal USDC send emits one principal push and no platform-fee push.')

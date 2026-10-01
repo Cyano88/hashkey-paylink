@@ -27,3 +27,6 @@ console.log('PASS public gift reader: validated gift identity and clean HTML out
 
 const retry=setup();retry.failure=true;await retry.flow.claim();assert.equal(retry.flow.state.phase,'unconfirmed');retry.result={status:'available',retryAllowed:true};await retry.flow.recheck();assert.equal(retry.flow.state.phase,'ready');assert.equal(retry.flow.state.transactionHash,undefined);assert.equal(retry.approved,1);retry.failure=false;retry.result={status:'confirmed',transactionHash:hash};await retry.flow.claim();assert.equal(retry.approved,2);assert.equal(retry.flow.state.phase,'confirmed');
 console.log('PASS explicit server-authorized retry resets cancelled claim without automatic approval.')
+
+const automatic=setup();await automatic.flow.claim();const before=automatic.states.length;automatic.result={status:'confirmed',transactionHash:hash};await automatic.flow.refresh();assert.equal(automatic.flow.state.phase,'confirmed');assert.equal(automatic.approved,1);assert(!automatic.states.slice(before).some(s=>s.phase==='checking'))
+console.log('PASS automatic claim confirmation updates quietly without another wallet approval.')
