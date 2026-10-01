@@ -79,3 +79,11 @@ One shared statement design, scoped to its entry point. Main Activity defaults t
 - Browser export regression passes when the visible Activity list is empty because of a future-date filter: All activity still exports recorded rows; local scope excludes deposits and gifts. PDF default is asserted.
 - Two-page fixture PDF rendered with the production Jakarta and Naira fonts and inspected locally. Verified long recipient wrapping, page break/header/footer alignment, double-stroke Naira, UGX amounts and preservation of 0.00000001 USDC. No real user data was used in the PDF fixture.
 - Changed-code TypeScript diagnostics: zero. Pixel save/return and live deployment verification pending.
+
+### Statement delivery checkpoint
+
+- Mobile Vite built in 2m 41s; Gradle BUILD SUCCESSFUL in 16s. Pixel install -r returned Success with data preserved.
+- On the installed app, Download statement opened with PDF and All activity selected. A one-day PDF export was requested without logging transaction contents.
+- Native save/return is NOT yet verified: the phone switched to another app during the check; Pocket process remained alive. Asked user to leave Pocket open before continuing. No restart claim is made from this interrupted test.
+- Statement changes pushed as 80b3a85e6; Render dep-davbicjtqb8s73f5nfe0 was updating at this checkpoint. A subsequent independent Trade merge retains the statement commit.
+- Final web verification: dep-davbicjtqb8s73f5nfe0 is live at 80b3a85e6 and Pocket web returned HTTP 200. Subsequent Trade-only deployment is separate and retains this work.
