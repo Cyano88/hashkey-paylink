@@ -1,3 +1,5 @@
+import {createGiftCodeService} from './codes.js'
+import {durableGiftCodeStore} from './code-store.js'
 import {baseGiftFundingAllowed} from './rollout.js'
 import {sameGiftDeployment,validateBaseGiftDeployment} from './deployment.js'
 import {publishGiftReceipts} from './receipts.js'
@@ -17,4 +19,5 @@ const rpc=(network:GiftNetwork)=>({base:process.env.PRIVATE_RPC_URL,arbitrum:pro
 // Enable only after Base deployment, sponsor and sender recovery checks are recorded.
 const BASE_GIFT_FUNDING_REVIEWED=false
 export const giftService=createGiftService({fundingEnabled:(network,identity,amount)=>baseGiftFundingAllowed({publicEnabled:BASE_GIFT_FUNDING_REVIEWED,pilotUserIds:process.env.POCKET_GIFT_PILOT_USER_IDS||'',network,identity,amount}),store:durableGiftStore,deployment:network=>{const d=GIFT_DEPLOYMENTS[network];return d?validateBaseGiftDeployment(d):undefined},wallet:async(userId,network)=>{const link=await readCircleLink(circleLinkKey(userId,network));return link?.privyUserId===userId&&link.chain===network?{address:link.circleWalletAddress as Address,id:link.circleWalletId}:undefined},observe:async(record,receiptHint)=>{const deployment=GIFT_DEPLOYMENTS[record.deployment.network],url=rpc(record.deployment.network);if(!deployment||!sameGiftDeployment(deployment,record.deployment)||!url)throw new GiftError(503,'Gift network is not enabled.');return observeGift(createPublicClient({transport:http(url,{timeout:10000,retryCount:1})}),record,receiptHint)},publishReceipts:publishGiftReceipts,readFundingAttempt:readGiftFundingAttempt,challenge:giftCircleChallenge})
-export default createGiftHandler({service:giftService,identity:async req=>{const identity=await verifiedPrivyUser(req),profile=await localCurrencyProfileRepository.get(identity.userId);return {userId:identity.userId,handle:profile?.pocketId||''}}})
+export const giftCodeService=createGiftCodeService({store:durableGiftCodeStore,key:()=>process.env.POCKET_GIFT_CODE_KEY||'',gift:id=>durableGiftStore.read(id),view:id=>giftService.view(id)})
+export default createGiftHandler({service:giftService,codes:giftCodeService,identity:async req=>{const identity=await verifiedPrivyUser(req),profile=await localCurrencyProfileRepository.get(identity.userId);return {userId:identity.userId,handle:profile?.pocketId||''}}})

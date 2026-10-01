@@ -83,3 +83,14 @@ export async function recoverPocketGiftFunding(input:Options&{id:string;session:
  if(result.gift?.id!==input.id||result.gift?.network!==input.session.chain||typeof result.retryAllowed!=='boolean')throw Error('Gift recovery could not be verified.')
  return {retryAllowed:result.retryAllowed}
 }
+
+export async function issuePocketGiftCode(input:Options&{id:string;secret:string}) {
+ const data=await postGift({action:'issue-code',id:input.id,secret:input.secret},input)
+ if(typeof data.code!=='string'||! /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(data.code))throw Error('Gift code could not be loaded.')
+ return data.code as string
+}
+export async function resolvePocketGiftCode(input:Options&{code:string}) {
+ const data=await postGift({action:'resolve-code',code:input.code},input)
+ if(typeof data.link!=='string'||!parseGiftLink(data.link))throw Error('Gift code could not be verified.')
+ return data.link as string
+}
