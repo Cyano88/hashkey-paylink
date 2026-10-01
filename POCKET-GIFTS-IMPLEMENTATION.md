@@ -224,3 +224,12 @@ Remaining: production route/native deep-link binding, secure creator capability 
 - Claim approval errors retain automatic read-only reconciliation but now truthfully say wallet approval did not finish. No retry or confirmation is inferred from that error.
 - Real installed SDK browser regression reproduces the original collision, proves gift and singleton construction are protected, and verifies OAuth handling remains unchanged. Unrelated JWT decoding is stubbed in that constructor-only test. Existing Circle approval surface/handoff and gift claim controller regressions passed; changed-file TypeScript diagnostics zero.
 - Pixel build in progress. Same funded gift remains the only user test; no new gift, no additional funding, and no confirmed claim at this checkpoint.
+
+- Approval fix bcc897fd1 is live on Render dep-dav3k3hsrm7s73bm0tlg. Duplicate manually queued deploy dep-dav3k87d7sfs738tdctg was canceled after discovering the automatic deploy. Vite/Gradle succeeded and Pixel install -r returned Success with data preserved. Live claim approval still needs verification; the user is reviewing gift activity/receipt on the device.
+
+## Gift activity and receipt polish - 2026-10-01
+
+- Reuse the existing outline Heroicons GiftIcon from Send/Receive menus through the shared activity icon mapping, covering both Home Recent and full Activity.
+- Gift receipts have their own compact detail rows: network, sender for incoming gifts, gift claim status for outgoing gifts, and platform fee. Removed generic From/To/Destination/amount-and-narration duplication. Funding is labeled Gift funded, distinct from actual claiming.
+- A sender's To row is available only after confirmed settlement and a matching claimed wallet. That verified claimant is included in the private action metadata; unfunded, unmatched or unclaimed gifts cannot invent a recipient. Refund receipt keeps the creation-fee explanation.
+- Receipt view is shared by mobile and exported receipt generation. Gift receipts regression covers funded/claimed/incoming/refunded and unmatched-recipient cases; existing receipt policy checks and changed-file TypeScript pass. Combined mobile build in progress.

@@ -2,6 +2,8 @@ import { pocketFundingRoute, type PocketPaymentFunding } from '../pocket/lib/poc
 import { CHAIN_META, type ChainKey } from './chains'
 
 export type PaylinkReceipt = {
+  giftState?: 'funded' | 'claimed' | 'refunded'
+  giftRecipient?: string
   paymentFunding?: PocketPaymentFunding[]
   type: string
   receiptId: string
@@ -264,6 +266,25 @@ export function paymentReceiptView(receipt: PaylinkReceipt): UnifiedReceiptView 
   const amount = (!pocketUsdc && localAmount) || `${compactReceiptAmount(receipt.amount)} ${receipt.asset}`
   const reference = receipt.referenceId || receipt.txHash || receipt.receiptHash || receipt.receiptId
   const type = receiptType(receipt)
+  if (receipt.source === 'gift') {
+    const incoming = receipt.type === 'money_in'
+    const refunded = receipt.status === 'refunded' || receipt.giftState === 'refunded'
+    return {
+      variant: 'general',
+      badge: refunded ? 'Gift refunded' : incoming ? 'Gift received' : 'Gift funded',
+      amount,
+      timestamp: fmtTime(receipt.createdAt),
+      rows: [
+        { label: 'Network', value: network },
+        ...(incoming && receipt.payer ? [{ label: 'From', value: receipt.payer, mono: /^0x/.test(receipt.payer) }] : []),
+        ...(!incoming && receipt.giftState === 'claimed' && receipt.giftRecipient ? [{ label: 'To', value: receipt.giftRecipient, mono: /^0x/.test(receipt.giftRecipient) }] : []),
+        ...(!incoming && receipt.giftState ? [{ label: 'Gift status', value: refunded ? 'Refunded' : receipt.giftState === 'claimed' ? 'Claimed' : 'Ready to claim' }] : []),
+        ...(!incoming && receipt.feeAmount ? [{ label: 'Platform fee', value: compactReceiptAmount(receipt.feeAmount) + ' USDC' }] : []),
+        ...(refunded ? [{ label: 'Note', value: 'The gift amount was returned. The creation fee was not refunded.' }] : []),
+      ],
+      reference,
+    }
+  }
   if (receipt.source === 'arc-agreement') {
     const outcome = receipt.agreementStatus === 'completed'
       ? `${compactReceiptAmount(receipt.releasedAmount)} USDC released`

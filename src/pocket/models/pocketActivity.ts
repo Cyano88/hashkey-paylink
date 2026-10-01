@@ -2,6 +2,8 @@ import type { PocketPaymentFunding } from '../lib/pocketPaymentFunding'
 import type { PocketPendingBridge } from '../lib/pocketPendingBridge'
 
 export type PocketActivityRow = {
+  giftState?: 'funded' | 'claimed' | 'refunded'
+  giftRecipient?: string
   fundingOnly?: boolean
   paymentFunding?: PocketPaymentFunding[]
   fundingParent?: string

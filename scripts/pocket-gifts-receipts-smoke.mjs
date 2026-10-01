@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import {giftReceiptActions,giftActivityRow} from '../api/pocket/gifts/receipts.ts'
+import {paymentReceiptView} from '../src/lib/paymentReceiptPdf.ts'
 import {pocketActivityReceipt} from '../src/pocket/lib/pocketReceipt.ts'
 import {collapsePocketAssetMoves} from '../src/pocket/lib/pocketAssetMoveActivity.ts'
 const hash=n=>'0x'+String(n).repeat(64),addr=n=>'0x'+String(n).repeat(40)
@@ -8,7 +9,7 @@ assert.deepEqual(giftReceiptActions(record),[])
 const funded={...record,state:'available',fundingHash:hash(1),fundingAt:1000}
 const actions=giftReceiptActions(funded);assert.equal(actions.length,1);assert.equal(actions[0].ownerId,'sender')
 const row=giftActivityRow({...actions[0],id:'row1'})
-assert.equal(pocketActivityReceipt(row).title,'Gift sent');assert.equal(pocketActivityReceipt(row).feeAmount,'0.25')
+assert.equal(pocketActivityReceipt(row).title,'Gift funded');assert.equal(pocketActivityReceipt(row).feeAmount,'0.25')
 const refunded={...funded,state:'refunded',refundHash:hash(2),refundAt:2000}
 const refundActions=giftReceiptActions(refunded);assert.equal(refundActions.length,1,'refund updates the original sender gift')
 const refundRow=giftActivityRow({...refundActions[0],id:'row1'})
@@ -23,3 +24,9 @@ const collapsed=collapsePocketAssetMoves([refundRow,raw('base',hash(1)),raw('bas
 assert.equal(collapsed.length,3,'only exact gift funding/refund legs collapse')
 for(const value of giftReceiptActions(claimed))assert.ok(!JSON.stringify(value).includes('signature'))
 console.log('PASS gift receipts: verified hashes only, correct account and fee, one refunded sender record, exact-chain underlying-transfer suppression.')
+
+const fundedView=paymentReceiptView(pocketActivityReceipt(row));assert.equal(fundedView.badge,'Gift funded');assert(!fundedView.rows.some(r=>['To','Destination','From','Amount & narration','Type'].includes(r.label)));assert.equal(fundedView.rows.find(r=>r.label==='Gift status').value,'Ready to claim');
+const senderClaim=giftActivityRow({...incoming[0],id:'row1'});const claimedView=paymentReceiptView(pocketActivityReceipt(senderClaim));assert.equal(claimedView.rows.find(r=>r.label==='To').value,addr(2));assert.equal(claimedView.rows.find(r=>r.label==='Gift status').value,'Claimed');
+const incomingView=paymentReceiptView(pocketActivityReceipt(giftActivityRow({...incoming[1],id:'row2'})));assert.equal(incomingView.rows.find(r=>r.label==='From').value,'@sender');assert(!incomingView.rows.some(r=>r.label==='To'||r.label==='Destination'));
+const unmatched=giftActivityRow({...giftReceiptActions({...claimed,claimRecipient:addr(3)})[0],id:'row1'});assert(!paymentReceiptView(pocketActivityReceipt(unmatched)).rows.some(r=>r.label==='To'));
+console.log('PASS compact gift receipts: no invented destination, verified claimant only, sender shown on received gifts, funding distinct from claim.');

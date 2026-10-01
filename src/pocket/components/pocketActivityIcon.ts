@@ -1,3 +1,4 @@
+import { GiftIcon } from '@heroicons/react/24/outline'
 import { createElement } from 'react'
 import { ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, Receipt, Landmark, Store, QrCode, RequestMoney, CreditCard, Phone, Wifi, Tv, Lightbulb } from './PocketIcons'
 import type { PocketActivityRow } from '../models/pocketActivity'
@@ -14,6 +15,7 @@ function UsdcActivityLogo({ className }: { className?: string }) {
 
 export function pocketActivityIcon(row: PocketActivityRow) {
   const source = String(row.source || '').toLowerCase().replace(/_/g, '-')
+  if (source === 'gift') return GiftIcon
   if (isOutgoingPosPurchase(row)) return Store
   if (source === 'bills') return ({ airtime: Phone, data: Wifi, tv: Tv, electricity: Lightbulb })[row.billCategory!] || Receipt
   if (source === 'request' || source === 'collection') return RequestMoney

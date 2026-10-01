@@ -94,7 +94,7 @@ export function pocketBillTitle(category?: string): string {
 
 export function pocketMovementTitle(row: PocketActivityRow): string {
   const kind = pocketReceiptKind(row)
-  if (normalizedSource(row) === 'gift') return row.paycrestStatus === 'refunded' ? 'Gift refunded' : row.direction === 'in' ? 'Gift received' : 'Gift sent'
+  if (normalizedSource(row) === 'gift') return row.paycrestStatus === 'refunded' ? 'Gift refunded' : row.direction === 'in' ? 'Gift received' : 'Gift funded'
   if (normalizedSource(row) === 'xpay' && row.direction === 'in') return 'Incoming'
   if (normalizedSource(row) === 'request' && ['pending', 'awaiting response', 'accepted', 'declined', 'cancelled'].includes(pocketActivityStatus(row))) return 'USDC request'
   if (normalizedSource(row) === 'request' || normalizedSource(row) === 'collection') return 'Request payment'
@@ -118,6 +118,8 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
 
   return {
     paymentFunding: row.paymentFunding,
+    giftState: row.giftState,
+    giftRecipient: row.giftRecipient,
     type: kind === 'bill_purchase' ? category : kind,
     receiptId: row.receiptId || row.billReference || row.eventId,
     receiptHash: row.txHash || reference,
