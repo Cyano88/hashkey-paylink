@@ -1,0 +1,11 @@
+{
+  "status": "deployment-plan-only",
+  "network": "base",
+  "chainId": 8453,
+  "contractName": "PocketGiftEscrow",
+  "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+  "treasury": "0xcE5dF9e1115F81a2Fc2F65941B20B820d508e753",
+  "platformFeeBps": 25,
+  "confirmations": 2,
+  "treasuryConfirmedOn": "2026-10-01"
+}
