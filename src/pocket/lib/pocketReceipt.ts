@@ -93,6 +93,8 @@ export function pocketBillTitle(category?: string): string {
 }
 
 export function pocketMovementTitle(row: PocketActivityRow): string {
+  if (normalizedSource(row) === 'wallet-bridge') return 'USDC bridge'
+  if (normalizedSource(row) === 'wallet-swap') return 'Swap'
   const kind = pocketReceiptKind(row)
   if (normalizedSource(row) === 'gift') return row.paycrestStatus === 'refunded' ? 'Gift refunded' : row.direction === 'in' ? 'Gift received' : 'Gift funded'
   if (normalizedSource(row) === 'xpay' && row.direction === 'in') return 'Incoming'

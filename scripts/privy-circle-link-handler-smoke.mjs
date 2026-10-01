@@ -41,7 +41,7 @@ const handler = createPrivyCircleLinkHandler({
 
 assert.equal((await request(handler, {}, 'GET')).statusCode, 405)
 assert.equal((await request(handler, {})).statusCode, 400)
-assert.match((await request(handler, { action: 'resolve', chain: 'polygon' })).body.error, /Unsupported Circle link chain/)
+assert.match((await request(handler, { action: 'resolve', chain: 'optimism' })).body.error, /Unsupported Circle link chain/)
 assert.match((await request(handler, { action: 'resolve', chain: 'base', purpose: 'invented' })).body.error, /Unsupported Circle link purpose/)
 
 const wallet = {
@@ -156,7 +156,7 @@ for (const relativePath of ['../src/pages/PaymentPage.tsx']) {
   const source = await readFile(new URL(relativePath, import.meta.url), 'utf8')
   assert.doesNotMatch(source, /savePrivyCircleLink|unlinkPrivyCircleLink/)
   for (const call of source.matchAll(/\blinkPocketWallet\(\{/g)) {
-    assert.match(source.slice(call.index, call.index + 500), /circleUserToken:\s*session\.userToken/)
+    assert.match(source.slice(call.index, call.index + 500), /circleUserToken:\s*(?:session|linkedSession)\.userToken/)
   }
 }
 

@@ -1,3 +1,4 @@
+import { POCKET_NATIVE_BACK_EVENT } from '../lib/pocketNativeBack'
 import PocketBottomSheet from './PocketBottomSheet'
 import PocketNetworkMark from './PocketNetworkMark'
 import { useEffect, useRef, useState } from 'react'
@@ -51,9 +52,17 @@ export default function PocketSelect({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false)
     }
+    const nativeBack = (event: Event) => {
+      if (!rootRef.current || event.defaultPrevented) return // Network sheets handle their own Back.
+      const dialogs = document.querySelectorAll('[role="dialog"], [aria-modal="true"]')
+      if (dialogs.length && !dialogs[dialogs.length - 1].contains(rootRef.current)) return
+      event.preventDefault(); event.stopImmediatePropagation(); setOpen(false)
+    }
+    window.addEventListener(POCKET_NATIVE_BACK_EVENT, nativeBack, true)
     document.addEventListener('mousedown', close)
     document.addEventListener('keydown', closeOnEscape)
     return () => {
+      window.removeEventListener(POCKET_NATIVE_BACK_EVENT, nativeBack, true)
       document.removeEventListener('mousedown', close)
       document.removeEventListener('keydown', closeOnEscape)
     }

@@ -7,7 +7,6 @@ import usePocketEmbeddedWallet from './hooks/usePocketEmbeddedWallet'
 import PocketTransferMenuPage from './pages/PocketTransferMenuPage'
 import './pocketTheme.css'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { App as CapacitorApp } from '@capacitor/app'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isPocketNativeRuntime, POCKET_BASE_PATH, POCKET_ROUTES, resolvePocketRoute } from './lib/pocketRoutes'
 import PocketLoadingState from './components/PocketLoadingState'
@@ -23,7 +22,6 @@ import { prefetchPocketActivity } from './hooks/usePocketActivity'
 import { readPocketBankWithdrawStatus, registerPocketBankWithdrawTransfer, confirmPocketBankWithdraw } from './api/pocketBankWithdrawClient'
 import { readPendingBankPayouts, saveActivePocketBankPayout, detachActivePocketBankPayout, clearActivePocketBankPayout, readActivePocketBankPayout, readActivePocketBankPayoutAcceptance, readActivePocketBankPayoutTransfer } from './lib/pocketBankPayoutState'
 import { registerPocketRefreshHandler } from './lib/pocketRefresh'
-import { POCKET_NATIVE_BACK_EVENT } from './lib/pocketNativeBack'
 import { preparePocketWalletsAfterSignIn, reconnectPocketBaseWallet, restorePocketWalletSession } from './controllers/usePocketWalletController'
 import { Lock } from './components/PocketIcons'
 import PocketPaymentSecurityGate from './components/PocketPaymentSecurityGate'
@@ -197,27 +195,6 @@ export default function CirclePocketApp() {
     return () => window.clearTimeout(timer)
   }, [email, reconnectWallet, walletUnlockBusy, walletUnlockState, stocks, canShowCachedHome])
 
-  useEffect(() => {
-    if (!isPocketNativeRuntime()) return
-    let disposed = false
-    let remove: (() => Promise<void>) | undefined
-    void CapacitorApp.addListener('backButton', () => {
-      const event = new Event(POCKET_NATIVE_BACK_EVENT, { cancelable: true })
-      if (!window.dispatchEvent(event)) return
-      if (landing || route?.section === 'home' && route.view === 'overview' || route?.section === 'xstocks' && route.view === 'home') {
-        void CapacitorApp.minimizeApp()
-        return
-      }
-      navigate(-1)
-    }).then(handle => {
-      if (disposed) void handle.remove()
-      else remove = handle.remove
-    })
-    return () => {
-      disposed = true
-      if (remove) void remove()
-    }
-  }, [landing, navigate, route])
 
   useEffect(() => {
     if (!landing || !sessionResolved || !authenticated) return

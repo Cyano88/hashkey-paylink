@@ -1,12 +1,13 @@
+import { dispatchPocketNativeBack } from '../lib/pocketNativeBack'
 import {useTheme} from '../../lib/ThemeContext'
 import { pocketScanDestination } from '../lib/pocketScanCode'
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Network } from '@capacitor/network'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { registerPlugin } from '@capacitor/core'
-import { isPocketNativeRuntime, POCKET_HOSTNAME } from '../lib/pocketRoutes'
+import { isPocketNativeRuntime, POCKET_HOSTNAME, POCKET_BASE_PATH } from '../lib/pocketRoutes'
 
 function nativePocketDestination(rawUrl: string) {
   try {
@@ -40,6 +41,26 @@ export default function PocketNativeBridge() {
   const {theme}=useTheme()
   useEffect(()=>{if(isPocketNativeRuntime())void PocketInsets.setPocketTheme({dark:theme==='dark'}).catch(()=>undefined)},[theme])
   const navigate = useNavigate()
+  const location = useLocation()
+  const currentPath = useRef(location.pathname)
+  currentPath.current = location.pathname
+  useEffect(() => {
+    if (!isPocketNativeRuntime()) return
+    let disposed = false
+    let remove: (() => Promise<void>) | undefined
+    const listener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      const path = currentPath.current.slice(POCKET_BASE_PATH.length) || '/'
+      dispatchPocketNativeBack({
+        atHome: ['/', '/home', '/xstocks/home'].includes(path),
+        canGoBack,
+        back: () => navigate(-1),
+        home: () => navigate(POCKET_BASE_PATH + '/home', { replace: true }),
+        minimize: () => { void CapacitorApp.minimizeApp() },
+      })
+    })
+    void listener.then(handle => { if (disposed) void handle.remove(); else remove = () => handle.remove() }).catch(() => undefined)
+    return () => { disposed = true; if (remove) void remove().catch(() => undefined) }
+  }, [navigate])
   const [online, setOnline] = useState(true)
 
   useEffect(() => {

@@ -35,7 +35,7 @@ export default function PocketArcTokenPicker({ label, value, tokens, excluded, d
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     root.current?.focus()
-    const close = (event: Event) => { event.preventDefault(); setOpen(false) }
+    const close = (event: Event) => { const dialogs = document.querySelectorAll('[role="dialog"]'); if (event.defaultPrevented || dialogs[dialogs.length - 1] !== root.current) return; event.preventDefault(); setOpen(false) }
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close(event)
       if (event.key === 'Tab') {

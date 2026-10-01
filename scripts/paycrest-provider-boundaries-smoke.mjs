@@ -57,7 +57,7 @@ globalThis.fetch = async (_url, init) => {
   })
 }
 assert.equal(await verifyPaycrestAccount({ institution: 'OPAY', accountIdentifier: '0123456789' }), 'TEST CUSTOMER')
-assert.deepEqual(verificationBody, { institution: 'OPAY', accountIdentifier: '0123456789', currency: 'NGN' })
+assert.deepEqual(verificationBody, { institution: 'OPAY', accountIdentifier: '0123456789' })
 
 globalThis.fetch = async () => new Response(JSON.stringify({
   status: 'error',
