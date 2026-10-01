@@ -26,11 +26,11 @@ export function createApp({store,adminSecret,sessionSecret,now=Date.now}){
    if(path==='/v1/integration-state'){
     const scope=await store.authenticate(token);if(!scope)fail('Business server authentication required.',401)
     limit('workspace:'+scope.workspaceId,120)
-    if(req.method==='GET')return send(200,{ok:true,...await store.integrationState(scope)})
+    if(req.method==='GET')return send(200,{ok:true,workspaceId:scope.workspaceId,...await store.integrationState(scope)})
     if(req.method==='PUT'){
      const input=await body(req,8*1024*1024)
      if(!Number.isSafeInteger(input.revision)||input.revision<0||input.revision>=2147483646||!input.value||typeof input.value!=='object'||Array.isArray(input.value))fail('Invalid integration state.')
-     return send(200,{ok:true,...await store.writeIntegrationState(scope,input.revision,input.value)})
+     return send(200,{ok:true,workspaceId:scope.workspaceId,...await store.writeIntegrationState(scope,input.revision,input.value)})
     }
     fail('Method not allowed.',405)
    }
