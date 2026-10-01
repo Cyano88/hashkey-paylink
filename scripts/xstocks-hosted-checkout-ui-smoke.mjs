@@ -14,8 +14,8 @@ const storage=new Map();globalThis.localStorage={getItem:k=>storage.get(k)||null
 await build({entryPoints:['src/components/xstocksAgreement/HostedWorkCheckout.tsx'],bundle:true,platform:'node',format:'esm',packages:'external',jsx:'automatic',outfile:output.pathname.replace(/^\/([A-Za-z]:)/,'$1'),plugins:[{name:'wallet-fixtures',setup(b){b.onResolve({filter:/^react(\/jsx-runtime)?$/},a=>({path:pathToFileURL(require.resolve(a.path)).href,external:true}));b.onResolve({filter:/(@privy-io\/react-auth|\/hostedWallet|\.\/ConfirmSheet)$/},a=>({path:a.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path.includes('react-auth')?`export const usePrivy=()=>({authenticated:true,user:{id:'fixture'}}),useWallets=()=>({wallets:[]}),useSignTransaction=()=>({signTransaction:()=>{throw Error('Unexpected signing')}});`:a.path.includes('hostedWallet')?`export const selectHostedWallet=()=>globalThis.__checkout.wallet;`:`export const useStreamConfirm=()=>({confirm:(...a)=>globalThis.__checkout.confirm(...a),confirmation:null});` }));}}]});
 try{
  const {default:Checkout}=await import(output.href);
- let readCount=0,waitForRead,fail=false,state=1,resolveConfirmation,receipt,networkPending=false;
- const request=async()=>{readCount++;await waitForRead;if(fail)throw Error('upstream HTML');return {enabled:true,state,pending:networkPending,stockReceipt:receipt,actions:state===0?['accept','cancel']:state===1?['approve','cancel']:state===2?['dispatch','refund']:state===3?['refund']:[],wallet:{address},customerReady:true,providerReady:true}};
+ let readCount=0,waitForRead,fail=false,state=1,resolveConfirmation,receipt,networkPending=false,fundingExpired=false;
+ const request=async()=>{readCount++;await waitForRead;if(fail)throw Error('upstream HTML');return {enabled:true,state,fundingExpired,pending:networkPending,stockReceipt:receipt,actions:state===0?['accept','cancel']:state===1?['approve','cancel']:state===2?['dispatch','refund']:state===3?['refund']:[],wallet:{address},customerReady:true,providerReady:true}};
  const item={id:'fixture',activeVersion:1,role:'customer',terms:[{kind:'trade',version:1,amount:'0.00222',durationSeconds:86400,xlayerPayment:{token:'0xc845b2894dbddd03858fd2d643b4ef725fe0849d',decimals:18,amountUnits:'2220000000000000',reviewHours:48}}]};
  let tree;await act(async()=>{tree=TestRenderer.create(React.createElement(Checkout,{item,request,onUpdated(){}}))});
  const buttons=()=>tree.root.findAllByType('button');const find=t=>buttons().find(b=>b.children.join('')===t);const text=()=>JSON.stringify(tree.toJSON());
@@ -48,6 +48,15 @@ try{
  const afterFinal=readCount;fail=true;await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.equal(readCount,afterFinal,'Verified final receipts stop background polling');assert.match(text(),/Paid to seller/);assert.doesNotMatch(text(),/Payment status unavailable/);assert.equal(find('Try again'),undefined);fail=false;
  // A different agreement must still load and poll normally.
  state=1;receipt=undefined;item.id='another-agreement';await act(async()=>{tree.update(React.createElement(Checkout,{item,request,onUpdated(){}}))});assert.ok(find('Pay securely'));
+ for(const role of ['customer','provider']){
+  item.role=role;state=undefined;fundingExpired=true;item.id='expired-'+role;
+  await act(async()=>tree.update(React.createElement(Checkout,{item,request,onUpdated(){}})));
+  assert.match(text(),/Payment deadline passed/);assert.match(text(),/agree fresh terms/);
+  assert.doesNotMatch(text(),/temporarily unavailable|Waiting for seller setup|Ready to set up payment/);
+  assert.equal(find('Set up payment'),undefined);assert.equal(find('Pay securely'),undefined);
+ }
+ fundingExpired=false;state=1;item.id='active-again';
+ await act(async()=>tree.update(React.createElement(Checkout,{item,request,onUpdated(){}})));
  const beforeHidden=readCount;document.visibilityState='hidden';await act(async()=>{window.dispatchEvent(new Event('focus'))});assert.equal(readCount,beforeHidden);
  document.visibilityState='visible';let finishRead;waitForRead=new Promise(resolve=>finishRead=resolve);
  await act(async()=>{window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('focus'))});assert.equal(readCount,beforeHidden+1,'Only one background request at a time');
