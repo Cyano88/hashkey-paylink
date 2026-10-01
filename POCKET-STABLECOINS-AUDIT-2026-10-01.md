@@ -49,3 +49,15 @@ Build/device/deployment results will be appended after verification. Unrelated X
 - Mobile Vite output reports built in 3m 14s. The PowerShell invocation reported exit 1 alongside Rollup dependency/chunk warnings; compiled assets were produced, synced, built by Gradle and exercised on Pixel. Do not describe the shell build exit as zero.
 - Web deployment verified live: dep-davasijtqb8s73f4jnk0, commit 27f80b3cfa260b4176c498a6066312f612853b50. Pocket web returned HTTP 200 after rollout. Two independent XStocks Agreement commits were merged without conflicts before push; no Stablecoins overlap.
 - Pixel contains the audited Stablecoins changes at af74ede8e. The later merge only adds the independent XStocks Agreement work; it was not rebuilt into this Pixel APK.
+
+## Follow-up: keyboard and approval recovery
+
+- Pixel Send USDC: amount input opens the Android keyboard; first physical Back dismisses it without leaving the form. Network selector closes on Back without leaving Send; next Back returns to Send menu.
+- Pixel bank amount screen: keyboard viewport measured 618.33 CSS px, Continue remains visible, no horizontal overflow. First Back dismisses keyboard and keeps Enter amount; next Back returns to Bank transfer. A temporary input of 1 was cleared; no quote approval or payment was submitted.
+- Found native keyboard subscription cleanup race: four delayed registrations survived route unmount. Reproduced in a new regression fixture before fix. Each registration now removes itself if it resolves after disposal, and individual registration failures no longer strand successfully registered handlers.
+- New keyboard lifecycle regression passes: focus, late registration cleanup, remount, show/hide and zero retained listeners. Native Back regression also passes.
+- Approval recovery, Circle approval surface and background recovery fixtures pass: provider close, timeout, errors, offline, cancellation, late callbacks, receipt-driven completion, anchored Confirm, account-switch isolation and quiet EVM/Solana recovery. These are mocked-provider tests; they are not a newly submitted live payment.
+
+### Next statement scope proposed to user
+
+One shared statement design, scoped to its entry point. Main Activity defaults to all balance movements with optional Bank transfers & bills filter; terminal/collection exports remain scoped; XStocks stays separate. DD-MM-YY dates; + or - on amounts rather than redundant direction labels/arrows; USDC primary with actual NGN/UGX local payment amount below. Remove provider/internal-routing jargon. Preserve truthful status, grouped funding/fees and financial totals. Date range, PDF default, CSV option. This is a product presentation proposal, not a conclusion about regulatory obligations.
