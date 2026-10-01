@@ -257,3 +257,9 @@ Remaining: production route/native deep-link binding, secure creator capability 
 - The native gift preview reused the public landing without an in-app back action. Added the existing PocketFlowHeader via an optional onBack callback; native Back returns to /gifts/claim with replace semantics so it cannot loop back to the preview.
 - Header exists in loading/error/loaded states with matching safe-area spacing. The public shared-link landing keeps its existing Pocket branding. Approval sheet dismissal protections remain unchanged.
 - Changed-file TypeScript passed. Mobile build and Pixel verification pending.
+
+## Revised gift completion navigation - 2026-10-01
+
+- User refined the flow: Back before claiming; after confirmed claiming, Back disappears and bottom Done goes Home. Implemented native onDone navigation with replace semantics and retained code-entry Back before completion.
+- Claim controller's confirmed result updates the preview to claimed, removes Back and closes no screens automatically. Successful sheet has only Done, without Close or backdrop dismissal; Done navigates Home. A loaded already-claimed native gift also has bottom Done. Pending/unavailable sheet dismissal does not falsely run successful completion navigation.
+- Browser regression verifies pre-claim Back, pending dismissal staying in the gift flow, and confirmed-only Done to Home with Back/Close removed. Changed-file TypeScript diagnostics zero. Final mobile build pending.

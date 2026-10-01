@@ -13,12 +13,13 @@ export function PocketGiftArtwork({ compact = false }: { compact?: boolean }) {
 function GiftDetails({ gift }: { gift: GiftView }) {
   return <><h1 className="mt-7 text-2xl font-bold tracking-tight">A gift for you</h1><p className="mt-3 text-3xl font-bold tabular-nums">{gift.amount} <span className="text-base font-medium">USDC</span></p><p className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-500 dark:text-gray-400"><PocketNetworkMark network={gift.network} /><span className="capitalize">{gift.network}</span></p><p className="mt-5 text-sm text-gray-600 dark:text-gray-300">From {gift.sender}</p>{gift.message && <p className="mx-auto mt-4 max-w-xs break-words text-sm leading-6 text-gray-500 dark:text-gray-400">{gift.message}</p>}</>
 }
-export function PocketGiftLanding({ gift, onRedeem, onCopyCode, onBack }: { onBack?: () => void; gift: GiftView; onRedeem: () => void; onCopyCode?: () => void }) {
+export function PocketGiftLanding({ gift, onRedeem, onCopyCode, onBack, onDone }: { onDone?: () => void; onBack?: () => void; gift: GiftView; onRedeem: () => void; onCopyCode?: () => void }) {
   const available = gift.status === 'available'
   return <main data-pocket-colour-scope="stablecoins" className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-6 pb-8 pt-[max(1.5rem,var(--pocket-safe-top))] text-center text-gray-950 dark:text-white">
     <div className="mb-8">{onBack?<PocketFlowHeader title="Claim a gift" onBack={onBack}/>:<p className="flex items-center justify-center gap-2 text-sm font-bold"><CPurseIcon size={26} title="" />Pocket</p>}</div>
     <PocketGiftArtwork /><GiftDetails gift={gift} />
     {available ? <div className="mt-8"><button type="button" onClick={onRedeem} className="pocket-cta-primary w-full">Redeem in Pocket</button>{onCopyCode && <button type="button" onClick={onCopyCode} className="mt-4 min-h-11 px-3 text-xs text-gray-500 dark:text-gray-400">Copy gift code</button>}</div> : <p role="status" className="mt-8 text-sm text-gray-500 dark:text-gray-400">{giftStateCopy(gift.status)}</p>}
+    {onDone&&<div className="mt-auto pt-8"><button type="button" className="pocket-cta-primary w-full" onClick={onDone}>Done</button></div>}
   </main>
 }
 export function PocketGiftClaimSheet({ gift, onClose, onClaim, busy = false, error = '' }: { gift: GiftView; onClose: () => void; onClaim: () => void; busy?: boolean; error?: string }) {
