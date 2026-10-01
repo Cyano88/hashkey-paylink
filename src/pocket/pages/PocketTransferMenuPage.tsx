@@ -1,7 +1,7 @@
-import {useEffect,useRef,useState} from 'react'
+import usePocketGiftConfig from '../hooks/usePocketGiftConfig'
+import {PocketSkeletonBar} from '../components/PocketContentSkeletons'
 import usePocketIdentity from '../hooks/usePocketIdentity'
 import {GiftIcon} from '@heroicons/react/24/outline'
-import {readPocketGiftConfig} from '../api/pocketGiftsClient'
 import { useNavigate } from 'react-router-dom'
 import PocketRouteShell from '../components/PocketRouteShell'
 import PocketFlowHeader from '../components/PocketFlowHeader'
@@ -10,9 +10,9 @@ import { POCKET_BASE_PATH, POCKET_ROUTES, pocketPathFor } from '../lib/pocketRou
 
 export default function PocketTransferMenuPage({ kind }: { kind: 'send' | 'receive' }) {
   const navigate = useNavigate()
-  const [giftReady,setGiftReady]=useState(false)
-  const identity=usePocketIdentity(),tokenReader=useRef(identity.getAccessToken);tokenReader.current=identity.getAccessToken
-  useEffect(()=>{let active=true;setGiftReady(false);if(!identity.ready)return;void (identity.authenticated?tokenReader.current():Promise.resolve(null)).then(token=>readPocketGiftConfig(fetch,token)).then(c=>{if(active)setGiftReady(kind==='send'?c.sendEnabled:c.claimEnabled)}).catch(()=>{});return()=>{active=false}},[kind,identity.ready,identity.authenticated,identity.user?.id])
+  const identity=usePocketIdentity()
+  const {config,loading:giftLoading}=usePocketGiftConfig(identity.authenticated?identity.user?.id??null:null,identity.ready,identity.getAccessToken)
+  const giftReady=kind==='send'?config?.sendEnabled:config?.claimEnabled
   const open = (path: string) => navigate(POCKET_BASE_PATH + path)
   const actions = kind === 'send' ? [
     { title: 'Stablecoins USDC', detail: 'Send USDC to a wallet', Icon: Coins, path: POCKET_ROUTES.send + '?mode=address' },
@@ -25,6 +25,7 @@ export default function PocketTransferMenuPage({ kind }: { kind: 'send' | 'recei
   return <PocketRouteShell active="home" onSelect={tab => open(tab === 'bills' ? POCKET_ROUTES.bills : tab === 'profile' ? POCKET_ROUTES.profile : tab === 'activity' ? pocketPathFor({ section: 'activity', view: 'all' }) : POCKET_ROUTES.home)}>
     <PocketFlowHeader centered title={kind === 'send' ? 'Send' : 'Receive'} onBack={() => open(POCKET_ROUTES.home)} />
     <section aria-label={kind === 'send' ? 'Send options' : 'Receive options'} className="divide-y divide-gray-100 dark:divide-[#262626]">
+      {giftLoading&&<div role="status" aria-label="Loading gift option" className="flex min-h-20 items-center gap-4 py-4"><PocketSkeletonBar className="h-10 w-10 rounded-full"/><div className="flex-1 space-y-2"><PocketSkeletonBar className="h-4 w-28"/><PocketSkeletonBar className="h-3 w-40"/></div></div>}
       {giftReady&&<button type="button" onClick={()=>open(kind==='send'?'/gifts/send':'/gifts/claim')} className="flex min-h-20 w-full items-center gap-4 py-4 text-left"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-[#121212]"><GiftIcon className="h-5 w-5"/></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{kind==='send'?'Send a gift':'Claim a gift'}</span><span className="mt-1 block text-[11px] text-gray-500">{kind==='send'?'Share a USDC gift on Base':'Open your gift link'}</span></span><ChevronRight className="h-4 w-4 text-gray-500"/></button>}
       {actions.map(({title,detail,Icon,path}) => <button key={title} type="button" onClick={() => open(path)} className="flex min-h-20 w-full items-center gap-4 py-4 text-left">
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-[#121212]"><Icon className="h-5 w-5" /></span>

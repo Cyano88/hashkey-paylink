@@ -268,3 +268,10 @@ Remaining: production route/native deep-link binding, secure creator capability 
 
 - Combined release c100daa1b is live on Render dep-dav5mh2j7g8c73aekrkg. Final mobile Vite build and Gradle succeeded; Pixel install -r returned Success with app data preserved. Generated tracked build files restored; unrelated XPay edits retained.
 - Before installation, the existing gift preview reported already claimed. Restoring that preview after installation lost the old CDP target as the WebView restarted. Reconnected to the new WebView and verified Pocket is at /home without dialogs or busy payment buttons. Claimed-screen Done behavior and branding were verified by the browser regression; an actual-device Done tap was not completed in this pass. No additional gift funding or claim was submitted.
+
+## Gift navigation and loading stability - 2026-10-01
+- Confirmed gift menu reset send/claim visibility on each mount while refetching configuration. Added in-memory account-scoped config reuse and in-flight deduplication; retain confirmed values on transient refresh failure, show a row-shaped placeholder only before first resolution. Server funding authorization remains authoritative.
+- Sender uses the same config and a single form-shaped skeleton across identity/config loading. Gift lazy routes now have scoped loaders instead of blank fallbacks. Claim code loader matches its form and safe-area spacing.
+- Confirmed native launch splash ignored the already-shown guard on every CirclePocketApp remount; gift routes are siblings, so returning remounted the app. Native splash now runs once per document launch, with explicit reset preserved. Rail curtain/content animation also excludes POP navigation so Back does not replay old route state.
+- Stablecoin address and Pocket ID send now use the same non-embedded network card as gifts, with all six existing network choices retained.
+- Browser checks passed for cached menu remount, failed refresh, account isolation, native splash remount, rail Back, and confirmed gift completion. Changed-file TypeScript diagnostics zero. Final APK packaging/device verification pending.

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 
+let nativeLaunchStarted = false
 const POCKET_SPLASH_SESSION_KEY = 'pocket_splash_shown_v2'
 export type PocketSplashState = 'idle' | 'entering' | 'mark' | 'assembling' | 'holding' | 'launching'
 
 export function resetPocketSessionSplash() {
+  nativeLaunchStarted = false
   try {
     window.sessionStorage.removeItem(POCKET_SPLASH_SESSION_KEY)
   } catch {
@@ -19,7 +21,7 @@ function resolveInitialState(enabled: boolean): PocketSplashState {
     const nativeRuntime = document.documentElement.dataset.pocketRuntime === 'native'
     // Native launches deliberately hand the Android mark to the matching CSS
     // mark so one continuous animation can assemble the Pocket wordmark.
-    if (nativeRuntime) return 'entering'
+    if (nativeRuntime) return nativeLaunchStarted || reduceMotion ? 'idle' : 'entering'
     return reduceMotion || alreadyShown ? 'idle' : 'entering'
   } catch {
     return 'idle'
@@ -38,6 +40,7 @@ export default function usePocketSessionSplash(enabled: boolean, canLaunch = tru
 
   useEffect(() => {
     if (state !== 'entering') return
+    nativeLaunchStarted = true
     try { window.sessionStorage.setItem(POCKET_SPLASH_SESSION_KEY, 'true') } catch { /* animation remains available */ }
     const revealTimer = window.setTimeout(() => setState('mark'), 70)
     return () => window.clearTimeout(revealTimer)

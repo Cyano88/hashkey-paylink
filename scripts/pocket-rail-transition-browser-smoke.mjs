@@ -6,9 +6,11 @@ const bundle=await build({stdin:{contents,resolveDir:process.cwd(),loader:'jsx'}
 const browser=await chromium.launch({headless:true,channel:'chrome'})
 try{
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text})
+ assert.equal(await page.locator('.pocket-mode-curtain').count(),0);await page.evaluate(()=>window.navigate('/xstocks/home',{state:{pocketRailTransition:'xstocks'}}));
  await page.waitForSelector('.pocket-mode-curtain');assert.match(await page.locator('.pocket-mode-curtain').innerText(),/Trade stocks/)
  await page.evaluate(()=>window.navigate('/xstocks/activity',{state:null}));await page.waitForSelector('.pocket-mode-curtain',{state:'detached'});assert.deepEqual(errors,[])
  await page.evaluate(()=>window.navigate('/home',{state:{pocketRailTransition:'stablecoins'}}));await page.waitForSelector('.pocket-mode-curtain');assert.match(await page.locator('.pocket-mode-curtain').innerText(),/USDC can do more/)
  await page.waitForSelector('.pocket-mode-curtain',{state:'detached'});assert.deepEqual(errors,[])
- console.log('PASS: navigating during mode animation with null state does not crash; both animations retain copy and duration')
+ await page.evaluate(()=>window.navigate('/send'));await page.evaluate(()=>window.navigate(-1));assert.equal(await page.locator('.pocket-mode-curtain').count(),0);
+ console.log('PASS: Back never replays rail transition; navigating during mode animation with null state does not crash; both animations retain copy and duration')
 }finally{await browser.close()}

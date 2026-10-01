@@ -1,7 +1,7 @@
 import { useLayoutEffect, useEffect, useRef, useState, type ReactNode, type TouchEvent, type UIEvent } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigationType } from 'react-router-dom'
 import PocketBottomNav, { type PocketNavTab } from './PocketBottomNav'
 import { Loader2 } from './PocketIcons'
 import PocketKycPrompt from './PocketKycPrompt'
@@ -28,6 +28,7 @@ export default function PocketRouteShell({
   refreshEnabled?: boolean
 }) {
   const { pathname, state, key: locationKey } = useLocation()
+  const navigationType=useNavigationType()
   const path = pathname.slice(POCKET_BASE_PATH.length)
   const hideNavigation = [POCKET_ROUTES.transfer, POCKET_ROUTES.send, POCKET_ROUTES.receive, POCKET_ROUTES.deposit, POCKET_ROUTES.swap, POCKET_ROUTES.usdc, POCKET_ROUTES.bank, '/xstocks/send', '/xstocks/receive'].includes(path) || path === POCKET_ROUTES.bills || path.startsWith(POCKET_ROUTES.bills + '/')
   const scrollPath=pathname+(scrollKey?':'+scrollKey:'')
@@ -210,7 +211,7 @@ export default function PocketRouteShell({
             </div>
             <div
               key={locationKey}
-              className={`mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] ${state?.pocketRailTransition ? 'pocket-mode-content' : ''}`}
+              className={`mx-auto w-[calc(100%-2rem)] max-w-[430px] space-y-5 pb-[calc(7.5rem+var(--pocket-safe-bottom))] ${navigationType==='PUSH' && state?.pocketRailTransition ? 'pocket-mode-content' : ''}`}
               style={{
                 minHeight: fixedPage ? 0 : `calc(100dvh - ${headerHeight}px)`,
                 height: fixedPage ? '100%' : undefined,

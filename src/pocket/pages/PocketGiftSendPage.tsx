@@ -1,5 +1,7 @@
+import usePocketGiftConfig from '../hooks/usePocketGiftConfig'
+import PocketGiftCreateSkeleton from '../features/gifts/PocketGiftCreateSkeleton'
 import PocketGiftShare from '../features/gifts/PocketGiftShare'
-﻿import {useEffect,useMemo,useRef,useState} from 'react'
+import {useEffect,useMemo,useRef,useState} from 'react'
 import {useGiftAutoRefresh} from '../features/gifts/useGiftAutoRefresh'
 import {useNavigate} from 'react-router-dom'
 import {QRCodeSVG} from 'qrcode.react'
@@ -12,7 +14,7 @@ import {createGiftFundingFlow,giftUsdc,type GiftFundingState} from '../features/
 import {giftLink,type GiftDraft} from '../features/gifts/pocketGift'
 import type {SavedGiftDraft} from '../features/gifts/giftDraftVault'
 import {nativeGiftDraftVault} from '../lib/pocketGiftVault'
-import {approvePocketGift,createPocketGift,recoverPocketGiftFunding,preparePocketGiftFunding,preparePocketGiftRefund,readPocketGiftConfig,readPocketGiftOwner} from '../api/pocketGiftsClient'
+import {approvePocketGift,createPocketGift,recoverPocketGiftFunding,preparePocketGiftFunding,preparePocketGiftRefund,readPocketGiftOwner} from '../api/pocketGiftsClient'
 import PocketFlowHeader from '../components/PocketFlowHeader'
 import PocketBottomSheet from '../components/PocketBottomSheet'
 import PocketConfirmationDetails from '../components/PocketConfirmationDetails'
@@ -22,19 +24,21 @@ import {requestPocketPaymentApproval} from '../lib/pocketPaymentApproval'
 import {isPocketNativeRuntime,POCKET_ROUTES} from '../lib/pocketRoutes'
 
 export default function PocketGiftSendPage(){
- const identity=usePocketIdentity()
- if(!identity.ready)return <div role="status" aria-label="Loading gifts" className="mx-auto mt-16 h-64 max-w-sm animate-pulse rounded-3xl bg-gray-100 dark:bg-[#171717]"/>
+ const identity=usePocketIdentity(),navigate=useNavigate()
+ if(!identity.ready)return <PocketGiftCreateSkeleton onBack={()=>navigate(POCKET_ROUTES.transfer)}/>
  if(!identity.authenticated)return <main className="mx-auto max-w-md p-6"><PocketEmailLogin/></main>
  return <PocketPaymentSecurityGate email={identity.email} getAccessToken={identity.getAccessToken}><Sender key={identity.user!.id} owner={identity.user!.id} email={identity.email} getAccessToken={identity.getAccessToken}/></PocketPaymentSecurityGate>
 }
 function Sender({owner,email,getAccessToken}:{owner:string;email:string;getAccessToken():Promise<string|null>}){
  const navigate=useNavigate(),wallet=usePocketWalletController({authenticated:true,email,getAccessToken})
- const [enabled,setEnabled]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[draft,setDraft]=useState<SavedGiftDraft|null>(null),[sheet,setSheet]=useState(false),[saved,setSaved]=useState<string[]>([])
+ const {config,loading,error:configError}=usePocketGiftConfig(owner,true,getAccessToken)
+ const enabled=config?.sendEnabled===true
+ const [error,setError]=useState(''),[draft,setDraft]=useState<SavedGiftDraft|null>(null),[sheet,setSheet]=useState(false),[saved,setSaved]=useState<string[]>([])
  const [state,setState]=useState<GiftFundingState>({phase:'draft',message:''})
  const vault=useMemo(()=>isPocketNativeRuntime()?nativeGiftDraftVault(owner):null,[owner])
  const flow=useRef<ReturnType<typeof createGiftFundingFlow>|null>(null)
  const callbacks=useRef({wallet,getAccessToken});callbacks.current={wallet,getAccessToken}
- useEffect(()=>{let active=true;void callbacks.current.getAccessToken().then(token=>readPocketGiftConfig(fetch,token)).then(config=>{if(active)setEnabled(config.sendEnabled)}).catch(()=>{if(active)setError('Gifts are temporarily unavailable.')}).finally(()=>{if(active)setLoading(false)});try{setSaved(vault?.list()||[])}catch{setError('Saved gifts could not be loaded.')}return()=>{active=false;flow.current?.dispose()}},[vault])
+ useEffect(()=>{try{setSaved(vault?.list()||[])}catch{setError('Saved gifts could not be loaded.')}return()=>{flow.current?.dispose()}},[vault])
  useEffect(()=>{
   if(!draft||!vault)return
   let session:CircleEvmEmailSession|undefined
@@ -50,9 +54,10 @@ function Sender({owner,email,getAccessToken}:{owner:string;email:string;getAcces
  const busy=['preparing','approval','checking'].includes(state.phase)
  async function begin(value:GiftDraft){if(!vault||!enabled||busy)return;setError('');try{const next=await vault.create(value.amount,value.message);setSaved(vault.list());setDraft(next);setSheet(true)}catch{setError('Could not securely save this gift. No funding was started.')}}
  const back=()=>{if(!busy)navigate(POCKET_ROUTES.transfer)}
+ if(loading)return <PocketGiftCreateSkeleton onBack={back}/>
  if(!vault)return <main className="mx-auto max-w-md p-6"><PocketFlowHeader title="Send a gift" onBack={back}/><p className="mt-6 text-sm">Create gifts in the Pocket app.</p></main>
  return <div data-pocket-colour-scope="stablecoins" className="min-h-[100dvh] bg-white text-gray-950 dark:bg-black dark:text-white">
-  {enabled?<PocketGiftCreate networks={['base']} onContinue={begin} onBack={back}/>:<main className="mx-auto max-w-md p-6"><PocketFlowHeader title="Send a gift" onBack={back}/>{loading?<div role="status" aria-label="Loading gifts" className="mt-8 h-40 animate-pulse rounded-2xl bg-gray-100 dark:bg-[#171717]"/>:<p className="mt-6 text-sm text-gray-500">Base gifts are not available yet.</p>}</main>}
+  {enabled?<PocketGiftCreate networks={['base']} onContinue={begin} onBack={back}/>:<main className="mx-auto max-w-md p-6"><PocketFlowHeader title="Send a gift" onBack={back}/><p className="mt-6 text-sm text-gray-500">{configError||'Base gifts are not available yet.'}</p></main>}
   {error&&<p role="alert" className="mx-auto max-w-md px-6 text-sm text-red-500">{error}</p>}
   {!!saved.length&&<section className="mx-auto max-w-md px-6 pb-8"><h2 className="text-sm font-semibold">Your saved gifts</h2>{[...saved].reverse().map((id,i)=><button key={id} disabled={busy} className="block min-h-12 w-full border-b border-gray-100 py-3 text-left text-sm dark:border-[#262626]" onClick={()=>void vault.load(id).then(next=>{setDraft(next);setSheet(true)}).catch(()=>setError('Gift recovery data could not be opened.'))}>Gift {saved.length-i}</button>)}</section>}
   {sheet&&draft&&<PocketBottomSheet title={state.phase==='available'?'Gift ready':'Send a gift'} onClose={()=>setSheet(false)} dismissOnBackdrop={false} dismissible={!busy}>

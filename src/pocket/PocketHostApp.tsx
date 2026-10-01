@@ -1,3 +1,4 @@
+import PocketGiftRouteLoading from './features/gifts/PocketGiftRouteLoading'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { isPocketNativeRuntime } from './lib/pocketRoutes'
@@ -20,9 +21,9 @@ export default function PocketHostApp() {
       <BrowserRouter>
         <PocketNativeBridge />
         <Routes>
-          <Route path="gifts/send" element={<Suspense fallback={null}><PocketGiftSendPage/></Suspense>}/>
-          <Route path="gifts/claim" element={<Suspense fallback={null}><PocketGiftClaimEntryPage/></Suspense>}/>
-          <Route path="gift/:giftId" element={<Suspense fallback={<div role="status" aria-label="Loading gift" className="mx-auto mt-16 h-64 max-w-sm animate-pulse rounded-3xl bg-gray-100 dark:bg-[#171717]"/>}><PocketGiftPage/></Suspense>} />
+          <Route path="gifts/send" element={<Suspense fallback={<PocketGiftRouteLoading kind="send"/>}><PocketGiftSendPage/></Suspense>}/>
+          <Route path="gifts/claim" element={<Suspense fallback={<PocketGiftRouteLoading kind="claim"/>}><PocketGiftClaimEntryPage/></Suspense>}/>
+          <Route path="gift/:giftId" element={<Suspense fallback={<PocketGiftRouteLoading kind="preview"/>}><PocketGiftPage/></Suspense>} />
           {!isPocketNativeRuntime() && <Route path="xpay/checkout/:checkoutId" element={<Suspense fallback={null}><UnifiedXPayCheckout publicCheckout /></Suspense>} />}
           {!isPocketNativeRuntime() && <Route path="xpay/:merchantId" element={<Suspense fallback={null}><XPayCheckout /></Suspense>} />}
           <Route path="docs/terms" element={<Suspense fallback={null}><PocketLegalDocumentPage document="terms" /></Suspense>} />
