@@ -74,3 +74,31 @@ Still required:
 Design references checked: OpenZeppelin EIP712/ECDSA and SafeERC20 documentation (https://docs.openzeppelin.com/contracts/5.x/api/utils/cryptography and https://docs.openzeppelin.com/contracts/5.x/api/token/erc20). Installed dependency version is pinned by the existing contracts lockfile. New gift code does not activate or reuse legacy payment vaults.
 
 No production deployment or Pixel installation was performed for this checkpoint.
+
+## Backend and wallet checkpoint — 2026-10-01
+
+Implemented locally:
+
+- Authenticated creation and wallet authorization routes with read/write rate limits. Durable per-gift Postgres records use row locks for idempotent creation and attempt reservation.
+- Confirmed observations verify chain, pinned contract runtime, token, treasury, fee and gift fields. Canonical block checks reject inconsistent observations; a transaction hash alone never establishes success.
+- Recipient-bound claim signatures are created locally. Public responses exclude authorization metadata and signatures; the bearer credential is not sent to the backend.
+- Circle smart-wallet batch adapters prepare funding, claim and refund challenges. The app adapter uses existing Circle approval. Preparing a challenge never marks a gift funded or paid.
+- Timeout/crash recovery reuses provider idempotency keys. Replacement claim authorization waits until confirmed chain time exceeds the old signature deadline. Late retry errors cannot overwrite recovered approval.
+- Claim confirmation requires evidence for the authenticated recipient. Bounded event lookup supports a validated receipt fallback.
+
+Validation:
+
+- Backend smoke checks passed: ownership, concurrent reservations, timeout and expired authorization recovery, response privacy, contract pinning and reorg rejection.
+- Wallet adapter checks passed: local signing, recipient validation, non-JSON failure handling and verified completion only.
+- Local end-to-end passed: smart-wallet funding, confirmed availability, claim and exact recipient credit; a separate expired gift returned principal to the sender. Circle approval was simulated. No production funds moved.
+- End-to-end testing caught stale RPC block-number caching after funding; the observer now requests the current head without that cache.
+- Changed-file TypeScript diagnostics: zero.
+
+Launch work still required:
+
+- Independent contract review, reviewed deployment registry and verified treasury/token configuration. Production deployment registry remains empty.
+- Live Circle approval, sponsorship and final network-fee economics; authoritative recovery for cancelled or expired funding challenges.
+- App UI connection, secure creator credential persistence and authentication/install continuation.
+- Scoped activity and receipts. Public drops and Solana gifts are outside this single-recipient EVM implementation.
+
+This checkpoint is not a live gift service or security certification. Nothing was deployed or installed on Pixel.
