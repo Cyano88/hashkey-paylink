@@ -31,7 +31,7 @@ export default function PocketGiftSendPage(){
 }
 function Sender({owner,email,getAccessToken}:{owner:string;email:string;getAccessToken():Promise<string|null>}){
  const navigate=useNavigate(),wallet=usePocketWalletController({authenticated:true,email,getAccessToken})
- const {config,loading,error:configError}=usePocketGiftConfig(owner,true,getAccessToken)
+ const {config,loading,error:configError,retry:retryConfig}=usePocketGiftConfig(owner,true,getAccessToken)
  const enabled=config?.sendEnabled===true
  const [error,setError]=useState(''),[draft,setDraft]=useState<SavedGiftDraft|null>(null),[sheet,setSheet]=useState(false),[saved,setSaved]=useState<string[]>([])
  const [state,setState]=useState<GiftFundingState>({phase:'draft',message:''})
@@ -57,7 +57,7 @@ function Sender({owner,email,getAccessToken}:{owner:string;email:string;getAcces
  if(loading)return <PocketGiftCreateSkeleton onBack={back}/>
  if(!vault)return <main className="mx-auto max-w-md p-6"><PocketFlowHeader title="Send a gift" onBack={back}/><p className="mt-6 text-sm">Create gifts in the Pocket app.</p></main>
  return <div data-pocket-colour-scope="stablecoins" className="min-h-[100dvh] bg-white text-gray-950 dark:bg-black dark:text-white">
-  {enabled?<PocketGiftCreate networks={['base']} onContinue={begin} onBack={back}/>:<main className="mx-auto max-w-md p-6"><PocketFlowHeader title="Send a gift" onBack={back}/><p className="mt-6 text-sm text-gray-500">{configError||'Base gifts are not available yet.'}</p></main>}
+  {enabled?<PocketGiftCreate networks={['base']} onContinue={begin} onBack={back}/>:<main className="mx-auto max-w-md p-6"><PocketFlowHeader title="Send a gift" onBack={back}/><p className="mt-6 text-sm text-gray-500">{configError||'Base gifts are not available yet.'}</p>{configError&&<button className="pocket-cta-primary mt-6 w-full" onClick={retryConfig}>Try again</button>}</main>}
   {error&&<p role="alert" className="mx-auto max-w-md px-6 text-sm text-red-500">{error}</p>}
   {!!saved.length&&<section className="mx-auto max-w-md px-6 pb-8"><h2 className="text-sm font-semibold">Your saved gifts</h2>{[...saved].reverse().map((id,i)=><button key={id} disabled={busy} className="block min-h-12 w-full border-b border-gray-100 py-3 text-left text-sm dark:border-[#262626]" onClick={()=>void vault.load(id).then(next=>{setDraft(next);setSheet(true)}).catch(()=>setError('Gift recovery data could not be opened.'))}>Gift {saved.length-i}</button>)}</section>}
   {sheet&&draft&&<PocketBottomSheet title={state.phase==='available'?'Gift ready':'Send a gift'} onClose={()=>setSheet(false)} dismissOnBackdrop={false} dismissible={!busy}>
