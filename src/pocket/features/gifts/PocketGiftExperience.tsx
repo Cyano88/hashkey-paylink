@@ -16,7 +16,7 @@ function GiftDetails({ gift }: { gift: GiftView }) {
 export function PocketGiftLanding({ gift, onRedeem, onCopyCode, onBack, onDone, inApp = false }: { inApp?: boolean; onDone?: () => void; onBack?: () => void; gift: GiftView; onRedeem: () => void; onCopyCode?: () => void }) {
   const available = gift.status === 'available'
   return <main data-pocket-colour-scope="stablecoins" className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-6 pb-8 pt-[max(1.5rem,var(--pocket-safe-top))] text-center text-gray-950 dark:text-white">
-    {(onBack||!inApp)&&<div className="mb-8">{onBack?<PocketFlowHeader title="Claim a gift" onBack={onBack}/>:<p className="flex items-center justify-center gap-2 text-sm font-bold"><CPurseIcon size={26} title="" />Pocket</p>}</div>}
+    {(onBack||!inApp)&&<div className="mb-8">{onBack?<PocketFlowHeader centered title="Claim a gift" onBack={onBack}/>:<p className="flex items-center justify-center gap-2 text-sm font-bold"><CPurseIcon size={26} title="" />Pocket</p>}</div>}
     <PocketGiftArtwork /><GiftDetails gift={gift} />
     {available ? <div className="mt-8"><button type="button" onClick={onRedeem} className="pocket-cta-primary w-full">Redeem in Pocket</button>{onCopyCode && <button type="button" onClick={onCopyCode} className="mt-4 min-h-11 px-3 text-xs text-gray-500 dark:text-gray-400">Copy gift code</button>}</div> : <p role="status" className="mt-8 text-sm text-gray-500 dark:text-gray-400">{giftStateCopy(gift.status)}</p>}
     {onDone&&<div className="mt-auto pt-8"><button type="button" className="pocket-cta-primary w-full" onClick={onDone}>Done</button></div>}
