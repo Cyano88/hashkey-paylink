@@ -2,7 +2,7 @@ import type { Hex } from 'viem'
 
 export type GiftClaimPhase = 'ready' | 'preparing' | 'approval' | 'checking' | 'unconfirmed' | 'confirmed' | 'unavailable'
 export type GiftClaimProgress = { phase: GiftClaimPhase; message: string; transactionHash?: Hex }
-export type GiftClaimResult = { status: 'confirmed' | 'claimed_elsewhere' | 'confirming' | 'funding' | 'available' | 'expired' | 'refunded'; transactionHash?: Hex }
+export type GiftClaimResult = { status: 'confirmed' | 'claimed_elsewhere' | 'confirming' | 'funding' | 'available' | 'expired' | 'refunded'; transactionHash?: Hex; retryAllowed?: boolean }
 
 /** One controller per gift and authenticated identity. Never automatically repeats approval. */
 export function createGiftClaimFlow<Approval>(deps: {
@@ -23,6 +23,8 @@ export function createGiftClaimFlow<Approval>(deps: {
         publish({ phase: 'confirmed', message: 'Gift claimed', transactionHash: result.transactionHash })
       } else if (['claimed_elsewhere', 'expired', 'refunded'].includes(result.status)) {
         publish({ phase: 'unavailable', message: result.status === 'claimed_elsewhere' ? 'This gift has already been claimed.' : result.status === 'expired' ? 'This gift has expired.' : 'This gift was returned to its sender.' })
+      } else if (result.status === 'available' && result.retryAllowed === true) {
+        publish({ phase: 'ready', message: 'Your previous approval expired. You can claim again.' })
       } else {
         publish({ ...state, phase: 'unconfirmed', message: 'Your claim is not confirmed yet. Check its status before continuing.' })
       }

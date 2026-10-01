@@ -6,7 +6,7 @@ import PocketBottomSheet from '../components/PocketBottomSheet'
 import PocketEmailLogin from '../components/PocketEmailLogin'
 import PocketGetApp from '../components/PocketGetApp'
 import PocketGiftRedeem from '../features/gifts/PocketGiftRedeem'
-import {parseGiftLink} from '../features/gifts/pocketGift'
+import {giftLink,parseGiftLink} from '../features/gifts/pocketGift'
 import {readPocketGift} from '../api/pocketGiftsClient'
 import {isPocketNativeRuntime,POCKET_ORIGIN} from '../lib/pocketRoutes'
 
@@ -29,7 +29,8 @@ export default function PocketGiftPage(){
   const parsed=parseGiftLink(link)
   if(!parsed)return
   setInstall(true)
-  window.location.href='pocket://open/gift/'+parsed.id+'#claim='+parsed.secret
+  // Bearer credentials must never enter a hijackable custom URI scheme.
+  window.location.href=giftLink(parsed.id,parsed.secret)
  }
  return <div className="min-h-[100dvh] bg-white dark:bg-black" data-pocket-colour-scope="stablecoins">
   <PocketGiftRedeem link={link} identityKey={identity.user?.id||''} authenticated={identity.authenticated} signIn={()=>setLogin(true)} getAccessToken={identity.getAccessToken} getSession={getSession} onOpenApp={isPocketNativeRuntime()?undefined:openApp}/>

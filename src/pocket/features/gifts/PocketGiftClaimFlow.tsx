@@ -28,7 +28,7 @@ function Claim({link,gift,identityKey,getAccessToken,getSession,onDone}:Props){
    prepare:async()=>{session=await callbacks.current.getSession();return preparePocketGiftClaim({link,session,accessToken:await token()})},
    approve:async approval=>{try{sessionStorage.setItem(key,'1')}catch{};return approvePocketGift({approval,session:session!})},
    status:async hash=>readPocketGiftClaimStatus({id:parsed.id,accessToken:await token(),transactionHash:hash}),
-   changed:next=>{setProgress(next);if(next.phase==='confirmed'||next.phase==='unavailable'){try{sessionStorage.removeItem(key)}catch{}}},
+   changed:next=>{setProgress(next);if(next.phase==='confirmed'||next.phase==='unavailable'||next.phase==='ready'){try{sessionStorage.removeItem(key)}catch{}}},
   })
   setFlow(controller)
   try{if(sessionStorage.getItem(key))void controller.recheck()}catch{}

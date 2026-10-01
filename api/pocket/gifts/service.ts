@@ -123,7 +123,9 @@ export function createGiftService(deps:GiftDependencies){
    if(receiptHint&&!/^0x[0-9a-fA-F]{64}$/.test(receiptHint))throw new GiftError(400,'Invalid transaction reference.')
    const record=await refresh(id,receiptHint),wallet=await linked(identity.userId,record.deployment.network)
    if(record.state==='claimed')return {status:record.claimRecipient?(record.claimRecipient.toLowerCase()===wallet.address.toLowerCase()?'confirmed':'claimed_elsewhere'):'confirming',transactionHash:record.claimRecipient?.toLowerCase()===wallet.address.toLowerCase()?record.settlementHash:undefined}
-   return {status:publicGift(record,now()).status}
+   const status=publicGift(record,now()).status
+   const retryAllowed=status==='available'&&record.claim?.userId===identity.userId&&record.claim.walletAddress.toLowerCase()===wallet.address.toLowerCase()&&!!record.claim.deadline&&!!record.observedTimestamp&&BigInt(record.observedTimestamp)>BigInt(record.claim.deadline)&&BigInt(record.observedTimestamp)<BigInt(record.expiresAt)
+   return {status,retryAllowed}
   },
   authorize,refresh,
  }

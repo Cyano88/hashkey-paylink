@@ -141,3 +141,12 @@ console.log('PASS funding/refund receipt evidence checks exact principal/fee/exp
  assert.deepEqual(ranges,[[0n,1999n],[2000n,3999n]])
 }
 console.log('PASS persisted event scan resumes bounded historical ranges without skipping older gift funding.')
+
+{
+ const f=setup(),{gift}=await f.service.create(f.alice,f.input);f.setState('available');const auth=await claim(f,f.bob,gift.id);await f.service.authorize(f.bob,gift.id,'claim','token',auth);
+ assert.equal((await f.service.claimStatus(f.bob,gift.id)).retryAllowed,false);
+ f.advance(300000);assert.equal((await f.service.claimStatus(f.bob,gift.id)).retryAllowed,false,'Equal deadline remains valid on chain');
+ f.advance(1000);assert.equal((await f.service.claimStatus(f.bob,gift.id)).retryAllowed,true);assert.equal((await f.service.claimStatus(f.charlie,gift.id)).retryAllowed,false,'Retry belongs to original claimant');
+ const before=f.calls.length;await f.service.authorize(f.bob,gift.id,'claim','token',await claim(f,f.bob,gift.id));assert.equal(f.calls.length,before+1);assert.equal((await f.service.claimStatus(f.bob,gift.id)).retryAllowed,false);
+}
+console.log('PASS claim retry requires confirmed strict deadline expiry and matching claimant; renewed authorization locks retry.')

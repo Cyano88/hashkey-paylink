@@ -12,3 +12,5 @@ assert.equal(new URL(link).search,'')
 for(const invalid of [link.replace('https:','http:'),link.replace('pocket.hashpaylink.com','evil.test'),link.replace('#','?'),link+'&claim='+secret,link.replace('/gift/','/gift/../'),link.replace('https://','https://user@'),link.replace('#','?redirect=evil#')])assert.equal(parseGiftLink(invalid),null)
 for(const state of ['funding','claiming','claimed','expired','refunding','refunded'])assert.ok(giftStateCopy(state))
 console.log('PASS gift integer accounting, equal drop allocations, input limits, capability URL isolation and terminal states.')
+
+const {readFile}=await import('node:fs/promises');const page=await readFile(new URL('../src/pocket/pages/PocketGiftPage.tsx',import.meta.url),'utf8');assert.ok(!page.includes('pocket://'));assert.ok(page.includes('window.location.href=giftLink(parsed.id,parsed.secret)'));console.log('PASS gift handoff uses canonical HTTPS and never a generic custom scheme.')

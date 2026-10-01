@@ -41,7 +41,7 @@ export async function readPocketGiftClaimStatus(input:Options&{id:string;transac
  const data=await postGift({action:'claim-status',id:input.id,...(input.transactionHash?{transactionHash:input.transactionHash}:{})},input)
  if(!['confirmed','claimed_elsewhere','confirming','funding','available','expired','refunded'].includes(data.status))throw Error('Gift status response was invalid.')
  if(data.status==='confirmed'&&!/^0x[0-9a-fA-F]{64}$/.test(data.transactionHash??''))throw Error('Gift confirmation is still being checked.')
- return {status:data.status as 'confirmed'|'claimed_elsewhere'|'confirming'|'funding'|'available'|'expired'|'refunded',transactionHash:data.transactionHash as Hex|undefined}
+ return {status:data.status as 'confirmed'|'claimed_elsewhere'|'confirming'|'funding'|'available'|'expired'|'refunded',transactionHash:data.transactionHash as Hex|undefined,retryAllowed:data.status==='available'&&data.retryAllowed===true}
 }
 
 export async function preparePocketGiftRefund(input:Options&{id:string;session:CircleEvmEmailSession}){

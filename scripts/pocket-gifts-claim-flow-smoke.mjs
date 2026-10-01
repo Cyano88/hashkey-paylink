@@ -24,3 +24,6 @@ assert.equal(requested.includes('#claim'),false)
 await assert.rejects(()=>readPocketGift(id,async()=>new Response('<html>offline</html>',{status:502})),/could not be loaded/)
 await assert.rejects(()=>readPocketGift(id,async()=>new Response(JSON.stringify({ok:true,gift:{...gift,id:'wrong'}}))),/could not be loaded/)
 console.log('PASS public gift reader: validated gift identity and clean HTML outage handling.')
+
+const retry=setup();retry.failure=true;await retry.flow.claim();assert.equal(retry.flow.state.phase,'unconfirmed');retry.result={status:'available',retryAllowed:true};await retry.flow.recheck();assert.equal(retry.flow.state.phase,'ready');assert.equal(retry.flow.state.transactionHash,undefined);assert.equal(retry.approved,1);retry.failure=false;retry.result={status:'confirmed',transactionHash:hash};await retry.flow.claim();assert.equal(retry.approved,2);assert.equal(retry.flow.state.phase,'confirmed');
+console.log('PASS explicit server-authorized retry resets cancelled claim without automatic approval.')
