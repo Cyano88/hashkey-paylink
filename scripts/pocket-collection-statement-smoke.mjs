@@ -5,7 +5,7 @@ const row={eventId:c.eventId,txHash:'0xpaid',payer:'=BAD()',memo:'',amount:'2',c
 const other={...row,eventId:'other_collection',amount:'999'}
 assert.equal(collectionPayments(c,[row,other]).length,1)
 const csv=collectionStatementCsv(c,[row,other])
-assert.ok(csv.includes("'=BAD()"));assert.ok(csv.includes('confirmed'));assert.ok(!csv.includes('999'));assert.ok(!csv.includes('other_collection'))
+assert.ok(csv.includes("'=BAD()"));assert.ok(csv.includes('Successful'));assert.ok(!csv.includes('999'));assert.ok(!csv.includes('other_collection'))
 const bank={...c,eventId:'bank_test',kind:'bank'}
 const incoming={...row,eventId:'ngpos-bank_test',merchantId:'bank_test',source:'bank-receive',amountNgn:'200',fiatCurrency:'UGX',bankSettlementStatus:'settled',paycrestStatus:'settled'}
 const bankCsv=collectionStatementCsv(bank,[incoming,other]);assert.ok(bankCsv.includes('UGX'));assert.ok(bankCsv.includes('200'));assert.ok(!bankCsv.includes('999'))

@@ -68,3 +68,14 @@ One shared statement design, scoped to its entry point. Main Activity defaults t
 - Changed-code TypeScript diagnostic check reports zero. Circle handoff, delayed status presentation and Bills navigation fixtures also passed.
 - Web deployment dep-davb6onf3r2c739q00pg verified live at commit 2aa3017fb45cc256464f3458b7f03376517e91b3; Pocket web HTTP 200. Concurrent Trade proposal-editor changes were merged without Stablecoins overlap. Pixel contains the keyboard fix at 222df2fc9; later unrelated Trade merge was not rebuilt into this APK.
 - Statement audit finding for the next pass: exportStatement currently exports `visible`, already narrowed by Activity category/status/date filters. The download date range cannot expand those rows. The new export scope must be explicit and independent of hidden list filters while respecting terminal/collection ownership.
+
+## Statement simplification — implemented
+
+- Shared PDF/CSV presentation uses DD-MM-YY dates, signed amounts, clear transaction descriptions and readable statuses. PDF shows recorded NGN/UGX amounts beneath the primary asset amount. Provider-routing strings, transaction hashes, network labels and internal references are omitted from the statement body.
+- Full available personal activity is the default. Optional Bank transfers & bills scope is available on Stablecoins. XStocks, merchant and collection exports retain their existing scoped row sources. Collection export headings no longer expose collection IDs.
+- Download dates and scope are independent of Activity category/status/date filters and archived-list presentation. Funding-only rows remain excluded; no exchange rate is invented for local equivalents.
+- PDF is default. CSV preserves exact signed decimal amounts as numeric-safe cells, and protects user-controlled text from spreadsheet formula injection.
+- Data regressions pass for CSV escaping, statuses, local-date inclusivity, invalid ranges, unpaid-request and merchant isolation, collection scope, local-rail filtering and funding exclusion.
+- Browser export regression passes when the visible Activity list is empty because of a future-date filter: All activity still exports recorded rows; local scope excludes deposits and gifts. PDF default is asserted.
+- Two-page fixture PDF rendered with the production Jakarta and Naira fonts and inspected locally. Verified long recipient wrapping, page break/header/footer alignment, double-stroke Naira, UGX amounts and preservation of 0.00000001 USDC. No real user data was used in the PDF fixture.
+- Changed-code TypeScript diagnostics: zero. Pixel save/return and live deployment verification pending.
