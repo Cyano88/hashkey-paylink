@@ -61,3 +61,10 @@ Build/device/deployment results will be appended after verification. Unrelated X
 ### Next statement scope proposed to user
 
 One shared statement design, scoped to its entry point. Main Activity defaults to all balance movements with optional Bank transfers & bills filter; terminal/collection exports remain scoped; XStocks stays separate. DD-MM-YY dates; + or - on amounts rather than redundant direction labels/arrows; USDC primary with actual NGN/UGX local payment amount below. Remove provider/internal-routing jargon. Preserve truthful status, grouped funding/fees and financial totals. Date range, PDF default, CSV option. This is a product presentation proposal, not a conclusion about regulatory obligations.
+
+### Follow-up delivery verified
+
+- Vite reports built in 4m 3s; Android Gradle BUILD SUCCESSFUL in 17s. Pixel install -r returned Success, with no data clear. Rechecked Send USDC keyboard dismissal after installation and returned Pixel to Home.
+- Changed-code TypeScript diagnostic check reports zero. Circle handoff, delayed status presentation and Bills navigation fixtures also passed.
+- Web deployment dep-davb6onf3r2c739q00pg verified live at commit 2aa3017fb45cc256464f3458b7f03376517e91b3; Pocket web HTTP 200. Concurrent Trade proposal-editor changes were merged without Stablecoins overlap. Pixel contains the keyboard fix at 222df2fc9; later unrelated Trade merge was not rebuilt into this APK.
+- Statement audit finding for the next pass: exportStatement currently exports `visible`, already narrowed by Activity category/status/date filters. The download date range cannot expand those rows. The new export scope must be explicit and independent of hidden list filters while respecting terminal/collection ownership.
