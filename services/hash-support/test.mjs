@@ -22,6 +22,15 @@ test('real PostgreSQL engine and HTTP isolation',async()=>{
   const stored=await query('SELECT key_hash FROM hash_api_keys WHERE id=$1',[a.keyId]);assert.equal(stored.rows[0].key_hash,digest(a.apiKey));assert.notEqual(stored.rows[0].key_hash,a.apiKey)
   const session=async(key,customerId)=>(await call('/v1/customer-sessions',key,'POST',{customerId,workspaceId:'attacker'})).body.token
   const sa=await session(a.apiKey,'customer-1'),sb=await session(b.apiKey,'customer-1'),sa2=await session(a.apiKey,'customer-2')
+  assert.equal((await call('/v1/integration-state',sa)).status,401)
+  const state={cases:{synthetic:{messages:[{text:'Private synthetic history'}]}},staffNames:{fixture:'Support'}}
+  assert.equal((await call('/v1/integration-state',a.apiKey)).body.revision,0)
+  assert.equal((await call('/v1/integration-state',a.apiKey,'PUT',{revision:0,value:state})).body.revision,1)
+  assert.equal((await call('/v1/integration-state',a.apiKey,'PUT',{revision:0,value:state})).body.revision,1)
+  assert.equal((await call('/v1/integration-state',a.apiKey,'PUT',{revision:0,value:{cases:{}}})).status,409)
+  assert.equal((await call('/v1/integration-state',b.apiKey)).body.value,null)
+  assert.deepEqual((await call('/v1/integration-state',a.apiKey)).body.value,state)
+  assert.equal((await query('SELECT * FROM hash_integration_state')).rows.length,0)
   const ca=await call('/v1/conversations',sa,'POST');assert.equal(ca.status,201);const id=ca.body.conversation.id
   const message={requestId:'test-message-00000001',message:'Synthetic test message'}
   const first=await call('/v1/conversations/'+id+'/messages',sa,'POST',message);assert.equal(first.status,201)

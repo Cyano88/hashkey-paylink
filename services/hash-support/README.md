@@ -27,3 +27,9 @@ npm test uses a PostgreSQL engine via PGlite under a non-superuser, non-BYPASSRL
 ## Next
 
 Business/staff membership and support inbox, knowledge migration, controlled Pocket adapter/cutover with rollback, durable usage accounting, dedicated 0G key with spending caps, then external pilot onboarding. No production-readiness claim for public SaaS onboarding yet.
+
+## Pocket compatibility integration
+
+The server-only `/v1/integration-state` endpoint accepts a business API key, never a customer session. GET returns the workspace's revision and document; PUT requires its current revision and a JSON object. PostgreSQL row-level security enforces workspace isolation. Conflicting writes return 409. An identical retry of the immediately preceding write returns its committed revision. Maximum payload: 8 MiB.
+
+This preserves Pocket's existing inbox, customer authorization, human handoff, resolution, staff profiles and reviewed knowledge while storage moves to this service. It is a temporary, whole-workspace compatibility boundary for Pocket's trusted backend, not an external multi-business staff API. Before external pilots, replace this document boundary with paginated cases, explicit staff memberships/roles and per-record operations.

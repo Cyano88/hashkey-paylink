@@ -9,6 +9,16 @@ export function createStore(pool){
   catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}
  }
  return {
+  async integrationState(scope){return scoped({...scope,customerId:''},async c=>{const r=await c.query('SELECT revision,value FROM hash_integration_state WHERE workspace_id=$1',[scope.workspaceId]);return r.rows[0]||{revision:0,value:null}})},
+  async writeIntegrationState(scope,revision,value){return scoped({...scope,customerId:''},async c=>{
+   await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',['hash-integration:'+scope.workspaceId]);
+   const r=await c.query('SELECT revision,value FROM hash_integration_state WHERE workspace_id=$1',[scope.workspaceId]);
+   const current=r.rows[0];
+   if(current?.revision===revision+1){const same=await c.query('SELECT value=$2::jsonb AS same FROM hash_integration_state WHERE workspace_id=$1',[scope.workspaceId,JSON.stringify(value)]);if(same.rows[0]?.same)return {revision:current.revision}}
+   if((current?.revision||0)!==revision)fail('Support data changed. Retry with the latest version.',409);
+   const next=await c.query('INSERT INTO hash_integration_state(workspace_id,revision,value) VALUES($1,$2,$3::jsonb) ON CONFLICT(workspace_id) DO UPDATE SET revision=excluded.revision,value=excluded.value,updated_at=now() RETURNING revision',[scope.workspaceId,revision+1,JSON.stringify(value)]);
+   return {revision:next.rows[0].revision};
+  })},
   async migrate(){const c=await pool.connect();try{await c.query('BEGIN');await c.query('SELECT pg_advisory_xact_lock(81723491)');await c.query(await readFile(new URL('./schema.sql',import.meta.url),'utf8'));await c.query('COMMIT')}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}},
   async health(){await pool.query('SELECT 1')},
   async createWorkspace(name){const id=randomUUID(),keyId=randomUUID(),apiKey=newApiKey(),c=await pool.connect();try{await c.query('BEGIN');await c.query('INSERT INTO hash_workspaces(id,name) VALUES($1,$2)',[id,name]);await c.query('INSERT INTO hash_api_keys(id,workspace_id,key_hash) VALUES($1,$2,$3)',[keyId,id,digest(apiKey)]);await c.query('COMMIT');return {workspaceId:id,keyId,apiKey}}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}},

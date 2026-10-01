@@ -29,3 +29,13 @@ DROP POLICY IF EXISTS hash_message_scope ON hash_messages;
 CREATE POLICY hash_message_scope ON hash_messages USING (
  workspace_id::text=current_setting('hash.workspace_id',true) AND EXISTS(SELECT 1 FROM hash_conversations c WHERE c.id=conversation_id AND c.workspace_id=hash_messages.workspace_id)
 ) WITH CHECK (workspace_id::text=current_setting('hash.workspace_id',true) AND EXISTS(SELECT 1 FROM hash_conversations c WHERE c.id=conversation_id AND c.workspace_id=hash_messages.workspace_id));
+
+-- Private compatibility document for server-side Pocket integration. Never customer-session accessible.
+CREATE TABLE IF NOT EXISTS hash_integration_state (
+ workspace_id uuid PRIMARY KEY REFERENCES hash_workspaces(id) ON DELETE CASCADE,
+ revision integer NOT NULL CHECK(revision>0), value jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE hash_integration_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hash_integration_state FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS hash_integration_scope ON hash_integration_state;
+CREATE POLICY hash_integration_scope ON hash_integration_state USING (workspace_id::text=current_setting('hash.workspace_id',true)) WITH CHECK (workspace_id::text=current_setting('hash.workspace_id',true));
