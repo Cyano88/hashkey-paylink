@@ -71,4 +71,14 @@ assert.equal(status.body.destinationTxHash, '0xdestination')
 const arc = await request(handler, { body: { action: 'quote', source: 'arc', destination: 'base', amount: '1' } })
 assert.equal(arc.statusCode, 200)
 
-console.log('Circle Pocket bridge adapter smoke tests passed.')
+for (const source of ['base','arbitrum','arc','solana','ethereum','polygon']) {
+ for (const destination of ['base','arbitrum','arc','solana','ethereum','polygon']) {
+  if(source===destination)continue
+  const result=await request(handler,{body:{action:'quote',source,destination,amount:'1'}})
+  assert.equal(result.statusCode,200,source+' -> '+destination)
+  assert.equal(result.body.quote.source,source)
+  assert.equal(result.body.quote.destination,destination)
+  assert.equal(result.body.quote.receive,'1')
+ }
+}
+console.log('Circle Pocket bridge adapter smoke tests passed, including all 30 directed quote routes.')

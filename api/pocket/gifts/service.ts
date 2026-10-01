@@ -6,7 +6,7 @@ import {prepareGiftFunding} from '../../../src/pocket/features/gifts/pocketGiftF
 import {GiftError,publicGift,type GiftAttempt,type GiftDeployment,type GiftIdentity,type GiftNetwork,type GiftObservation,type GiftRecord} from './types.js'
 import type {GiftStore} from './store.js'
 export type GiftDependencies={
- store:GiftStore;now?:()=>number;
+ store:GiftStore;now?:()=>number;fundingEnabled?(network:GiftNetwork):boolean;
  deployment(network:GiftNetwork):GiftDeployment|undefined;
  wallet(userId:string,network:GiftNetwork):Promise<{address:Address;id:string}|undefined>;
  observe(record:GiftRecord,receiptHint?:Hex):Promise<GiftObservation>;
@@ -27,6 +27,8 @@ export function createGiftService(deps:GiftDependencies){
   })
  }
  const authorize=async(identity:GiftIdentity,id:string,kind:'funding'|'claim'|'refund',userToken:string,claim?:{signature:Hex;deadline:string})=>{
+  const existing=await get(id)
+  if(kind==='funding'&&deps.fundingEnabled&&!deps.fundingEnabled(existing.deployment.network))throw new GiftError(503,'Gift funding is not available yet.')
   const record=await refresh(id),wallet=await linked(identity.userId,record.deployment.network)
   if(kind!=='claim'&&(record.ownerId!==identity.userId||wallet.address.toLowerCase()!==record.senderAddress.toLowerCase()||wallet.id!==record.walletId))throw new GiftError(403,'This gift belongs to another account.')
   if(kind==='funding'?record.state!=='unfunded':record.state!=='available')throw new GiftError(409,'This gift is not available for this action.')
@@ -67,9 +69,12 @@ export function createGiftService(deps:GiftDependencies){
   }
  }
  return {
+  configuration(){return {sendEnabled:Boolean(deps.deployment('base'))&&(deps.fundingEnabled?.('base')??true),claimEnabled:Boolean(deps.deployment('base')),network:'base' as const}},
+  async ownerStatus(identity:GiftIdentity,id:string){const before=await get(id);if(before.ownerId!==identity.userId)throw new GiftError(403,'This gift belongs to another account.');const record=await refresh(id);return {gift:publicGift(record,now()),funding:{principal:record.amountUnits,platformFee:record.feeUnits,totalDebit:String(BigInt(record.amountUnits)+BigInt(record.feeUnits))}}},
   async create(identity:GiftIdentity,input:{requestId:string;network:GiftNetwork;amount:string;claimSigner:Address;expiresAt:string;message?:string}){
    if(!['base','arbitrum','arc','ethereum','polygon'].includes(input.network)||typeof input.amount!=='string'||typeof input.claimSigner!=='string'||typeof input.message!=='undefined'&&typeof input.message!=='string')throw new GiftError(400,'Invalid gift details.')
    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)||!isAddress(input.claimSigner)||input.claimSigner==='0x0000000000000000000000000000000000000000')throw new GiftError(400,'Invalid gift details.')
+   if(deps.fundingEnabled&&!deps.fundingEnabled(input.network))throw new GiftError(503,'Gift funding is not available yet.')
    const deployment=deps.deployment(input.network)
    if(!deployment)throw new GiftError(503,'Gifts are not available on this network yet.')
    if(!/^\d{1,20}$/.test(input.expiresAt))throw new GiftError(400,'Choose a valid expiry.')

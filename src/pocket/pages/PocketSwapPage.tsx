@@ -25,7 +25,7 @@ function navPath(tab: PocketNavTab) {
   if (tab === 'activity') return POCKET_ROUTES.activity
   return POCKET_ROUTES.home
 }
-const label = (network: PocketBridgeNetwork) => network === 'solana' ? 'Solana' : network === 'arbitrum' ? 'Arbitrum' : network === 'arc' ? 'Arc' : 'Base'
+import { POCKET_BRIDGE_NETWORKS, pocketBridgeNetworkLabel as label, savedPocketBridgeNetwork } from '../lib/pocketBridgeNetworks'
 
 export default function PocketSwapPage() {
   const navigate = useNavigate()
@@ -37,7 +37,7 @@ export default function PocketSwapPage() {
   const activity = usePocketActivity({ authenticated, email, enabled: false, getAccessToken })
   const [source, setSource] = useState<PocketBridgeNetwork>(() => {
     const saved = window.localStorage.getItem('pocket.home.network')
-    return saved === 'arbitrum' || saved === 'solana' || saved === 'arc' ? saved : 'base'
+    return savedPocketBridgeNetwork(saved)
   })
   const onWalletReady = useCallback((network: PocketBridgeNetwork, wallet: { address: string; walletId?: string; blockchain?: string; updatedAt?: number }) => wallets.setWallets(current => ({ ...current, [network]: wallet })), [wallets.setWallets])
   const walletController = usePocketWalletController({ authenticated, email, getAccessToken, onWalletReady })
@@ -58,7 +58,7 @@ export default function PocketSwapPage() {
     {!mode && <div className="divide-y divide-gray-100 dark:divide-[#262626]">{([['bridge','Bridge USDC','Move USDC between your wallets'],['swap','Swap on Arc','Exchange assets on Arc']] as const).map(([value,title,description])=><button key={value} type="button" onClick={()=>setMode(value)} className="flex w-full items-center gap-3 py-5 text-left"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-100 dark:bg-[#171717]"><ArrowLeftRight className="h-5 w-5"/></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">{description}</span></span><ChevronRight className="h-4 w-4 text-gray-400"/></button>)}</div>}
     <div hidden={mode !== "swap"}><PocketArcSwapPanel enabled={mode === "swap"} onBusyChange={setSwapBusy} email={email} getAccessToken={getAccessToken} ensureWallet={() => walletController.ensureWallet("arc")} getSession={address => walletController.getEvmSession("arc", address)} refresh={wallets.refreshBalances} /></div><section hidden={mode !== "bridge"} className="space-y-5 rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm dark:border-[#262626] dark:bg-[#0D0D0D] dark:shadow-none">
       <div className="grid grid-cols-2 gap-3">
-        <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">From</p><PocketSelect disabled={signing} value={source} options={(['base','arbitrum','arc','solana'] as PocketBridgeNetwork[]).map(value => ({ value, label: label(value) }))} onChange={value => setSourceNetwork(value as PocketBridgeNetwork)} ariaLabel="Select source network" /></div>
+        <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">From</p><PocketSelect disabled={signing} value={source} options={POCKET_BRIDGE_NETWORKS.map(value => ({ value, label: label(value) }))} onChange={value => setSourceNetwork(value as PocketBridgeNetwork)} ariaLabel="Select source network" /></div>
         <div><p className="mb-2 text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">To</p><PocketSelect disabled={signing} value={swap.destination} options={swap.destinations.map(value => ({ value, label: label(value) }))} onChange={value => swap.setDestination(value as PocketBridgeNetwork)} ariaLabel="Select destination network" /></div>
       </div>
       <div className="flex items-center justify-between rounded-2xl bg-gray-50 px-4 py-3 dark:bg-[#121212]"><span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Available</span><span className="text-sm font-black tabular-nums">{formatPocketDisplayAmount(sourceBalance)} USDC</span></div>

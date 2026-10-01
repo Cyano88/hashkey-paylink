@@ -1,0 +1,30 @@
+﻿import type {Address} from 'viem'
+import {giftUnits} from './pocketGift'
+import {createGiftCapability,giftCapabilitySigner} from './pocketGiftSigning'
+export type SavedGiftDraft={version:1;requestId:string;network:'base';amount:string;message:string;expiresAt:string;secret:string;signer:Address;giftId?:string;approvalStarted?:boolean}
+export type GiftSecretStore={put(key:string,value:string):Promise<void>;get(key:string):Promise<string|null>}
+export function validateSavedGift(value:unknown):SavedGiftDraft{
+ const d=value as SavedGiftDraft
+ if(!d||d.version!==1||d.network!=='base'||!/^[0-9a-f-]{36}$/i.test(d.requestId)||typeof d.message!=='string'||d.message.length>160||!/^\d{1,20}$/.test(d.expiresAt)||!/^0x[0-9a-fA-F]{40}$/.test(d.signer)||!/^[A-Za-z0-9_-]{43}$/.test(d.secret)||d.giftId!==undefined&&!/^g_[A-Za-z0-9_-]{22}$/.test(d.giftId))throw Error('Saved gift needs recovery. Do not fund it again.')
+ if(giftCapabilitySigner(d.secret).toLowerCase()!==d.signer.toLowerCase())throw Error('Saved gift credential does not match. Do not fund it again.')
+ giftUnits(d.amount)
+ return d
+}
+export function createGiftDraftVault(owner:string,secrets:GiftSecretStore,index:Pick<Storage,'getItem'|'setItem'>){
+ if(!owner)throw Error('Sign in before creating a gift.')
+ const prefix='com.hashpaylink.pocket.gift.'+encodeURIComponent(owner)+'.',indexKey=prefix+'index'
+ function list(){const values=JSON.parse(index.getItem(indexKey)||'[]');if(!Array.isArray(values)||values.some(id=>typeof id!=='string'||!/^[0-9a-f-]{36}$/i.test(id)))throw Error('Saved gifts could not be read.');return values as string[]}
+ async function save(draft:SavedGiftDraft){
+  validateSavedGift(draft)
+  const payload=JSON.stringify(draft),key=prefix+draft.requestId
+  await secrets.put(key,payload)
+  if(await secrets.get(key)!==payload)throw Error('Pocket could not securely save this gift. No funding was started.')
+  const ids=list();if(!ids.includes(draft.requestId))index.setItem(indexKey,JSON.stringify([...ids,draft.requestId]))
+ }
+ return {list,save,async load(id:string){if(!list().includes(id))throw Error('Gift is not saved for this account.');const raw=await secrets.get(prefix+id);if(!raw)throw Error('Gift recovery data is unavailable. Do not fund it again.');return validateSavedGift(JSON.parse(raw))},async create(amount:string,message:string){
+  giftUnits(amount);if(message.trim().length>160)throw Error('Keep your message within 160 characters.')
+  const capability=createGiftCapability()
+  const draft:SavedGiftDraft={version:1,requestId:crypto.randomUUID(),network:'base',amount,message:message.trim(),expiresAt:String(Math.floor(Date.now()/1000)+7*86400),secret:capability.secret,signer:capability.signer}
+  await save(draft);return draft
+ }}
+}

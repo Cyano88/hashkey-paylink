@@ -1,3 +1,4 @@
+import { pocketBridgeDestinations } from '../lib/pocketBridgeNetworks'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { bridgeCircleEvmEmailWallet, type CircleEvmEmailSession } from '../../lib/circleEvmEmailWallet'
 import { readPocketBridgeQuote, recordPocketBridge, type PocketBridgeNetwork, type PocketBridgeQuote } from '../api/pocketBridgeClient'
@@ -22,7 +23,7 @@ export default function usePocketBridgeController(input: {
 }) {
   const latest = useRef(input)
   latest.current = input
-  const destinations = useMemo(() => (['base', 'arbitrum', 'arc', 'solana'] as PocketBridgeNetwork[]).filter(network => network !== input.source), [input.source])
+  const destinations = useMemo(() => pocketBridgeDestinations(input.source), [input.source])
   const [destination, setDestinationState] = useState<PocketBridgeNetwork>(destinations[0])
   const [amount, setAmount] = useState('')
   const [quote, setQuote] = useState<PocketBridgeQuote | null>(null)

@@ -58,3 +58,22 @@ export async function readPocketGift(id:string,fetcher:typeof fetch=fetch):Promi
  giftUnits(gift.amount)
  return {sender:gift.sender,amount:gift.amount,message:gift.message,network:gift.network,status:gift.status}
 }
+
+export type PocketGiftConfig={sendEnabled:boolean;claimEnabled:boolean;network:'base'}
+export async function readPocketGiftConfig(fetcher:typeof fetch=fetch):Promise<PocketGiftConfig>{
+ const response=await fetcher(pocketApiUrl('/api/pocket/gifts')+'?action=config',{cache:'no-store',signal:AbortSignal.timeout(10000)})
+ const data=await response.json().catch(()=>undefined)
+ if(!response.ok||!data?.ok||data.network!=='base'||typeof data.sendEnabled!=='boolean'||typeof data.claimEnabled!=='boolean')throw Error('Gifts are temporarily unavailable.')
+ return {sendEnabled:data.sendEnabled,claimEnabled:data.claimEnabled,network:'base'}
+}
+export async function readPocketGiftOwner(input:Options&{id:string}){
+ const data=await postGift({action:'owner-status',id:input.id},input)
+ if(data.gift?.id!==input.id||data.gift?.network!=='base'||!['funding','available','claimed','expired','refunded'].includes(data.gift?.status))throw Error('Gift status is unavailable.')
+ return data as {gift:{id:string;status:'funding'|'available'|'claimed'|'expired'|'refunded'};funding:{principal:string;platformFee:string;totalDebit:string}}
+}
+export async function createPocketGift(input:Options&{draft:import('../features/gifts/giftDraftVault').SavedGiftDraft}){
+ const d=input.draft
+ const data=d.giftId?await readPocketGiftOwner({...input,id:d.giftId}):await postGift({action:'create',requestId:d.requestId,network:'base',amount:d.amount,message:d.message,expiresAt:d.expiresAt,claimSigner:d.signer},input)
+ if(!/^g_[A-Za-z0-9_-]{22}$/.test(data.gift?.id||'')||!data.funding||![data.funding.principal,data.funding.platformFee,data.funding.totalDebit].every(x=>typeof x==='string'&&/^\d+$/.test(x)))throw Error('Gift funding details are unavailable.')
+ return {id:data.gift.id,...data.funding} as import('../features/gifts/giftFundingController').GiftFundingReview
+}

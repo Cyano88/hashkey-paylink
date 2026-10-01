@@ -1,3 +1,4 @@
+import { pocketBridgeNetworkLabel } from './pocketBridgeNetworks'
 import { signCircleSolanaTransaction } from '../../lib/circleSolanaEmailWallet'
 import type { PocketSolanaEmailSession } from '../controllers/usePocketWalletController'
 import type { PocketBridgeNetwork } from '../api/pocketBridgeClient'
@@ -43,7 +44,7 @@ export async function bridgeCircleSolanaWallet(input: {
     session: input.session,
     bridge: { destination: input.destination, destinationAddress: input.destinationAddress, amount: input.amount, accessToken: input.accessToken },
     rawTransaction: prepared.transaction,
-    memo: `Circle Pocket bridge ${input.amount} USDC from Solana to ${input.destination === 'base' ? 'Base' : 'Arbitrum'}`,
+    memo: `Circle Pocket bridge ${input.amount} USDC from Solana to ${pocketBridgeNetworkLabel(input.destination)}`,
   })
   input.onBeforeSubmit?.()
   const submitResponse = await fetch(POCKET_API.solanaCctpSubmit, {

@@ -15,6 +15,7 @@ function capabilityAccount(secret: string) {
   const key = ('0x' + Array.from(bytes, c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('')) as Hex
   try { return privateKeyToAccount(key) } catch { throw Error('Invalid gift code.') }
 }
+export function giftCapabilitySigner(secret:string){return capabilityAccount(secret).address}
 export function giftContractId(sender: Address, salt: Hex) {
   return keccak256(encodeAbiParameters([{type:'address'}, {type:'bytes32'}], [sender, salt]))
 }
