@@ -77,7 +77,7 @@ const startActions = new Set(['create', 'accept', 'approve', 'fund'])
 export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
   const d = { ...defaults, ...overrides }
   // Coalesce concurrent read-only chain checks for one project-owned record.
-  const observations = new Map<string, Promise<{record:XStocksAgreementRecord;pending:boolean}>>()
+  const observations = new Map<string, Promise<{record:XStocksAgreementRecord;pending:boolean;expiry?:{fundingExpired:true;escrow:string;observedBlock:string}}>>()
   async function observeTrade(record:XStocksAgreementRecord) {
     const existing = observations.get(record.id)
     if (existing) return existing
@@ -108,7 +108,10 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
             }
             return current
           })
-          return {record:next,pending:!!status.pending}
+          const expiry = !status.pending && status.fundingExpired === true && status.state === undefined && next.observed?.state === undefined
+            && status.escrow === '0x0000000000000000000000000000000000000000' && /^[1-9][0-9]*$/.test(status.observedBlock || '')
+            ? {fundingExpired:true as const,escrow:status.escrow,observedBlock:status.observedBlock!} : undefined
+          return {record:next,pending:!!status.pending,expiry}
         } catch(error) { if ((error as {code?:string}).code!=='STALE_CHAIN_OBSERVATION'||attempt>=2) throw error }
       }
     })()
@@ -135,7 +138,7 @@ export function createXStocksAgreementHandlers(overrides: Partial<Deps> = {}) {
         if (req.query.reconcile !== undefined && req.query.reconcile !== 'true') fail(400,'Choose a valid refresh option.')
         if (req.query.reconcile === 'true') {
           const next = await observeTrade(record!)
-          return res.json({ok:true,agreement:view(next.record),observation:{pending:next.pending,checkedAt:d.now().toISOString()}})
+          return res.json({ok:true,agreement:view(next.record),observation:{pending:next.pending,checkedAt:d.now().toISOString(),...next.expiry}})
         }
         return res.json({ ok: true, agreement: view(record!) })
       }
