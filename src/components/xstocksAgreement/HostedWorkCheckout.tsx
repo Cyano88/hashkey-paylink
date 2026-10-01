@@ -33,6 +33,9 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
   const [buyerAmount,setBuyerAmount]=useState('');
   const editingNote=noteAction||(status?.actions.includes('dispatch')?'dispatch':undefined);
   const {confirm,confirmation}=useStreamConfirm();
+  const [reviewing,setReviewing]=useState(false);
+  async function review(options:Parameters<typeof confirm>[0]){setReviewing(true);try{return await confirm(options);}finally{setReviewing(false);}}
+  useEffect(()=>{if(!status?.pending){setNoteAction(undefined);setEvidence('');setBuyerAmount('');}},[identity,status?.pending,status?.settlement?.nonce]);
   const storageKey='hashpaylink:xstocks-agreement-pending:v1:'+identity;
   function assertCurrent(){if(!mounted.current||(current.current.identity!==identity||current.current.epoch!==epoch))throw Error('Your account or agreement changed. Please reopen it.');}
   async function api(extra:Record<string,unknown>={}){assertCurrent();const result=await requestRef.current({action:'work_xlayer_status',requestId:item.id,version:item.activeVersion,...extra}) as WorkStatus;assertCurrent();return result;}
@@ -50,6 +53,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     if(getAddress(tx.from)!==getAddress(record.transaction.account)||tx.to?.toLowerCase()!==record.transaction.to.toLowerCase()||tx.input!==record.transaction.data||tx.value!==0n)throw Error('Transaction verification failed.');
     localStorage.removeItem(storageKey);setPending(false);
     if(receipt.status!=='success')throw Error('The transaction reverted. No payment was completed.');
+    if(record.operation==='proposeSettlement'){setNoteAction(undefined);setEvidence('');setBuyerAmount('');}
   }
   async function submit(operation:TradeXLayerAction,settlement?:SettlementReview){
     if(!wallet||!user?.id)throw Error('Your payment wallet is still loading. Please try again.');
@@ -81,9 +85,11 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     if(lock.current)return;
     if(['dispatch','refund','dispute','proposeSettlement'].includes(action)&&(evidence.trim().length<10||evidence.length>2000)){setError('Add a note of 10 to 2000 characters before continuing.');return;}
     ++refreshVersion.current;lock.current=true;setBusy('Checking payment...');setError('');
+    let actionStarted=false;
     try{
-      if(action==='wallet'){if(!wallet)throw Error('Your payment wallet is still loading. Please try again.');if(!await confirm({title:'Accept payment terms?',description:terms.amount+' '+workPaymentLabel(payment)+'. '+notice,action:'Accept terms'}))return;assertCurrent();await api({action:'work_xlayer_wallet',address:wallet.address});}
+      if(action==='wallet'){if(!wallet)throw Error('Your payment wallet is still loading. Please try again.');if(!await review({title:'Accept payment terms?',description:terms.amount+' '+workPaymentLabel(payment)+'. '+notice,action:'Accept terms'}))return;assertCurrent();actionStarted=true;await api({action:'work_xlayer_wallet',address:wallet.address});}
       else if(action==='recover'){
+        actionStarted=true;
         const raw=localStorage.getItem(storageKey);
         if(raw){
           const record:Pending=JSON.parse(raw);
@@ -112,7 +118,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
               const plan=await api({operation:record.operation,evidence:record.evidence||'',settlement:record.settlement}),next=plan.transaction;
               if(!next||next.to.toLowerCase()!==record.transaction.to.toLowerCase()||next.data!==record.transaction.data||next.account.toLowerCase()!==record.transaction.account.toLowerCase()||next.chainId!==196||next.value!=='0'||plan.token?.toLowerCase()!==payment.token.toLowerCase()||plan.amount!==payment.amountUnits||plan.decimals!==payment.decimals)
                 throw Error('Payment details changed. This saved action was not sent.');
-              if(!await confirm({title:'Resume this action?',description:'Continue the exact transaction you already approved. This will not create a second payment.',action:'Resume action'}))return;
+              if(!await review({title:'Resume this action?',description:'Continue the exact transaction you already approved. This will not create a second payment.',action:'Resume action'}))return;
               assertCurrent();
               try{await rpc.sendRawTransaction({serializedTransaction:record.serialized});}catch{ /* The network may already have it. Verify the saved hash below. */ }
             }
@@ -136,12 +142,13 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
         }
         const paying=action==='approve'||action==='fund';
         const description=isTrade?(paying?terms.amount+' '+workPaymentLabel(payment)+' will be held securely until it can be released under the agreed terms. Your wallet may ask for permission first, then payment. Network fees are paid in OKB.':action==='receipt'?'Confirm receipt and start the '+payment.reviewHours+'-hour inspection period. The seller can claim payment after it ends unless a dispute is confirmed on-chain before the deadline.':action==='release'?'Release the full stock payment to the seller. This cannot be undone.':action==='dispatch'?(terms.trade?.handover==='Pickup'?'Let the buyer know the item is ready for pickup.':'Let the buyer know the item has been sent.')+' Your note will be saved. Payment stays held until release.':(action==='create'?'Set up a secure payment for this agreement. This does not take payment yet.':action==='accept'?'Confirm the agreed amount and terms so the buyer can pay.':action==='cancel'?'Cancel this unpaid agreement. No stock payment will be taken.':action==='refund'?'Return the held payment to the buyer. This cannot be undone.':action==='dispute'?'Ask for help resolving this agreement. Payment stays held until the dispute is resolved.': 'Continue with '+labels[action].toLowerCase()+'.')+' A network fee may apply.'):paying?terms.amount+' '+workPaymentLabel(payment)+' will be held for this work agreement and paid to '+(status?.workerAddress||'the worker')+'. Network fees are paid in OKB.':action==='receipt'?'Start the '+payment.reviewHours+'-hour review period. After it ends, the worker can claim payment unless you confirm a dispute on-chain before the deadline.':action==='release'?'Approve this work and release the full token payment to the worker. This cannot be undone.':action==='dispatch'?'Record your work submission and its evidence. This does not prove client approval or release payment.':'Confirm '+labels[action].toLowerCase()+'. A network fee may apply.';
-        if(!await confirm({title:(paying?'Pay securely':labels[action])+'?',description:(splitDescription||description)+(paying&&terms.stockCustody?' The stock quantity can change if its issuer adjusts the shares. In a split payment, any fractional share remainder goes to the seller.':''),action:paying?'Confirm payment':labels[action]}))return;assertCurrent();
+        if(!await review({title:(paying?'Pay securely':labels[action])+'?',description:(splitDescription||description)+(paying&&terms.stockCustody?' The stock quantity can change if its issuer adjusts the shares. In a split payment, any fractional share remainder goes to the seller.':''),action:paying?'Confirm payment':labels[action]}))return;assertCurrent();
+        actionStarted=true;
         if(paying){let funded=false;for(let step=0;step<3;step++){const next=await api(),operation=next.actions.includes('fund')?'fund':next.actions.includes('approve')?'approve':undefined;if(!operation)throw Error('Payment state changed. Refresh.');await submit(operation);if(operation==='fund'){funded=true;break;}}if(!funded)throw Error('Approval completed. Refresh to continue.');}
         else await submit(action,reviewed);
       }
     }catch(e){if((current.current.identity===identity&&current.current.epoch===epoch)&&mounted.current)setError(stockActionError(e,Boolean(localStorage.getItem(storageKey))));}
-    finally{if((current.current.identity===identity&&current.current.epoch===epoch)&&mounted.current){await refresh().catch(()=>{});if(current.current.identity===identity&&current.current.epoch===epoch&&mounted.current){lock.current=false;setBusy('');updatedRef.current();}}}
+    finally{if((current.current.identity===identity&&current.current.epoch===epoch)&&mounted.current){if(actionStarted)await refresh().catch(()=>{});if(current.current.identity===identity&&current.current.epoch===epoch&&mounted.current){lock.current=false;setBusy('');if(actionStarted)updatedRef.current();}}}
   }
   async function run(action:TradeXLayerAction|'wallet'|'recover'){
     if(!navigator.locks){setError('Use an up-to-date browser to continue securely.');return;}
@@ -160,7 +167,7 @@ export default function HostedWorkCheckout({item,request,onUpdated}:{item:Servic
     {status?.fundingIssue&&<p role='alert' className='text-xs text-red-600'>{status.fundingIssue}</p>}
     {status&&<StockPaymentReceipt status={status} decimals={payment.decimals} label={workPaymentLabel(payment)} role={item.role}/>}
     {!wallet&&<p className='text-xs'>Your payment wallet is loading. Sign in again if it does not load.</p>}
-    {(busy||(!pending&&!loadError&&!error&&(!status||status.pending)))&&<button type='button' className={button+' flex items-center justify-center gap-2 disabled:opacity-100'} disabled aria-busy='true'><span aria-hidden='true' className='h-4 w-4 rounded-full border-2 border-current border-r-transparent motion-safe:animate-spin'/><span role='status' aria-live='polite'>{busy||(!status?'Checking payment...':'Confirming transaction...')}</span></button>}
+    {!reviewing&&(busy||(!pending&&!loadError&&!error&&(!status||status.pending)))&&<button type='button' className={button+' flex items-center justify-center gap-2 disabled:opacity-100'} disabled aria-busy='true'><span aria-hidden='true' className='h-4 w-4 rounded-full border-2 border-current border-r-transparent motion-safe:animate-spin'/><span role='status' aria-live='polite'>{busy||(!status?'Checking payment...':'Confirming transaction...')}</span></button>}
     {!busy&&!pending&&!loadError&&status&&!status.wallet&&<button className={button} disabled={!!busy||!wallet||!status.enabled} onClick={()=>void run('wallet')}>Accept payment terms</button>}
     {item.role==='provider'&&!status?.fundingExpired&&!status?.fundingIssue&&status?.customerReady&&status.providerReady&&!status.pending&&status.state===undefined&&!status.actions.length&&<p className='text-xs text-gray-500'>Payment setup is temporarily unavailable. Please try again.</p>}
     {status?.wallet&&!(status.customerReady&&status.providerReady)&&<p className='text-xs'>Waiting for the other person to accept the payment terms.</p>}
