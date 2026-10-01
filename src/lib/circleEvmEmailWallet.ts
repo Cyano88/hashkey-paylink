@@ -1,3 +1,4 @@
+import { createCircleSdk } from './createCircleSdk'
 import {notifyPocketKycRequirement} from '../pocket/lib/pocketKycAccess'
 import { installCircleApprovalSurface } from './circleApprovalSurface'
 import type { PaymentFeeQuote } from '../../api/payment-fee-quotes'
@@ -462,7 +463,7 @@ function authenticatedSdk(session: CircleEvmEmailSession) {
   if (session.chain === 'arc' && session.wallet.blockchain !== 'ARC') throw new Error('Reconnect this wallet on Arc mainnet.')
   const appId = session.appId ?? appIdForChain(session.chain)
   if (!appId) throw new Error('Circle email wallet is not configured.')
-  const sdk = new W3SSdk({ appSettings: { appId } })
+  const sdk = createCircleSdk({ appSettings: { appId } })
   applyHashPayLinkCircleUi(sdk)
   sdk.setAuthentication({ userToken: session.userToken, encryptionKey: session.encryptionKey })
   return sdk
@@ -750,7 +751,7 @@ export async function connectCircleEvmEmailWallet(
   if (chain !== 'base' && chain !== 'arbitrum' && chain !== 'arc') throw new Error('Circle email wallet is not enabled for this chain.')
   const appId = await appIdForChainAsync(chain)
   if (!appId) throw new Error('Circle email wallet is not configured.')
-  const sdk = new W3SSdk({ appSettings: { appId } })
+  const sdk = createCircleSdk({ appSettings: { appId } })
   applyHashPayLinkCircleUi(sdk, {
     asset: CHAIN_META[chain].asset,
     chainLabel: CHAIN_META[chain].label,

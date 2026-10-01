@@ -1,3 +1,4 @@
+import { createCircleSdk } from './createCircleSdk'
 import { installCircleApprovalSurface } from './circleApprovalSurface'
 import { executeRecoverableCircleApproval } from './circleRecoverableApproval'
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
@@ -244,7 +245,7 @@ async function ensureInitializedWallet(sdk: W3SSdk, userToken: string, encryptio
 
 export async function connectCircleSolanaEmailWallet(email: string): Promise<SolanaEmailSession> {
   if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
-  const sdk = new W3SSdk({ appSettings: { appId: APP_ID } })
+  const sdk = createCircleSdk({ appSettings: { appId: APP_ID } })
   applyHashPayLinkCircleSolanaUi(sdk)
   const deviceId = await sdk.getDeviceId()
   const otp = await circleSolanaApi<{
@@ -344,7 +345,7 @@ export async function resumeCircleSolanaEmailWallet(
   expectedWalletAddress?: string,
 ): Promise<SolanaEmailSession> {
   if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
-  const sdk = new W3SSdk({
+  const sdk = createCircleSdk({
     appSettings: { appId: APP_ID },
     authentication: {
       userToken: authentication.userToken,
@@ -479,7 +480,7 @@ export async function sendCircleSolanaTransfer(params: {
   onAccepted?: (value: { challengeId: string; transactionId: string }) => void
 }): Promise<{ state: 'submitted' | 'confirmed'; txHash: string; challengeId: string; transactionId: string }> {
   if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
-  const sdk = new W3SSdk({
+  const sdk = createCircleSdk({
     appSettings: { appId: APP_ID },
     authentication: {
       userToken: params.session.userToken,
@@ -547,7 +548,7 @@ export async function signCircleSolanaTransaction(params: {
   memo: string
 }) {
   if (!APP_ID) throw new Error('Circle Solana email wallet is not configured.')
-  const sdk = new W3SSdk({
+  const sdk = createCircleSdk({
     appSettings: { appId: APP_ID },
     authentication: {
       userToken: params.session.userToken,

@@ -11,7 +11,7 @@ export function createGiftClaimFlow<Approval>(deps: {
   status(hash?: Hex): Promise<GiftClaimResult>
   changed(progress: GiftClaimProgress): void
 }) {
-  let active = true, running = false
+  let active = true, running = false, approvalInterrupted = false
   let state: GiftClaimProgress = { phase: 'ready', message: '' }
   const publish = (next: GiftClaimProgress) => { if (active) { state = next; deps.changed(next) } }
   async function check(quiet = false) {
@@ -26,7 +26,7 @@ export function createGiftClaimFlow<Approval>(deps: {
       } else if (result.status === 'available' && result.retryAllowed === true) {
         publish({ phase: 'ready', message: 'Your previous approval expired. You can claim again.' })
       } else {
-        publish({ ...state, phase: 'unconfirmed', message: 'Confirmation pending. This updates automatically.' })
+        publish({ ...state, phase: 'unconfirmed', message: approvalInterrupted ? 'Wallet approval did not finish. Checking your gift automatically.' : 'Confirmation pending. This updates automatically.' })
       }
     } catch {
       publish({ ...state, phase: 'unconfirmed', message: 'Reconnecting to confirm your gift automatically.' })
@@ -38,6 +38,7 @@ export function createGiftClaimFlow<Approval>(deps: {
       if (!active || running || state.phase !== 'ready') return
       running = true
       publish({ phase: 'preparing', message: 'Preparing your claim.' })
+      approvalInterrupted = false
       let approvalStarted = false
       try {
         const approval = await deps.prepare()
@@ -50,7 +51,7 @@ export function createGiftClaimFlow<Approval>(deps: {
         publish({ phase: 'checking', message: 'Checking your claim.', transactionHash: hash })
         await check()
       } catch {
-        if (approvalStarted) await check()
+        if (approvalStarted) { approvalInterrupted = true; await check() }
         else publish({ phase: 'ready', message: 'Could not prepare your claim. Please try again.' })
       } finally { running = false }
     },

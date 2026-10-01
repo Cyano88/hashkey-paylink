@@ -11,6 +11,7 @@ const a=setup();await a.flow.claim();assert.equal(a.flow.state.phase,'unconfirme
 await a.flow.claim();assert.equal(a.approved,1)
 a.result={status:'confirmed',transactionHash:hash};await a.flow.recheck();assert.equal(a.flow.state.phase,'confirmed');assert.equal(a.approved,1)
 const b=setup();b.failure=true;await b.flow.claim();assert.equal(b.flow.state.phase,'unconfirmed');await b.flow.recheck();assert.equal(b.approved,1)
+assert.match(b.flow.state.message,/Wallet approval did not finish/);await b.flow.refresh();assert.match(b.flow.state.message,/Wallet approval did not finish/);
 const c=setup();let release;c.wait=new Promise(r=>release=r);const pending=c.flow.claim();await c.flow.claim();assert.equal(c.prepared,1);c.flow.dispose();release();await pending;assert.equal(c.approved,0)
 const d=setup();d.result={status:'claimed_elsewhere'};await d.flow.claim();assert.equal(d.flow.state.phase,'unavailable')
 const e=setup();e.result={status:'confirmed'};await e.flow.claim();assert.equal(e.flow.state.phase,'unconfirmed')

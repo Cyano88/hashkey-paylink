@@ -215,3 +215,12 @@ Remaining: production route/native deep-link binding, secure creator capability 
 - Release d5290dcd1 is live on Render dep-dav35hc9v7es73bulm0g. Mobile Vite build succeeded (4m20s), Gradle BUILD SUCCESSFUL, Pixel install -r returned Success. App data and saved gift retained; generated tracked files restored.
 - Updated Pixel reopened Gift 1 directly to its ready QR without manual status action. Copied gift link on-device and pasted into Claim a gift without printing the bearer capability. Landing correctly shows 0.01 USDC on Base from @shy.
 - Started one self-redemption test for the same gift. Backend record remains available with claim phase awaiting_approval, challenge present and no transaction ID/hash. UI automatically polls in place and shows Confirmation pending / Done, no Check status. Claim is NOT confirmed. User was asked whether Circle's claim approval appeared; await answer and reconcile before any repeat approval. Funding hash remains 0x716559b68370222522d4c28208678803e459cdd935d2c51ebab2884d23f06859.
+
+## Gift claim Circle fragment collision - 2026-10-01
+
+- User confirmed Circle approval never appeared. Pixel inspection found a hidden sdkIframe at /social/verify-token, not the claim approval page.
+- Installed Circle SDK 1.1.11 treats any key=value URL fragment as an OAuth response. Pocket's gift capability fragment matches that pattern; SDK construction consumed it and created the hidden social verification frame. The existing approval guard then correctly refused a second frame.
+- Added createCircleSdk for all Pocket EVM/Solana constructors. It temporarily hides only a valid Pocket gift capability fragment during synchronous SDK initialization, restores the URL and router state, and leaves real OAuth URLs and concurrent-approval protection unchanged. No bearer data is logged or persisted by this helper.
+- Claim approval errors retain automatic read-only reconciliation but now truthfully say wallet approval did not finish. No retry or confirmation is inferred from that error.
+- Real installed SDK browser regression reproduces the original collision, proves gift and singleton construction are protected, and verifies OAuth handling remains unchanged. Unrelated JWT decoding is stubbed in that constructor-only test. Existing Circle approval surface/handoff and gift claim controller regressions passed; changed-file TypeScript diagnostics zero.
+- Pixel build in progress. Same funded gift remains the only user test; no new gift, no additional funding, and no confirmed claim at this checkpoint.
