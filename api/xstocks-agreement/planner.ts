@@ -15,6 +15,7 @@ export async function verifyFactory(client: ReturnType<typeof tradeXLayerClient>
   if (!code || keccak256(code) !== (deployment.shares?SHARE_FACTORY_RUNTIME_HASH:runtimeHash)) throw Error('Trade factory does not match the verified deployment.');
   if (getAddress(await client.readContract({ address: factory, abi: factoryAbi, functionName:'arbiter', blockNumber })) !== arbiter) throw Error('Trade authority mismatch.');
 }
+function stateIsFinal(state:number){return state>=6&&state<=9;}
 export function tradeLifecycleActions(state: number, buyer: boolean, now: bigint, deadlines: { fundBy: bigint; dispatchBy: bigint; deliveryBy: bigint; inspectUntil: bigint }): TradeXLayerAction[] {
   if (state <= 1) return [...(now < deadlines.fundBy ? (state === 0 && !buyer ? ['accept' as const] : state === 1 && buyer ? ['fund' as const] : []) : []), 'cancel'];
   if (state === 2) return buyer ? (now >= deadlines.dispatchBy ? ['missedDispatch'] : []) : [...(now < deadlines.dispatchBy ? ['dispatch' as const] : []), 'refund'];
@@ -122,7 +123,8 @@ export async function prepareTradeXLayerAction(input: { env: NodeJS.ProcessEnv; 
     const fields=['fundedShares','buyerSettledShares','sellerSettledShares','buyerUnderlyingAtSettlement','sellerUnderlyingAtSettlement'] as const;
     const values=await Promise.all(fields.map(functionName=>client.readContract({address:escrow,abi:escrowAbi,functionName,blockNumber})));
     const stockAbi=parseAbi(['function getUnderlyingAmountByShares(uint256) view returns(uint256)','function getSharesByUnderlyingAmount(uint256) view returns(uint256)']);
-    const currentUnderlying=await client.readContract({address:t.token,abi:stockAbi,functionName:'getUnderlyingAmountByShares',args:[values[0]],blockNumber});
+    // Final receipts use immutable settlement records, not a new issuer conversion.
+    const currentUnderlying=stateIsFinal(result.state)||values[0]===0n?0n:await client.readContract({address:t.token,abi:stockAbi,functionName:'getUnderlyingAmountByShares',args:[values[0]],blockNumber});
     result.stockReceipt={policy:SHARE_CUSTODY_POLICY,fundedShares:String(values[0]),buyerSettledShares:String(values[1]),sellerSettledShares:String(values[2]),buyerUnderlyingAtSettlement:String(values[3]),sellerUnderlyingAtSettlement:String(values[4]),currentUnderlyingUnits:String(currentUnderlying),observedBlock:blockNumber.toString()};
     if(result.state<=1&&await client.readContract({address:t.token,abi:stockAbi,functionName:'getSharesByUnderlyingAmount',args:[BigInt(t.amount)],blockNumber})===0n){result.fundingIssue='The amount is too small to transfer one stock share unit.';result.actions=result.actions.filter(a=>!['approve','fund'].includes(a));}
   }

@@ -12,9 +12,9 @@ const body={kind:'trade',stockCustody:SHARE_CUSTODY_POLICY,title:'Test',descript
 assert.throws(()=>parseTradeCheckout(body,{...env,HASHPAYLINK_XSTOCKS_SHARE_ENABLED:'false'}),/not enabled/);
 const terms=parseTradeCheckout(body,env),b=prepareTradeCheckoutBinding('fixture',terms,buyer,seller,1000),old=prepareTradeCheckoutBinding('fixture',parseTradeCheckout({...body,stockCustody:undefined},{...env,HASHPAYLINK_XSTOCKS_SHARE_ENABLED:'false'}),buyer,seller,1000);
 assert.notEqual(b.termsHash,old.termsHash);assert.equal(b.custody,SHARE_CUSTODY_POLICY);assert.equal(b.factory,factory);assert.notEqual(old.factory,factory);
-function client(options={}){return {getChainId:async()=>196,getBlockNumber:async()=>100n,getBlock:async()=>({hash:'0x'+'aa'.repeat(32),timestamp:1100n}),getCode:async()=>options.badCode?'0x00':fixture.runtime,readContract:async({address,functionName,blockNumber})=>{
+function client(options={}){return {getChainId:async()=>196,getBlockNumber:async()=>100n,getBlock:async()=>({hash:'0x'+'aa'.repeat(32),timestamp:options.now??1100n}),getCode:async()=>options.badCode?'0x00':fixture.runtime,readContract:async({address,functionName,blockNumber})=>{
  if(address===factory){if(functionName==='arbiter')return TRADE_XLAYER_ARBITER;if(functionName==='escrows')return options.absent?zeroAddress:escrow;if(functionName==='approvedTokens')return true;}
- if(address.toLowerCase()===token){if(functionName==='decimals')return 18;if(functionName==='allowance')return 2220000000000000n;if(functionName==='getUnderlyingAmountByShares')return 2219999999999999n;if(functionName==='getSharesByUnderlyingAmount')return options.zero?0n:2216229757026900n;}
+ if(address.toLowerCase()===token){if(functionName==='decimals')return 18;if(functionName==='allowance')return 2220000000000000n;if(functionName==='getUnderlyingAmountByShares'){if(options.conversionUnavailable)throw Error('Issuer conversion unavailable');return 2219999999999999n;}if(functionName==='getSharesByUnderlyingAmount')return options.zero?0n:2216229757026900n;}
  if(functionName==='settlementNonce')return blockNumber===undefined?(options.latestNonce??3n):3n;
  if(functionName==='settlementProposer')return options.proposer??seller;
  if(functionName==='proposedBuyerAmount')return 1110000000000000n;
@@ -49,3 +49,16 @@ for(const buyerAmount of ['0','1110000000000000','2220000000000000']){const prop
 for(const buyerAmount of ['-1','2220000000000001','1.5','1e3',1])await assert.rejects(()=>prepareTradeXLayerAction({...input,action:'proposeSettlement',settlement:{...reviewed,buyerAmount},evidence:'Agreed controlled test split'},client({state:5})),/buyer amount/);
 for(const state of [2,6,7,8,9])await assert.rejects(()=>prepareTradeXLayerAction({...input,action:'acceptSettlement',settlement:reviewed},client({state})),/no longer available/);
 console.log('Dispute proposals passed: exact calldata, participant roles, full/partial allocations, stale nonce/amount/evidence, withdrawal, pending reads and terminal states.');
+
+// Completed receipts survive unavailable live conversion; held funds still fail closed.
+for(const state of [6,7,8,9]){const final=await prepareTradeXLayerAction(input,client({state,conversionUnavailable:true}));assert.deepEqual(final.actions,[]);assert.equal(final.stockReceipt.currentUnderlyingUnits,'0');}
+await assert.rejects(()=>prepareTradeXLayerAction(input,client({state:2,conversionUnavailable:true})),/Issuer conversion unavailable/);
+// Exact deadline boundaries on the actual share-custody planner, not only its action helper.
+for(const [state,account,action,functionName] of [[2,buyer,'missedDispatch','refundUndispatched'],[3,seller,'dispute','openDispute'],[4,seller,'inspectionRelease','releaseAfterInspection']]){
+ const before=await prepareTradeXLayerAction({...input,account},client({state,now:9999n}));assert.ok(!before.actions.includes(action));
+ for(const now of [10000n,10001n]){const after=await prepareTradeXLayerAction({...input,account,action,evidence:'Controlled deadline scenario'},client({state,now}));assert.equal(decodeFunctionData({abi:TRADE_ESCROW_ABI,data:after.transaction.data}).functionName,functionName);}
+}
+assert.ok((await prepareTradeXLayerAction(input,client({state:4,now:9999n}))).actions.includes('dispute'));
+assert.ok(!(await prepareTradeXLayerAction(input,client({state:4,now:10000n}))).actions.includes('dispute'));
+for(const action of ['resolveDispute','resolve'])for(const account of [buyer,seller,TRADE_XLAYER_ARBITER])await assert.rejects(()=>prepareTradeXLayerAction({...input,account,action},client({state:5})),/not a participant|no longer available/);
+console.log('Share custody boundaries passed: immutable final receipts, exact deadline transitions, reviewer operations excluded from participant API.');
