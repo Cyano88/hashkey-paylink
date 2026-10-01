@@ -47,3 +47,13 @@ const automatic=createGiftFundingFlow({...deps,draft:{...draft,giftId:'g_'+'a'.r
 await automatic.review();quietStates.length=0;status='available';await Promise.all([automatic.refresh(),automatic.refresh()]);assert.equal(automatic.state.phase,'available');assert.equal(quietApprovals,0);assert(!quietStates.some(s=>s.phase==='checking'),'Quiet updates must not flicker into a loading state')
 automatic.dispose();await automatic.refresh();assert.equal(quietApprovals,0)
 console.log('PASS automatic funding confirmation updates quietly without replaying approval.')
+
+const removable=createGiftDraftVault('cleanup',{...secretStore,remove:async k=>{secrets.delete(k)}},indexStore)
+const localDraft=await removable.create('0.1','')
+removable.archive(localDraft.requestId);assert(removable.archived().includes(localDraft.requestId));assert.equal((await removable.load(localDraft.requestId)).secret,localDraft.secret)
+removable.restore(localDraft.requestId);assert.equal(removable.archived().length,0)
+await removable.deleteDraft(localDraft.requestId);assert.equal(removable.list().length,0)
+const protectedDraft=await removable.create('0.1','')
+await removable.save({...protectedDraft,giftId:'g_'+'z'.repeat(22),approvalStarted:true})
+await assert.rejects(removable.deleteDraft(protectedDraft.requestId,true));assert.equal(removable.list().length,1)
+console.log('PASS archive preserves credentials and can restore; delete removes only safe unfunded drafts.')

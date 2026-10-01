@@ -32,6 +32,7 @@ export function createGiftService(deps:GiftDependencies){
  }
  const authorize=async(identity:GiftIdentity,id:string,kind:'funding'|'claim'|'refund',userToken:string,claim?:{signature:Hex;deadline:string})=>{
   const existing=await get(id)
+  if(existing.discardedAt)throw new GiftError(409,'This draft was deleted. Create a new gift.')
   if(kind==='funding'&&deps.fundingEnabled&&!deps.fundingEnabled(existing.deployment.network,identity,existing.amount))throw new GiftError(503,'Gift funding is not available yet.')
   const record=await refresh(id),wallet=await linked(identity.userId,record.deployment.network)
   if(kind!=='claim'&&(record.ownerId!==identity.userId||wallet.address.toLowerCase()!==record.senderAddress.toLowerCase()||wallet.id!==record.walletId))throw new GiftError(403,'This gift belongs to another account.')
@@ -48,6 +49,7 @@ export function createGiftService(deps:GiftDependencies){
   const candidate:GiftAttempt={id:randomUUID(),startedAt:now(),userId:identity.userId,walletAddress:wallet.address,phase:'authorizing',...(claim?{signature:claim.signature,deadline:claim.deadline}:{})}
   const saved=await deps.store.update(id,current=>{
    if(!current)throw new GiftError(404,'Gift not found.')
+   if(current.discardedAt)throw new GiftError(409,'This draft was deleted. Create a new gift.')
    if(kind==='funding'?current.state!=='unfunded':current.state!=='available')throw new GiftError(409,'This gift is no longer available.')
    const existing=current[kind]
    if(existing&&existing.phase!=='failed'&&!(kind==='claim'&&existing.deadline&&BigInt(current.observedTimestamp??'0')>BigInt(existing.deadline))){
@@ -73,6 +75,12 @@ export function createGiftService(deps:GiftDependencies){
   }
  }
  return {
+  async discardDraft(identity:GiftIdentity,id:string){
+   const before=await get(id);if(before.ownerId!==identity.userId)throw new GiftError(403,'This gift belongs to another account.')
+   await refresh(id)
+   await deps.store.update(id,current=>{if(!current||current.ownerId!==identity.userId)throw new GiftError(403,'This gift belongs to another account.');if(current.state!=='unfunded'||current.fundingHash||current.funding)throw new GiftError(409,'This gift cannot be deleted. Check its payment status.');return {...current,discardedAt:current.discardedAt||now(),updatedAt:now()}})
+   return {deleted:true}
+  },
   async recoverFunding(identity:GiftIdentity,id:string,userToken:string){
    const before=await get(id)
    if(before.ownerId!==identity.userId)throw new GiftError(403,'This gift belongs to another account.')
@@ -92,7 +100,7 @@ export function createGiftService(deps:GiftDependencies){
    return {retryAllowed,gift:publicGift(saved,now())}
   },
   configuration(identity?:GiftIdentity){return {sendEnabled:Boolean(deps.deployment('base'))&&(deps.fundingEnabled?.('base',identity)??true),claimEnabled:Boolean(deps.deployment('base')),network:'base' as const}},
-  async ownerStatus(identity:GiftIdentity,id:string){const before=await get(id);if(before.ownerId!==identity.userId)throw new GiftError(403,'This gift belongs to another account.');const record=await refresh(id);return {gift:publicGift(record,now()),fundingExpired:record.state==='unfunded'&&BigInt(record.observedTimestamp||'0')>=BigInt(record.expiresAt),funding:{principal:record.amountUnits,platformFee:record.feeUnits,totalDebit:String(BigInt(record.amountUnits)+BigInt(record.feeUnits))}}},
+  async ownerStatus(identity:GiftIdentity,id:string){const before=await get(id);if(before.ownerId!==identity.userId)throw new GiftError(403,'This gift belongs to another account.');const record=await refresh(id);return {canDelete:record.state==='unfunded'&&!record.funding&&!record.fundingHash,createdAt:record.createdAt,gift:publicGift(record,now()),fundingExpired:record.state==='unfunded'&&BigInt(record.observedTimestamp||'0')>=BigInt(record.expiresAt),funding:{principal:record.amountUnits,platformFee:record.feeUnits,totalDebit:String(BigInt(record.amountUnits)+BigInt(record.feeUnits))}}},
   async create(identity:GiftIdentity,input:{requestId:string;network:GiftNetwork;amount:string;claimSigner:Address;expiresAt:string;message?:string}){
    if(!['base','arbitrum','arc','ethereum','polygon'].includes(input.network)||typeof input.amount!=='string'||typeof input.claimSigner!=='string'||typeof input.message!=='undefined'&&typeof input.message!=='string')throw new GiftError(400,'Invalid gift details.')
    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)||!isAddress(input.claimSigner)||input.claimSigner==='0x0000000000000000000000000000000000000000')throw new GiftError(400,'Invalid gift details.')
@@ -112,7 +120,7 @@ export function createGiftService(deps:GiftDependencies){
    const plan=prepareGiftFunding({sender:wallet.address,escrow:deployment.escrow,token:deployment.token,claimSigner:input.claimSigner,salt,amount,expiresAt:expiry,now:seconds()})
    const handle=/^[a-z0-9]{3,20}$/i.test(identity.handle)?'@'+identity.handle:'A Pocket user'
    const record=await deps.store.update(id,current=>{
-    if(current){if(current.ownerId!==identity.userId||current.binding!==binding)throw new GiftError(409,'This gift attempt already has different details.');return current}
+    if(current){if(current.discardedAt)throw new GiftError(409,'This draft was deleted. Create a new gift.');if(current.ownerId!==identity.userId||current.binding!==binding)throw new GiftError(409,'This gift attempt already has different details.');return current}
     return {version:1,id,binding,ownerId:identity.userId,senderHandle:handle,senderAddress:wallet.address,walletId:wallet.id,deployment,giftId:plan.giftId,salt,claimSigner:getAddress(input.claimSigner),amount,amountUnits:String(plan.principal),feeUnits:String(plan.platformFee),expiresAt:input.expiresAt,message,state:'unfunded',createdAt:now(),updatedAt:now()}
    })
    return {gift:publicGift(record,now()),funding:{principal:record.amountUnits,platformFee:record.feeUnits,totalDebit:String(BigInt(record.amountUnits)+BigInt(record.feeUnits))}}

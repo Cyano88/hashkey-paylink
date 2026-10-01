@@ -15,7 +15,7 @@ export function createGiftHandler(deps:{service:Service;codes?:ReturnType<typeof
    if(req.method!=='POST')return res.status(405).json({ok:false,error:{message:'Method not allowed.'}})
    const identity=await deps.identity(req),body=req.body
    if(!body||typeof body!=='object'||Array.isArray(body))throw new GiftError(400,'Invalid gift request.')
-   const allowed:Record<string,string[]>={'issue-code':['id','secret'],'resolve-code':['code'],'recover-funding':['id','userToken'],'owner-status':['id'],create:['requestId','network','amount','claimSigner','expiresAt','message'],'claim-status':['id','transactionHash'],'prepare-claim':['id'],'authorize-funding':['id','userToken'],'authorize-claim':['id','userToken','signature','deadline'],'authorize-refund':['id','userToken']}
+   const allowed:Record<string,string[]>={'issue-code':['id','secret'],'resolve-code':['code'],'recover-funding':['id','userToken'],'discard-draft':['id'],'owner-status':['id'],create:['requestId','network','amount','claimSigner','expiresAt','message'],'claim-status':['id','transactionHash'],'prepare-claim':['id'],'authorize-funding':['id','userToken'],'authorize-claim':['id','userToken','signature','deadline'],'authorize-refund':['id','userToken']}
    if(typeof body.action!=='string'||!Object.hasOwn(allowed,body.action)||Object.keys(body).some(key=>key!=='action'&&!allowed[body.action].includes(key))||Object.values(body).some(value=>typeof value!=='string'))throw new GiftError(400,'Invalid gift request.')
    if(body.action==='issue-code'||body.action==='resolve-code'){
     if(!deps.codes)throw new GiftError(503,'Gift codes are temporarily unavailable. Use the gift link.')
@@ -24,6 +24,7 @@ export function createGiftHandler(deps:{service:Service;codes?:ReturnType<typeof
    }
    if(body.action==='create')return res.json({ok:true,...await deps.service.create(identity,body)})
    if(typeof body.id!=='string')throw new GiftError(400,'Choose a gift.')
+   if(body.action==='discard-draft')return res.json({ok:true,...await deps.service.discardDraft(identity,body.id)})
    if(body.action==='owner-status')return res.json({ok:true,...await deps.service.ownerStatus(identity,body.id)})
    if(body.action==='claim-status')return res.json({ok:true,...await deps.service.claimStatus(identity,body.id,body.transactionHash)})
    if(body.action==='prepare-claim')return res.json({ok:true,claim:await deps.service.claimDetails(identity,body.id)})

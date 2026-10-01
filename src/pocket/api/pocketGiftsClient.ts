@@ -69,7 +69,7 @@ export async function readPocketGiftConfig(fetcher:typeof fetch=fetch,accessToke
 export async function readPocketGiftOwner(input:Options&{id:string}){
  const data=await postGift({action:'owner-status',id:input.id},input)
  if(data.gift?.id!==input.id||data.gift?.network!=='base'||!['funding','available','claimed','expired','refunded'].includes(data.gift?.status))throw Error('Gift status is unavailable.')
- return data as {fundingExpired?:boolean;gift:{id:string;status:'funding'|'available'|'claimed'|'expired'|'refunded'};funding:{principal:string;platformFee:string;totalDebit:string}}
+ return data as {canDelete?:boolean;createdAt?:number;fundingExpired?:boolean;gift:{id:string;status:'funding'|'available'|'claimed'|'expired'|'refunded'};funding:{principal:string;platformFee:string;totalDebit:string}}
 }
 export async function createPocketGift(input:Options&{draft:import('../features/gifts/giftDraftVault').SavedGiftDraft}){
  const d=input.draft
@@ -99,3 +99,5 @@ export async function resolvePocketGiftCode(input:Options&{code:string}) {
  if(typeof data.link!=='string'||!parseGiftLink(data.link))throw Error('Gift code could not be verified.')
  return data.link as string
 }
+
+export async function discardPocketGiftDraft(input:Options&{id:string}){const result=await postGift({action:'discard-draft',id:input.id},input);if(result.deleted!==true)throw Error('The draft could not be deleted.')}

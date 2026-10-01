@@ -7,7 +7,7 @@ export type GiftRecord={
  deployment:GiftDeployment;giftId:Hex;salt:Hex;claimSigner:Address;amount:string;amountUnits:string;feeUnits:string;expiresAt:string;message:string;
  fundingHash?:Hex;fundingAt?:number;refundHash?:Hex;refundAt?:number;settlementAt?:number;claimRecipient?:Address;settlementHash?:Hex;state:'unfunded'|'available'|'claimed'|'refunded';observedBlock?:string;observedTimestamp?:string;observedBlockHash?:Hex;createdAt:number;updatedAt:number;
  evidenceScanBlock?:string;nextReconcileAt?:number;reconcileComplete?:boolean;
- funding?:GiftAttempt;claim?:GiftAttempt;refund?:GiftAttempt;
+ discardedAt?:number;funding?:GiftAttempt;claim?:GiftAttempt;refund?:GiftAttempt;
 }
 export type GiftObservation={state:GiftRecord['state'];blockNumber:bigint;blockHash:Hex;timestamp:bigint;evidenceScanBlock?:string;fundingHash?:Hex;fundingAt?:number;refundHash?:Hex;refundAt?:number;settlementAt?:number;claimRecipient?:Address;settlementHash?:Hex}
 export type GiftIdentity={userId:string;handle:string}

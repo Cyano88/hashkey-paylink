@@ -172,3 +172,30 @@ console.log('PASS claim retry requires confirmed strict deadline expiry and matc
  assert.equal(created.gift.amount,'100','A non-pilot account can create a valid gift')
  console.log('PASS public Base gifts: 0.1 and larger values allowed; no membership gate; invalid amounts/unsupported networks denied; rollback and wallet checks retained.')
 }
+
+// Deleting a draft never races or reverses a funding authorization.
+{
+ const f=setup(),{gift}=await f.service.create(f.alice,f.input)
+ await assert.rejects(f.service.discardDraft(f.bob,gift.id),e=>e.status===403)
+ assert.deepEqual(await f.service.discardDraft(f.alice,gift.id),{deleted:true})
+ await assert.rejects(f.service.authorize(f.alice,gift.id,'funding','token'),e=>e.status===409)
+ await assert.rejects(f.service.create(f.alice,f.input),e=>e.status===409)
+ assert.equal(f.calls.length,0)
+ assert.deepEqual(await f.service.discardDraft(f.alice,gift.id),{deleted:true})
+}
+for(const state of ['available','claimed','refunded']){
+ const f=setup(),{gift}=await f.service.create(f.alice,f.input);f.setState(state)
+ await assert.rejects(f.service.discardDraft(f.alice,gift.id),e=>e.status===409)
+}
+for(const unknown of [false,true]){
+ const f=setup(),{gift}=await f.service.create(f.alice,f.input);f.fail(unknown)
+ await f.service.authorize(f.alice,gift.id,'funding','token').catch(()=>{})
+ await assert.rejects(f.service.discardDraft(f.alice,gift.id),e=>e.status===409)
+}
+{
+ const f=setup(),{gift}=await f.service.create(f.alice,f.input)
+ const results=await Promise.allSettled([f.service.discardDraft(f.alice,gift.id),f.service.authorize(f.alice,gift.id,'funding','token')])
+ assert.equal(results.filter(r=>r.status==='fulfilled').length,1)
+ if(results[0].status==='fulfilled')assert.equal(f.calls.length,0)
+}
+console.log('PASS gift draft deletion: owner-only, idempotent tombstone, no replay, funded/pending/unknown protected, atomic funding race.')
