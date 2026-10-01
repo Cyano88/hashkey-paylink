@@ -1,9 +1,10 @@
+import { pocketActivityReference } from './pocketReceipt'
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { PocketActivityRow } from '../models/pocketActivity'
 import { statementDate, statementDescription, statementStatus, statementSignedAmount, isLocalStatementPayment } from './pocketStatementPresentation'
 import { personalPocketActivity } from './pocketPurchaseKind'
 import { statementPdf } from './pocketStatementPdf'
-export type StatementOptions = { title?: string; scope?: string; from?: string; to?: string; includeBusiness?: boolean; kind?: 'all' | 'local' }
+export type StatementOptions = { accountName?: string; pocketId?: string; title?: string; scope?: string; from?: string; to?: string; includeBusiness?: boolean; kind?: 'all' | 'local' }
 export function statementRows(rows: PocketActivityRow[], options: StatementOptions = {}) {
  if(options.from && options.to && options.from > options.to) throw new Error('Choose an end date on or after the start date.')
  return (options.includeBusiness ? rows : personalPocketActivity(rows)).filter(row=>{
@@ -19,9 +20,9 @@ export function pocketStatementCsv(input:PocketActivityRow[],options:StatementOp
  return '\uFEFF'+[
  [options.title||'Pocket statement'],[options.scope||'All activity'],
  ['From',options.from?statementDate(options.from):'First available','To',options.to?statementDate(options.to):'Latest available'],
- ['Generated',statementDate(Date.now())],[],
- ['Date','Description','Status','Amount','Asset','Local amount','Currency'],
- ...rows.map(row=>[statementDate(row.ts),statementDescription(row,options.title==='Collection statement'),statementStatus(row),statementSignedAmount(row),row.assetSymbol||'USDC',row.amountNgn||'',row.amountNgn?row.fiatCurrency||'NGN':''])
+ ['Account',options.accountName||''],['Pocket ID',options.pocketId||''],['Generated',statementDate(Date.now())],[],
+ ['Date','Description','Reference','Status','Amount','Asset','Local amount','Currency'],
+ ...rows.map(row=>[statementDate(row.ts),statementDescription(row,options.title==='Collection statement'),pocketActivityReference(row),statementStatus(row),statementSignedAmount(row),row.assetSymbol||'USDC',row.amountNgn||'',row.amountNgn?row.fiatCurrency||'NGN':''])
  ].map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n'
 
 }

@@ -1,3 +1,5 @@
+import usePocketIdentity from '../../hooks/usePocketIdentity'
+import usePocketProfile from '../../hooks/usePocketProfile'
 import { useSearchParams } from 'react-router-dom'
 import PocketDateField from '../../components/PocketDateField'
 import PocketLocalEquivalent from '../../components/PocketLocalEquivalent'
@@ -34,6 +36,9 @@ export function pocketTransactionCategory(row: PocketActivityRow): Category {
 }
 function initialCategory(view:PocketActivityView):Category {return view === 'bank' ? 'bank' : view === 'collections' ? 'requests' : view === 'purchases' ? 'bills' : 'all'}
 export default function PocketActivityPanel({collectionTitle,collectionId,renderHeader,incomingPos=false,rail='stablecoins',hideHeading=false,archivedKeys=[],view,rows,authenticated,busy,error,onRefund,onBridgeCheck,bridgeChecking,bridgeMessages,onNewBridge}:Props) {
+  const identity = usePocketIdentity()
+  const profileState = usePocketProfile({ authenticated: identity.authenticated, email: identity.email, getAccessToken: identity.getAccessToken })
+  const account = identity.authenticated && profileState.profile?.email?.trim().toLowerCase() === identity.email.trim().toLowerCase() ? profileState.profile : null
   const availableCategories = (incomingPos || collectionId) ? ([['all','All payments']] as Array<[Category,string]>) : rail==='xstocks' ? ([['all','All transactions'],['wallet','Transfers'],['requests','Requests'],['purchases','XPay']] as Array<[Category,string]>) : categories
   const [category,setCategory] = useState<Category>(()=>initialCategory(view))
   const [period,setPeriod] = useState({from:'',to:''})
@@ -68,7 +73,7 @@ export default function PocketActivityPanel({collectionTitle,collectionId,render
   const exportStatement=async()=>{
     if(exporting)return
     setExporting(true);setExportError('')
-    try{await downloadPocketStatement(transactions,statementFormat,{...statementPeriod,kind:statementKind,includeBusiness:!!collectionId||incomingPos,title:collectionId?'Collection statement':incomingPos?'XPay statement':rail==='xstocks'?'XStocks statement':'Pocket statement',scope:collectionId?collectionTitle||'Collection payments':incomingPos?'XPay payments':rail==='xstocks'?'XStocks activity':statementKind==='local'?'Bank transfers & bills':'All activity'});setStatementOpen(false)}
+    try{await downloadPocketStatement(transactions,statementFormat,{...statementPeriod,accountName:account?.resolvedName || [account?.firstName,account?.lastName].filter(Boolean).join(" "),pocketId:account?.pocketId,kind:statementKind,includeBusiness:!!collectionId||incomingPos,title:collectionId?'Collection statement':incomingPos?'XPay statement':rail==='xstocks'?'XStocks statement':'Pocket statement',scope:collectionId?collectionTitle||'Collection payments':incomingPos?'XPay payments':rail==='xstocks'?'XStocks activity':statementKind==='local'?'Bank transfers & bills':'All activity'});setStatementOpen(false)}
     catch(reason){if(!(reason instanceof Error&&reason.name==='AbortError'))setExportError('Your statement could not be saved. Please try again.')}
     finally{setExporting(false)}
   }

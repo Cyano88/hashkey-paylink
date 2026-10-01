@@ -42,3 +42,17 @@ export function statementLocalAmount(row: PocketActivityRow) {
  if (!row.amountNgn || !/^\d+(?:\.\d+)?$/.test(row.amountNgn)) return ''
  return (row.fiatCurrency === 'UGX' ? 'USh ' : '\u20a6') + Number(row.amountNgn).toLocaleString('en-US',{maximumFractionDigits:2})
 }
+
+// Confirmed USDC movements only. Never sum different assets or infer ledger balances.
+export function statementTotals(rows: PocketActivityRow[]) {
+ let incoming=0n,outgoing=0n
+ for(const row of rows) {
+  if ((row.assetSymbol || 'USDC') !== 'USDC' || row.fundingOnly || !['Successful','Delivered'].includes(statementStatus(row))) continue
+  const signed=statementSignedAmount(row), match=/^([+-])(\d+)(?:\.(\d{1,18}))?$/.exec(signed)
+  if(!match)continue
+  const units=BigInt(match[2])*10n**18n+BigInt((match[3]||'').padEnd(18,'0'))
+  if(match[1]==='+')incoming+=units;else outgoing+=units
+ }
+ const format=(units:bigint)=>{const fraction=(units%10n**18n).toString().padStart(18,'0').replace(/0+$/,'');return String(units/10n**18n)+(fraction?'.'+fraction:'')}
+ return {incoming:format(incoming),outgoing:format(outgoing)}
+}

@@ -94,3 +94,12 @@ One shared statement design, scoped to its entry point. Main Activity defaults t
 - After Save: /activity unchanged; window acceptance marker and performance.timeOrigin unchanged; download sheet closed; no dialogs remained. Pocket PID remained 30358 throughout. This confirms successful completion without WebView reload or process restart.
 - Saved file: Downloads/pocket-statement-2026-10-01-2026-10-01.pdf, 198983 bytes. PDF header verified. No transaction contents were copied or logged.
 - Earlier cancelled/interrupted attempts are not counted as successful. Native PDF save-and-return check is now complete. CSV content/download path was verified in the browser regression; no claim is made of a separate native CSV save test.
+
+### Compact statement and reference column
+
+- PDF now uses a 12-row compact table with Date, Description, Reference, Status and Amount; repeats account identity, period, summary and column headings on each page. Actual local amounts stay beneath USDC amounts.
+- Reference mapping is shared with existing receipts, preserving their identifiers rather than inventing export IDs. CSV includes the same full reference. References wrap in PDF.
+- Confirmed USDC summary uses exact integer arithmetic; excludes failed/pending/refunded records, internal funding, bridges/swaps and other assets. Does not infer opening, closing or running balances.
+- Account header uses the current authenticated profile with an email ownership guard. Missing identity is omitted rather than borrowed from another session.
+- Data tests passed for reference parity and exact totals, existing statement/collection scope and formula safety. Browser export regression passed. Two-page synthetic PDF rendered and both pages visually inspected. Changed-code TypeScript diagnostics zero.
+- Build, deployment and Pixel installation verification follow below.

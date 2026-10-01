@@ -106,6 +106,11 @@ export function pocketMovementTitle(row: PocketActivityRow): string {
   return row.direction === 'in' || kind === 'money_in' ? 'Incoming' : 'Outgoing'
 }
 
+// Reuse the existing receipt reference; exports must never mint a new identifier.
+export function pocketActivityReference(row: PocketActivityRow): string {
+  return row.providerReference || row.billReference || row.txHash || row.eventId
+}
+
 export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPending?: boolean } = {}): PaylinkReceipt | null {
   const kind = pocketReceiptKind(row)
   const availability = pocketReceiptAvailability(row)
@@ -113,7 +118,7 @@ export function pocketActivityReceipt(row: PocketActivityRow, options: { allowPe
 
   const source = normalizedSource(row)
   const category = row.billCategory || 'airtime'
-  const reference = row.providerReference || row.billReference || row.txHash || row.eventId
+  const reference = pocketActivityReference(row)
   const bankDestination = [row.accountName, row.bankName, row.bankLast4 ? `****${row.bankLast4}` : ''].filter(Boolean).join(' · ')
   const recipient = row.recipient || (kind === 'app_purchase' ? row.memo : '') || row.contextLabel || row.merchantId || '-'
   const destination = row.destination || bankDestination || row.contextLabel || `${row.chain || 'Base'} ${row.assetSymbol || 'USDC'} wallet`
