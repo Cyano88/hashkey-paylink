@@ -1,4 +1,4 @@
-# Pocket Stablecoins audit — 2026-10-01
+# Pocket Stablecoins audit ï¿½ 2026-10-01
 
 ## Scope and release position
 
@@ -32,11 +32,11 @@ Historical source-text assertions in circle-pocket-contracts-smoke are retained 
 
 The older verification-navigation fixture imports removed name-verification components. Durable-activity, activity-layout and terminal export browser fixtures need updating to current wallet/profile data and statement controls. The old unified-send browser fixture targets XStocks and is outside this Stablecoins pass. Do not describe all historical browser tests as passing.
 
-A saved Arc bridge on the Pixel still has a challenge ID without a recovered transaction hash. Read-only Check status produced no captured getChallenge/getTransaction request in the observation window. No success was inferred, and unrelated wallet rows were not collapsed by amount/time. Recheck authenticated recovery after installation; otherwise this remains an unresolved item.
+Before installation, a saved Arc bridge on Pixel had only a challenge ID and Needs attention. After installation and normal authenticated loading, it recovered automatically: source and destination hashes present, sourceConfirmed true, historySynced true, progress completed. The durable Activity snapshot contains the completed wallet-bridge with the exact source hash and a confirmed deposit with the exact destination hash. The installed Activity entry opens USDC bridge details directly with Done. No new transfer was submitted; no amount/time matching was used.
 
 Uganda verification prompt wording needs a separate country-aware UI check; no KYC permissions or limits were loosened in this audit.
 
-Still required before a public-store readiness claim: current-device acceptance after install, live settlement/recovery evidence for relevant rails, release signing/store configuration and iOS-specific validation. Do not confuse existing provider access or passing mocks with this evidence.
+Still required before a public-store readiness claim: broader current-device acceptance across all flows, live settlement/recovery evidence for remaining rails, release signing/store configuration and iOS-specific validation. Do not confuse existing provider access or passing mocks with this evidence.
 
 ## Delivery
 
@@ -47,4 +47,5 @@ Build/device/deployment results will be appended after verification. Unrelated X
 - Android debug build: BUILD SUCCESSFUL (366 tasks); installed with adb install -r, Success. No uninstall or data clear.
 - Pixel physical Back check after install: gift share sheet closes while Your gifts remains open; second Back opens Send a gift; third Back returns to Send. Verified via Android keyevent 4 and WebView route/dialog state. No bearer gift contents logged.
 - Mobile Vite output reports built in 3m 14s. The PowerShell invocation reported exit 1 alongside Rollup dependency/chunk warnings; compiled assets were produced, synced, built by Gradle and exercised on Pixel. Do not describe the shell build exit as zero.
-- Web deployment has not yet been verified.
+- Web deployment verified live: dep-davasijtqb8s73f4jnk0, commit 27f80b3cfa260b4176c498a6066312f612853b50. Pocket web returned HTTP 200 after rollout. Two independent XStocks Agreement commits were merged without conflicts before push; no Stablecoins overlap.
+- Pixel contains the audited Stablecoins changes at af74ede8e. The later merge only adds the independent XStocks Agreement work; it was not rebuilt into this Pixel APK.
