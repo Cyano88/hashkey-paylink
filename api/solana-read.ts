@@ -1,3 +1,4 @@
+import { recordPocketRpcRead } from './pocket/rpc-usage.js'
 const PUBLIC_RPC = 'https://api.mainnet-beta.solana.com'
 const METHODS = new Set(['getAccountInfo', 'getTokenAccountBalance', 'getSignaturesForAddress', 'getTransaction'])
 export class SolanaReadError extends Error {
@@ -14,6 +15,8 @@ export function createSolanaReadFetch(fetcher: typeof fetch = fetch, now = Date.
     if (now() - windowStart >= 60_000) { windowStart = now(); used = 0 }
     if (used + cost > 120) throw new SolanaReadError('capacity', -32005)
     used += cost
+    const raw=JSON.parse(String(init.body)), items=Array.isArray(raw)?raw:[raw]
+    for(const item of items)recordPocketRpcRead('solana-read','solana',item.method)
     let response: Response
     try {
       response = await fetcher(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: init.body,

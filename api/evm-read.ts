@@ -1,3 +1,4 @@
+import { recordPocketRpcRead } from './pocket/rpc-usage.js'
 import type { Request, Response } from 'express'
 
 const NETWORKS = {
@@ -15,7 +16,7 @@ const block = (v: unknown) => v === 'latest' || v === 'pending' || v === 'safe' 
 const record = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
 const only = (v: Record<string, any>, keys: string[]) => Object.keys(v).every(k => keys.includes(k))
 export class ReadRpcError extends Error {
-  constructor(public code: number, message: string, public reason?: 'quota' | 'network' | 'configuration' | 'response' | 'rpc') { super(message) }
+  constructor(public code: number, message: string, public reason?: 'quota' | 'network' | 'configuration' | 'response' | 'rpc' | 'scope') { super(message) }
 }
 
 /** No URLs, writes, state overrides, batches, filters or unbounded history scans. */
@@ -66,10 +67,11 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
   const cooldown = new Map<string, number>()
   const verifiedEndpoints = new Map<string, number>()
   let windowStart = now(), used = 0
-  async function upstream(url: string, method: string, params: any[], signal?: AbortSignal) {
+  async function upstream(url: string, method: string, params: any[], signal?: AbortSignal, network = 'unknown') {
     signal?.throwIfAborted()
     if (now() - windowStart >= 60_000) { windowStart = now(); used = 0 }
     if (++used > 300) throw new ReadRpcError(-32005, 'Read capacity reached. Try again shortly.')
+    recordPocketRpcRead('evm-read', network, method)
     let response: Awaited<ReturnType<typeof fetch>>
     try { response = await fetcher(url, {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -90,6 +92,8 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
     }
     const data = JSON.parse(Buffer.concat(chunks).toString('utf8'))
     if (data.error) {
+      // Range restrictions are capabilities, not exhausted quota.
+      if (method === 'eth_getLogs' && /block[ -]?range|range.*(?:limit|large|wide)|(?:limit|maximum|up to).*\d+.*blocks/i.test(String(data.error.message))) throw new ReadRpcError(-32006, 'Log range exceeds provider capability.', 'scope')
       if (/limit|quota|capacity|throughput/i.test(String(data.error.message))) throw new ReadRpcError(-32004, 'Upstream temporarily unavailable.', 'quota')
       // Do not expose upstream messages: they may include credentials or URLs.
       const error = new ReadRpcError(Number.isInteger(data.error.code) ? data.error.code : -32000, 'Contract read failed.', 'rpc')
@@ -118,11 +122,11 @@ export function createReadService(fetcher: typeof fetch = fetch, now = Date.now,
       const primary = !options.privateOnly && (cooldown.get(network) ?? 0) > now() ? config.fallback : configured
       const checkedUpstream = async (url: string) => {
         if ((network === 'ethereum' || network === 'polygon') && (verifiedEndpoints.get(`${network}:${url}`) ?? 0) <= now()) {
-          const id = await upstream(url, 'eth_chainId', [], signal)
+          const id = await upstream(url, 'eth_chainId', [], signal, network)
           if (typeof id !== 'string' || !/^0x[0-9a-f]+$/i.test(id) || BigInt(id) !== BigInt(config.id)) throw new ReadRpcError(-32003, 'RPC chain does not match the requested network.', 'configuration')
           verifiedEndpoints.set(`${network}:${url}`, now() + 300_000)
         }
-        return upstream(url, method, validated.params, signal)
+        return upstream(url, method, validated.params, signal, network)
       }
       let result: unknown
       try { result = await checkedUpstream(primary) }

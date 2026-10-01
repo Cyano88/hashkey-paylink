@@ -33,7 +33,7 @@ try {
  process.env.PRIVATE_RPC_URL_ARC_MAINNET = 'https://private-provider.invalid'
  calls.length = 0
  await evmActivity('arc', wallet, new AbortController().signal, scanRead)
- assert.equal(calls.filter(x => x.method === 'eth_getLogs').length, 24)
+ assert.equal(calls.filter(x => x.method === 'eth_getLogs').length, 2)
  process.env.PRIVATE_RPC_URL_ARC_MAINNET = 'https://rpc.mainnet.arc.io'
  process.env.POCKET_ACTIVITY_EVM_LOG_BLOCK_RANGE = '10'
  calls.length = 0
