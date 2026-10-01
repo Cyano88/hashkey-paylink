@@ -1,13 +1,23 @@
 import assert from 'node:assert/strict'
 import {build} from 'esbuild'
 import {createRequire} from 'node:module'
+const remoteMode=process.argv.includes('--remote')
+globalThis.hashRemoteMode=remoteMode
+if(remoteMode){
+ process.env.HASH_SUPPORT_URL='https://hash.fixture.test';process.env.HASH_SUPPORT_API_KEY='fixture-server'
+ let revision=1
+ globalThis.fetch=async(_url,options)=>{
+  if(options.method==='PUT'){const input=JSON.parse(options.body);assert.equal(input.revision,revision);globalThis.hashFixture=structuredClone(input.value);revision++;return Response.json({ok:true,revision,workspaceId:'fixture-workspace'})}
+  return Response.json({ok:true,revision,workspaceId:'fixture-workspace',value:globalThis.hashFixture})
+ }
+}
 const mocks={
  'kyc-level.js': 'export const readPocketKycLevel=async()=>({level:"none"})',
  'activity-store.js': 'export const pocketActivityStore={read:async()=>null}',
  'activity-feed.js': 'export const activityFeedKey=x=>x',
  'transaction-report.js': 'export const reportTransaction=()=>{},transactionReportKey=()=>{},transactionReportDetails=()=>{},validateTransactionReport=()=>{},upsertTransactionReport=()=>{}',
  'og-storage.js': 'export const archivePayment=async()=>{throw Error("External storage must not be used")}',
- 'render-durable-store.js': 'export const hasRenderDurableStore=()=>true;export const readDurableJson=async()=>structuredClone(globalThis.hashFixture);export const mutateDurableJson=async(_key,fn)=>{const value=await fn(structuredClone(globalThis.hashFixture));globalThis.hashFixture=value;return structuredClone(value)}',
+ 'render-durable-store.js': 'export const hasRenderDurableStore=()=>true;export const readDurableJson=async()=>structuredClone(globalThis.hashRemoteMode?{__hashSupportRemote:true,workspaceId:"fixture-workspace"}:globalThis.hashFixture);export const mutateDurableJson=async(_key,fn)=>{const value=await fn(structuredClone(globalThis.hashRemoteMode?{__hashSupportRemote:true,workspaceId:"fixture-workspace"}:globalThis.hashFixture));if(!globalThis.hashRemoteMode)globalThis.hashFixture=value;return structuredClone(value)}',
  'circle-pocket-identity.js': 'export const circlePocketIdentityId=x=>x.subject;export const circlePocketIdentityErrorStatus=(e,f)=>e.status||f;export const resolveCirclePocketIdentity=async req=>{const subject=req.headers.authorization?.slice(7);if(!subject)throw Object.assign(Error("Sign in required"),{status:401});return {kind:"privy",subject}}',
  'local-currency-profile.js': 'export const localCurrencyProfileRepository={get:async()=>undefined}',
  '@privy-io/server-auth': 'export class PrivyClient{async verifyAuthToken(token){return {userId:token}}async getUserById(){return {linkedAccounts:[]}}}',
